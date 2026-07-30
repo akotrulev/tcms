@@ -57,6 +57,36 @@ class RlsIsolationTest extends IntegrationTestBase {
 
         seedProject(ACME, "acme-olb");
         seedProject(GLOBEX, "globex-olb");
+        seedSystemGrant();
+    }
+
+    /**
+     * One instance-level operator grant, owned by this class.
+     *
+     * <p>Seeded here rather than relied upon from elsewhere: {@code PermissionEvaluatorTest}
+     * also creates operator grants, and leaning on that would make this class pass or fail
+     * depending on test ordering — the kind of coupling that turns into a flake nobody can
+     * reproduce. Both tables involved are instance-level, so this needs no company context.
+     */
+    private void seedSystemGrant() {
+        try (Connection connection = ownerConnection();
+             Statement statement = connection.createStatement()) {
+            statement.execute("""
+                    INSERT INTO app_user (id, email, canonical_name, status)
+                    VALUES ('00000000-0000-4000-8000-00000000000f', 'rls-operator@example.test',
+                            'RLS Operator', 'ACTIVE')
+                    ON CONFLICT (id) DO NOTHING
+                    """);
+            statement.execute("""
+                    INSERT INTO instance_role_assignment (id, role_id, user_id)
+                    VALUES ('00000000-0000-4000-8000-00000000000e',
+                            '10000000-0000-4000-8000-000000000001',
+                            '00000000-0000-4000-8000-00000000000f')
+                    ON CONFLICT (id) DO NOTHING
+                    """);
+        } catch (SQLException e) {
+            throw new IllegalStateException("could not seed the instance-level operator grant", e);
+        }
     }
 
     private void seedProject(UUID companyId, String marker) {
@@ -140,11 +170,25 @@ class RlsIsolationTest extends IntegrationTestBase {
         // The login path: minting a token requires reading SYSTEM grants before any
         // company is active. instance_role_assignment is instance-level and carries no
         // RLS precisely so this works — see its table comment and the audit note.
+        //
+        // Asserted as "the app role sees exactly what the owner sees" rather than as a
+        // row count. The count was previously zero and asserted as such, which coupled
+        // this test to the table being empty — PermissionEvaluatorTest seeds operator
+        // grants, and a stale count would have failed here while the property under test
+        // was still perfectly true. Comparing against the owner proves the real claim (no
+        // rows are being filtered out) and cannot go stale as fixtures grow.
+        long visibleToOwner = countAsOwner("instance_role_assignment");
+        assertThat(visibleToOwner)
+                .as("fixture precondition: there must be rows, or 'nothing is hidden' is vacuous")
+                .isPositive();
+
         try (Connection connection = appConnection();
              Statement statement = connection.createStatement();
              ResultSet rs = statement.executeQuery("SELECT count(*) FROM instance_role_assignment")) {
             rs.next();
-            assertThat(rs.getLong(1)).as("readable, not blocked, with no company context").isZero();
+            assertThat(rs.getLong(1))
+                    .as("readable in full, not blocked and not filtered, with no company context")
+                    .isEqualTo(visibleToOwner);
         }
     }
 

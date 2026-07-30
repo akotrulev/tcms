@@ -1,0 +1,611 @@
+package com.tcms.identity;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import com.tcms.IntegrationTestBase;
+import com.tcms.project.Project;
+import com.tcms.project.ProjectRepository;
+import com.tcms.tenancy.Company;
+import com.tcms.tenancy.CompanyContext;
+import com.tcms.tenancy.CompanyRepository;
+import java.time.Instant;
+import java.util.UUID;
+import java.util.function.Supplier;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.support.TransactionTemplate;
+
+/**
+ * The permission harness — personas 3 and 4 of the M0 isolation suite, plus the
+ * evaluator's own gate matrix.
+ *
+ * <p>Personas 1 and 2 (the two companies with identical-looking data) live in
+ * {@code RlsIsolationTest} and prove that one client cannot read another's rows. The two
+ * personas here are the ones those assertions <strong>structurally cannot catch</strong>:
+ *
+ * <ol start="3">
+ *   <li><strong>{@code memberNoGrant}</strong> — an ACTIVE member of Acme holding no
+ *       grant at all. The rows they must not see <em>are in their own company</em>, so
+ *       every cross-company assertion in {@code RlsIsolationTest} passes while this leak
+ *       is wide open. Company membership conveys authentication and zero project
+ *       visibility (roles spec A1), and this is the only test that says so.</li>
+ *   <li><strong>{@code crossCompany}</strong> — Company Admin in Acme, Test Engineer in
+ *       Globex. Asserts no permission bleeds across a company switch, which is where a
+ *       context-keyed cache or a stale thread-local would show.</li>
+ * </ol>
+ *
+ * <p>The fixture is deliberately hostile in the same way: both companies own a project
+ * with the <strong>same key and the same name</strong>, so a test cannot pass by having
+ * queried the convenient row.
+ */
+@DisplayName("Permission evaluator — the union, its gates, and personas 3 and 4")
+class PermissionEvaluatorTest extends IntegrationTestBase {
+
+    private static final UUID ACME = UUID.fromString("33333333-3333-3333-3333-333333333333");
+    private static final UUID GLOBEX = UUID.fromString("44444444-4444-4444-4444-444444444444");
+    /** Provisioned already suspended, so no test has to mutate a company another test reads. */
+    private static final UUID ZENITH = UUID.fromString("55555555-5555-5555-5555-555555555555");
+
+    private static final UUID ACME_PROJECT = UUID.fromString("33330000-0000-4000-8000-000000000001");
+    private static final UUID GLOBEX_PROJECT = UUID.fromString("44440000-0000-4000-8000-000000000001");
+    private static final UUID ZENITH_PROJECT = UUID.fromString("55550000-0000-4000-8000-000000000001");
+
+    private static final UUID LEAD = UUID.fromString("00000000-0000-4000-8000-0000000000a1");
+    private static final UUID MEMBER_NO_GRANT = UUID.fromString("00000000-0000-4000-8000-0000000000a2");
+    private static final UUID CROSS_COMPANY = UUID.fromString("00000000-0000-4000-8000-0000000000a3");
+    private static final UUID OPERATOR = UUID.fromString("00000000-0000-4000-8000-0000000000a4");
+    private static final UUID TEAM_ENGINEER = UUID.fromString("00000000-0000-4000-8000-0000000000a5");
+    private static final UUID INVITED_ONLY = UUID.fromString("00000000-0000-4000-8000-0000000000a6");
+    private static final UUID DEACTIVATED_OPERATOR = UUID.fromString("00000000-0000-4000-8000-0000000000a7");
+    private static final UUID ZENITH_LEAD = UUID.fromString("00000000-0000-4000-8000-0000000000a8");
+
+    private static final UUID ACME_QA_TEAM = UUID.fromString("00000000-0000-4000-8000-0000000000b1");
+
+    @Autowired
+    private PermissionEvaluator evaluator;
+
+    @Autowired
+    private PermissionCatalogue catalogue;
+
+    @Autowired
+    private CompanyRepository companies;
+
+    @Autowired
+    private ProjectRepository projects;
+
+    @Autowired
+    private AppUserRepository users;
+
+    @Autowired
+    private CompanyMembershipRepository memberships;
+
+    @Autowired
+    private TeamRepository teams;
+
+    @Autowired
+    private TeamMembershipRepository teamMemberships;
+
+    @Autowired
+    private RoleAssignmentRepository roleAssignments;
+
+    @Autowired
+    private InstanceRoleAssignmentRepository instanceRoleAssignments;
+
+    @Autowired
+    private TransactionTemplate tx;
+
+    @BeforeEach
+    void seed() {
+        Instant now = Instant.now();
+
+        // --- instance level: companies and accounts, no company context ------------
+        tx.executeWithoutResult(status -> {
+            provisionCompany(ACME, "acme-perm", "Acme Corporation", false, now);
+            provisionCompany(GLOBEX, "globex-perm", "Globex Inc", false, now);
+            provisionCompany(ZENITH, "zenith-perm", "Zenith Ltd", true, now);
+
+            activeUser(LEAD, "lead@example.test", now);
+            activeUser(MEMBER_NO_GRANT, "nogrant@example.test", now);
+            activeUser(CROSS_COMPANY, "cross@example.test", now);
+            activeUser(OPERATOR, "operator@example.test", now);
+            activeUser(TEAM_ENGINEER, "team@example.test", now);
+            activeUser(INVITED_ONLY, "invited@example.test", now);
+            activeUser(ZENITH_LEAD, "zenith@example.test", now);
+
+            // Deactivated, but holding the strongest grant in the product — so the
+            // account gate is proven to cover SYSTEM scope, not just company scope.
+            if (users.findById(DEACTIVATED_OPERATOR).isEmpty()) {
+                AppUser user = AppUser.invite(
+                        DEACTIVATED_OPERATOR, "gone@example.test", "Former Operator", now);
+                user.activate("x", now);
+                user.deactivate(now);
+                users.save(user);
+            }
+
+            grantInstanceAdmin(OPERATOR, now);
+            grantInstanceAdmin(DEACTIVATED_OPERATOR, now);
+        });
+
+        // --- Acme -----------------------------------------------------------------
+        inCompany(ACME, () -> tx.executeWithoutResult(status -> {
+            seedProject(ACME_PROJECT, ACME, "acme-marker", now);
+
+            member(ACME, LEAD, "Lead", true, now);
+            member(ACME, MEMBER_NO_GRANT, "No Grant", true, now);
+            member(ACME, CROSS_COMPANY, "Cross", true, now);
+            member(ACME, TEAM_ENGINEER, "Team Engineer", true, now);
+            // INVITED, deliberately not accepted — the gate must zero their grant.
+            member(ACME, INVITED_ONLY, "Invitee", false, now);
+            member(ACME, DEACTIVATED_OPERATOR, "Former Operator", true, now);
+            // OPERATOR is deliberately NOT a member of any company.
+
+            if (teams.findById(ACME_QA_TEAM).isEmpty()) {
+                teams.save(Team.create(ACME_QA_TEAM, ACME, "QA", null, now));
+            }
+            joinTeam(ACME, ACME_QA_TEAM, TEAM_ENGINEER, now);
+
+            grantOnProject("a1", ACME, Role.TEST_LEAD_ID, LEAD, ACME_PROJECT, now);
+            grantOnProject("a6", ACME, Role.TEST_LEAD_ID, INVITED_ONLY, ACME_PROJECT, now);
+            grantOnProject("a7", ACME, Role.TEST_LEAD_ID, DEACTIVATED_OPERATOR, ACME_PROJECT, now);
+            grantOnCompany("a3", ACME, Role.COMPANY_ADMIN_ID, CROSS_COMPANY, now);
+            grantToTeamOnProject("b1", ACME, Role.TEST_ENGINEER_ID, ACME_QA_TEAM, ACME_PROJECT, now);
+        }));
+
+        // --- Globex: same project key and name as Acme's --------------------------
+        inCompany(GLOBEX, () -> tx.executeWithoutResult(status -> {
+            seedProject(GLOBEX_PROJECT, GLOBEX, "globex-marker", now);
+            member(GLOBEX, CROSS_COMPANY, "Cross (Vendor)", true, now);
+            grantOnProject("g3", GLOBEX, Role.TEST_ENGINEER_ID, CROSS_COMPANY, GLOBEX_PROJECT, now);
+        }));
+
+        // --- Zenith: suspended ----------------------------------------------------
+        inCompany(ZENITH, () -> tx.executeWithoutResult(status -> {
+            seedProject(ZENITH_PROJECT, ZENITH, "zenith-marker", now);
+            member(ZENITH, ZENITH_LEAD, "Zenith Lead", true, now);
+            grantOnProject("z1", ZENITH, Role.TEST_LEAD_ID, ZENITH_LEAD, ZENITH_PROJECT, now);
+        }));
+    }
+
+    // =========================================================================
+    // Persona 3 — the member with no project grant
+    // =========================================================================
+
+    @Nested
+    @DisplayName("Persona 3 — an ACTIVE member holding no grant")
+    class MemberWithNoGrant {
+
+        @Test
+        @DisplayName("resolves to nothing on a project in their OWN company")
+        void seesNothingInTheirOwnCompany() {
+            // The leak RlsIsolationTest structurally cannot catch: this project IS in
+            // this user's company, so every cross-company assertion passes regardless.
+            PermissionSet permissions = evaluateIn(ACME, MEMBER_NO_GRANT, ACME_PROJECT);
+
+            assertThat(permissions.isEmpty())
+                    .as("company membership conveys authentication and ZERO project visibility")
+                    .isTrue();
+            assertThat(permissions.has("case:read")).isFalse();
+            assertThat(permissions.has("project:read")).isFalse();
+        }
+
+        @Test
+        @DisplayName("holds nothing company-wide either")
+        void seesNothingCompanyWide() {
+            assertThat(evaluateCompanyWideIn(ACME, MEMBER_NO_GRANT).isEmpty()).isTrue();
+        }
+
+        @Test
+        @DisplayName("the fixture is real — the same project DOES yield permissions to a grant holder")
+        void theProjectIsNotSimplyEmpty() {
+            // Without this, "sees nothing" would also pass if the project did not exist,
+            // if the seed silently failed, or if the evaluator returned empty for everyone.
+            assertThat(evaluateIn(ACME, LEAD, ACME_PROJECT).has("case:read")).isTrue();
+        }
+    }
+
+    // =========================================================================
+    // Persona 4 — the cross-company user
+    // =========================================================================
+
+    @Nested
+    @DisplayName("Persona 4 — Company Admin in Acme, Test Engineer in Globex")
+    class CrossCompanyUser {
+
+        @Test
+        @DisplayName("holds Company Admin capability in Acme")
+        void companyAdminInAcme() {
+            PermissionSet acme = evaluateCompanyWideIn(ACME, CROSS_COMPANY);
+
+            assertThat(acme.hasAll("company:settings", "company:members", "project:create")).isTrue();
+            // COMPANY scope covers every project, present and future — with no project grant.
+            assertThat(evaluateIn(ACME, CROSS_COMPANY, ACME_PROJECT)
+                    .hasAll("suite:delete", "run:close", "case:approve"))
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("holds ONLY Test Engineer capability in Globex — no admin bleed")
+        void testEngineerInGlobex() {
+            PermissionSet globex = evaluateIn(GLOBEX, CROSS_COMPANY, GLOBEX_PROJECT);
+
+            assertThat(globex.hasAll("case:create", "case:edit", "run:execute")).isTrue();
+
+            // The bleed assertions. Each names a capability they genuinely hold in Acme.
+            assertThat(globex.has("company:settings"))
+                    .as("Company Admin in Acme must confer nothing in Globex")
+                    .isFalse();
+            assertThat(globex.has("project:create")).isFalse();
+            assertThat(globex.has("case:approve")).isFalse();
+            assertThat(globex.has("run:close")).isFalse();
+        }
+
+        @Test
+        @DisplayName("switching company back and forth does not accumulate permissions")
+        void switchingCompaniesDoesNotAccumulate() {
+            // Where a context-keyed cache or a stale thread-local would show. Evaluated
+            // in the order Acme -> Globex -> Acme so a leak in either direction fails.
+            assertThat(evaluateCompanyWideIn(ACME, CROSS_COMPANY).has("company:settings")).isTrue();
+            assertThat(evaluateIn(GLOBEX, CROSS_COMPANY, GLOBEX_PROJECT).has("company:settings"))
+                    .isFalse();
+            assertThat(evaluateCompanyWideIn(ACME, CROSS_COMPANY).has("company:settings")).isTrue();
+        }
+
+        @Test
+        @DisplayName("a foreign project id resolves to NOTHING, not to this company's company-wide grants")
+        void foreignProjectIsUnreachable() {
+            // Found by this test failing on the first run, and it was the evaluator that
+            // was wrong, not the assertion. COMPANY-scope grants carry no project id, so
+            // before the fix a Globex project id evaluated in Acme context picked up
+            // Acme's Company Admin grant and answered "yes" — i.e. it answered "does this
+            // user hold X somewhere in Acme", not the question asked.
+            //
+            // Both projects share a key and a name, so this cannot pass by coincidence.
+            PermissionSet permissions = evaluateIn(ACME, CROSS_COMPANY, GLOBEX_PROJECT);
+
+            assertThat(permissions.isEmpty())
+                    .as("a project outside the active company yields no capability at all")
+                    .isTrue();
+
+            // Stated separately: this user genuinely holds both of these in Acme, so an
+            // empty result here is the boundary working rather than the user being powerless.
+            assertThat(evaluateIn(ACME, CROSS_COMPANY, ACME_PROJECT).hasAll("case:create", "case:approve"))
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("an unknown project id resolves to nothing, identically to a foreign one")
+        void unknownProjectIsIndistinguishableFromAForeignOne() {
+            // §6t: unreachable and non-existent must be indistinguishable, or the response
+            // becomes an oracle for what exists in another client's tenancy.
+            assertThat(evaluateIn(ACME, CROSS_COMPANY, UUID.randomUUID()).isEmpty()).isTrue();
+        }
+    }
+
+    // =========================================================================
+    // The gates
+    // =========================================================================
+
+    @Nested
+    @DisplayName("Gates — each zeroes the union without contributing to it")
+    class Gates {
+
+        @Test
+        @DisplayName("an INVITED membership conveys nothing, even holding a Test Lead grant")
+        void invitedMembershipIsNotAMembership() {
+            // An unaccepted invitation must not be a way to read a client's data before
+            // agreeing to anything. The grant exists and is deliberately ignored.
+            assertThat(evaluateIn(ACME, INVITED_ONLY, ACME_PROJECT).isEmpty()).isTrue();
+        }
+
+        @Test
+        @DisplayName("a DEACTIVATED account holds nothing — including its SYSTEM grant")
+        void deactivationIsTheInstanceWideOffSwitch() {
+            assertThat(evaluateIn(ACME, DEACTIVATED_OPERATOR, ACME_PROJECT).isEmpty()).isTrue();
+            assertThat(evaluateCompanyWideIn(ACME, DEACTIVATED_OPERATOR).isEmpty()).isTrue();
+            assertThat(evaluator.evaluateInstanceWide(DEACTIVATED_OPERATOR).isEmpty())
+                    .as("a deactivated operator must lose Instance Admin too, or deactivation is not an off switch")
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("a SUSPENDED company zeroes its members")
+        void suspensionIsHonouredInCode() {
+            // The status column enforces nothing on its own (plan §6s) — every row Zenith
+            // owns still exists and is still readable by RLS. This is the code that stops it.
+            assertThat(evaluateIn(ZENITH, ZENITH_LEAD, ZENITH_PROJECT).isEmpty()).isTrue();
+        }
+
+        @Test
+        @DisplayName("but an Instance Admin still reaches a SUSPENDED company — or it is unrecoverable")
+        void suspensionDoesNotLockOutTheOperator() {
+            assertThat(evaluateIn(ZENITH, OPERATOR, ZENITH_PROJECT).coversEverything())
+                    .as("suspend-never-delete requires that SYSTEM survive suspension")
+                    .isTrue();
+        }
+    }
+
+    // =========================================================================
+    // SYSTEM scope
+    // =========================================================================
+
+    @Nested
+    @DisplayName("SYSTEM scope — ungated by membership, by design")
+    class SystemScope {
+
+        @Test
+        @DisplayName("an Instance Admin who is a member of NO company still holds everything in one")
+        void instanceAdminNeedsNoMembership() {
+            // The decision the spec left ambiguous. An operator provisions a company
+            // before any membership row exists; gating SYSTEM on membership would lock
+            // them out of the company they just created.
+            assertThat(memberOf(ACME, OPERATOR))
+                    .as("fixture precondition: the operator is deliberately not a member")
+                    .isFalse();
+
+            assertThat(evaluateIn(ACME, OPERATOR, ACME_PROJECT).coversEverything()).isTrue();
+        }
+
+        @Test
+        @DisplayName("full coverage is DERIVED from the catalogue, never a stored wildcard")
+        void coverageIsDerived() {
+            PermissionSet operator = evaluateIn(ACME, OPERATOR, ACME_PROJECT);
+
+            assertThat(operator.keys())
+                    .as("every catalogued permission, counted — a '*' sentinel would pass this vacuously")
+                    .hasSameSizeAs(catalogue.keys())
+                    .containsExactlyInAnyOrderElementsOf(catalogue.keys());
+            assertThat(operator.keys()).doesNotContain("*");
+        }
+
+        @Test
+        @DisplayName("resolves with NO company context open — the login path")
+        void systemGrantsResolveBeforeAnyCompanyIsActive() {
+            try (var ignored = CompanyContext.clear()) {
+                assertThat(evaluator.evaluateInstanceWide(OPERATOR).coversEverything()).isTrue();
+            }
+        }
+
+        @Test
+        @DisplayName("a regular user holds nothing instance-wide")
+        void aCompanyAdminIsNotAnOperator() {
+            // Company Admin must not cross the client boundary. Company-scope grants live
+            // in a different table, so a leak here would mean the SYSTEM query is reading
+            // the wrong one.
+            assertThat(evaluator.evaluateInstanceWide(CROSS_COMPANY).isEmpty()).isTrue();
+            assertThat(evaluateCompanyWideIn(ACME, CROSS_COMPANY).has("company:delete"))
+                    .as("company:delete is SYSTEM scope — Company Admin must not hold it")
+                    .isFalse();
+        }
+    }
+
+    // =========================================================================
+    // Team-granted roles
+    // =========================================================================
+
+    @Nested
+    @DisplayName("Team grants — one hop, and company-bound")
+    class TeamGrants {
+
+        @Test
+        @DisplayName("a role granted to a team resolves for its members")
+        void teamGrantConfersItsRole() {
+            PermissionSet permissions = evaluateIn(ACME, TEAM_ENGINEER, ACME_PROJECT);
+
+            assertThat(permissions.hasAll("case:create", "case:edit", "run:execute")).isTrue();
+            assertThat(permissions.has("case:approve"))
+                    .as("Test Engineer, not Test Lead — the team grant must not widen the role")
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("a team grant confers nothing in another company")
+        void teamGrantDoesNotCrossCompanies() {
+            assertThat(evaluateIn(GLOBEX, TEAM_ENGINEER, GLOBEX_PROJECT).isEmpty()).isTrue();
+        }
+    }
+
+    // =========================================================================
+    // The Test Engineer / Test Lead boundary (roles spec A4)
+    // =========================================================================
+
+    @Test
+    @DisplayName("the three lines separating Test Engineer from Test Lead hold")
+    void testEngineerToTestLeadBoundary() {
+        PermissionSet engineer = evaluateIn(ACME, TEAM_ENGINEER, ACME_PROJECT);
+        PermissionSet lead = evaluateIn(ACME, LEAD, ACME_PROJECT);
+
+        // 1. creative vs destructive — never blocked from producing, only from unmaking
+        //    someone else's work.
+        assertThat(engineer.hasAll("case:create", "case:edit", "plan:create", "run:create")).isTrue();
+        assertThat(engineer.hasAny("suite:delete", "plan:delete", "run:close", "result:amend")).isFalse();
+        assertThat(lead.hasAll("suite:delete", "plan:delete", "run:close", "result:amend")).isTrue();
+
+        // 2. review vs approve — contributors review, only Lead+ signs off.
+        assertThat(engineer.hasAll("case:review", "suite:review", "plan:review")).isTrue();
+        assertThat(engineer.hasAny("case:approve", "suite:approve", "plan:approve")).isFalse();
+        assertThat(lead.hasAll("case:approve", "suite:approve", "plan:approve")).isTrue();
+
+        // 3. content vs configuration.
+        assertThat(engineer.hasAny(
+                "project:settings", "project:members", "project:audit", "integration:manage"))
+                .isFalse();
+        assertThat(lead.hasAll(
+                "project:settings", "project:members", "project:audit", "integration:manage"))
+                .isTrue();
+    }
+
+    // =========================================================================
+    // The evaluator's own contract
+    // =========================================================================
+
+    @Nested
+    @DisplayName("Contract — fails loudly rather than answering a different question")
+    class Contract {
+
+        @Test
+        @DisplayName("evaluating without a company context throws, rather than resolving to nothing")
+        void requiresCompanyContext() {
+            // Returning empty here would be indistinguishable from a legitimate denial,
+            // and would hide a missing CompanyContext.open() at the call site forever.
+            try (var ignored = CompanyContext.clear()) {
+                assertThatThrownBy(() -> evaluator.evaluate(LEAD, ACME_PROJECT))
+                        .isInstanceOf(IllegalStateException.class)
+                        .hasMessageContaining("No company context is active");
+            }
+        }
+
+        @Test
+        @DisplayName("a null projectId is refused — it would silently answer a company-wide question")
+        void refusesNullProject() {
+            inCompany(ACME, () -> assertThatThrownBy(() -> evaluator.evaluate(LEAD, null))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("evaluateCompanyWide"));
+        }
+
+        @Test
+        @DisplayName("an unknown permission key throws instead of quietly denying")
+        void unknownPermissionKeyThrows() {
+            // A typo returning false is indistinguishable from a real denial, so the bug
+            // presents as "this user is missing a permission" and is investigated against
+            // the grants, where nothing is wrong.
+            PermissionSet permissions = evaluateIn(ACME, LEAD, ACME_PROJECT);
+
+            assertThatThrownBy(() -> permissions.has("case:edt"))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("Unknown permission key");
+        }
+
+        @Test
+        @DisplayName("hasAny validates every argument, not just up to the first match")
+        void hasAnyDoesNotShortCircuitPastATypo() {
+            PermissionSet permissions = evaluateIn(ACME, LEAD, ACME_PROJECT);
+
+            assertThatThrownBy(() -> permissions.hasAny("case:read", "case:edt"))
+                    .as("short-circuiting on the first match would let a typo through unnoticed")
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+
+        @Test
+        @DisplayName("company-wide evaluation does not fold in a single project's grants")
+        void companyWideIsNotTheUnionOfProjects() {
+            // A Test Lead holds project:settings on their project. Reporting that
+            // company-wide would read as authority over the whole company.
+            assertThat(evaluateCompanyWideIn(ACME, LEAD).has("project:settings")).isFalse();
+            assertThat(evaluateIn(ACME, LEAD, ACME_PROJECT).has("project:settings")).isTrue();
+        }
+    }
+
+    // =========================================================================
+    // helpers
+    // =========================================================================
+
+    private PermissionSet evaluateIn(UUID companyId, UUID userId, UUID projectId) {
+        return inCompany(companyId, () -> evaluator.evaluate(userId, projectId));
+    }
+
+    private PermissionSet evaluateCompanyWideIn(UUID companyId, UUID userId) {
+        return inCompany(companyId, () -> evaluator.evaluateCompanyWide(userId));
+    }
+
+    private boolean memberOf(UUID companyId, UUID userId) {
+        return inCompany(companyId, () -> tx.execute(status ->
+                memberships.existsByCompanyIdAndUserIdAndStatus(
+                        companyId, userId, MembershipStatus.ACTIVE)));
+    }
+
+    private static <T> T inCompany(UUID companyId, Supplier<T> action) {
+        try (var ignored = CompanyContext.open(companyId)) {
+            return action.get();
+        }
+    }
+
+    private static void inCompany(UUID companyId, Runnable action) {
+        try (var ignored = CompanyContext.open(companyId)) {
+            action.run();
+        }
+    }
+
+    private void provisionCompany(UUID id, String slug, String name, boolean suspended, Instant now) {
+        if (companies.findById(id).isEmpty()) {
+            Company company = Company.provision(id, slug, name, now);
+            if (suspended) {
+                company.suspend();
+            }
+            companies.save(company);
+        }
+    }
+
+    private void activeUser(UUID id, String email, Instant now) {
+        if (users.findById(id).isEmpty()) {
+            AppUser user = AppUser.invite(id, email, email, now);
+            user.activate("hash", now);
+            users.save(user);
+        }
+    }
+
+    private void grantInstanceAdmin(UUID userId, Instant now) {
+        if (instanceRoleAssignments.findByUserId(userId).isEmpty()) {
+            instanceRoleAssignments.save(InstanceRoleAssignment.forUser(
+                    UUID.randomUUID(), Role.INSTANCE_ADMIN_ID, userId, null, now));
+        }
+    }
+
+    private void seedProject(UUID id, UUID companyId, String marker, Instant now) {
+        if (projects.findScopedById(id).isEmpty()) {
+            // Same key and name in both companies — see the class comment.
+            projects.save(Project.create(id, companyId, "OLB", "Online Banking", marker, now));
+        }
+    }
+
+    private void member(UUID companyId, UUID userId, String displayName, boolean accepted, Instant now) {
+        if (memberships.findByCompanyIdAndUserId(companyId, userId).isEmpty()) {
+            CompanyMembership membership =
+                    CompanyMembership.invite(companyId, userId, displayName, null, now);
+            if (accepted) {
+                membership.accept(now);
+            }
+            memberships.save(membership);
+        }
+    }
+
+    private void joinTeam(UUID companyId, UUID teamId, UUID userId, Instant now) {
+        if (teamMemberships.findById(new TeamMembershipId(teamId, userId)).isEmpty()) {
+            teamMemberships.save(TeamMembership.join(companyId, teamId, userId, false, now));
+        }
+    }
+
+    private void grantOnProject(
+            String marker, UUID companyId, UUID roleId, UUID userId, UUID projectId, Instant now) {
+        UUID id = assignmentId(marker);
+        if (roleAssignments.findById(id).isEmpty()) {
+            roleAssignments.save(RoleAssignment.forUserOnProject(
+                    id, companyId, roleId, userId, projectId, null, now));
+        }
+    }
+
+    private void grantOnCompany(String marker, UUID companyId, UUID roleId, UUID userId, Instant now) {
+        UUID id = assignmentId(marker);
+        if (roleAssignments.findById(id).isEmpty()) {
+            roleAssignments.save(
+                    RoleAssignment.forUserOnCompany(id, companyId, roleId, userId, null, now));
+        }
+    }
+
+    private void grantToTeamOnProject(
+            String marker, UUID companyId, UUID roleId, UUID teamId, UUID projectId, Instant now) {
+        UUID id = assignmentId(marker);
+        if (roleAssignments.findById(id).isEmpty()) {
+            roleAssignments.save(RoleAssignment.forTeamOnProject(
+                    id, companyId, roleId, teamId, projectId, null, now));
+        }
+    }
+
+    /** Stable ids so the seed is idempotent across the class's many @BeforeEach runs. */
+    private static UUID assignmentId(String marker) {
+        return UUID.nameUUIDFromBytes(("role-assignment:" + marker).getBytes());
+    }
+}
