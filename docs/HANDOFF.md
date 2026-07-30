@@ -1,11 +1,12 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-07-30 (last session: multi-company tenancy design)
-**State:** Planning and design complete, **now including multi-company tenancy**. Backend schema regenerated (not executed). Frontend complete through **Phase 3 (quality layers)** but built against the *pre*-multi-company design — see **§9, which is where the next session should start.**
-**Build status:** `frontend` — `npm run build` clean, `npm run lint` 0 warnings. Backend DDL statically validated (63 tables), **never run against Postgres**.
-**Branch:** `phase3-quality-layers`, not merged. Last commit `51f6056` — multi-company design + regenerated schema.
+**Date:** 2026-07-30 (last session: multi-company design → frontend corrections)
+**State:** Planning and design complete **including multi-company tenancy**. Backend schema regenerated (not executed). Frontend complete through **Phase 3**, and **now aligned with the multi-company decisions** (§9). Phase 4 (tests) and 5 (review) not started.
+**Build status:** `frontend` — `npm run build` clean, `npm run lint` 0 warnings, 0 new testid collisions. Backend DDL statically validated (63 tables), **never run against Postgres**.
+**Branch:** `phase3-quality-layers`, not merged. Last commits: `51f6056` multi-company design, `7c2bf70` handoff.
 
-> **⚠ Read §9 before touching the frontend.** The multi-company decisions changed the display-key format, the route topology, the role set and the permission catalogue. The frontend still implements the old shapes, and `openapi.yaml` is now behind the design. Nothing is broken at build time — it is *silently* out of date, which is worse.
+> **⚠ Two things are UNCOMMITTED and one is incomplete — read §10 first.**
+> A separate strand of work (a Kiwi TCMS competitive gap audit plus plan amendments for LDAP/AD, plan templates and defect handling) is on disk but not committed, and it left a **dangling `§6v` reference** — cited twice in the plan with no such section written. §10 has the details.
 
 ---
 
@@ -58,8 +59,9 @@ So "Payments" is a **Feature** or a suite folder, never a project. A company hol
 | `docs/specs/2026-07-30-tcms-roles-permissions-naming.md` | 340 | **AUTHORITATIVE for the permission catalogue, role grants and naming.** The seed-migration source. The ERD defers to it where they overlap. |
 | `docs/specs/2026-07-30-tcms-erd.md` | 760 | Entity-relationship design — Mermaid per module, field tables, reasoning. §0.1 is the `company_id` rule and is the most important part. |
 | `backend/src/main/resources/db/migration/V1__initial_schema.sql` | 1433 | First Flyway migration. **63 tables, 55 indexes, RLS policies.** Comments carry the *why*. |
-| `docs/specs/openapi.yaml` | 1996 | REST contract. **NOW STALE** — predates multi-company; see §9. |
-| `frontend/` | — | Vite + React 19 + TS + MUI v7. Phase 3 complete, but against the pre-multi-company contract; see §9. |
+| `docs/specs/openapi.yaml` | ~2100 | REST contract — the source of frontend types and mock handlers. **Aligned with multi-company** (§9): `PermissionKey` enum, six roles, `COMPANY` scope, `TC-1` keys, UUID-only path params. |
+| `docs/audits/2026-07-30-kiwi-tcms-capability-gaps.md` | — | Competitive gap analysis vs Kiwi TCMS. **From a separate work strand, uncommitted** — see §10. Its §6 proposes plan amendments, some already applied. |
+| `frontend/` | — | Vite + React 19 + TS + MUI v9. Phase 3 complete **and multi-company-aligned** (§9). |
 
 ### Plan section index (`docs/plans/...`)
 
@@ -172,7 +174,7 @@ So "Payments" is a **Feature** or a suite folder, never a project. A company hol
 - **Color:** `#1B2A41` ink · `#2E6E8E` steel (actions) · `#F5F7FA` surface · `#DDE3EA` hairline. Status: `#2E7D5B` passed · `#C0392B` failed · `#B7791F` blocked · `#6B7280` skipped.
 - **Type:** IBM Plex Sans + IBM Plex Mono (technical-documentation lineage; Inter would have been the default reach).
 - **Layout:** left rail (project + nav) · main content · detail pages split into content + metadata sidebar.
-- **Signature:** **the identifier system** — every key, version, release, percentage and SHA (`TC-1`, `v7`, `4.3.0`, `87%`) in Plex Mono with tabular figures. Functionally correct (similar keys stay distinguishable, keys align in columns) and gives the UI an instrument-panel character from the subject's own world. **⚠ The code still renders the old `TC_0042` form** — the format changed to `TC-1` with the company-scoped key decision (§9). The design thesis is unaffected; only the string is.
+- **Signature:** **the identifier system** — every key, version, release, percentage and SHA (`TC-1`, `v7`, `4.3.0`, `87%`) in Plex Mono with tabular figures. Functionally correct (similar keys stay distinguishable, keys align in columns) and gives the UI an instrument-panel character from the subject's own world. The format is `TC-1` (company-scoped, §6t) as of the corrections in §9 — the design thesis was unaffected by that change, only the string.
 - **Design-critique revision (required by the skill's gate):** critiqued against the three AI-default looks. Palette avoids cream+serif+terracotta and acid-on-black. First layout pass was "white cards with shadows on grey" — the safe SaaS default — and pushing away risked landing on default #3, the hairline-rule broadsheet. **Revised to:** one elevated surface per region, hairline dividers *inside* it, restrained 4px radius. Density comes from row rhythm, not from stripping geometry.
 
 ### Files written
@@ -202,7 +204,7 @@ So "Payments" is a **Feature** or a suite folder, never a project. A company hol
 
 | Path | Purpose |
 |---|---|
-| `src/mocks/db.ts` | Mutable store, `PREFIX_NNNN` key allocation, derived suite counts, lazily-materialized run executions, `recountRun()`, computed (never stored) derived work items. |
+| `src/mocks/db.ts` | Mutable store, `PREFIX-N` **per-company** display-key allocation (§9), derived suite counts, lazily-materialized run executions, `recountRun()`, computed (never stored) derived work items. |
 | `src/mocks/handlers.ts` | Every path in `openapi.yaml`. Optimistic-concurrency 409s, field-keyed 400s, bulk preview/commit, a real draft→approve guard. 220 ms latency so loading states are reachable. |
 | `src/mocks/browser.ts` | `setupWorker`. `public/mockServiceWorker.js` is committed. |
 | `src/api/queries.ts` | **The data module.** Every read/write hook, one `keys` factory, query keys carrying every dependency, `enabled` gates, per-endpoint timeout budgets. |
@@ -300,9 +302,9 @@ Modified: `Providers.tsx` (nesting order is load-bearing — see its header comm
 2. **`reportUnauthorized` closed over `user`**, so the query client captured it at mount when `user` was `null` — the guard would then have swallowed every 401 for the life of the session and the recovery dialog would never have appeared. Now reads a ref.
 3. **A drifted response crashed the whole route** rather than the region, because `isEmpty(data)` — a predicate over the response body — was evaluated in `DataRegion` *outside* its own boundary. Moved into a child component.
 
-### Phases 4–5 — next, but §9 comes first
+### Phases 4–5 — next
 
-**Read §9 before starting Phase 4.** The key format, role set and permission strings changed after Phase 3 shipped; writing tests against the old shapes means writing them twice.
+**Unblocked.** The §9 corrections landed, so Phase 4 tests will be written against shapes that survive. `lib/permissions.ts` and `lib/results.ts` are the highest-value targets — both pure and both load-bearing.
 
 - **Phase 4:** Vitest + RTL. Nothing is installed yet. Highest-value targets are the logic-bearing units, not the markup: `useCaseFilters` (URL round-tripping), `lib/results` (denominator arithmetic), `lib/format` (`compareReleaseVersions`), `lib/describeError` (the retryable/isAuth matrix), `DataRegion`'s state matrix, `app/versionSkew` (the once-only guard), and the `CaseSchema` cross-field refinements.
 - **Phase 5:** hostile self-review — `code-review` + `design/ui-code-audit` + `design/ux-review`, with the "remove one accessory" restraint check.
@@ -375,7 +377,9 @@ Modified: `Providers.tsx` (nesting order is load-bearing — see its header comm
 **Two more from the multi-company session:**
 
 9. **A schema-wide invariant needs a mechanical check, not a careful reading.** Regenerating `V1` and then cross-checking every table against the `company_id` rule found **five join tables with no `company_id`** (`case_classification`, `case_tag`, `case_automation_tag`, `case_condition_optout`, `work_item_link`) and **four version/annotation tables absent from the RLS list** (`suite_version`, `test_plan_version`, `doc_page_version`, `derived_item_annotation`). Both classes are severe: a join table without the column is unfilterable *and* un-RLS-able, so a query starting from `case_classification` could cross clients; a version table holds a full snapshot of client content. **Neither was visible reading the file top to bottom** — only by scripting the comparison. This is lesson 5's family (the gates prove it compiles, not that it's right) applied to schema, and it is the argument for the M0 schema test being mandatory rather than a formality.
-10. **Write the decision *and* its reversal into the docs, not just the new state.** Several of this session's changes superseded earlier decisions that were themselves written down with reasons — `tenant_id`-as-hedge, per-project keys, five roles, Test Engineer as the default. Leaving only the new value would make the next reader think the old reasoning was never considered. Struck-through rows with "→ superseded" in §3 cost nothing and prevent re-litigating.
+10. **A sentinel value in data is a lie waiting to happen.** The fixture modelled "holds everything" as `permissions: ['*']`. It read fine and typechecked — until the catalogue grew. A sentinel cannot distinguish *complete coverage* from *a value that happens to be present*, so adding a permission Instance Admin didn't hold would still have rendered "every permission". Derive the claim from the real set (`allPermissions.every(...)`) and a gap shows up as a gap. Same family as lesson 9: the invariant needs computing, not asserting.
+11. **Making a contract enum out of a string field turns the compiler into the migration checklist.** `PermissionKey` went from `type: string` to a 55-member enum in `openapi.yaml`; regenerating found every stale permission literal in the codebase in one pass, including the `'*'` above. Where a field has a closed set, spell it out in the contract — the cost is a few lines of YAML and the return is that drift becomes a build error.
+12. **Write the decision *and* its reversal into the docs, not just the new state.** Several of this session's changes superseded earlier decisions that were themselves written down with reasons — `tenant_id`-as-hedge, per-project keys, five roles, Test Engineer as the default. Leaving only the new value would make the next reader think the old reasoning was never considered. Struck-through rows with "→ superseded" in §3 cost nothing and prevent re-litigating.
 
 ---
 
@@ -430,34 +434,68 @@ Faults live in module state, so a **full page reload clears them** — arm the f
 
 ---
 
-## 9. Multi-company impact on the existing frontend — START HERE
+## 9. Multi-company alignment of the frontend — DONE 2026-07-30
 
-The frontend is complete through Phase 3 and builds clean, but it was written against the **pre-multi-company** design. Nothing fails at build time; it is *silently* out of date, which is harder to notice and easy to build more on top of.
+The frontend was written against the pre-multi-company design. It built clean the whole time, so it was *silently* out of date — the harder kind to notice. This is now corrected. Scope was **corrections only**: no company switcher, no `/c/{slug}` routing, no per-company branding (those wait for backend M6). Routes stayed project-scoped by decision.
 
-**Do not start Phase 4 (tests) before deciding how to handle this.** Writing tests against the old key format and route topology means writing them twice.
+Run through the `fe-react` skill (Mode B — extend), phases: contract → types → data → display.
 
-### What actually changed underneath it
+### What landed
 
-| Design change | Frontend consequence | Files (verified, not guessed) |
-|---|---|---|
-| Display keys `TC_0042` → **`TC-1`**, per company not per project | The **design signature** is the identifier system, so this touches the most visible thing in the UI. Fixtures, the mock key allocator, filter placeholder text, and the `.identifier` CSS example all carry the old format. | `src/index.css` · `src/components/Identifier.tsx` · `src/mocks/db.ts` (`PREFIX_NNNN` allocator → per-company, no padding) · `src/mocks/fixtures/{core,cases,reporting}.ts` · `src/features/cases/CaseFilterBar.tsx` · `src/app/router.tsx` (comment) |
-| Keys are unambiguous company-wide | The stated reason for project-scoped routes — *"keys are ambiguous without project context"* (`router.tsx:16`) — **no longer holds.** Routes can flatten, and cross-project search stops needing qualification. Whether to flatten them is a real decision, not a mechanical edit. | `src/app/router.tsx` (`/projects/:projectId/*` topology) |
-| New `/c/{companySlug}/…` routing + company switcher | Not built at all. M6 work, but the route shape decision interacts with the point above — decide both together. | `src/app/router.tsx` · `src/app/AppShell.tsx` (rail needs a company picker) |
-| Role set: 5 roles → **6**, three scopes | `Admin` → `Instance Admin` + `Company Admin`. The admin screen renders roles with their permissions expanded, so it shows a stale catalogue. | `src/mocks/fixtures/core.ts` · `src/mocks/handlers.ts` · `src/features/admin/TeamsPage.tsx` |
-| Permission catalogue gained 6, split 3 | `suite:delete`, `project:audit`, `case:comment`, `defect:create`, `workitem:manage`, `library:manage`. Any affordance gated on the old set is now wrong in both directions. | same as above |
-| **Viewer is the default everywhere** | Previously Test Engineer on project assignment. Fixtures seed contributors by default and will read as too-permissive. | `src/mocks/fixtures/core.ts` |
-| Per-membership display names | Names must resolve through the active company's membership, not `user.display_name`. Affects assignee pickers, mentions, audit rows, review comments, board avatars, org chart. | anywhere a user name renders |
-| Per-company branding | `theme.ts` builds a fixed palette; it now needs to derive from the active company's two brand colours **with contrast validated**, while **status colours stay fixed**. The existing thesis ("status owns the saturation budget, brand retreats") is exactly right for this and makes it easier — brand only touches actions and nav. | `src/app/theme.ts` · `src/index.css` |
-| Project = a full client product | Fixtures model projects as feature areas (`PAY`, `CHKOUT`). They should be whole products ("Acme Online Banking"), with `Payments` as a **Feature** value or suite folder. Cosmetic, but it teaches the wrong model to whoever reads the fixtures next. | `src/mocks/fixtures/core.ts` |
-| `automationKey` now company-unique | Was per-project. | `src/mocks/{db,handlers}.ts` |
-| Executions lost their display key | `TE_0001` no longer exists — executions are identified by `(run, case)` or UUID. | `src/mocks/db.ts` · execution screens |
+| Change | Where |
+|---|---|
+| Display keys `TC_0042` → **`TC-1`**, company-scoped, no zero-padding | `mocks/db.ts` allocator · 93 literals swept across `fixtures/{core,cases,reporting}.ts`, `index.css`, `Identifier.tsx`, `CaseFilterBar.tsx`, `PlanStatisticsPage.tsx` |
+| **Executions lost their display key entirely** — reached via run or case | `openapi.yaml` (`TestExecutionSummary.key`, `ExecutionHistoryEntry.executionKey` removed) · `db.ts` · `ExecutionPage.tsx` · `RunDetailPage.tsx` |
+| Role set 5 → **6** (Instance Admin + Company Admin), `COMPANY` scope | `openapi.yaml` `Role` · `fixtures/core.ts` |
+| **`PermissionKey` as a 55-member contract enum** | `openapi.yaml` — the compiler now rejects any stale permission string |
+| **`lib/permissions.ts` — new.** Catalogue as runtime data, exhaustive via `satisfies Record<PermissionKey, Area>` | mirrors the `lib/labels.ts` convention |
+| Viewer is the default grant; projects are whole client products (`OLB`, `MOB`) | `fixtures/core.ts` |
+| `automationKey` documented company-unique; `Project.key` pattern `^[A-Z0-9]{2,10}$`; `CaseId` param **UUID-only** | `openapi.yaml` |
+| Route justification corrected — the old one was falsified | `app/router.tsx` |
 
-### The ordering that avoids doing this twice
+### Two findings beyond the brief
 
-1. **Update `openapi.yaml` first.** It is the contract and the source of frontend types (§8). It currently has no company concept, the old role set, and the old key format. Everything below depends on it.
-2. **Regenerate types** (`npm run gen:api`) and let the compiler find the call sites. This is the cheap half.
-3. **Decide the route topology** — keep `/projects/:projectId/*`, or flatten now that keys are unambiguous, and where `/c/{slug}` sits. A decision, not a refactor.
-4. **Then** fixtures, mock allocator, role/permission data, and the identifier format.
-5. **Then** Phase 4 tests, against shapes that will survive.
+1. **The `'*'` permission wildcard was a fiction.** The fixture gave Instance Admin `permissions: ['*']`; no such permission exists in the model (§6b — code checks permissions, never role names, and there is no wildcard). Worse than cosmetic: a sentinel keeps reading as "every permission" after a permission is *added that the role does not hold*. Coverage is now **derived** by comparing against the catalogue, so a gap renders as a gap. `TeamsPage` also groups permissions by area, which is what makes a 55-item list legible.
+2. **`ExecutionHistoryEntry.executionKey` had no consumer** — a contract field nothing could populate once executions lost their key. Removed rather than left dangling.
 
-**A caveat worth stating:** M6 (the multi-company *surface*) is deliberately last on the backend, so there is a defensible argument for the frontend continuing single-company for now — as long as the **key format, role names and permission strings** are corrected, since those are wrong *today* regardless of when the switcher ships. The switcher, per-company branding and company-scoped routing can wait for M6. Don't let "M6 is later" become a reason to leave `TC_0042` in place.
+### Gate evidence
+
+`npm run build` clean · `npm run lint` 0 warnings · **36/36 assertions** in a throwaway `tsx` script (catalogue integrity, the three Test Engineer → Test Lead boundary lines, Company Admin holds no SYSTEM permission, grouping lossless for all six roles, key format, Viewer default) · 0 new testid collisions (the 6 pre-existing are the documented `TestIdPrefix` constants).
+
+### ⚠ The browser pass did NOT happen
+
+The Chrome extension was not connected. Per this project's own lessons 5–7, **the gates prove compilation, not correctness** — and this slice changed a table's column structure (`RunDetailPage` lost its "Execution" column, row→detail moved onto the title) and added grouped permission rendering. Both typecheck while potentially looking broken.
+
+**Before trusting this visually, run `npm run dev` and check:** `/projects/{id}/runs/{runId}` (the executions table) and Teams & roles (the six roles, Instance Admin showing "every permission (55)", others grouped by area).
+
+### Still deferred to M6
+
+Company switcher · `/c/{slug}` routing and session switching · per-company branding (theme derived from two brand colours with contrast validation; status colours stay fixed) · invitation flow · per-membership display names · route flattening (now *possible* since keys are unambiguous, deliberately not done so the URL shape is designed once).
+
+---
+
+## 10. In-flight work from a separate strand — UNCOMMITTED
+
+Discovered on disk at the end of the last session, **not produced by the multi-company work** and not committed. Flagged rather than absorbed, because I do not know its full intent:
+
+**`docs/audits/2026-07-30-kiwi-tcms-capability-gaps.md`** (untracked) — a one-directional competitive analysis of Kiwi TCMS capabilities the plan does not cover. Nine ranked gaps; the ones with real scope impact:
+
+- **No third-party extension mechanism.** The plan has internal *ports* (`IssueTracker`, `StorageService`, `SearchService`) but no plugin API. The note argues this compounds — every integration stays ours to write. Recommends deciding explicitly: a result-parser SPI + outbound webhooks, or declare it a non-goal.
+- **LDAP / Active Directory and Kerberos are absent from §6r**, which covers OIDC only. A large share of on-prem self-hosters have AD and no OIDC issuer.
+- Cloning (cases/plans/runs), an internal defect tracker, bug-tracker breadth (12 vs 1), per-entity notification subscribers, run-level parameters.
+- Its **§6 proposes plan amendments**, some already applied to the plan (also uncommitted).
+
+**Uncommitted plan edits** (`git diff docs/plans/…`), apparently from the same strand:
+- **§6r gained a full LDAP/AD subsection** — bind not redirect, LDAPS mandatory, identity keyed on `objectGUID`/`entryUUID` **never the DN**, groups by search not claim, reuses `claim_role_mapping` unchanged, deprovisioning by poll. Marked in scope for M4.
+- `TestPlanTemplate` added to the §2 domain model; "Plan templates & cloning" added to Phase 1 scope.
+- `Defect` reshaped — local record always exists, `externalRef` for the tracker, surfaced as a board work item.
+
+### ⚠ `§6v` is a dangling reference
+
+Both new plan edits cite **§6v** (`docs/plans/…` lines ~69 and ~139) and **no `## 6v` section exists.** Whoever resumes should either write it (plan templates + cloning design) or drop the references. A cited section that doesn't exist is how a plan starts being distrusted.
+
+### What to do first
+
+1. **Decide whether to commit the strand.** `docs/audits/…` + the plan diff are coherent on their own; the `§6v` gap is the only loose end.
+2. If LDAP/AD is genuinely M4 scope, the **`user_identity` key rule in §3 detail 12 now covers three cases**, not two: `(company_id, issuer, subject)` where subject is an OIDC `sub` **or** an `objectGUID`/`entryUUID` — never email, never a DN.
+3. The ERD and `V1` schema do **not** yet reflect `TestPlanTemplate` or the reshaped `Defect`. If those amendments stand, both need a pass.

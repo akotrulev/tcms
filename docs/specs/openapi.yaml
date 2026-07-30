@@ -1,0 +1,2139 @@
+openapi: 3.1.0
+info:
+  title: TCMS API
+  version: 0.1.0-mock
+  description: |
+    Test Case Management System — REST contract.
+
+    This is the source of truth for the frontend TypeScript types and the MSW mock
+    handlers. The backend has not been implemented yet; the shapes here are what the
+    UI is being designed against, and will drive the eventual Spring Boot controllers.
+
+    Companion documents:
+      * docs/plans/2026-07-30-tcms-high-level-plan.md  (§ references throughout)
+      * docs/specs/2026-07-30-tcms-erd.md              (persistence model)
+      * docs/specs/2026-07-30-tcms-roles-permissions-naming.md
+        (AUTHORITATIVE for the permission catalogue, role grants and naming)
+
+    Conventions
+      * All ids are UUIDs — and UUIDs are the only identifiers any path accepts.
+      * Display keys (TC-1, TP-1, TS-1, TR-1, DOC-1) are sequential PER COMPANY and
+        unique across all of that company's projects (plan §6t). They are display
+        only: they never appear as a path identifier, because they are trivially
+        guessable where a UUID is not. Paths stay nested under /projects/{projectId}
+        because a project is a real navigation boundary — a whole client product —
+        not because a key needs disambiguating.
+      * A company is a separate CLIENT organisation and the top-level isolation
+        boundary (plan §6s). Multi-company routing (/c/{slug}), the company switcher
+        and per-company branding land with backend M6 and are deliberately NOT in
+        this contract yet. What IS here is the shape those decisions already changed:
+        the display-key format, the six built-in roles, and the permission catalogue.
+      * List endpoints return { items, page, size, total } and accept composable
+        filters. Filter state is expected to live in the URL (plan §6o/§6q).
+      * Timestamps are RFC 3339 with offset.
+      * Write endpoints that mutate versioned entities accept If-Match with the
+        entity's lockVersion for optimistic concurrency (plan §7 resolved: multiple
+        testers may work one run concurrently).
+
+servers:
+  - url: /api/v1
+
+tags:
+  - name: auth
+  - name: projects
+  - name: repository
+  - name: execution
+  - name: documentation
+  - name: artifacts
+  - name: reporting
+  - name: admin
+  - name: work
+
+# =============================================================================
+# PATHS
+# =============================================================================
+paths:
+
+  # ---------------------------------------------------------------- auth ----
+  # v1 is local accounts only. External OIDC providers (Cognito, Entra ID, Google,
+  # Okta, Keycloak, generic) land in the integrations phase — plan §6r — and will add
+  # /auth/providers, /auth/oidc/{provider}/authorize and /auth/oidc/{provider}/callback
+  # alongside this endpoint, not replacing it. Local login is retained permanently as
+  # the break-glass path for a self-hosted product.
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Authenticate with email and password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, format: password }
+                rememberMe: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Authenticated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Invalidate the current session
+      responses:
+        '204': { description: Logged out }
+
+  /me:
+    get:
+      tags: [auth]
+      summary: The authenticated user
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CurrentUser' }
+
+  /me/permissions:
+    get:
+      tags: [auth]
+      summary: Effective permissions for the caller in a project
+      description: |
+        Drives UI affordances only. Every hidden action is independently rejected
+        server-side — hidden is not protected (plan §6b).
+      parameters:
+        - name: projectId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Permission keys
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  projectId: { type: string, format: uuid }
+                  permissions:
+                    type: array
+                    items: { $ref: '#/components/schemas/PermissionKey' }
+
+  # ------------------------------------------------------------ projects ----
+  /projects:
+    get:
+      tags: [projects]
+      summary: Projects visible to the caller
+      responses:
+        '200':
+          description: Projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Project' }
+
+  /projects/{projectId}:
+    parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+    get:
+      tags: [projects]
+      summary: Project detail
+      responses:
+        '200':
+          description: Project
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+
+  /projects/{projectId}/classification:
+    parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+    get:
+      tags: [projects]
+      summary: Classification dimensions and their values
+      description: Test Type, Test Level, Feature tree, Execution Phase (plan §6d).
+      responses:
+        '200':
+          description: Dimensions
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ClassificationDimension' }
+
+  /projects/{projectId}/statuses:
+    parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+    get:
+      tags: [projects]
+      summary: Configurable execution statuses
+      responses:
+        '200':
+          description: Statuses
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CaseStatus' }
+
+  # ---------------------------------------------------------- repository ----
+  /projects/{projectId}/suites:
+    parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+    get:
+      tags: [repository]
+      summary: Suite tree
+      responses:
+        '200':
+          description: Suites, as a flat list with parentId (client builds the tree)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Suite' }
+    post:
+      tags: [repository]
+      summary: Create a suite
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SuiteInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Suite' }
+
+  /projects/{projectId}/suites/{suiteId}:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - name: suiteId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [repository]
+      summary: Suite detail
+      responses:
+        '200':
+          description: Suite
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Suite' }
+    patch:
+      tags: [repository]
+      summary: Update a suite
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SuiteInput' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Suite' }
+
+  /projects/{projectId}/suites/{suiteId}/history:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - name: suiteId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: versionNo
+        in: query
+        description: Filter to one suite version. Omit for all.
+        schema: { type: integer }
+    get:
+      tags: [repository, reporting]
+      summary: Suite execution history — pass % per execution
+      description: |
+        Each entry is one execution of the suite, grouped by (run, suite, configuration),
+        summarized as counts. Percentages are derived client-side so the
+        "of executed" vs "of total" toggle works without a round trip (plan §6p).
+      responses:
+        '200':
+          description: History
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entries:
+                    type: array
+                    items: { $ref: '#/components/schemas/SuiteRunSummary' }
+                  versionMarkers:
+                    type: array
+                    items: { $ref: '#/components/schemas/VersionMarker' }
+
+  /projects/{projectId}/cases:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/Page' }
+      - { $ref: '#/components/parameters/Size' }
+      - name: q
+        in: query
+        description: |
+          Free text over title and description. A value matching the case-key
+          pattern (TC-n) short-circuits to an exact lookup (plan §6q).
+        schema: { type: string }
+      - name: suiteId
+        in: query
+        description: Includes descendant suites by default.
+        schema: { type: string, format: uuid }
+      - name: featureId
+        in: query
+        description: Includes descendant features by default (plan §6q).
+        schema: { type: string, format: uuid }
+      - name: testTypeId
+        in: query
+        schema: { type: string, format: uuid }
+      - name: testLevelId
+        in: query
+        schema: { type: string, format: uuid }
+      - name: lifecycleStatus
+        in: query
+        schema:
+          type: array
+          items: { $ref: '#/components/schemas/LifecycleStatus' }
+      - name: automationStatus
+        in: query
+        schema:
+          type: array
+          items: { $ref: '#/components/schemas/AutomationStatus' }
+      - name: priority
+        in: query
+        schema:
+          type: array
+          items: { $ref: '#/components/schemas/Priority' }
+      - name: healthSignal
+        in: query
+        description: Dashboard tile drill-down (plan §6o).
+        schema:
+          type: array
+          items: { $ref: '#/components/schemas/HealthSignal' }
+      - name: releaseVersion
+        in: query
+        description: Cases executed in this release (filters via executions).
+        schema: { type: string }
+      - name: sort
+        in: query
+        schema: { type: string, example: 'keySeq,asc' }
+    get:
+      tags: [repository]
+      summary: Search and filter test cases
+      responses:
+        '200':
+          description: Matching cases plus facet counts
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageMeta'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/TestCaseSummary' }
+                      facets:
+                        type: array
+                        items: { $ref: '#/components/schemas/Facet' }
+    post:
+      tags: [repository]
+      summary: Create a test case
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TestCaseInput' }
+      responses:
+        '201':
+          description: Created — key is server-allocated (TC-n, per company)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TestCase' }
+
+  /projects/{projectId}/cases/bulk:
+    parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+    post:
+      tags: [repository]
+      summary: Bulk operation over a case selection
+      description: |
+        Preview-then-commit. Always returns what changed, what was already
+        compliant, and what was skipped with a reason — mass edits without a
+        preview are how people destroy a suite at 5pm (plan §6f).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BulkOperation' }
+      responses:
+        '200':
+          description: Result (or preview when dryRun is true)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BulkResult' }
+
+  /projects/{projectId}/cases/{caseId}:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/CaseId' }
+    get:
+      tags: [repository]
+      summary: Full test case
+      responses:
+        '200':
+          description: Case
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TestCase' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [repository]
+      summary: Update a test case
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TestCaseInput' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TestCase' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [repository]
+      summary: Soft-delete a test case
+      responses:
+        '204': { description: Deleted }
+
+  /projects/{projectId}/cases/{caseId}/versions:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/CaseId' }
+    get:
+      tags: [repository]
+      summary: Version history
+      responses:
+        '200':
+          description: Versions, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/EntityVersion' }
+
+  /projects/{projectId}/cases/{caseId}/history:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/CaseId' }
+      - name: caseVersionNo
+        in: query
+        description: Omit for all versions; the UI defaults the summary to current.
+        schema: { type: integer }
+      - name: releaseVersion
+        in: query
+        schema: { type: string }
+      - name: configurationId
+        in: query
+        schema: { type: string, format: uuid }
+    get:
+      tags: [repository, reporting]
+      summary: Pass/fail execution history for a case
+      description: |
+        Timeline of every execution, attributed to the case version executed, plus
+        version-change markers so "the edit broke it" is readable at a glance
+        (plan §6p).
+      responses:
+        '200':
+          description: History
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  summary: { $ref: '#/components/schemas/CaseHistorySummary' }
+                  entries:
+                    type: array
+                    items: { $ref: '#/components/schemas/ExecutionHistoryEntry' }
+                  versionMarkers:
+                    type: array
+                    items: { $ref: '#/components/schemas/VersionMarker' }
+
+  /projects/{projectId}/conditions:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - name: q
+        in: query
+        description: Typeahead query. Ranked by relevance blended with usageCount (plan §6h).
+        schema: { type: string }
+      - name: type
+        in: query
+        schema: { type: string, enum: [PRE, POST, BOTH] }
+    get:
+      tags: [repository]
+      summary: Reusable pre/post condition library
+      responses:
+        '200':
+          description: Conditions
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Condition' }
+
+  /projects/{projectId}/shared-steps:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - name: q
+        in: query
+        schema: { type: string }
+    get:
+      tags: [repository]
+      summary: Reusable step library
+      responses:
+        '200':
+          description: Shared steps
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SharedStep' }
+
+  # ----------------------------------------------------------- execution ----
+  /projects/{projectId}/plans:
+    parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+    get:
+      tags: [execution]
+      summary: Test plans
+      responses:
+        '200':
+          description: Plans
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/TestPlanSummary' }
+    post:
+      tags: [execution]
+      summary: Create a test plan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TestPlanInput' }
+      responses:
+        '201':
+          description: Created — key is server-allocated (TP-n, per company)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TestPlan' }
+
+  /projects/{projectId}/plans/{planId}:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - name: planId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [execution]
+      summary: Plan detail
+      responses:
+        '200':
+          description: Plan
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TestPlan' }
+
+  /projects/{projectId}/plans/{planId}/statistics:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - name: planId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: aggregation
+        in: query
+        description: |
+          How to resolve a case executed many times. The chosen policy is echoed
+          back and MUST be displayed — two teams reading "94% pass" otherwise mean
+          different things (plan §6e).
+        schema:
+          $ref: '#/components/schemas/AggregationPolicy'
+    get:
+      tags: [execution, reporting]
+      summary: Current plan state from the latest execution
+      responses:
+        '200':
+          description: Statistics
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlanStatistics' }
+
+  /projects/{projectId}/runs:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - name: planId
+        in: query
+        schema: { type: string, format: uuid }
+      - name: releaseVersion
+        in: query
+        schema: { type: string }
+    get:
+      tags: [execution]
+      summary: Test runs
+      responses:
+        '200':
+          description: Runs
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/TestRun' }
+    post:
+      tags: [execution]
+      summary: Create a run
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TestRunInput' }
+      responses:
+        '201':
+          description: Created — key is server-allocated (TR-n, per company)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TestRun' }
+
+  /projects/{projectId}/runs/{runId}:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/RunId' }
+    get:
+      tags: [execution]
+      summary: Run detail with its executions
+      responses:
+        '200':
+          description: Run
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TestRunDetail' }
+
+  /projects/{projectId}/runs/{runId}/executions/{executionId}:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/RunId' }
+      - name: executionId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [execution]
+      summary: One execution, with the pinned case version's steps
+      responses:
+        '200':
+          description: Execution
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TestExecution' }
+    patch:
+      tags: [execution]
+      summary: Record a result
+      description: |
+        Optimistic locking via If-Match — several testers may work one run at once.
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ExecutionResultInput' }
+      responses:
+        '200':
+          description: Recorded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TestExecution' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  # ------------------------------------------------------- documentation ----
+  /projects/{projectId}/doc-pages:
+    parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+    get:
+      tags: [documentation]
+      summary: Documentation page tree
+      responses:
+        '200':
+          description: Pages
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/DocPageSummary' }
+
+  /projects/{projectId}/doc-pages/{pageId}:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - name: pageId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [documentation]
+      summary: Page with blocks and per-block coverage
+      description: |
+        Each block carries the cases linked to it and their latest results — the
+        inline coverage marker that makes people maintain links (plan §6i).
+      responses:
+        '200':
+          description: Page
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocPage' }
+
+  /projects/{projectId}/artifacts:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - name: scope
+        in: query
+        schema: { type: string, enum: [PROJECT, PLAN] }
+      - name: planId
+        in: query
+        description: When scope=PLAN, project-scope artifacts are also returned, flagged inherited.
+        schema: { type: string, format: uuid }
+    get:
+      tags: [artifacts]
+      summary: Artifact register
+      responses:
+        '200':
+          description: Artifacts
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Artifact' }
+
+  # ----------------------------------------------------------- reporting ----
+  /projects/{projectId}/dashboard:
+    parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+    get:
+      tags: [reporting]
+      summary: Repository status dashboard
+      description: |
+        Lifecycle counts crossed with derived health signals. Every count carries
+        the filter that reproduces it, so tiles are links, not decoration (plan §6o).
+      responses:
+        '200':
+          description: Dashboard
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RepositoryDashboard' }
+
+  /projects/{projectId}/reports:
+    parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+    get:
+      tags: [reporting]
+      summary: Saved report definitions
+      responses:
+        '200':
+          description: Definitions
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ReportDefinition' }
+
+  /projects/{projectId}/reports/generate:
+    parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+    post:
+      tags: [reporting]
+      summary: Generate a report
+      description: Async by contract — returns 202 with a job to poll (plan §6e).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, format]
+              properties:
+                type: { type: string, example: aggregate_execution }
+                format: { type: string, enum: [PDF, MD, HTML] }
+                parameters: { type: object, additionalProperties: true }
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReportJob' }
+
+  # --------------------------------------------------------------- admin ----
+  /users:
+    get:
+      tags: [admin]
+      summary: Users
+      responses:
+        '200':
+          description: Users
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/User' }
+
+  /teams:
+    get:
+      tags: [admin]
+      summary: Teams, with parent links for the org chart
+      responses:
+        '200':
+          description: Teams
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Team' }
+
+  /roles:
+    get:
+      tags: [admin]
+      summary: Roles and their permissions
+      responses:
+        '200':
+          description: Roles
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Role' }
+
+  /role-assignments:
+    get:
+      tags: [admin]
+      summary: Role grants to users and teams
+      parameters:
+        - name: projectId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Assignments
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/RoleAssignment' }
+
+  # ---------------------------------------------------------------- work ----
+  /work-items:
+    get:
+      tags: [work]
+      summary: Kanban board contents
+      description: |
+        Returns real tasks AND derived items (assigned executions, pending reviews,
+        stale cases) in one list. Derived items carry sourceType/sourceId and are
+        NOT stored — their status is computed from the source, so a card can never
+        diverge from its execution (plan §6l).
+      parameters:
+        - name: projectId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: assigneeId
+          in: query
+          description: Omit and pass mine=true for the personal board.
+          schema: { type: string, format: uuid }
+        - name: mine
+          in: query
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: Work items
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/WorkItem' }
+
+# =============================================================================
+# COMPONENTS
+# =============================================================================
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    CaseId:
+      name: caseId
+      in: path
+      required: true
+      description: |
+        UUID only. Display keys (TC-1) are deliberately NOT accepted here: they are
+        sequential per company and therefore trivially guessable, so allowing one as a
+        path identifier hands out an enumeration oracle (plan §6t). Resolve a key the
+        user typed or pasted through the search endpoint, which returns not-found —
+        never forbidden — for a key in a project the caller cannot reach.
+      schema: { type: string, format: uuid }
+    RunId:
+      name: runId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, default: 0 }
+    Size:
+      name: size
+      in: query
+      schema: { type: integer, default: 50, maximum: 200 }
+    IfMatch:
+      name: If-Match
+      in: header
+      description: The entity's lockVersion. Mismatch yields 409.
+      schema: { type: string }
+
+  responses:
+    Unauthorized:
+      description: Not authenticated
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Conflict:
+      description: Concurrent modification — reload and retry
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+
+    # ------------------------------------------------------------ common ---
+    Problem:
+      type: object
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+
+    PageMeta:
+      type: object
+      properties:
+        page: { type: integer }
+        size: { type: integer }
+        total: { type: integer }
+
+    Facet:
+      description: Returned alongside results so filter counts render without a second request.
+      type: object
+      required: [key, label, values]
+      properties:
+        key: { type: string, example: automationStatus }
+        label: { type: string }
+        values:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              label: { type: string }
+              count: { type: integer }
+
+    UserRef:
+      type: object
+      required: [id, displayName, email]
+      properties:
+        id: { type: string, format: uuid }
+        displayName: { type: string }
+        email: { type: string }
+        avatarUrl: { type: string, nullable: true }
+
+    # -------------------------------------------------------------- enums ---
+    LifecycleStatus:
+      type: string
+      enum: [DRAFT, IN_REVIEW, APPROVED, DEPRECATED]
+
+    AutomationStatus:
+      type: string
+      enum: [MANUAL, TO_BE_AUTOMATED, AUTOMATED, NOT_AUTOMATABLE]
+
+    Priority:
+      type: string
+      enum: [CRITICAL, HIGH, MEDIUM, LOW]
+
+    StepFormat:
+      type: string
+      enum: [STRUCTURED, GHERKIN]
+
+    StatusKind:
+      type: string
+      enum: [PASSED, FAILED, BLOCKED, SKIPPED, UNTESTED, RETEST]
+
+    HealthSignal:
+      type: string
+      description: Derived, never authored — self-heals when the cause is fixed (plan §6o).
+      enum:
+        - OUTDATED_SPEC_CHANGED
+        - STALE_APPROVAL
+        - CONDITION_DRIFT
+        - STALE_AUTOMATION
+        - NEVER_EXECUTED
+        - LONG_UNEXECUTED
+        - UNLINKED
+        - FAILING_REPEATEDLY
+        - ORPHANED
+        - INCOMPLETE
+
+    AggregationPolicy:
+      type: string
+      description: How a case executed many times resolves to one result (plan §6e).
+      enum: [LATEST, LATEST_PER_CONFIG, WORST, BEST, ALL]
+      default: LATEST
+
+    # -------------------------------------------------------------- auth ---
+    AuthResult:
+      type: object
+      required: [token, expiresAt, user]
+      properties:
+        token: { type: string }
+        expiresAt: { type: string, format: date-time }
+        user: { $ref: '#/components/schemas/CurrentUser' }
+
+    CurrentUser:
+      allOf:
+        - $ref: '#/components/schemas/UserRef'
+        - type: object
+          properties:
+            isSystemAdmin: { type: boolean }
+            teams:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  name: { type: string }
+                  isLead: { type: boolean }
+
+    # ----------------------------------------------------------- project ---
+    Project:
+      type: object
+      required: [id, key, name, archived, caseCount, myRole]
+      properties:
+        id: { type: string, format: uuid }
+        key:
+          type: string
+          pattern: '^[A-Z0-9]{2,10}$'
+          example: OLB
+          description: |
+            2-10 uppercase alphanumerics, immutable, unique per company. Used in URLs
+            and labels. NOT part of a display key — those are company-scoped (§6t).
+        name:
+          type: string
+          description: |
+            A project is a FULL CLIENT PROJECT — an entire product or engagement
+            ("Acme Online Banking"), not a feature area. Feature-level structure lives
+            in the Feature classification dimension and the suite tree (plan §1, §6b).
+          example: Acme Online Banking
+        description: { type: string, nullable: true }
+        archived: { type: boolean }
+        caseCount: { type: integer }
+        myRole:
+          type: string
+          nullable: true
+          description: |
+            The caller's role on this project, or null when they hold no project grant.
+            Company membership conveys authentication and ZERO project visibility, so a
+            listed project always carries a grant — but Viewer is the default, never
+            Test Engineer (plan §6b).
+          example: Viewer
+
+    ClassificationDimension:
+      type: object
+      required: [id, key, name, cardinality, hierarchical, locked, values]
+      properties:
+        id: { type: string, format: uuid }
+        key: { type: string, example: feature }
+        name: { type: string }
+        cardinality: { type: string, enum: [SINGLE, MULTI] }
+        hierarchical: { type: boolean }
+        locked: { type: boolean }
+        values:
+          type: array
+          items: { $ref: '#/components/schemas/ClassificationValue' }
+
+    ClassificationValue:
+      type: object
+      required: [id, name, path]
+      properties:
+        id: { type: string, format: uuid }
+        parentId: { type: string, format: uuid, nullable: true }
+        name: { type: string }
+        path: { type: string, example: 'Payments.Refunds' }
+        color: { type: string, nullable: true }
+
+    CaseStatus:
+      type: object
+      required: [id, name, kind, color, countsAsPass, isFinal]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        kind: { $ref: '#/components/schemas/StatusKind' }
+        color: { type: string }
+        countsAsPass: { type: boolean }
+        isFinal: { type: boolean }
+
+    # -------------------------------------------------------- repository ---
+    Suite:
+      type: object
+      required: [id, key, name, path, caseCount, lifecycleStatus, conditions, lockVersion]
+      properties:
+        id: { type: string, format: uuid }
+        key: { type: string, example: TS-1 }
+        parentId: { type: string, format: uuid, nullable: true }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        path: { type: string }
+        caseCount: { type: integer }
+        lifecycleStatus: { $ref: '#/components/schemas/LifecycleStatus' }
+        conditions:
+          description: Suite-level conditions inherited by every case beneath (plan §6f).
+          type: array
+          items: { $ref: '#/components/schemas/CaseConditionRef' }
+        lockVersion: { type: integer }
+
+    SuiteInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        parentId: { type: string, format: uuid, nullable: true }
+        description: { type: string, nullable: true }
+
+    TestCaseSummary:
+      type: object
+      required: [id, key, keySeq, title, suiteId, suiteName, priority, lifecycleStatus, automationStatus, stepFormat, owner, features, tags, healthSignals, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        key: { type: string, example: TC-1 }
+        keySeq: { type: integer, description: Sort by this — text keys do not order correctly. }
+        title: { type: string }
+        suiteId: { type: string, format: uuid }
+        suiteName: { type: string }
+        priority: { $ref: '#/components/schemas/Priority' }
+        lifecycleStatus: { $ref: '#/components/schemas/LifecycleStatus' }
+        automationStatus: { $ref: '#/components/schemas/AutomationStatus' }
+        stepFormat: { $ref: '#/components/schemas/StepFormat' }
+        owner: { $ref: '#/components/schemas/UserRef' }
+        testType: { type: string, nullable: true }
+        testLevel: { type: string, nullable: true }
+        features:
+          type: array
+          items: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        healthSignals:
+          type: array
+          items: { $ref: '#/components/schemas/HealthSignal' }
+        lastResult:
+          type: object
+          nullable: true
+          properties:
+            statusKind: { $ref: '#/components/schemas/StatusKind' }
+            executedAt: { type: string, format: date-time }
+            releaseVersion: { type: string, nullable: true }
+        updatedAt: { type: string, format: date-time }
+
+    TestCase:
+      allOf:
+        - $ref: '#/components/schemas/TestCaseSummary'
+        - type: object
+          properties:
+            description: { type: string, nullable: true }
+            objective: { type: string, nullable: true }
+            expectedOutcome:
+              type: string
+              nullable: true
+              description: Case-level, alongside per-step expected results (plan §6m).
+            severity: { $ref: '#/components/schemas/Priority' }
+            estimatedDurationSec: { type: integer, nullable: true }
+            automationTags:
+              type: array
+              items: { type: string }
+            automationKey:
+              type: string
+              nullable: true
+              description: |
+                The single stable identifier a CI result carries back — FQCN#method, a Cucumber
+                scenario URI, or an explicit annotation value. Unique per COMPANY (plan §6c), so
+                a CI job posts results without knowing which project owns the case, and a case
+                moved between projects does not change where its key resolves. Distinct from
+                automationTags, which are for *selection* (@smoke), not matching.
+            notAutomatableReason: { type: string, nullable: true }
+            gherkinSource: { type: string, nullable: true }
+            steps:
+              type: array
+              items: { $ref: '#/components/schemas/TestStep' }
+            preconditions:
+              type: array
+              items: { $ref: '#/components/schemas/CaseConditionRef' }
+            postconditions:
+              type: array
+              items: { $ref: '#/components/schemas/CaseConditionRef' }
+            relatedDocuments:
+              type: array
+              items: { $ref: '#/components/schemas/DocLink' }
+            currentVersionNo: { type: integer }
+            lockVersion: { type: integer }
+
+    TestCaseInput:
+      type: object
+      required: [title, suiteId]
+      properties:
+        title: { type: string }
+        suiteId: { type: string, format: uuid }
+        description: { type: string, nullable: true }
+        objective: { type: string, nullable: true }
+        expectedOutcome: { type: string, nullable: true }
+        stepFormat: { $ref: '#/components/schemas/StepFormat' }
+        gherkinSource: { type: string, nullable: true }
+        priority: { $ref: '#/components/schemas/Priority' }
+        severity: { $ref: '#/components/schemas/Priority' }
+        automationStatus: { $ref: '#/components/schemas/AutomationStatus' }
+        automationKey: { type: string, nullable: true }
+        automationTags:
+          type: array
+          items: { type: string }
+        notAutomatableReason: { type: string, nullable: true }
+        estimatedDurationSec: { type: integer, nullable: true }
+        ownerId: { type: string, format: uuid, nullable: true }
+        classificationValueIds:
+          type: array
+          items: { type: string, format: uuid }
+        tags:
+          type: array
+          items: { type: string }
+        steps:
+          type: array
+          items: { $ref: '#/components/schemas/TestStepInput' }
+        preconditions:
+          type: array
+          items: { $ref: '#/components/schemas/CaseConditionInput' }
+        postconditions:
+          type: array
+          items: { $ref: '#/components/schemas/CaseConditionInput' }
+        changeComment:
+          type: string
+          nullable: true
+          description: Optional by design — mandatory comments produce a thousand "update"s.
+
+    TestStep:
+      type: object
+      required: [id, position, action]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Stable — results and evidence anchor here, so reordering is safe (plan §6m).
+        position: { type: integer }
+        keyword:
+          type: string
+          nullable: true
+          enum: [GIVEN, WHEN, THEN, AND, BUT, null]
+        action: { type: string }
+        testData: { type: string, nullable: true }
+        expectedResult: { type: string, nullable: true }
+        sharedStepId: { type: string, format: uuid, nullable: true }
+
+    TestStepInput:
+      type: object
+      required: [action]
+      properties:
+        id: { type: string, format: uuid, nullable: true }
+        keyword: { type: string, nullable: true }
+        action: { type: string }
+        testData: { type: string, nullable: true }
+        expectedResult: { type: string, nullable: true }
+        sharedStepId: { type: string, format: uuid, nullable: true }
+
+    Condition:
+      type: object
+      required: [id, title, type, body, usageCount]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        type: { type: string, enum: [PRE, POST, BOTH] }
+        body:
+          type: array
+          items: { type: string }
+        usageCount:
+          type: integer
+          description: Drives typeahead ranking and the pre-edit impact warning (plan §6f/§6h).
+
+    CaseConditionRef:
+      type: object
+      required: [id, position, title, body, inline, inherited]
+      properties:
+        id: { type: string, format: uuid }
+        position: { type: integer }
+        conditionId: { type: string, format: uuid, nullable: true }
+        title: { type: string }
+        body:
+          type: array
+          items: { type: string }
+        inline: { type: boolean }
+        inherited: { type: boolean }
+        inheritedFrom: { type: string, nullable: true, example: 'Billing' }
+
+    CaseConditionInput:
+      type: object
+      properties:
+        conditionId: { type: string, format: uuid, nullable: true }
+        inlineBody:
+          type: array
+          items: { type: string }
+
+    SharedStep:
+      type: object
+      required: [id, title, body, usageCount]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        body:
+          type: array
+          items: { type: string }
+        usageCount: { type: integer }
+
+    BulkOperation:
+      type: object
+      required: [action, caseIds]
+      properties:
+        action:
+          type: string
+          enum: [ATTACH_CONDITIONS, DETACH_CONDITIONS, SET_STATUS, SET_AUTOMATION_STATUS, SET_OWNER, ADD_TAGS, SUBMIT_FOR_REVIEW, MOVE_TO_SUITE]
+        caseIds:
+          type: array
+          items: { type: string, format: uuid }
+        mode:
+          type: string
+          enum: [APPEND, PREPEND, REPLACE]
+          default: APPEND
+        dryRun:
+          type: boolean
+          default: true
+          description: Preview first. The UI must show the preview before committing.
+        dedupe: { type: boolean, default: true }
+        payload:
+          type: object
+          additionalProperties: true
+
+    BulkResult:
+      type: object
+      description: |
+        Every outcome is reported as a LIST OF KEYS, not a count. The UI has to name what
+        it touched — "38 changed, 4 already matched, 2 skipped" with the two skipped cases
+        named and their reason given. A bare `affected: 38` cannot be rendered as a preview,
+        and a blanket success toast over a partial failure is the worse half of the defect,
+        because the user believes all 44 went through (plan §6f).
+      required: [dryRun, total, changed, unchanged, skipped]
+      properties:
+        dryRun:
+          type: boolean
+          description: True when this is a preview. The UI must preview before committing.
+        total:
+          type: integer
+          description: Size of the requested selection.
+        changed:
+          type: array
+          description: Case keys that changed (or would change, when dryRun).
+          items: { type: string, example: TC-42 }
+        unchanged:
+          type: array
+          description: Case keys already in the requested state — compliant, not failed.
+          items: { type: string, example: TC-43 }
+        skipped:
+          type: array
+          description: Case keys that could not be changed, each with a displayable reason.
+          items:
+            type: object
+            required: [key, reason]
+            properties:
+              key: { type: string, example: TC-44 }
+              reason: { type: string, example: 'A draft must be reviewed before it can be approved.' }
+        auditEventId: { type: string, format: uuid, nullable: true }
+
+    EntityVersion:
+      type: object
+      required: [versionNo, createdBy, createdAt, pinned]
+      properties:
+        versionNo: { type: integer }
+        createdBy: { $ref: '#/components/schemas/UserRef' }
+        createdAt: { type: string, format: date-time }
+        changeComment: { type: string, nullable: true }
+        pinned: { type: boolean }
+
+    VersionMarker:
+      description: Rendered on history timelines so causation is visible (plan §6p).
+      type: object
+      required: [versionNo, occurredAt, author]
+      properties:
+        versionNo: { type: integer }
+        occurredAt: { type: string, format: date-time }
+        author: { $ref: '#/components/schemas/UserRef' }
+        changeComment: { type: string, nullable: true }
+
+    # --------------------------------------------------------- execution ---
+    TestPlanSummary:
+      type: object
+      required: [id, key, name, status, caseCount]
+      properties:
+        id: { type: string, format: uuid }
+        key: { type: string, example: TP-1 }
+        name: { type: string }
+        status: { type: string, enum: [DRAFT, IN_REVIEW, APPROVED, ACTIVE, CLOSED] }
+        milestoneName: { type: string, nullable: true }
+        milestoneDate: { type: string, format: date, nullable: true }
+        caseCount: { type: integer }
+        passRate: { type: number, nullable: true }
+        coverage: { type: number, nullable: true }
+
+    TestPlan:
+      allOf:
+        - $ref: '#/components/schemas/TestPlanSummary'
+        - type: object
+          properties:
+            description: { type: string, nullable: true }
+            entryCriteria:
+              type: array
+              items: { $ref: '#/components/schemas/Criterion' }
+            exitCriteria:
+              type: array
+              items: { $ref: '#/components/schemas/Criterion' }
+            configurations:
+              type: array
+              items: { $ref: '#/components/schemas/Configuration' }
+            currentVersionNo: { type: integer }
+            lockVersion: { type: integer }
+
+    TestPlanInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string, nullable: true }
+        milestoneName: { type: string, nullable: true }
+        milestoneDate: { type: string, format: date, nullable: true }
+        suiteIds:
+          type: array
+          items: { type: string, format: uuid }
+        caseIds:
+          type: array
+          items: { type: string, format: uuid }
+
+    Criterion:
+      type: object
+      description: Machine-evaluable so the plan page is a gate, not prose (plan §6p).
+      required: [metric, op, value, label]
+      properties:
+        metric: { type: string, example: pass_rate }
+        op: { type: string, example: '>=' }
+        value: { type: number }
+        label: { type: string }
+        met: { type: boolean, nullable: true }
+        actual: { type: number, nullable: true }
+
+    Configuration:
+      type: object
+      required: [id, name, isDefault, attributes]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, example: 'Chrome / Windows' }
+        isDefault: { type: boolean }
+        attributes:
+          type: object
+          additionalProperties: { type: string }
+
+    TestRun:
+      type: object
+      required: [id, key, name, configuration, status, source, counts]
+      properties:
+        id: { type: string, format: uuid }
+        key: { type: string, example: TR-1 }
+        name: { type: string }
+        planId: { type: string, format: uuid, nullable: true }
+        planKey: { type: string, nullable: true }
+        configuration: { $ref: '#/components/schemas/Configuration' }
+        status: { type: string, enum: [NOT_STARTED, IN_PROGRESS, COMPLETED, ABORTED] }
+        releaseVersion: { type: string, nullable: true }
+        buildNumber: { type: string, nullable: true }
+        source: { type: string, enum: [MANUAL, INGESTED] }
+        startedAt: { type: string, format: date-time, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+        counts: { $ref: '#/components/schemas/ResultCounts' }
+
+    TestRunInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        planId: { type: string, format: uuid, nullable: true }
+        configurationId: { type: string, format: uuid, nullable: true }
+        releaseVersion: { type: string, nullable: true }
+        buildNumber: { type: string, nullable: true }
+        caseIds:
+          type: array
+          items: { type: string, format: uuid }
+        assigneeId: { type: string, format: uuid, nullable: true }
+
+    TestRunDetail:
+      allOf:
+        - $ref: '#/components/schemas/TestRun'
+        - type: object
+          properties:
+            executions:
+              type: array
+              items: { $ref: '#/components/schemas/TestExecutionSummary' }
+
+    ResultCounts:
+      type: object
+      description: Counts, never percentages — the denominator toggle needs both (plan §6p).
+      required: [passed, failed, blocked, skipped, notRun, total]
+      properties:
+        passed: { type: integer }
+        failed: { type: integer }
+        blocked: { type: integer }
+        skipped: { type: integer }
+        notRun: { type: integer }
+        total: { type: integer }
+
+    TestExecutionSummary:
+      type: object
+      description: |
+        The case x run instance. Deliberately has NO display key (plan §6t): an execution is
+        always reached through its run or its case, nobody says "TE-4038" out loud, and a
+        per-execution counter would be the highest-volume contention point in the schema for no
+        benefit. Identified by its UUID, or by (runId, caseId).
+      required: [id, caseId, caseKey, caseTitle, caseVersionNo, defects]
+      properties:
+        id: { type: string, format: uuid }
+        caseId: { type: string, format: uuid }
+        caseKey: { type: string }
+        caseTitle: { type: string }
+        caseVersionNo: { type: integer }
+        status:
+          allOf: [{ $ref: '#/components/schemas/CaseStatus' }]
+          nullable: true
+        assignee: { $ref: '#/components/schemas/UserRef' }
+        executedBy: { $ref: '#/components/schemas/UserRef' }
+        executedAt: { type: string, format: date-time, nullable: true }
+        durationMs: { type: integer, nullable: true }
+        defects:
+          type: array
+          items: { $ref: '#/components/schemas/DefectLink' }
+
+    TestExecution:
+      allOf:
+        - $ref: '#/components/schemas/TestExecutionSummary'
+        - type: object
+          properties:
+            comment: { type: string, nullable: true }
+            releaseVersion: { type: string, nullable: true }
+            stepFormat: { $ref: '#/components/schemas/StepFormat' }
+            preconditions:
+              type: array
+              items: { $ref: '#/components/schemas/CaseConditionRef' }
+            postconditions:
+              type: array
+              items: { $ref: '#/components/schemas/CaseConditionRef' }
+            steps:
+              type: array
+              items: { $ref: '#/components/schemas/StepResult' }
+            evidence:
+              type: array
+              items: { $ref: '#/components/schemas/Evidence' }
+            lockVersion: { type: integer }
+
+    StepResult:
+      type: object
+      properties:
+        stepId: { type: string, format: uuid }
+        position: { type: integer }
+        keyword: { type: string, nullable: true }
+        action: { type: string }
+        testData: { type: string, nullable: true }
+        expectedResult: { type: string, nullable: true }
+        statusId: { type: string, format: uuid, nullable: true }
+        comment: { type: string, nullable: true }
+        evidence:
+          type: array
+          items: { $ref: '#/components/schemas/Evidence' }
+
+    Evidence:
+      type: object
+      required: [id, filename, contentType, sizeBytes, url, createdBy, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        filename: { type: string }
+        contentType: { type: string }
+        sizeBytes: { type: integer }
+        url: { type: string }
+        thumbnailUrl: { type: string, nullable: true }
+        caption: { type: string, nullable: true }
+        createdBy: { $ref: '#/components/schemas/UserRef' }
+        createdAt: { type: string, format: date-time }
+
+    ExecutionResultInput:
+      type: object
+      properties:
+        statusId: { type: string, format: uuid }
+        comment: { type: string, nullable: true }
+        stepResults:
+          type: array
+          items:
+            type: object
+            properties:
+              stepId: { type: string, format: uuid }
+              statusId: { type: string, format: uuid }
+              comment: { type: string, nullable: true }
+
+    DefectLink:
+      type: object
+      required: [id, externalKey, provider, url]
+      properties:
+        id: { type: string, format: uuid }
+        externalKey: { type: string, example: 'PAY-991' }
+        provider: { type: string, example: JIRA }
+        url: { type: string }
+        statusCache: { type: string, nullable: true }
+
+    # ----------------------------------------------------------- history ---
+    CaseHistorySummary:
+      type: object
+      description: |
+        Defaults to the CURRENT version only, and says so — blending results across
+        versions reports a number nobody should act on (plan §6p).
+      required: [scope, currentVersionNo, executions, passed, failed]
+      properties:
+        scope: { type: string, example: 'Current version (v7)' }
+        currentVersionNo: { type: integer }
+        executions: { type: integer }
+        passed: { type: integer }
+        failed: { type: integer }
+        lastExecutedAt: { type: string, format: date-time, nullable: true }
+        flakinessScore:
+          type: number
+          nullable: true
+          description: Alternation WITHIN one version and configuration only (plan §6p).
+        firstFailedAt: { type: string, format: date-time, nullable: true }
+        firstFailedInRelease: { type: string, nullable: true }
+
+    ExecutionHistoryEntry:
+      type: object
+      required: [executionId, statusKind, statusName, statusColor, caseVersionNo, runId, runKey, runName, configuration, executedBy, source, executedAt, evidenceCount, defects]
+      properties:
+        executionId: { type: string, format: uuid }
+        statusKind: { $ref: '#/components/schemas/StatusKind' }
+        statusName: { type: string }
+        statusColor: { type: string }
+        caseVersionNo: { type: integer }
+        releaseVersion: { type: string, nullable: true }
+        buildNumber: { type: string, nullable: true }
+        runId: { type: string, format: uuid }
+        runKey: { type: string }
+        runName: { type: string }
+        planKey: { type: string, nullable: true }
+        configuration: { type: string }
+        executedBy: { $ref: '#/components/schemas/UserRef' }
+        executedByToken: { type: string, nullable: true }
+        source: { type: string, enum: [MANUAL, INGESTED] }
+        executedAt: { type: string, format: date-time }
+        durationMs: { type: integer, nullable: true }
+        evidenceCount: { type: integer }
+        defects:
+          type: array
+          items: { $ref: '#/components/schemas/DefectLink' }
+
+    SuiteRunSummary:
+      type: object
+      required: [runId, runKey, runName, suiteVersionNo, configuration, executedAt, counts]
+      properties:
+        runId: { type: string, format: uuid }
+        runKey: { type: string }
+        runName: { type: string }
+        suiteVersionNo: { type: integer }
+        configuration: { type: string }
+        releaseVersion: { type: string, nullable: true }
+        executedAt: { type: string, format: date-time }
+        counts: { $ref: '#/components/schemas/ResultCounts' }
+
+    # --------------------------------------------------------- reporting ---
+    RepositoryDashboard:
+      type: object
+      required: [generatedAt, lifecycle, health, byFeature, byOwner, automationCoverage, recentActivity]
+      properties:
+        generatedAt: { type: string, format: date-time }
+        lifecycle:
+          type: array
+          items: { $ref: '#/components/schemas/DashboardTile' }
+        health:
+          type: array
+          items: { $ref: '#/components/schemas/DashboardTile' }
+        byFeature:
+          type: array
+          items: { $ref: '#/components/schemas/DashboardBreakdown' }
+        byOwner:
+          type: array
+          items: { $ref: '#/components/schemas/DashboardBreakdown' }
+        automationCoverage:
+          type: object
+          required: [automated, toBeAutomated, manual, notAutomatable, coveragePercent]
+          properties:
+            automated: { type: integer }
+            toBeAutomated: { type: integer }
+            manual: { type: integer }
+            notAutomatable: { type: integer }
+            coveragePercent:
+              type: number
+              description: automated / (total - notAutomatable) — honestly denominated (plan §6c).
+        recentActivity:
+          type: array
+          items:
+            type: object
+            required: [date, created, approved, modified]
+            properties:
+              date: { type: string, format: date }
+              created: { type: integer }
+              approved: { type: integer }
+              modified: { type: integer }
+
+    DashboardTile:
+      type: object
+      description: |
+        `filter` is the query that reproduces this count — the tile is a link into
+        a pre-filtered, bulk-actionable case list, not decoration (plan §6o).
+      required: [key, label, count, severity, filter]
+      properties:
+        key: { type: string }
+        label: { type: string }
+        count: { type: integer }
+        severity: { type: string, enum: [NEUTRAL, INFO, WARNING, ERROR] }
+        filter:
+          type: object
+          additionalProperties: true
+
+    DashboardBreakdown:
+      type: object
+      required: [id, label, segments]
+      properties:
+        id: { type: string }
+        label: { type: string }
+        segments:
+          type: array
+          items:
+            type: object
+            required: [key, label, count, color, filter]
+            properties:
+              key: { type: string }
+              label: { type: string }
+              count: { type: integer }
+              color: { type: string }
+              filter:
+                type: object
+                additionalProperties: true
+
+    PlanStatistics:
+      type: object
+      required: [planId, planKey, planName, planVersionNo, aggregationPolicy, counts, coveragePercent, stale, byConfiguration, bySuite, blockers, notRun, exitCriteria, trend]
+      properties:
+        planId: { type: string, format: uuid }
+        planKey: { type: string }
+        planName: { type: string }
+        planVersionNo: { type: integer }
+        aggregationPolicy: { $ref: '#/components/schemas/AggregationPolicy' }
+        counts: { $ref: '#/components/schemas/ResultCounts' }
+        coveragePercent:
+          type: number
+          description: A headline figure, not a footnote — 89% pass over 40% coverage is not green (plan §6p).
+        latestExecutionAt: { type: string, format: date-time, nullable: true }
+        stale:
+          type: boolean
+          description: True when nothing has executed recently. A stale page shown as current is dangerous.
+        byConfiguration:
+          type: array
+          items:
+            type: object
+            required: [configuration, counts]
+            properties:
+              configuration: { type: string }
+              counts: { $ref: '#/components/schemas/ResultCounts' }
+        bySuite:
+          type: array
+          items:
+            type: object
+            required: [suiteId, suiteKey, suiteName, counts]
+            properties:
+              suiteId: { type: string, format: uuid }
+              suiteKey: { type: string }
+              suiteName: { type: string }
+              counts: { $ref: '#/components/schemas/ResultCounts' }
+        blockers:
+          type: array
+          items: { $ref: '#/components/schemas/TestExecutionSummary' }
+        notRun:
+          type: array
+          items: { $ref: '#/components/schemas/TestCaseSummary' }
+        exitCriteria:
+          type: array
+          items: { $ref: '#/components/schemas/Criterion' }
+        trend:
+          type: array
+          items:
+            type: object
+            required: [runKey, executedAt, passRate]
+            properties:
+              runKey: { type: string }
+              executedAt: { type: string, format: date-time }
+              passRate: { type: number }
+
+    ReportDefinition:
+      type: object
+      required: [id, type, name, parameters, owner]
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string }
+        name: { type: string }
+        parameters:
+          type: object
+          additionalProperties: true
+        owner: { $ref: '#/components/schemas/UserRef' }
+
+    ReportJob:
+      type: object
+      properties:
+        jobId: { type: string, format: uuid }
+        status: { type: string, enum: [PENDING, RUNNING, COMPLETED, FAILED] }
+        format: { type: string }
+        downloadUrl: { type: string, nullable: true }
+
+    # ----------------------------------------------------- documentation ---
+    DocPageSummary:
+      type: object
+      required: [id, key, title, slug, status, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        key: { type: string, example: DOC-1 }
+        parentId: { type: string, format: uuid, nullable: true }
+        title: { type: string }
+        slug: { type: string }
+        status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
+        updatedAt: { type: string, format: date-time }
+
+    DocPage:
+      allOf:
+        - $ref: '#/components/schemas/DocPageSummary'
+        - type: object
+          properties:
+            blocks:
+              type: array
+              items: { $ref: '#/components/schemas/DocBlock' }
+            currentVersionNo: { type: integer }
+            lockVersion: { type: integer }
+
+    DocBlock:
+      type: object
+      required: [id, position, blockType, text]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: |
+            Immutable, generated at creation, never derived from text. Links target
+            this — heading-text anchors break silently when a typo is fixed (plan §6i).
+        position: { type: integer }
+        blockType: { type: string, enum: [heading, paragraph, list, code, table, image] }
+        level: { type: integer, nullable: true }
+        text: { type: string }
+        coverage:
+          description: Inline coverage marker — what makes people maintain links (plan §6i).
+          type: object
+          nullable: true
+          required: [linkedCases, passed, failed, notRun, caseKeys]
+          properties:
+            linkedCases: { type: integer }
+            passed: { type: integer }
+            failed: { type: integer }
+            notRun: { type: integer }
+            caseKeys:
+              type: array
+              items: { type: string }
+
+    DocLink:
+      type: object
+      required: [id, targetKind, relationship, stale]
+      properties:
+        id: { type: string, format: uuid }
+        targetKind: { type: string, enum: [DOC_BLOCK, EXTERNAL_GIT, EXTERNAL_URL] }
+        relationship: { type: string, enum: [VERIFIES, DERIVED_FROM, REFERENCES] }
+        pageId: { type: string, format: uuid, nullable: true }
+        pageKey: { type: string, nullable: true }
+        pageTitle: { type: string, nullable: true }
+        blockId: { type: string, format: uuid, nullable: true }
+        blockExcerpt: { type: string, nullable: true }
+        externalRepo: { type: string, nullable: true }
+        externalPath: { type: string, nullable: true }
+        externalLineStart: { type: integer, nullable: true }
+        externalLineEnd: { type: integer, nullable: true }
+        externalCommitSha:
+          type: string
+          nullable: true
+          description: Mandatory for EXTERNAL_GIT — a line number without it is meaningless later.
+        externalUrl: { type: string, nullable: true }
+        stale:
+          type: boolean
+          description: True when the target changed after the case was last touched (plan §6i).
+
+    Artifact:
+      type: object
+      required: [id, scope, category, kind, title, status, inherited, updatedBy, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        scope: { type: string, enum: [PROJECT, PLAN] }
+        category: { type: string }
+        kind: { type: string, enum: [FILE, DOC_PAGE_REF, EXTERNAL_URL, GENERATED_REPORT] }
+        title: { type: string }
+        description: { type: string, nullable: true }
+        status: { type: string, enum: [ACTIVE, SUPERSEDED, ARCHIVED] }
+        inherited:
+          type: boolean
+          description: Project-scope artifact shown read-only inside a plan (plan §6n).
+        url: { type: string, nullable: true }
+        filename: { type: string, nullable: true }
+        sizeBytes: { type: integer, nullable: true }
+        updatedBy: { $ref: '#/components/schemas/UserRef' }
+        updatedAt: { type: string, format: date-time }
+
+    # --------------------------------------------------------------- admin ---
+    User:
+      allOf:
+        - $ref: '#/components/schemas/UserRef'
+        - type: object
+          required: [status, teams]
+          properties:
+            status: { type: string, enum: [ACTIVE, INVITED, DEACTIVATED] }
+            lastLoginAt: { type: string, format: date-time, nullable: true }
+            teams:
+              type: array
+              items: { type: string }
+
+    Team:
+      type: object
+      required: [id, name, leads, members, projects]
+      properties:
+        id: { type: string, format: uuid }
+        parentTeamId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Org-chart structure only — permissions never cascade (plan §6k).
+        name: { type: string }
+        description: { type: string, nullable: true }
+        leads:
+          type: array
+          items: { $ref: '#/components/schemas/UserRef' }
+        members:
+          type: array
+          items: { $ref: '#/components/schemas/UserRef' }
+        projects:
+          type: array
+          items:
+            type: object
+            properties:
+              projectId: { type: string, format: uuid }
+              projectName: { type: string }
+              roleName: { type: string }
+
+    Role:
+      type: object
+      description: |
+        One of exactly six built-in roles. There are no custom roles in v1 — not even
+        clone-and-edit (plan §6b) — so `builtIn` is always true and there is no create
+        or update endpoint. Enforcement is permission-based throughout: nothing in the
+        code checks a role NAME, which is what keeps adding a role designer additive.
+
+        A COMPANY-scope grant covers every project in that company, present and future.
+        That is what makes Company Admin work, and why nothing else is granted there.
+      required: [id, name, scope, builtIn, description, permissions]
+      properties:
+        id: { type: string, format: uuid }
+        name:
+          type: string
+          enum:
+            - Instance Admin
+            - Company Admin
+            - Test Lead
+            - Test Engineer
+            - Automation Service
+            - Viewer
+        scope: { type: string, enum: [SYSTEM, COMPANY, PROJECT] }
+        builtIn: { type: boolean }
+        description: { type: string }
+        permissions:
+          type: array
+          description: |
+            Permission keys, `resource:action`. The authoritative catalogue and the
+            per-role grants live in docs/specs/2026-07-30-tcms-roles-permissions-naming.md.
+            `OWN`-qualified entries (case:delete, evidence:delete for Test Engineer) are
+            resolved server-side against createdBy — they are NOT separate keys.
+          items: { $ref: '#/components/schemas/PermissionKey' }
+
+    PermissionKey:
+      type: string
+      description: |
+        The full v1 catalogue. Grouped by area, in the order the spec lists them.
+        Six of these are newer than the first UI pass — suite:delete, project:audit,
+        case:comment, defect:create, workitem:manage, library:manage — and three split
+        a boundary that was previously wrong (suite:delete out of suite:manage,
+        project:audit out of audit:view, case:comment below the review tier).
+      enum:
+        # repository
+        - 'suite:manage'
+        - 'suite:delete'
+        - 'case:read'
+        - 'case:create'
+        - 'case:edit'
+        - 'case:delete'
+        - 'library:manage'
+        # review — three tiers: comment < review < approve
+        - 'case:comment'
+        - 'case:review'
+        - 'suite:review'
+        - 'plan:review'
+        - 'case:approve'
+        - 'suite:approve'
+        - 'plan:approve'
+        # execution
+        - 'plan:create'
+        - 'plan:edit'
+        - 'plan:delete'
+        - 'run:create'
+        - 'run:execute'
+        - 'run:close'
+        - 'result:submit'
+        - 'result:amend'
+        - 'evidence:attach'
+        - 'evidence:delete'
+        # defects & work
+        - 'defect:create'
+        - 'workitem:manage'
+        # reporting
+        - 'report:view'
+        - 'report:export'
+        # documentation
+        - 'doc:read'
+        - 'doc:edit'
+        - 'doc:publish'
+        # artifacts
+        - 'artifact:read'
+        - 'artifact:edit'
+        - 'artifact:delete'
+        # project
+        - 'project:read'
+        - 'project:audit'
+        - 'project:settings'
+        - 'project:members'
+        - 'integration:manage'
+        # company (COMPANY scope)
+        - 'company:read'
+        - 'company:settings'
+        - 'company:members'
+        - 'company:teams'
+        - 'company:vocabulary'
+        - 'company:idp'
+        - 'project:create'
+        - 'token:issue'
+        - 'audit:view'
+        # system (SYSTEM scope)
+        - 'company:create'
+        - 'company:delete'
+        - 'company:suspend'
+        - 'user:manage'
+        - 'role:manage'
+        - 'system:settings'
+        - 'instance:audit'
+
+    RoleAssignment:
+      type: object
+      required: [id, role, user, grantedAt]
+      properties:
+        id: { type: string, format: uuid }
+        role: { $ref: '#/components/schemas/Role' }
+        user: { $ref: '#/components/schemas/UserRef' }
+        team:
+          type: object
+          nullable: true
+          required: [id, name]
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+        projectId: { type: string, format: uuid, nullable: true }
+        projectName: { type: string, nullable: true }
+        grantedAt: { type: string, format: date-time }
+
+    # ---------------------------------------------------------------- work ---
+    WorkItem:
+      type: object
+      required: [id, derived, kind, title, status, priority, overdue, projectId, projectKey, allowedTransitions]
+      properties:
+        id: { type: string }
+        derived:
+          type: boolean
+          description: |
+            True for projections of an execution, review, or stale case. Derived items
+            are NOT stored and their status comes from the source, so a card can never
+            diverge from its execution (plan §6l).
+        sourceType: { type: string, nullable: true, example: EXECUTION }
+        sourceId: { type: string, format: uuid, nullable: true }
+        kind:
+          type: string
+          enum: [TASK, EXECUTION, REVIEW, DOC_UPDATE, CASE_MAINTENANCE, DEFECT]
+        title: { type: string }
+        description: { type: string, nullable: true }
+        status: { type: string }
+        priority: { $ref: '#/components/schemas/Priority' }
+        dueDate: { type: string, format: date, nullable: true }
+        overdue: { type: boolean }
+        assignee: { $ref: '#/components/schemas/UserRef' }
+        projectId: { type: string, format: uuid }
+        projectKey: { type: string }
+        linkedKey: { type: string, nullable: true, example: TC-42 }
+        allowedTransitions:
+          type: array
+          description: Columns a derived card may legally move to; others reject the drop.
+          items: { type: string }
+
+security:
+  - bearerAuth: []

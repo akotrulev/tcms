@@ -327,7 +327,16 @@ All of these are now reflected in `docs/plans/2026-07-30-tcms-high-level-plan.md
 
 **Outstanding in the plan:** none in this document's scope. The four remaining questions were answered 2026-07-30 — Viewer as the universal default, Company Admin sees all projects in their company, client-facing isolation evidence deferred to a nice-to-have, and no custom roles in v1. Plan §8 questions 1–42 remain, of which 1, 4, 5, 7, 8 and 9 affect the M1/M2 design.
 
-**Not yet updated:** `docs/specs/2026-07-30-tcms-erd.md` — still uses `tenant_id`, lacks `company`/`company_membership` as entities, the display-key counter table, and the granted-projects rule.
+**Downstream artifacts — all aligned as of 2026-07-30:**
+
+| Artifact | State |
+|---|---|
+| `docs/specs/2026-07-30-tcms-erd.md` | `company_id` throughout, `company`/`company_membership` modelled, display-key counter per company, granted-projects rule, RLS |
+| `V1__initial_schema.sql` | Regenerated — 63 tables, statically validated, **never executed** |
+| `docs/specs/openapi.yaml` | `PermissionKey` as a 55-member enum, six roles, `COMPANY` scope, `TC-1` keys |
+| `frontend/` | `lib/permissions.ts` derives the catalogue from the contract union; six roles in fixtures; Viewer default |
+
+**Still to do:** the permission catalogue as a **seed migration** (`V2__triggers_and_seed.sql`). This document is the source for it — the grants in Part A are the intended `role_permission` rows.
 
 ---
 

@@ -1,0 +1,161 @@
+import { useCallback, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import type {
+  AutomationStatus,
+  CaseFilters,
+  HealthSignal,
+  LifecycleStatus,
+  Priority,
+} from '../../api/types';
+
+/**
+ * Filter state lives in the URL, not in a store.
+ *
+ * That is a product decision, not a technical preference: a filtered view of a test
+ * repository is the thing people paste into a ticket, bookmark for their release, and send
+ * to a colleague ("here are the 78 cases whose spec changed"). State held in a store is
+ * unshareable, and it also breaks the back button — a user who drills from a dashboard tile
+ * into a filtered list expects Back to return to the dashboard.
+ *
+ * It also makes the dashboard's tiles trivially composable: a tile is a link carrying a
+ * filter predicate, and two predicates combine by merging query parameters.
+ */
+
+export const DEFAULT_SORT = 'keySeq,asc';
+export const DEFAULT_SIZE = 25;
+
+/** Parameters that are filters, as opposed to paging or sorting. */
+const FILTER_PARAMS = [
+  'q',
+  'suiteId',
+  'featureId',
+  'testTypeId',
+  'testLevelId',
+  'lifecycleStatus',
+  'automationStatus',
+  'priority',
+  'healthSignal',
+  'releaseVersion',
+] as const;
+
+export interface CaseFilterState {
+  filters: CaseFilters;
+  sort: string;
+  /** True when any filter narrows the result — drives no-records vs no-filter-match. */
+  hasActiveFilters: boolean;
+  setFilter: (key: keyof CaseFilters, value: string | string[] | undefined) => void;
+  setPage: (page: number) => void;
+  setSize: (size: number) => void;
+  setSort: (sort: string) => void;
+  clearFilters: () => void;
+}
+
+export function useCaseFilters(): CaseFilterState {
+  const [params, setParams] = useSearchParams();
+
+  const filters = useMemo<CaseFilters>(() => {
+    const multi = (key: string) => {
+      const values = params.getAll(key).filter(Boolean);
+      return values.length ? values : undefined;
+    };
+    return {
+      q: params.get('q') ?? undefined,
+      suiteId: params.get('suiteId') ?? undefined,
+      featureId: params.get('featureId') ?? undefined,
+      testTypeId: params.get('testTypeId') ?? undefined,
+      testLevelId: params.get('testLevelId') ?? undefined,
+      lifecycleStatus: multi('lifecycleStatus') as LifecycleStatus[] | undefined,
+      automationStatus: multi('automationStatus') as AutomationStatus[] | undefined,
+      priority: multi('priority') as Priority[] | undefined,
+      healthSignal: multi('healthSignal') as HealthSignal[] | undefined,
+      releaseVersion: params.get('releaseVersion') ?? undefined,
+      page: Number(params.get('page') ?? 0),
+      size: Number(params.get('size') ?? DEFAULT_SIZE),
+    };
+  }, [params]);
+
+  const sort = params.get('sort') ?? DEFAULT_SORT;
+
+  const hasActiveFilters = FILTER_PARAMS.some((key) => params.getAll(key).some(Boolean));
+
+  const setFilter = useCallback(
+    (key: keyof CaseFilters, value: string | string[] | undefined) => {
+      setParams(
+        (previous) => {
+          const next = new URLSearchParams(previous);
+          next.delete(key);
+          if (Array.isArray(value)) {
+            for (const v of value) if (v) next.append(key, v);
+          } else if (value) {
+            next.set(key, value);
+          }
+          // Changing a filter always returns to page 1 — staying on page 4 of a result set
+          // that now has two pages shows an empty grid the user can't explain.
+          next.delete('page');
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setParams],
+  );
+
+  const setPage = useCallback(
+    (page: number) => {
+      setParams(
+        (previous) => {
+          const next = new URLSearchParams(previous);
+          if (page <= 0) next.delete('page');
+          else next.set('page', String(page));
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setParams],
+  );
+
+  const setSize = useCallback(
+    (size: number) => {
+      setParams(
+        (previous) => {
+          const next = new URLSearchParams(previous);
+          next.set('size', String(size));
+          next.delete('page');
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setParams],
+  );
+
+  const setSort = useCallback(
+    (value: string) => {
+      setParams(
+        (previous) => {
+          const next = new URLSearchParams(previous);
+          if (value === DEFAULT_SORT) next.delete('sort');
+          else next.set('sort', value);
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setParams],
+  );
+
+  const clearFilters = useCallback(() => {
+    setParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        for (const key of FILTER_PARAMS) next.delete(key);
+        next.delete('page');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setParams]);
+
+  return { filters, sort, hasActiveFilters, setFilter, setPage, setSize, setSort, clearFilters };
+}

@@ -26,7 +26,7 @@ It owns the *manual and automated test asset lifecycle*: authoring cases, organi
 
 **Explicit non-goals for v1**
 - Not a test *runner* — it does not execute automation, it ingests results.
-- Not a CI server, not a defect tracker (it links to Jira, doesn't replace it).
+- Not a CI server, and not a defect tracker — it records the defects testing produced and links them to an external tracker (Jira · GitHub · GitLab · Azure DevOps), rather than replacing one. With no tracker configured the local record and the board (§6l) are enough to work; they are not a workflow engine.
 - Not public multi-tenant SaaS. Multiple companies, yes — but **provisioned by an instance administrator**, not by self-signup. No billing, no plans, no per-tenant custom domains, no tenant-level rate cards.
 - Not cross-company anything. No shared test assets, no cross-company reports, no user-visible list of companies they don't belong to.
 - Not a step-definition editor — we author and own the Gherkin *specification*; the glue code lives in the automation repo.
@@ -64,7 +64,9 @@ Project ──────┬─ Folder/Suite (tree)
               │                  │     (Test Type · Test Level · Feature · Phase)
               │                  ├─ Tag[]  (free-form escape hatch)
               │                  └─ CaseVersion[]  (immutable history)
-              ├─ Requirement ────── (links to TestCase, external Jira key)
+              ├─ Requirement ────── (links to TestCase, external tracker key)
+              ├─ TestPlanTemplate ── (named plan skeleton — selection query + config
+              │                       matrix + exit criteria, no executions; §6v)
               ├─ TestPlan ──┬─ TestRun ──┬─ TestExecution (case × run)
               │             │            │    ├─ releaseVersion (denormalized from run)
               │             │            │    └─ StepResult[] + Evidence[]
@@ -76,7 +78,9 @@ Project ──────┬─ Folder/Suite (tree)
               ├─ DocSpace ─→ DocPage (tree) ─→ DocBlock (stable ids)
               │                                     ▲
               │                    DocLink ─────────┘  (TestCase/Suite/Requirement → block)
-              ├─ Defect (link to Jira issue, created from failed execution)
+              ├─ Defect ─┬─ created from a failed execution; local record always exists
+              │           ├─ externalRef (tracker · key · url · syncedStatus · syncedAt)
+              │           └─ surfaced as a DEFECT work item on the board (§6l)
               ├─ Condition (reusable pre/post condition library, §6f)
               ├─ Review (optional workflow over Case | Suite | Plan, §6g)
               └─ SharedStep (reusable step blocks)
@@ -132,6 +136,7 @@ AuditEvent (append-only: actor, action, targets[], before/after, when)
 - **Review workflow (optional)** — Draft → In Review → Approved for cases, suites, and plans; off by default, per-project opt-in. See §6g.
 - **Rich text + attachments** — sanitized HTML, file storage abstraction (local FS first).
 - **Test plans & runs** — assemble cases into a plan and run, assign testers or teams, execute with per-step results and comments.
+- **Plan templates & cloning** — a reusable `TestPlanTemplate` (a named, saved plan skeleton) plus **clone** for cases, plans and runs. See §6v.
 - **Evidence capture** — attach screenshots, logs, videos, and files at *either* the step or the execution level, with paste-from-clipboard and drag-drop. Evidence is immutable once a run is closed and always carries author + timestamp.
 - **Automation status** — mark any case as Manual / Automated / To Be Automated / Not Automatable, with an automation tag and key when available. See §6c.
 - **Classification** — Test Type, Test Level, Feature tree, Execution Phase dimensions + free tags. See §6d.
@@ -150,7 +155,7 @@ AuditEvent (append-only: actor, action, targets[], before/after, when)
 - **`.feature` export / import** — generate canonical feature files from Gherkin cases (grouped by suite, tags preserved) for the automation repo; import existing `.feature` files into the repository. Direction of truth is configured per project, not bidirectional — see §6a.
 - **API tokens** — per-user and per-service tokens for CI.
 - **External identity providers (SSO)** — OIDC login against AWS Cognito, Microsoft Entra ID, Google Workspace, Okta, Keycloak, or generic OIDC, alongside retained local accounts. Account linking, JIT provisioning, IdP group claims mapped to roles/teams. Grouped here because it shares the OAuth client, credential-encryption and consent machinery with the integrations below. See §6r.
-- **Jira integration** — link cases ↔ Jira issues, one-click defect creation from a failed step with prefilled reproduction, status sync-back via webhook or poll.
+- **Issue tracker integration — Jira · GitHub Issues · GitLab Issues · Azure DevOps (Boards)** — all four are M4 scope, behind the one `IssueTracker` port (§5). Link cases ↔ issues, one-click defect creation from a failed step with prefilled reproduction, status sync-back via webhook or poll, **back-link written on the tracker side**, and **inline status hover-cards** wherever an issue is referenced. See §6l for the TCMS-side defect view.
 - **Notifications** — Slack/Teams incoming webhooks + SMTP. Events: run completed, run failed threshold, case assigned, defect created.
 - **Git traceability** — associate a run with commit SHA / branch / PR; link cases to requirements.
 - **Requirements & coverage matrix** — requirement → cases → last result → open defects.
@@ -279,7 +284,11 @@ Everything before this point runs on one company, on a schema that has been mult
 
 ### Integration architecture notes
 - **CI ingestion** must be async and idempotent. Endpoint accepts the payload, persists it raw (JSONB/blob), returns 202 with a job id; a worker parses and applies. An idempotency key per upload prevents duplicate runs from CI retries.
-- **Jira** behind an anti-corruption layer — a `IssueTracker` port with a Jira adapter, so a GitHub Issues or Azure DevOps adapter is a phase-3 addition, not a rewrite.
+- **Issue trackers behind an anti-corruption layer** — one `IssueTracker` port with **four M4 adapters: Jira, GitHub Issues, GitLab Issues, Azure DevOps Boards**. Building four at once is the decision that keeps the port honest: a port with a single implementation always leaks that implementation's vocabulary, and Jira's is the least representative of the four. Anything beyond these (Bugzilla, Redmine, Linear) is an adapter, not a project.
+  - **The port's contract is narrow on purpose:** `createIssue(defect) → externalRef` · `fetchStatus(externalRef[]) → status[]` · `writeBackLink(externalRef, executionUrl)` · `onWebhook(payload) → statusChange[]`. Nothing about workflows, sprints or custom fields crosses it.
+  - **Back-link on the tracker side is part of filing, not an extra feature.** Creating an issue also posts a comment (or link field) on the tracker pointing at the failed execution. Without it, traceability only works from inside TCMS, and the developer who receives the bug has no route back to the evidence — which is the half that makes the integration worth having.
+  - **Status hover-cards** — anywhere an issue key is rendered (execution page, defect board, coverage matrix, run summary report), hovering resolves title, status, assignee and updated-at from a **short-TTL cache**, never a synchronous call to the tracker on page render. A cold or failed lookup shows the key with a neutral "status unavailable" state; it must never block or error the page it sits on.
+  - **Per-project status mapping** (`tracker status → open/closed + board column`) with a documented default per adapter, because no two Jira workflows agree.
 - **Notifications** driven off domain events, per-project channel config, with a delivery-attempt log. Never let a failing Slack webhook fail a test run transaction.
 
 ---
@@ -382,7 +391,7 @@ Consequences that need building rather than assuming:
 
 **Union of allows, with no explicit deny.** Deny rules require precedence ordering, and precedence ordering makes "why can't Ana edit this case?" unanswerable without a debugger. If a team grants too much, the fix is a narrower role — not a deny override. This is a deliberate simplification and worth defending.
 
-Resolution is hot-path (every request), so cache the computed permission set per `(user, project)` with eventual invalidation on any role/team/assignment/company-membership change. Cache keys **must include the company id** — a cache keyed on `(userId, projectId)` alone is correct, but one keyed on a project *slug* or a short name is not, since those are only unique within a company.
+Resolution is hot-path (every request), so **it happens once at token issue and travels in the JWT** — see "Permissions in the session token" below. Where a grant set must still be resolved server-side (API tokens, scheduled jobs, the `prjOverflow` case), cache it per `(user, project)` with invalidation on any role/team/assignment/company-membership change. Cache keys **must include the company id** — a cache keyed on `(userId, projectId)` alone is correct, but one keyed on a project *slug* or a short name is not, since those are only unique within a company.
 
 ### Permission catalogue
 
@@ -496,9 +505,40 @@ Practical consequences:
 
 The *catalogue* is still permission-based rather than role-based (nothing in the code checks a role name), so adding clone-and-edit later is additive — a `role` table with `builtIn: false` rows and a designer UI, no change to enforcement. That stays a phase-3 option, on evidence of real demand rather than in anticipation of it.
 
+### Permissions in the session token
+
+**Decided: the JWT carries the caller's grants, so no request resolves permissions from the database.** This removes the class of bug where a permission check is skipped, mis-cached or resolved inconsistently between two code paths — the resolution happens once, at token issue, and every downstream check reads the same immutable input.
+
+**What makes this cheap is the §6b decision that roles are immutable built-ins.** Because the six roles are seeded and not editable (see "Deliberate v1 limits"), `role → permission[]` is a **compile-time constant**, not data. So the token does not need to carry permissions at all — it carries *role assignments*, and expansion to the permission set is an in-memory lookup with no I/O:
+
+```
+claims:
+  sub   user id (UUID)
+  co    active company id            ← always present, §6s
+  pv    permission version (int)     ← the revocation hook, see below
+  sys   [roleId]                     ← SYSTEM-scope grants
+  cmp   [roleId]                     ← COMPANY-scope grants, on `co`
+  prj   { projectId: [roleId] }      ← PROJECT-scope grants, active company only
+```
+
+Team-derived grants are **flattened into `prj`/`cmp` at issue time** — the token carries effective assignments, not team memberships, so nothing downstream needs to re-walk team edges. This is the whole §6b resolution rule evaluated once.
+
+**Three things this must not become:**
+
+1. **Not the authority — a cache with an integrity check.** `pv` is a per-user counter, bumped on *any* change to a role assignment, team membership, company membership, user status or company status. Every request compares the token's `pv` against the current value from an in-process Caffeine cache (already in the stack, §4); a mismatch returns 401 with a re-auth hint and the refresh flow mints a fresh token. That check is **one integer comparison against a cached value — not a permission resolution** — so the hot path stays I/O-free while revocation stays prompt.
+
+   Being explicit about the trade, because it is the real cost: **without the `pv` check, a revoked grant would stay live until the token expired.** That is precisely the "permission problem" this design is meant to prevent, so the epoch check is mandatory, not an optimization — and access-token TTL stays short (~10 minutes) as a second line of defence. A JWT carrying permissions and *no* revocation channel would be worse than resolving from the database.
+
+2. **Not a client-side authority.** The SPA can decode the token, and it may use it exactly as it uses `GET /api/v1/me/permissions` today — to hide affordances. Hidden ≠ protected still holds; every action is independently checked server-side against the token-derived context.
+
+3. **Not unbounded in size.** `prj` is scoped to the **active company only** (§6s), which bounds it naturally — but a Company Admin with 200 projects would still bloat every request header. Two mitigations: **COMPANY-scope grants are not expanded per project** (a Company Admin carries one `cmp` entry covering every project, present and future — the same reason that scope exists), and if `prj` exceeds a configured entry count the token sets a `prjOverflow` flag and those grants resolve server-side per request. The common case is I/O-free; the pathological case degrades to today's behaviour instead of failing.
+
+Company switching re-issues the token (already required by §3 Phase 4), which is what keeps `co` and `prj` consistent — and is why `prj` may safely omit other companies' projects.
+
 ### Enforcement
 
-- **Server is authoritative, always.** Spring Security with a custom `PermissionEvaluator`; endpoints annotated `@PreAuthorize("hasPermission(#projectId, 'PROJECT', 'case:edit')")`. Enforcement lives at the service boundary, not the controller, so ingestion and scheduled jobs pass through the same gate.
+- **Server is authoritative, always.** Spring Security with a custom `PermissionEvaluator`; endpoints annotated `@PreAuthorize("hasPermission(#projectId, 'PROJECT', 'case:edit')")`. The evaluator reads the token-derived grant set (above) rather than querying, but the annotation contract is unchanged. Enforcement lives at the service boundary, not the controller, so ingestion and scheduled jobs pass through the same gate.
+- **Non-JWT callers resolve the same way.** API tokens (§6b) and scheduled jobs have no session token, so they resolve their grant set server-side and populate the *same* context object. One `PermissionEvaluator`, one input shape, two ways of filling it — never two enforcement paths.
 - **Frontend gets `GET /api/v1/me/permissions?projectId=` ** and uses it purely to hide affordances. Hidden ≠ protected; every hidden action is independently rejected server-side.
 - **Row-level scoping** — a case query is always constrained by the projects the caller can read. Enforce in the repository layer via a mandatory project predicate, not by trusting callers to pass one.
 - **Company scoping is separate from, and prior to, permission scoping.** The `company_id` filter (§6s) removes foreign rows from existence; the permission check then decides what the caller may do with the rows that remain. Two layers, both mandatory — because a permission bug inside a company is a privilege escalation, while a filter bug across companies is a data breach, and they deserve independent defences. A missing permission annotation must never be the only thing standing between two companies.
@@ -624,8 +664,8 @@ A report is computed **once** into a serializable `ReportModel`, then handed to 
 
 | Format | Approach | Notes |
 |---|---|---|
-| **HTML** | Server-side template (Thymeleaf) → **single self-contained file** | CSS inlined, images/charts embedded as base64 data URIs. Must open correctly from a filesystem with no network — that's the whole point of the format. |
-| **Markdown** | Direct from `ReportModel` — GFM tables, headings | Charts degrade to tables plus an optional linked PNG. Ideal for pasting into a PR, a wiki, or a Jira comment. Keep it clean and diffable. |
+| **HTML** | Server-side template (Thymeleaf) → **single self-contained file** | CSS inlined, images/charts embedded as base64 data URIs. Must open correctly from a filesystem with no network — that's the whole point of the format. **Mermaid diagrams from doc-structured reports (§6i) are pre-rendered to inline SVG at generation time**, never left as a script tag: a self-contained file that needs a CDN to draw its diagrams is not self-contained. |
+| **Markdown** | Direct from `ReportModel` — GFM tables, headings | Charts degrade to tables plus an optional linked PNG. **Mermaid passes through as a fenced ` ```mermaid ` block** — GitHub, GitLab and most wikis render it natively, so the source text is the better output here than an image. Ideal for pasting into a PR, a wiki, or a tracker comment. Keep it clean and diffable. |
 | **PDF** | Render the HTML, then **Playwright/Chromium → PDF** | Reuses the HTML renderer entirely — one layout to maintain. Headers/footers with page numbers, report title, generation timestamp. |
 
 **On the PDF engine choice:** the alternatives are OpenPDF/iText (imperative layout — a second layout implementation to maintain) or Flying Saucer (XHTML+CSS 2.1 only, no modern CSS, charts render badly). Headless Chromium costs ~300MB in the image and needs a process pool, but it renders exactly what the browser shows and it's the only option where the PDF and the on-screen report can't drift. **Recommend Chromium**, with the container running it as a sidecar-capable component so self-hosters with tight images can disable PDF and keep HTML/MD.
@@ -942,6 +982,7 @@ Both paths render through the existing HTML / Markdown / PDF renderers (§6e) �
 - **Permissions** — `doc:read` / `doc:edit` / `doc:publish` added to the §6b catalogue. Member gets read + edit; publish is a Lead capability. Docs are frequently the artifact a wider audience (PM, support) needs read access to, so a **doc-only Viewer** role variant is worth seeding.
 - **Import** — Markdown and AsciiDoc import; optional **docs-as-code sync** from a Git repo path (phase 3), following the §6a rule: one direction of truth per space, never bidirectional.
 - **Templates** — seeded page templates for Test Strategy, Test Plan, and Release Report so teams don't start from a blank page.
+- **Mermaid diagrams** — a `mermaid` block type rendered client-side from its source text. Test strategy documents, environment topologies and state diagrams are substantially diagrams, and the alternative is people pasting screenshots of diagrams they drew elsewhere — which then rot invisibly, can't be diffed, and don't survive the §6j version snapshot as anything but an opaque image. Storing the **source text** in the block means diagrams version and diff like any other content. Sanitize as data, never as HTML, and render with a node/complexity cap so a pathological diagram can't hang the page.
 
 ### Deliberate limits
 No real-time collaborative editing (operational transforms / CRDTs are a project of their own — use optimistic locking with a clear conflict message instead), no page-level ACLs beyond project scope, no comment threads in v1 beyond what §6g's review provides.
@@ -1132,9 +1173,30 @@ Derived items are generated off domain events, so the board reflects the system 
 
 Each generator is individually toggleable per project. All of them on by default would bury the board on day one — and a board nobody can face is worse than no board.
 
+### Defects live here — and this is the local fallback
+
+**Decided: the board is where defects are tracked, and it is what makes TCMS useful with no tracker configured.** §1's non-goal stands — we are not building a defect tracker — but a `Defect` record is already in the domain model (§2), created from a failed execution, and `DEFECT` is already a `WorkItem` kind. Those two facts, plus a board column mapping, are the whole feature.
+
+Two modes, and the board is the same view in both:
+
+| | **No external tracker** (default) | **External tracker configured** (§3 Phase 2) |
+|---|---|---|
+| Where the defect lives | The local `Defect` record is the whole thing | The local record is the **stub**; the tracker owns the defect |
+| Status | Stored on the local record, moved on the board | **Synced from the tracker**, read-only on the board — a derived item per §6l's central rule |
+| Filing | Created from a failed step, prefilled with reproduction | Same action, additionally creates the tracker issue and stores `externalRef` |
+| The board shows | All open defects, by project / assignee / severity | The same view, statuses reflecting the tracker |
+
+**The point of keeping the local record in both modes:** it is the join between the failed execution, its evidence, and the external issue. Without it, integrating a tracker would mean the traceability chain (§6e coverage matrix, §6p history) has to query Jira to answer "which defects came out of this run" — which is slow, breaks when the token expires (§6r), and returns nothing at all for a self-hoster with no tracker.
+
+**So the bug-progress dashboard is ours regardless of tracker.** This is the explicit intent: a team using Jira still gets a TCMS-side view of every defect that came out of testing — open count by project, by severity, by feature (§6d), age, and which run produced it — without opening Jira and without rebuilding a Jira dashboard. Cross-tracker too: a company using GitHub Issues on one project and Jira on another sees one board.
+
+**What this deliberately is not:** no workflow editor, no custom defect fields, no sprint or estimation machinery, no comment threads mirrored from the tracker. When a tracker is configured it is authoritative for everything except our own link and our own view. Status mapping is a per-project config (`tracker status → board column`) with a documented default, because every Jira workflow is different and guessing produces a board that is subtly wrong.
+
+**Sync mechanics** follow §5: webhook where the tracker supports it, poll as fallback, `syncedStatus` + `syncedAt` on the local record so staleness is visible rather than silent (the §6p freshness rule applies — a defect column showing three-week-old statuses presented as current is the same failure mode).
+
 ### Practical details
 
-- **Permissions** — a user sees only work items in projects they can read; assigning to others needs `plan:edit`-level rights within the project. The personal board is filtered by the same §6b resolution as everything else.
+- **Permissions** — a user sees only work items in projects they can read; assigning to others needs `plan:edit`-level rights within the project. The personal board is filtered by the same §6b resolution as everything else. Filing a defect is `defect:create`; moving a *local* defect card is the same permission, while an externally-owned defect card is read-only regardless of role.
 - **Performance** — the board is a read model over several sources; cache per user with event-driven invalidation, and cap derived generation with sensible limits. It's opened dozens of times a day, so it must be fast.
 - **Real-time** — SSE for live column updates on team boards; ties in with the §8 open question about concurrent run execution, and the two should share one transport rather than growing separate ones.
 - **Not a project management tool.** No sprints, burndowns, story points, or dependency graphs. If a team wants those, the answer is the Jira integration (§3 phase 2) — and it's worth considering surfacing linked Jira issues as derived items on the board rather than reimplementing any of it.
@@ -1619,10 +1681,28 @@ Google and Microsoft appear in **both** columns and that is exactly why the dist
 | **Okta** | OIDC | Groups claim configurable per authorization server. |
 | **Keycloak** | OIDC | Self-hosted; the natural companion to a self-hosted product. |
 | **Generic OIDC** | OIDC | Discovery URL + client id/secret. Covers everything not named above and is what makes this list non-exhaustive. |
+| **LDAP / Active Directory** | LDAP(S) bind | **In scope for M4.** Not OIDC at all — a genuinely separate code path. See the subsection below. |
 | **SAML 2.0** | SAML | ADFS and older enterprise IdPs. A **second code path** — build only on demand, and say so rather than implying parity. |
 | **Local accounts** | — | Always retained. See below. |
 
-Implementation is **one generic OIDC client driven by per-provider configuration**, not seven integrations. The provider-specific rows above are configuration and claim-mapping differences, not separate adapters — with the honest exception of SAML, which is genuinely a different protocol.
+Implementation is **one generic OIDC client driven by per-provider configuration**, not seven integrations. The provider-specific rows above are configuration and claim-mapping differences, not separate adapters — with two honest exceptions: SAML, and LDAP/AD, which are genuinely different protocols.
+
+### LDAP / Active Directory — the on-prem case
+
+Included deliberately, because the OIDC list above assumes an issuer that many on-prem self-hosters simply do not have. A large share of target deployments run Active Directory with no OIDC endpoint in front of it, and telling those teams to stand up Keycloak first is telling them to evaluate a different product.
+
+It is **not** an OIDC provider with different settings — it is a directory you bind against, and the differences that matter are these:
+
+- **Authentication is a bind, not a redirect.** The user's credentials arrive at TCMS (over the local login form) and TCMS binds to the directory as that user. There is no browser redirect, no authorization code, no PKCE. Consequence: **LDAPS or StartTLS is mandatory, not recommended** — a plain-LDAP bind puts the user's directory password on the wire, and unlike OIDC there is no third party absorbing that risk. Refuse to save a provider config with an `ldap://` URL unless an explicit `allowInsecure` flag is set for lab use.
+- **The stable identity key is `objectGUID` (AD) or `entryUUID` (OpenLDAP) — never the DN.** A DN encodes the user's position in the tree, so moving someone between OUs changes it, and keying `user_identity` on the DN silently orphans the account and its authorship. This is the LDAP equivalent of §6r's "never key on email" rule, and it is the single most common way LDAP integrations break. Store the DN as a mutable attribute for display and re-bind, not as the key.
+- **`user_identity` still applies unchanged.** An LDAP identity is `(company_id, issuer = provider id, subject = objectGUID)`. It slots into the existing table with no schema change, which is what makes adding it cheap.
+- **Groups come from a search, not a claim.** Either read `memberOf` on the user entry or search groups for `member=<dn>`, configurable — directories differ, and `memberOf` is not always populated. **Nested groups need an explicit recursive resolution** (or AD's `LDAP_MATCHING_RULE_IN_CHAIN`), bounded by a depth limit; unbounded recursion on a large directory is a real outage.
+- **Group → role mapping reuses §6b's `claim_role_mapping` exactly.** An LDAP group is just another `(provider, claim, value)` tuple, and every rule in "Claim → role mapping" below applies without modification: map to roles or teams, never permissions; IdP-derived grants are read-only in the UI; unmapped groups grant nothing.
+- **Service-account bind for lookups**, with credentials stored per §6r's encrypted-credential rules, and connection pooling — a bind per request is slow enough to be noticed.
+- **Deprovisioning is a poll, not a push.** LDAP has no logout or removal notification, so a scheduled reconciliation deactivates users no longer present (§6r's "SSO never deletes users" rule holds). Until SCIM lands (phase 3), this poll *is* the deprovisioning path.
+- **Referrals and paging** — AD returns referrals and caps result sizes; unhandled, group resolution silently truncates for exactly the largest groups. Same failure shape as the Entra overage claim below, and worth handling at the same time.
+
+Spring Security has first-class LDAP support, so the work is configuration, group resolution and the identity-key discipline above — not a protocol implementation.
 
 ### Provider configuration is per company
 
@@ -1898,6 +1978,63 @@ Companies are separate clients (§1), so each one's users should see their own o
 
 ---
 
+## 6v. Plan Templates & Cloning — Design
+
+Three operations that look like one feature and are not: **clone a case**, **clone a run**, and **instantiate a plan from a template**. All three exist because re-assembling work by hand is the reason teams keep a spreadsheet alongside the TCMS.
+
+### Why a template is not just a clone
+
+| | **Clone** | **Template** |
+|---|---|---|
+| Produces | A copy, detached immediately | A new plan built from a definition |
+| Relationship to source | None after creation | The template persists and is reused |
+| Content | Whatever the source had, frozen at copy time | A **selection query** re-evaluated at instantiation |
+| Right for | "Like this one, but different" | "Every release, we run this" |
+
+The distinction that matters: **a plan template stores the *query*, not the case list.** "All Approved cases in `Payments` tagged Regression, on Chrome and Firefox" instantiated next release picks up the twelve cases added since — a clone would not. Storing a frozen case list would recreate the spreadsheet problem in the database, and it is the single design decision this section exists to get right.
+
+```
+TestPlanTemplate
+  ├─ name, description, projectId
+  ├─ selection        the §6q filter expression (facets, classification, status, feature subtree)
+  ├─ configurations[] the env/browser/OS matrix to create runs for
+  ├─ exitCriteria     carried onto instantiated plans (§6p)
+  ├─ defaultAssignees team or user pool
+  └─ milestone?       optional default
+```
+
+**Instantiation is explicit and previewable.** Selecting a template shows the resolved case list *before* creating anything — count, and what changed since last time ("+12 new, −3 deprecated"). Silent resolution is how someone runs a release plan that quietly lost half its coverage.
+
+**Reuse existing machinery, don't duplicate it:** `selection` is a §6q saved-search expression, and instantiated plans are ordinary `TestPlan` rows with no template pointer at execution time — so nothing in §6p statistics or §6e reporting needs to know templates exist.
+
+### Cloning — the rules that keep it safe
+
+Clone is cheap to build and easy to get subtly wrong. The rules:
+
+| Entity | What copies | What deliberately does **not** |
+|---|---|---|
+| **TestCase** | Steps (either format, §6a), conditions, classification, parameters, custom fields, attachments (by reference, not byte copy) | Version history, execution history, review state (**resets to Draft**), display key (**newly allocated**, §6t), `automationKey` (**never** — it is unique per company, §6c) |
+| **TestPlan** | Case selection, configurations, exit criteria, milestone | Runs, executions, results |
+| **TestRun** | The plan reference, case set, configurations, assignees | **All results, evidence, defects, and timestamps** — a cloned run starts Untested |
+
+Four rules that apply across all three:
+
+1. **`automationKey` is never copied.** It is unique per company (§6c), so copying it either violates the constraint or — worse, if uniqueness were relaxed — makes an ingested CI result match two cases and land somewhere unpredictable. Clone leaves it empty and says so in the UI.
+2. **Review state resets.** A clone of an Approved case is Draft (§6g). Approval attaches to reviewed content by a named person; carrying it to a copy nobody read is exactly the kind of laundered sign-off an audit is meant to catch.
+3. **A clone is a new aggregate, not a version.** It gets its own version-1 snapshot (§6j) with a `clonedFrom` provenance field recorded in the audit event — so "where did this case come from" is answerable — but no shared history and no linkage that could propagate an edit.
+4. **Deep vs shallow on the suite tree is an explicit choice.** Cloning a folder asks whether to include subfolders, and cloning into another project is allowed only when the target shares the company (§6s) and revalidates classification values against the target's vocabularies (§6d) — cross-project clones are where dangling references get created.
+
+**Bulk clone** ("clone these 30 cases into that suite") reuses the §6f bulk-selection mechanism rather than growing its own.
+
+### Placement
+
+- **Clone case** — M1, with the repository.
+- **Clone plan, clone run, plan templates** — M2, with execution. Clone-run is the highest-value of the three (re-running a regression cycle against a new build is the most repeated action in the product) and should not slip.
+
+Both were previously implied by "bulk operations" in Phase 3; they are daily-use operations and belong in Phase 1.
+
+---
+
 ## 7. Delivery Milestones
 
 | Milestone | Content | Rough size |
@@ -2023,7 +2160,7 @@ Ship those and M6 is additive. Skip any of them and M6 becomes a migration acros
 ## 9. Immediate Next Steps
 
 1. Resolve open questions 1, 4, 5, 7, 8, 9 — they change the M1/M2 design. The roles/permissions and naming decisions are settled and recorded in `docs/specs/2026-07-30-tcms-roles-permissions-naming.md`, which is authoritative for the seed migration.
-2. Produce the **detailed ERD + REST API surface** document, including the full permission catalogue as a seed migration. The ERD needs a pass to rename `tenant_id` → `company_id`, model `company` / `company_membership` as real entities, add the `COMPANY` role scope, add the per-company display-key counter table (§6t), and move the previously-global uniqueness constraints behind `company_id` (§6s).
+2. ~~Produce the detailed ERD + REST API surface~~ — **done.** `docs/specs/2026-07-30-tcms-erd.md` (63 tables, `company_id` throughout, RLS), `V1__initial_schema.sql` regenerated and statically validated, and `docs/specs/openapi.yaml` aligned. The permission catalogue still needs writing as a **seed migration** (`V2__triggers_and_seed.sql`), sourced from `docs/specs/2026-07-30-tcms-roles-permissions-naming.md`.
 3. Produce the **M0 implementation plan** and scaffold the repo — including the `tenancy` module, the schema test, the `provision-company` script and the two-company isolation harness. All four are M0 deliverables even though multi-company activation ships last.
 
 **Total revised estimate: 34–44 weeks** to v1.0 including multi-company — 33–43 to a fully-featured single-company release at M5 (with ~1 extra week already absorbed into M0 for the tenancy foundation and harness), plus 1–1.5 for M6. (The first draft was 14–19, before teams/RBAC, dual step format, evidence capture, automation metadata, classification dimensions, multi-format report export, the reusable condition library with bulk assignment, the optional review workflow, the documentation space, the aggregate execution report and multi-company were added.)
