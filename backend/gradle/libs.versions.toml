@@ -6,12 +6,14 @@ postgresql = "42.7.7"
 testcontainers = "1.21.3"
 archunit = "1.4.1"
 assertj = "3.27.3"
+greenmail = "2.1.9"
 
 [libraries]
 spring-boot-starter-web = { module = "org.springframework.boot:spring-boot-starter-web" }
 spring-boot-starter-data-jpa = { module = "org.springframework.boot:spring-boot-starter-data-jpa" }
 spring-boot-starter-validation = { module = "org.springframework.boot:spring-boot-starter-validation" }
 spring-boot-starter-actuator = { module = "org.springframework.boot:spring-boot-starter-actuator" }
+spring-boot-starter-mail = { module = "org.springframework.boot:spring-boot-starter-mail" }
 spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test" }
 
 # Just the crypto artifact, not the whole security starter: at this point the codebase
@@ -34,6 +36,10 @@ spring-boot-testcontainers = { module = "org.springframework.boot:spring-boot-te
 
 archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }
 assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
+
+# An in-JVM SMTP server. Not a container: mail needs no Postgres, and a structural
+# dependency on Docker for a test that does not need it is a test that gets skipped.
+greenmail-junit5 = { module = "com.icegreen:greenmail-junit5", version.ref = "greenmail" }
 
 [plugins]
 springBoot = { id = "org.springframework.boot", version.ref = "springBoot" }

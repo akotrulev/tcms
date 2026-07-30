@@ -1,6 +1,8 @@
 package com.tcms.identity;
 
+import com.tcms.tenancy.Company;
 import com.tcms.tenancy.CompanyContext;
+import com.tcms.tenancy.CompanyRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
@@ -11,6 +13,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
@@ -100,6 +104,8 @@ public class InvitationService {
     private final MembershipInvitationRepository invitations;
     private final AppUserRepository users;
     private final CompanyMembershipRepository memberships;
+    private final CompanyRepository companies;
+    private final InvitationMailer mailer;
     private final InvitationTokens tokens;
     private final PasswordPolicy passwordPolicy;
     private final PasswordEncoder passwordEncoder;
@@ -111,6 +117,8 @@ public class InvitationService {
             MembershipInvitationRepository invitations,
             AppUserRepository users,
             CompanyMembershipRepository memberships,
+            CompanyRepository companies,
+            InvitationMailer mailer,
             InvitationTokens tokens,
             PasswordPolicy passwordPolicy,
             PasswordEncoder passwordEncoder,
@@ -121,6 +129,8 @@ public class InvitationService {
         this.invitations = invitations;
         this.users = users;
         this.memberships = memberships;
+        this.companies = companies;
+        this.mailer = mailer;
         this.tokens = tokens;
         this.passwordPolicy = passwordPolicy;
         this.passwordEncoder = passwordEncoder;
@@ -175,8 +185,60 @@ public class InvitationService {
                 UUID.randomUUID(), companyId, userId, token.hash(), expiresAt, issuedBy, now));
         // The URL, not the secret: the secret has exactly one legitimate destination and
         // handing it around as a bare string invites a call site that logs it.
-        return new IssueOutcome(
-                Optional.of(properties.acceptUrl(token.secret())), Optional.of(expiresAt), true);
+        String acceptUrl = properties.acceptUrl(token.secret());
+        sendAfterCommit(companyId, membership.get(), acceptUrl, expiresAt);
+        return new IssueOutcome(Optional.of(acceptUrl), Optional.of(expiresAt), true);
+    }
+
+    /**
+     * Queues the invitation email for <strong>after the transaction commits</strong>.
+     *
+     * <p>Two independent reasons, either sufficient:
+     *
+     * <ul>
+     *   <li><strong>An SMTP round trip inside a transaction holds a pooled database
+     *       connection across a network call</strong> to a third party, for as long as that
+     *       party takes to answer. A slow relay would drain the pool.</li>
+     *   <li><strong>A mail failure must not roll back a provisioned company.</strong> Sent
+     *       inline, an unreachable relay would undo the company, the vocabularies, the
+     *       counters and the grant — and the operator would see a provisioning error whose
+     *       cause is a mail server.</li>
+     * </ul>
+     *
+     * <p>The reverse mistake matters too: sending <em>before</em> commit would deliver a
+     * link to a row that then rolled back, so the invitee gets a token nothing recognises.
+     *
+     * <p>When there is no transaction — nothing calls it that way today, but a future admin
+     * API might — the send happens immediately rather than being dropped. Silently
+     * discarding the one message that lets someone in is the worse failure.
+     */
+    private void sendAfterCommit(
+            UUID companyId, CompanyMembership membership, String acceptUrl, Instant expiresAt) {
+        String email = users.findById(membership.getUserId())
+                .map(AppUser::getEmail)
+                .orElse(null);
+        if (email == null) {
+            log.error("Invitation issued for user {} which no longer exists; not sending",
+                    membership.getUserId());
+            return;
+        }
+        String companyName = companies.findById(companyId)
+                .map(Company::getDisplayName)
+                .orElse("your company");
+
+        InvitationMailer.InvitationMessage message = new InvitationMailer.InvitationMessage(
+                email, membership.getDisplayName(), companyName, acceptUrl, expiresAt);
+
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            mailer.send(message);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                mailer.send(message);
+            }
+        });
     }
 
     /**

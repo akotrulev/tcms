@@ -22,11 +22,14 @@ import org.springframework.validation.annotation.Validated;
  *                 folder, short enough that a forwarded mail is not a standing key to a
  *                 client's company. Re-running {@code provision-company} after expiry
  *                 issues a fresh one, which is why a short window is not a trap.
+ * @param fromAddress the envelope sender. A real, deliverable address on a domain whose
+ *                    SPF/DKIM records name the relay — an invitation that lands in spam is
+ *                    an onboarding failure that looks like a bug in the product.
  */
 @ConfigurationProperties(prefix = "tcms.invitation")
 @Validated
 public record InvitationProperties(@NotNull URI baseUrl, @NotNull Duration validity,
-                                   @NotBlank String acceptPath) {
+                                   @NotBlank String acceptPath, @NotBlank String fromAddress) {
 
     /**
      * The URL to put in front of the invitee.

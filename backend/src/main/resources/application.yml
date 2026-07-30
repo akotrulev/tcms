@@ -62,6 +62,13 @@ tcms:
     base-url: ${TCMS_BASE_URL:http://localhost:5173}
     accept-path: /accept-invitation
     validity: P7D
+    from-address: ${TCMS_MAIL_FROM:tcms@localhost}
+
+  # spring.mail.host is deliberately NOT defaulted. Boot only auto-configures a
+  # JavaMailSender when it is set, and MailConfiguration turns its absence into a loud
+  # warning rather than a startup failure — an install with no relay still works, it just
+  # cannot email anyone. A default of localhost would instead produce a connection refused
+  # on every invitation, which reads as a bug rather than as missing configuration.
 
 management:
   endpoints:
