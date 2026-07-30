@@ -1,0 +1,10 @@
+{
+  "enabledPlugins": {
+    "be-java@skills-library": true,
+    "business-analysis@skills-library": true,
+    "data@skills-library": true,
+    "devops@skills-library": true,
+    "fe-react@skills-library": true,
+    "qa-java@skills-library": true
+  }
+}
