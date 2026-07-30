@@ -1,0 +1,463 @@
+# TCMS — Session Handoff
+
+**Date:** 2026-07-30 (last session: multi-company tenancy design)
+**State:** Planning and design complete, **now including multi-company tenancy**. Backend schema regenerated (not executed). Frontend complete through **Phase 3 (quality layers)** but built against the *pre*-multi-company design — see **§9, which is where the next session should start.**
+**Build status:** `frontend` — `npm run build` clean, `npm run lint` 0 warnings. Backend DDL statically validated (63 tables), **never run against Postgres**.
+**Branch:** `phase3-quality-layers`, not merged. Last commit `51f6056` — multi-company design + regenerated schema.
+
+> **⚠ Read §9 before touching the frontend.** The multi-company decisions changed the display-key format, the route topology, the role set and the permission catalogue. The frontend still implements the old shapes, and `openapi.yaml` is now behind the design. Nothing is broken at build time — it is *silently* out of date, which is worse.
+
+---
+
+## 0. IMPORTANT — Use the installed plugin skills
+
+This project is being built with the **`fe-react`, `be-java`, `data`, `qa-java`, `devops` and `business-analysis` plugin skills**. They are not optional colour — the work so far follows them, and continuing without them will produce inconsistent output.
+
+**At the start of any new session:**
+
+1. **Frontend work** → invoke the `fe-react:fe-react` skill (or `Skill` tool with `fe-react:fe-react`). It loads the agent definition at
+   `~/.claude/plugins/cache/skills-library/fe-react/<hash>/frontend/react/agents/fe-react.md`
+   and runs a **phased pipeline**. Read the phase table there and load **only that phase's `SKILL.md` files** before producing anything they cover. Skills live at
+   `~/.claude/plugins/cache/skills-library/fe-react/<hash>/frontend/react/skills/<name>/SKILL.md`.
+   - Phase 0–1 are **already done** (see §4). Next session enters **Phase 2 — Feature build**, which requires loading:
+     `component-writer`, `routing`, `forms`, `data-fetching`, `test-ids`, `ui-rules`, `responsive-design`, `animation`, `design/ux-writing`.
+   - The agent runs **inline**, not as a subagent, unless asked otherwise.
+2. **Backend work** → `be-java:be-java` skill. Also `be-java:be-java-database-code` for JPA/persistence and `data:data-postgresql` / `data:data-migrations` for schema and migration work.
+3. **Never improvise a pattern a skill owns.** The skill wins over instinct, and over general guidance, for its domain. If a listed skill is missing on disk, say so and proceed with general rules — never substitute invented guidance.
+4. The user's global `CLAUDE.md` requires: **no remote/cloud planning**, and all generated `.md` artifacts saved **into this project** under `docs/plans/`, `docs/specs/`, `docs/audits/` — never to a global directory.
+
+---
+
+## 1. What this project is
+
+A **self-hosted, Java-based test case management system** serving **one or more companies from a single instance**, where a **company is a separate CLIENT organisation**. It owns the manual and automated test asset lifecycle: authoring cases, organizing suites and plans, executing runs, ingesting automated results, and reporting quality signals traceable from documentation through to defects.
+
+**The hierarchy, because getting it wrong propagates into every example:**
+
+| Level | What it is | Example |
+|---|---|---|
+| Instance | One deployment, operated by you | — |
+| **Company** | **A separate client organisation.** The isolation boundary. | Acme Corporation |
+| **Project** | **A full client project** — an entire product or engagement. *Not* a feature area. | Acme Online Banking · Acme Mobile App |
+| Suite tree | Structure within one project | `Onboarding` › `KYC checks` |
+| Feature dimension | The feature-level classification axis (§6d) | `Payments` › `Refunds` › `Partial refund` |
+
+So "Payments" is a **Feature** or a suite folder, never a project. A company holds a handful of whole products, not dozens of features.
+
+**Three access tiers** (§6b): Instance Admin (everything, every company) → Company Admin (everything in the companies they're assigned to) → regular user (**only the projects they are explicitly granted** — company membership conveys authentication and *zero* project visibility).
+
+**Explicit non-goals:** not a test runner (it ingests results), not a defect tracker (it links to Jira), **not public multi-tenant SaaS** (companies are provisioned by an operator script, not self-signup — no billing, no custom domains), not a step-definition editor. No cross-company anything.
+
+---
+
+## 2. Artifacts produced
+
+| File | Lines | What it is |
+|---|---|---|
+| `docs/plans/2026-07-30-tcms-high-level-plan.md` | 2052 | **The master design document.** 21 design sections (§6a–§6u), functional scope by phase, milestones M0–M6, 42 open questions. |
+| `docs/specs/2026-07-30-tcms-roles-permissions-naming.md` | 340 | **AUTHORITATIVE for the permission catalogue, role grants and naming.** The seed-migration source. The ERD defers to it where they overlap. |
+| `docs/specs/2026-07-30-tcms-erd.md` | 760 | Entity-relationship design — Mermaid per module, field tables, reasoning. §0.1 is the `company_id` rule and is the most important part. |
+| `backend/src/main/resources/db/migration/V1__initial_schema.sql` | 1433 | First Flyway migration. **63 tables, 55 indexes, RLS policies.** Comments carry the *why*. |
+| `docs/specs/openapi.yaml` | 1996 | REST contract. **NOW STALE** — predates multi-company; see §9. |
+| `frontend/` | — | Vite + React 19 + TS + MUI v7. Phase 3 complete, but against the pre-multi-company contract; see §9. |
+
+### Plan section index (`docs/plans/...`)
+
+| § | Topic |
+|---|---|
+| 6a | Dual step format — structured **or** Gherkin per case |
+| 6b | Teams, roles & permissions — **Instance Admin / Company Admin / Test Lead / Test Engineer / Automation Service / Viewer**, three scopes (SYSTEM/COMPANY/PROJECT) |
+| 6c | Automation status & tagging |
+| 6d | Classification — Test Type × Test Level × Feature tree × Phase |
+| 6e | Reporting & export (PDF/MD/HTML) + aggregate execution report |
+| 6f | Pre/post conditions with bulk assignment |
+| 6g | Optional review workflow |
+| 6h | Reusable step & condition search (indexing) |
+| 6i | Documentation space with stable block anchors |
+| 6j | Versioning & history |
+| 6k | Org chart & team structure |
+| 6l | Kanban board & work items |
+| 6m | Test case field specification |
+| 6n | Test artifacts (project + plan scope) |
+| 6o | Repository status dashboard |
+| 6p | Execution history & statistics — case, suite, plan |
+| 6q | Search, filtering & release version |
+| 6r | External identity (OIDC SSO) & integration credentials — **M4, not phase 1**; per-company IdP config |
+| 6s | **Multi-company tenancy** — isolation strategy, the `company_id` rule, lifecycle, the isolation harness |
+| 6t | **Display keys** — `TC-1` etc., company-scoped, and why UUIDs stay the real keys |
+| 6u | **Per-company branding & per-membership display names** |
+
+---
+
+## 3. Decisions locked in (do not re-litigate without reason)
+
+### Product / architecture
+- Self-hosted, **multiple client companies per instance** · Spring Boot REST + React SPA · one deployable (SPA served from the Spring Boot jar).
+- **Monorepo**: `backend/` + `frontend/` + `docs/`. Justified by the shared `openapi.yaml` contract and the single shipped artifact.
+- Spring Modulith monolith. Modules: **`tenancy` ·** `identity · project · repository · execution · documentation · reporting · work · shared`. Cross-module FKs allowed only toward **`tenancy`**/`identity`/`project`; everything else via domain events, enforced by ArchUnit. `tenancy` is depended on by everything and depends on nothing.
+
+### Multi-company — decided 2026-07-30 (plan §6s, §6t, §6u)
+
+| Decision | Detail |
+|---|---|
+| **Companies are separate clients** | Not business units. Drives: RLS on by default · whole-company export required · no pre-auth company picker (would leak the client roster) · Viewer as the invitation default. |
+| **Sequencing: foundation M0, feature LAST (M6)** | The `company_id` discriminator, filter, constraints, provisioning script **and the two-company isolation harness** are M0. The surface (switcher, invitations UI, branding, per-company IdP) is M6 at ~1.5–2 weeks. Total cost ~2 weeks, split. |
+| **Companies are provisioned by an operator script** | `provision-company` CLI — tested and idempotent, not hand-written SQL. This is *why* M6 is small: no CRUD screens, no ops console, no archive state, no quota UI. |
+| **Default lifecycle policy: suspend, never delete** | Avoids a purge script across ~60 tables of cascades. `SUSPENDED` must be honored in code. |
+| **One account, many companies, independent permissions each** | `app_user` is instance-level, email unique **instance-wide**, `company_membership` is the join. Membership **gates** the permission union rather than contributing to it — so offboarding is one row update. |
+| **Company Admin is assigned per company by the Instance Admin** | A `COMPANY`-scope `RoleAssignment`, not a new tier. Sees every project in their company, present and future. Three companies = three rows. |
+| **Regular users see only granted projects** | Not the company's project list, names, or counts. Two independent gates: company filter, then project grant. |
+| **Instance Admin does reach into client content** | Deliberate — an operator with `psql` makes the restriction theatre. Mitigated by auditing operator access in **the client's own** trail and disclosing it plainly. |
+| **No custom roles in v1** | Not even clone-and-edit. Six built-ins are the complete set. Enforcement stays permission-based so a designer is additive later. |
+| **Viewer is the default at every entry point** | Company invitation, SSO JIT provisioning, and project assignment. Test Engineer is always an explicit grant. |
+| **Display keys are company-scoped** | `TC-1` `TP-1` `TS-1` `TR-1` `DOC-1`, numbered from 1 per **company**. No key for executions/conditions/defects. No automation prefix. |
+| **Branding: logo + two colours + name + favicon** | Theme *derived* from the two colours with contrast validated at save; **status colours are not brandable**. No custom CSS. |
+| **Per-membership display names** | Resolved through the active company's membership at every rendering site. In M0 because it threads through every surface showing a person. |
+
+### Resolved open questions (2026-07-30)
+| # | Decision |
+|---|---|
+| 7 | **Concurrent execution: yes, with live updates.** `lock_version` on executions/step results; SSE shared with the kanban board. |
+| 18 | **Requirements are documentation blocks.** No `requirement` table — traceability is `test_case → doc_link → doc_block`. |
+| — | **Custom fields deferred to phase 2.** |
+| — | **Versions written on explicit save only** (autosave → draft buffer; skipped when `content_hash` unchanged). |
+| — | **Steps stored relationally**, stable `test_step.id` so `step_result` FKs cleanly and reordering never reassigns evidence. |
+| — | **Read models are event-updated tables**, not materialized views. |
+| — | ~~`tenant_id` as a hedge~~ → **superseded.** `company_id` is a real modelled entity on every company-owned table. Requires: a globally-applied Hibernate filter fed from the session (never client input), `company_id` **leading** every composite index and previously-global uniqueness constraint, RLS on by default, and the schema test that enforces all of it. |
+| — | ~~Keys are `PREFIX_NNNN` per project~~ → **superseded.** Keys are **`PREFIX-N`, sequential per COMPANY**: `TC-` case · `TS-` suite · `TP-` plan · `TR-` run · `DOC-` doc page. No zero-padding (`key_seq` owns ordering). **No key for executions** — dropped entirely. |
+| — | **Auth: local accounts (BCrypt + JWT) in v1.** External OIDC SSO — Cognito, Entra ID, Google Workspace, Okta, Keycloak, generic — ships in **M4 with the integrations**, since it shares the OAuth client, encrypted credential storage and consent machinery with Jira/Slack/Teams. Local login is retained permanently as the break-glass path (§6r). |
+| — | **Jira is NOT an identity provider.** Authentication (who is this human) and outbound integration authorization (may TCMS act against Jira) are separate concerns with different scopes, lifetimes and consent models. Do not merge their code paths (§6r). |
+
+### Load-bearing details that are expensive to retrofit
+1. **A run pins the case *version* it executed** (`test_execution.case_version_id`). Without it, editing a case silently rewrites history in every past report.
+2. **Shared conditions/steps: reference while authoring, snapshot at version-pin time.** DRY while live, immutable once executed.
+3. **`doc_block.id` is immutable and never derived from text.** Heading-text anchors break *silently* when a typo is fixed.
+4. **Read models must ship from M1** — `execution_fact`, `suite_run_summary`, `plan_snapshot`, `case_health`. Retrofitting these onto live joins is a rewrite, not an optimization.
+5. **Versioning + audit must be written from M1** even if the diff/restore UI comes later. History you didn't record is history you never get back.
+6. **Keys don't sort lexicographically** — `TC-10000` sorts before `TC-9999`. Every keyed table stores `key_seq BIGINT` alongside `key TEXT`; order by `key_seq`, display `key`. Same class of bug as `release_sort_key`.
+7. **`suite_run_summary` stores counts, never percentages** — the "of executed" vs "of total" toggle needs both, and nested rollups must sum leaf counts (averaging child percentages over unequal case counts is wrong arithmetic).
+8. **Kanban derived items are never materialized.** Their status is computed from the source, so a card can't diverge from its execution.
+9. **Aggregation policy must be displayed on any multi-run report.** Two teams reading "94% pass" otherwise mean different things.
+10. **Identity must stay keyed on `app_user.id`, never email**, and `created_by` must FK to the user row. This already holds, and it is the single constraint that keeps M4's SSO work additive (new tables + a backfill) rather than a migration touching every authored artifact (§6r).
+11. **`company_id` on every company-owned table, from M0** — including **join tables and version tables**, which is where it is actually forgotten (see §6). Retrofitting the discriminator across every table, index and uniqueness constraint is the most expensive change available in this project. The *feature* can slip indefinitely; the column cannot.
+12. **`user_identity` must be keyed on `(company_id, issuer, subject)` when SSO lands in M4** — per-company issuer trust. A different client's IdP asserting the same `sub` must never resolve to an existing user. This is the multi-company account-takeover vector, and it is the one part of the M4 deferral that is *not* purely additive if got wrong.
+13. **Unreachable display keys return NOT FOUND, never FORBIDDEN** — identically, so the response can't be used as an oracle. Company-wide key numbering makes `TC-N` guessable, and this rule plus "display keys never appear in API paths" are what contain the inference channel. Both are load-bearing, not incidental.
+14. **Async handlers must re-establish `CompanyContext` from the event envelope**, not inherit a thread-local. Context loss across an `@Async` boundary is the realistic way a multi-company instance leaks, and it is invisible in synchronous tests.
+
+---
+
+## 4. Frontend — current state
+
+**Versions:** React 19.2, Vite 7 (no Next.js), MUI v7, TypeScript strict + `erasableSyntaxOnly`.
+
+### Phase 0 — Scaffold: DONE
+### Phase 1 — Architecture foundations: DONE (walking skeleton closed 2026-07-30)
+### Phase 2 — Feature build: DONE (all 10 screens; verified in-browser)
+### Phase 3 — Quality layers: DONE (2026-07-30; see §5 for what shipped and what was left open)
+
+**Decision record:**
+
+| Decision | Choice |
+|---|---|
+| Render target | **Vite SPA + React Router 7.** Internal authenticated tool, no SEO/SSR need. No RSC, so no `'use client'` boundary exists — the skills' RSC lane does not apply. |
+| Route topology | `/login` public; everything else behind `<RequireAuth>` under a persistent `<AppShell>` with `<Outlet/>`. Project-scoped routes under `/projects/:projectId/*` because keys are ambiguous without project context. |
+| Component library | **MUI v7** + MUI X DataGrid/TreeView. |
+| Styling authority | **MUI `theme` + `sx`, single authority.** No Tailwind. Tokens as CSS custom properties bridged into `createTheme` — one colour system. |
+| Server state | **TanStack Query.** No server data in any client store. |
+| Client state | Session in Context; **filter state in the URL** (`useSearchParams`) per plan §6o/§6q. No Zustand. |
+| Breakpoints | **MUI's values adopted wholesale** (xs 0 / sm 600 / md 900 / lg 1200 / xl 1536), mirrored in `src/app/breakpoints.ts`. |
+
+**Design plan (design/visual-identity):**
+- **Thesis:** status colour is load-bearing *data* in a TCMS, so the brand palette deliberately retreats. Brand steel is used for actions and active nav only — never on data. Status owns the entire saturation budget.
+- **Color:** `#1B2A41` ink · `#2E6E8E` steel (actions) · `#F5F7FA` surface · `#DDE3EA` hairline. Status: `#2E7D5B` passed · `#C0392B` failed · `#B7791F` blocked · `#6B7280` skipped.
+- **Type:** IBM Plex Sans + IBM Plex Mono (technical-documentation lineage; Inter would have been the default reach).
+- **Layout:** left rail (project + nav) · main content · detail pages split into content + metadata sidebar.
+- **Signature:** **the identifier system** — every key, version, release, percentage and SHA (`TC-1`, `v7`, `4.3.0`, `87%`) in Plex Mono with tabular figures. Functionally correct (similar keys stay distinguishable, keys align in columns) and gives the UI an instrument-panel character from the subject's own world. **⚠ The code still renders the old `TC_0042` form** — the format changed to `TC-1` with the company-scoped key decision (§9). The design thesis is unaffected; only the string is.
+- **Design-critique revision (required by the skill's gate):** critiqued against the three AI-default looks. Palette avoids cream+serif+terracotta and acid-on-black. First layout pass was "white cards with shadows on grey" — the safe SaaS default — and pushing away risked landing on default #3, the hairline-rule broadsheet. **Revised to:** one elevated surface per region, hairline dividers *inside* it, restrained 4px radius. Density comes from row rhythm, not from stripping geometry.
+
+### Files written
+
+| Path | Purpose |
+|---|---|
+| `src/index.css` | Design tokens only (+ minimal reset, `.identifier`, reduced-motion floor). No component styles. |
+| `src/app/theme.ts` | `createTheme` with `cssVariables: { colorSchemeSelector: 'data' }`, light+dark schemes, type scale, component defaults. Exports `statusColors`/`lifecycleColors` maps. |
+| `src/app/breakpoints.ts` | TS mirror of MUI breakpoints, for client branching and the QA suite to import. |
+| `src/app/Providers.tsx` | QueryClient + ThemeProvider + CssBaseline + SnackbarProvider + AuthProvider, mounted once. |
+| `src/auth/authContextValue.ts` | The Context object + `AuthValue` type. Split out so the provider file exports only a component (Fast Refresh). |
+| `src/auth/useAuth.ts` | Consumer hook — React 19 `use()`, throws outside the provider. |
+| `src/auth/AuthContext.tsx` | `AuthProvider` only. Session state, memoized value. Never holds server data. |
+| `src/lib/safeStorage.ts` | Guarded storage wrapper — degrades to in-memory, discards corrupt entries, logs once. |
+| `src/api/client.ts` | Fetch wrapper + `ApiError` (with `fieldErrors`) + `TimeoutError` + `isAbort()` + `budget()` + per-class `TIMEOUTS` + `qs()`. |
+| `src/api/schema.d.ts` | **Generated** — do not hand-edit. |
+| `src/api/types.ts` | Convenience aliases over the generated schema + `CaseFilters`. |
+| `src/mocks/fixtures/core.ts` | Users, teams, roles, projects, classification, statuses, configurations, suites, conditions, artifacts, doc pages, plans, runs. |
+| `src/mocks/fixtures/cases.ts` | 27 seeded cases carrying the awkward shapes + `buildCaseDetail()`. |
+| `src/mocks/fixtures/reporting.ts` | Case/suite history with version markers, dashboard, plan statistics. |
+
+**Fixtures deliberately carry the awkward rows** the UI must handle: a case whose results span three versions with a v5 edit followed by failures; a suite whose membership grew mid-cycle; an `AUTOMATED` case that stopped reporting; a doc block with zero linked cases; a plan at 89% pass over 97% coverage with two unmet exit criteria; an orphaned case owned by a deactivated user.
+
+### Files added 2026-07-30 (Phase 1 close + Phase 2)
+
+**Mock API — stateful.** `db.ts` holds a `structuredClone` of the fixtures and the handlers read *and write* it, so create/edit/result round-trips land in the list. A stateless handler set would have made every write screen untestable.
+
+| Path | Purpose |
+|---|---|
+| `src/mocks/db.ts` | Mutable store, `PREFIX_NNNN` key allocation, derived suite counts, lazily-materialized run executions, `recountRun()`, computed (never stored) derived work items. |
+| `src/mocks/handlers.ts` | Every path in `openapi.yaml`. Optimistic-concurrency 409s, field-keyed 400s, bulk preview/commit, a real draft→approve guard. 220 ms latency so loading states are reachable. |
+| `src/mocks/browser.ts` | `setupWorker`. `public/mockServiceWorker.js` is committed. |
+| `src/api/queries.ts` | **The data module.** Every read/write hook, one `keys` factory, query keys carrying every dependency, `enabled` gates, per-endpoint timeout budgets. |
+| `src/lib/labels.ts` | Enum→label maps, each `satisfies Record<Union, string>` so a new enum member is a compile error until labeled. |
+| `src/lib/format.ts` | One canonical format per type. Timezone always labeled. `compareReleaseVersions` (4.10.0 sorts after 4.9.0). |
+| `src/lib/results.ts` | `executedCount` / `passRate` / `sumCounts`. Split from the component so Fast Refresh keeps working. |
+| `src/components/DataRegion.tsx` | **The three-state binding.** loading / loaded / failed / empty / **stale-after-failed-refetch**; `isAbort()` never renders as failure; three distinct empty-state kinds. One fix here fixes every list. |
+| `src/components/ResultBar.tsx` | Stacked counts, `PassRateSummary` (both denominators side by side), `DenominatorToggle`. |
+| `src/components/Identifier.tsx` | The design signature — the single place `.identifier` is applied. |
+| `src/components/StatusChip.tsx` | Status / lifecycle / priority / automation / health. Colour is never the only signal. |
+| `src/components/PageHeader.tsx` | One page-header + breadcrumb treatment; emits `<title>` via React 19 hoisting (no `react-helmet`). Plus `Panel`. |
+| `src/app/AppShell.tsx` | Persistent layout: rail (CSS visibility swap, `Nav.Rail` / `Nav.Drawer`), active item marked three ways, semantic `<footer>`. |
+| `src/app/router.tsx` | Route topology; heavy screens `lazy()`-split. `cases/new` declared before `cases/:caseId`. |
+| `src/auth/RequireAuth.tsx` | Coarse gate; carries the attempted path so sign-in returns there. |
+| `src/features/auth/LoginPage.tsx` | RHF + Zod, field-mapped server errors. |
+| `src/features/projects/ProjectsPage.tsx` | Project picker. |
+| `src/features/dashboard/DashboardPage.tsx` | §6o — tiles serialize their filter predicate into a `<Link>`; composable, honest automation denominator. |
+| `src/features/cases/{CaseListPage,SuiteTree,CaseFilterBar,CaseGrid,BulkActionDialog,useCaseFilters}.tsx` | Suite tree + server-side grid, URL-backed filters, bulk preview-then-commit. |
+| `src/features/cases/{CaseDetailPage,CaseEditorPage}.tsx` | Dual step format, inherited-condition markers, stale doc links; editor schema = only fields that persist. |
+| `src/features/runs/{RunListPage,RunDetailPage,ExecutionPage}.tsx` | §6 execution — precondition checklist gating Blocked, per-step results, pinned case version. |
+| `src/features/plans/{PlanListPage,PlanStatisticsPage}.tsx` | §6p — pass rate + coverage side by side, aggregation policy always stated, exit criteria with target *and* actual. |
+| `src/features/history/{CaseHistoryPage,SuiteHistoryPage}.tsx` | §6p — version markers interleaved into the timeline; membership-change caveat fires from the data. |
+| `src/features/docs/DocsPage.tsx` | §6i — stable block-id anchors, inline per-block coverage markers. |
+| `src/features/artifacts/ArtifactsPage.tsx` | §6n — both scopes with the inheritance marker. |
+| `src/features/board/BoardPage.tsx` | §6l — derived cards computed per read; illegal drops refused *before* the request, with keyboard move buttons. |
+| `src/features/admin/TeamsPage.tsx` | §6b/§6k — org chart, assignments (team vs direct), roles with permissions expanded. |
+
+### Contract changes made (openapi.yaml is the source of truth — these were changed there, then regenerated)
+
+1. **`BulkResult` reshaped** from counts (`affected` / `alreadyCompliant`) to **lists of keys** (`changed` / `unchanged` / `skipped[{key, reason}]` / `total`). §6f requires the UI to *name* what it touched; `affected: 38` cannot be rendered as a preview, and a blanket toast over a partial failure is the worse half of the defect.
+2. **`required` arrays added** to eight inline objects that had none: `RepositoryDashboard.automationCoverage`, `.recentActivity[]`, `DashboardBreakdown.segments[]`, `PlanStatistics.byConfiguration[]` / `.bySuite[]` / `.trend[]`, `DocBlock.coverage`, `User` (status, teams), `RoleAssignment.team`. This is the handoff's own lesson #1 recurring — **if you add a schema, add its `required` array**, or the generated type is all-optional and no consumer can use it without null-checking fields that are always present.
+3. Bulk calls now use the contract's own `action` / `payload` naming rather than invented `operation` / `value`.
+
+---
+
+## 5. NOT done — next session starts here
+
+### Phase 2 gate — PASSED (evidence)
+
+`npm run build` clean · `npm run lint` 0 warnings · 206 `data-testid` sites, **0 collisions** (the six apparent duplicates are per-file `TestIdPrefix` constants resolving distinctly, or mutually exclusive render branches — see the audit command in §7) · no page-level horizontal overflow at 390 px (the DataGrid scrolls inside its own container) · console clean, no key/hydration warnings.
+
+**Driven in a real browser end to end**, not just built: sign-in → project → dashboard tile → filtered list → case detail → edit → save (**title changed, v3 → v4, toast, list reflects it**) → run → execution → untick a precondition → Blocked dialog pre-filled with the unmet condition → record → **run counts recomputed** (Blocked 0→1, Untested 27→26, filter chips updated). Version pinning confirmed visually: the run still shows TC_0003 at **v3** after the case was edited to v4.
+
+### Three defects found in the Phase 2 browser pass
+
+1. **Theme toggle was a no-op on a system-dark machine.** It read `mode === 'dark'`, but the default mode is `system` — so the control offered "switch to dark" on an already-dark page and the first click only moved `system` to the equivalent explicit value. Now resolves via `systemMode`.
+2. **Only the 60 px key cell in the case grid navigated**, not the title. The affordance technically existed but the row read as broken. The title is a `<Link>` now too.
+3. **Plan statistics contradicted itself**: the headline showed 91.1% ("of executed") while the exit criterion showed 89.1% (of all in scope), with nothing explaining the difference — the exact ambiguity §6p exists to remove. The exit-criteria panel now states its denominator.
+
+### Phase 3 — quality layers: DONE (2026-07-30)
+
+Skills applied: `error-handling` (+ both `references/`), `accessibility`, `performance`, `seo`.
+
+**The gap the handoff had not spotted, and the most severe one: there was not a single error boundary in the app**, while every heavy route is `lazy()`. Any render throw or failed chunk download blanked the entire SPA.
+
+| Area | What shipped |
+|---|---|
+| Boundaries | `components/ErrorBoundaries.tsx` — root (outside the providers, so a theme/query-client throw is caught), per-route (**inside** the shell, so the rail survives and you can navigate away from a broken page; `resetKeys` on pathname), per-region. `DataRegion` wraps its own children in one. |
+| Notifications | `notifications/` — top-right, **never auto-dismisses**, close button, copyable correlation id, deduped by `correlationId ?? code\|region` with a count, **rolled up by cause**, capped at 3 + "N more". Raised from **one** place (`QueryCache`/`MutationCache` `onError`); call sites with better copy opt out via `meta: { handled: true }`. notistack stays for success toasts only. |
+| Retry | Was a blanket `retry: 1` that retried 4xx too. Now `isTransient()` (5xx/network/timeout/408/429 only), exponential backoff, **honours `Retry-After`**, stops after 3. Mutations never auto-retry. |
+| Session | `auth/SessionRecoveryProvider` — a mid-session 401 raises **re-auth in place**; the route stays mounted and unsaved work survives. 403 never touches the session. |
+| Version skew | `app/versionSkew.ts` + `VersionSkewWatcher` — `__BUILD_ID__` stamped by Vite, chunk-load errors recovered by a **`sessionStorage`-guarded single reload**, prompted (never forced) when work is unsaved. |
+| Idempotency | `newIntentKey()` — one key **per user intent, not per attempt**, on creates. The mock handler genuinely dedupes on it, so the property is provable. |
+| A11y | Skip link (first focusable), `<main tabIndex={-1}>` focused on route change but **not** on first load, one persistent polite live region announcing each page. |
+| Reporting | `lib/reportClientError.ts` — one sink, rate-limited + deduped, fed by boundaries, `window.onerror`, `unhandledrejection`, and React 19's `onCaughtError`/`onRecoverableError`. |
+| SEO | Correctly **scoped out**: an authenticated internal tool has no crawlable surface. Placeholder `<title>frontend</title>` fixed, `noindex` meta, `robots.txt` disallowing everything. Reasoning recorded in the files. |
+
+**Files added in Phase 3**
+
+| Path | Purpose |
+|---|---|
+| `src/components/ErrorBoundaries.tsx` | The three tiers + the shared stale-build fallback. |
+| `src/lib/describeError.ts` | **One** place an error becomes user-facing copy. Both the inline region and the notification read from it, so a 503 is worded identically in both. Also owns `isTransient()`. |
+| `src/lib/reportClientError.ts` | The single reporting sink. Rate-limited, deduped, drops `AbortError`. |
+| `src/lib/globalErrorHandlers.ts` | `window.onerror` + `unhandledrejection` — the two paths boundaries cannot see. |
+| `src/notifications/{NotificationsProvider,notificationsContextValue,useNotify}` | The persistent stack. Dedupe, roll-up, cap. |
+| `src/auth/{SessionRecoveryProvider,sessionRecoveryContextValue,useSessionRecovery}` | The 401 ladder's rung 3, `useUnsavedWork`, and `SessionReplayBridge`. |
+| `src/a11y/{AnnouncerProvider,announcerContextValue,useAnnounce,useRouteFocus}` | Live region + route-change focus. |
+| `src/components/SkipToContentLink.tsx` | First focusable element in the DOM. |
+| `src/app/queryClient.ts` | Retry policy + the one global raise point for query/mutation failures. |
+| `src/app/versionSkew.ts` · `src/app/VersionSkewWatcher.tsx` | Chunk-error detection + the guarded reload; the proactive on-focus check. |
+| `src/mocks/faults.ts` | Dev-only fault injection (below). |
+| `src/build-env.d.ts` · `vite.config.ts` | `__BUILD_ID__`, and the recorded reasoning for the chunk-size limit. |
+| `public/robots.txt` · `index.html` | The SEO subset, with why-the-rest-doesn't-apply written down. |
+
+Modified: `Providers.tsx` (nesting order is load-bearing — see its header comment), `main.tsx`, `DataRegion.tsx`, `PageHeader.tsx`, `AppShell.tsx`, `api/client.ts`, `api/queries.ts`, `lib/format.ts`, `mocks/{db,handlers,browser}.ts`, `CaseEditorPage.tsx`.
+
+**Fault injection — `src/mocks/faults.ts`.** None of the above can be triggered by using the app normally, so the mock API grew a console-driven fault switch: `tcmsFaults.status(503, 30)` · `.hang()` · `.expire()` · `.drift()` · `.only('/cases')` · `.off()`. Dev-only, tree-shaken from production. **Use it before claiming any resilience behaviour still works.**
+
+**Verified in a real browser** (see §6 lesson 5), not just built: 503 → inline failed region + one notification while the search box, filters, suite tree and New case all keep rendering · load-then-fail-refetch → **19 rows kept, marked "Showing data from 11:25 UTC", retry offered, no failed body** · hung endpoint → leaves loading at the deadline · 401 with a half-typed case title → dialog in place, **title still there afterwards**, no redirect · one 503 across three regions → **one** notification reading "Occurred 3 times" · notification still present at **61 s** · retry from the notification → full recovery · route change → focus lands on `<main>`, announced.
+
+### Three defects found in the Phase 3 browser pass
+
+1. **`SessionRecoveryProvider` called `useQueryClient()` while mounted above `QueryClientProvider`** — it has to be above, because the query client's error handlers need `reportUnauthorized` at construction. Threw "No QueryClient set" and the root boundary caught it: **the app rendered nothing but the error page**. Fixed with a registration bridge (`SessionReplayBridge`) mounted below the client.
+2. **`reportUnauthorized` closed over `user`**, so the query client captured it at mount when `user` was `null` — the guard would then have swallowed every 401 for the life of the session and the recovery dialog would never have appeared. Now reads a ref.
+3. **A drifted response crashed the whole route** rather than the region, because `isEmpty(data)` — a predicate over the response body — was evaluated in `DataRegion` *outside* its own boundary. Moved into a child component.
+
+### Phases 4–5 — next, but §9 comes first
+
+**Read §9 before starting Phase 4.** The key format, role set and permission strings changed after Phase 3 shipped; writing tests against the old shapes means writing them twice.
+
+- **Phase 4:** Vitest + RTL. Nothing is installed yet. Highest-value targets are the logic-bearing units, not the markup: `useCaseFilters` (URL round-tripping), `lib/results` (denominator arithmetic), `lib/format` (`compareReleaseVersions`), `lib/describeError` (the retryable/isAuth matrix), `DataRegion`'s state matrix, `app/versionSkew` (the once-only guard), and the `CaseSchema` cross-field refinements.
+- **Phase 5:** hostile self-review — `code-review` + `design/ui-code-audit` + `design/ux-review`, with the "remove one accessory" restraint check.
+
+### Phase 3 items deliberately left open
+
+- **No runtime response validation.** A 200 whose body has drifted is currently caught by the region boundary — the page degrades correctly — but it is *not* categorized, and drift that renders **without throwing** (a renamed optional field silently reading `undefined`) is not caught at all. The real fix is parsing each response at the fetch boundary; that is `data-fetching`'s territory and roughly 40 schemas, so it is its own slice. **This is the largest remaining resilience gap.**
+- **`CaseListPage` stays at 527 kB raw / 155 kB gzip**, over the per-route budget. Measured alternative: forcing MUI X DataGrid into its own `manualChunks` entry defeated tree-shaking — the page fell to 72 kB but the grid chunk came out at 728 kB and total JS went from ~909 kB to ~1275 kB, with no cache reuse since `CaseGrid.tsx` is the only consumer. Reverted; `chunkSizeWarningLimit` raised to 600 with the reasoning in `vite.config.ts`. The entry chunk is **124 kB gzip, inside budget**, and the grid is behind a lazy route. The real lever is dropping DataGrid for a plain table — a Phase 5 conversation.
+- **Multi-tab session broadcast** (`BroadcastChannel`) — signing out in one tab does not yet update its siblings.
+- **`useUnsavedWork` is wired only to the case editor.** The execution screen and board should register too.
+- **No Lighthouse/CWV measurement.** Bundle budgets were checked; LCP/INP/CLS were not measured, and that needs the app served rather than in dev.
+
+### Known gaps deliberately left in Phase 2 scope
+
+- **Evidence upload** is modelled in the contract and rendered where present, but there is no upload control on the execution screen (needs the signed-URL path, not a form POST).
+- **Case create/edit does not assign features** — the feature dimension is MULTI + hierarchical and needs its own tree picker; the editor shows existing assignments read-only rather than offering a flat select that could set a parent where a leaf is required.
+- **Suite create/rename UI** — the handler and mutation hook exist, the tree has no affordance yet.
+- **Review/approve actions** are deliberately absent from the editor (status is not an editable dropdown, per §3); the actions themselves are not built.
+- **SSE / live updates** (open question #7 resolved as "yes, with live updates") — not wired. The `realtime` skill was not loaded because nothing pushes yet. Snapshot→live handoff is a Phase 3+ task.
+
+### Backend — not started
+- `V2__triggers_and_seed.sql`: `search_vector` generated columns, SINGLE-cardinality classification trigger, team **cycle + company-consistency** trigger, and all seed data — **the revised permission catalogue** (per `docs/specs/2026-07-30-tcms-roles-permissions-naming.md`, which is authoritative), **the six** built-in roles, **per-company** classification dimensions, default case statuses, default configuration per project.
+- **The `provision-company` CLI command** — an M0 deliverable, not an M6 one. Creates the company, seeds its vocabularies/statuses/settings, creates the first Company Admin as an invitation, writes an instance audit event. Tested and idempotent.
+- **The M0 isolation harness** — the highest-value backend deliverable and easy to postpone by mistake:
+  - paired-fixture suite: two companies with deliberately identical-looking data (same project key, same display keys, same team names, same user email in both), every read endpoint exercised as company A asserting no company-B row, name, id or count appears;
+  - a **third persona**: a company member with *no project grant*, asserting they see nothing — those rows *are* in the caller's company, so the cross-company assertions structurally cannot catch that leak;
+  - a **cross-company user**: Company Admin in A, Test Engineer in B, asserting no permission bleed across a company switch (where a stale cache would show);
+  - a **schema test**: every table not on the §0.1 exception list has `company_id NOT NULL` leading its indexes — this is what catches new tables a year from now;
+  - an **async-context test**: ingestion, report generation, a scheduled purge and an event handler each run with a foreign company active.
+- Gradle multi-module setup, Spring Boot app, Testcontainers.
+- **Run V1 against a real Postgres.** It has never executed — see §6.
+
+---
+
+## 6. Known risks and open items
+
+**The DDL has never been run.** No Postgres or Docker was available in this environment. Static validation of the current file confirmed: 63 tables, no duplicate names, all `REFERENCES` targets resolve, no forward references, index/comment targets valid, parentheses balanced, **every company-owned table carries `company_id`, and the RLS policy list exactly matches that set in both directions**. What static analysis **cannot** catch:
+- `ltree` / `pg_trgm` / `citext` extension availability (some managed hosts gate extensions)
+- The `IMMUTABLE` requirement on any generated `search_vector` expression
+- Trigger definitions (not in V1)
+- **The two RLS traps below** — both silent when wrong
+
+**The two RLS traps, worth their own line because both fail quietly:**
+1. **`FORCE ROW LEVEL SECURITY`, not just `ENABLE`.** A table's *owner* bypasses plain `ENABLE`, and in most compose setups the app connects as the schema owner — so plain `ENABLE` protects nothing. The app role must also not hold `BYPASSRLS`. `FORCE` is in the DDL; verify the role.
+2. **An unset GUC must yield zero rows, not all rows.** The policy is `company_id = current_setting('app.current_company', true)::uuid`; the `true` makes a missing setting return NULL, and `= NULL` is never true, so a request without company context sees nothing. Get the flag or the comparison wrong and a context-less query returns **the entire instance**. This needs its own explicit test — a green suite does not prove it.
+
+**Do this first on the backend:** stand up Postgres via Testcontainers, run V1, then write the test for trap 2 before anything else.
+
+**Eight open ERD points** are listed in `docs/specs/2026-07-30-tcms-erd.md` §10. The three worth attention: the polymorphic `attachment` table (the one place the schema knowingly drops referential integrity); **key allocation now contending on one `key_sequence` row per `(company, entity_type)`** — company-wide rather than per-project, so contention is higher by the number of projects a client runs, and range allocation is mandatory rather than advisable; and the **display-key inference channel** (see §3 lesson 13).
+
+**42 open questions** in the plan §8. All roles/permissions/naming questions are now **resolved**. Blocking nothing right now, but these change M1/M2 design: case versioning depth (#1), Jira flavour (#4), data volume (#5), concurrent execution (#7), default step format (#8), Gherkin sync mode (#9).
+
+**Two verification lessons from this session, both worth keeping:**
+
+1. **`tsc --noEmit` is not the gate.** It reported 0 errors while `npm run build` (which runs `tsc -b` against the stricter project config) failed with nine. Always verify with **`npm run build`**. The root cause of those errors was that `openapi.yaml` originally declared no `required` arrays, so every generated property was optional and the fixtures couldn't satisfy their own types — fixed by adding `required` to 39 schemas. **If you add a schema, add its `required` array.**
+2. **Don't chain `echo` after an install command.** An earlier `npm install -D msw openapi-typescript ... | tail -2 && echo "installed"` printed success while both packages silently failed to install, and that went unnoticed until `npm run gen:api` errored much later. Verify installs by reading `package.json`, not by trusting an exit code you've masked.
+
+**Three more from the 2026-07-30 session:**
+
+3. **Lesson 1 recurred, and will keep recurring.** Nine of the build errors in this session were `possibly undefined` on properties that are *always* present — because eight inline objects nested inside already-`required` schemas had no `required` array of their own. `required` on the parent does not descend. Grep for `type: object` with `properties:` and no sibling `required:` before writing consumers.
+4. **Don't invent a response shape — read the contract first.** `BulkResult`, `EntityVersion`, `HealthSignal` and `AggregationPolicy` were all coded against a guessed shape and all four had to be reworked. Where the contract was genuinely wrong for the UI (`BulkResult` counts vs lists), the fix belongs in `openapi.yaml`; where it wasn't, the code was wrong. Check which before editing either.
+5. **The browser found three defects the build could not.** A no-op theme toggle, a grid whose title didn't navigate, and two contradictory percentages on one screen all typechecked and linted clean. **Run the app.** The gates prove it compiles, not that it works.
+
+**Three more from the Phase 3 session:**
+
+6. **Lesson 5 recurred, and harder.** The Phase 3 work built clean and linted clean while rendering **nothing but the root error page** — a provider ordering bug (`useQueryClient` above `QueryClientProvider`) that is invisible to the type system because both are valid types in valid positions. Two of the three defects that session were of exactly this kind: correct types, wrong runtime graph. `npm run build` cannot see provider ordering, hook closure staleness, or effect timing.
+7. **A resilience feature you cannot trigger is a resilience feature you have not tested.** Every claim in the gate — timeout, stale-refetch, 401-in-place, roll-up, no-auto-dismiss — needed a fault the app has no way to produce on its own. Building `tcmsFaults` first would have been faster than building it after the third awkward attempt to fake a failure by hand. **Build the fault switch before the feature it proves.**
+8. **Measure the bundle change before believing it.** Splitting DataGrid into its own chunk looked obviously right and made total JS ~40% worse by defeating tree-shaking. The build output is the arbiter, not the reasoning.
+
+**Two more from the multi-company session:**
+
+9. **A schema-wide invariant needs a mechanical check, not a careful reading.** Regenerating `V1` and then cross-checking every table against the `company_id` rule found **five join tables with no `company_id`** (`case_classification`, `case_tag`, `case_automation_tag`, `case_condition_optout`, `work_item_link`) and **four version/annotation tables absent from the RLS list** (`suite_version`, `test_plan_version`, `doc_page_version`, `derived_item_annotation`). Both classes are severe: a join table without the column is unfilterable *and* un-RLS-able, so a query starting from `case_classification` could cross clients; a version table holds a full snapshot of client content. **Neither was visible reading the file top to bottom** — only by scripting the comparison. This is lesson 5's family (the gates prove it compiles, not that it's right) applied to schema, and it is the argument for the M0 schema test being mandatory rather than a formality.
+10. **Write the decision *and* its reversal into the docs, not just the new state.** Several of this session's changes superseded earlier decisions that were themselves written down with reasons — `tenant_id`-as-hedge, per-project keys, five roles, Test Engineer as the default. Leaving only the new value would make the next reader think the old reasoning was never considered. Struck-through rows with "→ superseded" in §3 cost nothing and prevent re-litigating.
+
+---
+
+## 7. How to run
+
+```bash
+# Frontend — no backend needed, MSW intercepts /api/v1 in dev
+cd frontend
+npm install
+npm run dev          # http://localhost:5173  (sign in with any password of 4+ chars)
+npm run build        # THE gate: tsc -b + vite build
+npm run lint         # must stay at 0 warnings
+
+# Regenerate types after ANY openapi.yaml change
+npm run gen:api
+
+# Audit test-id collisions (should print only per-file-prefix or exclusive-branch dupes)
+grep -rhoE 'data-testid=(\{`[^`]*`\}|"[^"]*")' src | sed -E 's/data-testid=//' | sort | uniq -d
+```
+
+**Driving the resilience behaviour** (dev only — from the browser console):
+
+```js
+tcmsFaults.status(503, 30)  // every request 503s, with Retry-After: 30
+tcmsFaults.hang()           // requests never answer — proves the timeout budget
+tcmsFaults.expire()         // the next request 401s once — proves in-place session recovery
+tcmsFaults.drift()          // a 200 with the wrong shape — must read as FAILED, not empty
+tcmsFaults.only('/cases')   // scope the fault to one endpoint family
+tcmsFaults.off()
+```
+
+Faults live in module state, so a **full page reload clears them** — arm the fault *after* the page has loaded when testing a failed refetch. Client error reports are also kept on `window.__tcmsErrors` in dev, so a caught error can be read back instead of expanded by hand in the console.
+
+**The mock API is stateful and in-memory** — it resets on reload. `mockServiceWorker.js` lives in `public/` and is committed; re-run `npx msw init public/ --save` only if it is ever deleted.
+
+`npm run gen:api` is wired for this. `npm run lint` (oxlint) must stay at 0 warnings — it is part of the phase gate, not advisory.
+
+**Why `gen:api` runs via `npx` rather than a local dependency:** the Vite scaffold pinned **TypeScript 6.0.3**, and `openapi-typescript@7` peer-requires `^5.x`. Installing it locally needs `--legacy-peer-deps` or a TypeScript downgrade — neither is worth it for a build-time codegen tool that only reads YAML and emits a `.d.ts` (it never typechecks this project). `npx --yes openapi-typescript@7` resolves its own TypeScript and sidesteps the conflict. Revisit when `openapi-typescript` supports TS 6.
+
+**Later, for production packaging:** Gradle should invoke the frontend build and copy `frontend/dist` into `backend/src/main/resources/static`, while `npm run dev` stays fully independent for day-to-day UI work. Conflating those is what makes monorepos feel slow.
+
+---
+
+## 8. Working agreement for this project
+
+- **Load the plugin skills before producing anything they cover** (§0). This is the single most important line in this document.
+- Verify with `npm run build`, never `tsc --noEmit` alone — **and then run the app** (§6, lesson 5).
+- `openapi.yaml` is the contract — change it there, regenerate, then adapt both sides in one commit. Read it before coding against a shape; don't guess.
+- **New display logic goes in the shared layer, not the page.** `lib/labels.ts` for enums, `lib/format.ts` for formats, `lib/results.ts` for count arithmetic, `DataRegion` for the three states, `Identifier` for anything monospace. A second implementation of any of these is how a hundred consistent pages become a hundred slightly-different ones.
+- Save generated `.md` artifacts into this project under `docs/`, never to a global directory.
+- The plan document is long by design; §6a–§6q each state the *decision and its reason*. Read the relevant section before changing behaviour it covers — several decisions look arbitrary until you see the failure mode they prevent.
+
+---
+
+## 9. Multi-company impact on the existing frontend — START HERE
+
+The frontend is complete through Phase 3 and builds clean, but it was written against the **pre-multi-company** design. Nothing fails at build time; it is *silently* out of date, which is harder to notice and easy to build more on top of.
+
+**Do not start Phase 4 (tests) before deciding how to handle this.** Writing tests against the old key format and route topology means writing them twice.
+
+### What actually changed underneath it
+
+| Design change | Frontend consequence | Files (verified, not guessed) |
+|---|---|---|
+| Display keys `TC_0042` → **`TC-1`**, per company not per project | The **design signature** is the identifier system, so this touches the most visible thing in the UI. Fixtures, the mock key allocator, filter placeholder text, and the `.identifier` CSS example all carry the old format. | `src/index.css` · `src/components/Identifier.tsx` · `src/mocks/db.ts` (`PREFIX_NNNN` allocator → per-company, no padding) · `src/mocks/fixtures/{core,cases,reporting}.ts` · `src/features/cases/CaseFilterBar.tsx` · `src/app/router.tsx` (comment) |
+| Keys are unambiguous company-wide | The stated reason for project-scoped routes — *"keys are ambiguous without project context"* (`router.tsx:16`) — **no longer holds.** Routes can flatten, and cross-project search stops needing qualification. Whether to flatten them is a real decision, not a mechanical edit. | `src/app/router.tsx` (`/projects/:projectId/*` topology) |
+| New `/c/{companySlug}/…` routing + company switcher | Not built at all. M6 work, but the route shape decision interacts with the point above — decide both together. | `src/app/router.tsx` · `src/app/AppShell.tsx` (rail needs a company picker) |
+| Role set: 5 roles → **6**, three scopes | `Admin` → `Instance Admin` + `Company Admin`. The admin screen renders roles with their permissions expanded, so it shows a stale catalogue. | `src/mocks/fixtures/core.ts` · `src/mocks/handlers.ts` · `src/features/admin/TeamsPage.tsx` |
+| Permission catalogue gained 6, split 3 | `suite:delete`, `project:audit`, `case:comment`, `defect:create`, `workitem:manage`, `library:manage`. Any affordance gated on the old set is now wrong in both directions. | same as above |
+| **Viewer is the default everywhere** | Previously Test Engineer on project assignment. Fixtures seed contributors by default and will read as too-permissive. | `src/mocks/fixtures/core.ts` |
+| Per-membership display names | Names must resolve through the active company's membership, not `user.display_name`. Affects assignee pickers, mentions, audit rows, review comments, board avatars, org chart. | anywhere a user name renders |
+| Per-company branding | `theme.ts` builds a fixed palette; it now needs to derive from the active company's two brand colours **with contrast validated**, while **status colours stay fixed**. The existing thesis ("status owns the saturation budget, brand retreats") is exactly right for this and makes it easier — brand only touches actions and nav. | `src/app/theme.ts` · `src/index.css` |
+| Project = a full client product | Fixtures model projects as feature areas (`PAY`, `CHKOUT`). They should be whole products ("Acme Online Banking"), with `Payments` as a **Feature** value or suite folder. Cosmetic, but it teaches the wrong model to whoever reads the fixtures next. | `src/mocks/fixtures/core.ts` |
+| `automationKey` now company-unique | Was per-project. | `src/mocks/{db,handlers}.ts` |
+| Executions lost their display key | `TE_0001` no longer exists — executions are identified by `(run, case)` or UUID. | `src/mocks/db.ts` · execution screens |
+
+### The ordering that avoids doing this twice
+
+1. **Update `openapi.yaml` first.** It is the contract and the source of frontend types (§8). It currently has no company concept, the old role set, and the old key format. Everything below depends on it.
+2. **Regenerate types** (`npm run gen:api`) and let the compiler find the call sites. This is the cheap half.
+3. **Decide the route topology** — keep `/projects/:projectId/*`, or flatten now that keys are unambiguous, and where `/c/{slug}` sits. A decision, not a refactor.
+4. **Then** fixtures, mock allocator, role/permission data, and the identifier format.
+5. **Then** Phase 4 tests, against shapes that will survive.
+
+**A caveat worth stating:** M6 (the multi-company *surface*) is deliberately last on the backend, so there is a defensible argument for the frontend continuing single-company for now — as long as the **key format, role names and permission strings** are corrected, since those are wrong *today* regardless of when the switcher ships. The switcher, per-company branding and company-scoped routing can wait for M6. Don't let "M6 is later" become a reason to leave `TC_0042` in place.
