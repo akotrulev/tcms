@@ -28,6 +28,27 @@ spring:
     # block executes. A baselined install would skip it and ship without isolation.
     baseline-on-migrate: false
 
+    # Flyway migrates as the SCHEMA OWNER, not as the application pool's role.
+    #
+    # Without these three lines Flyway inherits spring.datasource above and migrates as
+    # tcms_app — a role that by design owns nothing and can create nothing, so V1 fails
+    # on its first CREATE TABLE. The two repairs that suggest themselves are both
+    # catastrophic: connecting the application as the owner hands it ALTER/DROP POLICY on
+    # all 56 tables, and granting the app role ownership or BYPASSRLS voids isolation
+    # outright.
+    #
+    # The URL is a reference rather than a copy so a typo cannot point the migration and
+    # the application at two different databases — the failure mode there is a schema
+    # that migrates cleanly somewhere nobody reads.
+    #
+    # deploy/postgres/initdb/10-tcms-roles.sql creates both roles for compose; the Hetzner
+    # runbook (docs/plans/2026-07-30-tcms-hetzner-deployment-runbook.md) does the same on
+    # a host-native Postgres. IntegrationTestBase overrides all three via
+    # @DynamicPropertySource, so the test harness is unaffected.
+    url: ${spring.datasource.url}
+    user: ${DB_MIGRATION_USER:tcms_owner}
+    password: ${DB_MIGRATION_PASSWORD:tcms}
+
   threads:
     virtual:
       enabled: true

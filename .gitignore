@@ -34,3 +34,10 @@ build/
 # --- Node / frontend ---
 node_modules/
 frontend/dist/
+
+# --- Local environment ---
+# compose reads .env automatically. .env.example is committed and carries the shape;
+# the real file is not, so a personal port change or a rotated password never travels.
+.env
+.env.local
+!.env.example

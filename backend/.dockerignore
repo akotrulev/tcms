@@ -1,0 +1,26 @@
+# Build context is backend/. Keep it small: the image builds from source, so any local
+# build output is both useless and a cache-buster.
+#
+# NOTE: no `*.jar` rule. gradle/wrapper/gradle-wrapper.jar is how ./gradlew bootstraps
+# inside the build stage — excluding it makes the build fail with a wrapper error that
+# reads like a network problem. Same trap the repo .gitignore already documents.
+
+.gradle
+build
+bin
+out
+
+.git
+.github
+.idea
+.vscode
+**/*.md
+
+Dockerfile
+.dockerignore
+.env
+.env.*
+
+# Test-only assets. The image never runs tests (Testcontainers needs a Docker socket the
+# build stage does not have), so this keeps the context and the layers honest.
+src/test

@@ -1,0 +1,34 @@
+# Layer 2 of the three-layer config model: per-environment values that are NOT secrets.
+#
+# Layer 1 is application.yml (defaults, sized for a developer laptop). Layer 3 is the
+# secrets, which arrive as environment variables from outside the image and appear
+# nowhere in this repository. Nothing in this file may become a credential.
+#
+# Active only when SPRING_PROFILES_ACTIVE=prod, which the deployment sets — the image
+# deliberately bakes in no profile, so the same artifact runs locally and on the VM.
+
+spring:
+  datasource:
+    hikari:
+      # 10, not the default 20. The target is a 2-shared-vCPU / 4 GB box whose Postgres
+      # runs on the same host: past a handful of connections the pool is queueing on CPU
+      # and page cache rather than on the database, and every idle connection is Postgres
+      # backend memory taken from shared_buffers.
+      maximum-pool-size: 10
+
+server:
+  # Caddy terminates TLS and proxies to this container over plain HTTP. Without this,
+  # Spring builds absolute URLs from the connector — so every redirect, Location header
+  # and cookie Secure flag is computed as http:// on the container's own port instead of
+  # https:// on the public host. `framework` makes Spring honour Caddy's X-Forwarded-*.
+  #
+  # This is only safe because nothing but Caddy can reach the port: the container
+  # publishes to 127.0.0.1 and the Hetzner Cloud Firewall denies 8080 inbound. A directly
+  # reachable port with this setting lets a client forge its own X-Forwarded-Proto.
+  forward-headers-strategy: framework
+
+  shutdown: graceful
+
+logging:
+  level:
+    com.tcms: INFO

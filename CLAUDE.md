@@ -34,8 +34,23 @@ pipelines; continuing without them produces inconsistent output.
 
 ## Commands
 
-The two stacks are independent. Gradle lives in `backend/`, npm in `frontend/`. **Nothing at the repo
-root is buildable or runnable.**
+The two stacks are independent. Gradle lives in `backend/`, npm in `frontend/`. **Neither stack
+builds from the repo root** — the only thing the root runs is `docker compose`, which orchestrates
+the *system* and is therefore the one thing that legitimately spans both.
+
+```bash
+# Local stack — Postgres 17 with the real two-role privilege split, + the backend image
+cp .env.example .env         # required: compose fails fast rather than defaulting a password
+docker compose up --build    # http://localhost:8080/actuator/health
+docker compose down -v       # -v also drops the volume, so initdb re-runs the role script
+
+# The operator CLI is the same image
+docker compose run --rm backend provision-company --slug=acme --name="Acme" \
+  --admin-email=ops@acme.test --admin-name="A. Admin"
+```
+
+The frontend is deliberately **not** in compose: `npm run dev` with MSW needs no backend, and
+starting one would slow the loop without making it more real.
 
 ```bash
 # Backend — REQUIRES Docker; every test boots a real Postgres 17 via Testcontainers
@@ -111,6 +126,11 @@ uniqueness constraint. Enforcement is mechanical, in three layers:
    with `FORCE ROW LEVEL SECURITY` is the backstop; the app connects as an unprivileged role
    (`tcms_app`) that owns nothing and holds no `BYPASSRLS` — `IntegrationTestBase` sets up that
    privilege split, and a suite that migrated *and* queried as the superuser would prove nothing.
+   **The split is a deployment concern, not a test fixture**: `deploy/postgres/initdb/10-tcms-roles.sql`
+   creates both roles for compose and the Hetzner runbook does the same on the VM, while
+   `application.yml` gives Flyway its own `DB_MIGRATION_USER` so migrations run as the owner and the
+   pool never does. Collapsing them into one role is the tempting simplification and it hands the
+   application `DROP POLICY` on all 56 tables.
 
 Two RLS traps, both silent when wrong: the owner bypasses plain `ENABLE` (hence `FORCE`), and an
 unset GUC must yield **zero** rows, not all rows — `company_id = NULL` is never true. **There are two
