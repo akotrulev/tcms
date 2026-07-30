@@ -196,27 +196,36 @@ Three consequences:
 
 ---
 
-## 6. Proposed plan amendments
+## 6. Proposed plan amendments — dispositions
 
-Concrete, in priority order. Nothing here is more than a few days except 1️⃣.
+**Decided 2026-07-30.** All decisions are now folded into `docs/plans/2026-07-30-tcms-high-level-plan.md` (§8 "Resolved — second pass"). This table is the record of what was accepted, changed in shape, or dropped.
 
-| # | Change | Milestone | Plan section to edit |
+| # | Change | Disposition | Landed in |
 |---|---|---|---|
-| 1 | Add **clone** for case / plan / run | M1, M2 | §3 Phase 1; §2 |
-| 2 | Add **local `Defect` fallback** as the default `IssueTracker` adapter, so traceability works with zero integrations | M2 or M4 | §1 non-goals (qualify), §5 |
-| 3 | Add **LDAP bind auth** to the provider list | M4 | §6r |
-| 4 | Add **TAP + Robot Framework** result parsers | M3 | §3 Phase 2 |
-| 5 | Add **Mermaid** rendering in the doc space and PDF export | M2.5 | §6i, §6e |
-| 6 | Add **tracker back-link + status hover-card** to the Jira integration | M4 | §5 integration notes |
-| 7 | Decide the **third-party extension** question — result-parser SPI, or an explicit non-goal | Pre-M3 | §1, §5 |
-| 8 | Add **opt-in error reporting** and document a **TLS story** in packaging | M5 | §4 Packaging & Ops |
-| 9 | Ship **one reference client-side result-push plugin** | M3 | §3 Phase 2 |
-| 10 | Confirm §6p produces a **cases × runs status matrix** view ⚠ | M2 | §6p |
+| 1 | **Clone** for case / plan / run | ✅ Accepted, **plus plan templates** — templates store the selection *query*, not a frozen case list | New **§6v**; M1 (case), M2 (plan/run/template); §2 domain model; §3 Phase 1 |
+| 2 | **Local `Defect` fallback** | ✅ Accepted, **relocated to the kanban board** — the local record always exists as the join between failed execution, evidence and any external issue. TCMS keeps its own bug-progress dashboard **regardless of tracker**, including across projects on different trackers | §6l new subsection; §1 non-goal qualified; §2 `Defect` expanded |
+| 3 | **LDAP / AD auth** | ✅ Accepted for M4. Kerberos/SPNEGO explicitly out | §6r new subsection + provider table row; M4 |
+| 4 | **TAP + Robot Framework** parsers | ❌ **Dropped for now.** M3 parser set stays JUnit XML · TestNG · Allure · Cucumber JSON. Revisit on real demand | §8 resolved (recorded as a decision, not an omission) |
+| 5 | **Mermaid** | ✅ Accepted — source text in the block so diagrams version and diff; inline SVG for HTML/PDF, fenced block for Markdown | §6i practical details; §6e renderers; M2.5 |
+| 6 | **Tracker back-link + status hover-card** | ✅ Accepted, both | §5 integration notes; §3 Phase 2 |
+| 7 | **Third-party extension mechanism** | ⏳ **Still open** — the one item not decided. Must be settled before M3 freezes the ingestion contract | §8 Outstanding **#43** |
+| 8 | Opt-in error reporting + TLS story | ⏳ Not addressed this pass. Low risk to defer — both are M5 packaging concerns | — |
+| 9 | Reference client-side result-push plugin | ⏳ Deferred with #7 — it is the same decision wearing different clothes | — |
+| 10 | Confirm §6p yields a cases × runs **status matrix** ⚠ | ⏳ Still needs checking against §6p | — |
 
-Open questions this raises for the plan's §8 list:
+**Scope impact:** M4 grows from 7–8 to **8–10 weeks** (three extra tracker adapters + LDAP). Total moves 34–44 → **35–46 weeks**. Templates and cloning absorb into M1/M2 without moving them, because both reuse existing machinery — the §6j version snapshot for clones, the §6q saved-search expression for templates.
 
-- **Is LDAP/AD the actual auth reality for target self-hosters, or OIDC?** Changes 3️⃣ from "add it" to "add it *first*". Relates to existing open question #38 (JIT provisioning).
-- **Do we want third-party extensions at all?** This is a strategy question, not a technical one, and it should be answered before M3 hardens the ingestion contract.
+**One decision that came from outside this analysis** and is recorded here because it interacts with 3️⃣: **grants now travel in the JWT** (`sys`/`cmp`/`prj` role assignments + a `pv` revocation epoch, §6b). It works because the six built-in roles are immutable, making `role → permission[]` a compile-time constant — so the token carries assignments, not permissions. LDAP group→role mapping feeds it through the same `claim_role_mapping` path as OIDC, with no special case. The `pv` epoch check is the load-bearing part: without it a revoked grant survives until token expiry.
+
+### Priority trackers
+
+Confirmed: **Jira · GitHub Issues · GitLab Issues · Azure DevOps Boards** — all four in M4, behind one `IssueTracker` port. Building four at once is deliberate: a port with a single implementation always leaks that implementation's vocabulary, and Jira's is the least representative of the four. Kiwi's remaining eight (Bugzilla, Redmine, Mantis, Trac, BitBucket, OpenProject…) become adapters on demand, not roadmap items.
+
+### Still open for §8
+
+- **#43 — third-party extension mechanism.** Strategy, not engineering. Recommend a narrow result-parser SPI, which is the existing ingestion parser interface made public.
+- **#44 — tracker status-mapping defaults** (new). Opinionated per-adapter defaults with a "review this mapping" prompt, versus forcing configuration on first use.
+- **Is LDAP/AD the actual auth reality for target self-hosters, or OIDC?** Now affects *ordering within M4* rather than whether to build it. Relates to existing #38 (JIT provisioning).
 
 ---
 
