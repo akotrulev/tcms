@@ -163,6 +163,33 @@ class InvitationMailTest extends IntegrationTestBase {
     }
 
     @Test
+    @DisplayName("a dead relay does not undo the company it was announcing")
+    void aFailedSendDoesNotFailProvisioning() {
+        // Found by mutation: making the mailer rethrow instead of swallow failed NO test,
+        // so the one claim the swallow exists for — "a mail outage cannot take a
+        // provisioned company down with it" — was unverified. Provisioning would have
+        // reported failure, and the operator would have gone looking for a database
+        // problem that was never there.
+        SMTP.stop();
+        try {
+            ProvisionCompanyResult result = provisioning.provision(ProvisionCompanyRequest.of(
+                    "mail-down", "Mail Down Ltd", "down@mail-down.test", "Relay Down"));
+
+            assertThat(result.companyCreated()).isTrue();
+            assertThat(result.invitationLink())
+                    .as("the invitation is valid whether or not anyone could be told about "
+                            + "it — which is exactly why the CLI prints the link")
+                    .isPresent();
+            assertThat(invitations.accept(
+                    result.invitationLink().orElseThrow().replaceAll(".*\\?token=", ""),
+                    "correct-horse-battery"))
+                    .isInstanceOf(InvitationService.Accepted.class);
+        } finally {
+            SMTP.start();
+        }
+    }
+
+    @Test
     @DisplayName("a re-run that issues nothing sends nothing")
     void silentWhenNothingWasIssued() throws Exception {
         provisioning.provision(ProvisionCompanyRequest.of(
