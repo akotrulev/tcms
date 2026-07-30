@@ -1,0 +1,47 @@
+spring:
+  application:
+    name: tcms
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:tcms}
+    username: ${DB_USER:tcms_app}
+    password: ${DB_PASSWORD:tcms}
+    hikari:
+      maximum-pool-size: 20
+      connection-timeout: 5000
+      leak-detection-threshold: 60000
+
+  jpa:
+    open-in-view: false          # a view-rendered lazy load holds a connection per request
+    hibernate:
+      ddl-auto: validate         # non-negotiable: Flyway owns DDL, Hibernate only checks it
+    properties:
+      hibernate.jdbc.batch_size: 50
+      hibernate.order_inserts: true
+      hibernate.order_updates: true
+      hibernate.query.fail_on_pagination_over_collection_fetch: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # Baseline deliberately off: V1 must run on an empty database so the RLS policy
+    # block executes. A baselined install would skip it and ship without isolation.
+    baseline-on-migrate: false
+
+  threads:
+    virtual:
+      enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+logging:
+  level:
+    com.tcms: INFO
