@@ -192,6 +192,33 @@ class InvitationServiceTest extends IntegrationTestBase {
         }
 
         @Test
+        @DisplayName("stays spent even if the membership is invited again")
+        void consumptionIsWhatMakesItSingleUse() {
+            ProvisionCompanyResult result = provisioning.provision(request("inv-respent"));
+            String secret = tokenOf(result);
+            invitations.accept(secret, GOOD_PASSWORD);
+
+            // Re-invite the membership, which is what a future "remove and re-add a member"
+            // path will do. This is the assertion that isolates consumed_at: without it,
+            // single-use rests on the membership having left INVITED, and the moment
+            // anything puts it back the old token opens the company again.
+            //
+            // Found by mutation: deleting the consumed_at check from isRedeemable() failed
+            // NO test, because every existing case had also moved the membership to ACTIVE.
+            reInvite(result.companyId(), result.adminUserId());
+
+            assertThat(invitations.accept(secret, GOOD_PASSWORD))
+                    .isEqualTo(new InvitationService.Rejected(
+                            InvitationService.Rejection.NOT_REDEEMABLE, null));
+            assertThat(invitationRows
+                    .findByCompanyIdAndUserIdAndConsumedAtIsNull(
+                            result.companyId(), result.adminUserId()))
+                    .as("the spent invitation must not read as outstanding, or the next issue "
+                            + "attempt would see one and decline to mint a usable replacement")
+                    .isEmpty();
+        }
+
+        @Test
         @DisplayName("an unknown token is refused with the SAME answer as a spent one")
         void unknownTokenIsIndistinguishable() {
             InvitationService.Rejected expected = new InvitationService.Rejected(
@@ -235,6 +262,30 @@ class InvitationServiceTest extends IntegrationTestBase {
                     .as("accepting it would verify only the first 72 bytes, so two different "
                             + "passphrases sharing a prefix would both open the account")
                     .isEqualTo(InvitationService.Rejection.PASSWORD_UNACCEPTABLE);
+        }
+
+        @Test
+        @DisplayName("an offboarded member cannot re-admit themselves with an old invitation")
+        void removedMembershipIsRefused() {
+            ProvisionCompanyResult result = provisioning.provision(request("inv-removed"));
+            String secret = tokenOf(result);
+            setMembershipStatus(result.companyId(), result.adminUserId(), "REMOVED");
+
+            // Found by mutation: dropping the must-be-INVITED gate failed no test, because
+            // every other case reached it with the invitation already consumed. This is the
+            // one it uniquely covers — and without it, accept() would walk a REMOVED
+            // membership straight back to ACTIVE, so offboarding would be undone by a link
+            // the person still has in their mailbox.
+            assertThat(invitations.accept(secret, GOOD_PASSWORD))
+                    .isEqualTo(new InvitationService.Rejected(
+                            InvitationService.Rejection.NOT_REDEEMABLE, null));
+
+            try (var ignored = CompanyContext.open(result.companyId())) {
+                assertThat(memberships
+                        .findByCompanyIdAndUserId(result.companyId(), result.adminUserId())
+                        .orElseThrow().getStatus())
+                        .isEqualTo(MembershipStatus.REMOVED);
+            }
         }
 
         @Test
@@ -372,6 +423,30 @@ class InvitationServiceTest extends IntegrationTestBase {
             statement.setObject(2, companyId);
             statement.setObject(3, userId);
             assertThat(statement.executeUpdate()).isEqualTo(1);
+        }
+    }
+
+    /** Puts a membership back to INVITED — what a future remove-and-re-add path will do. */
+    private void reInvite(UUID companyId, UUID userId) {
+        setMembershipStatus(companyId, userId, "INVITED");
+    }
+
+    /**
+     * Forces a membership state the application has no path to yet. As the owner, because
+     * these tests assert what happens when the row is in a state the service must refuse —
+     * and a service method that could produce it would make the assertion circular.
+     */
+    private void setMembershipStatus(UUID companyId, UUID userId, String status) {
+        try (var connection = ownerConnection();
+                var statement = connection.prepareStatement(
+                        "UPDATE company_membership SET status = ?, accepted_at = NULL "
+                                + "WHERE company_id = ? AND user_id = ?")) {
+            statement.setString(1, status);
+            statement.setObject(2, companyId);
+            statement.setObject(3, userId);
+            assertThat(statement.executeUpdate()).isEqualTo(1);
+        } catch (SQLException e) {
+            throw new AssertionError("could not set the fixture membership status", e);
         }
     }
 
