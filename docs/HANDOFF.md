@@ -1,12 +1,13 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-07-30 (last session: multi-company design → frontend corrections)
-**State:** Planning and design complete **including multi-company tenancy**. Backend schema regenerated (not executed). Frontend complete through **Phase 3**, and **now aligned with the multi-company decisions** (§9). Phase 4 (tests) and 5 (review) not started.
-**Build status:** `frontend` — `npm run build` clean, `npm run lint` 0 warnings, 0 new testid collisions. Backend DDL statically validated (63 tables), **never run against Postgres**.
-**Branch:** `phase3-quality-layers`, not merged. Last commits: `51f6056` multi-company design, `7c2bf70` handoff.
+**Date:** 2026-07-30 (last session: **backend M0 started — V1 executed for the first time, tenancy module + isolation harness green**)
+**State:** Planning and design complete **including multi-company tenancy**. **Backend M0 partially built and running against real Postgres.** Frontend complete through **Phase 3** and aligned with the multi-company decisions (§9). Frontend Phase 4 (tests) and 5 (review) not started.
+**Build status:** `backend` — `./gradlew build` clean, **13/13 tests green against Testcontainers Postgres 17**. `frontend` — `npm run build` clean, `npm run lint` 0 warnings.
+**Branch:** `phase3-quality-layers`, not merged. Last commits: `b7f83b4` backend M0 scaffold + isolation harness, `cff882c` V1 first execution + SYSTEM-grant split, `d08590b` Kiwi decisions folded into the plan.
 
-> **⚠ Two things are UNCOMMITTED and one is incomplete — read §10 first.**
-> A separate strand of work (a Kiwi TCMS competitive gap audit plus plan amendments for LDAP/AD, plan templates and defect handling) is on disk but not committed, and it left a **dangling `§6v` reference** — cited twice in the plan with no such section written. §10 has the details.
+> **✅ The §10 concerns from the previous handoff are resolved.** The two uncommitted doc files are committed (`d08590b`) and `§6v` exists — the dangling reference is gone. §10 is retained as the record of that strand's decisions, not as an outstanding warning.
+>
+> **⚠ The DDL is no longer unexecuted — and running it found two defects.** See §11.
 
 ---
 
@@ -325,7 +326,12 @@ Modified: `Providers.tsx` (nesting order is load-bearing — see its header comm
 - **Review/approve actions** are deliberately absent from the editor (status is not an editable dropdown, per §3); the actions themselves are not built.
 - **SSE / live updates** (open question #7 resolved as "yes, with live updates") — not wired. The `realtime` skill was not loaded because nothing pushes yet. Snapshot→live handoff is a Phase 3+ task.
 
-### Backend — not started
+### Backend — M0 STARTED (2026-07-30), see §11 for what shipped and what remains
+
+**Done:** Gradle + Spring Boot 3.5 + Java 21 scaffold (rooted in `backend/`, not the repo root), Flyway running V1 against Testcontainers Postgres 17, the `tenancy` module (`CompanyContext` + Hibernate filter + RLS GUC per transaction), the `project` vertical slice, **the schema test**, and **the two-company isolation harness**. 13/13 green, mutation-verified.
+
+**Still not started** — everything below, plus: the `identity` module, Docker Compose, CI, ArchUnit/Modulith verification, `provision-company`, the third and fourth harness personas, and the async-context test.
+
 - `V2__triggers_and_seed.sql`: `search_vector` generated columns, SINGLE-cardinality classification trigger, team **cycle + company-consistency** trigger, and all seed data — **the revised permission catalogue** (per `docs/specs/2026-07-30-tcms-roles-permissions-naming.md`, which is authoritative), **the six** built-in roles, **per-company** classification dimensions, default case statuses, default configuration per project.
 - **The `provision-company` CLI command** — an M0 deliverable, not an M6 one. Creates the company, seeds its vocabularies/statuses/settings, creates the first Company Admin as an invitation, writes an instance audit event. Tested and idempotent.
 - **The M0 isolation harness** — the highest-value backend deliverable and easy to postpone by mistake:
@@ -341,7 +347,9 @@ Modified: `Providers.tsx` (nesting order is load-bearing — see its header comm
 
 ## 6. Known risks and open items
 
-**The DDL has never been run.** No Postgres or Docker was available in this environment. Static validation of the current file confirmed: 63 tables, no duplicate names, all `REFERENCES` targets resolve, no forward references, index/comment targets valid, parentheses balanced, **every company-owned table carries `company_id`, and the RLS policy list exactly matches that set in both directions**. What static analysis **cannot** catch:
+**~~The DDL has never been run.~~ → SUPERSEDED 2026-07-30.** It has now been executed against Postgres 17.10 and it runs clean; all three extensions are present in the stock image; **trap 2 passes**; and both RLS traps below are now covered by tests rather than warnings. Two defects were found in the process — see §11 and `docs/audits/2026-07-30-v1-schema-first-execution.md`. The original note is kept below because its list of what static analysis *cannot* catch is still the right checklist for V2.
+
+Static validation of the pre-execution file confirmed: 63 tables, no duplicate names, all `REFERENCES` targets resolve, no forward references, index/comment targets valid, parentheses balanced, **every company-owned table carries `company_id`, and the RLS policy list exactly matches that set in both directions**. What static analysis **cannot** catch:
 - `ltree` / `pg_trgm` / `citext` extension availability (some managed hosts gate extensions)
 - The `IMMUTABLE` requirement on any generated `search_vector` expression
 - Trigger definitions (not in V1)
@@ -503,3 +511,63 @@ That strand is driven by **`docs/audits/2026-07-30-kiwi-tcms-capability-gaps.md`
 ### Uncommitted at the time of writing
 
 `docs/plans/2026-07-30-tcms-high-level-plan.md` — left uncommitted **deliberately**, because the other session was mid-edit and committing would have interleaved two authors in one diff. Commit it from a fresh session once that strand is quiet.
+
+---
+
+## 11. Backend M0 — first build (2026-07-30)
+
+Docker became available, so the session ran the plan's own Immediate Next Step #3. Run through the **`be-java`** skill (agent definition + `pattern-writer` + `database-code`).
+
+### The headline: V1 works, and running it found two defects
+
+`V1__initial_schema.sql` had been statically validated but **never executed**. It runs clean on Postgres 17.10 — 63 tables, 56 RLS policies, all `FORCE`, and `ltree`/`pg_trgm`/`citext` all present in the stock image (the largest unquantified risk, since some managed hosts gate extensions). Full evidence in **`docs/audits/2026-07-30-v1-schema-first-execution.md`**.
+
+**Trap 2 passes.** Verified as a non-owner role: with no `app.current_company` set, a query returns **zero** rows while the superuser sees the rows exist. The highest-severity silent-inversion risk in the schema is now closed empirically rather than by reasoning.
+
+| # | Finding | Fix |
+|---|---|---|
+| 1 (HIGH) | **SYSTEM-scope grants were unreachable.** `role_assignment.company_id` was nullable to mean SYSTEM scope, but the policy is a bare equality and `NULL = anything` is never true — so an Instance Admin grant was invisible in *every* company context, permanently. It presents as an authorization denial, not a schema fault, and the tempting repair is `BYPASSRLS` on the app role, which destroys isolation for all 56 tables. Widening the policy is **also** wrong: measured, it regresses trap 2. | SYSTEM grants moved to **`instance_role_assignment`** (instance-level, no RLS, **user-only** — a team is company-owned, so a SYSTEM grant to a team lets a client-controlled entity confer operator rights). `role_assignment` is now `company_id NOT NULL`, removing the last nullable discriminator under RLS. |
+| 2 (LOW) | **`role_permission` was missing from the ERD §0.1 exception list** while correctly having no `company_id` — so the schema test as specified would have failed the build on its first run, and the tempting repair is a meaningless `company_id`. | Corrected the list, not the DDL. Added `instance_role_assignment` too. |
+
+Schema is now **64 tables, 56 policies, zero nullable `company_id` under RLS**.
+
+### What was built
+
+Gradle lives in **`backend/`, not the repo root** — the repo is polyglot, so each stack owns its directory and `cd backend && ./gradlew build` mirrors `cd frontend && npm run build`. Spring Modulith modules are **packages**, not Gradle subprojects, so no subproject split is needed; `settings.gradle.kts` records why and how to add one if that changes.
+
+| Path | Purpose |
+|---|---|
+| `backend/settings.gradle.kts` · `build.gradle.kts` · `gradle/libs.versions.toml` | Spring Boot 3.5.6, Java 21 toolchain, version catalog, `-Werror`. |
+| `tenancy/CompanyContext.java` | **A scope guard, not a setter** — `open()` returns an `AutoCloseable` that restores the previous value, so a company cannot outlive its block. Deliberately **not** `InheritableThreadLocal`: an async handler must re-establish from the event envelope, because inheriting silently makes a leak look correct under test. |
+| `tenancy/CompanyAwareTransactionManager.java` | Hooks `doBegin`, so the Hibernate filter **and** the `app.current_company` GUC are established for **every** transaction — not just web requests. Scheduled jobs, `@Async` handlers, ingestion and the provisioning CLI are exactly where context loss is invisible. Uses `set_config(…, true)` rather than literal `SET LOCAL`, because the latter takes no bind parameters. |
+| `tenancy/{Company,CompanyStatus,CompanyRepository,CompanyFilter}.java` · `package-info.java` | The `@FilterDef` and the company aggregate. |
+| `project/{Project,ProjectRepository}.java` | The M0 vertical slice — a company-owned entity that proves the plumbing. |
+| `IntegrationTestBase.java` | One container per run + **the privilege split**: Flyway migrates as the owner, the app connects as `tcms_app`. |
+| `SchemaConventionTest.java` | **The ERD §0.1 enforcement mechanism.** 5 assertions. |
+| `RlsIsolationTest.java` | **The two-company harness.** 8 assertions. |
+| `src/test/resources/db/testcallback/afterMigrate__create_app_role.sql` | Creates the unprivileged role. Test-only — provisioning DB roles belongs to the deployment, not to a production migration. |
+
+### Two things worth not re-learning
+
+1. **A green isolation suite proves nothing until you break it on purpose.** The suite was mutation-tested: simulating **context bleed** (the transaction manager receiving a stale company) failed exactly the three isolation-dependent tests while the four that shouldn't depend on it kept passing. A blunter mutation — disabling isolation entirely — failed *all* of them, including two pure-unit tests, because `@BeforeEach` seeding broke. The targeted mutation is the one that proves the assertions *discriminate*; the blunt one only proves they run.
+2. **That mutation surfaced an untested load-bearing property.** The policies declare `USING` with **no explicit `WITH CHECK`**, so Postgres reuses `USING` as the insert check — the read boundary is also the write boundary. Good behaviour, but implicit in the DDL. Now pinned by its own test, so a later "fix" adding `WITH CHECK (true)` fails instead of silently letting a company plant rows in another's tenancy.
+
+Also: **Docker Engine 29 rejects the API version Testcontainers negotiates**, and reports it as `Could not find a valid Docker environment` — which reads as "no daemon" rather than "version floor". Pinned via `systemProperty("api.version", …)` in the test task (the `DOCKER_API_VERSION` env var is *not* the key docker-java reads).
+
+### Next on the backend, in order
+
+1. **`V2__triggers_and_seed.sql`** — the `IMMUTABLE` requirement on `search_vector` is still unverified because V1's columns are plain `TSVECTOR` populated by triggers that don't exist yet. This is the next place static analysis will be insufficient.
+2. **Flyway has migrated V1, but checksum/repair behaviour across a *second* migration is unexercised.** V2 is the first real test of the migration chain.
+3. **The remaining harness personas** — the no-project-grant member and the cross-company user. Both need M0.5's permission evaluator, and the no-project-grant persona is the one the cross-company assertions *structurally cannot* catch.
+4. **The async-context test** — ingestion, report generation, a scheduled purge and an event handler each running with a foreign company active.
+5. `provision-company` CLI, Docker Compose, CI, ArchUnit + Modulith verification, the `identity` module.
+
+### How to run it
+
+```bash
+cd backend
+./gradlew build      # THE gate: compile (-Werror) + all tests against Testcontainers
+./gradlew test       # 13 tests, needs Docker running
+```
+
+Docker must be running — every test boots a real Postgres 17. There is no H2 fallback and there should not be: RLS, `ltree` and `citext` have no H2 equivalent, so an in-memory lane would test a schema the product never runs on.
