@@ -5,6 +5,7 @@ import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Grants in the active company, plus the two projections {@link PermissionEvaluator}
@@ -42,6 +43,12 @@ import org.springframework.data.repository.query.Param;
  * that produced the unreachable-SYSTEM-grant defect (handoff §11). Two explicit queries
  * cost four lines and depend on no NULL semantics at all.
  */
+// A repository interface must be @Transactional or its QUERY METHODS run with no
+// transaction at all — and therefore with no app.current_company, which under RLS means
+// zero rows. Inherited CRUD (findById, count, save) is covered by SimpleJpaRepository's
+// own annotation; derived and @Query methods are NOT. See RepositoryTransactionTest,
+// which both reproduces the defect and fails the build on a repository missing this.
+@Transactional(readOnly = true)
 public interface RoleAssignmentRepository extends JpaRepository<RoleAssignment, UUID> {
 
     /**
@@ -90,6 +97,17 @@ public interface RoleAssignmentRepository extends JpaRepository<RoleAssignment, 
 
     /** Company-filtered by the active context; used to list a user's grants for admin screens. */
     List<RoleAssignment> findByUserId(UUID userId);
+
+    /**
+     * Does this user already hold {@code roleId} across the whole company?
+     *
+     * <p>{@code ProjectIdIsNull} is the COMPANY-scope test, per {@link RoleAssignment}'s
+     * encoding of scope in the column rather than in a discriminator. Provisioning needs
+     * it to stay idempotent: re-running the CLI must not stack a second identical grant,
+     * which would read in an admin screen as though the operator had granted twice.
+     */
+    boolean existsByCompanyIdAndRoleIdAndUserIdAndProjectIdIsNull(
+            UUID companyId, UUID roleId, UUID userId);
 
     List<RoleAssignment> findByProjectId(UUID projectId);
 }

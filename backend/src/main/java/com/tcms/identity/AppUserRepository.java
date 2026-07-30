@@ -5,6 +5,7 @@ import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Accounts. Instance-level and therefore <strong>not</strong> company-filtered — this is
@@ -14,6 +15,12 @@ import org.springframework.data.repository.query.Param;
  * <p>Lookup by email is case-insensitive at the database ({@code CITEXT}), so callers
  * must not lower-case defensively — doing so would only hide a schema change.
  */
+// A repository interface must be @Transactional or its QUERY METHODS run with no
+// transaction at all — and therefore with no app.current_company, which under RLS means
+// zero rows. Inherited CRUD (findById, count, save) is covered by SimpleJpaRepository's
+// own annotation; derived and @Query methods are NOT. See RepositoryTransactionTest,
+// which both reproduces the defect and fails the build on a repository missing this.
+@Transactional(readOnly = true)
 public interface AppUserRepository extends JpaRepository<AppUser, UUID> {
 
     /**

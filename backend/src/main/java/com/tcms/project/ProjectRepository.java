@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Every method here is implicitly company-scoped by the Hibernate filter — with one
@@ -12,6 +13,12 @@ import org.springframework.data.jpa.repository.JpaRepository;
  * gap, which is why the database policy is not optional. {@link #findScopedById} exists
  * for call sites that want the filter to apply too.
  */
+// A repository interface must be @Transactional or its QUERY METHODS run with no
+// transaction at all — and therefore with no app.current_company, which under RLS means
+// zero rows. Inherited CRUD (findById, count, save) is covered by SimpleJpaRepository's
+// own annotation; derived and @Query methods are NOT. See RepositoryTransactionTest,
+// which both reproduces the defect and fails the build on a repository missing this.
+@Transactional(readOnly = true)
 public interface ProjectRepository extends JpaRepository<Project, UUID> {
 
     List<Project> findAllByOrderByNameAsc();

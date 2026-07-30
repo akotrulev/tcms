@@ -5,6 +5,7 @@ import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * SYSTEM-scope grants. Every table this touches
@@ -12,6 +13,12 @@ import org.springframework.data.repository.query.Param;
  * these queries work with <em>no company context open</em> — which is required, because
  * the login path resolves SYSTEM grants before any company is active.
  */
+// A repository interface must be @Transactional or its QUERY METHODS run with no
+// transaction at all — and therefore with no app.current_company, which under RLS means
+// zero rows. Inherited CRUD (findById, count, save) is covered by SimpleJpaRepository's
+// own annotation; derived and @Query methods are NOT. See RepositoryTransactionTest,
+// which both reproduces the defect and fails the build on a repository missing this.
+@Transactional(readOnly = true)
 public interface InstanceRoleAssignmentRepository extends JpaRepository<InstanceRoleAssignment, UUID> {
 
     /**

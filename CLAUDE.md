@@ -122,6 +122,20 @@ on a warm connection raises `invalid input syntax for type uuid` instead of retu
 `RlsIsolationTest` covers both spellings and `SchemaConventionTest` pins the predicate on all 56
 policies; a green suite alone does not.
 
+**A repository interface must carry `@Transactional(readOnly = true)`.** Isolation is established in
+`doBegin`, so it needs a transaction — and Spring Data gives one only to the CRUD methods *inherited*
+from `SimpleJpaRepository` (`findById`, `count`, `save`), never to the derived and `@Query` methods
+*declared on the interface*. Without the annotation those run outside any transaction, so
+`app.current_company` is never set and every RLS-protected read returns **zero rows** while
+`CompanyContext` holds the right company. Fail-closed, and it silently emptied the permission
+evaluator. `RepositoryTransactionTest` reproduces it and derives the repository list from the live
+context, so a new repository that forgets fails the build.
+
+Companies are created by exactly one path: `CompanyProvisioningService` (the `provisioning` module),
+driven by `java -jar tcms.jar provision-company`. It is idempotent — re-running is the supported way
+to top up a company after a release adds a vocabulary or a display-key counter — and it never
+*updates*. Only it may call `tcms_seed_company_defaults` / `tcms_seed_project_defaults`.
+
 Async work is the other half: `CompanyContextTaskDecorator` clears the context on every task so a
 handler that forgets fails closed, and `CompanyScopedEvent` is the only thing a handler may
 re-establish from. `AsyncCompanyContextTest` covers ingestion, reporting, scheduling and event
