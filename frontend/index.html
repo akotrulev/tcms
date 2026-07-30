@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      An authenticated internal tool: nothing here should be indexed, and the `noindex` is
+      belt-and-braces alongside robots.txt for the case where a URL is linked from somewhere
+      that a crawler already trusts.
+    -->
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="description" content="TCMS — test case management" />
+    <!--
+      The fallback title only shows before React mounts. Every route replaces it via
+      `PageHeader`, which renders a <title> that React 19 hoists into <head>.
+    -->
+    <title>TCMS</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

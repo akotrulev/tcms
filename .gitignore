@@ -23,3 +23,14 @@
 hs_err_pid*
 replay_pid*
 /.idea/
+
+# --- Gradle / backend ---
+.gradle/
+build/
+# The wrapper jar MUST be committed — it is how `./gradlew` bootstraps on a fresh
+# clone and in CI. The `*.jar` rule above would otherwise swallow it.
+!**/gradle/wrapper/gradle-wrapper.jar
+
+# --- Node / frontend ---
+node_modules/
+frontend/dist/

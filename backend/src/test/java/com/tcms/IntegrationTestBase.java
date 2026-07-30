@@ -1,0 +1,88 @@
+package com.tcms;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.utility.DockerImageName;
+
+/**
+ * Base for every integration test: one Postgres container for the whole run, the real
+ * application context, real Flyway, and the privilege split that makes RLS testing
+ * mean something.
+ *
+ * <p>Booting the real context is itself a gate — {@code ddl-auto: validate} means
+ * Hibernate checks every entity against the migrated schema at startup, so an entity
+ * that drifts from V1 fails here rather than at the first query in production.
+ *
+ * <h2>Why two roles</h2>
+ *
+ * <p>The most important detail in the setup, and getting it wrong makes every isolation
+ * test pass while nothing is protected:
+ *
+ * <ul>
+ *   <li><strong>A superuser always bypasses RLS.</strong> Testcontainers' default user
+ *       is one, so a suite that migrated and queried as it would never see a policy
+ *       take effect.</li>
+ *   <li><strong>A table's owner bypasses plain {@code ENABLE ROW LEVEL SECURITY}.</strong>
+ *       V1 also issues {@code FORCE}, which does cover the owner — but connecting as
+ *       the owner anyway would leave the suite unable to notice if {@code FORCE} were
+ *       ever dropped.</li>
+ * </ul>
+ *
+ * <p>So Flyway migrates as the container's owner/superuser, and the application pool
+ * connects as {@code tcms_app}: a plain {@code LOGIN} role owning nothing, holding no
+ * {@code BYPASSRLS}. It is created by the test-only after-migrate callback in
+ * {@code src/test/resources/db/testcallback} — creating roles belongs to the
+ * deployment, not to a production migration, which is why that location is added to
+ * {@code spring.flyway.locations} only here.
+ *
+ * <p>{@code RlsIsolationTest} asserts both role properties rather than trusting this.
+ */
+@SpringBootTest
+public abstract class IntegrationTestBase {
+
+    /** The unprivileged role the application connects as. */
+    public static final String APP_ROLE = "tcms_app";
+    public static final String APP_PASSWORD = "app-secret";
+
+    protected static final PostgreSQLContainer<?> POSTGRES =
+            new PostgreSQLContainer<>(DockerImageName.parse("postgres:17"))
+                    .withDatabaseName("tcms")
+                    .withUsername("tcms_owner")
+                    .withPassword("owner-secret");
+
+    static {
+        POSTGRES.start();
+    }
+
+    @DynamicPropertySource
+    static void datasourceProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
+        registry.add("spring.datasource.username", () -> APP_ROLE);
+        registry.add("spring.datasource.password", () -> APP_PASSWORD);
+
+        registry.add("spring.flyway.url", POSTGRES::getJdbcUrl);
+        registry.add("spring.flyway.user", POSTGRES::getUsername);
+        registry.add("spring.flyway.password", POSTGRES::getPassword);
+        registry.add("spring.flyway.locations",
+                () -> "classpath:db/migration,classpath:db/testcallback");
+    }
+
+    /**
+     * A connection as the owner/superuser — ground truth, past RLS. Use it to assert
+     * what a company-scoped query <em>should not</em> have been able to see.
+     */
+    protected static Connection ownerConnection() throws SQLException {
+        return DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+    }
+
+    /** A connection as the unprivileged application role, with RLS in force. */
+    protected static Connection appConnection() throws SQLException {
+        return DriverManager.getConnection(POSTGRES.getJdbcUrl(), APP_ROLE, APP_PASSWORD);
+    }
+}

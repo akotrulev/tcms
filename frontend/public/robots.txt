@@ -1,0 +1,9 @@
+# TCMS is a self-hosted, authenticated internal tool. Every route except /login sits behind a
+# session, so there is nothing here for a crawler to index — and the paths themselves (project
+# names, keys) are not information worth leaking through a search result.
+#
+# This is the whole of the SEO surface for this app, deliberately. Per-route metadata, Open
+# Graph tags, sitemaps and JSON-LD all exist to make PUBLIC pages rank and preview well; none of
+# that applies to screens no crawler can reach.
+User-agent: *
+Disallow: /

@@ -1,0 +1,187 @@
+/*
+ * Design tokens — the ONLY thing that legitimately lives global (styling skill).
+ * No component styles here.
+ *
+ * Design thesis: status colour is load-bearing DATA in a test management tool, so the
+ * brand palette deliberately retreats. Brand steel is used for actions and active nav
+ * only — never on data. Status owns the entire saturation budget.
+ *
+ * These are bridged into the MUI theme in src/app/theme.ts so there is ONE colour
+ * system, not two diverging ones.
+ */
+
+:root {
+  /* --- brand: recessive by design --- */
+  --color-ink: #1b2a41;
+  --color-action-primary: #2e6e8e;
+  --color-action-primary-hover: #24596f;
+
+  /* --- surfaces & structure --- */
+  --color-surface: #ffffff;
+  --color-surface-sunken: #f5f7fa;
+  --color-surface-raised: #ffffff;
+  --color-border: #dde3ea;
+  --color-border-strong: #c3ccd8;
+
+  /* --- text --- */
+  --color-text: #1b2a41;
+  --color-text-muted: #5b6b80;
+  --color-text-faint: #8593a5;
+  --color-on-action: #ffffff;
+
+  /* --- status: the saturation budget lives here --- */
+  --color-passed: #2e7d5b;
+  --color-failed: #c0392b;
+  --color-blocked: #b7791f;
+  --color-skipped: #6b7280;
+  --color-untested: #9ca3af;
+  --color-retest: #7c5cbf;
+
+  /* --- semantic feedback (distinct from status-of-a-test) --- */
+  --color-success: #2e7d5b;
+  --color-warning: #b7791f;
+  --color-danger: #c0392b;
+  --color-info: #2e6e8e;
+
+  /* --- lifecycle --- */
+  --color-draft: #8593a5;
+  --color-in-review: #b7791f;
+  --color-approved: #2e7d5b;
+  --color-deprecated: #9ca3af;
+
+  /* --- type --- */
+  --font-body: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', monospace;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+
+  --leading-tight: 1.2;
+  --leading-body: 1.5;
+  --tracking-tight: -0.011em;
+  --tracking-wide: 0.02em;
+
+  /* --- spacing & geometry --- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --radius: 4px;
+  --radius-lg: 6px;
+
+  /* --- breakpoints: documented source of truth, mirrors MUI + breakpoints.ts --- */
+  --bp-sm: 600px;
+  --bp-md: 900px;
+  --bp-lg: 1200px;
+  --bp-xl: 1536px;
+
+  /* --- layout --- */
+  --rail-width: 232px;
+  --header-height: 52px;
+}
+
+/*
+ * Dark mode is a deliberately-authored second palette, not an inversion:
+ * accents desaturated, no pure black, contrast re-verified per pair.
+ */
+[data-mui-color-scheme='dark'] {
+  --color-ink: #e8edf3;
+  --color-action-primary: #6ba8c4;
+  --color-action-primary-hover: #83bad4;
+
+  --color-surface: #151b24;
+  --color-surface-sunken: #0f141b;
+  --color-surface-raised: #1c242f;
+  --color-border: #2a3340;
+  --color-border-strong: #3b4757;
+
+  --color-text: #e8edf3;
+  --color-text-muted: #9aa8ba;
+  --color-text-faint: #6b7a8d;
+  --color-on-action: #0f141b;
+
+  --color-passed: #5aab84;
+  --color-failed: #e07568;
+  --color-blocked: #d9a441;
+  --color-skipped: #8b94a3;
+  --color-untested: #6b7280;
+  --color-retest: #a58ad6;
+
+  --color-success: #5aab84;
+  --color-warning: #d9a441;
+  --color-danger: #e07568;
+  --color-info: #6ba8c4;
+
+  --color-draft: #6b7a8d;
+  --color-in-review: #d9a441;
+  --color-approved: #5aab84;
+  --color-deprecated: #6b7280;
+}
+
+/* minimal reset */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: var(--leading-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/*
+ * The signature element: every identifier — case key, version, release, SHA, percentage —
+ * is monospace with TABULAR figures. TC-42 vs TC-402 becomes distinguishable, and keys
+ * align down a column. This is the one place the design spends its boldness.
+ */
+.identifier {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+  letter-spacing: var(--tracking-wide);
+}
+
+/*
+ * Visually hidden but announced. Used for the text that gives a visual-only cue its
+ * spoken equivalent — the "opens in a new tab" suffix on external links, for instance.
+ * Not `display: none`, which removes it from the accessibility tree entirely.
+ */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
