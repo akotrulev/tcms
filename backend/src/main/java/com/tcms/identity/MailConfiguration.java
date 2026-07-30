@@ -3,7 +3,7 @@ package com.tcms.identity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -19,8 +19,14 @@ import org.springframework.mail.javamail.JavaMailSender;
 @Configuration
 public class MailConfiguration {
 
+    // Not @ConditionalOnProperty("spring.mail.host"): that matches a property that is
+    // PRESENT, and an empty string is present. A compose file writing
+    // SPRING_MAIL_HOST: ${SMTP_HOST:-} therefore selected the SMTP mailer with nowhere to
+    // send, and every invitation produced a connection-refused stack trace instead of the
+    // "no relay configured" warning that describes the actual situation. Measured against
+    // the live stack, not reasoned about.
     @Bean
-    @ConditionalOnProperty(name = "spring.mail.host")
+    @ConditionalOnExpression("!'${spring.mail.host:}'.isBlank()")
     public InvitationMailer smtpInvitationMailer(
             JavaMailSender sender, InvitationProperties properties) {
         return new SmtpInvitationMailer(sender, properties.fromAddress());

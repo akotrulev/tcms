@@ -77,6 +77,20 @@ public abstract class IntegrationTestBase {
         // own, and it is not a value any environment would plausibly reuse.
         registry.add("tcms.auth.jwt.secret",
                 () -> "test-only-signing-key-not-for-any-real-deployment");
+
+        // Production sizes this at 20. The suite must not.
+        //
+        // Spring caches one context per distinct configuration, and this suite now has
+        // several — MockMvc, non-web, virtual-threads-off, mail-configured — each holding
+        // its OWN Hikari pool against the ONE shared container. At 20 apiece they exceed
+        // Postgres's default 100 connection slots, and the failure surfaces as
+        // "remaining connection slots are reserved for roles with the SUPERUSER attribute"
+        // in whichever unrelated test happened to start last. It reads as a leak or a
+        // hung transaction; it is arithmetic.
+        //
+        // Five is ample: no test drives concurrent load, and a low ceiling means a genuine
+        // connection leak shows up as exhaustion quickly rather than hiding behind headroom.
+        registry.add("spring.datasource.hikari.maximum-pool-size", () -> 5);
     }
 
     /**

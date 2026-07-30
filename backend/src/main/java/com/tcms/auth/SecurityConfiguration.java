@@ -1,20 +1,12 @@
 package com.tcms.auth;
 
-import com.nimbusds.jose.jwk.source.ImmutableSecret;
-import java.nio.charset.StandardCharsets;
-import javax.crypto.spec.SecretKeySpec;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtEncoder;
-import org.springframework.security.oauth2.jwt.JwtValidators;
-import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
-import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
@@ -41,6 +33,15 @@ import org.springframework.security.web.authentication.www.BasicAuthenticationFi
  * as tribal knowledge.
  */
 @Configuration
+// The same jar is the server AND the operator CLI, and the CLI runs with
+// WebApplicationType.NONE — where HttpSecurity does not exist. Without this condition the
+// filterChain bean cannot be satisfied and the whole context fails to start, so
+// `provision-company` dies before it reaches a database.
+//
+// Found by running the CLI against the live compose stack, not by the suite: every test
+// here boots a web context, so the one arrangement that breaks is the one nothing
+// exercised. ProvisionCompanyCommandTest now covers it.
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class SecurityConfiguration {
 
     @Bean
@@ -74,33 +75,4 @@ public class SecurityConfiguration {
                 .build();
     }
 
-    @Bean
-    public JwtEncoder jwtEncoder(JwtProperties properties) {
-        return new NimbusJwtEncoder(new ImmutableSecret<>(key(properties)));
-    }
-
-    /**
-     * Validates signature, expiry <em>and issuer</em>.
-     *
-     * <p>The issuer check is not ceremony: {@code JwtValidators.createDefault()} checks
-     * expiry alone, so a token signed with the same secret by anything else — a sibling
-     * environment restored from the same config, a test fixture that leaked its key — would
-     * otherwise be accepted here.
-     */
-    @Bean
-    public JwtDecoder jwtDecoder(JwtProperties properties) {
-        NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(key(properties))
-                .macAlgorithm(MacAlgorithm.HS256)
-                .build();
-        decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(properties.issuer()));
-        return decoder;
-    }
-
-    private static SecretKeySpec key(JwtProperties properties) {
-        // HmacSHA256 names the algorithm to the JCA; the token header says HS256. The
-        // minimum length is enforced by JwtProperties, because a short key is padded rather
-        // than refused and would look like it worked.
-        return new SecretKeySpec(
-                properties.secret().getBytes(StandardCharsets.UTF_8), "HmacSHA256");
-    }
 }

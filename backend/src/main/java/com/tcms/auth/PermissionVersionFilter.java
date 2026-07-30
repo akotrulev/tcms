@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -39,6 +40,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * to work for hours.
  */
 @Component
+// Non-web CLI runs have no request to filter, and constructing a servlet filter there
+// would be ceremony. Same condition as SecurityConfiguration, which is what consumes it.
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class PermissionVersionFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(PermissionVersionFilter.class);

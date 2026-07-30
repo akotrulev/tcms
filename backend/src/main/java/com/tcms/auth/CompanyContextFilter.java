@@ -10,6 +10,7 @@ import java.util.UUID;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -48,6 +49,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * resolve through {@code evaluateInstanceWide}, which needs no context by design.
  */
 @Component
+// Non-web CLI runs have no request to filter, and constructing a servlet filter there
+// would be ceremony. Same condition as SecurityConfiguration, which is what consumes it.
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class CompanyContextFilter extends OncePerRequestFilter {
 
     @Override

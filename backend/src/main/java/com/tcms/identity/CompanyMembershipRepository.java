@@ -45,15 +45,24 @@ public interface CompanyMembershipRepository
      * <p>The one query in this codebase that reads across companies, and the only caller is
      * the login path. It has to exist: authentication precedes company context, so the
      * derived query above would correctly return nothing at the moment the session's
-     * company must be chosen. It goes through {@code tcms_companies_for_user}, a
-     * {@code SECURITY DEFINER} function owned by the schema owner — see {@code V7} for what
-     * that costs and how it is bounded.
+     * company must be chosen.
+     *
+     * <p>It goes through {@code tcms_companies_for_user}, which runs as <em>this</em> caller
+     * with RLS fully in force — it walks the active companies and asks the ordinary policed
+     * question for each, rather than bypassing the policy. {@code V7} tried the bypass, with
+     * {@code SECURITY DEFINER}, and returned nothing in production because
+     * {@code FORCE ROW LEVEL SECURITY} covers the table owner too; {@code V8} is the fix and
+     * its header is worth reading before touching this.
      *
      * <p>Ids and nothing else, on purpose: every human-readable fact about a membership is
      * still read afterwards through RLS with the company open. Callers must pass an
      * already-authenticated account's id, <strong>never</strong> one taken from a request.
+     *
+     * <p>Ordered here rather than in the function, because a set-returning function's own
+     * {@code ORDER BY} is not guaranteed to survive being inlined into an outer query.
      */
     @Query(nativeQuery = true,
-            value = "SELECT company_id FROM tcms_companies_for_user(CAST(:userId AS uuid))")
+            value = "SELECT company_id FROM tcms_companies_for_user(CAST(:userId AS uuid)) "
+                    + "ORDER BY accepted_at NULLS LAST, company_id")
     List<UUID> findCompanyIdsForUser(@Param("userId") UUID userId);
 }

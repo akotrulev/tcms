@@ -71,6 +71,20 @@ services:
       # Flyway only. Owns the schema; never serves a request.
       DB_MIGRATION_USER: tcms_owner
       DB_MIGRATION_PASSWORD: ${DB_MIGRATION_PASSWORD:?set it in .env — copy .env.example}
+      # Session signing. Required with no default in application.yml, deliberately: a
+      # signing key committed to the repository is a forged session for anyone who can
+      # read it, and it is the class of default that survives to production because
+      # nothing ever fails because of it.
+      TCMS_JWT_SECRET: ${TCMS_JWT_SECRET:?set it in .env — copy .env.example}
+      # Where an invitee's browser can reach the SPA. NOT derivable from the request:
+      # behind a reverse proxy the container only ever sees its own address, and a link
+      # built from that would send every invitee to localhost:8080.
+      TCMS_BASE_URL: ${TCMS_BASE_URL:-http://localhost:5173}
+      # Mail is optional locally. With no relay the application logs a warning and the
+      # provisioning CLI still prints the activation link, so onboarding works by hand.
+      SPRING_MAIL_HOST: ${SMTP_HOST:-}
+      SPRING_MAIL_PORT: ${SMTP_PORT:-25}
+      TCMS_MAIL_FROM: ${TCMS_MAIL_FROM:-tcms@localhost}
     ports:
       - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
 
