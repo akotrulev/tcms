@@ -23,6 +23,8 @@ dependencies {
     implementation(libs.spring.boot.starter.actuator)
     implementation(libs.modulith.starter.core)
 
+    implementation(libs.spring.security.crypto)
+
     implementation(libs.flyway.core)
     runtimeOnly(libs.flyway.postgresql)
     runtimeOnly(libs.postgresql)

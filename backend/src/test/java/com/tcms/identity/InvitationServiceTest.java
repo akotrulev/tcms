@@ -1,0 +1,388 @@
+package com.tcms.identity;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.tcms.IntegrationTestBase;
+import com.tcms.provisioning.CompanyProvisioningService;
+import com.tcms.provisioning.ProvisionCompanyRequest;
+import com.tcms.provisioning.ProvisionCompanyResult;
+import com.tcms.tenancy.CompanyContext;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.UUID;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+
+/**
+ * The invitation/activation path — the thing that stood between a provisioned company and
+ * a usable one (handoff §17).
+ *
+ * <p>What is at stake is not "a row changed state". It is that the <strong>only</strong>
+ * way into a client company is a single-use secret that was mailed to the invitee: that
+ * redeeming it opens exactly one membership and no more, that a failed attempt costs the
+ * invitation nothing, and that no failure mode tells a stranger anything about who exists
+ * on this instance.
+ *
+ * <p>Per the async-harness lesson (§14) this class owns the {@code inv-} slug namespace and
+ * provisions its own companies rather than seeding fixed ids — the container is shared, and
+ * a test that assumes it is alone finds a collision and reports it as a leak.
+ */
+@DisplayName("Invitations — the only way into a company")
+class InvitationServiceTest extends IntegrationTestBase {
+
+    @Autowired
+    private CompanyProvisioningService provisioning;
+
+    @Autowired
+    private InvitationService invitations;
+
+    @Autowired
+    private MembershipInvitationRepository invitationRows;
+
+    @Autowired
+    private AppUserRepository users;
+
+    @Autowired
+    private CompanyMembershipRepository memberships;
+
+    private static final String GOOD_PASSWORD = "correct-horse-battery";
+
+    @Nested
+    @DisplayName("Issuing")
+    class Issuing {
+
+        @Test
+        @DisplayName("provisioning mints a link and an expiry for the first admin")
+        void provisioningIssuesAnInvitation() {
+            ProvisionCompanyResult result = provisioning.provision(request("inv-issue"));
+
+            assertThat(result.invitationLink())
+                    .as("provisioning must leave a way in, or it stands up a company nobody "
+                            + "can enter — which is exactly the state handoff §17 blocked on")
+                    .isPresent();
+            assertThat(result.invitationExpiry()).isPresent();
+            assertThat(result.invitationLink().orElseThrow())
+                    .startsWith("http://localhost:5173/accept-invitation?token=");
+        }
+
+        @Test
+        @DisplayName("stores a digest, never the token")
+        void storesOnlyADigest() {
+            ProvisionCompanyResult result = provisioning.provision(request("inv-digest"));
+            String secret = tokenOf(result);
+
+            MembershipInvitation row = invitationRows
+                    .findByCompanyIdAndUserIdAndConsumedAtIsNull(
+                            result.companyId(), result.adminUserId())
+                    .orElseThrow();
+
+            assertThat(row.getTokenHash())
+                    .as("a readable token in this table would make a database read enough to "
+                            + "become a client's administrator")
+                    .isNotEqualTo(secret)
+                    .hasSize(64)
+                    .matches("[0-9a-f]{64}");
+        }
+
+        @Test
+        @DisplayName("a re-run does NOT replace an outstanding invitation")
+        void reRunLeavesTheLiveLinkAlone() {
+            ProvisionCompanyResult first = provisioning.provision(request("inv-rerun"));
+            String secret = tokenOf(first);
+
+            ProvisionCompanyResult second = provisioning.provision(request("inv-rerun"));
+
+            assertThat(second.invitationLink())
+                    .as("minting a replacement would invalidate a link already in someone's "
+                            + "inbox, and re-running provision-company is a supported top-up")
+                    .isEmpty();
+            assertThat(second.invitationExpiry()).isEqualTo(first.invitationExpiry());
+            assertThat(invitations.accept(secret, GOOD_PASSWORD))
+                    .isInstanceOf(InvitationService.Accepted.class);
+        }
+
+        @Test
+        @DisplayName("a re-run after expiry issues a fresh one, and the lapsed token stays dead")
+        void reRunAfterExpiryReissues() throws SQLException {
+            ProvisionCompanyResult first = provisioning.provision(request("inv-expired"));
+            String lapsed = tokenOf(first);
+            expire(first.companyId(), first.adminUserId());
+
+            ProvisionCompanyResult second = provisioning.provision(request("inv-expired"));
+
+            assertThat(second.invitationLink()).isPresent();
+            assertThat(second.wasNoOp())
+                    .as("every other part existed, but re-issuing a lapsed invitation is a real "
+                            + "repair — reporting a no-op would send the operator looking "
+                            + "elsewhere for the thing that just got fixed")
+                    .isFalse();
+            assertThat(invitations.accept(lapsed, GOOD_PASSWORD))
+                    .isEqualTo(new InvitationService.Rejected(
+                            InvitationService.Rejection.NOT_REDEEMABLE, null));
+            assertThat(invitations.accept(tokenOf(second), GOOD_PASSWORD))
+                    .isInstanceOf(InvitationService.Accepted.class);
+        }
+
+        @Test
+        @DisplayName("nothing is issued once the administrator has accepted")
+        void noInvitationOnceAccepted() {
+            ProvisionCompanyResult first = provisioning.provision(request("inv-accepted"));
+            invitations.accept(tokenOf(first), GOOD_PASSWORD);
+
+            ProvisionCompanyResult second = provisioning.provision(request("inv-accepted"));
+
+            assertThat(second.invitationLink()).isEmpty();
+            assertThat(second.invitationExpiry()).isEmpty();
+            assertThat(second.wasNoOp()).isTrue();
+        }
+    }
+
+    @Nested
+    @DisplayName("Accepting")
+    class Accepting {
+
+        @Test
+        @DisplayName("activates the account and the membership, and sets the password")
+        void activatesBothRows() {
+            ProvisionCompanyResult result = provisioning.provision(request("inv-accept"));
+            int before = users.findById(result.adminUserId()).orElseThrow().getPermissionVersion();
+
+            InvitationService.AcceptOutcome outcome =
+                    invitations.accept(tokenOf(result), GOOD_PASSWORD);
+
+            assertThat(outcome).isInstanceOf(InvitationService.Accepted.class);
+            assertThat(((InvitationService.Accepted) outcome).passwordSet()).isTrue();
+
+            AppUser user = users.findById(result.adminUserId()).orElseThrow();
+            assertThat(user.getStatus()).isEqualTo(UserStatus.ACTIVE);
+            assertThat(user.getPasswordHash())
+                    .as("the delegating encoder writes the algorithm into the hash, so the cost "
+                            + "can be raised later without orphaning existing rows")
+                    .startsWith("{bcrypt}");
+            assertThat(user.getPermissionVersion())
+                    .as("INVITED -> ACTIVE changes what this account may do, so every token "
+                            + "issued before it must stop being accepted")
+                    .isGreaterThan(before);
+
+            try (var ignored = CompanyContext.open(result.companyId())) {
+                CompanyMembership membership = memberships
+                        .findByCompanyIdAndUserId(result.companyId(), result.adminUserId())
+                        .orElseThrow();
+                assertThat(membership.getStatus()).isEqualTo(MembershipStatus.ACTIVE);
+                assertThat(membership.getAcceptedAt()).isNotNull();
+            }
+        }
+
+        @Test
+        @DisplayName("is single-use — the second attempt with the same token is refused")
+        void isSingleUse() {
+            ProvisionCompanyResult result = provisioning.provision(request("inv-once"));
+            String secret = tokenOf(result);
+
+            assertThat(invitations.accept(secret, GOOD_PASSWORD))
+                    .isInstanceOf(InvitationService.Accepted.class);
+            assertThat(invitations.accept(secret, GOOD_PASSWORD))
+                    .isEqualTo(new InvitationService.Rejected(
+                            InvitationService.Rejection.NOT_REDEEMABLE, null));
+        }
+
+        @Test
+        @DisplayName("an unknown token is refused with the SAME answer as a spent one")
+        void unknownTokenIsIndistinguishable() {
+            InvitationService.Rejected expected = new InvitationService.Rejected(
+                    InvitationService.Rejection.NOT_REDEEMABLE, null);
+
+            // Three different causes, deliberately one answer: distinct replies would let
+            // anyone with a token-shaped string learn whether an address is on this
+            // instance (§6t's no-oracle rule, on a pre-auth surface).
+            assertThat(invitations.accept("not-a-real-token", GOOD_PASSWORD)).isEqualTo(expected);
+            assertThat(invitations.accept("", GOOD_PASSWORD)).isEqualTo(expected);
+            assertThat(invitations.accept(null, GOOD_PASSWORD)).isEqualTo(expected);
+        }
+
+        @Test
+        @DisplayName("a rejected password costs the invitation nothing")
+        void rejectedPasswordDoesNotSpendTheInvitation() {
+            ProvisionCompanyResult result = provisioning.provision(request("inv-weak"));
+            String secret = tokenOf(result);
+
+            InvitationService.AcceptOutcome tooShort = invitations.accept(secret, "short");
+
+            assertThat(tooShort).isInstanceOf(InvitationService.Rejected.class);
+            assertThat(((InvitationService.Rejected) tooShort).reason())
+                    .isEqualTo(InvitationService.Rejection.PASSWORD_UNACCEPTABLE);
+            assertThat(users.findById(result.adminUserId()).orElseThrow().getStatus())
+                    .isEqualTo(UserStatus.INVITED);
+            assertThat(invitations.accept(secret, GOOD_PASSWORD))
+                    .as("a typo in the password field must not burn the only way in")
+                    .isInstanceOf(InvitationService.Accepted.class);
+        }
+
+        @Test
+        @DisplayName("a password past BCrypt's 72-byte ceiling is refused, not truncated")
+        void refusesOversizedPassword() {
+            ProvisionCompanyResult result = provisioning.provision(request("inv-long"));
+
+            String tooLong = "x".repeat(73);
+            InvitationService.AcceptOutcome outcome = invitations.accept(tokenOf(result), tooLong);
+
+            assertThat(((InvitationService.Rejected) outcome).reason())
+                    .as("accepting it would verify only the first 72 bytes, so two different "
+                            + "passphrases sharing a prefix would both open the account")
+                    .isEqualTo(InvitationService.Rejection.PASSWORD_UNACCEPTABLE);
+        }
+
+        @Test
+        @DisplayName("a deactivated account cannot be activated by an outstanding invitation")
+        void deactivatedAccountIsRefused() {
+            ProvisionCompanyResult result = provisioning.provision(request("inv-deactivated"));
+            String secret = tokenOf(result);
+            deactivate(result.adminUserId());
+
+            assertThat(invitations.accept(secret, GOOD_PASSWORD))
+                    .as("deactivation is the instance-wide off switch; a live invitation must "
+                            + "not be a way around it")
+                    .isEqualTo(new InvitationService.Rejected(
+                            InvitationService.Rejection.NOT_REDEEMABLE, null));
+        }
+    }
+
+    @Nested
+    @DisplayName("A person who already has an account")
+    class SecondCompany {
+
+        @Test
+        @DisplayName("joins the second company without touching their password")
+        void secondCompanyDoesNotResetThePassword() {
+            ProvisionCompanyResult first = provisioning.provision(
+                    ProvisionCompanyRequest.of("inv-two-a", "Inv Two A", "two@inv.test", "Two A"));
+            invitations.accept(tokenOf(first), GOOD_PASSWORD);
+            String hashAfterFirst = users.findById(first.adminUserId()).orElseThrow()
+                    .getPasswordHash();
+
+            ProvisionCompanyResult second = provisioning.provision(
+                    ProvisionCompanyRequest.of("inv-two-b", "Inv Two B", "two@inv.test", "Two B"));
+
+            assertThat(second.adminUserId())
+                    .as("one account, several companies — the instance-wide email rule (§6s)")
+                    .isEqualTo(first.adminUserId());
+
+            InvitationService.AcceptOutcome outcome = invitations.accept(tokenOf(second), null);
+
+            assertThat(outcome).isInstanceOf(InvitationService.Accepted.class);
+            assertThat(((InvitationService.Accepted) outcome).passwordSet()).isFalse();
+            assertThat(users.findById(first.adminUserId()).orElseThrow().getPasswordHash())
+                    .isEqualTo(hashAfterFirst);
+
+            try (var ignored = CompanyContext.open(second.companyId())) {
+                assertThat(memberships
+                        .findByCompanyIdAndUserId(second.companyId(), second.adminUserId())
+                        .orElseThrow().getStatus())
+                        .isEqualTo(MembershipStatus.ACTIVE);
+            }
+        }
+
+        @Test
+        @DisplayName("cannot set a new password through the invitation")
+        void refusesAPasswordItWouldOtherwiseIgnore() {
+            ProvisionCompanyResult first = provisioning.provision(ProvisionCompanyRequest.of(
+                    "inv-pw-a", "Inv Pw A", "pw@inv.test", "Pw A"));
+            invitations.accept(tokenOf(first), GOOD_PASSWORD);
+            ProvisionCompanyResult second = provisioning.provision(ProvisionCompanyRequest.of(
+                    "inv-pw-b", "Inv Pw B", "pw@inv.test", "Pw B"));
+
+            InvitationService.AcceptOutcome outcome =
+                    invitations.accept(tokenOf(second), "a-brand-new-password");
+
+            assertThat(((InvitationService.Rejected) outcome).reason())
+                    .as("holding an invitation to a second company must not confer the ability "
+                            + "to overwrite an existing account's credential — and silently "
+                            + "ignoring the field would leave them believing they changed it")
+                    .isEqualTo(InvitationService.Rejection.PASSWORD_NOT_REQUIRED);
+        }
+    }
+
+    @Nested
+    @DisplayName("Preview")
+    class Preview {
+
+        @Test
+        @DisplayName("tells the holder who they are and whether a password is needed")
+        void describesTheInvitation() {
+            ProvisionCompanyResult result = provisioning.provision(request("inv-preview"));
+
+            InvitationService.InvitationPreview preview =
+                    invitations.preview(tokenOf(result)).orElseThrow();
+
+            assertThat(preview.email()).isEqualTo("admin@inv-preview.test");
+            assertThat(preview.displayName()).isEqualTo("Inv Admin");
+            assertThat(preview.passwordRequired()).isTrue();
+        }
+
+        @Test
+        @DisplayName("says nothing at all for a token it does not recognise")
+        void isSilentForAnUnknownToken() {
+            assertThat(invitations.preview("nope")).isEmpty();
+            assertThat(invitations.preview(null)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("stops describing an invitation once it has been redeemed")
+        void isSilentAfterRedemption() {
+            ProvisionCompanyResult result = provisioning.provision(request("inv-preview-used"));
+            String secret = tokenOf(result);
+            invitations.accept(secret, GOOD_PASSWORD);
+
+            assertThat(invitations.preview(secret)).isEmpty();
+        }
+    }
+
+    // ---------------------------------------------------------------- helpers ----
+
+    private static ProvisionCompanyRequest request(String slug) {
+        return ProvisionCompanyRequest.of(
+                slug, "Inv " + slug, "admin@" + slug + ".test", "Inv Admin");
+    }
+
+    /** Pulls the secret back out of the link, the way an invitee's browser would. */
+    private static String tokenOf(ProvisionCompanyResult result) {
+        String link = result.invitationLink().orElseThrow(() ->
+                new AssertionError("this run issued no invitation"));
+        return URLDecoder.decode(link.substring(link.indexOf("?token=") + "?token=".length()),
+                StandardCharsets.UTF_8);
+    }
+
+    /**
+     * Backdates the invitation past its expiry. Done in SQL as the owner because the entity
+     * deliberately has no mutator for it — an expiry the application can move is not an
+     * expiry.
+     */
+    private void expire(UUID companyId, UUID userId) throws SQLException {
+        Instant past = Instant.now().minus(1, ChronoUnit.DAYS);
+        try (var connection = ownerConnection();
+                var statement = connection.prepareStatement(
+                        "UPDATE membership_invitation SET expires_at = ? "
+                                + "WHERE company_id = ? AND user_id = ? AND consumed_at IS NULL")) {
+            statement.setObject(1, past.atOffset(java.time.ZoneOffset.UTC));
+            statement.setObject(2, companyId);
+            statement.setObject(3, userId);
+            assertThat(statement.executeUpdate()).isEqualTo(1);
+        }
+    }
+
+    private void deactivate(UUID userId) {
+        try (var connection = ownerConnection();
+                var statement = connection.prepareStatement(
+                        "UPDATE app_user SET status = 'DEACTIVATED' WHERE id = ?")) {
+            statement.setObject(1, userId);
+            assertThat(statement.executeUpdate()).isEqualTo(1);
+        } catch (SQLException e) {
+            throw new AssertionError("could not deactivate the fixture user", e);
+        }
+    }
+}

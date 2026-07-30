@@ -205,8 +205,42 @@ public class ProvisionCompanyCommand implements ApplicationRunner {
                     + "Vocabularies and key counters were topped up if any were missing.");
         }
         System.out.println();
-        System.out.println("The administrator is INVITED, not active: they hold no permission "
-                + "until they accept and set a password.");
+        reportInvitation(result);
+    }
+
+    /**
+     * Prints the activation link.
+     *
+     * <p><strong>Printed even though the invitation is also emailed</strong>, and that is
+     * deliberate: mail is sent after the transaction commits and can fail — a wrong relay,
+     * a DNS problem, a greylisting server — and if the only copy of the link were in that
+     * message, a mail outage would mean a provisioned company nobody can enter. The console
+     * is the operator's fallback, and it degrades to hand delivery rather than to a
+     * re-provision.
+     *
+     * <p>The three cases are distinct because they need different actions from the operator,
+     * and "invitation: ok" would hide the one that needs any.
+     */
+    private void reportInvitation(ProvisionCompanyResult result) {
+        if (result.invitationLink().isPresent()) {
+            System.out.println("The administrator is INVITED, not active: they hold no "
+                    + "permission until they accept and set a password.");
+            System.out.println("Give them this link — it is single-use and expires "
+                    + result.invitationExpiry().orElseThrow() + ":");
+            System.out.println();
+            System.out.println("  " + result.invitationLink().orElseThrow());
+        } else if (result.invitationExpiry().isPresent()) {
+            System.out.println("An invitation is already outstanding and was NOT replaced, so "
+                    + "the link already sent still works. It expires "
+                    + result.invitationExpiry().orElseThrow() + "; re-run after that to issue a "
+                    + "fresh one.");
+            System.out.println("The existing link cannot be reprinted — only a digest of it is "
+                    + "stored, which is what makes the database unable to hand out a working "
+                    + "token.");
+        } else {
+            System.out.println("The administrator has already accepted; no invitation was "
+                    + "issued. They sign in with their existing password.");
+        }
     }
 
     /**

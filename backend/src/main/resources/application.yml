@@ -53,6 +53,16 @@ spring:
     virtual:
       enabled: true
 
+tcms:
+  invitation:
+    # The SPA's public origin — what an invitee's browser can reach, NOT what the container
+    # sees. Behind Caddy the app only ever knows localhost:8080, and a link built from the
+    # request would send every invitee there. Defaulted for local development only; a
+    # deployment sets TCMS_BASE_URL and the Hetzner runbook says so.
+    base-url: ${TCMS_BASE_URL:http://localhost:5173}
+    accept-path: /accept-invitation
+    validity: P7D
+
 management:
   endpoints:
     web:

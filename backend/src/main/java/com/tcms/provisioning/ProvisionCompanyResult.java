@@ -1,5 +1,6 @@
 package com.tcms.provisioning;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -21,6 +22,11 @@ import java.util.UUID;
  * @param membershipCreated false when they were already a member of this company
  * @param adminGrantCreated false when the COMPANY-scope grant already existed
  * @param projectId        the first project, when one was requested
+ * @param invitationLink   the activation URL, present <strong>only</strong> when this run
+ *                         minted the token. Empty when an unexpired invitation was already
+ *                         outstanding (its secret is unrecoverable — only a digest is
+ *                         stored) and when the administrator has already accepted.
+ * @param invitationExpiry when the outstanding invitation lapses, minted by this run or not
  */
 public record ProvisionCompanyResult(
         UUID companyId,
@@ -30,11 +36,19 @@ public record ProvisionCompanyResult(
         boolean membershipCreated,
         boolean adminGrantCreated,
         Optional<UUID> projectId,
-        boolean projectCreated) {
+        boolean projectCreated,
+        Optional<String> invitationLink,
+        Optional<Instant> invitationExpiry) {
 
-    /** True when this run changed nothing — everything already existed. */
+    /**
+     * True when this run changed nothing — everything already existed.
+     *
+     * <p>A freshly minted invitation counts as a change even when every other part existed:
+     * re-running after the link lapsed is a real repair, and reporting it as a no-op would
+     * tell the operator to look elsewhere for the thing that just got fixed.
+     */
     public boolean wasNoOp() {
         return !companyCreated && !adminUserCreated && !membershipCreated && !adminGrantCreated
-                && !projectCreated;
+                && !projectCreated && invitationLink.isEmpty();
     }
 }

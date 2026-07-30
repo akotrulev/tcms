@@ -14,6 +14,11 @@ spring-boot-starter-validation = { module = "org.springframework.boot:spring-boo
 spring-boot-starter-actuator = { module = "org.springframework.boot:spring-boot-starter-actuator" }
 spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test" }
 
+# Just the crypto artifact, not the whole security starter: at this point the codebase
+# needs BCrypt and nothing else, and the starter's auto-configuration would secure every
+# endpoint with a generated password before there is a filter chain to configure.
+spring-security-crypto = { module = "org.springframework.security:spring-security-crypto" }
+
 flyway-core = { module = "org.flywaydb:flyway-core" }
 flyway-postgresql = { module = "org.flywaydb:flyway-database-postgresql" }
 postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }

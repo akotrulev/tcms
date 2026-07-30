@@ -6,6 +6,7 @@ import com.tcms.identity.AppUser;
 import com.tcms.identity.AppUserRepository;
 import com.tcms.identity.CompanyMembership;
 import com.tcms.identity.CompanyMembershipRepository;
+import com.tcms.identity.InvitationService;
 import com.tcms.identity.Role;
 import com.tcms.identity.RoleAssignment;
 import com.tcms.identity.RoleAssignmentRepository;
@@ -97,6 +98,7 @@ public class CompanyProvisioningService {
     private final RoleAssignmentRepository roleAssignments;
     private final ProjectRepository projects;
     private final InstanceAuditEventRepository auditEvents;
+    private final InvitationService invitations;
     private final EntityManager entityManager;
     private final TransactionTemplate transactions;
     private final ObjectMapper json;
@@ -110,6 +112,7 @@ public class CompanyProvisioningService {
             RoleAssignmentRepository roleAssignments,
             ProjectRepository projects,
             InstanceAuditEventRepository auditEvents,
+            InvitationService invitations,
             EntityManager entityManager,
             TransactionTemplate transactions,
             ObjectMapper json,
@@ -121,6 +124,7 @@ public class CompanyProvisioningService {
         this.roleAssignments = roleAssignments;
         this.projects = projects;
         this.auditEvents = auditEvents;
+        this.invitations = invitations;
         this.entityManager = entityManager;
         this.transactions = transactions;
         this.json = json;
@@ -176,6 +180,12 @@ public class CompanyProvisioningService {
 
         ProjectOutcome project = createFirstProjectIfRequested(request, companyId, now);
 
+        // Inside this transaction on purpose: a failure below must take the invitation with
+        // it, rather than leaving a live token for a company that rolled back. It is also
+        // why the mail is sent AFTER commit and not from here.
+        InvitationService.IssueOutcome invitation =
+                invitations.issueIfPending(companyId, admin.getId(), actorUserId);
+
         ProvisionCompanyResult result = new ProvisionCompanyResult(
                 companyId,
                 companyCreated,
@@ -184,7 +194,9 @@ public class CompanyProvisioningService {
                 membershipCreated,
                 grantCreated,
                 project.id(),
-                project.created());
+                project.created(),
+                invitation.acceptUrl(),
+                invitation.expiresAt());
 
         auditEvents.save(InstanceAuditEvent.record(
                 UUID.randomUUID(),
@@ -334,6 +346,10 @@ public class CompanyProvisioningService {
         changes.put("adminGrantCreated", result.adminGrantCreated());
         result.projectId().ifPresent(id -> changes.put("projectId", id.toString()));
         changes.put("projectCreated", result.projectCreated());
+        // Whether an invitation was minted, never the link — the audit trail is read by
+        // people who are not the invitee, and a redeemable token in it would let any of
+        // them become the client's administrator.
+        changes.put("invitationIssued", result.invitationLink().isPresent());
         changes.put("noOp", result.wasNoOp());
         try {
             return json.writeValueAsString(changes);
