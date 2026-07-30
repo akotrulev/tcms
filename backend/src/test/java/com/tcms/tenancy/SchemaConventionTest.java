@@ -51,6 +51,12 @@ class SchemaConventionTest extends IntegrationTestBase {
             "role",                       // built-in roles seeded once; no custom roles in v1
             "role_permission",            // join between two instance-level tables
             "instance_role_assignment",   // SYSTEM-scope grants (see the table's own comment)
+            // Redeemed BEFORE authentication, so no company context can exist when the
+            // token is looked up — and CompanyContext is never populated from request
+            // input. Under RLS the row would be permanently unreachable. Decided in V6,
+            // recorded in ERD §0.1; the row carries no email or name, and the token is
+            // stored only as a digest.
+            "membership_invitation",
             "instance_setting",           // infrastructure
             "instance_audit_event",       // operator actions across companies
             "flyway_schema_history");     // infrastructure

@@ -81,6 +81,21 @@ public class AppUser {
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
 
+    /**
+     * The {@code pv} revocation epoch (plan §6b). Bumped by {@link #revokeSessions} on any
+     * change to this account's effective authorization; a session token carries the value
+     * it was issued with, and a mismatch on any request means the token predates a
+     * revocation.
+     *
+     * <p><strong>Not behind {@code @Version}.</strong> The two look alike and answer
+     * different questions: {@code lockVersion} detects a concurrent write to this row and
+     * is incremented by Hibernate on every update, including ones that change nothing about
+     * authorization. Driving revocation off it would invalidate every live session when
+     * someone edited their own timezone.
+     */
+    @Column(name = "permission_version", nullable = false)
+    private int permissionVersion;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -112,10 +127,18 @@ public class AppUser {
         return user;
     }
 
+    /**
+     * Accepts an invitation: sets the first password and opens the account.
+     *
+     * <p>Bumps the revocation epoch, because {@code INVITED → ACTIVE} changes what this
+     * account may do — every gate in {@link PermissionEvaluator} keys off
+     * {@link UserStatus#ACTIVE}.
+     */
     public void activate(String passwordHash, Instant now) {
         this.status = UserStatus.ACTIVE;
         this.passwordHash = passwordHash;
         this.updatedAt = now;
+        revokeSessions();
     }
 
     /**
@@ -125,6 +148,25 @@ public class AppUser {
     public void deactivate(Instant now) {
         this.status = UserStatus.DEACTIVATED;
         this.updatedAt = now;
+        revokeSessions();
+    }
+
+    /**
+     * Bumps the {@code pv} epoch, invalidating every session token issued for this account
+     * so far.
+     *
+     * <p>Public because the callers that must invoke it live outside this class: a grant
+     * change, a team membership change, a company membership change. Each of those is a
+     * write to another aggregate, and the epoch is what turns those writes into prompt
+     * revocation instead of "effective when the token expires".
+     *
+     * <p>Called from {@link #activate} and {@link #deactivate} so status changes cannot
+     * forget it. <strong>The other call sites do not exist yet</strong> — grant and
+     * membership mutation still only happens in provisioning, which creates rather than
+     * changes — and that gap is recorded here rather than being silently assumed covered.
+     */
+    public void revokeSessions() {
+        this.permissionVersion++;
     }
 
     public void recordLogin(Instant now) {
@@ -165,6 +207,10 @@ public class AppUser {
 
     public Instant getLastLoginAt() {
         return lastLoginAt;
+    }
+
+    public int getPermissionVersion() {
+        return permissionVersion;
     }
 
     public Instant getCreatedAt() {
