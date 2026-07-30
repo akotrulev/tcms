@@ -1,8 +1,8 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-07-30 (last session: **backend M0.5 — the `identity` module and the permission evaluator; harness personas 3 and 4**)
-**State:** Planning and design complete **including multi-company tenancy**. **Backend M0 built and running against real Postgres through three migrations; M0.5's permission evaluator is done and the isolation harness now has all four personas.** Frontend complete through **Phase 3** and aligned with the multi-company decisions (§9). Frontend Phase 4 (tests) and 5 (review) not started.
-**Build status:** `backend` — `./gradlew build` clean, **75/75 tests green against Testcontainers Postgres 17**, the 30 new ones mutation-verified (§13). `frontend` — `npm run build` clean, `npm run lint` 0 warnings.
+**Date:** 2026-07-30 (last session: **backend M0 — the async-context harness, and the reset-GUC RLS defect it found**)
+**State:** Planning and design complete **including multi-company tenancy**. **Backend M0's four isolation deliverables are all landed — schema test, two-company harness, all four personas, and now the async-context harness — running against real Postgres through four migrations; M0.5's permission evaluator is done.** Frontend complete through **Phase 3** and aligned with the multi-company decisions (§9). Frontend Phase 4 (tests) and 5 (review) not started.
+**Build status:** `backend` — `./gradlew build` clean, **87/87 tests green against Testcontainers Postgres 17**, the 12 new ones mutation-verified across 8 mutations (§14). `frontend` — `npm run build` clean, `npm run lint` 0 warnings.
 **Branch:** `master` — the phase-3 branch was merged (PR #1, `2958112`). Per the git workflow, **work continues on the checked-out branch; do not branch per task.** Last commits: `eb9d39a` CLAUDE.md, `2958112` merge of phase 3, `b7f83b4` backend M0 scaffold + isolation harness.
 
 > **✅ The §10 concerns from the previous handoff are resolved.** The two uncommitted doc files are committed (`d08590b`) and `§6v` exists — the dangling reference is gone. §10 is retained as the record of that strand's decisions, not as an outstanding warning.
@@ -63,7 +63,7 @@ So "Payments" is a **Feature** or a suite folder, never a project. A company hol
 | `docs/specs/openapi.yaml` | ~2100 | REST contract — the source of frontend types and mock handlers. **Aligned with multi-company** (§9): `PermissionKey` enum, six roles, `COMPANY` scope, `TC-1` keys, UUID-only path params. Unaffected by the §11 schema change — `RoleAssignment` exposes `role.scope`, never `companyId`. |
 | `docs/audits/2026-07-30-kiwi-tcms-capability-gaps.md` | — | Competitive gap analysis vs Kiwi TCMS. **Committed**; its §6 is now a disposition record of what was accepted, reshaped or dropped. See §10. |
 | `docs/audits/2026-07-30-v1-schema-first-execution.md` | — | **Evidence for the first real execution of V1** — measured counts, the trap-2 result, and the two defects it found, with reproduction steps. Read this before touching RLS or the exception list. |
-| `backend/` | — | Spring Boot 3.5.6 + Java 21 + Gradle (**rooted in `backend/`, not the repo root**). `tenancy` + `project` modules, schema test, two-company isolation harness. 13/13 green (§11). |
+| `backend/` | — | Spring Boot 3.5.6 + Java 21 + Gradle (**rooted in `backend/`, not the repo root**). `tenancy` · `identity` · `project` modules, schema test, two-company isolation harness, async-context harness. 87/87 green (§11–§14). |
 | `frontend/` | — | Vite + React 19 + TS + MUI v7. Phase 3 complete **and multi-company-aligned** (§9). |
 
 ### Plan section index (`docs/plans/...`)
@@ -330,7 +330,7 @@ Modified: `Providers.tsx` (nesting order is load-bearing — see its header comm
 
 ### Backend — M0 STARTED (2026-07-30), see §11 for what shipped and what remains
 
-**Done:** Gradle + Spring Boot 3.5 + Java 21 scaffold (rooted in `backend/`, not the repo root), Flyway running V1 against Testcontainers Postgres 17, the `tenancy` module (`CompanyContext` + Hibernate filter + RLS GUC per transaction), the `project` vertical slice, **the schema test**, and **the two-company isolation harness**. 13/13 green, mutation-verified.
+**Done:** Gradle + Spring Boot 3.5 + Java 21 scaffold (rooted in `backend/`, not the repo root), Flyway running V1 against Testcontainers Postgres 17, the `tenancy` module (`CompanyContext` + Hibernate filter + RLS GUC per transaction), the `project` vertical slice, **the schema test**, and **the two-company isolation harness**. 13/13 green at the time, mutation-verified — see §12–§14 for what landed after.
 
 **Still not started** — everything below, plus: the `identity` module, Docker Compose, CI, ArchUnit/Modulith verification, `provision-company`, the third and fourth harness personas, and the async-context test.
 
@@ -400,7 +400,7 @@ Static validation of the pre-execution file confirmed: 63 tables, no duplicate n
 ```bash
 # Backend — REQUIRES Docker running (every test boots a real Postgres 17)
 cd backend
-./gradlew build      # THE gate: compile with -Werror + all 13 tests via Testcontainers
+./gradlew build      # THE gate: compile with -Werror + all 87 tests via Testcontainers
 ./gradlew test       # tests only
 ```
 
@@ -571,7 +571,7 @@ Also: **Docker Engine 29 rejects the API version Testcontainers negotiates**, an
 
 1. ~~`V2__triggers_and_seed.sql`~~ and ~~the migration chain~~ → **done 2026-07-30, see §12.** Shipped as **two** migrations (V2 DDL + V3 seed).
 2. ~~**The remaining harness personas** — the no-project-grant member and the cross-company user.~~ → **done 2026-07-30, see §13.** Both landed with the evaluator; the no-project-grant persona found nothing, but building the evaluator behind it found two HIGH defects.
-3. **The async-context test** — ingestion, report generation, a scheduled purge and an event handler each running with a foreign company active.
+3. ~~**The async-context test**~~ → **done 2026-07-30, see §14.** It found a HIGH defect in V1's RLS policy (the reset-GUC case), fixed in `V4`.
 4. **`provision-company` CLI** — now a thinner job than it was: the vocabularies exist as `tcms_seed_company_defaults` / `tcms_seed_project_defaults`, so the CLI creates the company row, opens the context, calls both, creates the first Company Admin as an invitation, and writes an instance audit event. **Nothing else may call those two functions.**
 5. Docker Compose, CI, ArchUnit + Modulith verification, ~~the `identity` module~~ (**done, §13**).
 
@@ -580,7 +580,7 @@ Also: **Docker Engine 29 rejects the API version Testcontainers negotiates**, an
 ```bash
 cd backend
 ./gradlew build      # THE gate: compile (-Werror) + all tests against Testcontainers
-./gradlew test       # 13 tests, needs Docker running
+./gradlew test       # 87 tests, needs Docker running
 ```
 
 Docker must be running — every test boots a real Postgres 17. There is no H2 fallback and there should not be: RLS, `ltree` and `citext` have no H2 equivalent, so an in-memory lane would test a schema the product never runs on.
@@ -740,4 +740,122 @@ The context refuses to start: *"found [citext (Types#OTHER)], but expecting [var
 
 ### Still not started on the backend
 
-The async-context test, `provision-company`, Docker Compose, CI, ArchUnit/Modulith verification — and now also: the evaluator's cache, the `OWN` qualifier, and an RLS-disabled lane for the surviving mutation above.
+~~The async-context test,~~ (**done, §14**) `provision-company`, Docker Compose, CI, ArchUnit/Modulith verification — and now also: the evaluator's cache, the `OWN` qualifier, and an RLS-disabled lane for the surviving mutation above.
+
+---
+
+## 14. Backend M0 — the async-context harness, and the reset-GUC defect (2026-07-30)
+
+Run through the **`be-java`** skill (agent definition + `pattern-writer` + `test-driven-development` +
+`code-review`), Mode B — extend. Closes §11's next-step list item 3, the **last of M0's four isolation
+deliverables**. Full evidence: **`docs/audits/2026-07-30-async-context-and-reset-guc-defect.md`**.
+
+### The headline: writing the harness found a HIGH defect in V1's RLS policy
+
+`V1`'s policy was `company_id = current_setting('app.current_company', true)::uuid`, with the `true`
+there so an unset GUC yields NULL and a context-less query sees **zero** rows (trap 2). **That holds
+only on a connection where the GUC was never set** — and production has a pool.
+
+Postgres does not return a custom GUC to *undefined* when a transaction ends. Once assigned even once
+— including via `set_config(…, is_local => true)`, exactly what `CompanyAwareTransactionManager`
+issues per transaction — its reset value for the rest of the **session** is the **empty string**. So
+every recycled connection evaluates `''::uuid` and raises:
+
+```
+ERROR:  invalid input syntax for type uuid: ""
+```
+
+**It fails closed, so it was never a leak.** It was a 500 on every legitimately context-less read
+touching a company-owned table — the login path, the provisioning CLI, an operator query, a forgetful
+report job — on any warm connection. Never on the first request; always afterwards.
+
+It also means **the existing trap-2 test read stronger than it was**: it opened a fresh connection, so
+it only ever covered the never-set case. `RlsIsolationTest` now has a second assertion for the
+recycled case, reproducing what the pool actually does.
+
+**Fixed in `V4__rls_policy_tolerates_reset_guc.sql`:** `nullif(current_setting(…, true), '')::uuid`,
+collapsing both spellings of "absent" onto NULL. Still a bare equality — **no widening**, so trap 2 is
+preserved rather than traded away. The migration rewrites from `pg_policies` (not a fourth copy of the
+56-table list), refuses to touch a policy whose predicate is not `V1`'s, and asserts it rewrote exactly
+56.
+
+### What shipped
+
+| Path | Purpose |
+|---|---|
+| `tenancy/CompanyScopedEvent.java` | The event-envelope contract: every cross-module event carries its `companyId`. **The only thing an async handler may re-establish context from.** A new event that forgets it does not compile. |
+| `tenancy/CompanyContextTaskDecorator.java` | Makes "the handler forgot" fail **closed**. Every task runs with the context cleared, and the submitting thread's company restored afterwards (a `CallerRuns` rejection or an inline executor runs the task on the *caller's* thread — clearing without restoring would strip a live request's company mid-flight). |
+| `tenancy/AsyncTenancyConfiguration.java` | `@EnableAsync` + `@EnableScheduling` + the decorator **as a single bean**. |
+| `tenancy/CompanyContext.openFor(event)` | So the correct path is also the shortest one. |
+| `db/migration/V4__rls_policy_tolerates_reset_guc.sql` | The defect fix, above. |
+| `test/tenancy/AsyncCompanyContextTest.java` | The harness — the four named surfaces plus the mechanism. 8 tests. |
+| `test/tenancy/PooledAsyncContextTest.java` | The same guard with `spring.threads.virtual.enabled=false`, where threads are pooled and it stops being insurance. 2 tests. |
+| `test/tenancy/RlsIsolationTest` +1 | Trap 2 on a **recycled** connection. |
+| `test/tenancy/SchemaConventionTest` +1 | **Every isolation policy carries the same predicate**, and none has an explicit `WITH CHECK`. |
+
+Each of the four surfaces — ingestion, report generation, a scheduled purge, an `@Async`
+`AFTER_COMMIT` event handler — runs **with a foreign company active on the submitting thread**, which
+is the condition under which "inherited the caller's company" and "re-established its own" look
+identical from outside. Two properties are pinned, and both are needed: handlers **re-establish** from
+the envelope, and a handler that **forgets** reads zero rows rather than the submitter's. The first
+without the second is a convention, and the convention is what gets forgotten.
+
+### Four "safety" beans that did nothing
+
+`AsyncTenancyConfiguration` first carried four `*Customizer` beans installing the decorator by hand on
+each executor kind. **Mutating each to stop doing so changed no test result** — Boot 3.5 already
+applies a single `TaskDecorator` *bean* to all four builders. Deleted, and the reason recorded in the
+class comment so it is not "restored" as a fix later. Code that reads as a safety mechanism while
+doing nothing is worse than no code.
+
+### Gate evidence
+
+`./gradlew build` clean — **87/87 tests** (75 pre-existing + 12 new).
+
+**Mutation-verified**, eight mutations, one narrow edit each:
+
+| Mutation | Tests failed |
+|---|---|
+| `V4` removed (the defect restored) | 2 — forgetful report + recycled-connection trap 2 |
+| Decorator reduced to a pass-through | 2 — pooled residue + inline restore |
+| One scheduler customizer stops setting the decorator | **0 — survived**, and that is the finding above |
+| Transaction manager never establishes isolation (blunt) | 41 — proves only that they run |
+| **Worker inherits the submitting thread's company** | 4 — and the forgetful-report test caught it reading **another company's rows** |
+| Scheduled sweep leaks company N into N+1 | 1 |
+| `@EnableAsync` removed | 3 |
+| One policy widened to `USING (true)` | 1 — the new predicate assertion |
+
+### Three things worth not re-learning
+
+1. **A GUC's "unset" and a GUC's "reset" are different values, and only one of them is NULL.** The
+   whole trap-2 design rested on `current_setting(…, true)` returning NULL, which it does — until the
+   setting has been assigned once on that session, after which it returns `''` forever. Every
+   connection in a pool is in the second state after its first company-scoped transaction. **A
+   property tested only on a fresh connection is not tested for a pooled application.**
+2. **The mutation that survives is the finding.** Three of eight mutations were expected to fail
+   things and did; one survived, and it was the only one that told us something new — four beans of
+   inert ceremony. Report the survivor rather than quietly re-rolling the mutation.
+3. **Tests share a container, so they share a fixture.** This harness first ran against
+   `PermissionEvaluatorTest`'s `3333…`/`4444…` company ids and silently saw its projects — an
+   assertion failure that looked like a leak and was a collision. Give every test class its own
+   company-id namespace, per the schema tests' mnemonic-prefix convention.
+
+### Deliberately not done
+
+- **`@Async` concurrency is unbounded.** `SimpleAsyncTaskExecutor` applies no limit and nothing
+  backpressures async work. No production caller exists yet, and inventing a number now would be
+  guessing.
+- **Async handler failures have nowhere to go.** A `void` `@Async` listener swallows its exception.
+  `V1` already carries an `outbox`; wiring it belongs to the module that publishes the first real event.
+- **The four surfaces are test fixtures.** `execution`, `reporting` and `work` do not exist yet; what
+  is pinned is the tenancy plumbing beneath them.
+
+### Next on the backend, in order
+
+1. **`provision-company` CLI** — the last M0 deliverable. Creates the company row, opens the context,
+   calls `tcms_seed_company_defaults` / `tcms_seed_project_defaults`, creates the first Company Admin
+   as an invitation, writes an instance audit event. **Nothing else may call those two functions.**
+2. ArchUnit + Modulith verification — and note that `CompanyScopedEvent` is now the contract those
+   rules should be written against.
+3. Docker Compose, CI.
+4. The evaluator's cache, the `OWN` qualifier, an RLS-disabled lane for §13's surviving mutation.

@@ -113,9 +113,19 @@ uniqueness constraint. Enforcement is mechanical, in three layers:
    privilege split, and a suite that migrated *and* queried as the superuser would prove nothing.
 
 Two RLS traps, both silent when wrong: the owner bypasses plain `ENABLE` (hence `FORCE`), and an
-unset GUC must yield **zero** rows, not all rows — `current_setting('app.current_company', true)`
-returns NULL and `company_id = NULL` is never true. `RlsIsolationTest` covers both; a green suite
-alone does not.
+unset GUC must yield **zero** rows, not all rows — `company_id = NULL` is never true. **There are two
+spellings of "unset" and only one is NULL:** a GUC that was never set reads NULL, but once
+`set_config` has run on a session — including the transaction-local form the transaction manager
+issues — its reset value is `''` for the rest of that session, so every *pooled* connection is in the
+second state. `V4` wraps the read in `nullif(…, '')` for exactly this; without it a context-less query
+on a warm connection raises `invalid input syntax for type uuid` instead of returning nothing.
+`RlsIsolationTest` covers both spellings and `SchemaConventionTest` pins the predicate on all 56
+policies; a green suite alone does not.
+
+Async work is the other half: `CompanyContextTaskDecorator` clears the context on every task so a
+handler that forgets fails closed, and `CompanyScopedEvent` is the only thing a handler may
+re-establish from. `AsyncCompanyContextTest` covers ingestion, reporting, scheduling and event
+handlers.
 
 Access is two independent gates: company membership (authentication + zero project visibility), then
 an explicit project grant. Three tiers — Instance Admin → Company Admin (a `COMPANY`-scope role

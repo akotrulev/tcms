@@ -137,6 +137,47 @@ class RlsIsolationTest extends IntegrationTestBase {
     }
 
     @Test
+    @DisplayName("TRAP 2 holds on a RECYCLED connection too, where the GUC resets to '' and not to unset")
+    void unsetCompanyContextYieldsZeroRowsOnARecycledConnection() throws SQLException {
+        // The test above opens a fresh connection, so it only ever exercises a GUC that
+        // was NEVER set. Production has a Hikari pool: a connection serves one company's
+        // transaction and is then handed to a context-less one.
+        //
+        // Postgres does not return that GUC to "undefined". Once a custom setting has been
+        // assigned — even with set_config(..., is_local => true) — its reset value for the
+        // rest of the SESSION is the empty string. So current_setting(name, true) returns
+        // '' rather than NULL, and the original policy's ''::uuid raised
+        // "invalid input syntax for type uuid" instead of yielding zero rows.
+        //
+        // Fails closed rather than open, so it was never a leak — but it turned every
+        // instance-level read touching a company-owned table into a 500 on any warm
+        // connection, and it made this class's trap-2 assertion narrower than it reads.
+        try (Connection connection = appConnection()) {
+            // The pool's previous borrower: one company-scoped transaction, issuing exactly
+            // what CompanyAwareTransactionManager issues — set_config(..., is_local => true)
+            // — and committing. No RESET is needed to reproduce this; ending the transaction
+            // is what leaves the setting at '' rather than unset.
+            connection.setAutoCommit(false);
+            try (var statement = connection.prepareStatement(
+                    "SELECT set_config('app.current_company', ?, true)")) {
+                statement.setString(1, ACME.toString());
+                statement.execute();
+            }
+            connection.commit();
+            connection.setAutoCommit(true);
+
+            // The next borrower has no company context at all.
+            try (Statement statement = connection.createStatement();
+                 ResultSet rs = statement.executeQuery("SELECT count(*) FROM project")) {
+                rs.next();
+                assertThat(rs.getLong(1))
+                        .as("a recycled connection with no company must see zero rows, not raise")
+                        .isZero();
+            }
+        }
+    }
+
+    @Test
     @DisplayName("each company sees only its own project, despite identical keys and names")
     void companiesCannotSeeEachOther() {
         List<String> acmeMarkers = descriptionsVisibleTo(ACME);

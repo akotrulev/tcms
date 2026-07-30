@@ -69,6 +69,21 @@ public final class CompanyContext {
     }
 
     /**
+     * Activates the company an event belongs to — the one correct way for an async
+     * handler or a scheduled job to establish context.
+     *
+     * <p>Exists so the correct path is also the shortest one. The alternative a handler
+     * reaches for when this is missing is the ambient thread value, which is exactly the
+     * leak {@link CompanyContextTaskDecorator} exists to make impossible.
+     */
+    public static Scope openFor(CompanyScopedEvent event) {
+        if (event == null) {
+            throw new IllegalArgumentException("event must not be null");
+        }
+        return open(event.companyId());
+    }
+
+    /**
      * Runs without any company active. The correct state for instance-level operator
      * work (provisioning, the SYSTEM-scope grant lookup during login) — and the state
      * in which RLS must yield <em>zero</em> rows rather than all rows.

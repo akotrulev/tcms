@@ -199,6 +199,60 @@ class SchemaConventionTest extends IntegrationTestBase {
     }
 
     @Test
+    @DisplayName("every isolation policy carries the SAME predicate — none has been widened")
+    void everyPolicyHasTheExactIsolationPredicate() throws SQLException {
+        // "Has a policy" is not "is protected". USING (true) is a policy. So is a
+        // predicate over the wrong column, or one that ORs in an escape hatch to make a
+        // failing query pass. Every check above would still be green.
+        //
+        // The predicate is pinned literally, including the nullif() V4 added: both
+        // spellings of "no company" — never set, and reset to '' on a recycled pooled
+        // connection — must collapse to NULL, and `company_id = NULL` is never true.
+        // Dropping the nullif() reintroduces "invalid input syntax for type uuid" on
+        // every warm connection; dropping the equality reintroduces the leak.
+        //
+        // Same family as the exception-list check: derive the invariant, do not read for it.
+        String expected =
+                "(company_id = (NULLIF(current_setting('app.current_company'::text, true), ''::text))::uuid)";
+
+        Map<String, String> divergent = new LinkedHashMap<>();
+        int checked = 0;
+        try (Statement statement = ownerConnection.createStatement();
+             ResultSet rs = statement.executeQuery("""
+                     SELECT tablename, policyname, qual, with_check
+                       FROM pg_policies
+                      WHERE schemaname = 'public'
+                      ORDER BY tablename
+                     """)) {
+            while (rs.next()) {
+                checked++;
+                String table = rs.getString(1);
+                if (!"company_isolation".equals(rs.getString(2))) {
+                    divergent.put(table, "unexpected policy name: " + rs.getString(2));
+                    continue;
+                }
+                if (!expected.equals(rs.getString(3))) {
+                    divergent.put(table, rs.getString(3));
+                }
+                // A policy with USING and no explicit WITH CHECK reuses USING as the
+                // insert check, so the read boundary is also the write boundary. Stating
+                // WITH CHECK explicitly — even as the same predicate — is how someone
+                // "fixes" an insert error into WITH CHECK (true) later.
+                if (rs.getString(4) != null) {
+                    divergent.put(table, "has an explicit WITH CHECK: " + rs.getString(4));
+                }
+            }
+        }
+
+        assertThat(divergent)
+                .as("Isolation policies whose predicate is not the one every other table uses")
+                .isEmpty();
+        assertThat(checked)
+                .as("fixture precondition: policies must have been found, or this asserts nothing")
+                .isEqualTo(56);
+    }
+
+    @Test
     @DisplayName("no RLS policy is attached to an instance-level table")
     void instanceLevelTablesAreNotRlsProtected() throws SQLException {
         // The reverse direction. An instance-level table that acquires a company_id
