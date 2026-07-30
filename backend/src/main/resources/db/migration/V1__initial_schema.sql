@@ -266,38 +266,69 @@ COMMENT ON TABLE key_sequence IS
 
 CREATE TABLE role_assignment (
     id         UUID PRIMARY KEY,
-    company_id UUID        REFERENCES company(id),   -- NULL only for SYSTEM-scope grants
+    company_id UUID        NOT NULL REFERENCES company(id),
     role_id    UUID        NOT NULL REFERENCES role(id),
     user_id    UUID        REFERENCES app_user(id),
     team_id    UUID        REFERENCES team(id) ON DELETE CASCADE,
     project_id UUID        REFERENCES project(id) ON DELETE CASCADE,
     granted_by UUID        REFERENCES app_user(id),
     granted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT ck_role_assignment_subject CHECK ((user_id IS NULL) <> (team_id IS NULL)),
-    CONSTRAINT ck_role_assignment_project_has_company
-        CHECK (project_id IS NULL OR company_id IS NOT NULL)
+    CONSTRAINT ck_role_assignment_subject CHECK ((user_id IS NULL) <> (team_id IS NULL))
 );
 COMMENT ON TABLE role_assignment IS
-    'The ONLY source of any capability (plan §6b). Effective permissions:'
+    'COMPANY- and PROJECT-scope grants. SYSTEM-scope grants live in instance_role_assignment — see '
+    'the comment there for why they are a separate table rather than a NULL company_id here. '
+    'The two tables together are the ONLY source of any capability (plan §6b). Effective permissions:'
     '  0  unless the user has an ACTIVE company_membership for project.company  <- gate, not a term'
     '  U  roles granted directly to the user on the project'
     '  U  roles granted to any team the user belongs to, on the project'
     '  U  roles granted to the user or their teams on project.company  (COMPANY scope)'
-    '  U  roles granted to the user or their teams at SYSTEM scope'
+    '  U  roles granted to the user at SYSTEM scope                    <- instance_role_assignment'
     'Cached per (company_id, user_id, project_id) — the company id MUST be in the cache key. '
-    'Invalidated on any write to role_assignment, team_membership, role_permission or '
-    'company_membership, and on a company switch. No explicit deny anywhere in the model.';
+    'Invalidated on any write to role_assignment, instance_role_assignment, team_membership, '
+    'role_permission or company_membership, and on a company switch. No explicit deny in the model.';
 COMMENT ON COLUMN role_assignment.company_id IS
-    'NULL => SYSTEM scope (Instance Admin). Non-null with project_id NULL => COMPANY scope, which '
-    'covers EVERY project in that company, present and future — that is what makes Company Admin '
-    'work, and why nothing else should be granted at that scope casually.';
+    'NOT NULL, like every other company-owned table — no special case for the schema test. '
+    'project_id NULL => COMPANY scope, which covers EVERY project in that company, present and '
+    'future: that is what makes Company Admin work, and why nothing else should be granted at that '
+    'scope casually.';
 COMMENT ON COLUMN role_assignment.project_id IS
-    'Non-null => PROJECT scope. A project grant always names its company (see the check). '
+    'Non-null => PROJECT scope. A project grant always names its company via company_id. '
     'Company membership alone conveys NO project visibility: a regular user sees only the projects '
     'they hold a grant on — not the company''s project list, names, or counts.';
 
 CREATE INDEX role_assignment_user_idx    ON role_assignment (company_id, user_id, project_id);
 CREATE INDEX role_assignment_team_idx    ON role_assignment (company_id, team_id, project_id);
+
+CREATE TABLE instance_role_assignment (
+    id         UUID PRIMARY KEY,
+    role_id    UUID        NOT NULL REFERENCES role(id),
+    user_id    UUID        NOT NULL REFERENCES app_user(id),
+    granted_by UUID        REFERENCES app_user(id),
+    granted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_instance_role_assignment UNIQUE (user_id, role_id)
+);
+COMMENT ON TABLE instance_role_assignment IS
+    'SYSTEM-scope grants (Instance Admin). A deliberate instance-level table (ERD §0.1 exception '
+    'list): no company_id, no RLS.'
+    '  WHY A SEPARATE TABLE, and not company_id IS NULL on role_assignment: the RLS policy is '
+    '  company_id = current_setting(''app.current_company'', true)::uuid, and NULL = anything is '
+    '  never true — so a SYSTEM grant modelled as a NULL company_id is invisible in EVERY company '
+    '  context, permanently. Instance Admin then resolves to zero permissions, which reads as an '
+    '  authorization bug rather than a schema one, and the tempting repair is BYPASSRLS on the app '
+    '  role, destroying isolation for all 56 protected tables. Widening this one policy to allow '
+    '  NULLs is not the fix either: a context-less query would then return rows, breaking the '
+    '  "unset GUC yields zero rows" invariant (ERD §0.1). Measured, not reasoned — see '
+    '  docs/audits/2026-07-30-v1-schema-first-execution.md.'
+    '  The split also removes the last nullable company_id under RLS, so the schema test rule '
+    '  "company_id NOT NULL on every non-exception table" holds with no special case.';
+COMMENT ON COLUMN instance_role_assignment.user_id IS
+    'Users only — deliberately no team_id. A team is company-owned, so granting instance-wide power '
+    'to a company-scoped team would let a client-owned entity confer operator rights: an escalation '
+    'path, and one whose membership the client controls. Instance Admin is granted per person by '
+    'the operator (plan §6s).';
+
+CREATE INDEX instance_role_assignment_user_idx ON instance_role_assignment (user_id);
 
 CREATE TABLE api_token (
     id           UUID PRIMARY KEY,
