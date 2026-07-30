@@ -22,6 +22,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.JwsHeader;
+import org.springframework.security.oauth2.jwt.JwtClaimsSet;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -54,6 +59,10 @@ class AuthEndpointTest extends IntegrationTestBase {
 
     @Autowired
     private AppUserRepository users;
+
+    /** The application's own signer — used to mint tokens that are valid except for one claim. */
+    @Autowired
+    private JwtEncoder encoder;
 
     @Nested
     @DisplayName("Signing in")
@@ -199,6 +208,33 @@ class AuthEndpointTest extends IntegrationTestBase {
         }
 
         @Test
+        @DisplayName("refuses a token whose epoch is stale even while the account stays ACTIVE")
+        void aBumpedEpochAloneInvalidatesTheSession() throws Exception {
+            Fixture fixture = activated("auth-epoch-only", "Epoch Only");
+            String token = tokenFor(fixture);
+
+            // Found by mutation: deleting the pv comparison failed NO test, because the
+            // only case exercising it also deactivated the account — and the status check
+            // one line away caught that. This is the case pv exists for and nothing else
+            // covers: a grant, team or membership change, where the account stays perfectly
+            // active and only what it may do has moved. Without the comparison the old
+            // token keeps its old authority for the rest of an 8-hour session.
+            AppUser user = users.findById(fixture.userId()).orElseThrow();
+            user.revokeSessions();
+            users.saveAndFlush(user);
+            assertThat(users.findById(fixture.userId()).orElseThrow().isActive()).isTrue();
+
+            assertThat(mvc.perform(get("/api/v1/me").header("Authorization", "Bearer " + token))
+                    .andReturn().getResponse().getStatus()).isEqualTo(401);
+
+            // And a freshly issued token carries the new epoch, so the user is not locked
+            // out — re-authenticating is the remedy the 401 is asking for.
+            assertThat(mvc.perform(get("/api/v1/me")
+                    .header("Authorization", "Bearer " + tokenFor(fixture)))
+                    .andReturn().getResponse().getStatus()).isEqualTo(200);
+        }
+
+        @Test
         @DisplayName("refuses a token signed with someone else's key")
         void refusesAForeignSignature() throws Exception {
             // A token whose payload is plausible and whose signature is not. If this ever
@@ -208,6 +244,36 @@ class AuthEndpointTest extends IntegrationTestBase {
                     + "MDAxIiwicHYiOjAsImV4cCI6NDEwMjQ0NDgwMH0.this-signature-is-not-real";
 
             assertThat(mvc.perform(get("/api/v1/me").header("Authorization", "Bearer " + forged))
+                    .andReturn().getResponse().getStatus()).isEqualTo(401);
+        }
+
+        @Test
+        @DisplayName("refuses a correctly signed token minted by a different issuer")
+        void refusesAForeignIssuer() throws Exception {
+            Fixture fixture = activated("auth-issuer", "Issuer User");
+
+            // Signed with THIS instance's key and otherwise perfectly formed — only `iss`
+            // differs. Found by mutation: dropping the issuer validator failed no test,
+            // because a forged signature and a foreign issuer look nothing alike and only
+            // the first was covered.
+            //
+            // The realistic shape is not an attacker: it is a second environment restored
+            // from the same configuration, or a fixture whose key leaked into one. Without
+            // the check, its tokens are accepted here as if they were ours.
+            String foreign = encoder.encode(JwtEncoderParameters.from(
+                            JwsHeader.with(MacAlgorithm.HS256).build(),
+                            JwtClaimsSet.builder()
+                                    .issuer("some-other-deployment")
+                                    .subject(fixture.userId().toString())
+                                    .issuedAt(Instant.now())
+                                    .expiresAt(Instant.now().plusSeconds(600))
+                                    .claim(SessionTokens.CLAIM_PERMISSION_VERSION,
+                                            users.findById(fixture.userId()).orElseThrow()
+                                                    .getPermissionVersion())
+                                    .build()))
+                    .getTokenValue();
+
+            assertThat(mvc.perform(get("/api/v1/me").header("Authorization", "Bearer " + foreign))
                     .andReturn().getResponse().getStatus()).isEqualTo(401);
         }
 
