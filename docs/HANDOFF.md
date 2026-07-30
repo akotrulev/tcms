@@ -1,8 +1,8 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-07-30 (last session: **backend M0 — `provision-company`, and the two defects writing it found**)
-**State:** Planning and design complete **including multi-company tenancy**. **Backend M0 is functionally complete: the four isolation deliverables (schema test, two-company harness, all four personas, async-context harness) plus `provision-company` — running against real Postgres through five migrations; M0.5's permission evaluator is done.** What remains of M0 is infrastructure, not product: Docker Compose, CI, ArchUnit/Modulith verification. Frontend complete through **Phase 3** and aligned with the multi-company decisions (§9). Frontend Phase 4 (tests) and 5 (review) not started.
-**Build status:** `backend` — `./gradlew build` clean, **115/115 tests green against Testcontainers Postgres 17**, the 28 new ones mutation-verified across 8 mutations, plus a real CLI run against a live Postgres (§15). `frontend` — `npm run build` clean, `npm run lint` 0 warnings.
+**Date:** 2026-07-30 (last session: **backend M0 — ArchUnit + Spring Modulith verification**)
+**State:** Planning and design complete **including multi-company tenancy**. **Backend M0 is functionally complete: the four isolation deliverables (schema test, two-company harness, all four personas, async-context harness), `provision-company`, and now the module-boundary verification — running against real Postgres through five migrations; M0.5's permission evaluator is done.** What remains of M0 is **Docker Compose and CI**. Frontend complete through **Phase 3** and aligned with the multi-company decisions (§9). Frontend Phase 4 (tests) and 5 (review) not started.
+**Build status:** `backend` — `./gradlew build` clean, **124/124 tests green against Testcontainers Postgres 17**, the 9 newest mutation-verified across 7 mutations with no survivors (§16). `frontend` — `npm run build` clean, `npm run lint` 0 warnings.
 **Branch:** `master` — the phase-3 branch was merged (PR #1, `2958112`). Per the git workflow, **work continues on the checked-out branch; do not branch per task.** Last commits: `33fa30d` async-context harness + V4, `1bda2d6` identity + evaluator, `1e8da6d` V2/V3.
 
 > **✅ The §10 concerns from the previous handoff are resolved.** The two uncommitted doc files are committed (`d08590b`) and `§6v` exists — the dangling reference is gone. §10 is retained as the record of that strand's decisions, not as an outstanding warning.
@@ -971,9 +971,114 @@ run created all five parts and **exited 0** without starting a servlet container
 
 ### Next on the backend, in order
 
-1. **ArchUnit + Modulith verification.** `CompanyScopedEvent` is the contract those rules should be
-   written against, and `provisioning` is a new module whose leaf status is worth pinning.
+1. ~~**ArchUnit + Modulith verification.**~~ → **done 2026-07-30, see §16.**
 2. **Docker Compose and CI.** Everything else in M0 is done.
 3. The evaluator's cache, the `OWN` qualifier, an RLS-disabled lane for §13's surviving mutation.
 4. **The invitation/activation path** — provisioning leaves an `INVITED` administrator and there is
    no table, token or email behind that yet. It is the first thing M0.5 needs to be usable.
+
+---
+
+## 16. Backend M0 — ArchUnit + Modulith verification (2026-07-30)
+
+Run through the **`be-java`** skill (agent definition + `code-review`), Mode B — extend. Closes §15's
+next-step list item 1. **No new product code** — this slice is entirely enforcement, and it is the
+point at which "modules are Java packages" stops being a naming convention. Nothing about it was
+enforced by the compiler: every class under `com.tcms` could see every other one.
+
+### The four module declarations
+
+`@ApplicationModule(allowedDependencies = …)` now sits on each `package-info.java`, matching what the
+code already does:
+
+| Module | Declares | Why |
+|---|---|---|
+| `tenancy` | `{}` — **nothing** | Everything depends on it. One edge out puts the isolation layer into a cycle, and "the boundary is established before anything reads a company-owned row" stops being guaranteeable. |
+| `project` | `tenancy` | Company-owned, needs the boundary and nothing else. Must **not** reach into `identity` — the grant question is asked *of* the evaluator *about* a project, never the reverse. |
+| `identity` | `tenancy`, `project` | The `project` edge is the §13 defect fix: the evaluator resolves the project through the company-filtered lookup before unioning any grant. |
+| `provisioning` | `tenancy`, `identity`, `project` | It composes all three; that is why it is its own module (§15). |
+
+**The default for `allowedDependencies` is *unrestricted*, not empty**, so leaving the annotation off
+asserts nothing — and `verify()` reports no violation, because there is no constraint to violate. A
+new module that simply forgot to declare would silently opt out of the whole rule set. Same failure
+shape as a table quietly added without `company_id`, and it has its own test.
+
+### What shipped
+
+| Path | Purpose |
+|---|---|
+| `test/architecture/ModuleStructureTest.java` | Modulith: `verify()` (declared deps + cycles), the detected-module list, **every module declares** its dependencies, and **no declaration names a module outside `tenancy`/`identity`/`project`**. 4 tests. |
+| `test/architecture/ArchitectureRulesTest.java` | The three rules Modulith cannot express (below), plus a fixture precondition on the class sets. 5 tests. |
+| `test/architecture/ArchitectureRules.java` | `FOUNDATION_MODULES` and `moduleOf(JavaClass)`, shared so the two tests cannot drift. |
+| four `package-info.java` | The declarations above, each with its reasoning. |
+
+**Neither test extends `IntegrationTestBase`** — both are static bytecode analysis, so no Postgres and
+no Spring context. A structural rule that only runs when Docker is up is one that gets skipped exactly
+when someone is in a hurry.
+
+### The three rules ArchUnit owns, and why Modulith cannot
+
+1. **`tenancy` depends on nothing** — stated from the code side and derived (`com.tcms..` minus
+   `com.tcms.tenancy..`), so a module added next year is covered without anyone remembering the file.
+2. **`provisioning` is a leaf.** `allowedDependencies` constrains what a module reaches *out* to and
+   has **no vocabulary for who reaches in**. The claim was already in its package comment; it is now a
+   build failure. The composition root `com.tcms` is exempt, spelled as an exact package so the
+   exemption covers `TcmsApplication` and nothing else.
+3. **Every `@EventListener`/`@TransactionalEventListener` method takes one `CompanyScopedEvent`.**
+   This is §14's whole design: the context is not inheritable, the decorator clears it, so the
+   envelope is the handler's only trustworthy source.
+
+### Two class sets, deliberately
+
+Dependency rules import **production only** — a test may import anything, and running them over
+`src/test` would report the isolation harness as an architecture violation. The event rule imports
+**production *and* tests**, because the only event handler in the codebase today is
+`AsyncCompanyContextTest`'s. Over production alone it would match nothing — and ArchUnit **fails a
+rule that matches nothing**, which is the property that keeps it honest rather than a nuisance.
+
+### Gate evidence
+
+`./gradlew build` clean — **124/124 tests** (115 pre-existing + 9 new).
+
+**Mutation-verified**, seven mutations, one narrow edit each. No survivors:
+
+| Mutation | Tests failed |
+|---|---|
+| `tenancy` references `identity` | 2 — the tenancy rule + `verify()` |
+| `tenancy` references a root-package class | 2 — the tenancy rule + `verify()`, but see below |
+| `identity` references `provisioning` | 3 — leaf + cross-module + `verify()` |
+| `implements CompanyScopedEvent` removed from an existing event | **compile failure** — see below |
+| A new listener whose event forgets the envelope | 1 — the event rule, alone |
+| `project` loses its `@ApplicationModule` | 1 — the declaration sweep, alone |
+| `identity` *declares* `provisioning` (no code edge) | 1 — the declaration-contents rule, alone |
+
+### Three things worth not re-learning
+
+1. **A comment claiming a tool's blind spot is a claim, and it was wrong the first time.** The
+   tenancy rule was written asserting Modulith "cannot see" a dependency on the composition root.
+   Modulith **does** fail it today — as a *cycle* (`tenancy → root:com.tcms → provisioning →
+   identity → tenancy`), which exists only because `TcmsApplication` wires the CLI. Remove that one
+   import and Modulith goes quiet while the edge remains. The rule still earns its place; the comment
+   was rewritten to say what was measured rather than what was assumed.
+2. **A mutation can fail at the compiler instead of at the test, and that is a finding too.** Taking
+   `implements CompanyScopedEvent` off an existing event does not reach the arch rule — it fails
+   compilation at the `CompanyContext.openFor(event)` call. So the compiler already covers events that
+   *are* opened. The gap the rule actually closes is **the handler that never calls `openFor`**: it
+   compiles, runs, reads zero rows because the decorator cleared the context, and presents as an empty
+   report rather than as a missing envelope.
+3. **`git checkout --` on an uncommitted file is not a mutation revert, it is a delete.** Two
+   mutations were reverted that way mid-run and silently took the session's own uncommitted
+   `package-info` edits with them — which then contaminated the next mutation's result (an extra
+   failing test that looked like a finding). Snapshot the file, or commit the slice before mutating
+   it.
+
+### Deliberately not done
+
+- **No `ApplicationModules` documentation output** (`Documenter` — C4/PlantUML module canvases).
+  Modulith can generate them; they belong with the first real cross-module event, when there is a
+  graph worth drawing rather than a star around `tenancy`.
+- **No rule pinning `@Transactional` on repository interfaces.** `RepositoryTransactionTest` (§15)
+  already does it against the live context, which is stronger than a naming-based ArchUnit rule.
+- **The publish side of the event contract is uncovered.** `ApplicationEventPublisher.publishEvent`
+  takes `Object`, so bytecode carries no argument type and ArchUnit cannot check it. The *handler*
+  side is checked, which is where the context is re-established and therefore where forgetting hurts.

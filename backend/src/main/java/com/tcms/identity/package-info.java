@@ -34,5 +34,15 @@
  * <p>Matching {@code com.tcms.project.Project}: the graph is never navigated from an
  * entity here, and the evaluator reads its union through native projections rather than
  * loading objects. Associations would buy lazy-loading traps and nothing else.
+ *
+ * <h2>Allowed dependencies</h2>
+ *
+ * <p>{@code tenancy} and {@code project}. The {@code project} edge is real and one-way:
+ * {@link com.tcms.identity.PermissionEvaluator} resolves the project through the
+ * company-filtered lookup before unioning any grant, which is the fix for the
+ * COMPANY-scope leak recorded in {@code docs/HANDOFF.md} §13 — asking about a foreign
+ * project must be answerable, and the only module that can answer it is
+ * {@code project}. {@code project} must never depend back (see its package comment).
  */
+@org.springframework.modulith.ApplicationModule(allowedDependencies = {"tenancy", "project"})
 package com.tcms.identity;

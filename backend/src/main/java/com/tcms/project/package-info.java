@@ -8,5 +8,14 @@
  * not the company's project list, names, or counts (plan §6b). That second gate lands
  * with the permission evaluator in M0.5; this module currently enforces only the
  * company gate.
+ *
+ * <h2>Allowed dependencies</h2>
+ *
+ * <p>{@code tenancy} only. A project is company-owned, so it needs the boundary and
+ * nothing else. In particular it must <strong>not</strong> reach into {@code identity}:
+ * the second gate (does this user hold a grant on this project?) is answered by
+ * {@code identity}'s evaluator asking about a project, not by a project asking about a
+ * user — and reversing that would put the two modules in a cycle.
  */
+@org.springframework.modulith.ApplicationModule(allowedDependencies = "tenancy")
 package com.tcms.project;

@@ -24,5 +24,14 @@
  * {@link com.tcms.provisioning.CompanyProvisioningService} — it does not grow a second
  * provisioning path, because a company that exists without its vocabularies, its
  * display-key counters or an administrator is worse than no company at all.
+ *
+ * <p>The leaf property is asserted by {@code ArchitectureRulesTest}, which Spring
+ * Modulith cannot express: {@code allowedDependencies} constrains what a module reaches
+ * <em>out</em> to, never who reaches <em>in</em>. The one permitted inbound edge is from
+ * the composition root {@code com.tcms} — {@code TcmsApplication} decides from the raw
+ * arguments whether the process is the server or the CLI, and that decision has to be
+ * made before the context exists.
  */
+@org.springframework.modulith.ApplicationModule(
+        allowedDependencies = {"tenancy", "identity", "project"})
 package com.tcms.provisioning;
