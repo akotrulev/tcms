@@ -3,6 +3,7 @@ package com.tcms;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.UUID;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -84,5 +85,28 @@ public abstract class IntegrationTestBase {
     /** A connection as the unprivileged application role, with RLS in force. */
     protected static Connection appConnection() throws SQLException {
         return DriverManager.getConnection(POSTGRES.getJdbcUrl(), APP_ROLE, APP_PASSWORD);
+    }
+
+    /**
+     * An application-role connection with a company already active — the raw-JDBC
+     * equivalent of {@code CompanyContext.open()}, for the tables that have no entity yet.
+     *
+     * <p>Session-scoped ({@code set_config(..., false)}) rather than transaction-scoped, so
+     * the setting survives the autocommit statements a schema-level test issues. Production
+     * uses the transaction-scoped form via {@code CompanyAwareTransactionManager}; a test
+     * that borrowed a pooled connection this way would leak the company into the next
+     * borrower, which is exactly why the production path sets it per transaction instead.
+     */
+    protected static Connection appConnection(UUID companyId) throws SQLException {
+        Connection connection = appConnection();
+        try (var statement =
+                connection.prepareStatement("SELECT set_config('app.current_company', ?, false)")) {
+            statement.setString(1, companyId.toString());
+            statement.execute();
+        } catch (SQLException e) {
+            connection.close();
+            throw e;
+        }
+        return connection;
     }
 }

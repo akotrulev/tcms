@@ -336,7 +336,13 @@ All of these are now reflected in `docs/plans/2026-07-30-tcms-high-level-plan.md
 | `docs/specs/openapi.yaml` | `PermissionKey` as a 55-member enum, six roles, `COMPANY` scope, `TC-1` keys |
 | `frontend/` | `lib/permissions.ts` derives the catalogue from the contract union; six roles in fixtures; Viewer default |
 
-**Still to do:** the permission catalogue as a **seed migration** (`V2__triggers_and_seed.sql`). This document is the source for it — the grants in Part A are the intended `role_permission` rows.
+~~**Still to do:** the permission catalogue as a seed migration~~ → **done 2026-07-30** as `V3__seed_permissions_and_roles.sql` (the seed split out of `V2`, which holds triggers and the per-company seed functions — schema and data are separate migrations). Part A is its source: 55 permissions, the six roles, and the grants exactly as tabulated above.
+
+**This document is now transcribed in three places, and that is the risk to manage.** The spec (here, authoritative) → `docs/specs/openapi.yaml` `PermissionKey` (what the frontend generates types from) → `V3` (what the running system actually enforces). Prose cannot keep three copies aligned, so `SeedDataTest` compares the seed to the contract mechanically in both directions and asserts the boundary properties Part A states as sentences — the Test Engineer → Test Lead lines, Company Admin holding no SYSTEM permission, Automation Service being exactly five, Viewer holding no write. The frontend holds the third corner with `satisfies Record<PermissionKey, Area>` in `lib/permissions.ts`, which is a compile error on drift.
+
+**Instance Admin's grant is derived** (`SELECT role_id, key FROM permission`), never enumerated and certainly never a `'*'` row — a sentinel cannot distinguish complete coverage from a value that happens to be present, so a later permission it did not hold would still have read as full coverage.
+
+**Adding a permission after this point touches four places in one commit:** this table, `openapi.yaml` (regenerate `schema.d.ts`), `lib/permissions.ts`, and a *new corrective migration* — never an edit to `V3`, which has shipped. `SeedDataTest` fails until all four agree.
 
 ---
 
