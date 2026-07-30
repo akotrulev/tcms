@@ -63,11 +63,11 @@ class ModuleStructureTest {
 
         assertThat(detected)
                 .as("""
-                        The four modules that exist today. Adding a module here is expected as the plan's \
+                        The five modules that exist today. Adding a module here is expected as the plan's \
                         remaining modules land (repository, execution, documentation, reporting, work, \
                         shared) — but it must be a deliberate edit, so that whoever adds one also reads \
                         the allowedDependencies rule they are now subject to.""")
-                .containsExactly("identity", "project", "provisioning", "tenancy");
+                .containsExactly("auth", "identity", "project", "provisioning", "tenancy");
     }
 
     @Test

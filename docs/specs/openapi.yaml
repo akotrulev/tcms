@@ -87,9 +87,88 @@ paths:
   /auth/logout:
     post:
       tags: [auth]
-      summary: Invalidate the current session
+      summary: End the current session
+      description: |
+        A client-side discard. The session token is stateless, so there is nothing
+        server-side to invalidate and this endpoint deliberately does not pretend
+        otherwise — a caller who believes a leaked token was revoked here would not
+        rotate anything. Prompt revocation is the `pv` epoch (plan §6b), which
+        invalidates every session for an account at once. A per-token denylist arrives
+        with refresh tokens.
       responses:
-        '204': { description: Logged out }
+        '204': { description: Session discarded by the client }
+
+  # Invitation redemption. Open like /auth/login, and for the same reason: someone
+  # accepting an invitation has no account to authenticate with yet.
+  #
+  # EVERY failure is 404 with no body — unknown token, expired, already redeemed,
+  # membership since removed, account since deactivated. Told apart, they would let
+  # anyone with a token-shaped string learn whether an address exists on this instance,
+  # and email is unique instance-wide, so that spans every client. Same rule as an
+  # unreachable display key (plan §6t), on the one surface a stranger can reach.
+  /auth/invitations/{token}:
+    get:
+      tags: [auth]
+      summary: What an invitation admits its holder to
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          description: |
+            The single-use secret from the invitation email. In the path, and in the
+            query string of the emailed link — a known exposure (browser history,
+            Referer headers, proxy logs) bounded by the token being single-use,
+            short-lived and inert once redeemed.
+          schema: { type: string }
+      responses:
+        '200':
+          description: The invitation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvitationPreview' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /auth/invitations/{token}/accept:
+    post:
+      tags: [auth]
+      summary: Redeem an invitation and activate the account
+      description: |
+        Answers 204, not a session. The invitee then signs in with the password they
+        just chose, which keeps token issuance to a single path and makes the round
+        trip prove the password was stored as intended.
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password:
+                  type: string
+                  format: password
+                  minLength: 12
+                  description: |
+                    Required when `passwordRequired` was true; omitted otherwise, and
+                    REJECTED rather than ignored when the account already has one —
+                    holding an invitation to a second company must not confer the
+                    ability to overwrite an existing credential. The 72-byte maximum is
+                    BCrypt's: anything longer is only partly verified, so it is refused
+                    rather than silently truncated.
+      responses:
+        '204': { description: Accepted; the account and the membership are now ACTIVE }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: The password was not accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
 
   /me:
     get:
@@ -1015,6 +1094,24 @@ components:
       default: LATEST
 
     # -------------------------------------------------------------- auth ---
+    InvitationPreview:
+      type: object
+      required: [email, displayName, passwordRequired]
+      properties:
+        email:
+          type: string
+          description: The address the invitation was sent to.
+        displayName:
+          type: string
+          description: |
+            The name this company will know them by — per-membership, not global
+            (plan §6u).
+        passwordRequired:
+          type: boolean
+          description: |
+            False when the address already has an account, i.e. this invitation only
+            adds a membership. The accept call must then omit the password.
+
     AuthResult:
       type: object
       required: [token, expiresAt, user]
@@ -1026,13 +1123,25 @@ components:
     CurrentUser:
       allOf:
         - $ref: '#/components/schemas/UserRef'
+        # required on BOTH levels, deliberately: `required` does not descend, so without
+        # the inner array every property of a team entry generates as optional and no
+        # consumer can use one without null-checking fields that are always present.
+        # This is the handoff's recurring lesson, and it recurred here.
         - type: object
+          required: [isSystemAdmin, teams]
           properties:
-            isSystemAdmin: { type: boolean }
+            isSystemAdmin:
+              type: boolean
+              description: |
+                Holds a SYSTEM-scope grant. Drives affordances only — every action is
+                independently checked server-side, and code checks permissions rather
+                than role names (plan §6b).
             teams:
               type: array
+              description: The caller's teams IN THE ACTIVE COMPANY. Never across companies.
               items:
                 type: object
+                required: [id, name, isLead]
                 properties:
                   id: { type: string, format: uuid }
                   name: { type: string }

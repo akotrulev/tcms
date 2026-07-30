@@ -26,3 +26,10 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO tcms_app;
 -- Tables created by later migrations must be reachable too.
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
     GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO tcms_app;
+
+-- V7's tcms_companies_for_user is SECURITY DEFINER and revokes EXECUTE from PUBLIC, so
+-- it must be granted explicitly. V7 does that too, conditionally — but only if the role
+-- already exists, and here it does not until this callback has run. Granting in both
+-- places is what makes the two role-creation orderings (initdb before Flyway in the
+-- deployment, afterMigrate here) produce the same privileges.
+GRANT EXECUTE ON FUNCTION tcms_companies_for_user(uuid) TO tcms_app;

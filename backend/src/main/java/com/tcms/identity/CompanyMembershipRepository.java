@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -29,9 +31,29 @@ public interface CompanyMembershipRepository
     Optional<CompanyMembership> findByCompanyIdAndUserId(UUID companyId, UUID userId);
 
     /**
-     * Memberships of the active company only. Listing a <em>user's</em> companies is
-     * deliberately absent: that is an Instance-Admin-only question, and offering it here
-     * would make the cross-client disclosure channel one autocomplete away.
+     * Memberships of the active company only. Listing a <em>user's</em> memberships as
+     * <em>rows</em> is deliberately absent: that is an Instance-Admin-only question, and
+     * offering it here would make the cross-client disclosure channel one autocomplete
+     * away. {@link #findCompanyIdsForUser} is the one narrow exception, and it returns ids.
      */
     List<CompanyMembership> findByCompanyId(UUID companyId);
+
+    /**
+     * The companies an account may open a session in — <strong>ids only</strong>, ordered
+     * by the membership they accepted first.
+     *
+     * <p>The one query in this codebase that reads across companies, and the only caller is
+     * the login path. It has to exist: authentication precedes company context, so the
+     * derived query above would correctly return nothing at the moment the session's
+     * company must be chosen. It goes through {@code tcms_companies_for_user}, a
+     * {@code SECURITY DEFINER} function owned by the schema owner — see {@code V7} for what
+     * that costs and how it is bounded.
+     *
+     * <p>Ids and nothing else, on purpose: every human-readable fact about a membership is
+     * still read afterwards through RLS with the company open. Callers must pass an
+     * already-authenticated account's id, <strong>never</strong> one taken from a request.
+     */
+    @Query(nativeQuery = true,
+            value = "SELECT company_id FROM tcms_companies_for_user(CAST(:userId AS uuid))")
+    List<UUID> findCompanyIdsForUser(@Param("userId") UUID userId);
 }

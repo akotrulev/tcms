@@ -16,10 +16,15 @@ spring-boot-starter-actuator = { module = "org.springframework.boot:spring-boot-
 spring-boot-starter-mail = { module = "org.springframework.boot:spring-boot-starter-mail" }
 spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test" }
 
-# Just the crypto artifact, not the whole security starter: at this point the codebase
-# needs BCrypt and nothing else, and the starter's auto-configuration would secure every
-# endpoint with a generated password before there is a filter chain to configure.
+# spring-security-crypto is pulled in transitively by the starter; it stays listed here
+# because BCrypt is used by the identity module, which must not depend on the web layer.
 spring-security-crypto = { module = "org.springframework.security:spring-security-crypto" }
+spring-boot-starter-security = { module = "org.springframework.boot:spring-boot-starter-security" }
+
+# The resource-server starter rather than a bare JOSE library. v1 signs its own tokens
+# with a symmetric key, but shaping the filter chain as a resource server now means M4's
+# external OIDC providers add a second JwtDecoder instead of a second architecture.
+spring-boot-starter-oauth2-resource-server = { module = "org.springframework.boot:spring-boot-starter-oauth2-resource-server" }
 
 flyway-core = { module = "org.flywaydb:flyway-core" }
 flyway-postgresql = { module = "org.flywaydb:flyway-database-postgresql" }
@@ -40,6 +45,7 @@ assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
 # An in-JVM SMTP server. Not a container: mail needs no Postgres, and a structural
 # dependency on Docker for a test that does not need it is a test that gets skipped.
 greenmail-junit5 = { module = "com.icegreen:greenmail-junit5", version.ref = "greenmail" }
+spring-security-test = { module = "org.springframework.security:spring-security-test" }
 
 [plugins]
 springBoot = { id = "org.springframework.boot", version.ref = "springBoot" }

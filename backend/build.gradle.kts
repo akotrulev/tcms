@@ -25,6 +25,8 @@ dependencies {
     implementation(libs.modulith.starter.core)
 
     implementation(libs.spring.security.crypto)
+    implementation(libs.spring.boot.starter.security)
+    implementation(libs.spring.boot.starter.oauth2.resource.server)
 
     implementation(libs.flyway.core)
     runtimeOnly(libs.flyway.postgresql)
@@ -38,6 +40,7 @@ dependencies {
     testImplementation(libs.archunit.junit5)
     testImplementation(libs.assertj.core)
     testImplementation(libs.greenmail.junit5)
+    testImplementation(libs.spring.security.test)
 }
 
 tasks.withType<JavaCompile>().configureEach {

@@ -61,7 +61,15 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Invalidate the current session */
+        /**
+         * End the current session
+         * @description A client-side discard. The session token is stateless, so there is nothing
+         *     server-side to invalidate and this endpoint deliberately does not pretend
+         *     otherwise — a caller who believes a leaked token was revoked here would not
+         *     rotate anything. Prompt revocation is the `pv` epoch (plan §6b), which
+         *     invalidates every session for an account at once. A per-token denylist arrives
+         *     with refresh tokens.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -71,12 +79,123 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Logged out */
+                /** @description Session discarded by the client */
                 204: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/invitations/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What an invitation admits its holder to */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /**
+                     * @description The single-use secret from the invitation email. In the path, and in the
+                     *     query string of the emailed link — a known exposure (browser history,
+                     *     Referer headers, proxy logs) bounded by the token being single-use,
+                     *     short-lived and inert once redeemed.
+                     */
+                    token: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The invitation */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InvitationPreview"];
+                    };
+                };
+                404: components["responses"]["NotFound"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/invitations/{token}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Redeem an invitation and activate the account
+         * @description Answers 204, not a session. The invitee then signs in with the password they
+         *     just chose, which keeps token issuance to a single path and makes the round
+         *     trip prove the password was stored as intended.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    token: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /**
+                         * Format: password
+                         * @description Required when `passwordRequired` was true; omitted otherwise, and
+                         *     REJECTED rather than ignored when the account already has one —
+                         *     holding an invitation to a second company must not confer the
+                         *     ability to overwrite an existing credential. The 72-byte maximum is
+                         *     BCrypt's: anything longer is only partly verified, so it is refused
+                         *     rather than silently truncated.
+                         */
+                        password?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Accepted; the account and the membership are now ACTIVE */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                404: components["responses"]["NotFound"];
+                /** @description The password was not accepted */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Problem"];
+                    };
                 };
             };
         };
@@ -1928,6 +2047,20 @@ export interface components {
          * @enum {string}
          */
         AggregationPolicy: "LATEST" | "LATEST_PER_CONFIG" | "WORST" | "BEST" | "ALL";
+        InvitationPreview: {
+            /** @description The address the invitation was sent to. */
+            email: string;
+            /**
+             * @description The name this company will know them by — per-membership, not global
+             *     (plan §6u).
+             */
+            displayName: string;
+            /**
+             * @description False when the address already has an account, i.e. this invitation only
+             *     adds a membership. The accept call must then omit the password.
+             */
+            passwordRequired: boolean;
+        };
         AuthResult: {
             token: string;
             /** Format: date-time */
@@ -1935,12 +2068,18 @@ export interface components {
             user: components["schemas"]["CurrentUser"];
         };
         CurrentUser: components["schemas"]["UserRef"] & {
-            isSystemAdmin?: boolean;
-            teams?: {
+            /**
+             * @description Holds a SYSTEM-scope grant. Drives affordances only — every action is
+             *     independently checked server-side, and code checks permissions rather
+             *     than role names (plan §6b).
+             */
+            isSystemAdmin: boolean;
+            /** @description The caller's teams IN THE ACTIVE COMPANY. Never across companies. */
+            teams: {
                 /** Format: uuid */
-                id?: string;
-                name?: string;
-                isLead?: boolean;
+                id: string;
+                name: string;
+                isLead: boolean;
             }[];
         };
         Project: {

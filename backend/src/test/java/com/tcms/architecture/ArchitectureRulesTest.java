@@ -188,6 +188,31 @@ class ArchitectureRulesTest {
     }
 
     @Test
+    @DisplayName("auth is a leaf — no module may reach for the session")
+    void nothingDependsOnAuth() {
+        // Same shape as the provisioning rule, and for a different reason. auth owns the
+        // session: the filter chain, the token, the current caller. A module reaching in
+        // would be reaching for "who is asking", and the moment a domain service can see
+        // that, authorization starts being decided in two places — which is precisely the
+        // failure PermissionEvaluator exists as a single entry point to prevent.
+        //
+        // What a module needs from the session it already has ambiently and safely:
+        // CompanyContext holds the company, established by CompanyContextFilter.
+        ArchRule rule = noClasses()
+                .that().resideInAPackage(ROOT_PACKAGE + "..")
+                .and().resideOutsideOfPackage("com.tcms.auth..")
+                .and().resideOutsideOfPackage(ROOT_PACKAGE)
+                .should().dependOnClassesThat().resideInAPackage("com.tcms.auth..")
+                .because("""
+                        auth composes tenancy + identity and is a leaf: nothing depends on it. A \
+                        module reaching in is reaching for the caller's session, and a service that \
+                        can see the session is one that will eventually decide authorization itself \
+                        rather than asking PermissionEvaluator""");
+
+        rule.check(PRODUCTION);
+    }
+
+    @Test
     @DisplayName("every event handler takes one CompanyScopedEvent")
     void eventHandlersReceiveACompanyScopedEvent() {
         // @TransactionalEventListener is meta-annotated with @EventListener, so matching

@@ -66,3 +66,14 @@ ALTER DEFAULT PRIVILEGES FOR ROLE tcms_owner IN SCHEMA public
 -- Deliberately NOT granted: TRUNCATE (bypasses row-level DELETE policies entirely),
 -- CREATE on schema public, and any privilege on tables owned by anyone other than
 -- tcms_owner.
+
+-- Functions created by later migrations. V7's tcms_companies_for_user is SECURITY
+-- DEFINER and revokes EXECUTE from PUBLIC, so the application role needs it granted;
+-- V7 does that itself when the role already exists, which it does here. The default
+-- privilege below covers any later function that follows the same pattern.
+--
+-- Note this is NOT a blanket loosening: functions get EXECUTE to PUBLIC by default in
+-- Postgres, so the restrictive step is each function's own REVOKE. This only ensures
+-- tcms_app keeps what those REVOKEs take away from everyone.
+ALTER DEFAULT PRIVILEGES FOR ROLE tcms_owner IN SCHEMA public
+    GRANT EXECUTE ON FUNCTIONS TO tcms_app;

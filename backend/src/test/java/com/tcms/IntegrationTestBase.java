@@ -71,6 +71,12 @@ public abstract class IntegrationTestBase {
         registry.add("spring.flyway.password", POSTGRES::getPassword);
         registry.add("spring.flyway.locations",
                 () -> "classpath:db/migration,classpath:db/testcallback");
+
+        // The signing key has no default in application.yml — deliberately, so no
+        // deployment can start with one taken from this repository. The suite supplies its
+        // own, and it is not a value any environment would plausibly reuse.
+        registry.add("tcms.auth.jwt.secret",
+                () -> "test-only-signing-key-not-for-any-real-deployment");
     }
 
     /**

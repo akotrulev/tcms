@@ -54,6 +54,16 @@ spring:
       enabled: true
 
 tcms:
+  auth:
+    jwt:
+      # No default, deliberately: a signing key in the repository is a forged session for
+      # anyone who can read it, and it is the kind of default that reaches production
+      # because nothing ever fails because of it. Compose and the runbook both set it.
+      secret: ${TCMS_JWT_SECRET:?a JWT signing secret of at least 32 characters is required}
+      issuer: ${TCMS_JWT_ISSUER:tcms}
+      ttl: PT8H
+      remember-me-ttl: P30D
+
   invitation:
     # The SPA's public origin — what an invitee's browser can reach, NOT what the container
     # sees. Behind Caddy the app only ever knows localhost:8080, and a link built from the
