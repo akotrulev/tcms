@@ -8,6 +8,12 @@
 #   cp .env.example .env
 #   docker compose up --build
 #
+# A SECOND, CONCURRENT STACK (two agents/sessions each holding their own browser pass) is
+# `cp .env.lane-b.example .env.lane-b && docker compose --env-file .env.lane-b up --build`.
+# That file shifts every host port and sets COMPOSE_PROJECT_NAME, which renames the `pgdata`
+# volume with it — so lane B gets its own database rather than migrating lane A's. See
+# docs/plans/2026-07-31-parallel-execution-rework.md.
+#
 # The frontend is NOT here. `npm run dev` with MSW needs no backend and starting one would
 # make the fast loop slower without making it more real — MSW intercepts /api/v1 before a
 # request ever leaves the browser.
@@ -15,7 +21,11 @@
 # Passwords are required rather than defaulted (`${VAR:?}`), so this file contains no
 # credential and cannot be copied to a server with a password someone forgot to change.
 
-name: tcms
+# Overridable so a second lane gets its own project namespace — and therefore its own
+# `pgdata` volume, since Compose prefixes volume names with the project. Two lanes sharing
+# one volume would have the second one's Flyway run against the first one's schema, which
+# is the same class of failure as two agents claiming migration version V13.
+name: ${COMPOSE_PROJECT_NAME:-tcms}
 
 services:
   postgres:

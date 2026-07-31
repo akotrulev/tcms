@@ -31,6 +31,17 @@ export default defineConfig({
     __BUILD_ID__: JSON.stringify(buildId),
   },
   server: {
+    port: Number(process.env.VITE_DEV_PORT ?? 5173),
+    /**
+     * Fail rather than shift when the port is taken.
+     *
+     * Vite's default is to walk to the next free port, which is friendly with one dev server
+     * and actively dangerous with two: a second lane started on a busy 6173 would silently
+     * land on 6174 while `TCMS_BASE_URL` still said 6173 — so every invitation link the CLI
+     * printed would open lane A's tab, pointed at lane A's backend, and the mistake would look
+     * like a backend defect. A refusal to start is the diagnosable version of that.
+     */
+    strictPort: true,
     proxy: {
       // Configured in both modes and harmless in mock mode: MSW intercepts at the service
       // worker, so a mocked request never reaches the dev server to be proxied.

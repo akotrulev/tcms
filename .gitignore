@@ -40,4 +40,7 @@ frontend/dist/
 # the real file is not, so a personal port change or a rotated password never travels.
 .env
 .env.local
+# The second-lane stack's env, same reasoning — its ports are a local arrangement.
+.env.lane-b
 !.env.example
+!.env.lane-b.example

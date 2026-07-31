@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:lane-b": "VITE_DEV_PORT=6173 VITE_API_PROXY_TARGET=http://localhost:9080 vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
