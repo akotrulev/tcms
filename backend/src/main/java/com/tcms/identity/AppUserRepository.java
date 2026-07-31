@@ -1,5 +1,7 @@
 package com.tcms.identity;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -49,4 +51,18 @@ public interface AppUserRepository extends JpaRepository<AppUser, UUID> {
      * authorization decision and needs nothing else from it.
      */
     boolean existsByIdAndStatus(UUID id, UserStatus status);
+
+    /**
+     * The accounts behind a set of ids the caller <strong>already holds company-scoped rows
+     * for</strong> — one query for a directory page rather than one per person.
+     *
+     * <p>This repository can see across clients, so this is the method that most needs its rule
+     * stated: the ids must come from {@code company_membership} in the active company, never from a
+     * request. Handed ids from a request it becomes an account oracle for guessed uuids, which is
+     * precisely the disclosure channel {@link AppUser}'s header describes and the reason there is
+     * no {@code findAll}-shaped listing here.
+     *
+     * <p>Callers must not pass an empty collection: an empty {@code IN ()} is a SQL syntax error.
+     */
+    List<AppUser> findByIdIn(Collection<UUID> ids);
 }

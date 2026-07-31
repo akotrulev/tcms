@@ -1,6 +1,7 @@
 package com.tcms.identity;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -226,4 +227,56 @@ public interface RoleAssignmentRepository extends JpaRepository<RoleAssignment, 
             UUID companyId, UUID roleId, UUID userId);
 
     List<RoleAssignment> findByProjectId(UUID projectId);
+
+    /**
+     * Every grant in the active company, newest first — the admin screen's list before it is
+     * narrowed to what the caller may administer.
+     *
+     * <p>A query method, so the Hibernate filter applies on top of RLS. Unpaginated, matching
+     * {@code GET /role-assignments}'s bare-array contract and the ceiling {@code ProjectService}
+     * states: a company holds a handful of whole products and tens of people, not thousands of
+     * grants. It becomes a pagination question the day that stops being true, and the contract
+     * has to change first.
+     */
+    List<RoleAssignment> findAllByOrderByGrantedAtDesc();
+
+    /**
+     * One grant by id, through a query rather than {@code findById}, <strong>so the company filter
+     * applies in the application layer too</strong>.
+     *
+     * <p>{@code findById} goes through {@code EntityManager.find}, which Hibernate does
+     * <em>not</em> apply {@code @Filter} to. RLS would still refuse another company's row, so the
+     * difference is defence in depth rather than a live leak — and this is the revoke path, where
+     * the two layers agreeing is what makes a foreign id answer "no such grant" rather than
+     * depending on the database alone. {@code ProjectRepository.findScopedById} exists for the
+     * same reason and says so in the same words.
+     */
+    Optional<RoleAssignment> findScopedById(UUID id);
+
+    /**
+     * The identical grant, if it is already there — the four lookups behind the contract's
+     * "re-granting an identical assignment returns the existing one with 200".
+     *
+     * <p>Four methods rather than one with nullable parameters, for the reason this class's header
+     * gives about the permission queries: a bound NULL that <em>happens</em> to compare correctly is
+     * the reasoning that produced the unreachable-SYSTEM-grant defect. {@code ProjectIdIsNull} is
+     * the COMPANY-scope test, per {@link RoleAssignment}'s encoding of scope in the column.
+     *
+     * <p>They are the <em>fast</em> path only. {@code uq_role_assignment_user} and
+     * {@code uq_role_assignment_team} (V15) are what actually make a duplicate impossible — two
+     * admins clicking Grant at the same instant both read nothing here, and one of them loses at
+     * the index. {@code AdminController.onDuplicateGrant} turns that loss back into the 200 this
+     * lookup would have produced a moment earlier.
+     */
+    Optional<RoleAssignment> findByCompanyIdAndRoleIdAndUserIdAndProjectId(
+            UUID companyId, UUID roleId, UUID userId, UUID projectId);
+
+    Optional<RoleAssignment> findByCompanyIdAndRoleIdAndUserIdAndProjectIdIsNull(
+            UUID companyId, UUID roleId, UUID userId);
+
+    Optional<RoleAssignment> findByCompanyIdAndRoleIdAndTeamIdAndProjectId(
+            UUID companyId, UUID roleId, UUID teamId, UUID projectId);
+
+    Optional<RoleAssignment> findByCompanyIdAndRoleIdAndTeamIdAndProjectIdIsNull(
+            UUID companyId, UUID roleId, UUID teamId);
 }
