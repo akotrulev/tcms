@@ -1256,7 +1256,13 @@ components:
         lifecycleStatus: { $ref: '#/components/schemas/LifecycleStatus' }
         automationStatus: { $ref: '#/components/schemas/AutomationStatus' }
         stepFormat: { $ref: '#/components/schemas/StepFormat' }
-        owner: { $ref: '#/components/schemas/UserRef' }
+        owner:
+          # Nullable because test_case.owner_id is. A case can exist with no owner (an
+          # import, or an owner offboarded from the company), and the three ways to answer
+          # that are: omit the row from the list, invent an owner, or say so. Only the last
+          # is true — and the first loses a case from its own project's list.
+          allOf: [{ $ref: '#/components/schemas/UserRef' }]
+          nullable: true
         testType: { type: string, nullable: true }
         testLevel: { type: string, nullable: true }
         features:

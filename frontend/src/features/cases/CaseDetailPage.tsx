@@ -215,7 +215,12 @@ export function CaseDetailPage() {
 
                   <Panel title="Ownership" testId="CaseDetail.Ownership">
                     <Stack sx={{ gap: 1.5 }}>
-                      <MetaRow label="Owner" value={data.owner.displayName} />
+                      {/*
+                        owner is nullable: test_case.owner_id is, so an imported case or one
+                        whose owner was offboarded has none. "Unassigned" rather than a blank
+                        row — a missing value and a missing field read the same otherwise.
+                      */}
+                      <MetaRow label="Owner" value={data.owner?.displayName ?? 'Unassigned'} />
                       <MetaRow
                         label="Updated"
                         value={

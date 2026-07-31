@@ -412,7 +412,10 @@ export function workItems(projectId: string, projectKey: string): WorkItem[] {
       priority: c.priority,
       dueDate: null,
       overdue: false,
-      assignee: c.owner,
+      // `?? undefined` rather than `?? null`: WorkItem.assignee is optional in the
+      // contract, not nullable, so an unowned case's derived card carries no assignee
+      // at all — which is what BoardPage already renders (`item.assignee && …`).
+      assignee: c.owner ?? undefined,
       projectId,
       projectKey,
       linkedKey: c.key,
@@ -433,7 +436,10 @@ export function workItems(projectId: string, projectKey: string): WorkItem[] {
       priority: 'MEDIUM' as const,
       dueDate: null,
       overdue: false,
-      assignee: c.owner,
+      // `?? undefined` rather than `?? null`: WorkItem.assignee is optional in the
+      // contract, not nullable, so an unowned case's derived card carries no assignee
+      // at all — which is what BoardPage already renders (`item.assignee && …`).
+      assignee: c.owner ?? undefined,
       projectId,
       projectKey,
       linkedKey: c.key,

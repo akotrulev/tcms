@@ -189,12 +189,22 @@ export function CaseGrid({
       field: 'owner',
       headerName: 'Owner',
       width: 140,
-      // Names, never the owner's uuid.
-      valueGetter: (_value, row) => row.owner.displayName,
+      // Names, never the owner's uuid. Nullable because test_case.owner_id is — an imported
+      // case, or one whose owner has been offboarded from this company, genuinely has none.
+      // "Unassigned" rather than an empty cell, which reads as a rendering failure.
+      valueGetter: (_value, row) => row.owner?.displayName ?? 'Unassigned',
       renderCell: ({ row }) => (
-        <Tooltip title={row.owner.email}>
-          <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} data-testid={`${TestIdPrefix}.Row.Owner`}>
-            {row.owner.displayName}
+        <Tooltip title={row.owner?.email ?? 'No owner assigned'}>
+          <Box
+            sx={{
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              color: row.owner ? 'text.primary' : 'text.secondary',
+            }}
+            data-testid={`${TestIdPrefix}.Row.Owner`}
+          >
+            {row.owner?.displayName ?? 'Unassigned'}
           </Box>
         </Tooltip>
       ),

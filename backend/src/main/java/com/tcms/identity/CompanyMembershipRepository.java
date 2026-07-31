@@ -1,5 +1,6 @@
 package com.tcms.identity;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -37,6 +38,25 @@ public interface CompanyMembershipRepository
      * away. {@link #findCompanyIdsForUser} is the one narrow exception, and it returns ids.
      */
     List<CompanyMembership> findByCompanyId(UUID companyId);
+
+    /**
+     * The memberships of a named set of accounts within the active company — for rendering a
+     * page's worth of people in one query.
+     *
+     * <p>Narrower than {@link #findByCompanyId} on purpose. Rendering the owner column of a
+     * 200-row case page needs at most 200 memberships, and reading every membership in the
+     * company to find them makes the cost of one screen scale with how many people the client
+     * employs rather than with what is on it.
+     *
+     * <p>It is <em>not</em> a widening of what this repository will answer: the same company
+     * filter and the same RLS policy apply, so it can only ever return memberships of the
+     * company currently open, and a user id from another client resolves to nothing. Callers
+     * must pass ids they already hold company-scoped rows for — never ids from a request, which
+     * would turn this into a membership oracle for guessed uuids.
+     *
+     * <p>Callers must not pass an empty collection: an empty {@code IN ()} is a SQL syntax error.
+     */
+    List<CompanyMembership> findByCompanyIdAndUserIdIn(UUID companyId, Collection<UUID> userIds);
 
     /**
      * The companies an account may open a session in — <strong>ids only</strong>, ordered

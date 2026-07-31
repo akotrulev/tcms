@@ -69,13 +69,33 @@ public interface ProjectRepository extends JpaRepository<Project, UUID> {
      * without it a deleted case still counts and the number contradicts the case list. The
      * partial index {@code test_case_lifecycle_idx (company_id, project_id, lifecycle_status)
      * WHERE deleted_at IS NULL} covers exactly this shape.
+     *
+     * <h2>The suite must be live too, and that join is the second half of the same rule</h2>
+     *
+     * <p>Soft-deleting a <em>suite</em> does not touch the cases beneath it, and the case list
+     * excludes them — a row whose folder is gone would name a place the user cannot navigate to
+     * (see {@code CaseSpecifications.where}). So a live case in a deleted folder is unreachable,
+     * and counting it here made the picker say "4 cases" over a list that showed 3.
+     *
+     * <p><strong>Found by running the app, not by a test.</strong> The two numbers are computed by
+     * different queries on different screens, both were individually plausible, the build was
+     * green and 306 tests passed. It is the same defect class as the two contradictory percentages
+     * on the plan statistics screen (handoff §5), and the same reason the working agreement says
+     * the gates prove it compiles, not that it works.
+     *
+     * <p>The alternative fix — having the case list include those rows — was rejected: it
+     * contradicts what {@code SuiteRepository} already documents as the intent, and it would put a
+     * case in the grid under a folder the tree refuses to show. If suite deletion later cascades
+     * into its cases, this join becomes redundant rather than wrong.
      */
     @Query(nativeQuery = true, value = """
             SELECT tc.project_id AS projectId, COUNT(*) AS caseCount
               FROM test_case tc
+              JOIN suite s ON s.id = tc.suite_id
              WHERE tc.company_id = :companyId
                AND tc.project_id IN (:projectIds)
                AND tc.deleted_at IS NULL
+               AND s.deleted_at IS NULL
              GROUP BY tc.project_id
             """)
     List<ProjectCaseCount> countLiveCasesByProject(

@@ -1,0 +1,62 @@
+package com.tcms.repository;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * {@code TestCaseSummary} in {@code docs/specs/openapi.yaml} — one row of the case grid.
+ *
+ * <p>A DTO for the reason every view here is one: {@code companyId} must never leave the building
+ * (ERD §0.1 point 2), and {@code projectId} is already in the request path — a body field that can
+ * disagree with the path is a field someone will eventually trust over the path.
+ *
+ * @param keySeq the numeric part of {@link #key}, on the wire because <strong>the client must not
+ *               sort by the text</strong>: {@code TC-10000} sorts before {@code TC-9999}. The
+ *               contract says so in its own description, and the SPA's grid orders on it.
+ * @param suiteName the folder's display name, resolved server-side. The alternative — letting the
+ *               SPA join it against the tree it already loaded — breaks the moment the grid is
+ *               shown without the tree, and puts a second copy of "which suite is this" in the
+ *               client.
+ * @param owner  <strong>nullable</strong>. The contract originally marked this required while
+ *               {@code test_case.owner_id} has always permitted null; this slice resolved the
+ *               divergence toward the schema and {@code openapi.yaml} now says
+ *               {@code nullable: true}. Listing an unowned case with no owner beats the two
+ *               alternatives: hiding the row loses a case from its own project's list, and
+ *               inventing an owner ("Unassigned" as a fake user) puts a person on the wire who does
+ *               not exist and whose id nothing can resolve. Same rule as §24's title-less inline
+ *               condition — the response does not make a claim the data never made.
+ * @param testType nullable — a case need not be classified, and nothing forces it to be
+ * @param features every Feature value on the case, by name. A list because Feature is the one
+ *               MULTI-cardinality dimension (plan §6d).
+ * @param healthSignals derived, never authored, and <strong>empty for every case today</strong>
+ *               because nothing computes them yet — see {@link HealthSignal}. Never null: the
+ *               contract marks it required, so the SPA cannot null-check it.
+ *
+ * <p><strong>{@code lastResult} is deliberately not a field here.</strong> It is sourced from
+ * {@code test_execution}, and the {@code execution} module does not exist — nothing can record a
+ * result, so no case has one. The contract does not mark it required, so omitting the key is legal,
+ * and the SPA already renders a missing {@code lastResult} as "Never run", which is exactly true.
+ * Serializing an explicit {@code null} would say the same thing more expensively; serializing a
+ * fabricated {@code UNTESTED} result would invent an execution that never happened. It appears when
+ * {@code execution} does.
+ */
+public record TestCaseSummaryView(
+        UUID id,
+        String key,
+        long keySeq,
+        String title,
+        UUID suiteId,
+        String suiteName,
+        Priority priority,
+        LifecycleStatus lifecycleStatus,
+        AutomationStatus automationStatus,
+        StepFormat stepFormat,
+        UserRefView owner,
+        String testType,
+        String testLevel,
+        List<String> features,
+        List<String> tags,
+        List<HealthSignal> healthSignals,
+        Instant updatedAt) {
+}
