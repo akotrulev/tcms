@@ -75,6 +75,9 @@ class CompanyReadBaselineTest extends IntegrationTestBase {
     private PermissionEvaluator permissions;
 
     @Autowired
+    private AdminDirectoryService directory;
+
+    @Autowired
     private CompanyRepository companies;
 
     @Autowired
@@ -205,19 +208,40 @@ class CompanyReadBaselineTest extends IntegrationTestBase {
         void withoutTheGrantThereIsNoCompanyRead() throws SQLException {
             UUID stranger = UUID.fromString("8c003000-0000-4000-8000-000000000001");
             Instant now = Instant.now();
+            UUID viewerGrant = UUID.fromString("8c005000-0000-4000-8000-000000000001");
             inCompany(COMPANY, () -> tx.executeWithoutResult(status -> {
                 activeUserIn(stranger, "stranger@baseline.test", now);
                 member(COMPANY, stranger, "S. Stranger", now);
+                // A PROJECT-scope Viewer grant, which carries company:read in role_permission.
+                // That is what makes this test the pin on the repair rather than a restatement of
+                // it: the workaround AdminDirectoryService.reachOf carried until §43 — "held
+                // company-wide OR on any project" — answers YES here off exactly this grant, and
+                // the direct company-scope question answers NO.
+                if (roleAssignments.findById(viewerGrant).isEmpty()) {
+                    roleAssignments.save(RoleAssignment.forUserOnProject(
+                            viewerGrant, COMPANY, Role.VIEWER_ID, stranger, PROJECT, null, now));
+                }
             }));
             deleteBaselineOf(stranger);
 
-            // Stated as its own test because it is the cost of the repair: the workaround
-            // AdminDirectoryService carried until §43 would have answered YES here off a project
-            // grant. Fail-closed is the right direction, and the repair is a re-run of the CLI.
+            // Fail-closed is the right direction, and the repair is a re-run of the CLI. Anything
+            // that reintroduces the workaround — here or in the next surface to gate on a
+            // company-scope permission — turns this green assertion red.
             assertThat(companyWide(stranger).has(READ_COMPANY)).isFalse();
+            // And the admin surface asks the same question, which is the half that can regress
+            // silently: AdminDirectoryService.reachOf is where the workaround lived, and every
+            // other persona in the suite holds both a project grant AND the baseline — so nothing
+            // else in 746 tests can tell the two readings apart.
+            AdminReach withoutBaseline = reachOf(stranger);
+            assertThat(withoutBaseline.readsCompany()).isFalse();
+            assertThat(withoutBaseline.visibleProjects())
+                    .as("the project grant is real and still confers project:read — it is only "
+                            + "company:read it must not carry company-wide")
+                    .containsExactly(PROJECT);
 
             inCompany(COMPANY, () -> tx.executeWithoutResult(status -> grantBaseline(COMPANY)));
             assertThat(companyWide(stranger).has(READ_COMPANY)).isTrue();
+            assertThat(reachOf(stranger).readsCompany()).isTrue();
         }
 
         @Test
@@ -363,6 +387,13 @@ class CompanyReadBaselineTest extends IntegrationTestBase {
                 roleAssignments.findByUserId(userId).stream()
                         .filter(grant -> Role.COMPANY_MEMBER_ID.equals(grant.getRoleId()))
                         .count()));
+    }
+
+    /** The admin surface's own question, which is where the workaround §43 removed used to live. */
+    private AdminReach reachOf(UUID userId) {
+        try (var ignored = CompanyContext.open(COMPANY)) {
+            return tx.execute(status -> directory.reachOf(userId));
+        }
     }
 
     private PermissionSet companyWide(UUID userId) {
