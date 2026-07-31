@@ -1,0 +1,89 @@
+package com.tcms.identity;
+
+import com.tcms.project.ProjectAccess;
+import com.tcms.tenancy.CompanyContext;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * {@code identity}'s answer to {@code project}'s question — the adapter that keeps the module
+ * edge one-way.
+ *
+ * <p>{@code project} declares {@link ProjectAccess} because it cannot import this module (that
+ * would close a cycle; see the interface's header). This class lives on the side that already
+ * depends on {@code project}, so implementing it adds no edge to the graph.
+ *
+ * <p>It is deliberately thin. Every authorization decision is delegated to
+ * {@link PermissionEvaluator} — the single place effective permissions are computed — and the
+ * only logic here is choosing which of several role names to display, which is not an
+ * authorization decision at all.
+ */
+@Service
+public class IdentityProjectAccess implements ProjectAccess {
+
+    /**
+     * The permission that gates seeing a project.
+     *
+     * <p>Held by all six built-in roles (roles spec §6b), so any project grant makes a project
+     * visible — the intent. Expressed as a permission rather than as "holds any grant" because
+     * the latter keeps quietly working if a role is ever defined without it.
+     */
+    private static final String VIEW_PROJECT = "project:read";
+
+    private final PermissionEvaluator permissions;
+    private final RoleAssignmentRepository roleAssignments;
+
+    public IdentityProjectAccess(
+            PermissionEvaluator permissions, RoleAssignmentRepository roleAssignments) {
+        this.permissions = permissions;
+        this.roleAssignments = roleAssignments;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean canView(UUID userId, UUID projectId) {
+        // The evaluator already returns the empty set for a project outside the active
+        // company, so a foreign id needs no separate check here — and adding one would be a
+        // second place the boundary is decided.
+        return permissions.evaluate(userId, projectId).has(VIEW_PROJECT);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>"Strongest" is the count of permissions the role confers, read from the same
+     * {@code role_permission} table authorization reads — <strong>derived, not a hard-coded
+     * ranking of role names</strong>, so a role added later sorts correctly without this method
+     * being edited. A name-ordered rank is the same mistake as the {@code '*'} sentinel in
+     * handoff §6 lesson 10: it reads correctly until the set it describes changes.
+     *
+     * <p>A caller can genuinely hold two grants on one project — directly and through a team,
+     * or through two teams — and the contract has room for one string. Ties break on the name
+     * so the answer is stable between requests rather than dependent on row order; picking
+     * either of two equally-strong roles is defensible, picking a different one each time is not.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, String> projectRoleNames(UUID userId) {
+        UUID companyId = CompanyContext.require();
+
+        Comparator<RoleAssignmentRepository.ProjectRoleName> byStrength =
+                Comparator.comparingLong(RoleAssignmentRepository.ProjectRoleName::getPermissionCount)
+                        .thenComparing(RoleAssignmentRepository.ProjectRoleName::getRoleName);
+
+        Map<UUID, RoleAssignmentRepository.ProjectRoleName> strongest = new HashMap<>();
+        for (var row : roleAssignments.findProjectRoleNames(companyId, userId)) {
+            strongest.merge(row.getProjectId(), row,
+                    (existing, candidate) ->
+                            byStrength.compare(candidate, existing) > 0 ? candidate : existing);
+        }
+
+        Map<UUID, String> names = new HashMap<>();
+        strongest.forEach((projectId, row) -> names.put(projectId, row.getRoleName()));
+        return names;
+    }
+}

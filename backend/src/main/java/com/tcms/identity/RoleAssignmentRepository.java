@@ -95,6 +95,61 @@ public interface RoleAssignmentRepository extends JpaRepository<RoleAssignment, 
     List<String> findCompanyScopedPermissionKeys(
             @Param("companyId") UUID companyId, @Param("userId") UUID userId);
 
+    /**
+     * The caller's <strong>PROJECT-scope</strong> role names across the whole company, in one
+     * query — what the contract's {@code Project.myRole} renders.
+     *
+     * <p>Display only. It is <em>not</em> an authorization input, and nothing may branch on
+     * the string it returns: code checks permissions, never role names (plan §6b), so that a
+     * custom-role designer stays additive. This exists because a person wants to be told
+     * "Test Lead", not handed 31 permission keys.
+     *
+     * <h2>Why COMPANY-scope grants are excluded</h2>
+     *
+     * <p>{@code project_id IS NOT NULL} is the whole point. The contract defines {@code myRole}
+     * as "the caller's role on this project, or null when they hold no project grant", so a
+     * Company Admin — who reaches every project through a grant carrying no project id —
+     * correctly gets {@code null}. Folding their company role in would label every project
+     * "Company Admin", which is a claim about the company rather than about the project.
+     *
+     * <h2>Why the permission count comes back too</h2>
+     *
+     * <p>A user can hold more than one project-scope grant on one project: directly and
+     * through a team, or through two teams. The contract has room for one string, so one has
+     * to win, and "which role is stronger" must be <strong>derived</strong> rather than
+     * ranked by name — a hard-coded ordering silently mis-sorts the first custom role anyone
+     * adds, and handoff §6 lesson 10 is the same mistake in a different costume. The count of
+     * permissions the role actually confers is the ordering, and it comes from the same
+     * {@code role_permission} table authorization reads.
+     */
+    @Query(nativeQuery = true, value = """
+            SELECT ra.project_id AS projectId,
+                   r.name        AS roleName,
+                   (SELECT COUNT(*) FROM role_permission rp
+                     WHERE rp.role_id = ra.role_id) AS permissionCount
+              FROM role_assignment ra
+              JOIN role r ON r.id = ra.role_id
+             WHERE ra.company_id = :companyId
+               AND ra.project_id IS NOT NULL
+               AND (ra.user_id = :userId
+                    OR ra.team_id IN (SELECT tm.team_id
+                                        FROM team_membership tm
+                                       WHERE tm.user_id = :userId
+                                         AND tm.company_id = :companyId))
+            """)
+    List<ProjectRoleName> findProjectRoleNames(
+            @Param("companyId") UUID companyId, @Param("userId") UUID userId);
+
+    /** One project-scope grant, reduced to what a screen shows plus how to rank it. */
+    interface ProjectRoleName {
+
+        UUID getProjectId();
+
+        String getRoleName();
+
+        long getPermissionCount();
+    }
+
     /** Company-filtered by the active context; used to list a user's grants for admin screens. */
     List<RoleAssignment> findByUserId(UUID userId);
 
