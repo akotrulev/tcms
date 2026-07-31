@@ -107,12 +107,13 @@ public class CaseVersionService {
             // "nobody was recorded" and "the recorded id names no account" are states a real row is
             // in. Same call TestCaseSummaryView.owner() makes, for the same reason.
             //
-            // The null CHECK is not defensive style, and dropping it is a 500 rather than a wrong
-            // name: CaseOwners.resolve answers Map.of() when there is nothing to resolve, and
-            // Map.of().get(null) throws NPE by contract. A case whose every version is unattributed
-            // — an imported one, the commonest kind in an installation being migrated — would take
-            // the whole panel down. The mutation that removes this is killed by the TENANCY test,
-            // of all things, because that fixture's versions happen to have no authors.
+            // This check USED to be load-bearing against a 500 as well: CaseOwners.resolve answered
+            // Map.of() when there was nothing to resolve, and Map.of().get(null) throws NPE by
+            // contract, so a case whose every version is unattributed — an imported one, the
+            // commonest kind in an installation being migrated — took the whole panel down. That
+            // trap is gone; resolve now answers a null-tolerant map whichever branch it takes, so
+            // the map no longer behaves differently depending on who happens to be in the data.
+            // The check stays because rendering an unattributed version is a decision, not a guard.
             rendered.add(EntityVersionView.of(
                     row, row.getCreatedBy() == null ? null : authors.get(row.getCreatedBy())));
         }

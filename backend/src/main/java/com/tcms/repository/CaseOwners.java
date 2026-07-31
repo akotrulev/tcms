@@ -63,7 +63,16 @@ public class CaseOwners {
         if (userIds.isEmpty()) {
             // Not merely an optimization: an empty collection bound into SQL `IN ()` is a syntax
             // error. A page whose every case is unowned is an ordinary state, not an edge one.
-            return Map.of();
+            //
+            // A HashMap rather than Map.of(), and that is the whole point of the line. Map.of()
+            // throws NPE on get(null) by contract while HashMap answers null, so returning the
+            // immutable empty map would make this method's behaviour on an unresolvable id depend
+            // on whether the page happened to contain anybody resolvable — fine on every page with
+            // one named owner, a 500 on the page where nobody has one. The same shape was a real
+            // 500 in execution.ExecutionPeople (handoff §38). Callers still null-check, because
+            // "unattributed" is a rendering decision; they should not also be the only thing
+            // standing between a data-dependent map and a stack trace.
+            return new HashMap<>();
         }
 
         Map<UUID, String> displayNames = new HashMap<>();

@@ -48,7 +48,11 @@ class ExecutionPeople {
         if (userIds.isEmpty()) {
             // An empty collection bound into SQL `IN ()` is a syntax error, and a run nobody has
             // been assigned or executed is the ordinary state of a run that was just created.
-            return Map.of();
+            //
+            // A HashMap rather than Map.of(): the latter throws NPE on get(null), which made
+            // exactly this method a 500 on an unassigned, unexecuted execution (§38). See
+            // repository.CaseOwners for the full argument — the two classes must not disagree.
+            return new HashMap<>();
         }
 
         Map<UUID, String> displayNames = new HashMap<>();

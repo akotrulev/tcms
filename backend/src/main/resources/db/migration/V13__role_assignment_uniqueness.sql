@@ -1,4 +1,4 @@
--- V15 — a grant can be made twice, and until now the second one landed.
+-- V13 — a grant can be made twice, and until now the second one landed.
 --
 -- role_assignment has carried no uniqueness since V1. That was harmless while the only writer was
 -- provision-company, which guards itself with an existence check so re-running the CLI tops a

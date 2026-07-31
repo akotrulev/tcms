@@ -104,7 +104,7 @@ public class AdminController {
      *
      * <p>Two admins granting the same role to the same person at the same instant both find no
      * existing row and one of them loses at {@code uq_role_assignment_user} /
-     * {@code uq_role_assignment_team} (V15). The loser's request is not a server fault and its
+     * {@code uq_role_assignment_team} (V13). The loser's request is not a server fault and its
      * intent is satisfied — the grant exists — so it gets the same {@code 200} the idempotent path
      * would have produced a moment earlier. Recovering that needs the <em>request</em>, to find the
      * row that won, which an exception handler does not have; and it needs a fresh transaction,

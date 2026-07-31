@@ -263,7 +263,7 @@ public interface RoleAssignmentRepository extends JpaRepository<RoleAssignment, 
      * the COMPANY-scope test, per {@link RoleAssignment}'s encoding of scope in the column.
      *
      * <p>They are the <em>fast</em> path only. {@code uq_role_assignment_user} and
-     * {@code uq_role_assignment_team} (V15) are what actually make a duplicate impossible — two
+     * {@code uq_role_assignment_team} (V13) are what actually make a duplicate impossible — two
      * admins clicking Grant at the same instant both read nothing here, and one of them loses at
      * the index. {@code AdminController.onDuplicateGrant} turns that loss back into the 200 this
      * lookup would have produced a moment earlier.

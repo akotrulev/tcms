@@ -18,7 +18,7 @@ psql.
 | `identity/AdminReach.java` | **The one place the scope-dependent gate is decided.** |
 | `identity/RoleGrantService.java` | Grant, revoke, the idempotent re-grant, the self-lockout refusal. |
 | `identity/{User,UserRef,Team,Role,RoleAssignment}View.java` · `RoleGrantRequest.java` | The wire shapes. |
-| `V15__role_assignment_uniqueness.sql` | The uniqueness `role_assignment` has never had. |
+| `V13__role_assignment_uniqueness.sql` | The uniqueness `role_assignment` has never had. |
 | `identity/RoleGrantEndpointTest.java` | **New, 58 tests** over HTTP against real Postgres with RLS. |
 | `features/admin/GrantRoleDialog.tsx` · `TeamsPage.tsx` | The form, and per-row Revoke. |
 | `api/queries/admin.ts` · `mocks/{db/store,handlers/admin}.ts` | The two mutations; the mock becomes stateful and gated. |
@@ -51,7 +51,7 @@ which the model permits and nobody has decided may staff a project.
    indexes are V1's. **It needed DDL for the promise.** The contract says an identical re-grant
    "returns the existing one with 200, not a duplicate and not a 409", and the table has carried
    **no uniqueness at all** since V1. Harmless while the only writer was `provision-company`, which
-   guards itself; reachable the moment an endpoint exists. So `V15` is used, and for a reason the
+   guards itself; reachable the moment an endpoint exists. So `V13` is used, and for a reason the
    plan did not anticipate.
 
    The cost of the duplicate is not an untidy list: **the same person holds two grants to revoke, so

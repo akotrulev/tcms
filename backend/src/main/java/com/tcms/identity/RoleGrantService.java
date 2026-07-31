@@ -63,7 +63,7 @@ import org.springframework.transaction.annotation.Transactional;
  * person holds this role here" — is already true, and a second row would give the same user two
  * grants to revoke, so revoking the one on the screen would leave them holding the role.
  *
- * <p>The lookup is the fast path; {@code V15}'s two partial unique indexes are the guarantee. Two
+ * <p>The lookup is the fast path; {@code V13}'s two partial unique indexes are the guarantee. Two
  * admins clicking Grant at the same instant both read nothing and one of them loses at the index —
  * {@code AdminController.onDuplicateGrant} turns that loss back into the 200 the lookup would have
  * produced a moment earlier, which is the arrangement {@code ProjectController.onKeyRace}
