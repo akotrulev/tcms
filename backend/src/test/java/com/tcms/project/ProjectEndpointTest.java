@@ -80,8 +80,19 @@ class ProjectEndpointTest extends IntegrationTestBase {
     private static final UUID SOUTHERNER = UUID.fromString("6e003000-0000-4000-8000-000000000004");
     /** Reaches NORTH_MOBILE only through a team grant. */
     private static final UUID TEAM_MEMBER = UUID.fromString("6e003000-0000-4000-8000-000000000005");
+    /** Two grants on ONE project — Viewer directly, Test Lead through a team. */
+    private static final UUID DUAL = UUID.fromString("6e003000-0000-4000-8000-000000000006");
 
     private static final UUID NORTH_QA_TEAM = UUID.fromString("6e004000-0000-4000-8000-000000000001");
+    /**
+     * A second team, for DUAL alone.
+     *
+     * <p>Deliberately not reusing the QA team: a Test Lead grant added there would also reach
+     * {@code TEAM_MEMBER} and quietly break the assertion that a team grant reveals only the
+     * team's own project. Two fixtures sharing a team is how one test's setup becomes another
+     * test's failure.
+     */
+    private static final UUID NORTH_LEADS_TEAM = UUID.fromString("6e004000-0000-4000-8000-000000000002");
 
     @Autowired
     private MockMvc mvc;
@@ -132,6 +143,7 @@ class ProjectEndpointTest extends IntegrationTestBase {
             activeUser(ADMIN, "admin@north.test", now);
             activeUser(SOUTHERNER, "engineer@south.test", now);
             activeUser(TEAM_MEMBER, "team@north.test", now);
+            activeUser(DUAL, "dual@north.test", now);
         });
 
         inCompany(NORTH, () -> tx.executeWithoutResult(status -> {
@@ -144,17 +156,21 @@ class ProjectEndpointTest extends IntegrationTestBase {
             member(NORTH, NO_GRANT, "N. Grant", now);
             member(NORTH, ADMIN, "A. Admin", now);
             member(NORTH, TEAM_MEMBER, "T. Member", now);
+            member(NORTH, DUAL, "D. Both", now);
 
-            if (teams.findById(NORTH_QA_TEAM).isEmpty()) {
-                teams.save(Team.create(NORTH_QA_TEAM, NORTH, "QA", null, now));
-            }
-            if (teamMemberships.findById(new TeamMembershipId(NORTH_QA_TEAM, TEAM_MEMBER)).isEmpty()) {
-                teamMemberships.save(TeamMembership.join(NORTH, NORTH_QA_TEAM, TEAM_MEMBER, false, now));
-            }
+            team(NORTH_QA_TEAM, NORTH, "QA", now);
+            team(NORTH_LEADS_TEAM, NORTH, "Leads", now);
+            joinTeam(NORTH, NORTH_QA_TEAM, TEAM_MEMBER, now);
+            joinTeam(NORTH, NORTH_LEADS_TEAM, DUAL, now);
 
             grantOnProject("n-lead", NORTH, Role.TEST_LEAD_ID, LEAD, NORTH_BANKING, now);
             grantOnCompany("n-admin", NORTH, Role.COMPANY_ADMIN_ID, ADMIN, now);
             grantToTeam("n-team", NORTH, Role.TEST_ENGINEER_ID, NORTH_QA_TEAM, NORTH_MOBILE, now);
+
+            // The two-grants-on-one-project case: the weaker one held directly, the stronger
+            // through a team, so "strongest wins" cannot pass by preferring direct grants.
+            grantOnProject("n-dual-viewer", NORTH, Role.VIEWER_ID, DUAL, NORTH_BANKING, now);
+            grantToTeam("n-dual-lead", NORTH, Role.TEST_LEAD_ID, NORTH_LEADS_TEAM, NORTH_BANKING, now);
         }));
 
         inCompany(SOUTH, () -> tx.executeWithoutResult(status -> {
@@ -355,6 +371,44 @@ class ProjectEndpointTest extends IntegrationTestBase {
         }
 
         @Test
+        @DisplayName("the projection itself excludes COMPANY-scope grants — not the map lookup")
+        void companyScopeIsExcludedByTheQueryNotByAccident() {
+            // Found by mutation, and the reason this test exists rather than resting on the
+            // rendered null above: deleting `project_id IS NOT NULL` from the query changed
+            // NOTHING observable. The company-scope row comes back with a null project_id,
+            // lands in the result map under a null key that no project id ever matches, and
+            // disappears. HashMap tolerating a null key is what hid it.
+            //
+            // So the assertion is moved to where the predicate lives. A row with no project
+            // id has no business in a per-project projection, whatever the consumer happens
+            // to survive — and the next consumer may not use a null-tolerant map.
+            List<RoleAssignmentRepository.ProjectRoleName> rows = inCompanyRead(NORTH,
+                    () -> roleAssignments.findProjectRoleNames(NORTH, ADMIN));
+
+            assertThat(rows)
+                    .as("this caller holds ONLY a COMPANY-scope grant, so a per-project "
+                            + "projection must return nothing at all for them")
+                    .isEmpty();
+
+            // Stated separately so an empty result cannot pass by the query being broken for
+            // everyone: the same projection does return a row for a project-scope grant.
+            assertThat(inCompanyRead(NORTH, () -> roleAssignments.findProjectRoleNames(NORTH, LEAD)))
+                    .hasSize(1);
+        }
+
+        @Test
+        @DisplayName("two grants on one project — the stronger role is shown, derived from its permissions")
+        void strongestGrantWins() throws Exception {
+            // DUAL holds Viewer directly and Test Lead through the QA team, both on
+            // NORTH_BANKING. One string may be shown, so the tie is broken by how many
+            // permissions each role actually confers — read from role_permission, never from
+            // a hard-coded ranking of names (handoff §6 lesson 10).
+            assertThat(detailAs(DUAL, NORTH, NORTH_BANKING).get("myRole").asText())
+                    .as("Test Lead confers strictly more than Viewer, so it is the honest label")
+                    .isEqualTo("Test Lead");
+        }
+
+        @Test
         @DisplayName("caseCount excludes soft-deleted cases")
         void caseCountIgnoresDeletedCases() throws Exception {
             // NORTH_BANKING has 3 live and 2 soft-deleted. Counting all 5 would contradict the
@@ -476,6 +530,31 @@ class ProjectEndpointTest extends IntegrationTestBase {
     private static void inCompany(UUID companyId, Runnable action) {
         try (var ignored = CompanyContext.open(companyId)) {
             action.run();
+        }
+    }
+
+    /**
+     * A read inside a company context <em>and</em> a transaction — both are required.
+     *
+     * <p>A repository query method with no transaction runs with no {@code app.current_company}
+     * set, and under RLS that means zero rows: the assertion would pass for the wrong reason,
+     * which is the defect {@code RepositoryTransactionTest} exists for.
+     */
+    private <T> T inCompanyRead(UUID companyId, java.util.function.Supplier<T> read) {
+        try (var ignored = CompanyContext.open(companyId)) {
+            return tx.execute(status -> read.get());
+        }
+    }
+
+    private void team(UUID teamId, UUID companyId, String name, Instant now) {
+        if (teams.findById(teamId).isEmpty()) {
+            teams.save(Team.create(teamId, companyId, name, null, now));
+        }
+    }
+
+    private void joinTeam(UUID companyId, UUID teamId, UUID userId, Instant now) {
+        if (teamMemberships.findById(new TeamMembershipId(teamId, userId)).isEmpty()) {
+            teamMemberships.save(TeamMembership.join(companyId, teamId, userId, false, now));
         }
     }
 
