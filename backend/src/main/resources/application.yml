@@ -89,6 +89,37 @@ management:
     health:
       probes:
         enabled: true
+  health:
+    # Mail is NOT a health signal for this application, and leaving it on made every
+    # default install report itself DOWN. Three reasons, in order of weight:
+    #
+    # 1. A mail outage is deliberately survivable here. SmtpInvitationMailer swallows send
+    #    failures and InvitationMailTest pins that ("a dead relay does not undo the company
+    #    it was announcing"). An indicator that turns a tolerated failure into an aggregate
+    #    DOWN contradicts a decision the suite already enforces.
+    # 2. DOWN is an instruction, not a note — an orchestrator restarts the container or
+    #    depools it. Neither action can reach an SMTP relay, so the signal is wrong rather
+    #    than merely noisy.
+    # 3. MailHealthIndicator calls testConnection() on EVERY poll, opening a real SMTP
+    #    connection each time. At the image's 30s HEALTHCHECK interval that is ~2,900
+    #    connections a day to a third-party relay, which is a shape relays rate-limit.
+    #
+    # Why here and not in compose: Boot's MailSenderAutoConfiguration gates on
+    # @ConditionalOnProperty("spring.mail.host"), which matches a property that is PRESENT
+    # — and an empty string is present. compose.yaml writes SPRING_MAIL_HOST: ${SMTP_HOST:-},
+    # and compose interpolation cannot omit a key conditionally, so "no relay" arrives as
+    # an empty host on every install that has not configured one. The JavaMailSender is
+    # then built pointing at nowhere, the indicator dials localhost, and the aggregate takes
+    # the worst of its components. Any templated deployment produces the same empty value,
+    # so the application is the only place that covers all of them.
+    #
+    # This is MailConfiguration's trap (§18 defect 3) one level up: that fix stopped an
+    # empty host selecting THIS project's SMTP mailer. It could not stop Boot's own
+    # auto-configuration, and the unused JavaMailSender bean is still there — known, not
+    # missed. HealthReportTest asserts all of it, including a canary that fails if a future
+    # Boot version rejects a blank host and makes this line dead configuration.
+    mail:
+      enabled: false
 
 logging:
   level:
