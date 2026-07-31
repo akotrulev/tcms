@@ -1425,6 +1425,7 @@ export interface paths {
                         "application/json": components["schemas"]["TestPlanSummary"][];
                     };
                 };
+                404: components["responses"]["NotFound"];
             };
         };
         put?: never;
@@ -1493,6 +1494,7 @@ export interface paths {
                         "application/json": components["schemas"]["TestPlan"];
                     };
                 };
+                404: components["responses"]["NotFound"];
             };
         };
         put?: never;
@@ -1520,7 +1522,15 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Current plan state from the latest execution */
+        /**
+         * Current plan state from the latest execution
+         * @description **Not implemented server-side as of backend M2 slice 1.** Every other path in this
+         *     tag is live; this one is still answered by the SPA's mock. The shape spans three
+         *     modules — `execution` for the results, `repository` for `bySuite`, `reporting` for
+         *     the trend and the coverage denominator — and `reporting` does not exist. Declared
+         *     here so the shape stays fixed, and named as unimplemented so a client is not misled
+         *     by its presence.
+         */
         get: {
             parameters: {
                 query?: {
@@ -1549,6 +1559,7 @@ export interface paths {
                         "application/json": components["schemas"]["PlanStatistics"];
                     };
                 };
+                404: components["responses"]["NotFound"];
             };
         };
         put?: never;
@@ -1571,7 +1582,13 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Test runs */
+        /**
+         * Test runs
+         * @description `planId` and `releaseVersion` are both **exact-match** filters, and both narrow rather
+         *     than resolve: a `planId` naming a plan in another project narrows the list to nothing
+         *     rather than answering 404, because the filter is a question about this project's runs
+         *     and the honest answer to "which of my runs belong to that plan" is none.
+         */
         get: {
             parameters: {
                 query?: {
@@ -1595,6 +1612,7 @@ export interface paths {
                         "application/json": components["schemas"]["TestRun"][];
                     };
                 };
+                404: components["responses"]["NotFound"];
             };
         };
         put?: never;
@@ -1666,6 +1684,7 @@ export interface paths {
                         "application/json": components["schemas"]["TestRunDetail"];
                     };
                 };
+                404: components["responses"]["NotFound"];
             };
         };
         put?: never;
@@ -1687,7 +1706,16 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** One execution, with the pinned case version's steps */
+        /**
+         * One execution, with the pinned case version's steps
+         * @description **The steps, preconditions and postconditions are the ones the pinned case version
+         *     carried, not the ones the case carries now** (plan §6j). `test_execution.case_version_id`
+         *     is the pin, and this response resolves through it — so editing a case never rewrites
+         *     what a tester was told to do in a run that already happened.
+         *
+         *     `caseTitle` is pinned for the same reason and `caseKey` is not pinned because it cannot
+         *     move: a display key is immutable (§6t).
+         */
         get: {
             parameters: {
                 query?: never;
@@ -1710,6 +1738,7 @@ export interface paths {
                         "application/json": components["schemas"]["TestExecution"];
                     };
                 };
+                404: components["responses"]["NotFound"];
             };
         };
         put?: never;
@@ -1720,6 +1749,16 @@ export interface paths {
         /**
          * Record a result
          * @description Optimistic locking via If-Match — several testers may work one run at once.
+         *
+         *     **Two permissions, not one.** Recording a verdict where none was recorded needs
+         *     `result:submit` (Test Engineer and Automation Service upward). Changing a verdict that
+         *     is already there needs `result:amend`, which is **Lead-only** (roles spec §A4 —
+         *     `result:amend` is listed beside `suite:delete` as destructive rather than creative). The
+         *     two 403s carry different sentences: telling a tester who records results every day that
+         *     they may not record results sends them to ask for a permission they already hold.
+         *
+         *     A `statusId` naming a status outside this project's vocabulary is a **400 on the field**,
+         *     not a 404 — the target resolved and the picker is where the message belongs.
          */
         patch: {
             parameters: {
@@ -1759,6 +1798,9 @@ export interface paths {
                         "application/json": components["schemas"]["TestExecution"];
                     };
                 };
+                400: components["responses"]["BadRequest"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
                 409: components["responses"]["Conflict"];
             };
         };
@@ -2765,20 +2807,20 @@ export interface components {
             name: string;
             /** @enum {string} */
             status: "DRAFT" | "IN_REVIEW" | "APPROVED" | "ACTIVE" | "CLOSED";
-            milestoneName?: string | null;
+            milestoneName: string | null;
             /** Format: date */
-            milestoneDate?: string | null;
+            milestoneDate: string | null;
             caseCount: number;
-            passRate?: number | null;
-            coverage?: number | null;
+            passRate: number | null;
+            coverage: number | null;
         };
         TestPlan: components["schemas"]["TestPlanSummary"] & {
-            description?: string | null;
-            entryCriteria?: components["schemas"]["Criterion"][];
-            exitCriteria?: components["schemas"]["Criterion"][];
-            configurations?: components["schemas"]["Configuration"][];
-            currentVersionNo?: number;
-            lockVersion?: number;
+            description: string | null;
+            entryCriteria: components["schemas"]["Criterion"][];
+            exitCriteria: components["schemas"]["Criterion"][];
+            configurations: components["schemas"]["Configuration"][];
+            currentVersionNo: number;
+            lockVersion: number;
         };
         TestPlanInput: {
             name: string;
@@ -2817,19 +2859,19 @@ export interface components {
             key: string;
             name: string;
             /** Format: uuid */
-            planId?: string | null;
-            planKey?: string | null;
+            planId: string | null;
+            planKey: string | null;
             configuration: components["schemas"]["Configuration"];
             /** @enum {string} */
             status: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "ABORTED";
-            releaseVersion?: string | null;
-            buildNumber?: string | null;
+            releaseVersion: string | null;
+            buildNumber: string | null;
             /** @enum {string} */
             source: "MANUAL" | "INGESTED";
             /** Format: date-time */
-            startedAt?: string | null;
+            startedAt: string | null;
             /** Format: date-time */
-            completedAt?: string | null;
+            completedAt: string | null;
             counts: components["schemas"]["ResultCounts"];
         };
         TestRunInput: {
@@ -2845,7 +2887,7 @@ export interface components {
             assigneeId?: string | null;
         };
         TestRunDetail: components["schemas"]["TestRun"] & {
-            executions?: components["schemas"]["TestExecutionSummary"][];
+            executions: components["schemas"]["TestExecutionSummary"][];
         };
         /** @description Counts, never percentages — the denominator toggle needs both (plan §6p). */
         ResultCounts: {
@@ -2870,36 +2912,41 @@ export interface components {
             caseKey: string;
             caseTitle: string;
             caseVersionNo: number;
-            status?: components["schemas"]["CaseStatus"] | null;
-            assignee?: components["schemas"]["UserRef"];
-            executedBy?: components["schemas"]["UserRef"];
+            status: components["schemas"]["CaseStatus"] | null;
+            assignee: components["schemas"]["UserRef"] | null;
+            executedBy: components["schemas"]["UserRef"] | null;
             /** Format: date-time */
-            executedAt?: string | null;
-            durationMs?: number | null;
+            executedAt: string | null;
+            durationMs: number | null;
             defects: components["schemas"]["DefectLink"][];
         };
         TestExecution: components["schemas"]["TestExecutionSummary"] & {
-            comment?: string | null;
-            releaseVersion?: string | null;
-            stepFormat?: components["schemas"]["StepFormat"];
-            preconditions?: components["schemas"]["CaseConditionRef"][];
-            postconditions?: components["schemas"]["CaseConditionRef"][];
-            steps?: components["schemas"]["StepResult"][];
-            evidence?: components["schemas"]["Evidence"][];
-            lockVersion?: number;
+            comment: string | null;
+            releaseVersion: string | null;
+            stepFormat: components["schemas"]["StepFormat"];
+            preconditions: components["schemas"]["CaseConditionRef"][];
+            postconditions: components["schemas"]["CaseConditionRef"][];
+            steps: components["schemas"]["StepResult"][];
+            evidence: components["schemas"]["Evidence"][];
+            lockVersion: number;
         };
+        /**
+         * @description One step of the **pinned** case version, with whatever result has been recorded against
+         *     it. The step fields are history and the result fields are current — which is why they
+         *     share a shape rather than being two lists the client has to join by `stepId`.
+         */
         StepResult: {
             /** Format: uuid */
-            stepId?: string;
-            position?: number;
-            keyword?: string | null;
-            action?: string;
-            testData?: string | null;
-            expectedResult?: string | null;
+            stepId: string;
+            position: number;
+            keyword: string | null;
+            action: string;
+            testData: string | null;
+            expectedResult: string | null;
             /** Format: uuid */
-            statusId?: string | null;
-            comment?: string | null;
-            evidence?: components["schemas"]["Evidence"][];
+            statusId: string | null;
+            comment: string | null;
+            evidence: components["schemas"]["Evidence"][];
         };
         Evidence: {
             /** Format: uuid */
@@ -2914,15 +2961,31 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
         };
+        /**
+         * @description **No `lockVersion` field.** The version the client read is a precondition, and it
+         *     travels as `If-Match` — see that parameter for why a body field would be a value on an
+         *     input schema that must never be persisted. The SPA sent one in the body for as long as
+         *     no server read it, which is the divergence class this schema exists not to repeat.
+         */
         ExecutionResultInput: {
-            /** Format: uuid */
-            statusId?: string;
+            /**
+             * Format: uuid
+             * @description Required: this endpoint records a verdict. A status outside the project's own
+             *     vocabulary is a 400 on this field.
+             */
+            statusId: string;
             comment?: string | null;
+            /**
+             * @description Optional and partial — a step absent from the list keeps whatever it had. A
+             *     `stepId` that is not a step of the **pinned** case version is a 400 on the field
+             *     rather than an ignored entry: silently dropping it is a save that reports success
+             *     and discards what the tester marked.
+             */
             stepResults?: {
                 /** Format: uuid */
-                stepId?: string;
+                stepId: string;
                 /** Format: uuid */
-                statusId?: string;
+                statusId: string;
                 comment?: string | null;
             }[];
         };
