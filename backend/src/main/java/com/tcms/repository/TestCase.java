@@ -19,13 +19,14 @@ import org.hibernate.annotations.Filter;
  * executions FK the case and pin the <em>version</em> they ran (§3 lesson 1), so hard-deleting one
  * would rewrite what every historical run covered. Every read must exclude deleted rows explicitly.
  *
- * <h2>No factory and no mutators, still</h2>
+ * <h2>A mutator now, and still no factory</h2>
  *
- * <p>Same reason as {@link Suite} and {@code ClassificationDimension}: this slice reads, and a
- * factory with no caller is where the {@code company_id} rule gets forgotten. The create endpoint
- * brings both, along with the two things that make writing a case harder than filling in these
- * fields — allocating {@code key}/{@code key_seq} from the company's {@code key_sequence} row, and
- * writing the first {@code test_case_version} in the same transaction so history starts at v1
+ * <p>{@link #applyEdit} arrived with {@code PATCH}, and is one method rather than a field's worth of
+ * setters for the reason its own comment gives. There is still no factory, and the reason has not
+ * changed: a factory with no caller is where the {@code company_id} rule gets forgotten. The create
+ * endpoint brings it, along with the two things that make <em>creating</em> a case harder than
+ * editing one — allocating {@code key}/{@code key_seq} from the company's {@code key_sequence} row,
+ * and writing the first {@code test_case_version} in the same transaction so history starts at v1
  * rather than at the first edit.
  *
  * <h2>Plain UUID foreign keys, no associations</h2>
@@ -207,6 +208,19 @@ public class TestCase {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    /**
+     * Who last wrote to this row. Mapped now because {@link #applyEdit} is the first thing that can
+     * change it, and a row saying it was updated without saying by whom is the audit column that
+     * looks present and answers nothing.
+     *
+     * <p>Nullable, and null on every row written before this slice — there is no backfill, because
+     * inventing an author for an edit nobody made is worse than admitting the record predates the
+     * column being kept. Like every {@code created_by}/{@code updated_by} in this schema it carries
+     * no FK to {@code app_user}; see {@link TestCaseVersion#getCreatedBy()}.
+     */
+    @Column(name = "updated_by")
+    private UUID updatedBy;
+
     /** Set ⇒ deleted. Excluded from every read; kept so past runs still resolve what they covered. */
     @Column(name = "deleted_at")
     private Instant deletedAt;
@@ -217,6 +231,65 @@ public class TestCase {
 
     /** JPA only. */
     protected TestCase() {
+    }
+
+    /**
+     * Applies a validated edit to this case — <strong>the only way its content changes.</strong>
+     *
+     * <h2>One method rather than fourteen setters, and that is the design</h2>
+     *
+     * <p>Every field here moves together on an explicit save (plan §6j), and two of them are not
+     * content at all: {@link #updatedAt} and {@link #updatedBy} must be stamped by whatever changed
+     * the row. With setters that is a rule each call site remembers, and the call site that forgets
+     * produces a row that was silently edited by nobody at no time — invisible in every test that
+     * checks the field it did set. Here it is not possible to change the title without stamping who
+     * did it.
+     *
+     * <p>{@code lifecycleStatus} is deliberately absent, matching {@code TestCaseInput}: promotion
+     * through draft → review → approved is the review workflow's (plan §6g), and a status that an
+     * ordinary edit can set is an approval anyone can grant themselves by saving. The SPA's editor
+     * agrees — status is not a field on the form.
+     *
+     * <p>{@code key}, {@code keySeq}, {@code companyId} and {@code projectId} are
+     * {@code updatable = false} at the mapping level, so a case cannot be renumbered or moved
+     * between projects or companies by this path even if a future caller passes them. Moving a case
+     * between projects would invalidate every suite, classification value and condition attached to
+     * it; it is not an edit, and if it is ever wanted it is its own operation.
+     *
+     * @param edit     already validated and normalized — see {@link CaseEdit}. This method enforces
+     *                 nothing, on purpose: a rule half-enforced here and half at the edge is a rule
+     *                 with two answers.
+     * @param editorId the authenticated caller, never a value from the request body
+     */
+    void applyEdit(CaseEdit edit, UUID editorId, Instant now) {
+        this.suiteId = edit.suiteId();
+        this.title = edit.title();
+        this.description = edit.description();
+        this.objective = edit.objective();
+        this.expectedOutcome = edit.expectedOutcome();
+        this.stepFormat = edit.stepFormat();
+        this.gherkinSource = edit.gherkinSource();
+        this.priority = edit.priority();
+        this.severity = edit.severity();
+        this.automationStatus = edit.automationStatus();
+        this.automationKey = edit.automationKey();
+        this.notAutomatableReason = edit.notAutomatableReason();
+        this.estimatedDurationSec = edit.estimatedDurationSec();
+        this.updatedAt = now;
+        this.updatedBy = editorId;
+    }
+
+    /**
+     * Records that a new authored version now exists — called only when one was actually written.
+     *
+     * <p>Separate from {@link #applyEdit} because the two do not always both happen: a save whose
+     * content hash is unchanged writes no version and must not advance this number, while
+     * {@link #lockVersion} advances on every write regardless. Keeping them one method is how the
+     * version beside the title starts counting saves instead of versions, and then no history entry
+     * matches it.
+     */
+    void advanceVersion(int versionNo) {
+        this.currentVersionNo = versionNo;
     }
 
     public UUID getId() {

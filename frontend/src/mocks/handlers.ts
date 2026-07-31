@@ -51,8 +51,21 @@ const API = '/api/v1';
 /** A little latency, so loading states are real rather than theoretical. */
 const LATENCY = 220;
 
-const problem = (status: number, title: string, detail: string) =>
-  HttpResponse.json({ type: 'about:blank', title, status, detail }, { status });
+/**
+ * `Problem` from the contract. `errors` is the RFC-7807 field map the client reads as
+ * `ApiError.fieldErrors`, and it is omitted rather than sent empty: a 409 carrying `errors: {}`
+ * reads as "no fields were wrong" instead of "fields are not what this is about".
+ */
+const problem = (
+  status: number,
+  title: string,
+  detail: string,
+  errors?: Record<string, string[]>,
+) =>
+  HttpResponse.json(
+    { type: 'about:blank', title, status, detail, ...(errors ? { errors } : {}) },
+    { status },
+  );
 
 const notFound = (what: string) => problem(404, 'Not found', `${what} does not exist.`);
 
@@ -620,9 +633,23 @@ export const handlers = [
     const existing = caseDetail(String(params.caseId));
     if (!existing) return notFound('That test case');
 
-    const body = (await request.json()) as Record<string, unknown> & { lockVersion?: number };
-    if (body.lockVersion !== undefined && body.lockVersion !== existing.lockVersion) {
-      return problem(409, 'Someone else saved first', 'Reload the case to see the newer version, then reapply your change.');
+    const body = (await request.json()) as Record<string, unknown>;
+
+    // The precondition is the If-Match header, not a body field — see `useUpdateCase`. Read the
+    // same way the real endpoint reads it, quoted form included: a mock that accepts a shape the
+    // server refuses is a mock that hides the bug until live mode (§27's condition-order defect,
+    // arriving through a different door).
+    const ifMatch = request.headers.get('If-Match');
+    if (ifMatch !== null && ifMatch.trim() !== '') {
+      const expected = Number(ifMatch.trim().replace(/^"(.*)"$/, '$1'));
+      if (!Number.isInteger(expected)) {
+        return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+          'If-Match': ["Send the case's lockVersion as the If-Match header, or omit the header."],
+        });
+      }
+      if (expected !== existing.lockVersion) {
+        return problem(409, 'Someone else saved first', 'Reload the case to see the newer version, then reapply your change.');
+      }
     }
 
     if (typeof body.title === 'string' && !body.title.trim()) {
@@ -638,8 +665,32 @@ export const handlers = [
       );
     }
 
+    // The six fields on `TestCaseInput` the real endpoint has no write path for are REFUSED, not
+    // ignored — accepting and dropping them is a save that reports success and discards what the
+    // user typed. Mirrored here so mock mode cannot pass a payload live mode rejects.
+    const unsupported = [
+      'ownerId',
+      'classificationValueIds',
+      'tags',
+      'automationTags',
+      'preconditions',
+      'postconditions',
+    ] as const;
+    const refused = unsupported.filter((field) => body[field] !== undefined);
+    if (refused.length > 0) {
+      return problem(
+        400,
+        'Validation failed',
+        'Check the highlighted fields.',
+        Object.fromEntries(refused.map((f) => [f, ['This field cannot be changed here yet.']])),
+      );
+    }
+
     // Only fields the update path actually persists are applied — and the form only
     // renders these, so an edit can never show success and discard the value (ui-rules §3).
+    // `lifecycleStatus` is absent because it is absent from `TestCaseInput`: promotion through
+    // draft → review → approved is the review workflow's (plan §6g), and a status an ordinary
+    // edit can set is an approval anyone grants themselves by saving.
     const writable = [
       'title',
       'description',
@@ -649,16 +700,11 @@ export const handlers = [
       'severity',
       'automationStatus',
       'automationKey',
-      'automationTags',
       'notAutomatableReason',
       'estimatedDurationSec',
       'stepFormat',
       'gherkinSource',
-      'tags',
       'suiteId',
-      'lifecycleStatus',
-      'preconditions',
-      'postconditions',
     ] as const;
 
     const next: TestCase = { ...existing };

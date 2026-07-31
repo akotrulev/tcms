@@ -272,11 +272,26 @@ export function useCreateCase(projectId: string) {
   });
 }
 
+/**
+ * Edits a case.
+ *
+ * The version the client read travels in `If-Match`, **not** in the body. A PATCH body states the
+ * desired state; the version it started from is a precondition about that state, and sending it as
+ * a field puts a value on the input schema that must never be persisted. `openapi.yaml` has always
+ * specified the header — this hook sent `lockVersion` in the body for as long as no server read
+ * either, and the real endpoint reads the header (backend M1 slice 7).
+ *
+ * `lockVersion` is required rather than optional: omitting the header is last-write-wins, which is
+ * correct for an importer with no prior read and never correct for an editor. Making the caller
+ * pass it means a screen cannot silently opt out of conflict detection by forgetting.
+ */
 export function useUpdateCase(projectId: string, caseId: string) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (input: Record<string, unknown>) =>
-      api.patch<TestCase>(`${base(projectId)}/cases/${caseId}`, input),
+    mutationFn: ({ lockVersion, ...input }: Record<string, unknown> & { lockVersion: number }) =>
+      api.patch<TestCase>(`${base(projectId)}/cases/${caseId}`, input, {
+        headers: { 'If-Match': String(lockVersion) },
+      }),
     // Same reasoning as the create above — and this one also renders 409 conflicts itself,
     // which are a decision to hand back rather than a generic failure to announce.
     meta: { handled: true },

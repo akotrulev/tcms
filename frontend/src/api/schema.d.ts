@@ -908,7 +908,16 @@ export interface paths {
             parameters: {
                 query?: never;
                 header?: {
-                    /** @description The entity's lockVersion. Mismatch yields 409. */
+                    /**
+                     * @description The `lockVersion` the client read, as a decimal string. Mismatch yields 409.
+                     *
+                     *     **The precondition travels in the header, never in the body.** A PATCH body states the
+                     *     desired state; the version the client happened to read is an assertion about the state it
+                     *     started from, and mixing the two means a field on the input schema that must never be
+                     *     persisted. Omitting the header skips the check — a last-write-wins save, which is correct
+                     *     for a caller that genuinely has no prior read (an importer) and wrong for an editor, so
+                     *     the SPA always sends it.
+                     */
                     "If-Match"?: components["parameters"]["IfMatch"];
                 };
                 path: {
@@ -939,6 +948,8 @@ export interface paths {
                         "application/json": components["schemas"]["TestCase"];
                     };
                 };
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
                 409: components["responses"]["Conflict"];
             };
         };
@@ -1497,7 +1508,16 @@ export interface paths {
             parameters: {
                 query?: never;
                 header?: {
-                    /** @description The entity's lockVersion. Mismatch yields 409. */
+                    /**
+                     * @description The `lockVersion` the client read, as a decimal string. Mismatch yields 409.
+                     *
+                     *     **The precondition travels in the header, never in the body.** A PATCH body states the
+                     *     desired state; the version the client happened to read is an assertion about the state it
+                     *     started from, and mixing the two means a field on the input schema that must never be
+                     *     persisted. Omitting the header skips the check — a last-write-wins save, which is correct
+                     *     for a caller that genuinely has no prior read (an importer) and wrong for an editor, so
+                     *     the SPA always sends it.
+                     */
                     "If-Match"?: components["parameters"]["IfMatch"];
                 };
                 path: {
@@ -2002,6 +2022,20 @@ export interface components {
             title?: string;
             status?: number;
             detail?: string;
+            /**
+             * @description RFC-7807 `errors` — field name to the messages that field failed on, present only on a
+             *     validation rejection. The key is the field's name **as it appears on the input schema**
+             *     (`gherkinSource`, not `gherkin_source` or `caseInput.gherkinSource`), because the SPA
+             *     maps it straight onto a form input: a key that does not match a field name lands the
+             *     message nowhere and the form reports a failure with nothing highlighted.
+             *
+             *     Undeclared until 2026-07-31 while both sides already implemented it — the client has
+             *     read `body.errors` since Phase 1 and the mock has emitted it since. Documented here so
+             *     the first real write agrees with the contract rather than with the mock.
+             */
+            errors?: {
+                [key: string]: string[];
+            } | null;
         };
         PageMeta: {
             page?: number;
@@ -2194,13 +2228,13 @@ export interface components {
             updatedAt: string;
         };
         TestCase: components["schemas"]["TestCaseSummary"] & {
-            description?: string | null;
-            objective?: string | null;
+            description: string | null;
+            objective: string | null;
             /** @description Case-level, alongside per-step expected results (plan §6m). */
-            expectedOutcome?: string | null;
-            severity?: components["schemas"]["Priority"] | null;
-            estimatedDurationSec?: number | null;
-            automationTags?: string[];
+            expectedOutcome: string | null;
+            severity: components["schemas"]["Priority"] | null;
+            estimatedDurationSec: number | null;
+            automationTags: string[];
             /**
              * @description The single stable identifier a CI result carries back — FQCN#method, a Cucumber
              *     scenario URI, or an explicit annotation value. Unique per COMPANY (plan §6c), so
@@ -2208,15 +2242,15 @@ export interface components {
              *     moved between projects does not change where its key resolves. Distinct from
              *     automationTags, which are for *selection* (@smoke), not matching.
              */
-            automationKey?: string | null;
-            notAutomatableReason?: string | null;
-            gherkinSource?: string | null;
-            steps?: components["schemas"]["TestStep"][];
-            preconditions?: components["schemas"]["CaseConditionRef"][];
-            postconditions?: components["schemas"]["CaseConditionRef"][];
+            automationKey: string | null;
+            notAutomatableReason: string | null;
+            gherkinSource: string | null;
+            steps: components["schemas"]["TestStep"][];
+            preconditions: components["schemas"]["CaseConditionRef"][];
+            postconditions: components["schemas"]["CaseConditionRef"][];
             relatedDocuments?: components["schemas"]["DocLink"][];
-            currentVersionNo?: number;
-            lockVersion?: number;
+            currentVersionNo: number;
+            lockVersion: number;
         };
         TestCaseInput: {
             title: string;
@@ -2916,6 +2950,25 @@ export interface components {
                 "application/json": components["schemas"]["Problem"];
             };
         };
+        /**
+         * @description Authenticated, and the target is one the caller may READ, but the action needs a
+         *     permission they do not hold.
+         *
+         *     This does not weaken the 404-not-403 rule (§6t): that rule conceals whether an id names
+         *     anything real from a caller who cannot see it, and it still governs every read and every
+         *     unreachable target. Once a caller has passed the read gate they already know the thing
+         *     exists, so answering 404 on the write would conceal nothing and would instead tell an
+         *     editor their case had vanished. An unreachable project or case stays 404 here too — 403
+         *     is reached only after the read gate has passed.
+         */
+        Forbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Problem"];
+            };
+        };
         /** @description Concurrent modification — reload and retry */
         Conflict: {
             headers: {
@@ -2939,7 +2992,16 @@ export interface components {
         RunId: string;
         Page: number;
         Size: number;
-        /** @description The entity's lockVersion. Mismatch yields 409. */
+        /**
+         * @description The `lockVersion` the client read, as a decimal string. Mismatch yields 409.
+         *
+         *     **The precondition travels in the header, never in the body.** A PATCH body states the
+         *     desired state; the version the client happened to read is an assertion about the state it
+         *     started from, and mixing the two means a field on the input schema that must never be
+         *     persisted. Omitting the header skips the check — a last-write-wins save, which is correct
+         *     for a caller that genuinely has no prior read (an importer) and wrong for an editor, so
+         *     the SPA always sends it.
+         */
         IfMatch: string;
     };
     requestBodies: never;

@@ -210,7 +210,9 @@ Project-scope artifact edit is Lead-only; sign-off artifacts are write-once.
 
 ### A5. The ownership qualifier
 
-`case:edit`, `case:delete` and `evidence:delete` are `OWN`-qualified for Test Engineer: they apply to content the caller authored, in any state. Implemented as an `OWN` qualifier resolved against `createdBy` — **not** as separate `case:edit:own` permissions.
+~~`case:edit`,~~ `case:delete` and `evidence:delete` are `OWN`-qualified for Test Engineer: they apply to content the caller authored, in any state. Implemented as an `OWN` qualifier resolved against `createdBy` — **not** as separate `case:edit:own` permissions.
+
+**→ superseded 2026-07-31: `case:edit` is *not* `OWN`-qualified.** This line was the only place it was, and it contradicted both the permission table above (plain ✓ for Test Engineer) and §A3's own principle one screen up — *"a Test Engineer is never blocked from producing, only from unmaking **someone else's** work"* — which names `case:delete` and `evidence:delete` and deliberately not this. The failure the old reading produces is not theoretical: a Test Engineer who spots a wrong expected result in a colleague's case could not fix it, in a product whose entire subject is a **shared** test repository. Editing is producing; deleting is unmaking. The qualifier stays exactly where the principle puts it, and is still owed to `case:delete` (unimplemented as of backend M1 slice 7, which gates `case:edit` unqualified).
 
 ### A6. Automation Service — the exact grant
 

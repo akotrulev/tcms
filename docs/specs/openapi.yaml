@@ -490,6 +490,8 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/TestCase' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
     delete:
       tags: [repository]
@@ -988,7 +990,15 @@ components:
     IfMatch:
       name: If-Match
       in: header
-      description: The entity's lockVersion. Mismatch yields 409.
+      description: |
+        The `lockVersion` the client read, as a decimal string. Mismatch yields 409.
+
+        **The precondition travels in the header, never in the body.** A PATCH body states the
+        desired state; the version the client happened to read is an assertion about the state it
+        started from, and mixing the two means a field on the input schema that must never be
+        persisted. Omitting the header skips the check — a last-write-wins save, which is correct
+        for a caller that genuinely has no prior read (an importer) and wrong for an editor, so
+        the SPA always sends it.
       schema: { type: string }
 
   responses:
@@ -999,6 +1009,20 @@ components:
           schema: { $ref: '#/components/schemas/Problem' }
     NotFound:
       description: Not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Forbidden:
+      description: |
+        Authenticated, and the target is one the caller may READ, but the action needs a
+        permission they do not hold.
+
+        This does not weaken the 404-not-403 rule (§6t): that rule conceals whether an id names
+        anything real from a caller who cannot see it, and it still governs every read and every
+        unreachable target. Once a caller has passed the read gate they already know the thing
+        exists, so answering 404 on the write would conceal nothing and would instead tell an
+        editor their case had vanished. An unreachable project or case stays 404 here too — 403
+        is reached only after the read gate has passed.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Problem' }
@@ -1018,6 +1042,22 @@ components:
         title: { type: string }
         status: { type: integer }
         detail: { type: string }
+        errors:
+          type: object
+          nullable: true
+          description: |
+            RFC-7807 `errors` — field name to the messages that field failed on, present only on a
+            validation rejection. The key is the field's name **as it appears on the input schema**
+            (`gherkinSource`, not `gherkin_source` or `caseInput.gherkinSource`), because the SPA
+            maps it straight onto a form input: a key that does not match a field name lands the
+            message nowhere and the form reports a failure with nothing highlighted.
+
+            Undeclared until 2026-07-31 while both sides already implemented it — the client has
+            read `body.errors` since Phase 1 and the mock has emitted it since. Documented here so
+            the first real write agrees with the contract rather than with the mock.
+          additionalProperties:
+            type: array
+            items: { type: string }
 
     PageMeta:
       type: object
@@ -1287,6 +1327,34 @@ components:
       allOf:
         - $ref: '#/components/schemas/TestCaseSummary'
         - type: object
+          # `required` does NOT descend from the parent schema, and an allOf branch needs its own —
+          # without this every field below generated as optional and `lockVersion` could not be sent
+          # as If-Match without a null check on a value the server always emits. Handoff §6 lesson 3,
+          # found by `tsc` the moment a consumer relied on one of them.
+          #
+          # The nullable scalars are listed too, because the server emits the KEY with a null value
+          # rather than omitting it — "always present, sometimes null" is what nullable+required says,
+          # and leaving them out would mean a consumer cannot tell an unset objective from a field
+          # this endpoint does not serve.
+          #
+          # relatedDocuments is deliberately ABSENT: it is sourced from the `documentation` module,
+          # which does not exist, so the server omits the key entirely rather than serving [] and
+          # claiming a case has no linked documents (§27).
+          required:
+            - description
+            - objective
+            - expectedOutcome
+            - severity
+            - estimatedDurationSec
+            - automationTags
+            - automationKey
+            - notAutomatableReason
+            - gherkinSource
+            - steps
+            - preconditions
+            - postconditions
+            - currentVersionNo
+            - lockVersion
           properties:
             description: { type: string, nullable: true }
             objective: { type: string, nullable: true }

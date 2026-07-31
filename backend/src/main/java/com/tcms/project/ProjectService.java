@@ -139,6 +139,48 @@ public class ProjectService {
     }
 
     /**
+     * <strong>The gate for every project-scoped write.</strong> Runs {@code write} against the
+     * project only if the caller may see it <em>and</em> holds {@code permission} on it.
+     *
+     * <p>The read gate's sibling, and deliberately a different method rather than a flag on it: a
+     * read that accidentally omitted a permission argument would still compile and would still be
+     * gated (on visibility), which is exactly the mistake that must not be silent. A write that
+     * calls the wrong one of these two is visible in the diff, because it has to name a permission
+     * to get here at all.
+     *
+     * <p><strong>The permission is a constant at the call site, never a parameter from the
+     * request.</strong> Letting a caller nominate the permission it is checked against is the same
+     * class of defect as reading the company from a header (ERD §0.1 point 2), one layer up.
+     *
+     * <p>The write runs inside this transaction, so a failure after the gate rolls the whole thing
+     * back — including the {@code audit_event} row, which must not survive a change that did not
+     * commit.
+     *
+     * @param permission the permission key the action needs, e.g. {@code case:edit}. Must not be an
+     *                   {@code OWN}-qualified one — see {@link ProjectAccess#canDo}.
+     * @param write      applied to the gated project, for the reason {@link #readVisible} gives:
+     *                   nothing downstream should accept a {@code projectId} it has not had gated
+     */
+    @Transactional
+    public <T> GateResult<T> writeGranted(
+            UUID userId, UUID projectId, String permission, Function<Project, T> write) {
+
+        Optional<Project> project = projects.findScopedById(projectId);
+        if (project.isEmpty() || !access.canView(userId, project.get().getId())) {
+            // Both gates of the READ path first, and in this order: a caller who cannot see the
+            // project must not be able to tell a nonexistent id from one they hold no grant on by
+            // observing 403 instead of 404. Checking the write permission first would leak exactly
+            // that, because the evaluator answers "no" for both and this method would then have to
+            // guess which "no" it was looking at.
+            return new GateResult.Unreachable<>();
+        }
+        if (!access.canDo(userId, project.get().getId(), permission)) {
+            return new GateResult.Denied<>();
+        }
+        return new GateResult.Allowed<>(write.apply(project.get()));
+    }
+
+    /**
      * The gate itself — <strong>the one implementation of "may this caller see this project".</strong>
      *
      * <p>Private and unannotated on purpose. Every caller ({@link #findVisible} in this class,

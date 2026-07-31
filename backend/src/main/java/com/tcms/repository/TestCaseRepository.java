@@ -54,4 +54,39 @@ public interface TestCaseRepository extends JpaRepository<TestCase, UUID> {
             """)
     Optional<TestCase> findLiveInProject(
             @Param("projectId") UUID projectId, @Param("caseId") UUID caseId);
+
+    /**
+     * Is this automation key already claimed by a <em>different</em> case in this company?
+     *
+     * <h2>Company-wide, and deliberately not project-scoped</h2>
+     *
+     * <p>{@code test_case_automation_key_idx} is unique on {@code (company_id, automation_key)}, and
+     * §6c explains why the scope is the company: a CI job posts a result under a key without knowing
+     * which project owns the case. Scoping this check to the project would pass for a key another
+     * project has taken, and the insert would then fail on the constraint as a 500.
+     *
+     * <h2>Deleted cases still hold their keys, and this query agrees with the index</h2>
+     *
+     * <p>There is no {@code deletedAt IS NULL} here, and that is not the oversight it looks like:
+     * the unique index is partial on {@code automation_key IS NOT NULL} and does
+     * <strong>not</strong> exclude soft-deleted rows, so a retired case keeps its CI identifier
+     * reserved. Adding the predicate here would make this check disagree with the constraint that
+     * actually enforces it — the check would pass and the insert would fail, which is the worst of
+     * both: a validated form that 500s on submit.
+     *
+     * <p>Keeping the key reserved is also correct on its own terms. Results still arrive for a
+     * retired case's automated test until someone deletes the CI job, and handing that key to a new
+     * case would silently file the old test's results against it.
+     *
+     * @param caseId excluded, so a case re-saving its own unchanged key is not rejected by itself —
+     *               the bug this parameter exists to prevent, and one that would make every second
+     *               save of an automated case fail
+     */
+    @Query("""
+            SELECT COUNT(tc) > 0 FROM TestCase tc
+             WHERE tc.automationKey = :automationKey
+               AND tc.id <> :caseId
+            """)
+    boolean existsByAutomationKeyOtherThan(
+            @Param("automationKey") String automationKey, @Param("caseId") UUID caseId);
 }

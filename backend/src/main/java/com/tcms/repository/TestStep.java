@@ -1,5 +1,6 @@
 package com.tcms.repository;
 
+import com.tcms.tenancy.CompanyContext;
 import com.tcms.tenancy.CompanyFilter;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -88,6 +89,43 @@ public class TestStep {
 
     /** JPA only. */
     protected TestStep() {
+    }
+
+    /**
+     * A new step on a case.
+     *
+     * <p>The id is generated here and is <strong>the value every future result will reference</strong>
+     * — so it is assigned once, at creation, and never reassigned. {@code companyId} comes from
+     * {@link CompanyContext} rather than from an argument, per ERD §0.1 point 2: a company taken from
+     * a parameter is one a future call site can pass wrong.
+     *
+     * @param position the caller's index in the submitted list, not a value from the request — see
+     *                 {@link CaseSteps}
+     */
+    static TestStep of(UUID caseId, int position, CaseEdit.StepEdit edit) {
+        TestStep step = new TestStep();
+        step.id = UUID.randomUUID();
+        step.companyId = CompanyContext.require();
+        step.caseId = caseId;
+        step.applyEdit(position, edit);
+        return step;
+    }
+
+    /**
+     * Updates this step in place, <strong>keeping its id</strong>.
+     *
+     * <p>That is the whole point, and it is why {@link CaseSteps} updates rather than replaces:
+     * {@code step_result} references {@link #id}, so an edited step keeps every result recorded
+     * against it and a reordered one keeps them attached to the right action. {@code caseId} is
+     * {@code updatable = false} at the mapping level, so no edit can move a step between cases.
+     */
+    void applyEdit(int position, CaseEdit.StepEdit edit) {
+        this.position = position;
+        this.keyword = edit.keyword();
+        this.action = edit.action();
+        this.testData = edit.testData();
+        this.expectedResult = edit.expectedResult();
+        this.sharedStepId = edit.sharedStepId();
     }
 
     public UUID getId() {

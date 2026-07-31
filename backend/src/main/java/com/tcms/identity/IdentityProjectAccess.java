@@ -46,10 +46,24 @@ public class IdentityProjectAccess implements ProjectAccess {
     @Override
     @Transactional(readOnly = true)
     public boolean canView(UUID userId, UUID projectId) {
+        return canDo(userId, projectId, VIEW_PROJECT);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>One line, and it is the same line {@link #canView} used to be — which is the point of
+     * routing both through here rather than giving the write its own evaluator call. The two gates
+     * differ in the permission they name and in nothing else, so there is one place the evaluator
+     * is asked and one place a mistake in asking it could live.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public boolean canDo(UUID userId, UUID projectId, String permission) {
         // The evaluator already returns the empty set for a project outside the active
         // company, so a foreign id needs no separate check here — and adding one would be a
         // second place the boundary is decided.
-        return permissions.evaluate(userId, projectId).has(VIEW_PROJECT);
+        return permissions.evaluate(userId, projectId).has(permission);
     }
 
     /**

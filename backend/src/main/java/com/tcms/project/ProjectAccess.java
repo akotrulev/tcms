@@ -43,6 +43,35 @@ public interface ProjectAccess {
     boolean canView(UUID userId, UUID projectId);
 
     /**
+     * Does this caller hold {@code permission} on this project, in the company currently open?
+     *
+     * <p>{@link #canView} is this question asked with {@code project:read}, and is kept as its own
+     * method because every read in the application calls it and "the permission that means visible"
+     * is a decision that belongs on the implementation side rather than at two hundred call sites.
+     *
+     * <h2>Why a write needs this and cannot reuse {@code canView}</h2>
+     *
+     * <p>Access is two independent gates and a write adds a third question to them: not "may this
+     * caller see the project" but "may they do <em>this</em> to it". Every one of the six built-in
+     * roles holds {@code project:read} — that is what makes a granted project visible at all — so a
+     * write gated on {@code canView} is a write every Viewer may perform. The client's own
+     * stakeholder, invited as a Viewer precisely so they can read coverage without touching it
+     * (roles spec §A7), would be able to rewrite the test suite they were shown.
+     *
+     * <p>The answer must come from {@code PermissionEvaluator} like every other, for the reason the
+     * header gives: a second computation of "may they?" diverges quietly, and the quiet one decides
+     * what a client can change.
+     *
+     * <p><strong>This answers permissions, never the ownership qualifier.</strong> Roles spec §A5
+     * qualifies {@code case:delete} and {@code evidence:delete} with {@code OWN}, resolved against
+     * the row's author — which needs the row, not just the project, and so cannot be answered from
+     * this signature. A caller of this method for an {@code OWN}-qualified permission would get a
+     * true that means "holds it for something" and read it as "holds it for this one". No such
+     * permission is gated anywhere yet; the qualifier is still owed.
+     */
+    boolean canDo(UUID userId, UUID projectId, String permission);
+
+    /**
      * The caller's <strong>PROJECT-scope</strong> role name per project across the whole
      * company, strongest grant winning — one lookup for the entire list rather than one per
      * project.
