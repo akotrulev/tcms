@@ -104,21 +104,24 @@ public class AdminDirectoryService {
      * is the bug class plan §6b names and {@code ProjectService}'s header refuses in the same
      * words. When the evaluator gets its cache, this improves for free.
      *
-     * <h2>{@code company:read} is asked for <em>anywhere</em>, and the reason is a real gap</h2>
+     * <h2>{@code company:read} is asked at company scope, and used to have to be asked "anywhere"</h2>
      *
-     * <p>The obvious gate is {@code evaluateCompanyWide(user).has("company:read")}, and it refuses
-     * a Test Lead. Roles spec §A3 grants {@code company:read} to "every member" and {@code V3}
-     * seeds it onto five of the six roles saying so in its own comment — but four of those five are
-     * <strong>PROJECT-scope</strong> roles, and the company-wide term is SYSTEM + COMPANY only. So
-     * a permission the spec says every member holds is invisible to the only question that asks
-     * about the company, for everyone below Company Admin.
+     * <p>This gate read {@code companyWide || held on any project} until handoff §43, because
+     * {@code evaluateCompanyWide} refused a Test Lead: roles spec §A3 grants {@code company:read} to
+     * "every member" and {@code V3} seeds it onto five of the six roles, but four of those five are
+     * <strong>PROJECT-scope</strong> and the company-wide term is SYSTEM + COMPANY only. The
+     * workaround was honest and did not scale — the next surface gating on a company-scope
+     * permission would have written it again, or fail closed by forgetting.
      *
-     * <p>Two repairs exist and neither is this slice's to make: seed {@code company:read} through a
-     * company-scope grant every member receives on joining, or let the evaluator answer "held
-     * anywhere in this company". Until one of them lands, the gate here asks the honest version of
-     * the question — held company-wide, <em>or</em> on any project this caller holds — which
-     * matches the spec's intent and costs nothing, because the per-project sets are being computed
-     * on this pass anyway. Recorded in handoff §39 rather than absorbed.
+     * <p>{@code V15} repaired the root instead: every member holds an explicit COMPANY-scope grant
+     * of {@link Role#COMPANY_MEMBER_ID}, so the company-wide question now answers for every member
+     * and this asks it directly. The rejected alternative — letting the evaluator answer "held
+     * anywhere in this company" — would have made {@code case:delete} on one project read as a
+     * company-wide capability.
+     *
+     * <p>The two readings are equivalent for every member the product creates and no longer
+     * equivalent for a membership row written by hand: that one now answers "no", which is the
+     * fail-closed direction and is repaired by re-running {@code provision-company}.
      */
     @Transactional(readOnly = true)
     public AdminReach reachOf(UUID userId) {
@@ -136,7 +139,6 @@ public class AdminDirectoryService {
             if (held.has(MANAGE_PROJECT_MEMBERS)) {
                 staffable.add(project.getId());
             }
-            readsCompany = readsCompany || held.has(READ_COMPANY);
         }
         return new AdminReach(
                 Set.copyOf(visible), Set.copyOf(staffable), companyWide, readsCompany);
@@ -269,6 +271,19 @@ public class AdminDirectoryService {
      * The same assembly, ungated — for the paths that have already gated and need role names to
      * render a grant with. Calling {@link #listRoles} from there would re-run {@link #reachOf} and
      * its N evaluations to answer a question the caller has already answered.
+     *
+     * <h2>{@link Role#COMPANY_MEMBER_ID} is filtered out, and it is not cosmetic</h2>
+     *
+     * <p>The baseline every member holds is a consequence of membership, not a decision about a
+     * person: it is granted on joining (V15), refused by {@link RoleGrantService}, and never
+     * revocable. Offering it here would put it in the grant picker, where the only two things an
+     * administrator could do with it are grant something everybody already has and — through the
+     * assignment list — revoke a colleague's sight of the company with no way back short of the
+     * operator CLI.
+     *
+     * <p>It is also what keeps the response inside the contract: {@code openapi.yaml}'s
+     * {@code Role.name} is a closed six-value enum, so a seventh name on this wire would be a
+     * divergence a generated client cannot parse.
      */
     List<RoleView> roleCatalogue() {
         Map<UUID, List<String>> permissionsByRole = new HashMap<>();
@@ -277,6 +292,7 @@ public class AdminDirectoryService {
                     .add(row.getPermissionKey());
         }
         return roles.findAllByOrderByNameAsc().stream()
+                .filter(role -> !Role.COMPANY_MEMBER_ID.equals(role.getId()))
                 .map(role -> new RoleView(
                         role.getId(),
                         role.getName(),
@@ -322,6 +338,11 @@ public class AdminDirectoryService {
 
         return roleAssignments.findAllByOrderByGrantedAtDesc().stream()
                 .filter(grant -> projectId == null || projectId.equals(grant.getProjectId()))
+                // The baseline every member holds is not an administrable grant — see
+                // roleCatalogue(). Rendering it would offer a Revoke that removes a colleague's
+                // sight of the company, and would put a role the contract does not enumerate on
+                // the wire inside RoleAssignment.role.
+                .filter(grant -> !Role.COMPANY_MEMBER_ID.equals(grant.getRoleId()))
                 .filter(grant -> reach.mayStaff(grant.getProjectId()))
                 .map(grant -> view(grant, reach, projectNames, roleViews, people, teamNames))
                 .toList();

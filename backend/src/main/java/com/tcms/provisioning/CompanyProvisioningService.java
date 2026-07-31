@@ -178,6 +178,16 @@ public class CompanyProvisioningService {
         boolean membershipCreated = inviteMembershipIfAbsent(request, companyId, admin, now);
         boolean grantCreated = grantCompanyAdminIfAbsent(companyId, admin, actorUserId, now);
 
+        // Every member's company:read baseline (V15) — the admin just invited above, and everyone
+        // who joined before this release. AFTER the membership insert, so the fresh admin is one of
+        // the rows it covers rather than needing a second call.
+        //
+        // Company-wide rather than "the admin we just created", deliberately: re-running the CLI is
+        // the supported way to top a company up after a release (V5), and a company provisioned
+        // before V15 whose members were then granted by hand has exactly the gap this repairs. It
+        // is one statement guarded by NOT EXISTS, so a re-run on a healthy company writes nothing.
+        int baselineGrants = grantCompanyReadBaseline(companyId);
+
         ProjectOutcome project = createFirstProjectIfRequested(request, companyId, now);
 
         // Inside this transaction on purpose: a failure below must take the invitation with
@@ -193,6 +203,7 @@ public class CompanyProvisioningService {
                 adminOutcome.created(),
                 membershipCreated,
                 grantCreated,
+                baselineGrants,
                 project.id(),
                 project.created(),
                 invitation.acceptUrl(),
@@ -281,6 +292,24 @@ public class CompanyProvisioningService {
         return true;
     }
 
+    /**
+     * Grants the {@code company:read} baseline to every member who lacks it, and reports how many
+     * rows that wrote.
+     *
+     * <p>The statement lives in {@code tcms_grant_company_read_baseline} (V15) rather than here for
+     * the reason V2 §4 gives about the vocabularies: three callers need exactly it — that
+     * migration's backfill, this, and invitation acceptance — and the copy that drifts is the one
+     * that decides whether a client can see their own company. Same shape as the two seed functions
+     * above, including the refusal to run without a matching company context.
+     */
+    private int grantCompanyReadBaseline(UUID companyId) {
+        Object created = entityManager
+                .createNativeQuery("SELECT tcms_grant_company_read_baseline(CAST(:companyId AS uuid))")
+                .setParameter("companyId", companyId.toString())
+                .getSingleResult();
+        return ((Number) created).intValue();
+    }
+
     private ProjectOutcome createFirstProjectIfRequested(
             ProvisionCompanyRequest request, UUID companyId, Instant now) {
         Optional<ProvisionCompanyRequest.FirstProject> requested = request.firstProject();
@@ -344,6 +373,9 @@ public class CompanyProvisioningService {
         changes.put("adminUserCreated", result.adminUserCreated());
         changes.put("membershipCreated", result.membershipCreated());
         changes.put("adminGrantCreated", result.adminGrantCreated());
+        // How many members gained the company:read baseline on this run — 1 on a fresh company, and
+        // the reason an operator can tell a top-up that repaired something from one that did not.
+        changes.put("baselineGrantsCreated", result.baselineGrantsCreated());
         result.projectId().ifPresent(id -> changes.put("projectId", id.toString()));
         changes.put("projectCreated", result.projectCreated());
         // Whether an invitation was minted, never the link — the audit trail is read by

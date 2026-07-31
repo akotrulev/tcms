@@ -51,6 +51,9 @@ class SeedDataTest extends IntegrationTestBase {
     private static final String AUTOMATION_SERVICE = "Automation Service";
     private static final String VIEWER = "Viewer";
 
+    /** V15's non-assignable baseline — company:read for every member, at COMPANY scope. */
+    private static final String COMPANY_MEMBER = "Company Member";
+
     private static Connection connection;
 
     /**
@@ -108,23 +111,48 @@ class SeedDataTest extends IntegrationTestBase {
     }
 
     @Test
-    @DisplayName("exactly six built-in roles, with the scopes the spec assigns")
+    @DisplayName("exactly six assignable built-in roles, plus the non-assignable member baseline")
     void sixBuiltInRoles() throws SQLException {
         List<String> rows = queryStrings(
                 "SELECT name || ' / ' || scope FROM role WHERE built_in ORDER BY name");
 
         assertThat(rows)
-                .as("no custom roles in v1 — these six are the complete set (spec A2)")
+                .as("""
+                        No custom roles in v1 — the six assignable ones are the complete set (spec \
+                        A2), and Company Member is the seventh row V15 added: the company:read \
+                        baseline every member is granted on joining. It is deliberately NOT one of \
+                        the six — it is never offered, never granted by hand and never revoked, so \
+                        an addition to this list is a new tier and needs a spec decision.""")
                 .containsExactlyInAnyOrder(
                         INSTANCE_ADMIN + " / SYSTEM",
                         COMPANY_ADMIN + " / COMPANY",
                         TEST_LEAD + " / PROJECT",
                         TEST_ENGINEER + " / PROJECT",
                         AUTOMATION_SERVICE + " / PROJECT",
-                        VIEWER + " / PROJECT");
+                        VIEWER + " / PROJECT",
+                        COMPANY_MEMBER + " / COMPANY");
         assertThat(queryStrings("SELECT name FROM role WHERE NOT built_in"))
                 .as("nothing may seed a non-built-in role while custom roles do not exist")
                 .isEmpty();
+    }
+
+    @Test
+    @DisplayName("the member baseline is exactly company:read — it is held by everybody")
+    void theMemberBaselineIsOnlyCompanyRead() throws SQLException {
+        // Enumerated rather than described, for the same reason Automation Service is: every human
+        // in every company holds this grant, so anything added here is granted to all of them in
+        // one edit — including, if the edit were careless, a project permission at COMPANY scope,
+        // which would hand every member every project and undo roles spec §A1 outright.
+        assertThat(grantsOf(COMPANY_MEMBER)).containsExactly("company:read");
+
+        assertThat(queryStrings("""
+                SELECT scope FROM role WHERE name = 'Company Member'
+                """))
+                .as("""
+                        COMPANY scope is the whole point: PermissionEvaluator.evaluateCompanyWide \
+                        reads the SYSTEM and COMPANY terms only, so a PROJECT-scope baseline would \
+                        be exactly as unreachable as the five per-role grants it repairs.""")
+                .containsExactly("COMPANY");
     }
 
     @Test

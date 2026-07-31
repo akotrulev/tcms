@@ -30,12 +30,14 @@ import java.util.UUID;
  * @param companyWide       the caller holds {@code company:members}: they may grant and revoke
  *                          across the whole company, including the company-wide grants that name no
  *                          project. Company Admin and Instance Admin, per roles spec §A3.
- * @param readsCompany      the caller holds {@code company:read} <strong>somewhere</strong> in this
- *                          company — company-wide, or on any project they hold. See
- *                          {@link AdminDirectoryService#reachOf} for why "somewhere" and not
- *                          "company-wide": five of the six built-in roles carry
- *                          {@code company:read} on a PROJECT-scope grant, so the company-wide
- *                          question answers "no" for a Test Lead who unambiguously holds it.
+ * @param readsCompany      the caller holds {@code company:read} <strong>at company scope</strong>.
+ *                          This read "or on any project they hold" until handoff §43, because five
+ *                          of the six built-in roles carry {@code company:read} on a PROJECT-scope
+ *                          grant and the company-wide question therefore answered "no" for a Test
+ *                          Lead who unambiguously held it. {@code V15} fixed that at the root — the
+ *                          {@link Role#COMPANY_MEMBER_ID} baseline every member is granted on
+ *                          joining — so the honest question and the direct one are now the same
+ *                          question. See {@link AdminDirectoryService#reachOf}.
  */
 public record AdminReach(
         Set<UUID> visibleProjects,

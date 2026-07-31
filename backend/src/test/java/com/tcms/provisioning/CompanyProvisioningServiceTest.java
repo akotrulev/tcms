@@ -8,6 +8,7 @@ import com.tcms.identity.AppUserRepository;
 import com.tcms.identity.CompanyMembership;
 import com.tcms.identity.CompanyMembershipRepository;
 import com.tcms.identity.MembershipStatus;
+import com.tcms.identity.Role;
 import com.tcms.identity.RoleAssignment;
 import com.tcms.identity.RoleAssignmentRepository;
 import com.tcms.identity.RoleRepository;
@@ -149,7 +150,11 @@ class CompanyProvisioningServiceTest extends IntegrationTestBase {
                     roles.findByName(CompanyProvisioningService.COMPANY_ADMIN_ROLE).orElseThrow().getId();
 
             try (var ignored = CompanyContext.open(result.companyId())) {
-                List<RoleAssignment> grants = roleAssignments.findByUserId(result.adminUserId());
+                List<RoleAssignment> grants = roleAssignments.findByUserId(result.adminUserId()).stream()
+                        // The membership baseline (V15) is the other grant every member holds; it
+                        // has its own tests below.
+                        .filter(grant -> !Role.COMPANY_MEMBER_ID.equals(grant.getRoleId()))
+                        .toList();
                 assertThat(grants).singleElement().satisfies(grant -> {
                     assertThat(grant.getRoleId()).isEqualTo(companyAdminRole);
                     // projectId == null IS the COMPANY scope (see RoleAssignment). A
@@ -160,6 +165,62 @@ class CompanyProvisioningServiceTest extends IntegrationTestBase {
                     assertThat(grant.getCompanyId()).isEqualTo(result.companyId());
                 });
             }
+        }
+
+        @Test
+        @DisplayName("grants the company:read baseline, so the first admin is a member too")
+        void grantsTheCompanyReadBaseline() {
+            var result = provisioning.provision(request("prov-baseline"));
+
+            assertThat(result.baselineGrantsCreated())
+                    .as("one member exists on a fresh company, and they must hold it")
+                    .isEqualTo(1);
+
+            try (var ignored = CompanyContext.open(result.companyId())) {
+                assertThat(roleAssignments.findByUserId(result.adminUserId()))
+                        .as("""
+                                The baseline is what makes company:read answerable at COMPANY \
+                                scope for everyone below Company Admin (handoff §43). A Company \
+                                Admin would answer without it, which is exactly why the gap was \
+                                invisible until a Test Lead asked.""")
+                        .anySatisfy(grant -> {
+                            assertThat(grant.getRoleId()).isEqualTo(Role.COMPANY_MEMBER_ID);
+                            assertThat(grant.isCompanyScoped()).isTrue();
+                            assertThat(grant.getGrantedBy())
+                                    .as("nobody decided this — attributing it would put a person's "
+                                            + "name on a row they did not choose to create")
+                                    .isNull();
+                        });
+            }
+        }
+
+        @Test
+        @DisplayName("and a re-run repairs a company whose members predate the baseline")
+        void theTopUpRepairsExistingMembers() throws SQLException {
+            var first = provisioning.provision(request("prov-baseline-topup"));
+            // The state a company provisioned before V15 is in: members, no baseline. Removed
+            // through the app role with the company active, so RLS is in force while it happens.
+            try (var connection = appConnection(first.companyId());
+                 var statement = connection.prepareStatement(
+                         "DELETE FROM role_assignment WHERE role_id = ?")) {
+                statement.setObject(1, Role.COMPANY_MEMBER_ID);
+                statement.executeUpdate();
+            }
+
+            var second = provisioning.provision(request("prov-baseline-topup"));
+
+            assertThat(second.baselineGrantsCreated())
+                    .as("re-running the CLI is the supported repair path (V5), and this is the "
+                            + "release that needed one")
+                    .isEqualTo(1);
+            assertThat(second.wasNoOp())
+                    .as("a run that repaired something must not report 'nothing to do' — the "
+                            + "operator would go looking elsewhere for the fix that just landed")
+                    .isFalse();
+
+            var third = provisioning.provision(request("prov-baseline-topup"));
+            assertThat(third.baselineGrantsCreated()).isZero();
+            assertThat(third.wasNoOp()).isTrue();
         }
 
         @Test
@@ -254,10 +315,12 @@ class CompanyProvisioningServiceTest extends IntegrationTestBase {
             // The parts that a "create if absent" bug would duplicate rather than skip.
             assertThat(classificationValueCount(first.companyId())).isEqualTo(20);
             assertThat(keyPrefixes(first.companyId())).hasSize(5);
+            assertThat(second.baselineGrantsCreated()).isZero();
             try (var ignored = CompanyContext.open(first.companyId())) {
                 // A second identical grant reads in an admin screen as though the
-                // operator had granted twice.
-                assertThat(roleAssignments.findByUserId(first.adminUserId())).hasSize(1);
+                // operator had granted twice. Two rows: the Company Admin appointment and the
+                // membership baseline (V15), one each.
+                assertThat(roleAssignments.findByUserId(first.adminUserId())).hasSize(2);
             }
         }
 

@@ -57,6 +57,15 @@ import org.springframework.transaction.annotation.Transactional;
  * not be one until an instance-admin surface exists to hold it; the operator CLI is the only way
  * today.
  *
+ * <h2>The membership baseline is refused in both directions</h2>
+ *
+ * <p>{@link Role#COMPANY_MEMBER_ID} — the COMPANY-scope grant of {@code company:read} every member
+ * receives on joining (V15, handoff §43) — cannot be granted here and cannot be revoked here. It is
+ * a consequence of membership rather than a decision about a person: granting it is a no-op on a
+ * row that already exists, and revoking it removes a colleague's sight of the company entirely,
+ * with no repair short of the operator CLI. It is also absent from {@code GET /roles} and from
+ * {@code GET /role-assignments}, so nothing legitimate names it.
+ *
  * <h2>Re-granting is idempotent, and a duplicate is impossible rather than merely unlikely</h2>
  *
  * <p>An identical grant returns the existing row with {@code 200}. The caller's intent — "this
@@ -274,6 +283,13 @@ public class RoleGrantService {
         RoleAssignment grant = found.get();
         UUID projectId = grant.getProjectId();
 
+        if (Role.COMPANY_MEMBER_ID.equals(grant.getRoleId())) {
+            // The baseline every member holds (V15). It is never listed, so no screen can offer
+            // this — but an id typed into a request must not be able to take away a colleague's
+            // sight of the company, whose only repair is re-running the operator CLI. Removing it
+            // is what removing the MEMBERSHIP means, and that is a different endpoint.
+            return new Revoke.Forbidden();
+        }
         if (projectId != null && projects.findScopedById(projectId).isEmpty()) {
             return new Revoke.NotFound();
         }
@@ -337,7 +353,10 @@ public class RoleGrantService {
         Optional<Role> role = request.roleId() == null
                 ? Optional.empty()
                 : roles.findById(request.roleId());
-        if (role.isEmpty()) {
+        if (role.isEmpty() || Role.COMPANY_MEMBER_ID.equals(request.roleId())) {
+            // The baseline is refused as an unknown role rather than with its own message. It is
+            // not offered by GET /roles, so no legitimate client can name it, and telling a caller
+            // that a role they cannot see exists is the disclosure this endpoint avoids elsewhere.
             errors.put("roleId", List.of("Choose a role."));
         } else {
             scopeError(role.get(), request.projectId()).ifPresent(

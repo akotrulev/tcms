@@ -189,6 +189,9 @@ public class ProvisionCompanyCommand implements ApplicationRunner {
         parts.put("admin account", result.adminUserCreated());
         parts.put("company membership (invited)", result.membershipCreated());
         parts.put("Company Admin grant", result.adminGrantCreated());
+        // A count rather than a flag, and printed separately below: on a fresh company it is
+        // always 1 and says nothing, while on a top-up it is the number of existing members this
+        // run repaired — which is the whole reason an operator re-runs after upgrading past V15.
         if (result.projectId().isPresent()) {
             parts.put("first project", result.projectCreated());
         }
@@ -198,6 +201,10 @@ public class ProvisionCompanyCommand implements ApplicationRunner {
         result.projectId().ifPresent(id -> System.out.println("Project id: " + id));
         parts.forEach((part, created) ->
                 System.out.println("  " + (created ? "created " : "existed ") + part));
+        if (result.baselineGrantsCreated() > 0) {
+            System.out.println("  granted the company:read baseline to "
+                    + result.baselineGrantsCreated() + " member(s)");
+        }
 
         if (result.wasNoOp()) {
             System.out.println();
