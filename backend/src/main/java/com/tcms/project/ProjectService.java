@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -104,16 +105,61 @@ public class ProjectService {
     public Optional<ProjectView> findVisible(UUID userId, UUID projectId) {
         UUID companyId = CompanyContext.require();
 
-        // findScopedById rather than findById: the latter resolves by primary key through the
-        // persistence context, and Hibernate filters do NOT apply to that path. RLS would still
-        // cover it, but using one layer where both are available is how a layered defence
-        // quietly becomes a single point (see ProjectRepository's header).
+        return visibleProject(userId, projectId).map(project -> view(
+                project,
+                caseCounts(companyId, List.of(project.getId())),
+                access.projectRoleNames(userId)));
+    }
+
+    /**
+     * <strong>The gate, for every project-scoped read in the application.</strong> Runs
+     * {@code read} against the project only if the caller may see it; empty otherwise, for all
+     * three unreachable reasons alike.
+     *
+     * <h2>Why this is a method others call rather than a rule others follow</h2>
+     *
+     * <p>Everything the SPA fetches under {@code /projects/{projectId}/…} — the classification
+     * vocabularies and statuses today, the suite tree and cases next — has to pass the same two
+     * gates. Left as a convention, each new endpoint would re-answer "may they?" in its own
+     * service, and the one that gets it subtly wrong is the one nobody notices: a leak here
+     * returns another client's <em>vocabulary</em>, which reads like innocuous reference data
+     * right up to the point where it names their features.
+     *
+     * <p>So the gate is a single call site, and a new endpoint gets it by construction rather than
+     * by remembering. Deleting the grant check inside it now fails tests across every endpoint
+     * built on it, not just the one whose author removed it — the property that makes this worth a
+     * higher-order method instead of a copied two-line filter.
+     *
+     * @param read applied to the project itself, so a caller never has to re-fetch it — and never
+     *             has a reason to accept a {@code projectId} it has not had gated
+     */
+    @Transactional(readOnly = true)
+    public <T> Optional<T> readVisible(UUID userId, UUID projectId, Function<Project, T> read) {
+        return visibleProject(userId, projectId).map(read);
+    }
+
+    /**
+     * The gate itself — <strong>the one implementation of "may this caller see this project".</strong>
+     *
+     * <p>Private and unannotated on purpose. Every caller ({@link #findVisible} in this class,
+     * {@link #readVisible} from another bean) is already inside a read-only transaction, so an
+     * annotation here would be decoration at best: a private call never crosses the Spring proxy,
+     * which is precisely why {@code findVisible} calls <em>this</em> rather than the public
+     * {@code readVisible} — a self-invocation of an annotated method is the kind of line that reads
+     * as if it establishes a transaction and does not.
+     *
+     * <p>The transaction is not optional, though, and the requirement lands on the callers: without
+     * one {@code app.current_company} is never set and {@code findScopedById} returns nothing under
+     * RLS — a gate that fails closed, but for the wrong reason and silently.
+     *
+     * <p>{@code findScopedById} rather than {@code findById}: the latter resolves by primary key
+     * through the persistence context, and Hibernate filters do NOT apply to that path. RLS would
+     * still cover it, but using one layer where both are available is how a layered defence quietly
+     * becomes a single point (see {@link ProjectRepository}'s header).
+     */
+    private Optional<Project> visibleProject(UUID userId, UUID projectId) {
         return projects.findScopedById(projectId)
-                .filter(project -> access.canView(userId, project.getId()))
-                .map(project -> view(
-                        project,
-                        caseCounts(companyId, List.of(project.getId())),
-                        access.projectRoleNames(userId)));
+                .filter(project -> access.canView(userId, project.getId()));
     }
 
     private ProjectView view(

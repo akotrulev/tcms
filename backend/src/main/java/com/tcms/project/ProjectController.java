@@ -11,11 +11,17 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The project list and one project — the first endpoints past authentication.
+ * The project list, one project, and that project's two vocabularies — the first endpoints past
+ * authentication.
  *
  * <p>Everything the SPA does after sign-in starts here: the picker calls
  * {@code GET /projects}, and every other route is scoped under a project id it chose from
  * that response.
+ *
+ * <p>All four are one controller because all four are one contract tag and one gate. The gate
+ * itself lives in {@link ProjectService#readVisible} and is <em>called</em>, never restated — a
+ * project-scoped endpoint that answers "may they?" for itself is how the two implementations
+ * diverge (plan §6b).
  *
  * <h2>The caller comes from the token, and the company from the context</h2>
  *
@@ -40,9 +46,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProjectController {
 
     private final ProjectService projects;
+    private final ProjectConfigurationService configuration;
 
-    public ProjectController(ProjectService projects) {
+    public ProjectController(ProjectService projects, ProjectConfigurationService configuration) {
         this.projects = projects;
+        this.configuration = configuration;
     }
 
     /**
@@ -62,6 +70,43 @@ public class ProjectController {
             @AuthenticationPrincipal Jwt jwt, @PathVariable UUID projectId) {
 
         return projects.findVisible(UUID.fromString(jwt.getSubject()), projectId)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /**
+     * The classification vocabularies that apply to this project (plan §6d).
+     *
+     * <p>Company-level and project-level dimensions in one array: Test Type, Test Level and
+     * Execution Phase belong to the company so a client's projects stay comparable, Feature belongs
+     * to the project. The distinction is deliberately invisible on the wire — a consumer picking
+     * values has no use for it, and it is the field a future author would try to <em>send</em>.
+     *
+     * <p>{@code []} is a valid answer and means the project has no dimensions, which is what a
+     * company provisioned before the vocabulary existed looks like. An unreachable project is a
+     * 404, exactly as on {@link #detail} — same gate, same reason.
+     */
+    @GetMapping("/{projectId}/classification")
+    public ResponseEntity<List<ClassificationDimensionView>> classification(
+            @AuthenticationPrincipal Jwt jwt, @PathVariable UUID projectId) {
+
+        return configuration.findClassification(UUID.fromString(jwt.getSubject()), projectId)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /**
+     * This project's configurable execution statuses — the six defaults, plus whatever it added.
+     *
+     * <p>Project-scoped, unlike the classification vocabularies above: two client products
+     * legitimately differ in status vocabulary while "what counts as a Performance test" should not
+     * (ERD §3). Reporting reads each status's {@code kind}, never its name.
+     */
+    @GetMapping("/{projectId}/statuses")
+    public ResponseEntity<List<CaseStatusView>> statuses(
+            @AuthenticationPrincipal Jwt jwt, @PathVariable UUID projectId) {
+
+        return configuration.findStatuses(UUID.fromString(jwt.getSubject()), projectId)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
