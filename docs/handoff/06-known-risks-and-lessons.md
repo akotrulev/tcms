@@ -1,0 +1,43 @@
+# §6. Known risks and open items
+
+**~~The DDL has never been run.~~ → SUPERSEDED 2026-07-30.** It has now been executed against Postgres 17.10 and it runs clean; all three extensions are present in the stock image; **trap 2 passes**; and both RLS traps below are now covered by tests rather than warnings. Two defects were found in the process — see §11 and `docs/audits/2026-07-30-v1-schema-first-execution.md`. The original note is kept below because its list of what static analysis *cannot* catch is still the right checklist for V2.
+
+Static validation of the pre-execution file confirmed: 63 tables, no duplicate names, all `REFERENCES` targets resolve, no forward references, index/comment targets valid, parentheses balanced, **every company-owned table carries `company_id`, and the RLS policy list exactly matches that set in both directions**. What static analysis **cannot** catch:
+- `ltree` / `pg_trgm` / `citext` extension availability (some managed hosts gate extensions)
+- The `IMMUTABLE` requirement on any generated `search_vector` expression
+- Trigger definitions (not in V1)
+- **The two RLS traps below** — both silent when wrong
+
+**The two RLS traps, worth their own line because both fail quietly:**
+1. **`FORCE ROW LEVEL SECURITY`, not just `ENABLE`.** A table's *owner* bypasses plain `ENABLE`, and in most compose setups the app connects as the schema owner — so plain `ENABLE` protects nothing. The app role must also not hold `BYPASSRLS`. `FORCE` is in the DDL; verify the role.
+2. **An unset GUC must yield zero rows, not all rows.** The policy is `company_id = current_setting('app.current_company', true)::uuid`; the `true` makes a missing setting return NULL, and `= NULL` is never true, so a request without company context sees nothing. Get the flag or the comparison wrong and a context-less query returns **the entire instance**. This needs its own explicit test — a green suite does not prove it.
+
+**Do this first on the backend:** stand up Postgres via Testcontainers, run V1, then write the test for trap 2 before anything else.
+
+**Eight open ERD points** are listed in `docs/specs/2026-07-30-tcms-erd.md` §10. The three worth attention: the polymorphic `attachment` table (the one place the schema knowingly drops referential integrity); **key allocation now contending on one `key_sequence` row per `(company, entity_type)`** — company-wide rather than per-project, so contention is higher by the number of projects a client runs, and range allocation is mandatory rather than advisable; and the **display-key inference channel** (see §3 lesson 13).
+
+**42 open questions** in the plan §8. All roles/permissions/naming questions are now **resolved**. Blocking nothing right now, but these change M1/M2 design: case versioning depth (#1), Jira flavour (#4), data volume (#5), concurrent execution (#7), default step format (#8), Gherkin sync mode (#9).
+
+**Two verification lessons from this session, both worth keeping:**
+
+1. **`tsc --noEmit` is not the gate.** It reported 0 errors while `npm run build` (which runs `tsc -b` against the stricter project config) failed with nine. Always verify with **`npm run build`**. The root cause of those errors was that `openapi.yaml` originally declared no `required` arrays, so every generated property was optional and the fixtures couldn't satisfy their own types — fixed by adding `required` to 39 schemas. **If you add a schema, add its `required` array.**
+2. **Don't chain `echo` after an install command.** An earlier `npm install -D msw openapi-typescript ... | tail -2 && echo "installed"` printed success while both packages silently failed to install, and that went unnoticed until `npm run gen:api` errored much later. Verify installs by reading `package.json`, not by trusting an exit code you've masked.
+
+**Three more from the 2026-07-30 session:**
+
+3. **Lesson 1 recurred, and will keep recurring.** Nine of the build errors in this session were `possibly undefined` on properties that are *always* present — because eight inline objects nested inside already-`required` schemas had no `required` array of their own. `required` on the parent does not descend. Grep for `type: object` with `properties:` and no sibling `required:` before writing consumers.
+4. **Don't invent a response shape — read the contract first.** `BulkResult`, `EntityVersion`, `HealthSignal` and `AggregationPolicy` were all coded against a guessed shape and all four had to be reworked. Where the contract was genuinely wrong for the UI (`BulkResult` counts vs lists), the fix belongs in `openapi.yaml`; where it wasn't, the code was wrong. Check which before editing either.
+5. **The browser found three defects the build could not.** A no-op theme toggle, a grid whose title didn't navigate, and two contradictory percentages on one screen all typechecked and linted clean. **Run the app.** The gates prove it compiles, not that it works.
+
+**Three more from the Phase 3 session:**
+
+6. **Lesson 5 recurred, and harder.** The Phase 3 work built clean and linted clean while rendering **nothing but the root error page** — a provider ordering bug (`useQueryClient` above `QueryClientProvider`) that is invisible to the type system because both are valid types in valid positions. Two of the three defects that session were of exactly this kind: correct types, wrong runtime graph. `npm run build` cannot see provider ordering, hook closure staleness, or effect timing.
+7. **A resilience feature you cannot trigger is a resilience feature you have not tested.** Every claim in the gate — timeout, stale-refetch, 401-in-place, roll-up, no-auto-dismiss — needed a fault the app has no way to produce on its own. Building `tcmsFaults` first would have been faster than building it after the third awkward attempt to fake a failure by hand. **Build the fault switch before the feature it proves.**
+8. **Measure the bundle change before believing it.** Splitting DataGrid into its own chunk looked obviously right and made total JS ~40% worse by defeating tree-shaking. The build output is the arbiter, not the reasoning.
+
+**Two more from the multi-company session:**
+
+9. **A schema-wide invariant needs a mechanical check, not a careful reading.** Regenerating `V1` and then cross-checking every table against the `company_id` rule found **five join tables with no `company_id`** (`case_classification`, `case_tag`, `case_automation_tag`, `case_condition_optout`, `work_item_link`) and **four version/annotation tables absent from the RLS list** (`suite_version`, `test_plan_version`, `doc_page_version`, `derived_item_annotation`). Both classes are severe: a join table without the column is unfilterable *and* un-RLS-able, so a query starting from `case_classification` could cross clients; a version table holds a full snapshot of client content. **Neither was visible reading the file top to bottom** — only by scripting the comparison. This is lesson 5's family (the gates prove it compiles, not that it's right) applied to schema, and it is the argument for the M0 schema test being mandatory rather than a formality.
+10. **A sentinel value in data is a lie waiting to happen.** The fixture modelled "holds everything" as `permissions: ['*']`. It read fine and typechecked — until the catalogue grew. A sentinel cannot distinguish *complete coverage* from *a value that happens to be present*, so adding a permission Instance Admin didn't hold would still have rendered "every permission". Derive the claim from the real set (`allPermissions.every(...)`) and a gap shows up as a gap. Same family as lesson 9: the invariant needs computing, not asserting.
+11. **Making a contract enum out of a string field turns the compiler into the migration checklist.** `PermissionKey` went from `type: string` to a 55-member enum in `openapi.yaml`; regenerating found every stale permission literal in the codebase in one pass, including the `'*'` above. Where a field has a closed set, spell it out in the contract — the cost is a few lines of YAML and the return is that drift becomes a build error.
+12. **Write the decision *and* its reversal into the docs, not just the new state.** Several of this session's changes superseded earlier decisions that were themselves written down with reasons — `tenant_id`-as-hedge, per-project keys, five roles, Test Engineer as the default. Leaving only the new value would make the next reader think the old reasoning was never considered. Struck-through rows with "→ superseded" in §3 cost nothing and prevent re-litigating.
