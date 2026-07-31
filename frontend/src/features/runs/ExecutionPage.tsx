@@ -24,6 +24,7 @@ import { useExecution, useProject, useStatuses, useSubmitResult } from '../../ap
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
+import { PermissionGate } from '../../components/PermissionGate';
 import { StatusChip } from '../../components/StatusChip';
 import { formatDateTime } from '../../lib/format';
 import { statusLabels } from '../../lib/labels';
@@ -341,25 +342,31 @@ function ExecutionForm({
                 // everything else records directly.
                 const isBlocked = kind === 'BLOCKED';
                 return (
-                  <Button
-                    key={kind}
-                    variant={kind === 'PASSED' ? 'contained' : 'outlined'}
-                    fullWidth
-                    disabled={submit.isPending}
-                    onClick={() => (isBlocked ? setBlockedDialog(true) : void record(status.id))}
-                    data-testid={`Execution.Action.${kind}`}
-                    sx={{
-                      justifyContent: 'flex-start',
-                      ...(kind === 'PASSED'
-                        ? { bgcolor: 'var(--color-passed)', '&:hover': { bgcolor: 'var(--color-passed)', filter: 'brightness(0.92)' } }
-                        : {
-                            color: `var(--color-${kind.toLowerCase()})`,
-                            borderColor: `color-mix(in srgb, var(--color-${kind.toLowerCase()}) 45%, transparent)`,
-                          }),
-                    }}
-                  >
-                    {submit.isPending ? 'Saving…' : statusLabels[kind]}
-                  </Button>
+                  // All four verdicts ride one permission — `result:submit` is what the server
+                  // checks, and there is no per-verdict grant. Gated per button rather than around
+                  // the group so each one keeps its own `data-testid` and its own tooltip anchor.
+                  <PermissionGate key={kind} projectId={projectId} permission="result:submit">
+                    {({ allowed }) => (
+                      <Button
+                        variant={kind === 'PASSED' ? 'contained' : 'outlined'}
+                        fullWidth
+                        disabled={!allowed || submit.isPending}
+                        onClick={() => (isBlocked ? setBlockedDialog(true) : void record(status.id))}
+                        data-testid={`Execution.Action.${kind}`}
+                        sx={{
+                          justifyContent: 'flex-start',
+                          ...(kind === 'PASSED'
+                            ? { bgcolor: 'var(--color-passed)', '&:hover': { bgcolor: 'var(--color-passed)', filter: 'brightness(0.92)' } }
+                            : {
+                                color: `var(--color-${kind.toLowerCase()})`,
+                                borderColor: `color-mix(in srgb, var(--color-${kind.toLowerCase()}) 45%, transparent)`,
+                              }),
+                        }}
+                      >
+                        {submit.isPending ? 'Saving…' : statusLabels[kind]}
+                      </Button>
+                    )}
+                  </PermissionGate>
                 );
               })}
 

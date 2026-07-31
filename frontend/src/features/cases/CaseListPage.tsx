@@ -4,7 +4,9 @@ import { useSnackbar } from 'notistack';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useCases, useClassification, useProject, useSuites } from '../../api/queries';
+import { useCan } from '../../auth/useCan';
 import { DataRegion, GridSkeleton } from '../../components/DataRegion';
+import { PermissionGate } from '../../components/PermissionGate';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { formatCount } from '../../lib/format';
 import { BulkActionDialog } from './BulkActionDialog';
@@ -36,6 +38,7 @@ export function CaseListPage() {
   const suites = useSuites(projectId);
   const dimensions = useClassification(projectId);
   const cases = useCases(projectId, filters, sort);
+  const gate = useCan(projectId);
 
   const [selection, setSelection] = useState<string[]>([]);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -58,14 +61,19 @@ export function CaseListPage() {
             : 'Everything in this project. Pick a suite to narrow it, or filter below.'
         }
         actions={
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => navigate(`/projects/${projectId}/cases/new`)}
-            data-testid="Cases.NewCaseButton"
-          >
-            New case
-          </Button>
+          <PermissionGate projectId={projectId} permission="case:create">
+            {({ allowed }) => (
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                disabled={!allowed}
+                onClick={() => navigate(`/projects/${projectId}/cases/new`)}
+                data-testid="Cases.NewCaseButton"
+              >
+                New case
+              </Button>
+            )}
+          </PermissionGate>
         }
       />
 
@@ -129,9 +137,19 @@ export function CaseListPage() {
               <Typography variant="body2" sx={{ fontWeight: 600 }} data-testid="Cases.SelectionCount">
                 {formatCount(selection.length)} selected
               </Typography>
-              <Button size="small" variant="contained" onClick={() => setBulkOpen(true)} data-testid="Cases.BulkEditButton">
-                Edit selected
-              </Button>
+              <PermissionGate projectId={projectId} permission="case:edit">
+                {({ allowed }) => (
+                  <Button
+                    size="small"
+                    variant="contained"
+                    disabled={!allowed}
+                    onClick={() => setBulkOpen(true)}
+                    data-testid="Cases.BulkEditButton"
+                  >
+                    Edit selected
+                  </Button>
+                )}
+              </PermissionGate>
               <Button size="small" onClick={() => setSelection([])} data-testid="Cases.ClearSelection">
                 Clear selection
               </Button>
@@ -160,16 +178,25 @@ export function CaseListPage() {
                   : {
                       kind: 'no-records',
                       title: 'No cases yet',
-                      body: 'Create the first test case for this project.',
+                      // The body follows the verdict, not the other way round: telling a Viewer to
+                      // "create the first test case" points at a button they cannot press.
+                      body: gate.can('case:create')
+                        ? 'Create the first test case for this project.'
+                        : 'Nothing here yet. Ask a test engineer or lead to add the first case.',
                       action: (
-                        <Button
-                          variant="contained"
-                          size="small"
-                          onClick={() => navigate(`/projects/${projectId}/cases/new`)}
-                          data-testid="Cases.List.Empty.NewCaseButton"
-                        >
-                          New case
-                        </Button>
+                        <PermissionGate projectId={projectId} permission="case:create">
+                          {({ allowed }) => (
+                            <Button
+                              variant="contained"
+                              size="small"
+                              disabled={!allowed}
+                              onClick={() => navigate(`/projects/${projectId}/cases/new`)}
+                              data-testid="Cases.List.Empty.NewCaseButton"
+                            >
+                              New case
+                            </Button>
+                          )}
+                        </PermissionGate>
                       ),
                     }
               }

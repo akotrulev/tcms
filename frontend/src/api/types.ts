@@ -18,6 +18,7 @@ export type Team = S['Team'];
 export type Role = S['Role'];
 export type RoleAssignment = S['RoleAssignment'];
 export type PermissionKey = S['PermissionKey'];
+export type EffectivePermissions = S['EffectivePermissions'];
 export type RoleName = Role['name'];
 export type RoleScope = Role['scope'];
 

@@ -31,6 +31,7 @@ import type {
   CurrentUser,
   DocPage,
   DocPageSummary,
+  EffectivePermissions,
   EntityVersion,
   ExecutionHistoryEntry,
   InvitationPreview,
@@ -62,6 +63,7 @@ import type { CaseFilters } from './types';
  */
 export const keys = {
   me: ['me'] as const,
+  permissions: (p: string) => ['me', 'permissions', p] as const,
   invitation: (token: string) => ['invitation', token] as const,
   projects: ['projects'] as const,
   project: (id: string) => ['projects', id] as const,
@@ -145,6 +147,35 @@ export function useAcceptInvitation(token: string): UseMutationResult<void, Erro
       api.post<void>(`/auth/invitations/${encodeURIComponent(token)}/accept`, input),
     // The form owns every outcome: a 422 lands on the password field, a 404 replaces the whole
     // panel. Neither is improved by a notification in the corner of a page with one purpose.
+    meta: { handled: true },
+  });
+}
+
+/**
+ * What this caller may do **in this project** — the answer every write affordance is gated on.
+ *
+ * Four things here are decisions rather than defaults:
+ *
+ *   - **Keyed by project**, because the answer is. The same user is a Test Lead on one project
+ *     and a Viewer on the next; a single `['permissions']` key would let the first project's
+ *     answer decide the second project's buttons.
+ *   - **`meta: { handled: true }`.** A failure of this call is invisible by design — the gate
+ *     falls open (see `useCan`) and every action stays clickable, which is exactly how the app
+ *     behaved before it existed. A toast saying "Couldn't load permissions" would report a
+ *     degradation the user cannot act on and will not notice.
+ *   - **`staleTime` of five minutes**, matching `useProjects`. Grants change when an admin
+ *     changes them, which is rare, and every project-scoped screen reads this — a shorter
+ *     window would refetch on every navigation to answer a question whose answer did not move.
+ *   - **No `projectId` means no call.** `enabled` gates it, so the hook is safe to call from a
+ *     component that renders before the route params resolve.
+ */
+export function useMyPermissions(projectId: string | undefined): UseQueryResult<EffectivePermissions> {
+  return useQuery({
+    queryKey: keys.permissions(projectId ?? ''),
+    queryFn: ({ signal }) =>
+      api.get<EffectivePermissions>(`/me/permissions${qs({ projectId })}`, { signal }),
+    enabled: !!projectId,
+    staleTime: 5 * 60_000,
     meta: { handled: true },
   });
 }

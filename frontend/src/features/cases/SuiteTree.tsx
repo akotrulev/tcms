@@ -14,6 +14,8 @@ import { SimpleTreeView } from '@mui/x-tree-view/SimpleTreeView';
 import { TreeItem } from '@mui/x-tree-view/TreeItem';
 import { useMemo, useState } from 'react';
 import type { Suite } from '../../api/types';
+import { useCan } from '../../auth/useCan';
+import { PermissionGate } from '../../components/PermissionGate';
 import { formatCount } from '../../lib/format';
 import { CreateSuiteDialog, DeleteSuiteDialog, RenameSuiteDialog } from './SuiteDialogs';
 
@@ -29,14 +31,14 @@ import { CreateSuiteDialog, DeleteSuiteDialog, RenameSuiteDialog } from './Suite
  * its own to put them on and never should: the tree is where its structure is visible, so it is
  * where structure is edited.
  *
- * **The actions are rendered for everyone and refused by the server.** The SPA cannot gate them
- * on the caller's permissions because `CurrentUser` does not carry any: it exposes `isSystemAdmin`
- * and teams, and nothing says whether this user holds `suite:manage` on this project. So a Viewer
- * sees Delete, clicks it, and gets a 403 rendered in the dialog. That is a real violation of
- * disable-don't-hide and it is a **pre-existing class**, not this feature's — "New case" has
- * behaved exactly this way since Phase 2. The fix is one contract change (the caller's effective
- * permissions on a project) that closes it everywhere at once; gating suites alone would leave the
- * rest of the app inconsistent and make the eventual fix touch two patterns instead of one.
+ * **The actions are gated on the caller's permissions**, through `PermissionGate` — create and
+ * rename on `suite:manage`, delete on `suite:delete`, which is the split the roles spec fixed and
+ * the tree must not re-collapse. They used to render for everyone and be refused by the server,
+ * because `CurrentUser` carries no permissions; `GET /me/permissions` answers that question and
+ * `useCan` reads it. The three menu items are gated individually rather than the kebab as a whole:
+ * a Test Engineer holds `suite:manage` and not `suite:delete`, so the menu they get is two live
+ * items and one greyed one — which is the truth, where a disabled kebab would claim they may not
+ * touch folders at all.
  */
 
 interface TreeNode {
@@ -90,6 +92,7 @@ export function SuiteTree({
   projectId: string;
 }) {
   const tree = useMemo(() => buildTree(suites), [suites]);
+  const gate = useCan(projectId);
   const [editing, setEditing] = useState<Editing>(null);
   const [menuFor, setMenuFor] = useState<{ anchor: HTMLElement; suite: Suite } | null>(null);
 
@@ -196,14 +199,19 @@ export function SuiteTree({
           than leaving it implicit — a New button that silently picks a parent is how a folder ends
           up three levels from where its author meant it.
         */}
-        <Button
-          size="small"
-          startIcon={<AddIcon />}
-          onClick={() => setEditing({ kind: 'create', parent: selected })}
-          data-testid="SuiteTree.NewSuite"
-        >
-          New
-        </Button>
+        <PermissionGate projectId={projectId} permission="suite:manage">
+          {({ allowed }) => (
+            <Button
+              size="small"
+              startIcon={<AddIcon />}
+              disabled={!allowed}
+              onClick={() => setEditing({ kind: 'create', parent: selected })}
+              data-testid="SuiteTree.NewSuite"
+            >
+              New
+            </Button>
+          )}
+        </PermissionGate>
       </Stack>
 
       {/*
@@ -252,19 +260,31 @@ export function SuiteTree({
 
       {tree.length === 0 && (
         <Stack spacing={1} sx={{ px: 1.5, py: 2 }}>
+          {/*
+            The empty state's copy is gated too, not just its button. "This is the first thing to
+            make" beside a button they cannot press is an instruction the reader cannot follow —
+            an empty state that names the wrong next step is worse than one that names none.
+          */}
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            No suites yet. A case needs a suite to live in, so this is the first thing to make.
+            {gate.can('suite:manage')
+              ? 'No suites yet. A case needs a suite to live in, so this is the first thing to make.'
+              : 'No suites yet. A case needs a suite to live in — ask a project lead to create the first one.'}
           </Typography>
-          <Button
-            size="small"
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => setEditing({ kind: 'create', parent: null })}
-            data-testid="SuiteTree.Empty.NewSuite"
-            sx={{ alignSelf: 'flex-start' }}
-          >
-            New suite
-          </Button>
+          <PermissionGate projectId={projectId} permission="suite:manage">
+            {({ allowed }) => (
+              <Button
+                size="small"
+                variant="contained"
+                startIcon={<AddIcon />}
+                disabled={!allowed}
+                onClick={() => setEditing({ kind: 'create', parent: null })}
+                data-testid="SuiteTree.Empty.NewSuite"
+                sx={{ alignSelf: 'flex-start' }}
+              >
+                New suite
+              </Button>
+            )}
+          </PermissionGate>
         </Stack>
       )}
 
@@ -274,35 +294,51 @@ export function SuiteTree({
         onClose={() => setMenuFor(null)}
         data-testid="SuiteTree.Menu"
       >
-        <MenuItem
-          data-testid="SuiteTree.Menu.NewChild"
-          onClick={() => {
-            if (menuFor) setEditing({ kind: 'create', parent: menuFor.suite });
-            setMenuFor(null);
-          }}
-        >
-          <ListItemText>New suite inside</ListItemText>
-        </MenuItem>
-        <MenuItem
-          data-testid="SuiteTree.Menu.Rename"
-          onClick={() => {
-            if (menuFor) setEditing({ kind: 'rename', suite: menuFor.suite });
-            setMenuFor(null);
-          }}
-        >
-          <ListItemText>Rename…</ListItemText>
-        </MenuItem>
-        <MenuItem
-          data-testid="SuiteTree.Menu.Delete"
-          onClick={() => {
-            if (menuFor) setEditing({ kind: 'delete', suite: menuFor.suite });
-            setMenuFor(null);
-          }}
-        >
-          {/* Danger-coloured here as well as on the dialog's confirm, so the destructive item is
-              distinguishable before it is chosen and not only after. */}
-          <ListItemText sx={{ color: 'error.main' }}>Delete…</ListItemText>
-        </MenuItem>
+        <PermissionGate projectId={projectId} permission="suite:manage" wrapper="block">
+          {({ allowed }) => (
+            <MenuItem
+              disabled={!allowed}
+              data-testid="SuiteTree.Menu.NewChild"
+              onClick={() => {
+                if (menuFor) setEditing({ kind: 'create', parent: menuFor.suite });
+                setMenuFor(null);
+              }}
+            >
+              <ListItemText>New suite inside</ListItemText>
+            </MenuItem>
+          )}
+        </PermissionGate>
+        <PermissionGate projectId={projectId} permission="suite:manage" wrapper="block">
+          {({ allowed }) => (
+            <MenuItem
+              disabled={!allowed}
+              data-testid="SuiteTree.Menu.Rename"
+              onClick={() => {
+                if (menuFor) setEditing({ kind: 'rename', suite: menuFor.suite });
+                setMenuFor(null);
+              }}
+            >
+              <ListItemText>Rename…</ListItemText>
+            </MenuItem>
+          )}
+        </PermissionGate>
+        <PermissionGate projectId={projectId} permission="suite:delete" wrapper="block">
+          {({ allowed }) => (
+            <MenuItem
+              disabled={!allowed}
+              data-testid="SuiteTree.Menu.Delete"
+              onClick={() => {
+                if (menuFor) setEditing({ kind: 'delete', suite: menuFor.suite });
+                setMenuFor(null);
+              }}
+            >
+              {/* Danger-coloured here as well as on the dialog's confirm, so the destructive item
+                  is distinguishable before it is chosen and not only after. Muted when the item
+                  is disabled, so a greyed row doesn't shout in red about something it won't do. */}
+              <ListItemText sx={{ color: allowed ? 'error.main' : undefined }}>Delete…</ListItemText>
+            </MenuItem>
+          )}
+        </PermissionGate>
       </Menu>
 
       {editing?.kind === 'create' && (

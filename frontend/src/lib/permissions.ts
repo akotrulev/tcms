@@ -97,6 +97,86 @@ export const permissionAreas = {
 
 export const allPermissions = Object.keys(permissionAreas) as PermissionKey[];
 
+/**
+ * Each permission as the **verb phrase** that completes "You don't have permission to ___ in
+ * this project." — the sentence `useCan` puts on a disabled control.
+ *
+ * Phrased from the user's side of the screen, never from the model's: the key is
+ * `library:manage`, and the thing a person recognizes is "reusable steps and preconditions".
+ * A tooltip reading "You don't have permission to library:manage" tells someone who already
+ * knows the catalogue what they already knew, and everyone else nothing.
+ *
+ * `satisfies Record<PermissionKey, string>` for the same reason `permissionAreas` has it: a
+ * permission added to the contract is a compile error here until someone decides how to say it
+ * out loud. A gap would otherwise surface as `undefined` inside a sentence.
+ */
+export const permissionLabels = {
+  'suite:manage': 'create or rename suites',
+  'suite:delete': 'delete suites',
+  'case:read': 'view test cases',
+  'case:create': 'create test cases',
+  'case:edit': 'edit test cases',
+  'case:delete': 'delete test cases',
+  'library:manage': 'manage reusable steps and preconditions',
+
+  'case:comment': 'comment on test cases',
+  'case:review': 'review test cases',
+  'suite:review': 'review suites',
+  'plan:review': 'review test plans',
+  'case:approve': 'approve test cases',
+  'suite:approve': 'approve suites',
+  'plan:approve': 'approve test plans',
+
+  'plan:create': 'create test plans',
+  'plan:edit': 'edit test plans',
+  'plan:delete': 'delete test plans',
+  'run:create': 'create test runs',
+  'run:execute': 'execute test runs',
+  'run:close': 'close test runs',
+  'result:submit': 'record results',
+  'result:amend': 'amend recorded results',
+  'evidence:attach': 'attach evidence',
+  'evidence:delete': 'delete evidence',
+
+  'defect:create': 'raise defects',
+  'workitem:manage': 'manage board items',
+
+  'report:view': 'view reports',
+  'report:export': 'export reports',
+
+  'doc:read': 'read documentation',
+  'doc:edit': 'edit documentation',
+  'doc:publish': 'publish documentation',
+
+  'artifact:read': 'view artifacts',
+  'artifact:edit': 'upload or edit artifacts',
+  'artifact:delete': 'delete artifacts',
+
+  'project:read': 'open this project',
+  'project:audit': 'view the project audit log',
+  'project:settings': 'change project settings',
+  'project:members': 'manage project members',
+  'integration:manage': 'manage integrations',
+
+  'company:read': 'view this company',
+  'company:settings': 'change company settings',
+  'company:members': 'manage company members',
+  'company:teams': 'manage teams',
+  'company:vocabulary': 'manage the company vocabulary',
+  'company:idp': 'configure single sign-on',
+  'project:create': 'create projects',
+  'token:issue': 'issue API tokens',
+  'audit:view': 'view the company audit log',
+
+  'company:create': 'create companies',
+  'company:delete': 'delete companies',
+  'company:suspend': 'suspend companies',
+  'user:manage': 'manage users',
+  'role:manage': 'manage roles',
+  'system:settings': 'change instance settings',
+  'instance:audit': 'view the instance audit log',
+} as const satisfies Record<PermissionKey, string>;
+
 export const areaLabels = {
   repository: 'Repository',
   review: 'Review',

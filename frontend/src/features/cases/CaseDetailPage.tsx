@@ -21,6 +21,7 @@ import { useCase, useProject } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
+import { PermissionGate } from '../../components/PermissionGate';
 import { AutomationLabel, HealthChip, LifecycleChip, PriorityLabel, StatusChip } from '../../components/StatusChip';
 import { formatAge, formatDateTime, formatSeconds } from '../../lib/format';
 import { stepFormatLabels } from '../../lib/labels';
@@ -75,15 +76,37 @@ export function CaseDetailPage() {
                   >
                     Execution history
                   </Button>
-                  <Button
-                    component={RouterLink}
-                    to={`/projects/${projectId}/cases/${caseId}/edit`}
-                    variant="contained"
-                    startIcon={<EditIcon />}
-                    data-testid="CaseDetail.EditButton"
-                  >
-                    Edit case
-                  </Button>
+                  {/*
+                    The denied branch renders a plain `<button>`, NOT a disabled link. MUI's
+                    `disabled` on `component={RouterLink}` only adds `aria-disabled` and kills
+                    pointer events — the anchor keeps its `href`, so Enter on a focused link and a
+                    middle-click both still navigate. A disabled-looking link that opens the editor
+                    is worse than no gate at all, because it looks like the gate worked.
+                  */}
+                  <PermissionGate projectId={projectId} permission="case:edit">
+                    {({ allowed }) =>
+                      allowed ? (
+                        <Button
+                          component={RouterLink}
+                          to={`/projects/${projectId}/cases/${caseId}/edit`}
+                          variant="contained"
+                          startIcon={<EditIcon />}
+                          data-testid="CaseDetail.EditButton"
+                        >
+                          Edit case
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="contained"
+                          disabled
+                          startIcon={<EditIcon />}
+                          data-testid="CaseDetail.EditButton"
+                        >
+                          Edit case
+                        </Button>
+                      )
+                    }
+                  </PermissionGate>
                 </>
               }
             />

@@ -252,6 +252,16 @@ export interface paths {
          * Effective permissions for the caller in a project
          * @description Drives UI affordances only. Every hidden action is independently rejected
          *     server-side — hidden is not protected (plan §6b).
+         *
+         *     Three different questions, and the answers are deliberately not the same set
+         *     (see MeController): with a projectId, the SYSTEM + COMPANY + PROJECT terms; with
+         *     a company open but no project, SYSTEM + COMPANY only — NOT "whatever this caller
+         *     holds on some project", because a Test Lead on one project must not read as
+         *     holding project:settings company-wide; with no company at all, SYSTEM only.
+         *
+         *     An unreachable project and a non-existent one both answer with the empty set,
+         *     identically, so this endpoint cannot be used to probe for projects in other
+         *     companies (plan §6t).
          */
         get: {
             parameters: {
@@ -270,11 +280,7 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": {
-                            /** Format: uuid */
-                            projectId?: string;
-                            permissions?: components["schemas"]["PermissionKey"][];
-                        };
+                        "application/json": components["schemas"]["EffectivePermissions"];
                     };
                 };
             };
@@ -3011,6 +3017,18 @@ export interface components {
              *     per-role grants live in docs/specs/2026-07-30-tcms-roles-permissions-naming.md.
              *     `OWN`-qualified entries (case:delete, evidence:delete for Test Engineer) are
              *     resolved server-side against createdBy — they are NOT separate keys.
+             */
+            permissions: components["schemas"]["PermissionKey"][];
+        };
+        EffectivePermissions: {
+            /**
+             * Format: uuid
+             * @description Echoes the query parameter. Null when the caller asked company-wide.
+             */
+            projectId: string | null;
+            /**
+             * @description Sorted, and possibly empty — an empty set is a real answer (a company member
+             *     with no grant on this project), not a missing one.
              */
             permissions: components["schemas"]["PermissionKey"][];
         };

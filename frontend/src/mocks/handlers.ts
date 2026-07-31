@@ -360,14 +360,30 @@ export const handlers = [
     MeController. This handler used to return an ARRAY of per-project entries, which nothing
     consumed and no endpoint ever produced; it would have failed the first consumer written
     against it the moment live mode existed. Drift in an unused handler is still drift.
+
+    It also used to answer **Test Lead for every project**, which was harmless while nothing
+    called it and became actively misleading the moment the disable-don't-hide gate did: a mock
+    that grants everything can only ever render the enabled branch, so the whole feature would
+    have been unprovable in the mode the app is developed in. The answer now comes from the
+    project's own `myRole`, and the fixtures already carry a project where the caller is a
+    **Viewer** — MOB, seeded that way precisely because read-only is the default on joining.
+
+    No project id means the company-wide question, which the real endpoint answers with the
+    SYSTEM + COMPANY terms only — deliberately NOT the union of the caller's project grants.
+    `company:read` is the honest mock of that for a plain member.
   */
   http.get(`${API}/me/permissions`, ({ request }) => {
     const denied = requireAuth(request);
     if (denied) return denied;
 
     const projectId = new URL(request.url).searchParams.get('projectId');
-    const lead = roles.find((r) => r.name === 'Test Lead');
-    return HttpResponse.json({ projectId, permissions: lead?.permissions ?? [] });
+    if (!projectId) return HttpResponse.json({ projectId: null, permissions: ['company:read'] });
+
+    // An unknown project answers with the empty set rather than a 404, matching the real
+    // endpoint: an unreachable project and a non-existent one must be indistinguishable (§6t).
+    const project = projects.find((p) => p.id === projectId);
+    const role = roles.find((r) => r.name === project?.myRole);
+    return HttpResponse.json({ projectId, permissions: [...(role?.permissions ?? [])].sort() });
   }),
 
   // -------------------------------------------------------------- projects ----

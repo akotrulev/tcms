@@ -27,6 +27,7 @@ import { useCase, useClassification, useCreateCase, useSuites, useUpdateCase } f
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
+import { PermissionGate } from '../../components/PermissionGate';
 import { automationLabels, priorityLabels, stepFormatLabels } from '../../lib/labels';
 import type { TestCase } from '../../api/types';
 
@@ -302,15 +303,26 @@ function CaseEditorForm({
             >
               Cancel
             </Button>
-            <Button
-              type="submit"
-              variant="contained"
-              disabled={isSubmitting || (mode === 'edit' && !isDirty)}
-              title={mode === 'edit' && !isDirty ? 'Nothing has changed yet' : undefined}
-              data-testid={`${TestIdPrefix}.Submit`}
-            >
-              {isSubmitting ? 'Saving…' : mode === 'edit' ? 'Save changes' : 'Create case'}
-            </Button>
+            {/*
+              Gated as well as its entry points, because the entry points are not the only way in:
+              /cases/new and /cases/:id/edit are real URLs, so a bookmark, a shared link or the
+              back button lands here without passing the New-case button. Gating only the button
+              that navigates here would make the permission look enforced while leaving the form
+              fully usable up to the 403.
+            */}
+            <PermissionGate projectId={projectId} permission={mode === 'edit' ? 'case:edit' : 'case:create'}>
+              {({ allowed }) => (
+                <Button
+                  type="submit"
+                  variant="contained"
+                  disabled={!allowed || isSubmitting || (mode === 'edit' && !isDirty)}
+                  title={allowed && mode === 'edit' && !isDirty ? 'Nothing has changed yet' : undefined}
+                  data-testid={`${TestIdPrefix}.Submit`}
+                >
+                  {isSubmitting ? 'Saving…' : mode === 'edit' ? 'Save changes' : 'Create case'}
+                </Button>
+              )}
+            </PermissionGate>
           </>
         }
       />
