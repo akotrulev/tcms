@@ -35,6 +35,20 @@ npm run gen:api
 grep -rhoE 'data-testid=(\{`[^`]*`\}|"[^"]*")' src | sed -E 's/data-testid=//' | sort | uniq -d
 ```
 
+**A second, concurrent stack** — for when two sessions each need a live browser pass at once. Ports
+are shifted by 1000 and the Compose project is renamed, which also renames the volume, so lane B
+gets its own database instead of migrating lane A's (§33):
+
+```bash
+cp .env.lane-b.example .env.lane-b            # from the repo root
+docker compose --env-file .env.lane-b up -d   # postgres 6432, backend 9080
+cd frontend && npm run dev:lane-b             # vite 6173, proxying to 9080
+```
+
+The vite port is **strict**: it refuses to start when taken rather than walking to the next one. A
+silently-shifted port makes every invitation link open the *other* lane's tab against the other
+lane's backend, which reads as a backend defect.
+
 **Driving the resilience behaviour** (dev only — from the browser console):
 
 ```js

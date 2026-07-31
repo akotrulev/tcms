@@ -7,6 +7,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 `docs/HANDOFF.md` is the living session handoff — current state, what is done, what is next, and the
 lessons this project has already paid for. Read it before starting work; update it when you finish.
 
+**It is an index.** Each section lives in `docs/handoff/NN-slug.md`, numbered by its § number, so a
+reference anywhere in this repo (`§6 lesson 5`, `HANDOFF §14`) resolves by the filename prefix.
+**Finishing a slice means adding a file and one index row — never appending to `HANDOFF.md`.**
+
 Authoritative documents, in precedence order where they overlap:
 
 | Document | Authority over |
@@ -16,6 +20,7 @@ Authoritative documents, in precedence order where they overlap:
 | `docs/specs/2026-07-30-tcms-erd.md` | Entity design. **§0.1 is the `company_id` rule and the RLS exception list** — the most important part. |
 | `docs/plans/2026-07-30-tcms-high-level-plan.md` | The master design doc: §6a–§6v decisions, milestones M0–M6, open questions. Section references (`§6p`) throughout the repo point here. |
 | `docs/audits/` | Audit evidence, including the first real execution of V1 and the Kiwi TCMS gap analysis. |
+| `docs/plans/2026-07-31-parallel-execution-rework.md` | What may run in parallel and what may not, the Flyway numbering rule, and the second-lane stack. Read it before starting concurrent work. |
 
 Design decisions in the plan state *the decision and its reason*. Several look arbitrary until you
 read the failure mode they prevent — read the relevant section before changing behaviour it covers.
@@ -233,6 +238,26 @@ a hundred slightly different ones.
   `docs/plans/` mid-session. Stage only the files your phase touched (`git add <paths>`, never
   `git add -A`), so another author's in-flight edits don't get interleaved into your diff. Re-read a
   shared doc before editing it.
+- **A concurrency worktree is the one exception to "do not create a branch."** The rule above is
+  about not branching per *task*. A second lane that touches the backend needs its own worktree,
+  because one `backend/build/` and one Gradle daemon cannot serve two lanes. Say so before using it.
+
+## Running work in parallel
+
+Read `docs/plans/2026-07-31-parallel-execution-rework.md` before starting a second lane. The three
+rules that bite hardest:
+
+- **One contract holder.** `openapi.yaml` and `npm run gen:api` belong to exactly one lane per run;
+  `schema.d.ts` is generated and two regenerations do not merge. A lane needing a contract change
+  hands over rather than editing in parallel.
+- **Pre-assign Flyway versions, renumber at integration in landing order.** `out-of-order` is unset,
+  so it defaults to `false`: a `V13` landing after a `V14` is **refused on any already-migrated
+  database**. Testcontainers cannot see this — it migrates a fresh container every time.
+- **Choose lanes by Modulith module, not by a "Next"-list order.** The boundaries are already
+  enforced by ArchUnit, so the seam is machine-checked rather than hoped for.
+
+A second stack for a concurrent browser pass is `cp .env.lane-b.example .env.lane-b`,
+`docker compose --env-file .env.lane-b up`, and `npm run dev:lane-b` (6432 / 9080 / 6173).
 
 ## Working agreement
 
