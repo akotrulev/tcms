@@ -742,7 +742,11 @@ export const handlers = [
     const q = url.searchParams.get('q')?.toLowerCase();
     const type = url.searchParams.get('type');
     let rows = db.conditions;
-    if (type) rows = rows.filter((c) => c.type === type);
+    // A BOTH entry matches type=PRE and type=POST, because BOTH means "usable in either
+    // position" — not a third role. Exact matching would make marking a condition reusable
+    // everywhere the one way to hide it everywhere. The real API does the same; see
+    // ConditionType.matching on the backend, which is where the decision is written down.
+    if (type) rows = rows.filter((c) => c.type === type || (type !== 'BOTH' && c.type === 'BOTH'));
     if (q) rows = rows.filter((c) => c.title.toLowerCase().includes(q));
     // Most-reused first — the whole point of a reusable-condition search is to surface
     // the one 400 cases already share, not the one someone wrote yesterday.

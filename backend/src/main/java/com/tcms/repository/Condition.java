@@ -3,6 +3,8 @@ package com.tcms.repository;
 import com.tcms.tenancy.CompanyFilter;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
@@ -20,10 +22,13 @@ import org.hibernate.type.SqlTypes;
  * time. That is the whole design: DRY while live, immutable once executed. This module reads the
  * live side only.
  *
- * <p>Mapped thin on purpose. {@code type}, {@code parameters}, {@code usage_count} and
- * {@code search_vector} all belong to surfaces that do not exist yet — the typeahead (§6h) and the
- * pre-edit impact warning (§6f) — and a field mapped before its reader is a field nobody notices
- * has gone stale.
+ * <p>Still mapped thin, but less so than it was: {@code type} and {@code usage_count} were left
+ * off while nothing read them, and the library endpoint ({@link ConditionController}) is the
+ * reader they were waiting for — the contract marks both required on {@code Condition}.
+ * {@code parameters} and {@code search_vector} stay unmapped on the original terms, because a
+ * field mapped before its reader is a field nobody notices has gone stale: parameters belong to a
+ * substitution surface nothing implements, and {@code search_vector} is a generated column no
+ * caller ever wants the value of.
  */
 @Entity
 @Table(name = "condition")
@@ -42,6 +47,31 @@ public class Condition {
 
     @Column(name = "title", nullable = false)
     private String title;
+
+    /**
+     * PRE, POST or BOTH — see {@link ConditionType} for why BOTH is not a third role.
+     *
+     * <p>{@code @Enumerated(STRING)} rather than the JPA default: the default is
+     * {@code ORDINAL}, which stores 0/1/2 against a {@code TEXT CHECK (type IN ('PRE','POST',
+     * 'BOTH'))} column and fails at insert — and, worse, would silently re-map every stored row if
+     * a member were ever inserted into the middle of the enum.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "type", nullable = false)
+    private ConditionType type;
+
+    /**
+     * How many cases and suites reference this entry — the typeahead's ranking signal (§6h) and
+     * the input to the pre-edit impact warning (§6f).
+     *
+     * <p><strong>Zero on every row today, and served as zero rather than hidden.</strong> The
+     * column is {@code NOT NULL DEFAULT 0} and the writers that would maintain it — condition
+     * attachment, case authoring — do not exist yet, so the honest answer is the stored one. Same
+     * shape as {@code case_health}, which §25 left as a real query over a table nothing computes:
+     * it starts ranking the moment something counts, with no change here.
+     */
+    @Column(name = "usage_count", nullable = false)
+    private int usageCount;
 
     /**
      * The ordered steps — "log in" is realistically three actions, so the body is a list and not a
@@ -72,6 +102,14 @@ public class Condition {
 
     public String getTitle() {
         return title;
+    }
+
+    public ConditionType getType() {
+        return type;
+    }
+
+    public int getUsageCount() {
+        return usageCount;
     }
 
     /** Never null in practice — {@code body} is {@code NOT NULL} — but may legitimately be empty. */

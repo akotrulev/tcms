@@ -154,9 +154,16 @@ export function BulkActionDialog({
                 {(conditions.data ?? []).map((condition: Condition) => (
                   <MenuItem key={condition.id} value={condition.id}>
                     {condition.title}
-                    <Box component="span" sx={{ ml: 1, color: 'text.secondary', fontSize: '0.75rem' }}>
-                      used by {formatCount(condition.usageCount)}
-                    </Box>
+                    {/* Omitted at zero rather than rendered as "used by 0". Nothing maintains
+                        usage_count yet, so on a real instance every row would carry it — a label
+                        stating a fact the data never made, and one that invites reading the
+                        order as a ranking when it is currently just the title. Same call as the
+                        dangling "Your role:" and the invented status colour. */}
+                    {condition.usageCount > 0 && (
+                      <Box component="span" sx={{ ml: 1, color: 'text.secondary', fontSize: '0.75rem' }}>
+                        used by {formatCount(condition.usageCount)}
+                      </Box>
+                    )}
                   </MenuItem>
                 ))}
               </Select>

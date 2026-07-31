@@ -444,6 +444,10 @@ export const conditions: Condition[] = [
   { id: uid(5, 'n'), title: 'Reset test payment data', type: 'POST', body: ['Void any pending authorisations', 'Restore the merchant balance'], usageCount: 71 },
   { id: uid(6, 'n'), title: 'Log out', type: 'POST', body: ['Open the account menu', 'Select Sign out'], usageCount: 203 },
   { id: uid(7, 'n'), title: 'Sign in as standard user', type: 'PRE', body: ['Open the app', 'Sign in'], usageCount: 2 },
+  // BOTH — setup that is also cleanup. Carried so the type filter's fold-in is reachable in
+  // mock mode at all: with only PRE and POST rows, exact matching and the real semantics
+  // return identical lists and the difference is invisible until live mode.
+  { id: uid(8, 'n'), title: 'Restore the merchant balance', type: 'BOTH', body: ['Void any pending authorisations', 'Set the balance to 1000.00 EUR'], usageCount: 38 },
 ];
 
 export const sharedSteps: SharedStep[] = [
