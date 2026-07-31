@@ -62,6 +62,12 @@ class PermissionEvaluatorTest extends IntegrationTestBase {
     private static final UUID INVITED_ONLY = UUID.fromString("00000000-0000-4000-8000-0000000000a6");
     private static final UUID DEACTIVATED_OPERATOR = UUID.fromString("00000000-0000-4000-8000-0000000000a7");
     private static final UUID ZENITH_LEAD = UUID.fromString("00000000-0000-4000-8000-0000000000a8");
+    /**
+     * Company Admin over Acme <em>and</em> Test Engineer on Acme's project — the one persona that
+     * separates "strongest wins" from "last row read wins" when the same permission arrives twice
+     * with two qualifiers.
+     */
+    private static final UUID DUAL_GRANT = UUID.fromString("00000000-0000-4000-8000-0000000000a9");
 
     private static final UUID ACME_QA_TEAM = UUID.fromString("00000000-0000-4000-8000-0000000000b1");
 
@@ -115,6 +121,7 @@ class PermissionEvaluatorTest extends IntegrationTestBase {
             activeUser(TEAM_ENGINEER, "team@example.test", now);
             activeUser(INVITED_ONLY, "invited@example.test", now);
             activeUser(ZENITH_LEAD, "zenith@example.test", now);
+            activeUser(DUAL_GRANT, "dual@example.test", now);
 
             // Deactivated, but holding the strongest grant in the product — so the
             // account gate is proven to cover SYSTEM scope, not just company scope.
@@ -153,6 +160,12 @@ class PermissionEvaluatorTest extends IntegrationTestBase {
             grantOnProject("a7", ACME, Role.TEST_LEAD_ID, DEACTIVATED_OPERATOR, ACME_PROJECT, now);
             grantOnCompany("a3", ACME, Role.COMPANY_ADMIN_ID, CROSS_COMPANY, now);
             grantToTeamOnProject("b1", ACME, Role.TEST_ENGINEER_ID, ACME_QA_TEAM, ACME_PROJECT, now);
+
+            // Both grants on the same user, the weaker one PROJECT-scoped and arriving second in
+            // the evaluator's union — so a "last term wins" merge answers OWN for a Company Admin.
+            member(ACME, DUAL_GRANT, "Dual Grant", true, now);
+            grantOnCompany("a9c", ACME, Role.COMPANY_ADMIN_ID, DUAL_GRANT, now);
+            grantOnProject("a9p", ACME, Role.TEST_ENGINEER_ID, DUAL_GRANT, ACME_PROJECT, now);
         }));
 
         // --- Globex: same project key and name as Acme's --------------------------
@@ -500,8 +513,108 @@ class PermissionEvaluatorTest extends IntegrationTestBase {
     }
 
     // =========================================================================
+    // The OWN qualifier (roles spec §A5)
+    // =========================================================================
+
+    @Nested
+    @DisplayName("The OWN qualifier — which ROWS a grant covers, not whether it is held")
+    class Qualifier {
+
+        @Test
+        @DisplayName("a Test Lead's case:delete is unqualified")
+        void leadDeletesAnything() {
+            assertThat(qualifierIn(ACME, LEAD, ACME_PROJECT, "case:delete"))
+                    .isEqualTo(PermissionQualifier.ALL);
+        }
+
+        @Test
+        @DisplayName("a Test Engineer's case:delete is OWN — the whole point of V12")
+        void engineerDeletesOnlyTheirOwn() {
+            // Through a TEAM grant, so the qualifier is proven to survive the hop rather than
+            // being read only off a direct assignment.
+            assertThat(qualifierIn(ACME, TEAM_ENGINEER, ACME_PROJECT, "case:delete"))
+                    .isEqualTo(PermissionQualifier.OWN);
+        }
+
+        @Test
+        @DisplayName("a Test Engineer's case:EDIT is NOT qualified — the superseded reading, pinned")
+        void editingIsProducingAndStaysUnqualified() {
+            // The roles spec carried "case:edit is OWN-qualified" until 2026-07-31 and reversed it:
+            // editing is producing, deleting is unmaking. Restoring the old line means a Test
+            // Engineer cannot fix a wrong expected result in a colleague's case, in a product whose
+            // whole subject is a SHARED repository. This assertion is what makes that a build
+            // failure rather than a support ticket.
+            assertThat(qualifierIn(ACME, TEAM_ENGINEER, ACME_PROJECT, "case:edit"))
+                    .isEqualTo(PermissionQualifier.ALL);
+        }
+
+        @Test
+        @DisplayName("strongest wins — a Company Admin who is also a project's Test Engineer keeps ALL")
+        void anExtraWeakerGrantTakesNothingAway() {
+            // The merge rule, and the failure it prevents: a role ADDED to a user must never
+            // subtract capability, or granting someone a project role demotes them.
+            assertThat(qualifierIn(ACME, DUAL_GRANT, ACME_PROJECT, "case:delete"))
+                    .isEqualTo(PermissionQualifier.ALL);
+        }
+
+        @Test
+        @DisplayName("not held at all is NONE, and NONE is not OWN")
+        void aViewerlessMemberHoldsNothing() {
+            // MEMBER_NO_GRANT holds no grant, so there is no qualifier to report. Answering OWN
+            // here would let them delete anything they had somehow authored.
+            assertThat(qualifierIn(ACME, MEMBER_NO_GRANT, ACME_PROJECT, "case:delete"))
+                    .isEqualTo(PermissionQualifier.NONE);
+        }
+
+        @Test
+        @DisplayName("every gate that zeroes the union zeroes the qualifier too")
+        void theGatesApplyHereAsWell() {
+            // Each is reachable without evaluate() ever being called, so each must be re-checked
+            // rather than assumed to have been passed by an earlier call.
+            assertThat(qualifierIn(ACME, DEACTIVATED_OPERATOR, ACME_PROJECT, "case:delete"))
+                    .as("a deactivated account")
+                    .isEqualTo(PermissionQualifier.NONE);
+            assertThat(qualifierIn(ZENITH, ZENITH_LEAD, ZENITH_PROJECT, "case:delete"))
+                    .as("a suspended company")
+                    .isEqualTo(PermissionQualifier.NONE);
+            assertThat(qualifierIn(ACME, INVITED_ONLY, ACME_PROJECT, "case:delete"))
+                    .as("an unaccepted invitation")
+                    .isEqualTo(PermissionQualifier.NONE);
+            assertThat(qualifierIn(ACME, CROSS_COMPANY, GLOBEX_PROJECT, "case:delete"))
+                    .as("a project outside the active company")
+                    .isEqualTo(PermissionQualifier.NONE);
+            assertThat(qualifierIn(ACME, LEAD, UUID.randomUUID(), "case:delete"))
+                    .as("a project that does not exist")
+                    .isEqualTo(PermissionQualifier.NONE);
+        }
+
+        @Test
+        @DisplayName("an unknown key throws rather than answering NONE")
+        void aTypoIsNotADenial() {
+            // NONE from a typo reads as "this user is not allowed" and gets investigated against
+            // the grants, where nothing is wrong. Same rule PermissionSet#has follows.
+            assertThatThrownBy(() -> qualifierIn(ACME, LEAD, ACME_PROJECT, "case:delet"))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("case:delet");
+        }
+
+        @Test
+        @DisplayName("a null projectId is refused, like evaluate's")
+        void thereIsNoCompanyWideQualifier() {
+            assertThatThrownBy(() -> inCompany(ACME, () ->
+                    evaluator.qualifierOf(LEAD, null, "case:delete")))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+    }
+
+    // =========================================================================
     // helpers
     // =========================================================================
+
+    private PermissionQualifier qualifierIn(
+            UUID companyId, UUID userId, UUID projectId, String permissionKey) {
+        return inCompany(companyId, () -> evaluator.qualifierOf(userId, projectId, permissionKey));
+    }
 
     private PermissionSet evaluateIn(UUID companyId, UUID userId, UUID projectId) {
         return inCompany(companyId, () -> evaluator.evaluate(userId, projectId));

@@ -96,6 +96,67 @@ public interface RoleAssignmentRepository extends JpaRepository<RoleAssignment, 
             @Param("companyId") UUID companyId, @Param("userId") UUID userId);
 
     /**
+     * The qualifiers on every PROJECT-scope grant of <em>one</em> permission — {@code 'ALL'},
+     * {@code 'OWN'}, or no rows at all when the caller does not hold it here.
+     *
+     * <h2>Why the qualifier is not folded into the two key projections above</h2>
+     *
+     * <p>{@link #findProjectScopedPermissionKeys} feeds a {@link PermissionSet}, which is a set of
+     * keys and must stay one: every consumer — the {@code /me/permissions} response, the visibility
+     * gate, every {@code has(…)} call — asks "is it held", and a key that arrived qualified is still
+     * held. Returning pairs there would push the qualifier into all of them, where all but one would
+     * discard it.
+     *
+     * <p>So the qualifier is asked for separately, by the one gate that acts on a row, and about the
+     * one permission it is gating. That also keeps this query cheap: it is the same index-covered
+     * join with one more predicate, run once per authorship-gated write rather than on every check.
+     *
+     * <p>The company predicate and the team branch are the sibling queries' — see the class header
+     * for why the explicit {@code company_id} stays even though RLS also enforces it.
+     */
+    @Query(nativeQuery = true, value = """
+            SELECT DISTINCT rp.qualifier
+              FROM role_assignment ra
+              JOIN role_permission rp ON rp.role_id = ra.role_id
+             WHERE ra.company_id = :companyId
+               AND ra.project_id = :projectId
+               AND rp.permission_key = :permissionKey
+               AND (ra.user_id = :userId
+                    OR ra.team_id IN (SELECT tm.team_id
+                                        FROM team_membership tm
+                                       WHERE tm.user_id = :userId
+                                         AND tm.company_id = :companyId))
+            """)
+    List<String> findProjectScopedQualifiers(
+            @Param("companyId") UUID companyId,
+            @Param("userId") UUID userId,
+            @Param("projectId") UUID projectId,
+            @Param("permissionKey") String permissionKey);
+
+    /**
+     * The same, for COMPANY-scope grants — {@code project_id IS NULL}, applying to every project in
+     * the company. This is the term that makes a Company Admin's {@code case:delete} unqualified on
+     * a project where they also hold a Test Engineer grant.
+     */
+    @Query(nativeQuery = true, value = """
+            SELECT DISTINCT rp.qualifier
+              FROM role_assignment ra
+              JOIN role_permission rp ON rp.role_id = ra.role_id
+             WHERE ra.company_id = :companyId
+               AND ra.project_id IS NULL
+               AND rp.permission_key = :permissionKey
+               AND (ra.user_id = :userId
+                    OR ra.team_id IN (SELECT tm.team_id
+                                        FROM team_membership tm
+                                       WHERE tm.user_id = :userId
+                                         AND tm.company_id = :companyId))
+            """)
+    List<String> findCompanyScopedQualifiers(
+            @Param("companyId") UUID companyId,
+            @Param("userId") UUID userId,
+            @Param("permissionKey") String permissionKey);
+
+    /**
      * The caller's <strong>PROJECT-scope</strong> role names across the whole company, in one
      * query — what the contract's {@code Project.myRole} renders.
      *

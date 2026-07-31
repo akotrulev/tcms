@@ -585,8 +585,25 @@ paths:
     delete:
       tags: [repository]
       summary: Soft-delete a test case
+      description: |
+        Soft-deletes the case. Past runs pinned the version they executed and must keep
+        resolving what they covered, so the row survives, no read returns it, and the
+        display and automation keys stay reserved.
+
+        Requires `case:delete`, which is **`OWN`-qualified for Test Engineer** (roles spec
+        §A5): a lead deletes any case, a test engineer only cases they authored. Both
+        refusals are `403` and they carry **different messages** — "you cannot delete cases
+        here" is false for an engineer who deletes their own every day, and would send them
+        to ask for a permission they hold.
+
+        No `If-Match`: there is no lost-delete for a precondition to prevent, and a stale
+        version would refuse the delete over an edit the caller does not care about.
+
+        Nothing cascades. Steps, conditions, tags and attachments stay on the row.
       responses:
         '204': { description: Deleted }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /projects/{projectId}/cases/{caseId}/versions:
     parameters:

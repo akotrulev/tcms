@@ -386,6 +386,31 @@ public class TestCase {
         this.currentVersionNo = versionNo;
     }
 
+    /**
+     * Soft-deletes this case.
+     *
+     * <p>Soft for the reason this class's header already gives and which is stronger here than for a
+     * suite: a past run pinned the version it executed, and that result must keep resolving what it
+     * covered (§3 lesson 1). A hard delete rewrites history rather than removing a case from the
+     * repository.
+     *
+     * <p>Nothing beneath the case is touched. Steps, conditions, tags and classifications stay
+     * attached to a row that no read returns, which is what makes the deletion recoverable and what
+     * lets a pinned version still render. The keys stay reserved too — deliberately, per
+     * {@link TestCaseRepository#existsByAutomationKeyOtherThan}: results keep arriving for a retired
+     * automated test until someone deletes the CI job, and handing its key to a new case would file
+     * them against the wrong one.
+     *
+     * <p>No {@code lifecycleStatus} change. Deleted is not a workflow state — a case in review that
+     * is deleted was not rejected, and re-using the status column for it is how "approved" starts
+     * meaning two things.
+     */
+    void softDelete(UUID actorId, Instant now) {
+        this.deletedAt = now;
+        this.updatedAt = now;
+        this.updatedBy = actorId;
+    }
+
     public UUID getId() {
         return id;
     }
@@ -472,6 +497,18 @@ public class TestCase {
 
     public Instant getDeletedAt() {
         return deletedAt;
+    }
+
+    /**
+     * Who wrote this case, or null on a row that predates {@code POST}.
+     *
+     * <p>Read by exactly one caller — {@link CaseDeleteService}, which hands it to the authorship
+     * gate because {@code case:delete} is {@code OWN}-qualified for Test Engineer (roles spec §A5).
+     * It is deliberately <em>not</em> on {@link TestCaseSummaryView} or the detail view: an author is
+     * not a field the API serves, and a null one would have to mean something on a screen.
+     */
+    public UUID getCreatedBy() {
+        return createdBy;
     }
 
     public long getLockVersion() {

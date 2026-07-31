@@ -342,39 +342,10 @@ public class SuiteWriteService {
                 // recognises the folder by and is the one thing the id does not tell them; the name
                 // is here because a deleted suite's name is otherwise only recoverable by reading a
                 // soft-deleted row, which is precisely what an audit trail should not require.
+                // The escape lives on AuditEvent: the case delete needs the same one for a title,
+                // and two copies of an escaper diverge on exactly the input neither was tested with.
                 "{\"key\":\"" + suite.getKey() + "\",\"name\":"
-                        + jsonString(suite.getName()) + "}",
+                        + AuditEvent.jsonString(suite.getName()) + "}",
                 now));
-    }
-
-    /**
-     * Escapes a name into a JSON string literal.
-     *
-     * <p>A suite may be called {@code "Payments" — v2\new}. Concatenating that into the detail JSON
-     * unescaped produces a malformed document in a {@code JSONB} column, which fails the insert and
-     * takes the whole write down — so a folder with a quote in its name would be uncreatable, and the
-     * error would name the audit table rather than the name. The two cases that matter are quotes and
-     * backslashes; control characters are escaped as well because a pasted name can carry them.
-     */
-    private static String jsonString(String value) {
-        StringBuilder escaped = new StringBuilder("\"");
-        for (int index = 0; index < value.length(); index++) {
-            char character = value.charAt(index);
-            switch (character) {
-                case '"' -> escaped.append("\\\"");
-                case '\\' -> escaped.append("\\\\");
-                case '\n' -> escaped.append("\\n");
-                case '\r' -> escaped.append("\\r");
-                case '\t' -> escaped.append("\\t");
-                default -> {
-                    if (character < 0x20) {
-                        escaped.append(String.format("\\u%04x", (int) character));
-                    } else {
-                        escaped.append(character);
-                    }
-                }
-            }
-        }
-        return escaped.append('"').toString();
     }
 }

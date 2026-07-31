@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -178,6 +179,57 @@ public class ProjectService {
             return new GateResult.Denied<>();
         }
         return new GateResult.Allowed<>(write.apply(project.get()));
+    }
+
+    /**
+     * <strong>The gate for a write whose permission is {@code OWN}-qualified for some role.</strong>
+     * Runs {@code write} when the caller may see the project and holds {@code permission} on it in
+     * <em>any</em> form — and hands it an {@link AuthorshipGate} for the second half of the question,
+     * which only the caller can ask because only the caller has the row.
+     *
+     * <h2>Why the row-level check cannot be folded in here</h2>
+     *
+     * <p>The qualifier restricts <em>which rows</em>, so answering it needs the row's author, and
+     * finding the row needs the project this method has only just finished gating. Loading it here
+     * would put a case lookup in {@code project}, or a {@code Function<Project, Optional<UUID>>}
+     * parameter that reads the row once for the check and leaves the callback to read it again.
+     *
+     * <p>So the split is: this method decides <em>whether the caller holds the permission</em>, the
+     * callback decides <em>which row</em> and asks {@link AuthorshipGate#mayActOn} about it. The
+     * verdict itself is still computed in one place — {@code identity}'s evaluator — and the callback
+     * cannot compute one of its own, because all it is given is a yes/no function.
+     *
+     * <p><strong>The honest cost:</strong> a callback that never calls {@code mayActOn} silently
+     * gets the unqualified behaviour. That is why the endpoint's test asserts the refusal from the
+     * outside — an author-restricted caller acting on someone else's row — rather than trusting the
+     * shape of this signature.
+     *
+     * @param permission the permission the action needs, a constant at the call site as in
+     *                   {@link #writeGranted}
+     */
+    @Transactional
+    public <T> GateResult<T> writeGrantedByAuthorship(
+            UUID userId,
+            UUID projectId,
+            String permission,
+            BiFunction<Project, AuthorshipGate, T> write) {
+
+        Optional<Project> project = projects.findScopedById(projectId);
+        if (project.isEmpty() || !access.canView(userId, project.get().getId())) {
+            // The read gates first and in this order, for the reason writeGranted gives: a caller
+            // who cannot see the project must not tell a nonexistent id from an ungranted one.
+            return new GateResult.Unreachable<>();
+        }
+        UUID gatedProjectId = project.get().getId();
+        if (!access.canDo(userId, gatedProjectId, permission)) {
+            // Held-for-nothing is refused before any row is read, so a Viewer's 403 costs no
+            // lookup and cannot depend on whether the row they named exists.
+            return new GateResult.Denied<>();
+        }
+        AuthorshipGate authorship =
+                authorId -> access.canDoOnAuthored(userId, gatedProjectId, permission, authorId);
+
+        return new GateResult.Allowed<>(write.apply(project.get(), authorship));
     }
 
     /**

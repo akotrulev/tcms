@@ -5,6 +5,7 @@ import com.tcms.tenancy.CompanyContext;
 import com.tcms.tenancy.CompanyRepository;
 import com.tcms.tenancy.CompanyStatus;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -62,13 +63,8 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <h2>Not yet done here</h2>
  *
- * <p>Two things this deliberately does not implement, both recorded rather than
- * forgotten:
+ * <p>One thing this deliberately does not implement, recorded rather than forgotten:
  * <ul>
- *   <li><strong>The {@code OWN} qualifier</strong> (roles spec A5) — {@code case:edit},
- *       {@code case:delete} and {@code evidence:delete} apply to content the caller
- *       authored when held via Test Engineer. That is resolved against {@code created_by}
- *       at the call site, because this type cannot see the row being acted on.</li>
  *   <li><strong>Caching</strong>. The table comment specifies a cache keyed on
  *       {@code (company_id, user_id, project_id)} — company id included — invalidated on
  *       any write to the five grant-bearing tables. Correctness first: an uncached
@@ -145,6 +141,68 @@ public class PermissionEvaluator {
             keys.addAll(roleAssignments.findProjectScopedPermissionKeys(companyId, userId, projectId));
         }
         return PermissionSet.of(catalogue, keys);
+    }
+
+    /**
+     * <strong>Which rows</strong> the caller's grant of one permission covers on one project —
+     * {@link PermissionQualifier#NONE} when they do not hold it at all.
+     *
+     * <h2>Why this is a second method and not a field on {@link PermissionSet}</h2>
+     *
+     * <p>{@link #evaluate} answers "is it held", which is what every consumer but one asks. This
+     * answers "over what", which only a gate standing in front of a specific row can use — and that
+     * gate knows which permission it is enforcing, so it asks about one key rather than being handed
+     * a map of qualifiers it would discard.
+     *
+     * <p>The gates are the same three, in the same order, and re-checking them here is not
+     * belt-and-braces: this is reachable independently of {@link #evaluate}, and a deactivated
+     * account or a foreign project must answer {@code NONE} on this path too. Answering "ALL"
+     * because "the caller must already have passed the coarse gate" is an assumption about a caller
+     * this class cannot see.
+     *
+     * <p>{@code NONE} is also what a caller who holds the permission through no grant at all gets,
+     * so a gate that consults only this method — without {@link PermissionSet#has} first — is still
+     * correct. That is deliberate: two methods that must be called in the right order to be safe are
+     * one method with a footgun.
+     */
+    @Transactional(readOnly = true)
+    public PermissionQualifier qualifierOf(UUID userId, UUID projectId, String permissionKey) {
+        if (projectId == null) {
+            throw new IllegalArgumentException(
+                    "projectId must not be null. A qualifier is asked about a row, and every "
+                            + "OWN-qualified permission is project-scoped.");
+        }
+        // Validates the key against the catalogue, so a typo throws here rather than resolving to
+        // NONE — which would read as "this user is not allowed" and be investigated against the
+        // grants, where nothing is wrong. Same reason PermissionSet#has validates.
+        catalogue.requireKnown(permissionKey);
+
+        UUID companyId = CompanyContext.require();
+        if (projects.findScopedById(projectId).isEmpty()) {
+            return PermissionQualifier.NONE;
+        }
+        if (!users.existsByIdAndStatus(userId, UserStatus.ACTIVE)) {
+            return PermissionQualifier.NONE;
+        }
+
+        PermissionQualifier held =
+                strongestOf(instanceRoleAssignments.findSystemQualifiers(userId, permissionKey));
+        if (companyGateOpen(companyId, userId)) {
+            held = held.strongest(strongestOf(
+                    roleAssignments.findCompanyScopedQualifiers(companyId, userId, permissionKey)));
+            held = held.strongest(strongestOf(roleAssignments.findProjectScopedQualifiers(
+                    companyId, userId, projectId, permissionKey)));
+        }
+        return held;
+    }
+
+    /** No rows means the term grants nothing; otherwise the strongest qualifier in it. */
+    private static PermissionQualifier strongestOf(List<String> stored) {
+        PermissionQualifier strongest = PermissionQualifier.NONE;
+        for (String value : stored) {
+            strongest = strongest.strongest(PermissionQualifier.ofStored(value));
+        }
+        return strongest;
     }
 
     /**

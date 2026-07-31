@@ -139,6 +139,41 @@ public class AuditEvent {
         return event;
     }
 
+    /**
+     * Escapes a value into a JSON string literal, for building a {@code changes} document.
+     *
+     * <p>Here rather than in each module that writes one, because the failure it prevents is
+     * identical everywhere and silent until the first awkward value: a suite called
+     * {@code "Payments" — v2\new}, or a case title with a quote in it, concatenated raw produces a
+     * malformed document in a {@code JSONB} column. The insert fails, the whole write rolls back,
+     * and the error names the audit table rather than the title — so a folder with a quote in its
+     * name becomes uncreatable for a reason nothing on the screen can explain.
+     *
+     * <p>Quotes and backslashes are the two that matter; control characters are escaped as well
+     * because a pasted value can carry them.
+     */
+    public static String jsonString(String value) {
+        StringBuilder escaped = new StringBuilder("\"");
+        for (int index = 0; index < value.length(); index++) {
+            char character = value.charAt(index);
+            switch (character) {
+                case '"' -> escaped.append("\\\"");
+                case '\\' -> escaped.append("\\\\");
+                case '\n' -> escaped.append("\\n");
+                case '\r' -> escaped.append("\\r");
+                case '\t' -> escaped.append("\\t");
+                default -> {
+                    if (character < 0x20) {
+                        escaped.append(String.format("\\u%04x", (int) character));
+                    } else {
+                        escaped.append(character);
+                    }
+                }
+            }
+        }
+        return escaped.append('"').toString();
+    }
+
     public UUID getId() {
         return id;
     }

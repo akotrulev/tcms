@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -66,16 +67,19 @@ public class CaseController {
     private final CaseDetailService detail;
     private final CaseUpdateService cases;
     private final CaseCreateService creation;
+    private final CaseDeleteService deletion;
 
     public CaseController(
             CaseService search,
             CaseDetailService detail,
             CaseUpdateService cases,
-            CaseCreateService creation) {
+            CaseCreateService creation,
+            CaseDeleteService deletion) {
         this.search = search;
         this.detail = detail;
         this.cases = cases;
         this.creation = creation;
+        this.deletion = deletion;
     }
 
     /**
@@ -250,6 +254,50 @@ public class CaseController {
             case CaseUpdateService.Outcome.Stale ignored ->
                     ResponseEntity.status(HttpStatus.CONFLICT).body(ApiProblem.conflict());
             case CaseUpdateService.Outcome.Updated updated -> ResponseEntity.ok(updated.view());
+        };
+    }
+
+    /**
+     * Soft-deletes a case.
+     *
+     * <h2>204, and why there is no body to return</h2>
+     *
+     * <p>Nothing is left to describe: the case is gone from every read, and a client that wanted its
+     * content had it before pressing delete. A 200 carrying the tombstone would invite a screen that
+     * renders a deleted case as if it were current.
+     *
+     * <h2>Two 403s with two sentences, from one permission</h2>
+     *
+     * <p>{@code case:delete} is {@code OWN}-qualified for Test Engineer (roles spec §A5), so
+     * "refused" has two meanings and they must not be worded alike. A Test Engineer told "you do not
+     * have permission to delete test cases in this project" would go and ask an admin for a
+     * permission they already hold, about a case they are looking at, having deleted three of their
+     * own that morning. See {@link CaseDeleteService} for the split.
+     *
+     * <h2>No {@code If-Match}</h2>
+     *
+     * <p>Deliberate, and {@link CaseDeleteService}'s header gives the reason: there is no lost-delete
+     * for a precondition to prevent. The suite delete one level up takes none either.
+     */
+    @DeleteMapping("/{caseId}")
+    public ResponseEntity<Object> delete(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID caseId) {
+
+        CaseDeleteService.Outcome outcome =
+                deletion.delete(UUID.fromString(jwt.getSubject()), projectId, caseId);
+
+        return switch (outcome) {
+            case CaseDeleteService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
+            case CaseDeleteService.Outcome.Forbidden ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiProblem.forbidden(
+                            "You do not have permission to delete test cases in this project."));
+            case CaseDeleteService.Outcome.NotTheAuthor ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiProblem.forbidden(
+                            "You can only delete test cases you created. Ask a test lead to delete "
+                                    + "this one."));
+            case CaseDeleteService.Outcome.Deleted ignored -> ResponseEntity.noContent().build();
         };
     }
 

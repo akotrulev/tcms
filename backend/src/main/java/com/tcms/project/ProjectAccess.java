@@ -66,10 +66,32 @@ public interface ProjectAccess {
      * qualifies {@code case:delete} and {@code evidence:delete} with {@code OWN}, resolved against
      * the row's author — which needs the row, not just the project, and so cannot be answered from
      * this signature. A caller of this method for an {@code OWN}-qualified permission would get a
-     * true that means "holds it for something" and read it as "holds it for this one". No such
-     * permission is gated anywhere yet; the qualifier is still owed.
+     * true that means "holds it for something" and read it as "holds it for this one".
+     * {@link #canDoOnAuthored} is that question asked correctly, and
+     * {@link ProjectService#writeGrantedByAuthorship} is how a write reaches it.
      */
     boolean canDo(UUID userId, UUID projectId, String permission);
+
+    /**
+     * May this caller do {@code permission} to a row <strong>authored by {@code authorId}</strong>?
+     *
+     * <h2>Why the author is a parameter rather than the answer being a qualifier</h2>
+     *
+     * <p>The alternative port hands back "your grant is {@code OWN}" and lets the caller compare it
+     * to the row. That puts an authorization rule — what {@code OWN} means, and what an unknown
+     * author means — in every module that owns a deletable row, which is the second
+     * authorization-resolution path plan §6b names and {@link ProjectService}'s header refuses. It
+     * would also land it in {@code repository}, whose own package documentation says a permission
+     * check appearing there is a defect regardless of what its dependency list permits.
+     *
+     * <p>So the row's author crosses the boundary and the verdict comes back. The caller supplies a
+     * fact about its row and is told yes or no.
+     *
+     * @param authorId the row's {@code created_by}; <strong>nullable</strong>, and a null is not the
+     *                 caller — a row nobody can vouch for must not be covered by a grant that only
+     *                 covers the caller's own work
+     */
+    boolean canDoOnAuthored(UUID userId, UUID projectId, String permission, UUID authorId);
 
     /**
      * The caller's <strong>PROJECT-scope</strong> role name per project across the whole

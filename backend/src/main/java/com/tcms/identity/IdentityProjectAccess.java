@@ -69,6 +69,35 @@ public class IdentityProjectAccess implements ProjectAccess {
     /**
      * {@inheritDoc}
      *
+     * <p>Three lines, and each is a decision:
+     *
+     * <ul>
+     *   <li>{@link PermissionQualifier#NONE} is a refusal — the caller does not hold the permission
+     *       at all, so this method needs no separate {@code canDo} call in front of it and callers
+     *       cannot get the order wrong.</li>
+     *   <li>{@link PermissionQualifier#ALL} is a yes regardless of who wrote the row. A Test Lead
+     *       deleting a colleague's case is the ordinary case, not an exception.</li>
+     *   <li>{@link PermissionQualifier#OWN} compares the row's author. {@code authorId} may be null
+     *       — a row written before authorship was recorded — and {@code equals} on the caller's id
+     *       answers false for it, which is the intended direction: a grant that covers "your own
+     *       work" must not stretch to work nobody can attribute.</li>
+     * </ul>
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public boolean canDoOnAuthored(
+            UUID userId, UUID projectId, String permission, UUID authorId) {
+
+        return switch (permissions.qualifierOf(userId, projectId, permission)) {
+            case NONE -> false;
+            case ALL -> true;
+            case OWN -> userId.equals(authorId);
+        };
+    }
+
+    /**
+     * {@inheritDoc}
+     *
      * <p>"Strongest" is the count of permissions the role confers, read from the same
      * {@code role_permission} table authorization reads — <strong>derived, not a hard-coded
      * ranking of role names</strong>, so a role added later sorts correctly without this method

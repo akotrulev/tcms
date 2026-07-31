@@ -37,5 +37,24 @@ public interface InstanceRoleAssignmentRepository extends JpaRepository<Instance
             """)
     List<String> findSystemPermissionKeys(@Param("userId") UUID userId);
 
+    /**
+     * The qualifiers on a SYSTEM-scope grant of one permission.
+     *
+     * <p>Instance Admin's grant is derived from the whole catalogue and therefore carries V12's
+     * {@code 'ALL'} default on every key — so in practice this returns {@code ALL} or nothing. It is
+     * still asked rather than assumed: "the operator role is unqualified" is a fact about seed data,
+     * and a check that hard-codes it stops being true the day a SYSTEM role is defined with a
+     * qualified grant, silently and in the direction that grants more.
+     */
+    @Query(nativeQuery = true, value = """
+            SELECT DISTINCT rp.qualifier
+              FROM instance_role_assignment ira
+              JOIN role_permission rp ON rp.role_id = ira.role_id
+             WHERE ira.user_id = :userId
+               AND rp.permission_key = :permissionKey
+            """)
+    List<String> findSystemQualifiers(
+            @Param("userId") UUID userId, @Param("permissionKey") String permissionKey);
+
     List<InstanceRoleAssignment> findByUserId(UUID userId);
 }
