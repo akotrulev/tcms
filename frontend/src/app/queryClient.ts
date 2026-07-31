@@ -92,8 +92,36 @@ export function createAppQueryClient(handlers: QueryClientHandlers): QueryClient
 
     defaultOptions: {
       queries: {
+        /**
+         * ## Freshness: `staleTime` is the throttle, focus refetching is the correctness property
+         *
+         * This is one decision expressed in two settings, so they are written down together.
+         *
+         * `refetchOnWindowFocus` was set to `false` here with no recorded reason, which made it
+         * the one unexplained line in this file. It is now **left at TanStack's default (`true`)**
+         * and deliberately not overridden, because this is a multi-user TCMS on one instance: the
+         * result someone else recorded, the grant an admin gave you, the case a colleague edited,
+         * and the run they closed all change *under* a tab that is doing nothing. Disabling focus
+         * refetching trades a real correctness property — a tab that comes back from lunch must
+         * not present yesterday's numbers as current — for a cosmetic one, quieter devtools.
+         * The `data-fetching` skill names exactly this trade and says to tune `staleTime` instead.
+         *
+         * `staleTime: 30_000` is that tuning, and it is what makes the default affordable. A
+         * focus refetch fires only for queries older than 30s, so alt-tabbing to Slack and back
+         * costs nothing, while a tab left open over a meeting revalidates on return. The two
+         * numbers are a pair: raising `staleTime` weakens focus revalidation, and removing it
+         * would turn every window focus into a full refetch of every mounted query.
+         *
+         * The failure mode of turning it back off is silent and expensive: a lead reads a run's
+         * pass rate off a tab opened an hour ago, and nothing on screen is wrong-looking. The
+         * failure mode of leaving it on is a burst of requests on focus — which is bounded by
+         * `staleTime`, deduped into one notification by cause (see `NotificationsProvider`), and
+         * capped by `MAX_RETRIES` below. That asymmetry is the whole argument.
+         *
+         * `refetchOnReconnect` is also left at its default for the same reason: coming back from
+         * a dropped network is the other moment the screen is provably behind the server.
+         */
         staleTime: 30_000,
-        refetchOnWindowFocus: false,
 
         /**
          * The retry policy this replaces was a blanket `retry: 1`, which retried everything —

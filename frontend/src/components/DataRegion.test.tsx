@@ -93,6 +93,37 @@ describe('DataRegion', () => {
     })
   })
 
+  /**
+   * `useCases` carries `placeholderData: keepPreviousData`, and the case grid's filters live in
+   * the URL — so every keystroke in the search box is a new query key. This is the shape those
+   * renders arrive here in, and the two halves of the seam pull in opposite directions:
+   * mid-flight the previous rows must survive, and a *failure* must not present them as the
+   * answer to the filter that was typed.
+   */
+  describe('a filter change under keepPreviousData', () => {
+    it('keeps the previous key’s rows and shows the hairline, rather than flashing a skeleton', () => {
+      // TanStack reports the substituted rows as ordinary data with `isPending` false: the
+      // region has something to show, so a skeleton here would be a regression the user sees on
+      // every keystroke.
+      renderRegion(state({ data: rows('TC-1', 'TC-2'), isPending: false, isFetching: true }))
+
+      expect(screen.getByTestId('Cases.Rows')).toHaveTextContent('TC-2')
+      expect(screen.queryByTestId('Cases.Loading')).not.toBeInTheDocument()
+      expect(screen.getByTestId('Cases.Refreshing')).toBeInTheDocument()
+    })
+
+    it('shows the failed body — not the stale marker — when the new key’s first load fails', () => {
+      // The placeholder only stands in while the query is pending, so a failure arrives with no
+      // data of its own. That is the right line: rows for the filter you replaced, labelled
+      // "showing older data", would answer a question nobody asked.
+      renderRegion(state({ isError: true, error: new ApiError(503, 'unavailable'), data: undefined }))
+
+      expect(screen.getByTestId('Cases.Error')).toBeInTheDocument()
+      expect(screen.queryByTestId('Cases.Stale')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('Cases.Rows')).not.toBeInTheDocument()
+    })
+  })
+
   describe('empty', () => {
     it('distinguishes an empty result from a broken one', () => {
       renderRegion(state({ data: rows() }))
