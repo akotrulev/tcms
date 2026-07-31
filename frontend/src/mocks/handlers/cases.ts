@@ -9,7 +9,6 @@
 import { HttpResponse, delay, http } from 'msw';
 import type {
   BulkResult,
-  EntityVersion,
   Facet,
   LifecycleStatus,
   TestCase,
@@ -19,9 +18,11 @@ import type {
 import {
   allocateCaseKey,
   caseDetail,
+  caseVersions,
   db,
   descendantSuiteIds,
   newId,
+  recordCaseVersion,
   reporting,
   writeCase,
 } from '../db';
@@ -279,6 +280,24 @@ export const caseHandlers = [
     };
 
     const saved = writeCase(created);
+    /*
+      v1, written with the case.
+
+      A created case must have NO gap: `CaseVersions.initial` on the server exists precisely because
+      deriving the number from the counter would give a fresh case v2 and leave its v1 permanently
+      absent — indistinguishable from the historical accident that afflicts every case older than
+      the write path. Recorded here too, or mock mode would show the created case an empty history
+      while live mode shows it v1.
+    */
+    recordCaseVersion(saved.id, {
+      versionNo: 1,
+      createdBy: userRef(0),
+      createdAt: saved.updatedAt,
+      changeComment: typeof body.changeComment === 'string' && body.changeComment.trim()
+        ? body.changeComment.trim()
+        : null,
+      pinned: false,
+    });
     // Recorded only after the write succeeded — a key stored before a failure would make the
     // retry return a record that was never created.
     if (idempotencyKey) db.idempotency.set(idempotencyKey, saved);
@@ -456,6 +475,27 @@ export const caseHandlers = [
     if (substantive) next.currentVersionNo = (next.currentVersionNo ?? 1) + 1;
     next.lockVersion = (next.lockVersion ?? 1) + 1;
 
+    if (substantive) {
+      // The counter and the history row are advanced together, because a case whose detail page
+      // reads v8 beside a version list whose newest entry is v7 is two screens of one case
+      // disagreeing — and neither of them says which is right. The server writes both in one
+      // transaction for exactly this reason.
+      //
+      // `changeComment` is carried from the payload rather than invented: it is the sentence the
+      // panel displays, the editor has a field for it, and a comment that silently failed to save
+      // is a note its author believes they left.
+      recordCaseVersion(next.id, {
+        versionNo: next.currentVersionNo ?? 1,
+        createdBy: userRef(0),
+        createdAt: new Date().toISOString(),
+        changeComment: typeof body.changeComment === 'string' && body.changeComment.trim()
+          ? body.changeComment.trim()
+          : null,
+        // Nothing has executed this version yet — it was made a moment ago.
+        pinned: false,
+      });
+    }
+
     return HttpResponse.json(writeCase(next));
   }),
 
@@ -496,25 +536,22 @@ export const caseHandlers = [
     return new HttpResponse(null, { status: 204 });
   }),
 
+  /*
+    The version list — what the case detail's history panel reads.
+
+    An empty array is a 200 and NOT a 404. A case authored before the write path existed has no
+    version rows at all, which is an ordinary state of a perfectly readable case; a 404 there would
+    tell the reader their case had been deleted, on most of the cases in an installation being
+    migrated. The server draws the same line for the same reason (`CaseVersionService`).
+
+    Read from `db.caseVersions` rather than derived from `currentVersionNo`, so a save the user just
+    made appears here carrying the comment they typed — see the store's field header for what
+    deriving it from the counter costs.
+  */
   http.get(`${API}/projects/:projectId/cases/:caseId/versions`, async ({ params }) => {
     await delay(LATENCY);
-    const detail = caseDetail(String(params.caseId));
-    if (!detail) return notFound('That test case');
-    const total = detail.currentVersionNo ?? 1;
-    const versions: EntityVersion[] = Array.from({ length: total }, (_, i) => {
-      const versionNo = total - i;
-      const marker = reporting.caseVersionMarkers.find((m) => m.versionNo === versionNo);
-      return {
-        versionNo,
-        createdBy: marker?.author ?? userRef(0),
-        createdAt: marker?.occurredAt ?? '2026-07-01T09:00:00Z',
-        changeComment: marker?.changeComment ?? null,
-        // A version is pinned when some execution still references it, so it can never be
-        // pruned — that pin is what keeps past reports honest.
-        pinned: versionNo <= 7 && versionNo >= 3,
-      };
-    });
-    return HttpResponse.json(versions);
+    const versions = caseVersions(String(params.caseId));
+    return versions ? HttpResponse.json(versions) : notFound('That test case');
   }),
 
   http.get(`${API}/projects/:projectId/cases/:caseId/history`, async ({ request }) => {

@@ -164,13 +164,40 @@ export function useBulkCases(projectId: string): UseMutationResult<BulkResult, E
   });
 }
 
+/**
+ * One authored version, **with the author widened to nullable**.
+ *
+ * `EntityVersion` in the contract declares `createdBy` as a required, non-null `UserRef`, and the
+ * server cannot honour that: `test_case_version.created_by` is a nullable column with no foreign
+ * key to `app_user`, so a version can be genuinely unattributed (imported content) or carry an id
+ * that resolves to no account. It serves `null` for both, which is the honest answer — inventing a
+ * name would be a false claim about who changed a test.
+ *
+ * Hand-written here for the same reason `CaseHistoryResponse` below is: the generated type is not
+ * usable as-is, and the alternative is a `!` at every call site, which is how a real `null` becomes
+ * a blank line on the panel instead of "Unknown author". **`openapi.yaml` should say
+ * `nullable: true` on `createdBy`** — the same fix `TestCaseSummary.owner` already carries for
+ * exactly this reason — and this alias is deleted when it does. The contract is one lane's to
+ * change; see `docs/handoff/35-m1-s12-case-versions.md`.
+ */
+export type CaseVersion = Omit<EntityVersion, 'createdBy'> & {
+  createdBy: EntityVersion['createdBy'] | null;
+};
+
+/**
+ * A case's authored history, newest first.
+ *
+ * Unpaged, because the server's list is: it is bounded by how many times a human has saved one
+ * case, and the panel needs the whole thing to be able to say which version is the earliest one
+ * recorded.
+ */
 export function useCaseVersions(
   projectId: string,
   caseId: string | undefined,
-): UseQueryResult<EntityVersion[]> {
+): UseQueryResult<CaseVersion[]> {
   return useQuery({
     queryKey: keys.caseVersions(projectId, caseId ?? ''),
-    queryFn: ({ signal }) => api.get<EntityVersion[]>(`${base(projectId)}/cases/${caseId}/versions`, { signal }),
+    queryFn: ({ signal }) => api.get<CaseVersion[]>(`${base(projectId)}/cases/${caseId}/versions`, { signal }),
     enabled: !!caseId,
   });
 }

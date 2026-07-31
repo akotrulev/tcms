@@ -189,7 +189,12 @@ export function buildCaseDetail(summary: TestCaseSummary): TestCase {
         stale: false,
       },
     ],
-    currentVersionNo: summary.key === 'TC-5' ? 7 : 3,
+    // Three populations, on purpose, because the version panel renders each one differently:
+    // TC-5 has a long history, TC-12 has NONE (a case nobody has ever edited, whose history is
+    // legitimately empty and must read as "no recorded history" rather than as a failure), and
+    // everything else has a short one. All of them start at v2 in `caseVersions` — see its header
+    // for why a gapless 1..N would make the panel's "earliest recorded" line unreachable.
+    currentVersionNo: summary.key === 'TC-5' ? 7 : summary.key === 'TC-12' ? 1 : 3,
     lockVersion: 3,
   };
 }

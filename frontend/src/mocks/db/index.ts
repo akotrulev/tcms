@@ -9,6 +9,6 @@
 export { db, newId, reporting, users, configurations, statusByKind, uid, type MockInvitation } from './store';
 export { allocateCaseKey, allocatePlanKey, allocateRunKey, allocateSuiteKey } from './keys';
 export { descendantSuiteIds, suiteCaseCount, suiteOwnCaseCount, suiteTree } from './suites';
-export { caseDetail, writeCase } from './cases';
+export { caseDetail, caseVersions, recordCaseVersion, writeCase } from './cases';
 export { recountRun, runExecutions } from './executions';
 export { addWorkItem, workItems } from './workItems';
