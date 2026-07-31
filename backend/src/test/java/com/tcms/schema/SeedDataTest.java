@@ -247,14 +247,58 @@ class SeedDataTest extends IntegrationTestBase {
     }
 
     @Test
-    @DisplayName("Automation Service is exactly the five permissions of spec A6")
+    @DisplayName("no PROJECT-scope role is granted a permission it cannot reach")
+    void everyProjectScopeRoleHoldsTheVisibilityPrecondition() throws SQLException {
+        // THE COMPUTED CHECK, not a reading. Derived from the catalogue, so a role added or a
+        // grant edited a year from now is covered without anyone remembering this rule.
+        //
+        // `project:read` is not one capability among the others: it is the permission
+        // ProjectAccess.canView asks, and every project-scoped endpoint asks canView first so
+        // that "another company's project" and "a project you hold no grant on" are the same
+        // 404 (§6t). A PROJECT-scope role without it does not lose the project list — it 404s
+        // on every project-scoped path, so EVERY permission it holds is unreachable and the
+        // role is inert over HTTP while looking correct in the seed, in the spec and on the
+        // roles screen.
+        //
+        // That is exactly how Automation Service shipped from V3 until V16: five permissions,
+        // none of them reachable, discovered only when handoff §42 wrote the first test that
+        // asked as that role. Reading V3 did not find it and could not have — the row is
+        // absent, and absence is what a reading is worst at. Same family as the company:read
+        // gap (§43): a permission the spec grants, made unreachable by a gate ordering nobody
+        // checked against the catalogue. Two in one session is what makes this a script.
+        assertThat(queryStrings("""
+                SELECT r.name
+                  FROM role r
+                 WHERE r.scope = 'PROJECT'
+                   AND EXISTS (SELECT 1 FROM role_permission rp WHERE rp.role_id = r.id)
+                   AND NOT EXISTS (SELECT 1 FROM role_permission rp
+                                    WHERE rp.role_id = r.id AND rp.permission_key = 'project:read')
+                 ORDER BY r.name
+                """))
+                .as("""
+                        PROJECT-scope roles holding permissions but not project:read. Every path \
+                        these roles can reach asks canView first, so each of these roles is inert \
+                        over HTTP: not degraded, not partially working — 404 on everything. Grant \
+                        project:read in a migration; do NOT repair it by weakening what canView \
+                        asks, which would change the meaning of the one predicate two hundred call \
+                        sites depend on.""")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("Automation Service is exactly the six permissions of spec A6")
     void automationServiceIsTheSmallestRole() throws SQLException {
         // A leaked CI token is the realistic breach, so this grant is enumerated rather
         // than described: any addition here widens what a stolen token can do, and must be
         // a deliberate edit to both the spec and this assertion.
+        //
+        // project:read joined the list in V16 and is the visibility precondition, not a sixth
+        // capability — see that migration for why it does not widen §A6's argument about what a
+        // stolen token can do. The five capabilities below are unchanged.
         assertThat(grantsOf(AUTOMATION_SERVICE))
                 .containsExactlyInAnyOrder(
-                        "case:read", "case:create", "run:create", "result:submit", "evidence:attach");
+                        "case:read", "case:create", "run:create", "result:submit", "evidence:attach",
+                        "project:read");
 
         assertThat(grantsOf(AUTOMATION_SERVICE))
                 .as("""

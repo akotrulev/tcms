@@ -220,41 +220,42 @@ class RunCreateEndpointTest extends IntegrationTestBase {
         }
 
         /**
-         * <strong>This test documents a defect, and it will go red when the defect is fixed.</strong>
+         * <strong>This test was written expecting 404, to pin a defect. {@code V16} repaired it and
+         * the expectation is now 201 — which is the whole point of having written it that way.</strong>
          *
-         * <p>Roles spec §A6 gives Automation Service exactly five permissions —
-         * {@code case:read}, {@code run:create}, {@code result:submit}, {@code evidence:attach} and
-         * a quarantine-only {@code case:create} — and {@code V3} line 252 seeds precisely those.
-         * <strong>{@code project:read} is not among them.</strong>
+         * <p>Roles spec §A6 gives Automation Service five capabilities — {@code case:read},
+         * {@code run:create}, {@code result:submit}, {@code evidence:attach} and a quarantine-only
+         * {@code case:create} — and {@code V3} seeded precisely those and <em>no</em>
+         * {@code project:read}.
          *
-         * <p>But {@code ProjectService.writeGranted} runs the read gate first, and
+         * <p>{@code ProjectService.writeGranted} runs the read gate first, and
          * {@code ProjectAccess.canView} <em>is</em> "holds {@code project:read}". So every
-         * project-scoped path answers this role <strong>404</strong> before its permission is asked
-         * — including {@code run:create} here and {@code result:submit} in §38. The role's entire
-         * justification (§A6: "a leaked CI token can post results and break nothing") describes
-         * capabilities it cannot currently reach at all.
+         * project-scoped path answered this role <strong>404 before its permission was asked</strong>
+         * — {@code run:create} here, and equally {@code result:submit}, {@code evidence:attach} and
+         * {@code case:read}. The role whose entire justification is "a leaked CI token can post
+         * results and break nothing" could not post a result. Not degraded: inert.
          *
-         * <p>This is <strong>§39's {@code company:read} finding in a second place</strong>: a
-         * spec-vs-code disagreement rather than a bug, with two candidate repairs — add
-         * {@code project:read} to §A6's grant, or let the write gate resolve visibility from the
-         * write permission itself. Choosing is a decision.
+         * <p>{@code V16} grants the missing {@code project:read}, which is the visibility
+         * precondition rather than a sixth capability — that migration carries the argument for why
+         * it does not widen what a stolen token can do, and why the alternative repair (weakening
+         * what {@code canView} asks) was refused.
          *
-         * <p>It is <strong>not fixed here</strong>: the repair lives in
-         * {@code V3__seed_permissions_and_roles.sql}, which another lane held this run. Asserted as
-         * 404 so the behaviour is pinned and stated rather than merely absent — and so that whoever
-         * makes the repair is sent to this comment by a red test instead of discovering the
-         * question later.
+         * <p>The general form is now a computed check:
+         * {@code SeedDataTest.everyProjectScopeRoleHoldsTheVisibilityPrecondition} derives the rule
+         * from the catalogue, so the next role added is covered without anyone recalling it. This
+         * gap and §43's {@code company:read} gap were the same shape — a permission the spec grants,
+         * made unreachable by a gate ordering nobody checked against the catalogue — and two in one
+         * session is what turned a reading into a script.
          */
         @Test
-        @DisplayName("an Automation Service gets 404 — the §A6 role cannot reach its own permission")
-        void theRobotCannotReachRunCreate() throws Exception {
+        @DisplayName("an Automation Service creates a run — the §A6 role reaches its own permission")
+        void theRobotCanReachRunCreate() throws Exception {
             assertThat(post(ROBOT, ACME, ACME_BANKING, fromPlan("Nightly"), null)
                     .getResponse().getStatus())
-                    .as("If this is now 201, the project:read gap has been repaired — read this "
-                            + "test's javadoc, then change the expectation to 201 and delete the "
-                            + "note from handoff §42.")
-                    .isEqualTo(404);
-            assertThat(runCount(ACME)).isZero();
+                    .as("If this is 404 again, project:read has been dropped from Automation "
+                            + "Service — read this test's javadoc and V16 before 'fixing' the gate.")
+                    .isEqualTo(201);
+            assertThat(runCount(ACME)).isOne();
         }
 
         @Test

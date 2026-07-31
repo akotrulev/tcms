@@ -238,9 +238,28 @@ run:create        ✓
 result:submit     ✓
 evidence:attach   ✓
 case:create       ✓  restricted to the quarantine folder
+project:read      ✓  visibility precondition, not a capability — see below
 ```
 
 Everything else denied. A leaked token can post results and add quarantine stubs; it cannot edit or delete a real case, close a run, or read reports.
+
+**`project:read` was missing until `V16`, and its absence made the other five unreachable.** It is
+not a sixth capability: it is the permission `ProjectAccess.canView` asks, and every project-scoped
+endpoint asks `canView` first so that a project in another company and a project you hold no grant
+on are the same 404 (§6t). A PROJECT-scope role without it therefore does not lose the project list
+— it 404s on **every** project-scoped path, so a role that looks correct in this spec, in the seed
+and on the roles screen is inert over HTTP. Automation Service was in that state from `V3` until
+`V16`, which means the role M3's ingestion depends on could not post a result.
+
+The repair grants the precondition rather than weakening what `canView` asks — the same choice made
+for `company:read` (handoff §43), and for the same reason: loosening a gate to reach a permission is
+how a gate stops meaning anything. This does not widen the paragraph above, which is about what a
+stolen token can *do*; a token that may read the project's cases can hardly be prevented from
+knowing the project exists.
+
+**The rule is now machine-checked**, not restated here and hoped for:
+`SeedDataTest.everyProjectScopeRoleHoldsTheVisibilityPrecondition` derives from the catalogue that
+no PROJECT-scope role holds permissions without `project:read`.
 
 ### A7. Defaults & visibility
 
@@ -253,6 +272,15 @@ Everything else denied. A leaked token can post results and add quarantine stubs
 | Instance Admin's visibility | Everything, every company; access into client content audited in the client's own trail |
 
 **Nothing is open.** All roles, permissions and naming decisions are settled as of 2026-07-30.
+
+**Corrected 2026-08-01.** The sentence above is about *decisions*, and it held. What did not hold is
+the assumption that a settled decision is a delivered one: on 2026-08-01 two grants this document
+states as facts turned out to be **unreachable in the running system** — `company:read` at company
+scope (§A3, repaired by `V15`) and the whole of Automation Service's grant (§A6, repaired by `V16`).
+Both were correct in the seed and correct here; both were defeated by the scope or ordering of the
+gate that asks them, and neither was visible until a test asked as that role. See the change log.
+The lesson is recorded where it can act: the two rules are now **derived from the catalogue by
+`SeedDataTest`** rather than asserted in prose here.
 
 ---
 
@@ -370,3 +398,4 @@ All of these are now reflected in `docs/plans/2026-07-30-tcms-high-level-plan.md
 | 2026-07-30 | All 17 decisions taken; display keys and `automationKey` moved to company scope; Project clarified as a full client project, not a feature area |
 | 2026-07-30 | Final four: Viewer is the default at every entry point (was Test Engineer on project assignment) · Company Admin sees all projects in their company · client-facing isolation evidence deferred · **no custom roles in v1, clone-and-edit removed** |
 | 2026-08-01 | **`company:read` reaches company scope.** A7's promise that every member holds it was true of the seed and false of the evaluator, because four of the five roles holding it are PROJECT-scope. Added the non-assignable **Company Member** baseline (§A2), granted on joining by `V15` and backfilled for existing members; recorded the rejected "held anywhere in this company" evaluator change (§A3). No permission was added, removed or moved between roles, so `openapi.yaml` and `lib/permissions.ts` are unchanged. Handoff §43. |
+| 2026-08-01 | **Automation Service gets `project:read` (§A6), and the rule becomes a computed check.** The same shape as the row above, found the same day by the first test that asked as that role: `V3` seeded the five §A6 capabilities and no `project:read`, but every project-scoped path asks `ProjectAccess.canView` — which *is* `project:read` — before asking the permission. So all five were unreachable and the role was inert over HTTP, which would have blocked M3 ingestion. `V16` grants the precondition rather than weakening `canView`, matching the row above. `SeedDataTest.everyProjectScopeRoleHoldsTheVisibilityPrecondition` now derives the rule from the catalogue so a third instance cannot ship. `V16` also corrects `role`'s table comment, which still said "exactly six built-ins" after `V15` added the seventh. No permission was added to the catalogue, so `openapi.yaml` and `lib/permissions.ts` are unchanged. Handoff §42, §45. |

@@ -52,9 +52,14 @@ public interface ProjectAccess {
      * <h2>Why a write needs this and cannot reuse {@code canView}</h2>
      *
      * <p>Access is two independent gates and a write adds a third question to them: not "may this
-     * caller see the project" but "may they do <em>this</em> to it". Every one of the six built-in
-     * roles holds {@code project:read} — that is what makes a granted project visible at all — so a
-     * write gated on {@code canView} is a write every Viewer may perform. The client's own
+     * caller see the project" but "may they do <em>this</em> to it". Every PROJECT-scope built-in
+     * role holds {@code project:read} — that is what makes a granted project visible at all — so a
+     * write gated on {@code canView} is a write every Viewer may perform. (This sentence read
+     * "every one of the six built-in roles" until V16, and was false: Automation Service held no
+     * {@code project:read}, so the role 404'd on every project-scoped path. The claim was the
+     * justification for this whole method existing, which is the kind of sentence worth checking
+     * rather than believing — {@code SeedDataTest} now derives it from the catalogue.) The client's
+     * own
      * stakeholder, invited as a Viewer precisely so they can read coverage without touching it
      * (roles spec §A7), would be able to rewrite the test suite they were shown.
      *
