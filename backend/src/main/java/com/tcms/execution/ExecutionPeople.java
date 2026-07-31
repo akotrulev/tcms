@@ -44,6 +44,30 @@ class ExecutionPeople {
      * @param companyId the active company, passed rather than read from the context so the caller's
      *                  scope and this lookup's scope are visibly the same one
      */
+    /**
+     * Whether {@code userId} is an <strong>active member of this company</strong> — the question
+     * {@link #resolve} deliberately does not answer.
+     *
+     * <p>The two look interchangeable and are not, which cost this slice a red test. {@code app_user}
+     * is an <em>instance-level</em> table with no {@code company_id}: it is on ERD §0.1's exception
+     * list because one person may work with several clients. So {@code resolve} finds any account on
+     * the instance — correctly, because its job is to name the people already on a row, including
+     * somebody since offboarded from this company (§38). Used as a membership check it accepts a
+     * user id belonging to <em>another client entirely</em>, and a run created that way assigns a
+     * client's testing to a stranger and puts their name on this company's screens.
+     *
+     * <p>{@code ACTIVE}, not merely present: an {@code INVITED} membership conveys nothing until it
+     * is accepted, which is the rule {@code existsByCompanyIdAndUserIdAndStatus}'s own header states
+     * — an unaccepted invitation must not become a way to be handed a client's work.
+     *
+     * <p>This still asks {@code identity} only <em>who is this person</em> / <em>are they here</em>,
+     * never <em>may they</em>. The gate stays {@code project.ProjectService}.
+     */
+    boolean isActiveMember(UUID companyId, UUID userId) {
+        return memberships.existsByCompanyIdAndUserIdAndStatus(
+                companyId, userId, com.tcms.identity.MembershipStatus.ACTIVE);
+    }
+
     Map<UUID, UserRefView> resolve(UUID companyId, Collection<UUID> userIds) {
         if (userIds.isEmpty()) {
             // An empty collection bound into SQL `IN ()` is a syntax error, and a run nobody has

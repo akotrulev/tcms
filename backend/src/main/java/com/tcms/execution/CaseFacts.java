@@ -6,8 +6,10 @@ import jakarta.persistence.EntityManager;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 
@@ -29,7 +31,26 @@ import org.springframework.stereotype.Component;
  *       {@code plan_scope_item} holds foreign keys to {@code suite} and {@code test_case} (V1), and
  *       a suite item means <em>the folder and everything beneath it</em>, which only the {@code ltree}
  *       path can answer.</li>
+ *   <li><strong>Which cases a plan's scope covers</strong> — {@link #caseIdsInPlanScope}, the same
+ *       expansion returning ids instead of a count, because creating a run needs the members and
+ *       not the size of the set.</li>
+ *   <li><strong>Which of a set of ids name live rows in this project</strong> —
+ *       {@link #liveSuiteIds} and {@link #liveCaseIds}, so a plan's scope items and a run's case
+ *       list are validated rather than trusted. {@code plan_scope_item.suite_id} and
+ *       {@code case_id} are foreign keys, so an absent id would be a 500 at insert and an id from
+ *       a <em>sibling project in the same company</em> would be accepted by the database and by
+ *       RLS — the one case only this predicate refuses.</li>
+ *   <li><strong>Which version each case is on right now</strong> — {@link #currentVersionIds},
+ *       <em>the write half of the pin</em> and the first thing in this module that reads a
+ *       {@code repository} row in order to store its id. Everything the pin is for depends on this
+ *       being resolved once, at creation, and never re-resolved.</li>
  * </ol>
+ *
+ * <p>The last two are new in M2 slice 2 and they are deliberately <strong>here</strong> rather than
+ * in the two create services. Adding a second class that names {@code test_case} would end the one
+ * property that makes this seam reviewable — that a reader can find every crossing by opening one
+ * file — and it would end it for the most tempting reason there is, which is that the new query is
+ * short.
  *
  * <h2>Native SQL, and why there is no entity for either table</h2>
  *
@@ -190,6 +211,124 @@ class CaseFacts {
             counts.put((UUID) row[0], ((Number) row[1]).longValue());
         }
         return counts;
+    }
+
+    /**
+     * The live cases a plan's scope covers, as ids.
+     *
+     * <p><strong>The same expansion {@link #caseCountsByPlan} counts</strong> — deliberately the
+     * same predicate, kept adjacent so the two cannot drift. A run created from a plan whose case
+     * set differed from the plan's own displayed {@code caseCount} would show a tester a checklist
+     * of a different length from the plan they created it from, on the previous screen, and neither
+     * number would be identifiable as the wrong one.
+     *
+     * <p>Ordered by {@code key_seq}, not by id: the run's checklist is read in key order, and
+     * {@code TC-10000} sorts before {@code TC-9999} as text. Same rule the case grid follows.
+     */
+    List<UUID> caseIdsInPlanScope(UUID projectId, UUID planId) {
+        @SuppressWarnings("unchecked")
+        List<UUID> rows = entities.createNativeQuery("""
+                        SELECT DISTINCT c.id, c.key_seq
+                        FROM plan_scope_item i
+                        LEFT JOIN suite s ON s.id = i.suite_id AND s.deleted_at IS NULL
+                        JOIN test_case c
+                          ON c.project_id = :projectId
+                         AND c.deleted_at IS NULL
+                         AND ( (i.case_id IS NOT NULL AND c.id = i.case_id)
+                            OR (i.suite_id IS NOT NULL AND c.suite_id IN (
+                                    SELECT d.id FROM suite d
+                                    WHERE d.project_id = s.project_id
+                                      AND d.deleted_at IS NULL
+                                      AND d.path <@ s.path)) )
+                        WHERE i.plan_id = :planId
+                        ORDER BY c.key_seq
+                        """)
+                .setParameter("projectId", projectId)
+                .setParameter("planId", planId)
+                .getResultList()
+                .stream()
+                .map(row -> (UUID) ((Object[]) row)[0])
+                .toList();
+        return rows;
+    }
+
+    /**
+     * Of {@code ids}, those naming a live suite in this project.
+     *
+     * <p>The project predicate is the whole point and it is the gate nothing else applies: RLS
+     * refuses another <em>company</em>'s suite, and the foreign key refuses an id that names nothing
+     * at all — but a suite from a <strong>sibling project in the caller's own company</strong>
+     * passes both, and would put a folder from another product into this plan's scope. The caller
+     * may well hold a grant on that project too, so no access check catches it either.
+     */
+    Set<UUID> liveSuiteIds(UUID projectId, Collection<UUID> ids) {
+        return liveIds("suite", projectId, ids);
+    }
+
+    /** Of {@code ids}, those naming a live case in this project. See {@link #liveSuiteIds}. */
+    Set<UUID> liveCaseIds(UUID projectId, Collection<UUID> ids) {
+        return liveIds("test_case", projectId, ids);
+    }
+
+    /**
+     * @param table one of two literals chosen by the two callers above, never a parameter reaching
+     *              this class from outside it — the two tables have identical shapes for this
+     *              question and two near-identical methods is how one of them loses its
+     *              {@code deleted_at} predicate.
+     */
+    private Set<UUID> liveIds(String table, UUID projectId, Collection<UUID> ids) {
+        if (ids.isEmpty()) {
+            return Set.of();
+        }
+        @SuppressWarnings("unchecked")
+        List<UUID> rows = entities.createNativeQuery(
+                        "SELECT t.id FROM " + table + " t "
+                                + "WHERE t.project_id = :projectId AND t.deleted_at IS NULL "
+                                + "AND t.id IN (:ids)")
+                .setParameter("projectId", projectId)
+                .setParameter("ids", ids)
+                .getResultList();
+        return new LinkedHashSet<>(rows);
+    }
+
+    /**
+     * <strong>The write half of the pin</strong> — each case's current version row, by case id.
+     *
+     * <p>{@code test_case.current_version_no} names the version, {@code test_case_version} holds it,
+     * and {@code uq_case_version (case_id, version_no)} makes the join single-valued. This is
+     * resolved <em>once</em>, when the run is created, and stored on every execution — which is what
+     * makes an execution a statement about a fixed text. Re-resolving it later, however convenient,
+     * is the one thing {@link TestExecution#getCaseVersionId} exists to prevent.
+     *
+     * <p>A case with no version row is simply <strong>absent from the map</strong>, and the caller
+     * refuses the whole create rather than dropping it. Every case authored since §29 has a v1
+     * written with it; a case predating that path could have none, and there are two honest answers
+     * — refuse, or materialise a shorter checklist than the tester asked for and say nothing. The
+     * second is how a run silently omits cases, so the caller takes the first.
+     */
+    Map<UUID, UUID> currentVersionIds(UUID projectId, Collection<UUID> caseIds) {
+        if (caseIds.isEmpty()) {
+            return Map.of();
+        }
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = entities.createNativeQuery("""
+                        SELECT c.id, v.id
+                        FROM test_case c
+                        JOIN test_case_version v
+                          ON v.case_id = c.id AND v.version_no = c.current_version_no
+                        WHERE c.project_id = :projectId
+                          AND c.deleted_at IS NULL
+                          AND c.id IN (:caseIds)
+                        """)
+                .setParameter("projectId", projectId)
+                .setParameter("caseIds", caseIds)
+                .getResultList();
+
+        Map<UUID, UUID> pins = new HashMap<>();
+        for (Object[] row : rows) {
+            pins.put((UUID) row[0], (UUID) row[1]);
+        }
+        return pins;
     }
 
     private PinnedCase parse(int versionNo, String snapshot) {

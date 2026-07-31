@@ -776,6 +776,16 @@ paths:
     post:
       tags: [execution]
       summary: Create a test plan
+      description: |
+        `plan:create` — Instance Admin, Company Admin, Test Lead and Test Engineer (roles
+        spec §A4). Viewer and Automation Service do not hold it: a plan is authoring, and
+        the read gate every role passes must not be the write gate.
+
+        `suiteIds` and `caseIds` become the plan's **scope items**. A suite item means the
+        folder *and everything beneath it* — the plan's `caseCount` expands it — so adding
+        a folder and one of its cases is not a mistake, it is two ways of saying the same
+        thing and the count dedupes them.
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody:
         required: true
         content:
@@ -784,9 +794,28 @@ paths:
       responses:
         '201':
           description: Created — key is server-allocated (TP-n, per company)
+          headers:
+            Location:
+              schema: { type: string }
+              description: The new plan's canonical URL.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/TestPlan' }
+        '200':
+          # A retry carrying an Idempotency-Key that already created a plan. 200 rather than
+          # 201 so a client can tell "I made this" from "I already had this", and so a
+          # well-behaved retry is not logged as a second creation. No Location: nothing was
+          # created by THIS request.
+          description: Replayed — this Idempotency-Key already created a plan
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TestPlan' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          # The project read gate, before the payload is looked at — an absent project, one
+          # in another company, and one the caller holds no grant on are one answer.
+          $ref: '#/components/responses/NotFound'
 
   /projects/{projectId}/plans/{planId}:
     parameters:
@@ -876,6 +905,20 @@ paths:
     post:
       tags: [execution]
       summary: Create a run
+      description: |
+        `run:create` — every role except Viewer, **including Automation Service** (roles spec
+        §A4), which is what lets a CI token open the run it is about to post results into.
+
+        **Creating a run materialises its executions.** One `test_execution` per case in
+        scope, each pinned to that case's *current* `case_version_id` at this moment — which
+        is what makes the run a record of what was tested rather than of what the cases say
+        today (plan §6j). The scope is `caseIds` when the body carries them, otherwise the
+        plan's expanded scope; a run that would materialise **nothing** is a 400 on the
+        field, not an empty run, because an empty run looks finished.
+
+        `configurationId` defaults to the project's default configuration — every project is
+        seeded with one, so the field is optional and the column stays `NOT NULL`.
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody:
         required: true
         content:
@@ -884,9 +927,24 @@ paths:
       responses:
         '201':
           description: Created — key is server-allocated (TR-n, per company)
+          headers:
+            Location:
+              schema: { type: string }
+              description: The new run's canonical URL.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/TestRun' }
+        '200':
+          # See POST /plans. It matters more here: a replayed run create that made a second
+          # run would also materialise a second set of executions, so the same tester would
+          # be shown the same checklist twice with one half of their results on each.
+          description: Replayed — this Idempotency-Key already created a run
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TestRun' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /projects/{projectId}/runs/{runId}:
     parameters:

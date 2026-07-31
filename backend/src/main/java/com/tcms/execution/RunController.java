@@ -1,5 +1,6 @@
 package com.tcms.execution;
 
+import java.net.URI;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -37,10 +39,54 @@ public class RunController {
 
     private final RunService runs;
     private final ExecutionService executions;
+    private final RunCreateService creates;
 
-    public RunController(RunService runs, ExecutionService executions) {
+    public RunController(
+            RunService runs, ExecutionService executions, RunCreateService creates) {
         this.runs = runs;
         this.executions = executions;
+        this.creates = creates;
+    }
+
+    /**
+     * Creates a run <strong>and its executions</strong> — see {@link RunCreateService}.
+     *
+     * <p>The response is the run, not the run with its checklist: {@code TestRun} is what the
+     * contract declares here and what the run list renders, and the SPA's next navigation is to
+     * {@code GET /runs/{runId}} which serves the executions. Returning a two-hundred-row detail from
+     * a create would make the create the largest response in the module for a screen that is about
+     * to fetch it again anyway.
+     */
+    @PostMapping
+    public ResponseEntity<Object> create(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestBody RunWriteRequest request) {
+
+        RunCreateService.Outcome outcome = creates.create(
+                UUID.fromString(jwt.getSubject()), projectId, request, idempotencyKey);
+
+        return switch (outcome) {
+            case RunCreateService.Outcome.Created created -> ResponseEntity
+                    .created(URI.create("/api/v1/projects/" + projectId + "/runs/"
+                            + created.view().id()))
+                    .body(created.view());
+            case RunCreateService.Outcome.Replayed replayed -> ResponseEntity.ok(replayed.view());
+            case RunCreateService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
+            case RunCreateService.Outcome.Forbidden ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(createForbiddenProblem());
+            case RunCreateService.Outcome.Invalid invalid ->
+                    ResponseEntity.badRequest().body(validationProblem(invalid.errors()));
+        };
+    }
+
+    /** Worded for the action, naming no permission key — §32, as on {@code PlanController}. */
+    private static ProblemDetail createForbiddenProblem() {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
+        problem.setTitle("Not allowed");
+        problem.setDetail("You do not have permission to create runs in this project.");
+        return problem;
     }
 
     /**

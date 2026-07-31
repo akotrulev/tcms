@@ -88,6 +88,25 @@ public class PlanService {
     }
 
     /**
+     * One plan as the API serves it, resolving its own counts and configurations.
+     *
+     * <p>Exists for {@link PlanCreateService}, which must answer the same shape {@code GET} answers.
+     * Not a second assembler: a created plan rendered by a different method would show one thing on
+     * create and another on the reload that follows it, with neither screen revealing which is
+     * stored — {@code repository.CaseCreateService} makes the same argument at more length, and the
+     * force of it here is that a create response is the <em>first</em> thing anyone sees of a plan.
+     *
+     * <p>Two extra queries per create, which is the right trade at one row per user action.
+     */
+    @Transactional(readOnly = true)
+    TestPlanView viewOf(TestPlan plan) {
+        return view(
+                plan,
+                cases.caseCountsByPlan(plan.getProjectId(), List.of(plan.getId())),
+                configurationsOf(plan.getProjectId()));
+    }
+
+    /**
      * The wire shape, assembled once for both endpoints.
      *
      * <p>{@code configurations} is the <em>project's</em> list rather than a per-plan one, because

@@ -19,7 +19,8 @@ import org.hibernate.annotations.Filter;
  * case it ran, so editing that case afterwards cannot rewrite what a past run reported (plan
  * §2/§6j). Making it settable would give this module a way to say "actually, it ran the new text",
  * which is the one claim history exists to prevent — so the field is written when the execution is
- * created (a slice that does not exist yet) and never again.
+ * created and never again. {@link #materialise} is that write, called once per case in scope when a
+ * run is created; there is deliberately no setter beside it.
  *
  * <p>{@link #caseId} is immutable for the same reason and a weaker one: it is what the case-history
  * index is keyed on.
@@ -84,6 +85,15 @@ public class TestExecution {
     @Column(name = "release_version", updatable = false)
     private String releaseVersion;
 
+    /**
+     * Derived from {@link #releaseVersion} in the one statement that sets it, exactly as on
+     * {@link TestRun}. {@code test_execution_release_idx} leads on this column, so leaving it null
+     * while the release is set makes the release-filtered aggregate — the one every report runs —
+     * skip the rows it is about.
+     */
+    @Column(name = "release_sort_key", updatable = false)
+    private String releaseSortKey;
+
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
@@ -96,8 +106,58 @@ public class TestExecution {
     @Column(name = "lock_version", nullable = false)
     private long lockVersion;
 
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
+
     /** JPA only. */
     protected TestExecution() {
+    }
+
+    /**
+     * One row of a new run's checklist — <strong>the write half of the pin</strong>.
+     *
+     * <p>{@code caseVersionId} is resolved by {@link CaseFacts#currentVersionIds} at the instant the
+     * run is created and stored here. Everything the pin promises follows from that one fact: an
+     * edit to the case afterwards writes a v2 and this row still names v1, so the execution screen
+     * keeps answering what the tester was actually asked to do.
+     *
+     * <p>Nothing here has a result. {@code statusId}, {@code executedBy} and {@code executedAt} are
+     * all null, which is what {@link #hasResult} reads and therefore what makes the first recording
+     * a {@code result:submit} rather than a {@code result:amend}. Seeding a status — even an
+     * "Untested" one from the project's vocabulary — would make every fresh execution look amended
+     * and hand {@code result:amend}'s Lead-only gate to the first person who opened the run.
+     *
+     * <p>{@code assigneeId} may be null and that is the ordinary state: a run created without an
+     * assignee is one the team picks up from, which is how most teams work. It is not a placeholder
+     * for "unknown".
+     *
+     * @param releaseVersion denormalized from the run per V1's comment — nearly every interesting
+     *                       query filters executions by release, and joining back to the run on each
+     *                       is the join in every slow-query report (§6q). Copied here rather than
+     *                       read through the run so that the two are set by one statement.
+     */
+    static TestExecution materialise(
+            UUID projectId,
+            UUID runId,
+            UUID caseId,
+            UUID caseVersionId,
+            UUID assigneeId,
+            String releaseVersion,
+            Instant now) {
+
+        TestExecution created = new TestExecution();
+        created.id = UUID.randomUUID();
+        created.companyId = com.tcms.tenancy.CompanyContext.require();
+        created.projectId = projectId;
+        created.runId = runId;
+        created.caseId = caseId;
+        created.caseVersionId = caseVersionId;
+        created.assigneeId = assigneeId;
+        created.releaseVersion = releaseVersion;
+        created.releaseSortKey = ReleaseSortKey.of(releaseVersion);
+        created.createdAt = now;
+        created.updatedAt = now;
+        return created;
     }
 
     /**

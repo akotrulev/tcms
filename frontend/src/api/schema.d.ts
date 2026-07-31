@@ -1429,11 +1429,35 @@ export interface paths {
             };
         };
         put?: never;
-        /** Create a test plan */
+        /**
+         * Create a test plan
+         * @description `plan:create` — Instance Admin, Company Admin, Test Lead and Test Engineer (roles
+         *     spec §A4). Viewer and Automation Service do not hold it: a plan is authoring, and
+         *     the read gate every role passes must not be the write gate.
+         *
+         *     `suiteIds` and `caseIds` become the plan's **scope items**. A suite item means the
+         *     folder *and everything beneath it* — the plan's `caseCount` expands it — so adding
+         *     a folder and one of its cases is not a mistake, it is two ways of saying the same
+         *     thing and the count dedupes them.
+         */
         post: {
             parameters: {
                 query?: never;
-                header?: never;
+                header?: {
+                    /**
+                     * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
+                     *     already succeeded answers **200** with the case that intent created, instead of creating a
+                     *     second one — so pressing Save again after a timeout is safe.
+                     *
+                     *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
+                     *     it across retries. A key generated per attempt is the mistake that makes the header look
+                     *     right and do nothing.
+                     *
+                     *     Scoped to the project the request is addressed to, which is the scope the uniqueness
+                     *     constraint behind it uses. Optional: omitted, every call creates. At most 200 characters.
+                     */
+                    "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                };
                 path: {
                     projectId: components["parameters"]["ProjectId"];
                 };
@@ -1445,8 +1469,8 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description Created — key is server-allocated (TP-n, per company) */
-                201: {
+                /** @description Replayed — this Idempotency-Key already created a plan */
+                200: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -1454,6 +1478,20 @@ export interface paths {
                         "application/json": components["schemas"]["TestPlan"];
                     };
                 };
+                /** @description Created — key is server-allocated (TP-n, per company) */
+                201: {
+                    headers: {
+                        /** @description The new plan's canonical URL. */
+                        Location?: string;
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TestPlan"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
             };
         };
         delete?: never;
@@ -1616,14 +1654,42 @@ export interface paths {
             };
         };
         put?: never;
-        /** Create a run */
+        /**
+         * Create a run
+         * @description `run:create` — every role except Viewer, **including Automation Service** (roles spec
+         *     §A4), which is what lets a CI token open the run it is about to post results into.
+         *
+         *     **Creating a run materialises its executions.** One `test_execution` per case in
+         *     scope, each pinned to that case's *current* `case_version_id` at this moment — which
+         *     is what makes the run a record of what was tested rather than of what the cases say
+         *     today (plan §6j). The scope is `caseIds` when the body carries them, otherwise the
+         *     plan's expanded scope; a run that would materialise **nothing** is a 400 on the
+         *     field, not an empty run, because an empty run looks finished.
+         *
+         *     `configurationId` defaults to the project's default configuration — every project is
+         *     seeded with one, so the field is optional and the column stays `NOT NULL`.
+         */
         post: {
             parameters: {
                 query?: {
                     planId?: string;
                     releaseVersion?: string;
                 };
-                header?: never;
+                header?: {
+                    /**
+                     * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
+                     *     already succeeded answers **200** with the case that intent created, instead of creating a
+                     *     second one — so pressing Save again after a timeout is safe.
+                     *
+                     *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
+                     *     it across retries. A key generated per attempt is the mistake that makes the header look
+                     *     right and do nothing.
+                     *
+                     *     Scoped to the project the request is addressed to, which is the scope the uniqueness
+                     *     constraint behind it uses. Optional: omitted, every call creates. At most 200 characters.
+                     */
+                    "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                };
                 path: {
                     projectId: components["parameters"]["ProjectId"];
                 };
@@ -1635,8 +1701,8 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description Created — key is server-allocated (TR-n, per company) */
-                201: {
+                /** @description Replayed — this Idempotency-Key already created a run */
+                200: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -1644,6 +1710,20 @@ export interface paths {
                         "application/json": components["schemas"]["TestRun"];
                     };
                 };
+                /** @description Created — key is server-allocated (TR-n, per company) */
+                201: {
+                    headers: {
+                        /** @description The new run's canonical URL. */
+                        Location?: string;
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TestRun"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
             };
         };
         delete?: never;

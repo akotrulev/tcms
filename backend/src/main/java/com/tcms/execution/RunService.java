@@ -95,6 +95,20 @@ public class RunService {
     }
 
     /**
+     * One run as the API serves it, resolving its own plan key, configuration and counts.
+     *
+     * <p>Exists for {@link RunCreateService}, and it is not a second assembler for
+     * {@link PlanService#viewOf}'s reason: a created run rendered by a different method would show
+     * one thing on create and another on the reload after it. The counts it computes for a
+     * just-created run are the honest ones — every execution unrecorded, so {@code notRun} equals
+     * the checklist's length, which is exactly what the run list must show beside it.
+     */
+    @Transactional(readOnly = true)
+    TestRunView viewOf(TestRun run) {
+        return view(run, contextFor(run.getProjectId(), List.of(run)));
+    }
+
+    /**
      * Everything a batch of runs needs beyond their own columns, fetched once.
      *
      * <p>Three lookups for a page of runs: the plan keys, the configurations, and the tally. Each is

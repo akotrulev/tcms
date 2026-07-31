@@ -16,10 +16,11 @@ import org.hibernate.type.SqlTypes;
 /**
  * A test plan — a scope, a milestone and a set of criteria (ERD §5).
  *
- * <p>Read-only in this slice: nothing here creates or edits a plan, so there is no factory and no
- * mutator. That is deliberate rather than unfinished — {@code plan:create} and {@code plan:edit}
- * are their own slice, and an entity that can be constructed before anything validates it is how a
- * plan with no scope and no key gets written.
+ * <p>Creatable since M2 slice 2 and still <strong>not editable</strong>: {@link #create} is the one
+ * way a row appears and there is no mutator, because {@code plan:edit} is a separate permission and
+ * a separate slice. The factory is package-private and takes an already-validated {@link PlanEdit},
+ * so an entity that can be constructed before anything validates it — the shape that writes a plan
+ * with no name and no key — is not expressible.
  *
  * <h2>The criteria are held as JSON text, not as a mapped graph</h2>
  *
@@ -94,8 +95,68 @@ public class TestPlan {
     @Column(name = "lock_version", nullable = false)
     private long lockVersion;
 
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private java.time.Instant createdAt;
+
+    @Column(name = "created_by", updatable = false)
+    private UUID createdBy;
+
+    @Column(name = "updated_at", nullable = false)
+    private java.time.Instant updatedAt;
+
+    /** Opaque, write-once, never read as data — see {@code V14}. */
+    @Column(name = "created_idempotency_key", updatable = false)
+    private String createdIdempotencyKey;
+
     /** JPA only. */
     protected TestPlan() {
+    }
+
+    /**
+     * A new plan, {@code DRAFT} at v1.
+     *
+     * <p><strong>Not {@code ACTIVE}.</strong> The status ladder is DRAFT → IN_REVIEW → APPROVED →
+     * ACTIVE → CLOSED and {@code plan:review} / {@code plan:approve} are separate permissions held
+     * by fewer roles (roles spec §A4). A create that landed at ACTIVE would let a Test Engineer
+     * grant their own plan the approval the catalogue says they may not — the same argument
+     * {@code repository.TestCase.applyEdit} makes for leaving {@code lifecycleStatus} off an edit,
+     * and {@code TestPlanInput} agrees by having no status field.
+     *
+     * <p>{@code companyId} comes from {@link CompanyContext}, never from the caller (ERD §0.1
+     * point 2).
+     */
+    static TestPlan create(
+            UUID projectId,
+            String key,
+            long keySeq,
+            PlanEdit edit,
+            UUID creatorId,
+            String idempotencyKey,
+            java.time.Instant now) {
+
+        TestPlan created = new TestPlan();
+        created.id = UUID.randomUUID();
+        created.companyId = com.tcms.tenancy.CompanyContext.require();
+        created.projectId = projectId;
+        created.key = key;
+        created.keySeq = keySeq;
+        created.name = edit.name();
+        created.description = edit.description();
+        created.status = PlanStatus.DRAFT;
+        created.milestoneName = edit.milestoneName();
+        created.milestoneDate = edit.milestoneDate();
+        // Both null, not "[]": a plan that has not reached the point of declaring criteria has not
+        // declared an empty set of them, and PlanCriteria renders null as [] for the wire anyway.
+        // Writing "[]" here would make "nobody has decided" and "there are deliberately none"
+        // indistinguishable in the column that a later plan:edit slice has to tell apart.
+        created.entryCriteria = null;
+        created.exitCriteria = null;
+        created.currentVersionNo = 1;
+        created.createdAt = now;
+        created.createdBy = creatorId;
+        created.updatedAt = now;
+        created.createdIdempotencyKey = idempotencyKey;
+        return created;
     }
 
     UUID getId() {

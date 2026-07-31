@@ -39,6 +39,18 @@ public interface TestRunRepository extends JpaRepository<TestRun, UUID> {
     Optional<TestRun> findLiveInProject(
             @Param("projectId") UUID projectId, @Param("runId") UUID runId);
 
+    /**
+     * The run a previous request with this {@code Idempotency-Key} created, if any.
+     *
+     * <p>The predicates match {@code test_run_created_idempotency_key_idx} exactly, and
+     * {@code deletedAt} is deliberately not among them — {@link TestPlanRepository#findByIdempotencyKey}
+     * carries both arguments in full.
+     */
+    @Query("SELECT r FROM TestRun r WHERE r.projectId = :projectId "
+            + "AND r.createdIdempotencyKey = :key")
+    Optional<TestRun> findByIdempotencyKey(
+            @Param("projectId") UUID projectId, @Param("key") String key);
+
     /** The plan keys a set of runs point at, so a run list resolves them in one query, not N. */
     @Query("SELECT p.id, p.key FROM TestPlan p WHERE p.id IN :planIds")
     List<Object[]> findPlanKeys(@Param("planIds") Collection<UUID> planIds);
