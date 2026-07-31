@@ -13,15 +13,18 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import EditIcon from '@mui/icons-material/Edit';
 import HistoryIcon from '@mui/icons-material/History';
-import { Link as RouterLink, useParams } from 'react-router-dom';
+import { useState } from 'react';
+import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import type { CaseConditionRef, DocLink, TestCase, TestStep } from '../../api/types';
 import { useCase, useProject } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
+import { CaseDeleteDialog } from './CaseDeleteDialog';
 import { AutomationLabel, HealthChip, LifecycleChip, PriorityLabel, StatusChip } from '../../components/StatusChip';
 import { formatAge, formatDateTime, formatSeconds } from '../../lib/format';
 import { stepFormatLabels } from '../../lib/labels';
@@ -38,6 +41,8 @@ export function CaseDetailPage() {
   const { projectId = '', caseId = '' } = useParams();
   const project = useProject(projectId);
   const testCase = useCase(projectId, caseId);
+  const navigate = useNavigate();
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   return (
     <Box>
@@ -107,9 +112,40 @@ export function CaseDetailPage() {
                       )
                     }
                   </PermissionGate>
+                  <PermissionGate projectId={projectId} permission="case:delete">
+                    {({ allowed }) => (
+                      <Button
+                        color="error"
+                        startIcon={<DeleteOutlineIcon />}
+                        disabled={!allowed}
+                        onClick={() => setConfirmingDelete(true)}
+                        data-testid="CaseDetail.DeleteButton"
+                      >
+                        Delete
+                      </Button>
+                    )}
+                  </PermissionGate>
                 </>
               }
             />
+
+            {/*
+              Mounted only while confirming, so the dialog's own reset-on-open effect starts from a
+              clean mutation each time rather than from the previous case's refusal.
+            */}
+            {confirmingDelete && (
+              <CaseDeleteDialog
+                open
+                onClose={() => setConfirmingDelete(false)}
+                projectId={projectId}
+                testCase={data}
+                onDeleted={() => {
+                  // `replace`, so Back does not return to a detail screen for a case that is gone
+                  // and answer 404 at a URL the user reached by pressing Back.
+                  navigate(`/projects/${projectId}/cases`, { replace: true });
+                }}
+              />
+            )}
 
             {data.healthSignals.length > 0 && (
               <Stack direction="row" sx={{ gap: 0.75, flexWrap: 'wrap', mb: 2 }} data-testid="CaseDetail.Health">

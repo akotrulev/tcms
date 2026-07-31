@@ -377,13 +377,32 @@ export function useUpdateCase(projectId: string, caseId: string) {
   });
 }
 
+/**
+ * Soft-deletes a case.
+ *
+ * `meta.handled` because the refusal is the message: `case:delete` is `OWN`-qualified for a Test
+ * Engineer, so a 403 here says *this* case is someone else's — a sentence the dialog renders in
+ * place, beside the case it is about. A global toast would show it at the corner and let the
+ * dialog close as though nothing had happened.
+ *
+ * The case's own cached entry is **removed**, not invalidated: a refetch of a deleted case is a
+ * 404, which the detail screen would render as an error where the honest answer is "it is gone".
+ */
 export function useDeleteCase(projectId: string) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (caseId: string) => api.del<void>(`${base(projectId)}/cases/${caseId}`),
-    onSuccess: () => {
+    meta: { handled: true },
+    onSuccess: (_result, caseId) => {
+      client.removeQueries({ queryKey: keys.case(projectId, caseId) });
       void client.invalidateQueries({ queryKey: ['projects', projectId, 'cases'] });
+      // The tree renders per-suite case counts, so a delete changes it even though no suite row
+      // was touched.
       void client.invalidateQueries({ queryKey: keys.suites(projectId) });
+      // The project header carries a case count too — stale by one until this lands. `exact`,
+      // because `keys.project` is a PREFIX of every key above it: without it this one call would
+      // invalidate the case list, the tree and the case that was just removed from the cache.
+      void client.invalidateQueries({ queryKey: keys.project(projectId), exact: true });
     },
   });
 }

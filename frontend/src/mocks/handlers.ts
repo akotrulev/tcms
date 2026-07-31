@@ -32,6 +32,7 @@ import {
   allocateRunKey,
   allocateSuiteKey,
   suiteCaseCount,
+  suiteOwnCaseCount,
   caseDetail,
   db,
   descendantSuiteIds,
@@ -71,6 +72,19 @@ const notFound = (what: string) => problem(404, 'Not found', `${what} does not e
 
 /** The server's own cap on a suite name, mirrored so a rejection reads the same in both modes. */
 const MAX_SUITE_NAME = 150;
+
+/**
+ * What the caller may do on one project, from that project's own `myRole`.
+ *
+ * Shared by `GET /me/permissions` and by the writes that refuse — so the mock cannot enable a
+ * control through one answer and then accept the write it should have refused. An unknown project
+ * yields nothing, matching the real endpoint: unreachable and non-existent are indistinguishable.
+ */
+function permissionsOn(projectId: string): string[] {
+  const project = projects.find((p) => p.id === projectId);
+  const role = roles.find((r) => r.name === project?.myRole);
+  return [...(role?.permissions ?? [])].sort();
+}
 
 function requireAuth(request: Request) {
   return request.headers.get('Authorization')?.startsWith('Bearer ')
@@ -381,9 +395,7 @@ export const handlers = [
 
     // An unknown project answers with the empty set rather than a 404, matching the real
     // endpoint: an unreachable project and a non-existent one must be indistinguishable (§6t).
-    const project = projects.find((p) => p.id === projectId);
-    const role = roles.find((r) => r.name === project?.myRole);
-    return HttpResponse.json({ projectId, permissions: [...(role?.permissions ?? [])].sort() });
+    return HttpResponse.json({ projectId, permissions: permissionsOn(projectId) });
   }),
 
   // -------------------------------------------------------------- projects ----
@@ -512,7 +524,7 @@ export const handlers = [
     // `lifecycleStatus` is NOT applied any more: it is not on SuiteInput, and a status an
     // ordinary edit can set is an approval its author granted themselves (§6g).
     suite.lockVersion = (suite.lockVersion ?? 0) + 1;
-    return HttpResponse.json({ ...suite, caseCount: suiteCaseCount(suite.id) });
+    return HttpResponse.json({ ...suite, caseCount: suiteOwnCaseCount(suite.id) });
   }),
 
   http.delete(`${API}/projects/:projectId/suites/:suiteId`, async ({ params }) => {
@@ -849,11 +861,38 @@ export const handlers = [
     return HttpResponse.json(writeCase(next));
   }),
 
-  http.delete(`${API}/projects/:projectId/cases/:caseId`, async ({ params }) => {
+  /*
+    The delete, and the one refusal this mock can honestly reproduce.
+
+    A caller whose role does not hold `case:delete` gets the server's 403 — which matters because
+    the SPA's gate reads the SAME source (`permissionsOn`), so a mock that accepted the write would
+    let a disabled button and a successful request coexist.
+
+    NOT modelled: the `OWN` refusal. `case:delete` is OWN-qualified for a Test Engineer, and the
+    server resolves that against the case's `created_by` — which the contract does not serve and
+    the fixtures therefore do not carry. Faking it against `owner` would refuse on a different fact
+    than the server uses and teach the wrong rule. Named here rather than half-implemented; the
+    live pass is where that branch is proved.
+  */
+  http.delete(`${API}/projects/:projectId/cases/:caseId`, async ({ params, request }) => {
+    const denied = requireAuth(request);
+    if (denied) return denied;
     await delay(LATENCY);
+
+    if (!permissionsOn(String(params.projectId)).includes('case:delete')) {
+      return problem(
+        403,
+        'Forbidden',
+        'You do not have permission to delete test cases in this project.',
+      );
+    }
+
     const id = String(params.caseId);
     const index = db.cases.findIndex((c) => c.id === id);
     if (index < 0) return notFound('That test case');
+    // Removed from the store rather than flagged: the mock has no soft-delete column, and every
+    // read here already goes through `db.cases`. What the server keeps — the row, for the runs
+    // that pinned a version — has no reader in mock mode.
     db.cases.splice(index, 1);
     db.caseDetails.delete(id);
     return new HttpResponse(null, { status: 204 });

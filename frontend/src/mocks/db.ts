@@ -179,9 +179,31 @@ sequences.set('TR', 418);
 
 // Suite case counts are derived, never stored — a stored count drifts the moment a case
 // moves suite, and the drift is invisible until someone reconciles by hand.
+
+/**
+ * Every live case in this suite's **subtree**.
+ *
+ * What "is this folder empty" means — the question the delete asks, where a case three levels
+ * down is still a reason to refuse.
+ */
 export function suiteCaseCount(suiteId: string): number {
   const descendants = descendantSuiteIds(suiteId);
   return db.cases.filter((c) => descendants.has(c.suiteId)).length;
+}
+
+/**
+ * The cases filed **directly** in this suite — what `Suite.caseCount` means on the wire.
+ *
+ * `SuiteView`'s own comment says it: the count is the suite's own, and the SPA's tree rolls the
+ * subtree up. This mock answered the subtree count instead, so every parent folder rendered its
+ * descendants twice — Payments showed 40 for a project with 26 cases, because the tree added the
+ * children to a number that already contained them.
+ *
+ * Found by the case-delete browser pass: deleting one case dropped that folder's count by two,
+ * which is the only symptom that makes the double count visible rather than merely large.
+ */
+export function suiteOwnCaseCount(suiteId: string): number {
+  return db.cases.filter((c) => c.suiteId === suiteId).length;
 }
 
 export function descendantSuiteIds(suiteId: string): Set<string> {
@@ -200,7 +222,7 @@ export function descendantSuiteIds(suiteId: string): Set<string> {
 }
 
 export function suiteTree(): Suite[] {
-  return db.suites.map((s) => ({ ...s, caseCount: suiteCaseCount(s.id) }));
+  return db.suites.map((s) => ({ ...s, caseCount: suiteOwnCaseCount(s.id) }));
 }
 
 // -------------------------------------------------------------------- cases ----
