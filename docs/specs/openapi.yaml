@@ -1076,6 +1076,77 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/RoleAssignment' }
+    post:
+      tags: [admin]
+      summary: Grant a role to a user or a team
+      description: |
+        The only way a company member gains sight of a project. Company membership grants
+        authentication and **zero project visibility** (roles spec §A1), so without this
+        endpoint a provisioned company has exactly one usable account — the Company Admin
+        the CLI created — and every colleague signs in to an empty project list.
+
+        **The gate depends on the scope of the grant being made, not on one permission:**
+
+        - `projectId` present → a PROJECT-scope grant, gated on **`project:members` on that
+          project**. A Test Lead staffs their own project without being able to staff another.
+        - `projectId` null → a COMPANY-scope grant, gated on **`company:members`**, which only
+          Company Admin and Instance Admin hold. This is the same shape as `project:create`
+          (§6 of that endpoint's description): a grant that spans every project cannot be
+          authorised by a permission held on one project.
+
+        Exactly one of `userId` and `teamId` is supplied; both or neither is a `400` keyed on
+        `userId`. A role whose own `scope` disagrees with the grant being made — a COMPANY-scope
+        role pinned to one project, or the reverse — is a `400` keyed on `roleId` rather than a
+        silent coercion, because the two mean materially different access.
+
+        **Re-granting an identical assignment returns the existing one with `200`**, not a
+        duplicate and not a `409`. The caller's intent is "this person holds this role here",
+        which is already true; a second row would give the same user two grants to revoke.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RoleAssignmentInput' }
+      responses:
+        '200':
+          description: The grant already existed and is returned unchanged.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RoleAssignment' }
+        '201':
+          description: Granted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RoleAssignment' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /role-assignments/{assignmentId}:
+    parameters:
+      - name: assignmentId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [admin]
+      summary: Revoke a grant
+      description: |
+        Gated exactly as the grant was: `project:members` on the assignment's project for a
+        PROJECT-scope grant, `company:members` for a COMPANY-scope one.
+
+        **Revoking a grant that does not exist is a `204`**, so a double-click and a retried
+        request both end in the state the caller asked for.
+
+        A caller may not revoke the grant that is carrying their own ability to revoke —
+        removing your own last `company:members` grant is a `400` keyed on `assignmentId`,
+        because the alternative is a company with no administrator and no way back in
+        without the operator CLI.
+      responses:
+        '204': { description: Revoked }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   # ---------------------------------------------------------------- work ----
   /work-items:
@@ -2545,6 +2616,24 @@ components:
         projectId: { type: string, format: uuid, nullable: true }
         projectName: { type: string, nullable: true }
         grantedAt: { type: string, format: date-time }
+
+    RoleAssignmentInput:
+      type: object
+      description: |
+        `projectId` is what selects the scope of the grant, and therefore which permission
+        gates it — see `POST /role-assignments`. It is nullable rather than optional so that
+        "grant across the whole company" is something the caller states, not something they
+        fall into by omitting a field.
+      required: [roleId, projectId]
+      properties:
+        roleId: { type: string, format: uuid }
+        userId: { type: string, format: uuid, nullable: true }
+        teamId: { type: string, format: uuid, nullable: true }
+        projectId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Null grants the role across every project in the company, present and future.
 
     # ---------------------------------------------------------------- work ---
     WorkItem:
