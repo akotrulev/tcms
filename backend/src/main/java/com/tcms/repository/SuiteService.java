@@ -78,10 +78,24 @@ public class SuiteService {
     public Optional<List<SuiteView>> findTree(UUID userId, UUID projectId) {
         UUID companyId = CompanyContext.require();
 
-        return projects.readVisible(userId, projectId, project -> treeOf(companyId, project.getId()));
+        return projects.readVisible(userId, projectId, project -> render(companyId, project.getId()));
     }
 
-    private List<SuiteView> treeOf(UUID companyId, UUID projectId) {
+    /**
+     * The rendered tree for a project whose gate the caller has <strong>already</strong> passed.
+     *
+     * <p>Package-private and ungated, which is the one thing to be careful about here: it takes a
+     * {@code projectId} and checks nothing, so every caller must have come through
+     * {@link ProjectService#readVisible} or {@link ProjectService#writeGranted} first — as
+     * {@link #findTree} above does and as {@link SuiteWriteService} does, both from inside the
+     * gate's own callback, which is the shape that makes it hard to call otherwise.
+     *
+     * <p>It exists so a write can serve back the same suite shape a read serves. The alternative —
+     * {@link SuiteWriteService} assembling a {@link SuiteView} itself — is a second definition of a
+     * suite's wire shape, and the field that diverges shows one value on create and another on the
+     * reload after it.
+     */
+    List<SuiteView> render(UUID companyId, UUID projectId) {
         List<Suite> live = suites.findLiveForProject(projectId);
         if (live.isEmpty()) {
             // Not merely an optimization: an empty collection bound into SQL `IN ()` is a syntax

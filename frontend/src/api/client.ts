@@ -36,6 +36,15 @@ export class ApiError extends Error {
   // `erasableSyntaxOnly`, which forbids the parameter-property shorthand.
   readonly status: number;
   readonly detail: string;
+  /**
+   * RFC-7807 `title` — the problem's *kind*, as opposed to `detail`'s account of this instance.
+   *
+   * Carried because one status code can mean two things that want opposite advice: a 409 is
+   * either "someone else saved first" (reload and reapply) or "this is not in a state that
+   * allows it" (reloading changes nothing). `describeError` reads the title to tell them apart.
+   * Null when the body carried none.
+   */
+  readonly title: string | null;
   /** RFC-7807 `errors` map, when the server rejected specific fields. */
   readonly fieldErrors: Record<string, string[]> | null;
   readonly correlationId: string | null;
@@ -51,11 +60,13 @@ export class ApiError extends Error {
     fieldErrors: Record<string, string[]> | null = null,
     correlationId: string | null = null,
     retryAfter: string | null = null,
+    title: string | null = null,
   ) {
     super(detail);
     this.name = 'ApiError';
     this.status = status;
     this.detail = detail;
+    this.title = title;
     this.fieldErrors = fieldErrors;
     this.correlationId = correlationId;
     this.retryAfter = retryAfter;
@@ -185,9 +196,11 @@ async function request<T>(path: string, init: RequestInit = {}, options: Request
     // consumer that falls back to it renders a blank message.
     let detail = res.statusText || `The request failed (HTTP ${res.status}).`;
     let fieldErrors: Record<string, string[]> | null = null;
+    let title: string | null = null;
     try {
       const body = await res.json();
       detail = body.detail ?? body.title ?? detail;
+      title = typeof body.title === 'string' ? body.title : null;
       if (body.errors && typeof body.errors === 'object') {
         fieldErrors = body.errors as Record<string, string[]>;
       }
@@ -200,6 +213,7 @@ async function request<T>(path: string, init: RequestInit = {}, options: Request
       fieldErrors,
       res.headers.get('x-correlation-id'),
       res.headers.get('retry-after'),
+      title,
     );
   }
 

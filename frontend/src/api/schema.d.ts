@@ -479,7 +479,15 @@ export interface paths {
             };
         };
         put?: never;
-        /** Create a suite */
+        /**
+         * Create a suite
+         * @description `key` is server-allocated from the company's counter (`TS-n`, sequential per **company**,
+         *     §6t), and `path` is derived from it — **not** from the name, so a rename never rewrites a
+         *     path. Requires `suite:manage`.
+         *
+         *     `lifecycleStatus` is always `DRAFT`, for the reason a created case is: a status an ordinary
+         *     create could set is an approval its author granted themselves (§6g).
+         */
         post: {
             parameters: {
                 query?: never;
@@ -495,15 +503,20 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description Created */
+                /** @description Created — key is server-allocated (TS-n, per company) */
                 201: {
                     headers: {
+                        /** @description The created suite's own URL. */
+                        Location?: string;
                         [name: string]: unknown;
                     };
                     content: {
                         "application/json": components["schemas"]["Suite"];
                     };
                 };
+                400: components["responses"]["BadRequest"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
             };
         };
         delete?: never;
@@ -548,14 +561,88 @@ export interface paths {
         };
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Update a suite */
-        patch: {
+        /**
+         * Delete an empty suite
+         * @description Soft-deletes a suite. Requires `suite:delete`, which is held by leads and above and **not**
+         *     by Test Engineer — deleting is the one repository action a contributor is blocked from, so
+         *     they can organise the tree freely without being able to unmake someone else's work
+         *     (roles spec §6b).
+         *
+         *     **The suite must be empty**, subtree included: a suite holding live cases, or having live
+         *     child suites, answers `409` naming what is in the way. A cascade would soft-delete other
+         *     people's *cases* through a folder action with no preview, routing around the `OWN` qualifier
+         *     that `case:delete` carries for exactly that reason. Cascading deletion waits for a slice that
+         *     can show what it is about to touch.
+         *
+         *     Soft, not hard: past runs reference the cases beneath a suite and `suite_run_summary` keys on
+         *     the suite id, so removing the row rewrites what a past run covered.
+         */
+        delete: {
             parameters: {
                 query?: never;
                 header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                    suiteId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Deleted. No body. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                /**
+                 * @description The suite is not empty. `detail` names the live case and child-suite counts standing in
+                 *     the way, so the client can say what to clear rather than "could not delete".
+                 */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /**
+         * Rename a suite
+         * @description Renames a suite and edits its description. Requires `suite:manage`.
+         *
+         *     **Moving is not supported here yet.** `parentId` is accepted only when it matches the
+         *     suite's current parent; a different value is a `400` rather than a silently ignored field,
+         *     because reparenting rewrites every descendant's `path` and needs cycle prevention — see
+         *     `Suite.path`. A client must not be able to believe a move happened.
+         *
+         *     Send the suite's `lockVersion` as `If-Match`. Omitting it is last-write-wins, which is right
+         *     for an importer with no prior read; the SPA always sends it, so a concurrent rename is a
+         *     `409` rather than a silent overwrite (§6j).
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: {
+                    /**
+                     * @description The `lockVersion` the client read, as a decimal string. Mismatch yields 409.
+                     *
+                     *     **The precondition travels in the header, never in the body.** A PATCH body states the
+                     *     desired state; the version the client happened to read is an assertion about the state it
+                     *     started from, and mixing the two means a field on the input schema that must never be
+                     *     persisted. Omitting the header skips the check — a last-write-wins save, which is correct
+                     *     for a caller that genuinely has no prior read (an importer) and wrong for an editor, so
+                     *     the SPA always sends it.
+                     */
+                    "If-Match"?: components["parameters"]["IfMatch"];
+                };
                 path: {
                     projectId: components["parameters"]["ProjectId"];
                     suiteId: string;
@@ -577,6 +664,10 @@ export interface paths {
                         "application/json": components["schemas"]["Suite"];
                     };
                 };
+                400: components["responses"]["BadRequest"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
             };
         };
         trace?: never;
@@ -2236,7 +2327,12 @@ export interface components {
         };
         SuiteInput: {
             name: string;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description The parent folder, or null for a root. **Set on create; on `PATCH` it may only repeat
+             *     the suite's current parent** — a different value is refused rather than ignored, because
+             *     moving is not implemented yet (see the `PATCH` description).
+             */
             parentId?: string | null;
             description?: string | null;
         };

@@ -44,13 +44,38 @@ record ApiProblem(
                 errors);
     }
 
+    /** A lost-update refusal on a case. Kept as the no-argument form because it has one caller. */
     static ApiProblem conflict() {
+        return stale("case");
+    }
+
+    /**
+     * A lost-update refusal — the {@code If-Match} the client sent is not the stored version.
+     *
+     * @param noun what to reload, in the user's vocabulary. Parameterized because the copy tells the
+     *             reader what to do next, and "reload the case" on a suite rename sends them to the
+     *             wrong screen — a small wrongness that costs a support conversation, since the
+     *             advice is otherwise correct enough to be followed.
+     */
+    static ApiProblem stale(String noun) {
         return new ApiProblem(
                 BLANK_TYPE,
                 "Someone else saved first",
                 409,
-                "Reload the case to see the newer version, then reapply your change.",
+                "Reload the " + noun + " to see the newer version, then reapply your change.",
                 null);
+    }
+
+    /**
+     * A refusal that is not a lost update — the request was well-formed, current, and still cannot
+     * be performed in the target's present state.
+     *
+     * <p>Separate from {@link #stale} because the two 409s want opposite advice: a stale write says
+     * "reload and reapply", and reloading does nothing at all for a delete refused because the
+     * folder has cases in it. One wording covering both would be the one that fits neither.
+     */
+    static ApiProblem conflict(String title, String detail) {
+        return new ApiProblem(BLANK_TYPE, title, 409, detail, null);
     }
 
     /**

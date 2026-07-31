@@ -73,6 +73,31 @@ export function describeError(error: unknown): DescribedError {
       };
     }
     if (error.status === 409) {
+      /*
+        Not every 409 is a lost update, and the two want opposite advice.
+
+        A stale write says "reload and reapply". A write refused because the target is not in a
+        state that allows it — deleting a suite that still holds cases — is not fixed by reloading
+        at all, and the server's `detail` is the only sentence that says what to do instead ("This
+        suite still holds 42 cases. Move or delete them first."). Collapsing both into the
+        lost-update wording threw that sentence away and told the user to reload, which changes
+        nothing.
+
+        The server distinguishes them by TITLE, so that is what is read here: the lost-update
+        problem is the one it titles "Someone else saved first". Anything else keeps its own
+        detail. Falling back to the reload copy when there is no detail keeps the previous
+        behaviour for a bodiless 409.
+      */
+      const isLostUpdate = error.title === null || error.title === 'Someone else saved first';
+      if (!isLostUpdate && error.detail) {
+        return {
+          ...shared,
+          title: error.title,
+          body: error.detail,
+          retryable: false,
+          isAuth: false,
+        };
+      }
       return {
         ...shared,
         title: 'Someone else changed this',

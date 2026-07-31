@@ -1,6 +1,7 @@
 package com.tcms.repository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -91,6 +92,81 @@ public interface SuiteRepository extends JpaRepository<Suite, UUID> {
             """)
     List<SuiteCaseCount> countLiveCasesBySuite(
             @Param("companyId") UUID companyId, @Param("projectId") UUID projectId);
+
+    /**
+     * One live suite of one project, by id — the read every write gates on.
+     *
+     * <p>Both predicates matter and neither is redundant with the other. {@code projectId} is what
+     * makes {@code /projects/{a}/suites/{id}} refuse a suite belonging to project {@code b} in the
+     * same company: without it a caller granted one project could rename folders in another, and
+     * the project gate above would have passed on a project the suite is not in.
+     * {@code deletedAt IS NULL} is what stops a second delete of an already-deleted folder
+     * answering 204 as though it had done something.
+     *
+     * <p>Not {@code findById}: that resolves by primary key through the persistence context, and
+     * Hibernate filters do not apply to that path (see {@code ProjectRepository}'s header). RLS
+     * still covers it, but using one layer where two are available is how a layered defence quietly
+     * becomes a single point.
+     */
+    @Query("""
+            SELECT s FROM Suite s
+             WHERE s.id = :suiteId
+               AND s.projectId = :projectId
+               AND s.deletedAt IS NULL
+            """)
+    Optional<Suite> findLiveInProject(
+            @Param("projectId") UUID projectId, @Param("suiteId") UUID suiteId);
+
+    /**
+     * How many live child suites this suite has — <strong>direct children only.</strong>
+     *
+     * <p>Direct rather than subtree-wide because that is all the emptiness check needs: a suite with
+     * a grandchild necessarily has a child, so refusing on direct children refuses every non-empty
+     * subtree, one level at a time, in the order a person would clear them. The message it produces
+     * is also the more useful one — "3 folders" names what is visible in the tree under this node,
+     * not a total the user cannot see the parts of.
+     */
+    @Query("""
+            SELECT COUNT(s) FROM Suite s
+             WHERE s.parentId = :suiteId
+               AND s.deletedAt IS NULL
+            """)
+    long countLiveChildren(@Param("suiteId") UUID suiteId);
+
+    /**
+     * How many live cases sit <strong>in the whole subtree</strong> beneath and including this
+     * suite.
+     *
+     * <p>Subtree-wide here, unlike the child count above, and the asymmetry is deliberate rather
+     * than an oversight: the child check already guarantees a refused delete whenever descendants
+     * exist, so by the time this number is read the suite is a leaf and "subtree" and "own" are the
+     * same set. It is written as a subtree match anyway so the query stays correct if a later slice
+     * relaxes the child rule — a count that silently becomes wrong under a rule change is how a
+     * "delete is safe" guarantee turns into deleting somebody's cases.
+     *
+     * <p>Native and {@code <@}: the {@code ltree} containment operator has no JPQL spelling, and it
+     * is served by {@code suite_path_idx}, the GiST index V1 created for exactly this shape. Both
+     * tenancy predicates are spelled out because a Hibernate filter does not apply to a native
+     * query — the same note {@link #countLiveCasesBySuite} carries. Unlike that one, though,
+     * <strong>{@code project_id} here is observable</strong> and has a test: paths are unique only
+     * within a project, so two projects of one company routinely both have a suite at {@code s1},
+     * and dropping the predicate makes an empty folder undeletable because a different project's
+     * folder has cases in it.
+     */
+    @Query(nativeQuery = true, value = """
+            SELECT COUNT(*)
+              FROM test_case tc
+              JOIN suite s ON s.id = tc.suite_id
+             WHERE tc.company_id = :companyId
+               AND tc.project_id = :projectId
+               AND tc.deleted_at IS NULL
+               AND s.deleted_at IS NULL
+               AND s.path <@ CAST(:path AS ltree)
+            """)
+    long countLiveCasesInSubtree(
+            @Param("companyId") UUID companyId,
+            @Param("projectId") UUID projectId,
+            @Param("path") String path);
 
     /** A {@code (suiteId, caseCount)} row from {@link #countLiveCasesBySuite}. */
     interface SuiteCaseCount {

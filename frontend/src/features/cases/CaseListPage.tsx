@@ -77,14 +77,23 @@ export function CaseListPage() {
               <DataRegion
                 testId="Cases.SuiteTree"
                 state={{ ...suites, refetch: () => void suites.refetch() }}
-                isEmpty={(rows) => rows.length === 0}
-                empty={{ kind: 'no-records', title: 'No suites', body: 'Create a suite to organize cases.' }}
+                /*
+                  No `isEmpty` here, deliberately, and this is the one place a region opts out.
+                  DataRegion still owns loading and failed; the EMPTY state is the tree's, because
+                  it is the only one that needs an action wired to state the tree holds — the
+                  create dialog. The alternative was lifting that state into this page purely to
+                  satisfy the shared empty slot, which would put the suite-writing machinery on the
+                  case list. Before this slice the region's empty state read "Create a suite to
+                  organize cases" with no way to create one, which is the dead end a freshly
+                  provisioned project actually landed on.
+                */
               >
                 {(rows) => (
                   <SuiteTree
                     suites={rows}
                     selectedSuiteId={filters.suiteId}
                     onSelect={(suiteId) => setFilter('suiteId', suiteId)}
+                    projectId={projectId}
                   />
                 )}
               </DataRegion>

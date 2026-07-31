@@ -1,9 +1,18 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-07-31 (last session: **case create — the key allocator, v1, and server-side idempotency** — §29)
-**State:** Planning and design complete **including multi-company tenancy**. **Backend M0 is COMPLETE**, and **M0.5 now has a usable login** (§18): invitation → activation → sign-in works end to end, `CompanyContext` finally has a production entry point, and the permission evaluator answers over HTTP. **The instance is reachable for the first time.** Frontend complete through **Phase 3** and aligned with the multi-company decisions (§9), and **the two halves have now met (§20)**: `VITE_API_MODE=live` points the SPA at the real backend through a dev proxy, `/accept-invitation` redeems a real CLI-issued link, and a real session survives a reload. **As of §25 the SPA's biggest screen renders live**: the case grid, its suite tree, its facet chips and its filters all run against the real API. **As of §26 that screen raises no errors at all** — its condition library is served, so nothing on it 404s. **As of §27 the case *detail* screen is live too, including §6f's suite-condition inheritance** — which makes the `repository` module's read surface complete. **As of §28 the product has its first WRITE**: editing a case is live end to end, `test_case_version` has a writer so §6j history actually accumulates, `audit_event` has its first row, and the write gate is a permission (`case:edit`) rather than the read gate every role holds. **As of §29 a case can be CREATED live**: `TC-n` is allocated from the company's `key_sequence` by the one non-racing statement, v1 is written with the case so a created case has no history gap, and the `Idempotency-Key` the SPA has sent since Phase 1 is finally read — a retry returns the case it already made. Deleting cases, **creating suites**, and every other module's writes still run on MSW. Frontend Phase 4 (tests) and 5 (review) not started.
-**Build status:** `backend` — `./gradlew build` clean, **491/491 tests green against Testcontainers Postgres 17**, migrating as a **non-superuser owner** (§19). `frontend` — `npm run build` clean, `npm run lint` 0 warnings, **and driven in a real browser in both API modes** (§20). **`docker compose up` serves provision → accept-in-the-browser → sign in against a non-superuser owner** (§18, §20), and its aggregate `/actuator/health` now reports **UP** — the `mail`-indicator defect §20 found is **fixed in §21**. CI runs both gates on GitHub Actions.
-**Branch:** `master`. Per the git workflow, **work continues on the checked-out branch; do not branch per task.** Last commits: `8668102` the first write, gated on a permission rather than on readability, `b32f4b5` the case detail with §6f condition inheritance, `6d617a2` design renders (**a concurrent strand — see §10**).
+**Date:** 2026-07-31 (last session: **suite writes — create, rename, and the delete that refuses** — §30)
+**State:** Planning and design complete **including multi-company tenancy**. **Backend M0 is COMPLETE**, and **M0.5 now has a usable login** (§18): invitation → activation → sign-in works end to end, `CompanyContext` finally has a production entry point, and the permission evaluator answers over HTTP. **The instance is reachable for the first time.** Frontend complete through **Phase 3** and aligned with the multi-company decisions (§9), and **the two halves have now met (§20)**: `VITE_API_MODE=live` points the SPA at the real backend through a dev proxy, `/accept-invitation` redeems a real CLI-issued link, and a real session survives a reload. **As of §25 the SPA's biggest screen renders live**: the case grid, its suite tree, its facet chips and its filters all run against the real API. **As of §26 that screen raises no errors at all** — its condition library is served, so nothing on it 404s. **As of §27 the case *detail* screen is live too, including §6f's suite-condition inheritance** — which makes the `repository` module's read surface complete. **As of §28 the product has its first WRITE**: editing a case is live end to end, `test_case_version` has a writer so §6j history actually accumulates, `audit_event` has its first row, and the write gate is a permission (`case:edit`) rather than the read gate every role holds. **As of §29 a case can be CREATED live**: `TC-n` is allocated from the company's `key_sequence` by the one non-racing statement, v1 is written with the case so a created case has no history gap, and the `Idempotency-Key` the SPA has sent since Phase 1 is finally read — a retry returns the case it already made. **As of §30 a provisioned company is finally usable without hand-written SQL**: suites can be created, renamed and deleted from the tree, both halves in one slice, so `useCreateSuite` — dead in the data module since Phase 1 — has its first consumer. Deleting cases and every other module's writes still run on MSW. Frontend Phase 4 (tests) and 5 (review) not started.
+**Build status:** `backend` — `./gradlew build` clean, **547/547 tests green against Testcontainers Postgres 17**, migrating as a **non-superuser owner** (§19). `frontend` — `npm run build` clean, `npm run lint` 0 warnings, **and driven in a real browser in both API modes** (§20). **`docker compose up` serves provision → accept-in-the-browser → sign in against a non-superuser owner** (§18, §20), and its aggregate `/actuator/health` now reports **UP** — the `mail`-indicator defect §20 found is **fixed in §21**. CI runs both gates on GitHub Actions.
+**Branch:** `master`. Per the git workflow, **work continues on the checked-out branch; do not branch per task.** Last commits: `88af5e5` case create with the non-racing key allocator, `8668102` the first write gated on a permission, `6d617a2` design renders (**a concurrent strand — see §10**).
+
+> **⚠ A file-sync daemon on this machine creates `<name> 2.<ext>` conflict copies, and they BREAK
+> THE BUILD.** 14 were sitting in the tree at the start of §30 — `ProjectController 2.java` declares
+> `public class ProjectController`, which is a hard `compileJava` error, so the backend did not
+> compile on arrival. They are gitignored inside `build/` and untracked in `src/`, so **`git status`
+> does not always show them and a clean `git status` does not mean a clean build.** They reappeared
+> mid-session the moment a script bulk-deleted and recreated a directory. **Check
+> `find . -name "* 2.*" -not -path "./.git/*"` before trusting a build failure**, and prefer editing
+> files in place over `rm -rf` + `cp -R` on a source directory.
 
 > **⚠ Re-derive the next slice from the code, not from the last session's "Next" list — §28, and
 > again in §29.** §27's three named next steps were all unsupportable; §28's own list then led with
@@ -3061,3 +3070,178 @@ or silently fixed. It is a React 19 + MUI X DataGrid setState-in-render warning;
 4. Frontend **Phase 4 (Vitest + RTL)** — unchanged, still unblocked.
 5. The `OWN` qualifier, the quarantine-folder gate (with M3), the evaluator's cache, and the
    pre-existing DataGrid setState-in-render warning above.
+
+---
+
+## 30. Backend M1, slice 9 — suite writes, and the first slice that shipped both halves (2026-07-31)
+
+Run through the **`be-java`** skill (Mode B — extend) and then the **`fe-react`** skill (Mode B,
+re-entering Phase 2). Plan: `docs/plans/2026-07-31-suite-writes.md`.
+
+### The orientation pass changed the slice's SHAPE, not its subject
+
+§29's list named suite writes first and that survived the re-derivation — a provisioned company had
+no folders, and a case requires one, so §29's own live pass had to insert a suite with hand-written
+SQL. What the pass *added* was the half the list omitted: **`useCreateSuite` had zero consumers**,
+exactly like `useCaseVersions` before it. A backend-only slice would have left it dead for a fourth
+consecutive slice. So this is the first slice to ship the endpoint and its screen together, and the
+"which of these has a consumer" question is what produced that.
+
+`useCaseVersions` is **still** dead. Fourth slice running.
+
+| Path | Purpose |
+|---|---|
+| `repository/SuiteWriteService` | Create / rename / delete, sealed `Outcome`, two permissions. |
+| `repository/SuiteEdit` | Validation, with `validateCreate` and `validateRename` genuinely different. |
+| `repository/SuiteVersions` · `SuiteVersion` · `SuiteVersionRepository` | v1 composition version at create. |
+| `repository/Suite` | Factory + `applyEdit` + `softDelete`; `key_seq` and the audit columns now mapped. |
+| `repository/SuiteWriteEndpointTest` | **New, 56 tests.** |
+| `features/cases/SuiteDialogs.tsx` | Create / rename / delete dialogs — `useCreateSuite`'s first consumer. |
+
+### The `ltree` path label is the key sequence, and that is the load-bearing decision
+
+`V2` ships `tcms_ltree_label()`, which slugs a *name*, and it is the wrong tool for a suite.
+Classification values are seeded once and never renamed; **suites are renamed constantly, and a
+name-derived path makes every rename a subtree rewrite** — contradicting `Suite`'s own account,
+where reparenting is what rewrites paths. A slug is also not unique (`"UI / E2E"` and `"ui e2e"`
+collide under one parent) and can be empty (`"…"` → `''`, not a valid label, failing at insert with
+a message about nothing). The label is `s` + `key_seq`: unique by construction, stable across
+renames, never empty. **Proven over the wire** — a live rename left the path at `s2`.
+
+### Two permissions, because collapsing them reverts a boundary the spec fixed
+
+`suite:manage` (create, rename) is Test Engineer and above; `suite:delete` is leads only. The roles
+spec lists that split as a boundary that was *previously wrong and got corrected*, so gating both on
+`suite:manage` is not a simplification, it is the reversion. One test carries it, and it is the only
+one that goes red for that mutation.
+
+### What this slice REFUSES, and why the refusal is the feature
+
+1. **Moving.** A `PATCH` whose `parentId` differs from the stored one is a **400 naming the reason**,
+   not a silently dropped field. Reparenting rewrites every descendant's path and needs cycle
+   prevention; until that exists the only honest answers are "done" and "refused", and dropping the
+   field is the third one — where a client shows the folder in its new place, reloads, and finds it
+   back, with the server having reported success.
+2. **Deleting anything non-empty.** `suite:delete` is specced "folder + subtree" and the cascade is
+   deliberately absent: a folder delete that soft-deletes the cases beneath it unmakes *other
+   people's* work through a permission whose sibling, `case:delete`, carries an `OWN` qualifier
+   precisely to stop that — and with no preview. **409 naming the counts.** The cascade belongs to a
+   slice that can show its work; `BulkResult` already has the shape.
+
+### A rename writes NO version, and that follows from the schema rather than from taste
+
+`V1`'s comment on `suite_version.snapshot` defines a suite version as **composition** (member cases,
+order, nesting) and explicitly *not* content, "otherwise every case edit bumps every ancestor suite".
+A name is content. So create writes v1 (§29's precedent: a row created after the write path exists
+must not be born with the same gap as the rows predating it) and **rename writes nothing** — a
+bump there is the start of the spiral the comment exists to refuse, and it looks like diligence.
+Case-move, reorder and reparent owe the later bumps; each is named in `SuiteVersions`' header.
+
+### Mutation-verified — fourteen mutations, and the one survivor was a missing FIXTURE
+
+| Mutation | Result |
+|---|---|
+| Delete gated on `suite:manage` · create gated on `project:read` | **Killed** |
+| Subtree count drops its project predicate | **Killed** |
+| Path slugged from the name · move silently ignored on PATCH | **Killed** |
+| Key allocated before validation · v1 written as v2 | **Killed** |
+| `findLiveInProject` drops `deletedAt` · drops `projectId` | **Killed** |
+| Blank description stored as-is · `If-Match` ignored · parent unchecked · audit detail unescaped | **Killed** |
+| **Emptiness check ignores child suites** | **Survived — no fixture could see it** |
+
+The survivor is the instructive one. Every non-empty folder in the fixture also held **cases**
+somewhere beneath, so the subtree case count refused them anyway — and the counts still flowed into
+the message, so even the wording assertion passed. Fixed by adding a parent whose only occupant is
+an **empty** child, where the case count is zero and only the child check stands in the way. §29's
+lesson in a new costume: a test that exercises the right code path can still be structurally unable
+to observe the defect, and only the mutation says which kind you wrote.
+
+### Gate evidence — run, not just built
+
+`./gradlew build` clean with `-Werror`, **547 tests** (491 + 56). `npm run build` clean,
+`npm run lint` 0 warnings.
+
+**Live**, against `docker compose up` and a real session:
+
+| Assertion | Result |
+|---|---|
+| Create from the tree | **TS-2**, path **`s2`** (not a slug of the name), `DRAFT`, creator stamped |
+| Rows written | `suite_version` v1 with `{"caseIds": [], "parentId": null}` + a 64-char hash; `audit_event` `suite.created` |
+| Rename | name changed, `lock_version` 0→1 (so `If-Match` was read), **path still `s2`**, still exactly one version row, `suite.renamed` |
+| Delete a folder holding 4 cases | **409 in the dialog**: "This suite still holds 4 cases. Move or delete them first." Folder kept |
+| Delete the empty folder | **204**, row survives with `deleted_at` set, `suite.deleted` |
+| Create inside a collapsed folder | child at path **`payments.s3`**, parent auto-expanded so it is visible |
+
+### Three defects the browser found and the gates could not
+
+1. **An empty-name submit displayed nothing at all.** The dialog's `useEffect` called
+   `reset(defaults)` with `defaults` in its dependency array — and `defaults` is an object literal
+   built by the caller on every render. A failed submit set the field errors, React re-rendered, the
+   identity changed, the effect re-ran, and `reset()` wiped the errors before anyone saw them. The
+   reset was not needed at all: each dialog is conditionally rendered, so it mounts fresh and
+   `defaultValues` already carries the right values. **Handoff lesson 6 exactly** — correct types,
+   wrong runtime graph, both gates green.
+2. **The server's actionable 409 never reached the user.** `describeError` collapsed *every* 409 to
+   the lost-update copy ("Reload to see their version"), throwing away "This suite still holds 4
+   cases. Move or delete them first." — and telling the user to reload, which changes nothing. The
+   two 409s want opposite advice, so `ApiError` now carries RFC-7807 `title` and `describeError`
+   reads it to tell them apart. **`ApiProblem` had already made this distinction server-side**
+   (`stale()` vs `conflict(title, detail)`); the client threw it away one layer later.
+3. **A MUI X Tree View warning my own slice made routine.** `defaultExpandedItems` is an
+   *uncontrolled* default, and every write now invalidates the suite query, so it changed on every
+   create/rename/delete. Made controlled — which also fixed the behaviour underneath: creating a
+   suite inside a collapsed folder used to leave it invisible.
+
+### The 500 the live pass hit, which was NOT this slice's code
+
+The first live create answered **500 — `duplicate key value violates unique constraint
+uq_suite_key`**. The allocator was right and the *data* was wrong: **every earlier slice's live pass
+inserted its suite with hand-written SQL, bypassing `key_sequence`**, so all six companies had a
+`TS-1` row and a counter still reading 1. Repaired with
+`UPDATE key_sequence SET next_value = MAX(key_seq)+1`, which is the documented repair `V5`'s header
+describes. Recorded rather than absorbed, because anyone following the handoff's own live-pass
+instructions will hit it, and because it is the argument for `provision-company` being the only path
+that creates rows.
+
+### The rule this slice could not follow, and why it was not half-followed
+
+`ui-rules` requires **disable-don't-hide**: an action the backend will refuse should render disabled
+with a why-tooltip, never render-then-reject. **The SPA cannot do that for any of these actions** —
+`CurrentUser` carries `isSystemAdmin` and teams and *no permission list*, so nothing tells the client
+whether this user holds `suite:manage` on this project. A Viewer therefore sees Delete, clicks it,
+and gets a 403 rendered in the dialog.
+
+This is a **pre-existing class, not this feature's** — "New case" has behaved this way since Phase 2.
+The fix is one contract change (the caller's effective permissions on a project) that closes it
+everywhere at once. Gating suites alone would leave the rest of the app inconsistent and make the
+eventual fix touch two patterns instead of one, which is precisely the "second implementation" the
+working agreement warns about. **It is the highest-value frontend item outstanding.**
+
+### The mock was aligned, because it was proving properties live mode lacked
+
+Three divergences, all the `If-Match`-in-the-body family: the mock read `lockVersion` from the
+**body**, slugged `path` from the **name**, accepted a parent from outside the project, applied
+`lifecycleStatus`, and had **no DELETE at all**. All corrected.
+
+### Deliberately not done
+
+- **Moving/reparenting and reordering** — the endpoint *and* its UI belong to one slice, since a move
+  endpoint with no drag-and-drop would be the dead-hook trap from the other direction.
+- **Cascading delete** — owed to a slice that can preview what it will touch.
+- **Composition version bumps** on case membership changes — owed to the case-move and case-delete
+  slices, named in `SuiteVersions`.
+- `ClassificationValue.path` has the same `ltree` mapping and **not** the `@ColumnTransformer` that
+  `Suite.path` needed; it is unbroken only because nothing in Java inserts one yet, and it will fail
+  identically on the day something does.
+
+### Next
+
+1. **The caller's effective permissions on a project, in the contract** — the disable-don't-hide gap
+   above. One change, closes the class everywhere, and every future affordance needs it.
+2. **`POST/PATCH/DELETE` on cases' remaining verb — `DELETE /cases/{caseId}`** — still needs the `OWN`
+   qualifier `case:delete` is owed, and `useDeleteCase` **does** have a consumer, unlike `/versions`.
+3. **`GET …/cases/{caseId}/versions`** — real rows and a v1 to show, and **still no SPA consumer after
+   four slices**. Only worth doing in the same slice as the detail page's history panel.
+4. **The `execution` module** — unblocks `/history`, the one screen with a live link that 404s.
+5. Frontend **Phase 4 (Vitest + RTL)** — unchanged, still unblocked, and `SuiteEdit`-style pure logic
+   plus `describeError`'s now-branching 409 are good first targets.
