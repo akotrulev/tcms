@@ -19,5 +19,10 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts"]
+  /*
+    `vitest.config.ts` is typechecked here alongside `vite.config.ts` — both are node-side
+    config, neither is application source. Leaving it out would mean `npm run build` never
+    looks at it, and a broken test config would only surface when someone ran the tests.
+  */
+  "include": ["vite.config.ts", "vitest.config.ts"]
 }
