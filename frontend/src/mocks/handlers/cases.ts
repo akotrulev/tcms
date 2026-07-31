@@ -1,0 +1,541 @@
+/**
+ * The case list and everything under it — filtering, sorting, faceting, the four writes, the
+ * version list and the execution history.
+ *
+ * The filter/sort/facet helpers live here rather than in `shared.ts` because they are about
+ * `TestCaseSummary` specifically; nothing else in the mock sorts by `keySeq` or counts health
+ * signals.
+ */
+import { HttpResponse, delay, http } from 'msw';
+import type {
+  BulkResult,
+  EntityVersion,
+  Facet,
+  LifecycleStatus,
+  TestCase,
+  TestCaseSummary,
+  TestStep,
+} from '../../api/types';
+import {
+  allocateCaseKey,
+  caseDetail,
+  db,
+  descendantSuiteIds,
+  newId,
+  reporting,
+  writeCase,
+} from '../db';
+import { dimensions } from '../fixtures/core';
+import {
+  API,
+  LATENCY,
+  notFound,
+  paging,
+  permissionsOn,
+  problem,
+  requireAuth,
+  userRef,
+} from './shared';
+
+// ----------------------------------------------------------------- filtering ----
+
+/**
+ * Deterministic sort with a unique tiebreaker on every list (ui-rules §2). Without the
+ * tiebreaker, rows jump position after an edit and paging duplicates or drops them.
+ */
+function sortCases(rows: TestCaseSummary[], sort: string): TestCaseSummary[] {
+  const [field, dir = 'asc'] = sort.split(',');
+  const sign = dir === 'desc' ? -1 : 1;
+  return [...rows].sort((a, b) => {
+    let primary = 0;
+    switch (field) {
+      case 'title':
+        primary = a.title.localeCompare(b.title);
+        break;
+      case 'updatedAt':
+        primary = a.updatedAt.localeCompare(b.updatedAt);
+        break;
+      case 'priority': {
+        const rank = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+        primary = rank[a.priority] - rank[b.priority];
+        break;
+      }
+      case 'lifecycleStatus':
+        primary = a.lifecycleStatus.localeCompare(b.lifecycleStatus);
+        break;
+      case 'suiteName':
+        primary = a.suiteName.localeCompare(b.suiteName);
+        break;
+      default:
+        // Order by keySeq, never the text key — TC-10000 sorts before TC-9999.
+        primary = a.keySeq - b.keySeq;
+    }
+    return primary * sign || a.keySeq - b.keySeq;
+  });
+}
+
+const CASE_KEY_PATTERN = /^TC[_-]?(\d+)$/i;
+
+function filterCases(url: URL): TestCaseSummary[] {
+  const p = url.searchParams;
+  let rows = db.cases;
+
+  const q = p.get('q')?.trim();
+  if (q) {
+    // A value matching the key pattern short-circuits to an exact lookup (plan §6q) —
+    // typing a key you were given should land on that case, not search for it as text.
+    const asKey = CASE_KEY_PATTERN.exec(q);
+    if (asKey) {
+      const seq = Number(asKey[1]);
+      rows = rows.filter((c) => c.keySeq === seq);
+    } else {
+      const needle = q.toLowerCase();
+      rows = rows.filter(
+        (c) => c.title.toLowerCase().includes(needle) || c.key.toLowerCase().includes(needle),
+      );
+    }
+  }
+
+  const suiteId = p.get('suiteId');
+  if (suiteId) {
+    const scope = descendantSuiteIds(suiteId);
+    rows = rows.filter((c) => scope.has(c.suiteId));
+  }
+
+  const featureId = p.get('featureId');
+  if (featureId) {
+    const value = dimensions
+      .find((d) => d.key === 'feature')
+      ?.values.find((v) => v.id === featureId);
+    if (value) rows = rows.filter((c) => c.features.includes(value.name));
+  }
+
+  const typeId = p.get('testTypeId');
+  if (typeId) {
+    const value = dimensions.find((d) => d.key === 'test_type')?.values.find((v) => v.id === typeId);
+    if (value) rows = rows.filter((c) => c.testType === value.name);
+  }
+
+  const levelId = p.get('testLevelId');
+  if (levelId) {
+    const value = dimensions.find((d) => d.key === 'test_level')?.values.find((v) => v.id === levelId);
+    if (value) rows = rows.filter((c) => c.testLevel === value.name);
+  }
+
+  const multi = (key: string) => p.getAll(key).filter(Boolean);
+
+  const lifecycle = multi('lifecycleStatus');
+  if (lifecycle.length) rows = rows.filter((c) => lifecycle.includes(c.lifecycleStatus));
+
+  const automation = multi('automationStatus');
+  if (automation.length) rows = rows.filter((c) => automation.includes(c.automationStatus));
+
+  const priority = multi('priority');
+  if (priority.length) rows = rows.filter((c) => priority.includes(c.priority));
+
+  const health = multi('healthSignal');
+  if (health.length) rows = rows.filter((c) => c.healthSignals.some((h) => health.includes(h)));
+
+  const release = p.get('releaseVersion');
+  if (release) rows = rows.filter((c) => c.lastResult?.releaseVersion === release);
+
+  return rows;
+}
+
+/** Facet counts are computed over the *filtered* set so the numbers match what's shown. */
+function facetsFor(rows: TestCaseSummary[]): Facet[] {
+  const count = <T extends string>(pick: (c: TestCaseSummary) => T[]) => {
+    const tally = new Map<string, number>();
+    for (const row of rows) for (const v of pick(row)) tally.set(v, (tally.get(v) ?? 0) + 1);
+    return [...tally.entries()].map(([id, n]) => ({ id, label: id, count: n }));
+  };
+
+  return [
+    { key: 'lifecycleStatus', label: 'Status', values: count((c) => [c.lifecycleStatus]) },
+    { key: 'automationStatus', label: 'Automation', values: count((c) => [c.automationStatus]) },
+    { key: 'priority', label: 'Priority', values: count((c) => [c.priority]) },
+    { key: 'healthSignal', label: 'Health', values: count((c) => c.healthSignals) },
+  ];
+}
+
+// ------------------------------------------------------------------ handlers ----
+
+export const caseHandlers = [
+  http.get(`${API}/projects/:projectId/cases`, async ({ request }) => {
+    const denied = requireAuth(request);
+    if (denied) return denied;
+    await delay(LATENCY);
+
+    const url = new URL(request.url);
+    const { page, size, sort } = paging(url);
+    const filtered = filterCases(url);
+    const sorted = sortCases(filtered, sort);
+
+    return HttpResponse.json({
+      items: sorted.slice(page * size, page * size + size),
+      page,
+      size,
+      total: filtered.length,
+      facets: facetsFor(filtered),
+    });
+  }),
+
+  http.post(`${API}/projects/:projectId/cases`, async ({ request }) => {
+    await delay(LATENCY);
+
+    /*
+      Idempotency, implemented rather than assumed.
+
+      The client sends one `Idempotency-Key` per user intent and reuses it on every retry of that
+      intent, so a timed-out create can be safely tried again. That guarantee is only real if the
+      server actually dedupes — so the mock does, and the behaviour is provable end to end
+      instead of being a header nobody reads.
+    */
+    const idempotencyKey = request.headers.get('Idempotency-Key');
+    if (idempotencyKey) {
+      const previous = db.idempotency.get(idempotencyKey);
+      // 200, not 201: nothing was created this time. The client gets the original record back.
+      if (previous) return HttpResponse.json(previous, { status: 200 });
+    }
+
+    const body = (await request.json()) as Record<string, unknown>;
+    const title = String(body.title ?? '').trim();
+    const suiteId = String(body.suiteId ?? '');
+
+    // Field-keyed errors, so the form can land them on the right inputs rather than
+    // dumping one banner over a form the user can't fix.
+    const errors: Record<string, string[]> = {};
+    if (!title) errors.title = ['Enter a title.'];
+    if (!suiteId) errors.suiteId = ['Choose a suite.'];
+    /*
+      The six fields the real endpoint refuses, refused here in the same words.
+
+      Each needs a write path the backend has not built (a membership check for the owner,
+      cardinality validation for classification, the library-vs-inline shape for conditions). The
+      mock echoing them back would make mock mode accept a payload live mode rejects — the exact
+      divergence that let the SPA put `lockVersion` in the PATCH body for months, because no server
+      read either. Absent means unchanged; present means 400, in both modes.
+    */
+    for (const field of [
+      'ownerId',
+      'classificationValueIds',
+      'tags',
+      'automationTags',
+      'preconditions',
+      'postconditions',
+    ]) {
+      if (body[field] != null) errors[field] = ['This field cannot be changed here yet.'];
+    }
+    if (Object.keys(errors).length) {
+      return HttpResponse.json(
+        { type: 'about:blank', title: 'Validation failed', status: 400, detail: 'Check the highlighted fields.', errors },
+        { status: 400 },
+      );
+    }
+
+    const { key, keySeq } = allocateCaseKey();
+    const steps = ((body.steps as TestStep[] | undefined) ?? []).map((s, i) => ({
+      ...s,
+      id: s.id ?? newId(),
+      position: i,
+    }));
+
+    const created: TestCase = {
+      id: newId(),
+      key,
+      keySeq,
+      title,
+      suiteId,
+      suiteName: db.suites.find((s) => s.id === suiteId)?.name ?? '',
+      priority: (body.priority as TestCase['priority']) ?? 'MEDIUM',
+      lifecycleStatus: 'DRAFT',
+      automationStatus: (body.automationStatus as TestCase['automationStatus']) ?? 'MANUAL',
+      stepFormat: (body.stepFormat as TestCase['stepFormat']) ?? 'STRUCTURED',
+      // The creator owns what they wrote — `ownerId` is refused above, so there is nothing to
+      // resolve. `userRef(0)` is this mock's stand-in for the signed-in user throughout.
+      owner: userRef(0),
+      testType: (body.testType as string) ?? null,
+      testLevel: (body.testLevel as string) ?? null,
+      features: [],
+      tags: [],
+      healthSignals: ['NEVER_EXECUTED'],
+      lastResult: null,
+      updatedAt: new Date().toISOString(),
+      description: (body.description as string) ?? null,
+      objective: (body.objective as string) ?? null,
+      expectedOutcome: (body.expectedOutcome as string) ?? null,
+      severity: (body.severity as TestCase['priority']) ?? 'MEDIUM',
+      estimatedDurationSec: (body.estimatedDurationSec as number) ?? null,
+      automationTags: [],
+      automationKey: (body.automationKey as string) ?? null,
+      notAutomatableReason: (body.notAutomatableReason as string) ?? null,
+      gherkinSource: (body.gherkinSource as string) ?? null,
+      steps,
+      preconditions: [],
+      postconditions: [],
+      relatedDocuments: [],
+      currentVersionNo: 1,
+      lockVersion: 1,
+    };
+
+    const saved = writeCase(created);
+    // Recorded only after the write succeeded — a key stored before a failure would make the
+    // retry return a record that was never created.
+    if (idempotencyKey) db.idempotency.set(idempotencyKey, saved);
+    return HttpResponse.json(saved, { status: 201 });
+  }),
+
+  http.post(`${API}/projects/:projectId/cases/bulk`, async ({ request }) => {
+    await delay(LATENCY);
+    const body = (await request.json()) as {
+      caseIds?: string[];
+      action?: string;
+      dryRun?: boolean;
+      payload?: Record<string, unknown>;
+    };
+    const ids = body.caseIds ?? [];
+    const dryRun = body.dryRun ?? false;
+
+    const changed: string[] = [];
+    const unchanged: string[] = [];
+    const skipped: { key: string; reason: string }[] = [];
+
+    for (const id of ids) {
+      const row = db.cases.find((c) => c.id === id);
+      if (!row) continue;
+
+      if (body.action === 'SET_STATUS') {
+        const target = body.payload?.lifecycleStatus as LifecycleStatus;
+        if (row.lifecycleStatus === target) {
+          unchanged.push(row.key);
+        } else if (target === 'APPROVED' && row.lifecycleStatus === 'DRAFT') {
+          // A real guard, not a mock formality: draft goes to review before approval.
+          skipped.push({ key: row.key, reason: 'A draft must be reviewed before it can be approved.' });
+        } else {
+          if (!dryRun) {
+            row.lifecycleStatus = target;
+            const detail = db.caseDetails.get(id);
+            if (detail) detail.lifecycleStatus = target;
+          }
+          changed.push(row.key);
+        }
+      } else if (body.action === 'ATTACH_CONDITIONS') {
+        const detail = caseDetail(id);
+        const condition = db.conditions.find((c) => c.id === body.payload?.conditionId);
+        if (!detail || !condition) {
+          skipped.push({ key: row.key, reason: 'The condition no longer exists.' });
+        } else if (detail.preconditions?.some((p) => p.conditionId === condition.id)) {
+          unchanged.push(row.key);
+        } else {
+          if (!dryRun) {
+            detail.preconditions = [
+              ...(detail.preconditions ?? []),
+              {
+                id: newId(),
+                position: detail.preconditions?.length ?? 0,
+                conditionId: condition.id,
+                title: condition.title,
+                body: condition.body,
+                inline: false,
+                inherited: false,
+                inheritedFrom: null,
+              },
+            ];
+          }
+          changed.push(row.key);
+        }
+      } else {
+        skipped.push({ key: row.key, reason: 'That operation is not supported yet.' });
+      }
+    }
+
+    const result: BulkResult = { dryRun, changed, unchanged, skipped, total: ids.length };
+    return HttpResponse.json(result);
+  }),
+
+  http.get(`${API}/projects/:projectId/cases/:caseId`, async ({ params }) => {
+    await delay(LATENCY);
+    const detail = caseDetail(String(params.caseId));
+    return detail ? HttpResponse.json(detail) : notFound('That test case');
+  }),
+
+  http.patch(`${API}/projects/:projectId/cases/:caseId`, async ({ params, request }) => {
+    await delay(LATENCY);
+    const existing = caseDetail(String(params.caseId));
+    if (!existing) return notFound('That test case');
+
+    const body = (await request.json()) as Record<string, unknown>;
+
+    // The precondition is the If-Match header, not a body field — see `useUpdateCase`. Read the
+    // same way the real endpoint reads it, quoted form included: a mock that accepts a shape the
+    // server refuses is a mock that hides the bug until live mode (§27's condition-order defect,
+    // arriving through a different door).
+    const ifMatch = request.headers.get('If-Match');
+    if (ifMatch !== null && ifMatch.trim() !== '') {
+      const expected = Number(ifMatch.trim().replace(/^"(.*)"$/, '$1'));
+      if (!Number.isInteger(expected)) {
+        return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+          'If-Match': ["Send the case's lockVersion as the If-Match header, or omit the header."],
+        });
+      }
+      if (expected !== existing.lockVersion) {
+        return problem(409, 'Someone else saved first', 'Reload the case to see the newer version, then reapply your change.');
+      }
+    }
+
+    if (typeof body.title === 'string' && !body.title.trim()) {
+      return HttpResponse.json(
+        {
+          type: 'about:blank',
+          title: 'Validation failed',
+          status: 400,
+          detail: 'Check the highlighted fields.',
+          errors: { title: ['Enter a title.'] },
+        },
+        { status: 400 },
+      );
+    }
+
+    // The six fields on `TestCaseInput` the real endpoint has no write path for are REFUSED, not
+    // ignored — accepting and dropping them is a save that reports success and discards what the
+    // user typed. Mirrored here so mock mode cannot pass a payload live mode rejects.
+    const unsupported = [
+      'ownerId',
+      'classificationValueIds',
+      'tags',
+      'automationTags',
+      'preconditions',
+      'postconditions',
+    ] as const;
+    const refused = unsupported.filter((field) => body[field] !== undefined);
+    if (refused.length > 0) {
+      return problem(
+        400,
+        'Validation failed',
+        'Check the highlighted fields.',
+        Object.fromEntries(refused.map((f) => [f, ['This field cannot be changed here yet.']])),
+      );
+    }
+
+    // Only fields the update path actually persists are applied — and the form only
+    // renders these, so an edit can never show success and discard the value (ui-rules §3).
+    // `lifecycleStatus` is absent because it is absent from `TestCaseInput`: promotion through
+    // draft → review → approved is the review workflow's (plan §6g), and a status an ordinary
+    // edit can set is an approval anyone grants themselves by saving.
+    const writable = [
+      'title',
+      'description',
+      'objective',
+      'expectedOutcome',
+      'priority',
+      'severity',
+      'automationStatus',
+      'automationKey',
+      'notAutomatableReason',
+      'estimatedDurationSec',
+      'stepFormat',
+      'gherkinSource',
+      'suiteId',
+    ] as const;
+
+    const next: TestCase = { ...existing };
+    for (const field of writable) {
+      if (body[field] !== undefined) {
+        (next as Record<string, unknown>)[field] = body[field];
+      }
+    }
+    if (Array.isArray(body.steps)) {
+      next.steps = (body.steps as TestStep[]).map((s, i) => ({ ...s, id: s.id ?? newId(), position: i }));
+    }
+    if (typeof body.suiteId === 'string') {
+      next.suiteName = db.suites.find((s) => s.id === body.suiteId)?.name ?? next.suiteName;
+    }
+
+    // A version is written on explicit save only, and skipped when nothing changed.
+    const substantive = writable.some((f) => body[f] !== undefined) || Array.isArray(body.steps);
+    if (substantive) next.currentVersionNo = (next.currentVersionNo ?? 1) + 1;
+    next.lockVersion = (next.lockVersion ?? 1) + 1;
+
+    return HttpResponse.json(writeCase(next));
+  }),
+
+  /*
+    The delete, and the one refusal this mock can honestly reproduce.
+
+    A caller whose role does not hold `case:delete` gets the server's 403 — which matters because
+    the SPA's gate reads the SAME source (`permissionsOn`), so a mock that accepted the write would
+    let a disabled button and a successful request coexist.
+
+    NOT modelled: the `OWN` refusal. `case:delete` is OWN-qualified for a Test Engineer, and the
+    server resolves that against the case's `created_by` — which the contract does not serve and
+    the fixtures therefore do not carry. Faking it against `owner` would refuse on a different fact
+    than the server uses and teach the wrong rule. Named here rather than half-implemented; the
+    live pass is where that branch is proved.
+  */
+  http.delete(`${API}/projects/:projectId/cases/:caseId`, async ({ params, request }) => {
+    const denied = requireAuth(request);
+    if (denied) return denied;
+    await delay(LATENCY);
+
+    if (!permissionsOn(String(params.projectId)).includes('case:delete')) {
+      return problem(
+        403,
+        'Forbidden',
+        'You do not have permission to delete test cases in this project.',
+      );
+    }
+
+    const id = String(params.caseId);
+    const index = db.cases.findIndex((c) => c.id === id);
+    if (index < 0) return notFound('That test case');
+    // Removed from the store rather than flagged: the mock has no soft-delete column, and every
+    // read here already goes through `db.cases`. What the server keeps — the row, for the runs
+    // that pinned a version — has no reader in mock mode.
+    db.cases.splice(index, 1);
+    db.caseDetails.delete(id);
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  http.get(`${API}/projects/:projectId/cases/:caseId/versions`, async ({ params }) => {
+    await delay(LATENCY);
+    const detail = caseDetail(String(params.caseId));
+    if (!detail) return notFound('That test case');
+    const total = detail.currentVersionNo ?? 1;
+    const versions: EntityVersion[] = Array.from({ length: total }, (_, i) => {
+      const versionNo = total - i;
+      const marker = reporting.caseVersionMarkers.find((m) => m.versionNo === versionNo);
+      return {
+        versionNo,
+        createdBy: marker?.author ?? userRef(0),
+        createdAt: marker?.occurredAt ?? '2026-07-01T09:00:00Z',
+        changeComment: marker?.changeComment ?? null,
+        // A version is pinned when some execution still references it, so it can never be
+        // pruned — that pin is what keeps past reports honest.
+        pinned: versionNo <= 7 && versionNo >= 3,
+      };
+    });
+    return HttpResponse.json(versions);
+  }),
+
+  http.get(`${API}/projects/:projectId/cases/:caseId/history`, async ({ request }) => {
+    await delay(LATENCY);
+    const scope = new URL(request.url).searchParams.get('scope') ?? 'CURRENT_VERSION';
+    const all = reporting.caseHistoryEntries;
+    const entries = scope === 'ALL_VERSIONS' ? all : all.filter((e) => e.caseVersionNo === 7);
+
+    return HttpResponse.json({
+      summary:
+        scope === 'ALL_VERSIONS'
+          ? {
+              ...reporting.caseHistorySummary,
+              scope: 'All versions',
+              executions: all.length,
+              passed: all.filter((e) => e.statusKind === 'PASSED').length,
+              failed: all.filter((e) => e.statusKind === 'FAILED').length,
+            }
+          : reporting.caseHistorySummary,
+      entries,
+      versionMarkers: reporting.caseVersionMarkers,
+    });
+  }),
+];
