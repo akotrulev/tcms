@@ -129,7 +129,7 @@ class CompanyFilterTest extends IntegrationTestBase {
 
     private static Set<String> tablesWithRowLevelSecurity() throws SQLException {
         Set<String> tables = new HashSet<>();
-        try (Connection connection = ownerConnection();
+        try (Connection connection = superuserConnection();
              Statement statement = connection.createStatement();
              ResultSet rs = statement.executeQuery("""
                      SELECT c.relname

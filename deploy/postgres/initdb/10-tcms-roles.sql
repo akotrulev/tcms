@@ -1,10 +1,17 @@
 -- The privilege split, as the deployment owns it.
 --
--- Until now this existed ONLY in the test suite
--- (backend/src/test/resources/db/testcallback/afterMigrate__create_app_role.sql), whose
--- own comment says "the production install guide must create an equivalent role". This
--- is that path. Two roles, and the difference between them is what the entire RLS design
--- rests on:
+-- This file was written because the split existed ONLY in the test suite, in a Flyway
+-- afterMigrate callback whose own comment said "the production install guide must create
+-- an equivalent role" — and nothing did. This is that path.
+--
+-- The direction has since reversed: the suite now mirrors THIS file, via
+-- backend/src/test/resources/db/testinit/tcms-roles.sql, run as a Testcontainers init
+-- script before Flyway. The callback is deleted. It created tcms_app *after* migrating and
+-- left the owner a superuser, so the suite could not see anything that depends on the
+-- owner not being one — which is exactly how V7's defect reached production. When you
+-- change this file, change that one.
+--
+-- Two roles, and the difference between them is what the entire RLS design rests on:
 --
 --   tcms_owner  owns the database and every object in it. Flyway connects as this role,
 --               because migrations create tables, policies and functions. NOT a

@@ -124,8 +124,12 @@ uniqueness constraint. Enforcement is mechanical, in three layers:
 3. **`CompanyAwareTransactionManager`** — hooks `doBegin`, so the Hibernate filter and the
    `app.current_company` GUC are set for *every* transaction, not just web requests. Postgres RLS
    with `FORCE ROW LEVEL SECURITY` is the backstop; the app connects as an unprivileged role
-   (`tcms_app`) that owns nothing and holds no `BYPASSRLS` — `IntegrationTestBase` sets up that
-   privilege split, and a suite that migrated *and* queried as the superuser would prove nothing.
+   (`tcms_app`) that owns nothing and holds no `BYPASSRLS`. **Neither role in the test harness is a
+   superuser either**: `IntegrationTestBase` creates a non-superuser `tcms_owner` *before* Flyway via
+   `src/test/resources/db/testinit/tcms-roles.sql`, mirroring the deployment's ordering, and
+   `PrivilegeSplitTest` pins every property of the split. The container's superuser is used only for
+   ground truth in assertions. A suite that migrated as a superuser proves nothing — it had one, and
+   that is precisely how V7's zero-rows-in-production defect got past 171 green tests.
    **The split is a deployment concern, not a test fixture**: `deploy/postgres/initdb/10-tcms-roles.sql`
    creates both roles for compose and the Hetzner runbook does the same on the VM, while
    `application.yml` gives Flyway its own `DB_MIGRATION_USER` so migrations run as the owner and the

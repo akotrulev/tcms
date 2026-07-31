@@ -19,29 +19,35 @@ import org.testcontainers.utility.DockerImageName;
  * Hibernate checks every entity against the migrated schema at startup, so an entity
  * that drifts from V1 fails here rather than at the first query in production.
  *
- * <h2>Why two roles</h2>
+ * <h2>Why three roles, and why none of them is a superuser</h2>
  *
  * <p>The most important detail in the setup, and getting it wrong makes every isolation
  * test pass while nothing is protected:
  *
  * <ul>
- *   <li><strong>A superuser always bypasses RLS.</strong> Testcontainers' default user
- *       is one, so a suite that migrated and queried as it would never see a policy
- *       take effect.</li>
- *   <li><strong>A table's owner bypasses plain {@code ENABLE ROW LEVEL SECURITY}.</strong>
- *       V1 also issues {@code FORCE}, which does cover the owner — but connecting as
- *       the owner anyway would leave the suite unable to notice if {@code FORCE} were
- *       ever dropped.</li>
+ *   <li><strong>A superuser always bypasses RLS</strong> — {@code FORCE} included.
+ *       Testcontainers' default user is one, so a suite that migrated as it exercises an
+ *       arrangement production does not have.</li>
+ *   <li><strong>A table's owner bypasses plain {@code ENABLE ROW LEVEL SECURITY}</strong>,
+ *       which is why V1 issues {@code FORCE} as well. {@code FORCE} <em>does</em> cover a
+ *       non-superuser owner, and the reflex belief that it does not cost this project a
+ *       HIGH defect — see the V8 migration header.</li>
  * </ul>
  *
- * <p>So Flyway migrates as the container's owner/superuser, and the application pool
- * connects as {@code tcms_app}: a plain {@code LOGIN} role owning nothing, holding no
- * {@code BYPASSRLS}. It is created by the test-only after-migrate callback in
- * {@code src/test/resources/db/testcallback} — creating roles belongs to the
- * deployment, not to a production migration, which is why that location is added to
- * {@code spring.flyway.locations} only here.
+ * <p>So the container's superuser ({@value #SUPERUSER_ROLE}) does exactly two things:
+ * create the two real roles, and answer ground-truth questions in assertions. Nothing
+ * under test connects as it. Flyway migrates as non-superuser {@code tcms_owner} and the
+ * application pool connects as {@code tcms_app}, both created by
+ * {@code src/test/resources/db/testinit/tcms-roles.sql}, which runs as a Testcontainers
+ * init script — i.e. <em>before</em> Flyway, the same ordering the deployment has.
  *
- * <p>{@code RlsIsolationTest} asserts both role properties rather than trusting this.
+ * <p>That file mirrors {@code deploy/postgres/initdb/10-tcms-roles.sql}. It replaced a
+ * Flyway {@code afterMigrate} callback that created {@code tcms_app} after the fact and
+ * left the owner a superuser; §18 of the handoff records what that gap hid.
+ *
+ * <p>{@code PrivilegeSplitTest} asserts every one of these properties rather than trusting
+ * this comment — a comment claiming a privilege arrangement is not a privilege arrangement,
+ * which is the lesson the callback's own header failed to apply to itself.
  */
 @SpringBootTest
 public abstract class IntegrationTestBase {
@@ -50,11 +56,28 @@ public abstract class IntegrationTestBase {
     public static final String APP_ROLE = "tcms_app";
     public static final String APP_PASSWORD = "app-secret";
 
+    /**
+     * The schema owner Flyway connects as — non-superuser, so every policy applies to it
+     * exactly as in the deployment. Its credentials are duplicated in
+     * {@code db/testinit/tcms-roles.sql}, which JDBC cannot parameterize.
+     */
+    public static final String OWNER_ROLE = "tcms_owner";
+    public static final String OWNER_PASSWORD = "owner-secret";
+
+    /**
+     * The container's superuser. Creates the two roles above and answers ground-truth
+     * questions; <strong>nothing under test connects as it.</strong>
+     */
+    public static final String SUPERUSER_ROLE = "tcms_super";
+
     protected static final PostgreSQLContainer<?> POSTGRES =
             new PostgreSQLContainer<>(DockerImageName.parse("postgres:17"))
                     .withDatabaseName("tcms")
-                    .withUsername("tcms_owner")
-                    .withPassword("owner-secret");
+                    .withUsername(SUPERUSER_ROLE)
+                    .withPassword("super-secret")
+                    // Runs after the container is ready and BEFORE anything else touches
+                    // the database, so tcms_owner exists in time to migrate.
+                    .withInitScript("db/testinit/tcms-roles.sql");
 
     static {
         POSTGRES.start();
@@ -66,11 +89,17 @@ public abstract class IntegrationTestBase {
         registry.add("spring.datasource.username", () -> APP_ROLE);
         registry.add("spring.datasource.password", () -> APP_PASSWORD);
 
+        // Flyway migrates as the OWNER, never as the container's superuser and never as
+        // the pool's role. application.yml gives Flyway its own DB_MIGRATION_USER for the
+        // same reason; this is the suite's spelling of it.
         registry.add("spring.flyway.url", POSTGRES::getJdbcUrl);
-        registry.add("spring.flyway.user", POSTGRES::getUsername);
-        registry.add("spring.flyway.password", POSTGRES::getPassword);
-        registry.add("spring.flyway.locations",
-                () -> "classpath:db/migration,classpath:db/testcallback");
+        registry.add("spring.flyway.user", () -> OWNER_ROLE);
+        registry.add("spring.flyway.password", () -> OWNER_PASSWORD);
+        // No test-only location: spring.flyway.locations stays at the production default,
+        // so the suite runs exactly the migration set the deployment does. The callback
+        // that used to live at classpath:db/testcallback granted the app role its
+        // privileges after the fact; db/testinit/tcms-roles.sql now does it beforehand,
+        // through the deployment's own ALTER DEFAULT PRIVILEGES mechanism.
 
         // The signing key has no default in application.yml — deliberately, so no
         // deployment can start with one taken from this repository. The suite supplies its
@@ -94,12 +123,31 @@ public abstract class IntegrationTestBase {
     }
 
     /**
-     * A connection as the owner/superuser — ground truth, past RLS. Use it to assert
-     * what a company-scoped query <em>should not</em> have been able to see.
+     * A connection as the container's <strong>superuser</strong> — ground truth, past RLS.
+     * Use it to assert what a company-scoped query <em>should not</em> have been able to
+     * see, and to set up fixtures in tables the caller has no context for.
+     *
+     * <p>This is the <em>only</em> RLS-exempt connection in the suite. It is deliberately
+     * not the migration owner: see {@link #migrationOwnerConnection()}.
      */
-    protected static Connection ownerConnection() throws SQLException {
+    protected static Connection superuserConnection() throws SQLException {
         return DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+    }
+
+    /**
+     * A connection as the schema owner Flyway migrates with — owns every table, and is
+     * <strong>still subject to every policy</strong>, because V1 issues
+     * {@code FORCE ROW LEVEL SECURITY}.
+     *
+     * <p>Separate from {@link #superuserConnection()} on purpose, and named so a call site
+     * cannot confuse the two: "the owner" is not a way past RLS in this schema, and the
+     * reflex to assume it is cost this project a HIGH defect
+     * (V8's header — a {@code SECURITY DEFINER} lookup that returned zero rows in
+     * production while 171 tests stayed green).
+     */
+    protected static Connection migrationOwnerConnection() throws SQLException {
+        return DriverManager.getConnection(POSTGRES.getJdbcUrl(), OWNER_ROLE, OWNER_PASSWORD);
     }
 
     /** A connection as the unprivileged application role, with RLS in force. */

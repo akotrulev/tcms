@@ -61,11 +61,11 @@ class SchemaConventionTest extends IntegrationTestBase {
             "instance_audit_event",       // operator actions across companies
             "flyway_schema_history");     // infrastructure
 
-    private static Connection ownerConnection;
+    private static Connection catalogConnection;
 
     @BeforeAll
     static void connect() throws SQLException {
-        ownerConnection = ownerConnection();
+        catalogConnection = superuserConnection();
     }
 
     @Test
@@ -123,7 +123,7 @@ class SchemaConventionTest extends IntegrationTestBase {
                  WHERE n.nspname = 'public' AND t.relkind = 'r'
                 """;
 
-        try (Statement statement = ownerConnection.createStatement();
+        try (Statement statement = catalogConnection.createStatement();
              ResultSet rs = statement.executeQuery(sql)) {
             while (rs.next()) {
                 String table = rs.getString("table_name");
@@ -161,7 +161,7 @@ class SchemaConventionTest extends IntegrationTestBase {
         List<String> noPolicy = new ArrayList<>();
 
         Set<String> tablesWithPolicy = new LinkedHashSet<>();
-        try (Statement statement = ownerConnection.createStatement();
+        try (Statement statement = catalogConnection.createStatement();
              ResultSet rs = statement.executeQuery(
                      "SELECT tablename FROM pg_policies WHERE schemaname = 'public'")) {
             while (rs.next()) {
@@ -175,7 +175,7 @@ class SchemaConventionTest extends IntegrationTestBase {
                   JOIN pg_namespace n ON n.oid = c.relnamespace
                  WHERE n.nspname = 'public' AND c.relkind = 'r'
                 """;
-        try (Statement statement = ownerConnection.createStatement();
+        try (Statement statement = catalogConnection.createStatement();
              ResultSet rs = statement.executeQuery(sql)) {
             while (rs.next()) {
                 String table = rs.getString(1);
@@ -223,7 +223,7 @@ class SchemaConventionTest extends IntegrationTestBase {
 
         Map<String, String> divergent = new LinkedHashMap<>();
         int checked = 0;
-        try (Statement statement = ownerConnection.createStatement();
+        try (Statement statement = catalogConnection.createStatement();
              ResultSet rs = statement.executeQuery("""
                      SELECT tablename, policyname, qual, with_check
                        FROM pg_policies
@@ -265,7 +265,7 @@ class SchemaConventionTest extends IntegrationTestBase {
         // policy becomes unreadable without company context — which is how the login
         // path breaks silently.
         List<String> unexpected = new ArrayList<>();
-        try (Statement statement = ownerConnection.createStatement();
+        try (Statement statement = catalogConnection.createStatement();
              ResultSet rs = statement.executeQuery(
                      "SELECT DISTINCT tablename FROM pg_policies WHERE schemaname = 'public'")) {
             while (rs.next()) {
@@ -298,7 +298,7 @@ class SchemaConventionTest extends IntegrationTestBase {
 
     private static List<String> allTables() throws SQLException {
         List<String> tables = new ArrayList<>();
-        try (Statement statement = ownerConnection.createStatement();
+        try (Statement statement = catalogConnection.createStatement();
              ResultSet rs = statement.executeQuery(
                      "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename")) {
             while (rs.next()) {
@@ -313,7 +313,7 @@ class SchemaConventionTest extends IntegrationTestBase {
                 SELECT is_nullable FROM information_schema.columns
                  WHERE table_schema = 'public' AND table_name = ? AND column_name = 'company_id'
                 """;
-        try (var statement = ownerConnection.prepareStatement(sql)) {
+        try (var statement = catalogConnection.prepareStatement(sql)) {
             statement.setString(1, table);
             try (ResultSet rs = statement.executeQuery()) {
                 return rs.next() ? rs.getString(1) : null;

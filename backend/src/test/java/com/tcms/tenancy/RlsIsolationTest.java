@@ -69,7 +69,7 @@ class RlsIsolationTest extends IntegrationTestBase {
      * reproduce. Both tables involved are instance-level, so this needs no company context.
      */
     private void seedSystemGrant() {
-        try (Connection connection = ownerConnection();
+        try (Connection connection = superuserConnection();
              Statement statement = connection.createStatement()) {
             statement.execute("""
                     INSERT INTO app_user (id, email, canonical_name, status)
@@ -101,19 +101,10 @@ class RlsIsolationTest extends IntegrationTestBase {
         }
     }
 
-    @Test
-    @DisplayName("the app role is neither superuser nor BYPASSRLS")
-    void appRoleCannotBypassRls() throws SQLException {
-        // Without this, every other assertion in this class is theatre.
-        try (Connection connection = ownerConnection();
-             Statement statement = connection.createStatement();
-             ResultSet rs = statement.executeQuery(
-                     "SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = '" + APP_ROLE + "'")) {
-            assertThat(rs.next()).as("the app role must exist").isTrue();
-            assertThat(rs.getBoolean("rolsuper")).as("app role must not be superuser").isFalse();
-            assertThat(rs.getBoolean("rolbypassrls")).as("app role must not hold BYPASSRLS").isFalse();
-        }
-    }
+    // The precondition every assertion in this class rests on — that the app role can
+    // neither bypass RLS nor own the tables it reads — is asserted by PrivilegeSplitTest,
+    // which owns the whole two-role arrangement including the migration owner. It used to
+    // be duplicated here; one home for the claim is the point of having a home for it.
 
     @Test
     @DisplayName("TRAP 2 — an unset GUC yields zero rows, not every row")
@@ -299,7 +290,7 @@ class RlsIsolationTest extends IntegrationTestBase {
     }
 
     private static long countAsOwner(String table) throws SQLException {
-        try (Connection connection = ownerConnection();
+        try (Connection connection = superuserConnection();
              Statement statement = connection.createStatement();
              ResultSet rs = statement.executeQuery("SELECT count(*) FROM " + table)) {
             rs.next();

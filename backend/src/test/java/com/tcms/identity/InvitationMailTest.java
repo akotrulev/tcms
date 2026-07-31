@@ -96,7 +96,7 @@ class InvitationMailTest extends IntegrationTestBase {
      * owner, because the application has no path that does this — which is the point.
      */
     private void spendInvitation(java.util.UUID companyId, java.util.UUID userId) {
-        try (var connection = ownerConnection();
+        try (var connection = superuserConnection();
                 var statement = connection.prepareStatement(
                         "UPDATE membership_invitation SET consumed_at = now() "
                                 + "WHERE company_id = ? AND user_id = ? AND consumed_at IS NULL")) {

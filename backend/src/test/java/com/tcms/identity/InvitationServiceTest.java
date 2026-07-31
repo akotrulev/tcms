@@ -415,7 +415,7 @@ class InvitationServiceTest extends IntegrationTestBase {
      */
     private void expire(UUID companyId, UUID userId) throws SQLException {
         Instant past = Instant.now().minus(1, ChronoUnit.DAYS);
-        try (var connection = ownerConnection();
+        try (var connection = superuserConnection();
                 var statement = connection.prepareStatement(
                         "UPDATE membership_invitation SET expires_at = ? "
                                 + "WHERE company_id = ? AND user_id = ? AND consumed_at IS NULL")) {
@@ -437,7 +437,7 @@ class InvitationServiceTest extends IntegrationTestBase {
      * and a service method that could produce it would make the assertion circular.
      */
     private void setMembershipStatus(UUID companyId, UUID userId, String status) {
-        try (var connection = ownerConnection();
+        try (var connection = superuserConnection();
                 var statement = connection.prepareStatement(
                         "UPDATE company_membership SET status = ?, accepted_at = NULL "
                                 + "WHERE company_id = ? AND user_id = ?")) {
@@ -451,7 +451,7 @@ class InvitationServiceTest extends IntegrationTestBase {
     }
 
     private void deactivate(UUID userId) {
-        try (var connection = ownerConnection();
+        try (var connection = superuserConnection();
                 var statement = connection.prepareStatement(
                         "UPDATE app_user SET status = 'DEACTIVATED' WHERE id = ?")) {
             statement.setObject(1, userId);
