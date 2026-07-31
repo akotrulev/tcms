@@ -69,9 +69,19 @@ export function ProjectsPage() {
                     <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                       <Identifier variant="muted">{formatCount(project.caseCount)}</Identifier> cases
                     </Typography>
-                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                      Your role: {project.myRole}
-                    </Typography>
+                    {/* myRole is null when the caller reaches this project through a
+                        COMPANY-scope grant, which is the contract's stated meaning and not a
+                        missing value. Rendering the label anyway printed a dangling
+                        "Your role:" — invisible in mock mode, where every fixture project
+                        carries a role, and visible on the first real Company Admin session.
+                        The line is omitted rather than filled with an invented label: the API
+                        deliberately does not say what their company role is here, and guessing
+                        it would be the UI making a claim the response never made. */}
+                    {project.myRole !== null && (
+                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                        Your role: {project.myRole}
+                      </Typography>
+                    )}
                   </Stack>
                 </Box>
               </RouterLink>

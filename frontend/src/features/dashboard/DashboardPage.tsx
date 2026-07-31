@@ -38,9 +38,13 @@ export function DashboardPage() {
               <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                 <Identifier variant="muted">{formatCount(project.data.caseCount)}</Identifier> cases
               </Typography>
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                Your role: {project.data.myRole}
-              </Typography>
+              {/* Omitted rather than empty when myRole is null — see ProjectsPage for why a
+                  COMPANY-scope grant legitimately has no per-project role name. */}
+              {project.data.myRole !== null && (
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  Your role: {project.data.myRole}
+                </Typography>
+              )}
             </>
           )
         }
