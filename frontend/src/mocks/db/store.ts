@@ -20,6 +20,7 @@ import type {
   Configuration,
   DocPage,
   Project,
+  RoleAssignment,
   Suite,
   TestCase,
   TestCaseSummary,
@@ -39,6 +40,7 @@ import {
   docPages,
   plans,
   projects,
+  roleAssignments,
   runs,
   sharedSteps,
   statusByKind,
@@ -73,6 +75,14 @@ interface Store {
    * success and then render the same cards it rendered before.
    */
   projects: Project[];
+  /**
+   * The grants — mutable, for the same reason and a sharper one.
+   *
+   * The whole point of `POST /role-assignments` is that somebody can now see a project. An admin
+   * screen that reports success and then renders the same four rows is not merely stale; it is
+   * reporting the opposite of what happened.
+   */
+  roleAssignments: RoleAssignment[];
   suites: Suite[];
   cases: TestCaseSummary[];
   /** Full detail, lazily materialized on first read so edits survive a re-read. */
@@ -131,6 +141,7 @@ export interface MockInvitation {
 
 export const db: Store = {
   projects: clone(projects),
+  roleAssignments: clone(roleAssignments),
   suites: clone(suites),
   cases: clone(caseSummaries),
   caseDetails: new Map(),

@@ -1,5 +1,7 @@
 import {
+  Alert,
   Box,
+  Button,
   Chip,
   Stack,
   Table,
@@ -10,14 +12,18 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { ApiError } from '../../api/client';
 import type { Role, RoleAssignment, Team } from '../../api/types';
-import { useRoleAssignments, useRoles, useTeams, useUsers } from '../../api/queries';
+import { useRevokeRole, useRoleAssignments, useRoles, useTeams, useUsers } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
+import { PermissionGate } from '../../components/PermissionGate';
+import { describeError } from '../../lib/describeError';
 import { formatAge, formatCount, formatDateTime } from '../../lib/format';
 import { allPermissions, groupByArea, holdsEveryPermission } from '../../lib/permissions';
+import { GrantRoleDialog } from './GrantRoleDialog';
 
 /**
  * Teams, roles and the org chart (plan §6b, §6k).
@@ -28,12 +34,21 @@ import { allPermissions, groupByArea, holdsEveryPermission } from '../../lib/per
  * Roles are shown with their **permissions expanded**. An admin deciding whether to grant
  * someone Test Engineer needs to see that it excludes final approval; a name alone doesn't
  * say that, and the resulting guess is how people end up over-privileged.
+ *
+ * ## This page became a write surface, and the assignment list is what makes it one
+ *
+ * The list is not "every grant in the company" — the server returns exactly the grants the caller
+ * could revoke, which is a Test Lead's own project and nothing else. So every row here carries a
+ * Revoke the server will accept, and the gate on it is scope-dependent for the same reason the
+ * grant's is: `project:members` for a row naming a project, `company:members` for one that does
+ * not.
  */
 export function TeamsPage() {
   const teams = useTeams();
   const roles = useRoles();
   const assignments = useRoleAssignments();
   const users = useUsers();
+  const [granting, setGranting] = useState(false);
 
   return (
     <Box>
@@ -43,7 +58,29 @@ export function TeamsPage() {
         documentTitle="Teams and roles"
         crumbs={[{ label: 'Administration' }, { label: 'Teams & roles' }]}
         subtitle="Team structure, who holds which role on which project, and what each role can do."
+        actions={
+          /*
+            Deliberately UNGATED, and the one place in the app that is. The permission the server
+            will check is chosen by a field inside the dialog — `project:members` on the project
+            picked, or `company:members` for a company-wide grant — so the gate lives on the
+            dialog's Grant button, where it can follow that choice. Gating this one would need the
+            answer before the question had been asked, and would disable the whole feature for a
+            Test Lead who may staff exactly one project. Opening a form refuses nothing; §31's rule
+            is about the action, and the action is Grant.
+          */
+          <Button
+            variant="contained"
+            onClick={() => setGranting(true)}
+            data-testid="Admin.Grant.Open"
+          >
+            Grant a role
+          </Button>
+        }
       />
+
+      {granting && (
+        <GrantRoleDialog open onClose={() => setGranting(false)} onGranted={() => setGranting(false)} />
+      )}
 
       <Stack sx={{ gap: 3 }}>
         <Panel title="Team structure" testId="Admin.Teams">
@@ -224,6 +261,30 @@ function TeamTree({ teams }: { teams: Team[] }) {
 }
 
 function AssignmentTable({ rows }: { rows: RoleAssignment[] }) {
+  const revoke = useRevokeRole();
+  /*
+    Keyed by assignment id rather than held as one string. The self-lockout refusal belongs to the
+    row that caused it — a single `error` would move the message onto whichever row was clicked
+    next, which is how a warning about YOUR grant ends up under somebody else's name.
+  */
+  const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
+
+  const onRevoke = async (assignment: RoleAssignment) => {
+    setRowErrors((current) => ({ ...current, [assignment.id]: '' }));
+    try {
+      await revoke.mutateAsync(assignment.id);
+    } catch (error) {
+      // The one refusal `PermissionGate` cannot predict: "you may not revoke the grant carrying
+      // your own ability to revoke" is a fact about the ROW, not about the caller's permissions,
+      // so it can only be surfaced where it happens.
+      const message =
+        error instanceof ApiError && error.fieldErrors?.assignmentId
+          ? error.fieldErrors.assignmentId.join(' ')
+          : describeError(error).body;
+      setRowErrors((current) => ({ ...current, [assignment.id]: message }));
+    }
+  };
+
   return (
     <Table size="small" data-testid="Admin.Assignments.Grid">
       <TableHead>
@@ -233,6 +294,10 @@ function AssignmentTable({ rows }: { rows: RoleAssignment[] }) {
           <TableCell sx={{ color: 'text.secondary', width: 180 }}>Project</TableCell>
           <TableCell sx={{ color: 'text.secondary', width: 160 }}>Granted via</TableCell>
           <TableCell sx={{ color: 'text.secondary', width: 130 }}>Granted</TableCell>
+          <TableCell sx={{ color: 'text.secondary', width: 110 }} align="right">
+            {/* Header intentionally blank-labelled: the column holds one action per row. */}
+            Access
+          </TableCell>
         </TableRow>
       </TableHead>
       <TableBody>
@@ -267,6 +332,40 @@ function AssignmentTable({ rows }: { rows: RoleAssignment[] }) {
               </TableCell>
               <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
                 {formatDateTime(assignment.grantedAt)}
+                {rowErrors[assignment.id] && (
+                  <Alert
+                    severity="error"
+                    role="alert"
+                    sx={{ mt: 0.5, py: 0, fontSize: '0.7rem' }}
+                    data-testid="Admin.Assignments.Row.Error"
+                  >
+                    {rowErrors[assignment.id]}
+                  </Alert>
+                )}
+              </TableCell>
+              <TableCell align="right">
+                {/*
+                  The same scope-dependent gate the server applies, and the same one the grant
+                  dialog applies — a row naming a project asks that project's `project:members`, a
+                  company-wide row asks `company:members`. Disabled with a reason rather than
+                  hidden: an action cell that empties on some rows shifts the whole column.
+                */}
+                <PermissionGate
+                  projectId={assignment.projectId ?? 'company'}
+                  permission={assignment.projectId ? 'project:members' : 'company:members'}
+                >
+                  {({ allowed }) => (
+                    <Button
+                      size="small"
+                      color="error"
+                      disabled={!allowed || revoke.isPending}
+                      onClick={() => void onRevoke(assignment)}
+                      data-testid="Admin.Assignments.Row.Revoke"
+                    >
+                      Revoke
+                    </Button>
+                  )}
+                </PermissionGate>
               </TableCell>
             </TableRow>
           ))}
