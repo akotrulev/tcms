@@ -21,6 +21,10 @@ import java.util.UUID;
  *                         case for a person who works with more than one of your clients
  * @param membershipCreated false when they were already a member of this company
  * @param adminGrantCreated false when the COMPANY-scope grant already existed
+ * @param baselineGrantsCreated how many members gained the {@code company:read} baseline
+ *                         (V15) on this run — 1 on a fresh company, 0 on a healthy re-run,
+ *                         and more than that exactly when the re-run repaired a company
+ *                         whose members predate the baseline
  * @param projectId        the first project, when one was requested
  * @param invitationLink   the activation URL, present <strong>only</strong> when this run
  *                         minted the token. Empty when an unexpired invitation was already
@@ -35,6 +39,7 @@ public record ProvisionCompanyResult(
         boolean adminUserCreated,
         boolean membershipCreated,
         boolean adminGrantCreated,
+        int baselineGrantsCreated,
         Optional<UUID> projectId,
         boolean projectCreated,
         Optional<String> invitationLink,
@@ -48,7 +53,10 @@ public record ProvisionCompanyResult(
      * tell the operator to look elsewhere for the thing that just got fixed.
      */
     public boolean wasNoOp() {
+        // A baseline grant written is a change for the same reason: a re-run that repaired a
+        // pre-V15 company's members did something, and reporting "nothing to do" would send the
+        // operator looking elsewhere for the fix that just landed.
         return !companyCreated && !adminUserCreated && !membershipCreated && !adminGrantCreated
-                && !projectCreated && invitationLink.isEmpty();
+                && baselineGrantsCreated == 0 && !projectCreated && invitationLink.isEmpty();
     }
 }

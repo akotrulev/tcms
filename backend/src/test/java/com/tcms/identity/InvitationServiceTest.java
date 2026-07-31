@@ -179,6 +179,33 @@ class InvitationServiceTest extends IntegrationTestBase {
         }
 
         @Test
+        @DisplayName("grants the company:read baseline, repairing a membership that lacks one")
+        void acceptingGrantsTheCompanyReadBaseline() throws SQLException {
+            ProvisionCompanyResult result = provisioning.provision(request("inv-baseline"));
+            // Provisioning already granted it, so acceptance would normally be a no-op. Removed
+            // first, which is the state a membership row created by a path that forgot would be
+            // in — a future invite-a-colleague endpoint, a restore tool, a hand-written row. The
+            // person must not find an empty company on the way in.
+            try (var connection = appConnection(result.companyId());
+                 var statement = connection.prepareStatement(
+                         "DELETE FROM role_assignment WHERE role_id = ?")) {
+                statement.setObject(1, Role.COMPANY_MEMBER_ID);
+                statement.executeUpdate();
+            }
+
+            assertThat(invitations.accept(tokenOf(result), GOOD_PASSWORD))
+                    .isInstanceOf(InvitationService.Accepted.class);
+
+            assertThat(baselineGrantCount(result.companyId(), result.adminUserId()))
+                    .as("""
+                            Accepting is the moment a person actually joins, and roles spec §A3 \
+                            gives every member company:read. Without the grant the company-wide \
+                            question answers no and the admin directory reads as empty rather \
+                            than as forbidden (handoff §43).""")
+                    .isEqualTo(1);
+        }
+
+        @Test
         @DisplayName("is single-use — the second attempt with the same token is refused")
         void isSingleUse() {
             ProvisionCompanyResult result = provisioning.provision(request("inv-once"));
@@ -406,6 +433,20 @@ class InvitationServiceTest extends IntegrationTestBase {
                 new AssertionError("this run issued no invitation"));
         return URLDecoder.decode(link.substring(link.indexOf("?token=") + "?token=".length()),
                 StandardCharsets.UTF_8);
+    }
+
+    /** How many V15 baseline grants one member holds, read as the app role with RLS in force. */
+    private long baselineGrantCount(UUID companyId, UUID userId) throws SQLException {
+        try (var connection = appConnection(companyId);
+             var statement = connection.prepareStatement(
+                     "SELECT count(*) FROM role_assignment WHERE role_id = ? AND user_id = ?")) {
+            statement.setObject(1, Role.COMPANY_MEMBER_ID);
+            statement.setObject(2, userId);
+            try (var rs = statement.executeQuery()) {
+                rs.next();
+                return rs.getLong(1);
+            }
+        }
     }
 
     /**

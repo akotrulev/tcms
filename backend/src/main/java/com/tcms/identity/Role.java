@@ -12,7 +12,9 @@ import java.util.UUID;
 /**
  * One of the six built-in roles, seeded by {@code V3__seed_permissions_and_roles.sql}
  * from the authoritative
- * {@code docs/specs/2026-07-30-tcms-roles-permissions-naming.md}.
+ * {@code docs/specs/2026-07-30-tcms-roles-permissions-naming.md} — plus
+ * {@link #COMPANY_MEMBER_ID}, the baseline V15 added, which is deliberately not one of the
+ * six and never appears on the wire.
  *
  * <p><strong>Instance-level and deliberately without {@code company_id}</strong>: the six
  * built-ins are the complete role set in v1 — no custom roles, not even clone-and-edit
@@ -55,6 +57,22 @@ public class Role {
     /** Viewer — PROJECT scope. The default at every entry point. */
     public static final UUID VIEWER_ID =
             UUID.fromString("10000000-0000-4000-8000-000000000006");
+
+    /**
+     * Company Member — COMPANY scope, holding exactly {@code company:read}, granted to every
+     * member on joining (V15).
+     *
+     * <p><strong>Not one of the six.</strong> It is not offered by {@code GET /roles}, cannot be
+     * granted through {@code POST /role-assignments}, and its grants are filtered out of
+     * {@code GET /role-assignments} so nothing renders a Revoke for them — see
+     * {@link AdminDirectoryService#roleCatalogue()} and {@link RoleGrantService}. It exists because
+     * {@code company:read} is granted to every member (roles spec §A3) while four of the five roles
+     * holding it are PROJECT-scope, and {@link PermissionEvaluator#evaluateCompanyWide} answers from
+     * the SYSTEM and COMPANY terms only — so without it nobody below Company Admin could answer a
+     * company-level question. Handoff §43.
+     */
+    public static final UUID COMPANY_MEMBER_ID =
+            UUID.fromString("10000000-0000-4000-8000-000000000007");
 
     @Id
     @Column(name = "id", nullable = false, updatable = false)

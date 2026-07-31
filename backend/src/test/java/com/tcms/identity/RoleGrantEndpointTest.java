@@ -128,6 +128,9 @@ class RoleGrantEndpointTest extends IntegrationTestBase {
     private AuditEventRepository auditEvents;
 
     @Autowired
+    private jakarta.persistence.EntityManager entityManager;
+
+    @Autowired
     private TransactionTemplate tx;
 
     @BeforeEach
@@ -170,12 +173,19 @@ class RoleGrantEndpointTest extends IntegrationTestBase {
             grantOnCompany(GRANT_ADMIN, WEST, Role.COMPANY_ADMIN_ID, ADMIN, now);
             grantOnProject(GRANT_LEAD, WEST, Role.TEST_LEAD_ID, LEAD, ALPHA, now);
             grantOnProject(GRANT_BETA_LEAD, WEST, Role.TEST_LEAD_ID, BETA_LEAD, BETA, now);
+
+            // The company:read baseline every member holds (V15), through the same statement
+            // provisioning and invitation acceptance run — not a fixture-only copy of it. Without
+            // it these personas are members the product could not have created, and AdminReach
+            // would answer "does not read this company" for the Test Lead this class is built on.
+            grantCompanyReadBaseline(WEST);
         }));
 
         inCompany(EAST, () -> tx.executeWithoutResult(status -> {
             seedProject(EAST_PROJECT, EAST, "EST", "Eastwind Portal", now);
             member(EAST, EAST_ADMIN, "E. Admin", now);
             grantOnCompany(GRANT_EAST_ADMIN, EAST, Role.COMPANY_ADMIN_ID, EAST_ADMIN, now);
+            grantCompanyReadBaseline(EAST);
         }));
 
         resetMutableRows();
@@ -204,7 +214,12 @@ class RoleGrantEndpointTest extends IntegrationTestBase {
                 .orElseThrow();
         try (var connection = appConnection(companyId)) {
             execute(connection, "DELETE FROM audit_event");
-            execute(connection, "DELETE FROM role_assignment WHERE id NOT IN (" + kept + ")");
+            // The membership baseline is kept by role rather than by id: it is granted by the
+            // product on joining and is not a row any test here writes or revokes, so listing its
+            // ids would mean re-deriving them on every seed. Deleting it would leave personas the
+            // product could not have created.
+            execute(connection, "DELETE FROM role_assignment WHERE id NOT IN (" + kept + ")"
+                    + " AND role_id <> '" + Role.COMPANY_MEMBER_ID + "'");
         }
     }
 
@@ -514,6 +529,10 @@ class RoleGrantEndpointTest extends IntegrationTestBase {
             // alone and fails in the suite — handoff §19's defect, in the table most likely to
             // produce it.
             long before = instanceGrantCount();
+            // A delta here too, since V15: role_assignment now also carries one membership
+            // baseline per member, so an absolute count would pin the fixture's headcount rather
+            // than the property this test names.
+            long grantsBefore = grantCount(WEST);
 
             assertThat(statusOf(post(OPERATOR, WEST, userGrant(Role.INSTANCE_ADMIN_ID, NEWCOMER, null))))
                     .isEqualTo(400);
@@ -522,7 +541,51 @@ class RoleGrantEndpointTest extends IntegrationTestBase {
             assertThat(grantCount(WEST))
                     .as("nor did it land in role_assignment, where it would confer instance-wide "
                             + "power scoped to one company")
-                    .isEqualTo(3);
+                    .isEqualTo(grantsBefore);
+        }
+
+        @Test
+        @DisplayName("the membership baseline cannot be granted — it is not a role anyone chooses")
+        void theMembershipBaselineIsNotGrantable() throws Exception {
+            // Company Member (V15) is granted by the act of joining. Granting it by hand is at
+            // best a no-op on a row that already exists; refused as an unknown role rather than
+            // with its own message, because GET /roles does not offer it and telling a caller
+            // that a role they cannot see exists is a disclosure this endpoint avoids elsewhere.
+            MvcResult refused = post(ADMIN, WEST, userGrant(Role.COMPANY_MEMBER_ID, NEWCOMER, null));
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOn(refused, "roleId")).containsExactly("Choose a role.");
+        }
+
+        @Test
+        @DisplayName("nor revoked — that would take away a colleague's sight of the company")
+        void theMembershipBaselineIsNotRevocable() throws Exception {
+            UUID baseline = baselineGrantId(WEST, NEWCOMER);
+
+            // 403 rather than 204: it exists, and the caller — a Company Admin, who may revoke
+            // anything else in this company — may not remove it. The only repair for a successful
+            // revoke here is re-running the operator CLI, and the person it happened to would see
+            // an empty company rather than a refusal.
+            assertThat(revoke(ADMIN, WEST, baseline)).isEqualTo(403);
+            assertThat(inCompanyRead(WEST, () -> roleAssignments.findById(baseline)))
+                    .as("and nothing was deleted")
+                    .isPresent();
+        }
+
+        @Test
+        @DisplayName("and its grants are not listed, so no screen can offer that Revoke")
+        void theMembershipBaselineIsNotListed() throws Exception {
+            List<JsonNode> assignments = fetch("/api/v1/role-assignments", ADMIN, WEST);
+
+            assertThat(assignments)
+                    .as("""
+                            A baseline row on this list would carry a Revoke the server refuses — \
+                            the exact defect §31's disable-don't-hide rule and AdminReach exist to \
+                            prevent — and its `role` would be a name the contract does not \
+                            enumerate.""")
+                    .allSatisfy(assignment -> assertThat(assignment.get("role").get("name").asText())
+                            .isNotEqualTo("Company Member"));
+            assertThat(assignments).isNotEmpty();
         }
 
         @Test
@@ -805,11 +868,19 @@ class RoleGrantEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("GET /roles is the six built-ins with their permissions expanded")
+        @DisplayName("GET /roles is the six built-ins — the membership baseline is not one of them")
         void theRoleCatalogueIsWholeAndHasNoWildcard() throws Exception {
             List<JsonNode> roles = fetch("/api/v1/roles", LEAD, WEST);
 
             assertThat(roles).hasSize(6);
+            assertThat(roles.stream().map(role -> role.get("name").asText()).toList())
+                    .as("""
+                            Company Member (V15) is granted by joining, never chosen — offering it \
+                            here would put it in the grant picker and, through the assignment \
+                            list, behind a Revoke that takes away a colleague's sight of the \
+                            company. It is also a seventh name for a `Role.name` the contract \
+                            declares as a closed six-value enum.""")
+                    .doesNotContain("Company Member");
             JsonNode instanceAdmin = roles.stream()
                     .filter(role -> role.get("name").asText().equals("Instance Admin"))
                     .findFirst().orElseThrow();
@@ -984,6 +1055,17 @@ class RoleGrantEndpointTest extends IntegrationTestBase {
         return assignments.stream().map(node -> UUID.fromString(node.get("id").asText())).toList();
     }
 
+    /** The V15 baseline grant one member holds — never on the wire, so it is read directly. */
+    private UUID baselineGrantId(UUID companyId, UUID userId) {
+        return inCompanyRead(companyId, () -> roleAssignments.findByUserId(userId).stream()
+                .filter(grant -> Role.COMPANY_MEMBER_ID.equals(grant.getRoleId()))
+                .map(RoleAssignment::getId)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(
+                        "no membership baseline for " + userId + " — the fixture did not run "
+                                + "tcms_grant_company_read_baseline")));
+    }
+
     private long grantCount(UUID companyId) {
         return inCompanyRead(companyId, () -> (long) roleAssignments.findAllByOrderByGrantedAtDesc().size());
     }
@@ -1067,6 +1149,14 @@ class RoleGrantEndpointTest extends IntegrationTestBase {
             roleAssignments.save(RoleAssignment.forUserOnProject(
                     id, companyId, roleId, userId, projectId, null, now));
         }
+    }
+
+    /** V15's baseline, run exactly as provisioning runs it. Requires an open context and a tx. */
+    private void grantCompanyReadBaseline(UUID companyId) {
+        entityManager
+                .createNativeQuery("SELECT tcms_grant_company_read_baseline(CAST(:companyId AS uuid))")
+                .setParameter("companyId", companyId.toString())
+                .getSingleResult();
     }
 
     private void grantInstanceAdmin(UUID userId, Instant now) {

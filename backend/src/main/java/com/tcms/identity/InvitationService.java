@@ -3,6 +3,7 @@ package com.tcms.identity;
 import com.tcms.tenancy.Company;
 import com.tcms.tenancy.CompanyContext;
 import com.tcms.tenancy.CompanyRepository;
+import jakarta.persistence.EntityManager;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
@@ -110,6 +111,7 @@ public class InvitationService {
     private final PasswordPolicy passwordPolicy;
     private final PasswordEncoder passwordEncoder;
     private final InvitationProperties properties;
+    private final EntityManager entityManager;
     private final TransactionTemplate transactions;
     private final Clock clock;
 
@@ -123,8 +125,10 @@ public class InvitationService {
             PasswordPolicy passwordPolicy,
             PasswordEncoder passwordEncoder,
             InvitationProperties properties,
+            EntityManager entityManager,
             TransactionTemplate transactions,
             Clock clock) {
+        this.entityManager = entityManager;
         this.properties = properties;
         this.invitations = invitations;
         this.users = users;
@@ -342,6 +346,14 @@ public class InvitationService {
 
         invitation.consume(now);
         membership.accept(now);
+
+        // The company:read baseline (V15). Provisioning already granted it when the membership row
+        // was created, so this is normally a no-op that writes nothing — it is here because
+        // ACCEPTING is the moment a person actually joins, and a membership row created by a path
+        // that forgot (a future invite-a-colleague endpoint, a restore tool, a hand-written row)
+        // is repaired here rather than presenting to that person as an empty company. Same
+        // statement the migration's backfill and provisioning run, for the reason V15 §2 gives.
+        grantCompanyReadBaseline(invitation.getCompanyId());
         if (passwordRequired) {
             // activate() bumps the pv epoch itself: INVITED -> ACTIVE changes what this
             // account may do.
@@ -356,6 +368,25 @@ public class InvitationService {
                 invitationId, user.getId(), invitation.getCompanyId(), passwordRequired);
         return new Accepted(
                 user.getId(), invitation.getCompanyId(), user.getEmail(), passwordRequired);
+    }
+
+    /**
+     * Grants the {@code company:read} baseline to every member of {@code companyId} who lacks it.
+     *
+     * <p>The statement lives in {@code tcms_grant_company_read_baseline} (V15) and not here: the
+     * migration's backfill, {@code CompanyProvisioningService} and this all need exactly it, and
+     * three copies of the rule "who gets the baseline" is three chances for one of them to answer
+     * differently. Idempotent, and bounded by the company's membership count — a self-hosted
+     * instance holds tens of people per client.
+     *
+     * <p>Runs inside {@link #redeem}'s transaction and therefore inside its company context, which
+     * the function checks for rather than trusting: without it, RLS would hide every row written.
+     */
+    private void grantCompanyReadBaseline(UUID companyId) {
+        entityManager
+                .createNativeQuery("SELECT tcms_grant_company_read_baseline(CAST(:companyId AS uuid))")
+                .setParameter("companyId", companyId.toString())
+                .getSingleResult();
     }
 
     /**

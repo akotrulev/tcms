@@ -59,7 +59,17 @@ Effective permissions are a **union of allows with no explicit deny**, gated on 
 | **Automation Service** | PROJECT | yes | Non-human. Attached to API tokens, never people. |
 | **Viewer** | PROJECT | yes | Read-only, plus commenting and report export. **The default everywhere.** |
 
-**These six are the complete role set in v1.** Seeded, immutable, **not cloneable — no custom roles at all**, not even clone-and-edit. A client needing something between two tiers gets the higher one, or the built-in boundary is drawn wrong and should be fixed. Enforcement is permission-based (nothing checks a role name), so adding a role designer later is additive — phase 3, on evidence of demand.
+**These six are the complete set of *assignable* roles in v1.** Seeded, immutable, **not cloneable — no custom roles at all**, not even clone-and-edit. A client needing something between two tiers gets the higher one, or the built-in boundary is drawn wrong and should be fixed. Enforcement is permission-based (nothing checks a role name), so adding a role designer later is additive — phase 3, on evidence of demand.
+
+**A seventh row exists in `role` and is not one of the six** — added 2026-08-01 by `V15`, and it is the mechanism §A3's "`company:read` for every member" needed rather than a tier:
+
+| Role | Scope | Built-in | Assignable | Intent |
+|---|---|---|---|---|
+| **Company Member** | COMPANY | yes | **no** | Exactly `company:read`, granted automatically to every member on joining. Never offered, never revocable. |
+
+It is not in the table above because nobody ever *chooses* it: it is granted by the act of joining, it is filtered out of `GET /roles`, `POST /role-assignments` refuses it, and `GET /role-assignments` does not list its grants — so nothing renders a Revoke whose effect would be to take away a colleague's sight of the company with no repair short of the operator CLI. `openapi.yaml`'s `Role.name` enum therefore stays at six names, and the six are still the whole of what an administrator can do.
+
+**Why it had to be a new role rather than a reuse.** The four PROJECT-scope roles cannot be granted at COMPANY scope (`RoleGrantService.scopeError` refuses the mismatch, and it should: Viewer granted company-wide would confer `project:read` and `case:read` over **every project present and future**, which is exactly the boundary §A1 draws), and Company Admin confers everything. **It is not the "company-wide read-only stakeholder"** handoff §39 anticipated as a possible seventh role — that one reads every project; this one grants nothing about any project, which is what makes it safe to hold universally. Both could exist; they are different roles.
 
 **Viewer is the default at every entry point:** accepting a company invitation, SSO JIT provisioning, and project assignment. One rule at both levels — the cost of an unintended Viewer is nothing; the cost of an unintended contributor is edits to a client's test assets.
 
@@ -181,6 +191,10 @@ Project-scope artifact edit is Lead-only; sign-off artifacts are write-once.
 | `audit:view` | ✓ | ✓ | — | The company-wide audit log |
 
 **`company:read` is granted to every company member explicitly**, rather than being implicit in membership — one uniform mechanism, and every check is a real permission check.
+
+**How "every member" is actually delivered — corrected 2026-08-01.** ~~It is seeded onto five of the six built-in roles, so holding any of them holds it.~~ → **superseded.** That is what `V3` did, and it did not work: four of those five roles are **PROJECT-scope**, while a company-level question is answered from the SYSTEM and COMPANY terms only (`PermissionEvaluator.evaluateCompanyWide`, deliberately — see below). So the permission this table says every member holds was **unreachable at company scope for everyone below Company Admin**, which is the defect handoff §39 found and §43 repaired. The per-role grants above are unchanged and still correct; what carries the permission company-wide is the **Company Member** baseline of §A2, granted on joining.
+
+**The repair that was rejected, so it is not re-proposed:** letting the evaluator answer "held anywhere in this company". It fixes `company:read` and breaks the scope model — `case:delete` held on one project would then read true for the whole company, and every company-scope gate in the product would be answering a question about one project. Scope is what makes a Test Lead the lead of *one* project.
 
 #### System — `SYSTEM` scope
 
@@ -355,3 +369,4 @@ All of these are now reflected in `docs/plans/2026-07-30-tcms-high-level-plan.md
 | 2026-07-30 | Initial snapshot from the high-level plan |
 | 2026-07-30 | All 17 decisions taken; display keys and `automationKey` moved to company scope; Project clarified as a full client project, not a feature area |
 | 2026-07-30 | Final four: Viewer is the default at every entry point (was Test Engineer on project assignment) · Company Admin sees all projects in their company · client-facing isolation evidence deferred · **no custom roles in v1, clone-and-edit removed** |
+| 2026-08-01 | **`company:read` reaches company scope.** A7's promise that every member holds it was true of the seed and false of the evaluator, because four of the five roles holding it are PROJECT-scope. Added the non-assignable **Company Member** baseline (§A2), granted on joining by `V15` and backfilled for existing members; recorded the rejected "held anywhere in this company" evaluator change (§A3). No permission was added, removed or moved between roles, so `openapi.yaml` and `lib/permissions.ts` are unchanged. Handoff §43. |
