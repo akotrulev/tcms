@@ -17,6 +17,7 @@ export type User = S['User'];
 export type Team = S['Team'];
 export type Role = S['Role'];
 export type RoleAssignment = S['RoleAssignment'];
+export type RoleAssignmentInput = S['RoleAssignmentInput'];
 export type PermissionKey = S['PermissionKey'];
 export type EffectivePermissions = S['EffectivePermissions'];
 export type RoleName = Role['name'];

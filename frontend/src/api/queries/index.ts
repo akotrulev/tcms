@@ -67,5 +67,12 @@ export {
 } from './runs';
 export { useArtifacts, useDocPage, useDocPages } from './documentation';
 export { useDashboard } from './reporting';
-export { useRoleAssignments, useRoles, useTeams, useUsers } from './admin';
+export {
+  useGrantRole,
+  useRevokeRole,
+  useRoleAssignments,
+  useRoles,
+  useTeams,
+  useUsers,
+} from './admin';
 export { useCreateWorkItem, useMoveWorkItem, useWorkItems } from './workItems';
