@@ -28,6 +28,7 @@ import type {
   TestRun,
   WorkItem,
 } from '../../api/types';
+import type { CaseVersion } from '../../api/queries/cases';
 import { caseSummaries } from '../fixtures/cases';
 import {
   artifacts,
@@ -76,6 +77,16 @@ interface Store {
   cases: TestCaseSummary[];
   /** Full detail, lazily materialized on first read so edits survive a re-read. */
   caseDetails: Map<string, TestCase>;
+  /**
+   * Case id → its authored versions, **newest first**, lazily materialized like `caseDetails`.
+   *
+   * Held rather than recomputed per request, because the panel that reads it has to show the
+   * version an edit *just wrote*, carrying the comment its author typed. Synthesizing the list from
+   * `currentVersionNo` on every read — which is what this mock did before there was a server to
+   * disagree with — makes the history a function of a counter: every entry gets the same invented
+   * author, no comment survives a save, and the round-trip the mock exists to prove cannot happen.
+   */
+  caseVersions: Map<string, CaseVersion[]>;
   conditions: Condition[];
   sharedSteps: typeof sharedSteps;
   plans: TestPlan[];
@@ -123,6 +134,7 @@ export const db: Store = {
   suites: clone(suites),
   cases: clone(caseSummaries),
   caseDetails: new Map(),
+  caseVersions: new Map(),
   conditions: clone(conditions),
   sharedSteps: clone(sharedSteps),
   plans: clone(plans),

@@ -25,6 +25,7 @@ import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
 import { CaseDeleteDialog } from './CaseDeleteDialog';
+import { CaseVersionPanel } from './CaseVersionPanel';
 import { AutomationLabel, HealthChip, LifecycleChip, PriorityLabel, StatusChip } from '../../components/StatusChip';
 import { formatAge, formatDateTime, formatSeconds } from '../../lib/format';
 import { stepFormatLabels } from '../../lib/labels';
@@ -290,6 +291,18 @@ export function CaseDetailPage() {
                       />
                     </Stack>
                   </Panel>
+
+                  {/*
+                    Below Ownership rather than above it: the sidebar reads as "what is this case"
+                    (classification, automation, who owns it) and then "what has happened to it".
+                    It is also the tallest panel here, and putting a scrolling region above three
+                    short ones pushes them off the fold on a laptop.
+                  */}
+                  <CaseVersionPanel
+                    projectId={projectId}
+                    caseId={caseId}
+                    currentVersionNo={data.currentVersionNo}
+                  />
                 </Stack>
               </Box>
             </Stack>

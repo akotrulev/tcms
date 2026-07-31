@@ -53,6 +53,7 @@ export {
   useUpdateCase,
   type BulkInput,
   type CaseHistoryResponse,
+  type CaseVersion,
 } from './cases';
 export { useConditions, useSharedSteps } from './library';
 export { useCreatePlan, usePlan, usePlanStatistics, usePlans } from './plans';

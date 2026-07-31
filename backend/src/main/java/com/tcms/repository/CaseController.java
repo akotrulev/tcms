@@ -65,6 +65,7 @@ public class CaseController {
 
     private final CaseService search;
     private final CaseDetailService detail;
+    private final CaseVersionService history;
     private final CaseUpdateService cases;
     private final CaseCreateService creation;
     private final CaseDeleteService deletion;
@@ -72,11 +73,13 @@ public class CaseController {
     public CaseController(
             CaseService search,
             CaseDetailService detail,
+            CaseVersionService history,
             CaseUpdateService cases,
             CaseCreateService creation,
             CaseDeleteService deletion) {
         this.search = search;
         this.detail = detail;
+        this.history = history;
         this.cases = cases;
         this.creation = creation;
         this.deletion = deletion;
@@ -142,6 +145,39 @@ public class CaseController {
             @PathVariable UUID caseId) {
 
         return detail.findOne(UUID.fromString(jwt.getSubject()), projectId, caseId)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /**
+     * The case's authored version history, newest first.
+     *
+     * <h2>Same two gates as the detail, same single 404</h2>
+     *
+     * <p>An unreachable project, a case that does not exist and a case in a sibling project all
+     * answer <strong>404 with no body</strong>, exactly as {@link #findOne} does. This response is a
+     * strict subset of what reading the case already discloses to the same caller, so it takes the
+     * read gate and no permission of its own.
+     *
+     * <h2>{@code 200 []} is not a 404, and the difference is most of the installation</h2>
+     *
+     * <p>Every case authored before the edit endpoint existed has no version rows at all (handoff
+     * §28) — an ordinary state of a readable case, not a missing resource. Answering 404 for it
+     * would tell the reader their case was gone, on most of the cases in an existing project.
+     *
+     * <p>The contract declares only a 200 for this path. The 404 is served all the same, because
+     * every other read on this controller answers one and an endpoint that instead disclosed
+     * something for an unreachable case would be the inference channel §6t exists to close. See
+     * {@code docs/handoff/35-m1-s12-case-versions.md} for the divergence, which is the contract
+     * holder's to close.
+     */
+    @GetMapping("/{caseId}/versions")
+    public ResponseEntity<List<EntityVersionView>> versions(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID caseId) {
+
+        return history.findForCase(UUID.fromString(jwt.getSubject()), projectId, caseId)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
