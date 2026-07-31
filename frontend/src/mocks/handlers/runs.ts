@@ -1,7 +1,15 @@
 /** Runs, their executions, and the one write that records a result. */
 import { HttpResponse, delay, http } from 'msw';
 import type { TestRun } from '../../api/types';
-import { allocateRunKey, db, newId, recountRun, runExecutions } from '../db';
+import {
+  allocateRunKey,
+  db,
+  materialiseRun,
+  newId,
+  planScopeCaseIds,
+  recountRun,
+  runExecutions,
+} from '../db';
 import { API, LATENCY, notFound, permissionsOn, problem, userRef } from './shared';
 
 export const runHandlers = [
@@ -18,20 +26,61 @@ export const runHandlers = [
     );
   }),
 
-  http.post(`${API}/projects/:projectId/runs`, async ({ request }) => {
+  /**
+   * Creating a run — **and its executions**, which is the whole point and the part the old mock
+   * faked. It used to invent a checklist of "the first twelve cases in the project" regardless of
+   * what was asked for, and never wrote the rows at all: the count said twelve and
+   * `runExecutions` reverse-engineered a plausible twelve on first read. That is exactly the
+   * mock-proves-a-property-live-mode-lacks divergence §29 and §38 each found, and it would have
+   * hidden the one behaviour this slice exists to deliver.
+   *
+   * Now the scope resolves the same way the server's does — explicit `caseIds`, else the plan's
+   * expanded scope, never the union — and a run that would materialise nothing is refused, because
+   * an empty run renders as 0 of 0, 100%, complete.
+   */
+  http.post(`${API}/projects/:projectId/runs`, async ({ params, request }) => {
     await delay(LATENCY);
+    const projectId = String(params.projectId);
+
+    if (!permissionsOn(projectId).includes('run:create')) {
+      return problem(403, 'Not allowed', 'You do not have permission to create runs in this project.');
+    }
+
+    const idempotencyKey = request.headers.get('Idempotency-Key');
+    if (idempotencyKey) {
+      const already = db.runIdempotency.get(idempotencyKey);
+      // The assertion this mechanism exists for: a replay must not make a SECOND checklist.
+      if (already) return HttpResponse.json(already, { status: 200 });
+    }
+
     const body = (await request.json()) as Record<string, unknown>;
     const name = String(body.name ?? '').trim();
     if (!name) {
-      return HttpResponse.json(
-        { type: 'about:blank', title: 'Validation failed', status: 400, detail: 'Check the highlighted fields.', errors: { name: ['Enter a name.'] } },
-        { status: 400 },
-      );
+      return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+        name: ['Enter a run name.'],
+      });
     }
-    const plan = db.plans.find((p) => p.id === body.planId);
-    const caseIds = (body.caseIds as string[] | undefined) ?? db.cases.slice(0, 12).map((c) => c.id);
-    const { key } = allocateRunKey();
 
+    const plan = db.plans.find((p) => p.id === body.planId);
+    if (body.planId && !plan) {
+      return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+        planId: ['That plan is not in this project any more.'],
+      });
+    }
+
+    const requested = (body.caseIds as string[] | undefined) ?? [];
+    const caseIds =
+      requested.length > 0 ? requested : plan ? planScopeCaseIds(plan.id) : [];
+
+    if (caseIds.length === 0) {
+      return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+        [plan ? 'planId' : 'caseIds']: [
+          'This run would have nothing to execute. Choose cases, or a plan whose scope still has some.',
+        ],
+      });
+    }
+
+    const { key } = allocateRunKey();
     const run: TestRun = {
       id: newId(),
       key,
@@ -42,16 +91,23 @@ export const runHandlers = [
         db.configurations.find((c) => c.id === body.configurationId) ??
         db.configurations.find((c) => c.isDefault) ??
         db.configurations[0],
-      status: 'IN_PROGRESS',
+      // NOT_STARTED with no startedAt, matching the server: a run starts when somebody records
+      // the first result, not when it is named.
+      status: 'NOT_STARTED',
       releaseVersion: (body.releaseVersion as string) ?? null,
       buildNumber: (body.buildNumber as string) ?? null,
       source: 'MANUAL',
-      startedAt: new Date().toISOString(),
+      startedAt: null,
       completedAt: null,
       counts: { passed: 0, failed: 0, blocked: 0, skipped: 0, notRun: caseIds.length, total: caseIds.length },
     };
     db.runs.unshift(run);
-    return HttpResponse.json(run, { status: 201 });
+    materialiseRun(run.id, caseIds);
+    if (idempotencyKey) db.runIdempotency.set(idempotencyKey, run);
+    return HttpResponse.json(run, {
+      status: 201,
+      headers: { Location: `${API}/projects/${projectId}/runs/${run.id}` },
+    });
   }),
 
   http.get(`${API}/projects/:projectId/runs/:runId`, async ({ params }) => {

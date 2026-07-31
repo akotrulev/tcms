@@ -1,6 +1,7 @@
 /** Runs, the executions inside them, and the one write that records a result. */
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
-import { api, qs } from '../client';
+import { useRef } from 'react';
+import { api, newIntentKey, qs } from '../client';
 import type { TestExecution, TestRun, TestRunDetail } from '../types';
 import { base, keys } from './keys';
 
@@ -19,11 +20,41 @@ export function useRun(projectId: string, runId: string | undefined): UseQueryRe
   });
 }
 
+/** The body of `POST /runs` — `TestRunInput`. */
+export interface TestRunInput {
+  name: string;
+  planId?: string | null;
+  configurationId?: string | null;
+  releaseVersion?: string | null;
+  buildNumber?: string | null;
+  caseIds?: string[];
+  assigneeId?: string | null;
+}
+
+/**
+ * Creates a run — **and, server-side, its whole checklist**: one execution per case in scope,
+ * each pinned to that case's current version.
+ *
+ * That is why the `Idempotency-Key` matters more here than on any other create in the product. A
+ * retry that fell through would not merely make a second row; it would make a second checklist,
+ * and the same tester's results would end up split across two runs that each report a pass rate
+ * over a denominator nobody intended. One key per mounted dialog, per the intent-not-attempt rule.
+ *
+ * The run list *and* the plans list are both invalidated: a plan's case count is unchanged by a
+ * run, but its statistics are not, and a plan page open in another tab is the one place a stale
+ * "0 runs" is read as fact.
+ */
 export function useCreateRun(projectId: string) {
   const client = useQueryClient();
+  const intentKey = useRef(newIntentKey());
   return useMutation({
-    mutationFn: (input: Record<string, unknown>) => api.post<TestRun>(`${base(projectId)}/runs`, input),
-    onSuccess: () => client.invalidateQueries({ queryKey: ['projects', projectId, 'runs'] }),
+    mutationFn: (input: TestRunInput) =>
+      api.post<TestRun>(`${base(projectId)}/runs`, input, { idempotencyKey: intentKey.current }),
+    meta: { handled: true },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ['projects', projectId, 'runs'] });
+      void client.invalidateQueries({ queryKey: ['projects', projectId, 'plans'] });
+    },
   });
 }
 

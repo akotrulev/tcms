@@ -72,6 +72,87 @@ export function runExecutions(runId: string): TestExecution[] {
   return built;
 }
 
+/**
+ * The executions a **newly created** run starts with — one per case, none of them recorded.
+ *
+ * Distinct from `runExecutions` above, which reverse-engineers a seeded run's checklist from its
+ * counts because the fixtures carry counts and not rows. This is the create path, and it is the
+ * one that has to be honest: the server materialises an execution per case in scope pinned to that
+ * case's current version, so the mock does the same rather than synthesising a plausible spread of
+ * verdicts. A created run with results already in it would make the mock disagree with the server
+ * about the one thing this slice is for.
+ *
+ * @param caseIds the resolved scope, in the order the checklist is worked
+ */
+export function materialiseRun(runId: string, caseIds: string[]): TestExecution[] {
+  const run = db.runs.find((r) => r.id === runId);
+  const built = caseIds.map((caseId, i) => {
+    const source = db.cases.find((c) => c.id === caseId);
+    const detail = caseDetail(caseId);
+    return {
+      id: uid(700 + i, 'n'),
+      caseId,
+      caseKey: source?.key ?? 'TC-?',
+      caseTitle: source?.title ?? 'Unknown case',
+      // The pin, resolved at creation. An edit after this must not move it — which the mock
+      // cannot demonstrate, but it can at least not contradict.
+      caseVersionNo: detail?.currentVersionNo ?? 1,
+      status: null,
+      // Null for both, which is the ordinary state of a run nobody has started — and the state
+      // that made §38's person-lookup a 500 on the server.
+      assignee: null,
+      executedBy: null,
+      executedAt: null,
+      durationMs: null,
+      defects: [],
+      comment: null,
+      releaseVersion: run?.releaseVersion ?? null,
+      stepFormat: detail?.stepFormat ?? 'STRUCTURED',
+      preconditions: detail?.preconditions ?? [],
+      postconditions: detail?.postconditions ?? [],
+      steps: (detail?.steps ?? []).map((step, p) => ({
+        stepId: step.id,
+        position: p,
+        keyword: step.keyword ?? null,
+        action: step.action,
+        testData: step.testData ?? null,
+        expectedResult: step.expectedResult ?? null,
+        statusId: null,
+        comment: null,
+        evidence: [],
+      })),
+      evidence: [] as Evidence[],
+      lockVersion: 1,
+    } satisfies TestExecution;
+  });
+
+  db.executions.set(runId, built);
+  return built;
+}
+
+/**
+ * The live cases a plan's scope covers — the suite subtree expansion, deduped.
+ *
+ * A suite item means the folder **and everything beneath it**, which the server answers with an
+ * `ltree` descendant query. Here the tree is the `path` string, so a descendant is anything whose
+ * path starts with the folder's own path — the same relation, spelled for the shape the mock has.
+ */
+export function planScopeCaseIds(planId: string): string[] {
+  const suiteIds = db.planScope.get(planId) ?? [];
+  if (suiteIds.length === 0) return [];
+
+  const roots = db.suites.filter((suite) => suiteIds.includes(suite.id));
+  const covered = new Set(
+    db.suites
+      .filter((suite) => roots.some((root) => suite.path === root.path || suite.path.startsWith(`${root.path}.`)))
+      .map((suite) => suite.id),
+  );
+
+  return db.cases
+    .filter((row) => covered.has(row.suiteId) && row.lifecycleStatus !== 'DEPRECATED')
+    .map((row) => row.id);
+}
+
 export function recountRun(runId: string): void {
   const run = db.runs.find((r) => r.id === runId);
   if (!run) return;

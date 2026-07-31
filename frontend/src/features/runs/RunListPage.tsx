@@ -1,11 +1,26 @@
-import { Box, Chip, Stack, Table, TableBody, TableCell, TableHead, TableRow, Tooltip, Typography } from '@mui/material';
-import { Link as RouterLink, useParams } from 'react-router-dom';
+import {
+  Box,
+  Button,
+  Chip,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  Tooltip,
+  Typography,
+} from '@mui/material';
+import { useState } from 'react';
+import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import type { TestRun } from '../../api/types';
 import { useProject, useRuns } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
+import { PermissionGate } from '../../components/PermissionGate';
 import { ResultBar } from '../../components/ResultBar';
+import { RunCreateDialog } from './RunCreateDialog';
 import { executedCount, passRate } from '../../lib/results';
 import { formatAge, formatCount, formatDateTime, formatDuration, formatPercent } from '../../lib/format';
 
@@ -20,8 +35,10 @@ import { formatAge, formatCount, formatDateTime, formatDuration, formatPercent }
  */
 export function RunListPage() {
   const { projectId = '' } = useParams();
+  const navigate = useNavigate();
   const project = useProject(projectId);
   const runs = useRuns(projectId);
+  const [creating, setCreating] = useState(false);
 
   return (
     <Box>
@@ -34,7 +51,37 @@ export function RunListPage() {
           { label: 'Test runs' },
         ]}
         subtitle="Every pass over a plan, manual or ingested from CI."
+        actions={
+          /*
+            `run:create` is the widest write gate in the product — every role but Viewer holds it,
+            including Automation Service, because a CI job opens the run it is about to post into.
+            Gated all the same: the one role that does not hold it is the one most likely to be
+            looking at this screen.
+          */
+          <PermissionGate projectId={projectId} permission="run:create">
+            {({ allowed }) => (
+              <Button
+                variant="contained"
+                disabled={!allowed}
+                onClick={() => setCreating(true)}
+                data-testid="Runs.New"
+              >
+                New run
+              </Button>
+            )}
+          </PermissionGate>
+        }
       />
+
+      {creating && (
+        <RunCreateDialog
+          projectId={projectId}
+          open
+          onClose={() => setCreating(false)}
+          /* Straight to the checklist — the run was created in order to work through it. */
+          onCreated={(run) => navigate(`/projects/${projectId}/runs/${run.id}`)}
+        />
+      )}
 
       <Panel testId="Runs.Panel" dense>
         <DataRegion

@@ -19,6 +19,7 @@ import { useSnackbar } from 'notistack';
 import { useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
+import { useUnsavedWork } from '../../auth/useSessionRecovery';
 import type { CaseStatus, StepResult, TestExecution } from '../../api/types';
 import { useExecution, useProject, useStatuses, useSubmitResult } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
@@ -125,6 +126,37 @@ function ExecutionForm({
   );
   const [blockedDialog, setBlockedDialog] = useState(false);
   const [conflict, setConflict] = useState<string | null>(null);
+
+  /*
+    The residual §41 lists, and the screen that most deserves it.
+
+    This form has no `formState.isDirty` — it is four `useState` buffers, not react-hook-form — so
+    "dirty" is derived: a step verdict differing from what the row carried, a typed comment, or a
+    precondition unticked. Deriving it rather than setting a flag in each handler is what keeps a
+    fifth buffer from being added later and silently not counting.
+
+    Why it matters more here than on the case editor: an execution is filled in *while running the
+    test*. The tester has been through fifteen steps in another window and the marks on this screen
+    are the only record of what happened — losing them to a deploy-skew reload means running the
+    test again, not retyping a title. The pending mutation counts too: a submit in flight when the
+    session recovers is work the user believes is saved.
+
+    §41 records that lane C checked the *board* for the same treatment and found it correctly does
+    not need one — its writes are immediate single-field mutations with no unsaved buffer. This
+    screen is the opposite shape.
+  */
+  const markedSomeStep = (execution.steps ?? []).some(
+    (step) => stepResults[step.stepId ?? ''] !== (step.statusId ?? null),
+  );
+  const typedSomething =
+    comment !== (execution.comment ?? '') ||
+    Object.values(stepComments).some((value) => value.trim() !== '');
+  const untickedAPrecondition = (execution.preconditions ?? []).some((c) => !metPreconditions[c.id]);
+
+  useUnsavedWork(
+    markedSomeStep || typedSomething || untickedAPrecondition || submit.isPending,
+    'a test result you have not recorded yet',
+  );
 
   const byKind = (kind: string) => statuses.find((s) => s.kind === kind);
   const unmetPreconditions = (execution.preconditions ?? []).filter((c) => !metPreconditions[c.id]);

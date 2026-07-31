@@ -1,8 +1,8 @@
 /** Test plans and the plan statistics report. */
 import { HttpResponse, delay, http } from 'msw';
 import type { TestPlan } from '../../api/types';
-import { allocatePlanKey, db, newId, reporting } from '../db';
-import { API, LATENCY, notFound } from './shared';
+import { allocatePlanKey, db, newId, planScopeCaseIds, reporting } from '../db';
+import { API, LATENCY, notFound, permissionsOn, problem } from './shared';
 
 export const planHandlers = [
   http.get(`${API}/projects/:projectId/plans`, async () => {
@@ -10,25 +10,68 @@ export const planHandlers = [
     return HttpResponse.json(db.plans);
   }),
 
-  http.post(`${API}/projects/:projectId/plans`, async ({ request }) => {
+  /**
+   * Creating a plan. Three properties the mock has to share with the server, or mock mode proves
+   * something live mode does not have — which is the class of divergence §29 and §38 each found:
+   *
+   *  1. **The same refusal**, from the same `permissionsOn` the affordance's `PermissionGate`
+   *     reads, so the disabled button and the refused write cannot disagree.
+   *  2. **`Idempotency-Key` honoured.** The hook sends one per mounted dialog; a mock that
+   *     ignored it would let a retry make a second plan here and not on the server.
+   *  3. **The scope remembered**, so `caseCount` expands the folders and a run started from this
+   *     plan has a checklist. See `db.planScope`.
+   */
+  http.post(`${API}/projects/:projectId/plans`, async ({ params, request }) => {
     await delay(LATENCY);
+    const projectId = String(params.projectId);
+
+    if (!permissionsOn(projectId).includes('plan:create')) {
+      return problem(
+        403,
+        'Not allowed',
+        'You do not have permission to create test plans in this project.',
+      );
+    }
+
+    const idempotencyKey = request.headers.get('Idempotency-Key');
+    if (idempotencyKey) {
+      const already = db.planIdempotency.get(idempotencyKey);
+      // 200 rather than 201, and before validation: the client is asking whether its intent
+      // landed, so a drifted retry answers the plan it already made.
+      if (already) return HttpResponse.json(already, { status: 200 });
+    }
+
     const body = (await request.json()) as Record<string, unknown>;
     const name = String(body.name ?? '').trim();
     if (!name) {
-      return HttpResponse.json(
-        { type: 'about:blank', title: 'Validation failed', status: 400, detail: 'Check the highlighted fields.', errors: { name: ['Enter a name.'] } },
-        { status: 400 },
-      );
+      return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+        name: ['Enter a plan name.'],
+      });
     }
+
+    const suiteIds = ((body.suiteIds as string[] | undefined) ?? []).filter((id) =>
+      db.suites.some((suite) => suite.id === id),
+    );
+    if (suiteIds.length !== ((body.suiteIds as string[] | undefined) ?? []).length) {
+      return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+        suiteIds: ['One of the selected suites is not in this project any more.'],
+      });
+    }
+
     const { key } = allocatePlanKey();
+    const id = newId();
+    db.planScope.set(id, suiteIds);
+
     const plan: TestPlan = {
-      id: newId(),
+      id,
       key,
       name,
       status: 'DRAFT',
       milestoneName: (body.milestoneName as string) ?? null,
       milestoneDate: (body.milestoneDate as string) ?? null,
-      caseCount: 0,
+      // The expansion, not the number of scope items — a plan that says "40 cases" for 27 is
+      // §32's defect one entity over.
+      caseCount: planScopeCaseIds(id).length,
       passRate: null,
       coverage: null,
       description: (body.description as string) ?? null,
@@ -39,7 +82,11 @@ export const planHandlers = [
       lockVersion: 1,
     };
     db.plans.unshift(plan);
-    return HttpResponse.json(plan, { status: 201 });
+    if (idempotencyKey) db.planIdempotency.set(idempotencyKey, plan);
+    return HttpResponse.json(plan, {
+      status: 201,
+      headers: { Location: `${API}/projects/${projectId}/plans/${id}` },
+    });
   }),
 
   http.get(`${API}/projects/:projectId/plans/:planId`, async ({ params }) => {

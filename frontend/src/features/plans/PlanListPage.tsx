@@ -1,11 +1,25 @@
-import { Box, Chip, Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material';
-import { Link as RouterLink, useParams } from 'react-router-dom';
+import {
+  Box,
+  Button,
+  Chip,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  Typography,
+} from '@mui/material';
+import { useState } from 'react';
+import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import type { TestPlan } from '../../api/types';
 import { usePlans, useProject } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
+import { PermissionGate } from '../../components/PermissionGate';
 import { formatCount, formatRatio } from '../../lib/format';
+import { PlanCreateDialog } from './PlanCreateDialog';
 
 /**
  * Test plans. Deliberately a compact table rather than a card grid: a lead comparing four
@@ -14,8 +28,10 @@ import { formatCount, formatRatio } from '../../lib/format';
  */
 export function PlanListPage() {
   const { projectId = '' } = useParams();
+  const navigate = useNavigate();
   const project = useProject(projectId);
   const plans = usePlans(projectId);
+  const [creating, setCreating] = useState(false);
 
   return (
     <Box>
@@ -28,7 +44,37 @@ export function PlanListPage() {
           { label: 'Test plans' },
         ]}
         subtitle="A plan fixes the scope, configurations and exit criteria for a release. Runs execute against it."
+        actions={
+          /*
+            Disabled with a reason rather than hidden (§31): a Viewer seeing a greyed "New plan"
+            learns the capability exists and is worth asking for. `plan:create` is PROJECT scope —
+            unlike "New project", which is the app's one company-scope affordance — so this asks
+            the project question and the gate matches the server's.
+          */
+          <PermissionGate projectId={projectId} permission="plan:create">
+            {({ allowed }) => (
+              <Button
+                variant="contained"
+                disabled={!allowed}
+                onClick={() => setCreating(true)}
+                data-testid="Plans.New"
+              >
+                New plan
+              </Button>
+            )}
+          </PermissionGate>
+        }
       />
+
+      {/* Conditionally rendered, so the form mounts fresh each time — see the dialog's own note. */}
+      {creating && (
+        <PlanCreateDialog
+          projectId={projectId}
+          open
+          onClose={() => setCreating(false)}
+          onCreated={(plan) => navigate(`/projects/${projectId}/plans/${plan.id}`)}
+        />
+      )}
 
       <Panel testId="Plans.Panel" dense>
         <DataRegion

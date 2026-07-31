@@ -10,5 +10,5 @@ export { db, newId, reporting, users, configurations, statusByKind, uid, type Mo
 export { allocateCaseKey, allocatePlanKey, allocateRunKey, allocateSuiteKey } from './keys';
 export { descendantSuiteIds, suiteCaseCount, suiteOwnCaseCount, suiteTree } from './suites';
 export { caseDetail, caseVersions, recordCaseVersion, writeCase } from './cases';
-export { recountRun, runExecutions } from './executions';
+export { materialiseRun, planScopeCaseIds, recountRun, runExecutions } from './executions';
 export { addWorkItem, workItems } from './workItems';
