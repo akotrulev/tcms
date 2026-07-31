@@ -135,9 +135,11 @@ function ExecutionForm({
       const updated = await submit.mutateAsync({
         statusId,
         comment: comment || null,
-        // The version we read comes back with the write, so a second tester recording
-        // against the same execution is rejected rather than silently overwritten. This run
-        // may legitimately have two people on it — that's why the check is here.
+        // The version we read travels as `If-Match` (the hook puts it there), so a second
+        // tester recording against the same execution is rejected rather than silently
+        // overwritten. This run may legitimately have two people on it — that's why the check is
+        // here. It was sent in the BODY until the server existed to read it, which is exactly how
+        // a divergence survives: both sides agreed, and both were wrong.
         lockVersion: execution.lockVersion,
         stepResults: Object.entries(stepResults)
           .filter(([, value]) => value !== null)
@@ -342,10 +344,21 @@ function ExecutionForm({
                 // everything else records directly.
                 const isBlocked = kind === 'BLOCKED';
                 return (
-                  // All four verdicts ride one permission — `result:submit` is what the server
-                  // checks, and there is no per-verdict grant. Gated per button rather than around
-                  // the group so each one keeps its own `data-testid` and its own tooltip anchor.
-                  <PermissionGate key={kind} projectId={projectId} permission="result:submit">
+                  // All four verdicts ride ONE permission, but WHICH one depends on the row: a
+                  // first result needs `result:submit`, and changing one that is already there
+                  // needs `result:amend`, which is lead-only (roles spec §A4 — amending is
+                  // unmaking somebody else's work). The server decides the same way, so the
+                  // disabled state and the refusal cannot disagree; gating both on
+                  // `result:submit` would show a Test Engineer four enabled buttons that every
+                  // one of them 403s.
+                  //
+                  // Gated per button rather than around the group so each keeps its own
+                  // `data-testid` and its own tooltip anchor.
+                  <PermissionGate
+                    key={kind}
+                    projectId={projectId}
+                    permission={execution.status ? 'result:amend' : 'result:submit'}
+                  >
                     {({ allowed }) => (
                       <Button
                         variant={kind === 'PASSED' ? 'contained' : 'outlined'}

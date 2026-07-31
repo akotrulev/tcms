@@ -43,15 +43,23 @@ export function useExecution(
 export interface ExecutionResultInput {
   statusId?: string;
   comment?: string | null;
-  lockVersion?: number;
   stepResults?: { stepId?: string; statusId?: string; comment?: string | null }[];
 }
 
 export function useSubmitResult(projectId: string, runId: string, executionId: string) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (input: ExecutionResultInput) =>
-      api.patch<TestExecution>(`${base(projectId)}/runs/${runId}/executions/${executionId}`, input),
+    // `lockVersion` travels as `If-Match`, never in the body — the same correction §30 made to
+    // the suite rename. This call site carried the divergence longer than any other: the SPA has
+    // sent it in the body since Phase 1, and the mock read it from there, so both sides agreed and
+    // both were wrong about where the contract puts it. The server built in M2 s1 reads only the
+    // header, and `ExecutionResultInput` no longer has a field for the other spelling.
+    mutationFn: ({ lockVersion, ...input }: ExecutionResultInput & { lockVersion?: number }) =>
+      api.patch<TestExecution>(
+        `${base(projectId)}/runs/${runId}/executions/${executionId}`,
+        input,
+        lockVersion === undefined ? undefined : { headers: { 'If-Match': String(lockVersion) } },
+      ),
     // The execution screen renders its own 409 conflict panel — a concurrent edit is a decision
     // to hand back, and it needs the server's detail in place, not a generic corner message.
     meta: { handled: true },

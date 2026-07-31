@@ -2,7 +2,7 @@
 import { HttpResponse, delay, http } from 'msw';
 import type { TestRun } from '../../api/types';
 import { allocateRunKey, db, newId, recountRun, runExecutions } from '../db';
-import { API, LATENCY, notFound, problem, userRef } from './shared';
+import { API, LATENCY, notFound, permissionsOn, problem, userRef } from './shared';
 
 export const runHandlers = [
   http.get(`${API}/projects/:projectId/runs`, async ({ request }) => {
@@ -77,36 +77,80 @@ export const runHandlers = [
     const execution = runExecutions(runId).find((e) => e.id === params.executionId);
     if (!execution) return notFound('That execution');
 
+    // Which permission applies depends on the ROW, not on the verb: a first result is
+    // `result:submit`, changing one that exists is `result:amend`, which is lead-only. Answered
+    // from the same `permissionsOn` the gate reads, so the disabled button and the refused write
+    // cannot disagree — the divergence class the If-Match-in-the-body finding belongs to.
+    const amending = execution.status != null;
+    const held = permissionsOn(String(params.projectId));
+    if (!held.includes(amending ? 'result:amend' : 'result:submit')) {
+      return problem(
+        403,
+        'Not allowed',
+        amending
+          ? 'A result has already been recorded here, and changing one needs a test lead.'
+          : 'You do not have permission to record results in this project.',
+      );
+    }
+
     const body = (await request.json()) as {
       statusId?: string;
       comment?: string | null;
-      lockVersion?: number;
       stepResults?: { stepId?: string; statusId?: string; comment?: string | null }[];
     };
 
-    // Concurrent execution is supported by design, which is exactly why the lock matters:
-    // two testers on one run must not silently overwrite each other (open question #7).
-    if (body.lockVersion !== undefined && body.lockVersion !== execution.lockVersion) {
-      return problem(409, 'Someone else recorded a result first', 'Reload the execution to see their result before recording yours.');
+    // The precondition is the HEADER. It was read from the body here for as long as no server
+    // read it at all, and the SPA sent it there — both sides agreed and both were wrong about
+    // where the contract puts it. Concurrent execution is supported by design, which is exactly
+    // why the lock matters: two testers on one run must not silently overwrite each other.
+    const ifMatch = request.headers.get('If-Match');
+    if (ifMatch !== null && ifMatch.trim() !== '') {
+      const expected = Number(ifMatch.replace(/^"|"$/g, ''));
+      if (Number.isNaN(expected)) {
+        return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+          'If-Match': ["Send the execution's lockVersion as the If-Match header, or omit the header."],
+        });
+      }
+      if (expected !== execution.lockVersion) {
+        return problem(
+          409,
+          'Someone else recorded a result first',
+          'Reload the execution to see their result before recording yours.',
+        );
+      }
     }
 
-    if (body.statusId) {
-      const status = db.statuses.find((s) => s.id === body.statusId);
-      if (!status) return problem(400, 'Unknown status', 'That result status no longer exists.');
-      execution.status = status;
-      execution.executedAt = new Date().toISOString();
-      execution.executedBy = userRef(0);
+    if (!body.statusId) {
+      return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+        statusId: ['Choose a result.'],
+      });
     }
-    if (body.comment !== undefined) execution.comment = body.comment;
+    const status = db.statuses.find((s) => s.id === body.statusId);
+    if (!status) {
+      return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+        statusId: ['That result status is not one this project uses.'],
+      });
+    }
+
+    execution.status = status;
+    execution.executedAt = new Date().toISOString();
+    execution.executedBy = userRef(0);
+    execution.comment = body.comment ?? null;
 
     for (const update of body.stepResults ?? []) {
       const step = execution.steps?.find((s) => s.stepId === update.stepId);
-      if (!step) continue;
+      // Refused rather than dropped, matching the server: the tester marked something, and a save
+      // that reports success while discarding a mark is this endpoint's worst failure.
+      if (!step) {
+        return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+          stepResults: [`Step ${update.stepId} is not part of the version this run pinned.`],
+        });
+      }
       if (update.statusId !== undefined) step.statusId = update.statusId;
       if (update.comment !== undefined) step.comment = update.comment;
     }
 
-    execution.lockVersion = (execution.lockVersion ?? 1) + 1;
+    execution.lockVersion = (execution.lockVersion ?? 0) + 1;
     recountRun(runId);
     return HttpResponse.json(execution);
   }),
