@@ -626,11 +626,13 @@ class ProjectEndpointTest extends IntegrationTestBase {
     /**
      * Cases straight into {@code test_case}, as the superuser.
      *
-     * <p>There is no {@code TestCase} entity — the {@code repository} module does not exist yet
-     * — and {@code caseCount} is precisely the field that needs rows in that table. Written as
-     * the superuser rather than through the app role because this fixture needs a suite row and
-     * a key sequence it has no service to allocate; the assertions still read through the
-     * ordinary policed path, which is what is under test.
+     * <p>There is still no {@code TestCase} entity — the {@code repository} module exists now and
+     * owns {@code Suite}, but nothing maps a case — and {@code caseCount} is precisely the field
+     * that needs rows in that table. Written as the superuser rather than through the app role
+     * because this fixture needs a suite row and a key sequence it has no service to allocate; the
+     * assertions still read through the ordinary policed path, which is what is under test.
+     * ({@code SuiteEndpointTest} writes the equivalent fixture through the app role instead, which
+     * is the stronger arrangement and the one to copy.)
      *
      * @param live    non-deleted cases
      * @param deleted soft-deleted ones, which must NOT be counted

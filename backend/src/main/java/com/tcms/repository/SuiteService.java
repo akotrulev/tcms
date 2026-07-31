@@ -1,0 +1,161 @@
+package com.tcms.repository;
+
+import com.tcms.project.ProjectService;
+import com.tcms.tenancy.CompanyContext;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * One project's suite tree, as the flat list the contract specifies.
+ *
+ * <h2>The gate is borrowed, not restated</h2>
+ *
+ * <p>Every read here goes through {@link ProjectService#readVisible}, so a caller passes exactly
+ * the two gates that {@code GET /projects/{projectId}} applies — company first, then the explicit
+ * project grant. Nothing in this class decides whether a caller may see a project.
+ *
+ * <p>This is the first endpoint <em>outside</em> the {@code project} module to be built on that
+ * method, and it is the case the method was extracted for. The failure it prevents is not the
+ * dramatic one: an endpoint that checks only that the project exists in the caller's company
+ * passes every cross-company test in the suite — the rows genuinely are in the caller's company —
+ * and hands a member who was granted nothing the client's entire test tree. A suite tree names
+ * what a client tests, folder by folder, which is a fair sketch of what they are building.
+ *
+ * <h2>Flat, because the client builds the tree</h2>
+ *
+ * <p>The contract is explicit: "a flat list with parentId (client builds the tree)". Nesting it
+ * server-side would put a second tree-shaped contract beside the one the SPA already implements in
+ * {@code SuiteTree.tsx}, and a nested response is also strictly worse to filter — the case list's
+ * suite filter needs to find one node, not walk to it.
+ *
+ * <h2>Three queries, never one per suite</h2>
+ *
+ * <p>Suites, their case counts, and their condition attachments are three queries whose results
+ * are grouped in memory. The alternatives are worse in both directions: mapped {@code @OneToMany}
+ * associations would lazily load conditions one suite at a time, and a single joined query would
+ * multiply each suite row by its condition count and need de-duplicating anyway. A tree is the
+ * shape where an N+1 stops being cheap first — the count is the number of folders, not the number
+ * of projects.
+ */
+@Service
+public class SuiteService {
+
+    private final ProjectService projects;
+    private final SuiteRepository suites;
+    private final SuiteConditionRepository attachments;
+    private final ConditionRepository conditions;
+
+    public SuiteService(
+            ProjectService projects,
+            SuiteRepository suites,
+            SuiteConditionRepository attachments,
+            ConditionRepository conditions) {
+
+        this.projects = projects;
+        this.suites = suites;
+        this.attachments = attachments;
+        this.conditions = conditions;
+    }
+
+    /**
+     * The project's live suites, or empty when the caller may not see the project.
+     *
+     * <p>An empty {@link Optional} and a present-but-empty list are different answers and the
+     * controller renders them differently: 404 for "you may not see this project", {@code []} for
+     * "you may, and it has no suites". Collapsing them would turn a freshly provisioned project —
+     * which has no suites at all, since nothing seeds one — into a 404 on the first screen the SPA
+     * opens after the picker.
+     */
+    @Transactional(readOnly = true)
+    public Optional<List<SuiteView>> findTree(UUID userId, UUID projectId) {
+        UUID companyId = CompanyContext.require();
+
+        return projects.readVisible(userId, projectId, project -> treeOf(companyId, project.getId()));
+    }
+
+    private List<SuiteView> treeOf(UUID companyId, UUID projectId) {
+        List<Suite> live = suites.findLiveForProject(projectId);
+        if (live.isEmpty()) {
+            // Not merely an optimization: an empty collection bound into SQL `IN ()` is a syntax
+            // error, so the condition query below must not run. An empty tree is the normal state
+            // of a new project, not an edge case. Same guard, same reason, as
+            // ProjectService.listVisible.
+            return List.of();
+        }
+
+        Map<UUID, Long> caseCounts = caseCounts(companyId, projectId);
+        Map<UUID, List<SuiteConditionView>> bySuite =
+                conditionsBySuite(live.stream().map(Suite::getId).toList());
+
+        return live.stream()
+                .map(suite -> new SuiteView(
+                        suite.getId(),
+                        suite.getKey(),
+                        suite.getParentId(),
+                        suite.getName(),
+                        suite.getDescription(),
+                        suite.getPath(),
+                        // A suite with no cases has no GROUP BY row at all, so this default is the
+                        // normal path for an empty folder rather than a fallback for a broken
+                        // query.
+                        caseCounts.getOrDefault(suite.getId(), 0L),
+                        suite.getLifecycleStatus(),
+                        // Must serialize as [] and never as null: the contract marks `conditions`
+                        // required, so the SPA cannot null-check it.
+                        bySuite.getOrDefault(suite.getId(), List.of()),
+                        suite.getLockVersion()))
+                .toList();
+    }
+
+    private Map<UUID, Long> caseCounts(UUID companyId, UUID projectId) {
+        Map<UUID, Long> counts = new HashMap<>();
+        for (var row : suites.countLiveCasesBySuite(companyId, projectId)) {
+            counts.put(row.getSuiteId(), row.getCaseCount());
+        }
+        return counts;
+    }
+
+    /**
+     * Resolves each attachment against the live library and groups by suite.
+     *
+     * <p>Preserves the query's ordering within each suite — {@code ArrayList}, not a set — because
+     * a condition list is a sequence of actions and its order is its content.
+     */
+    private Map<UUID, List<SuiteConditionView>> conditionsBySuite(List<UUID> suiteIds) {
+        List<SuiteCondition> live = attachments.findForSuites(suiteIds);
+        if (live.isEmpty()) {
+            return Map.of();
+        }
+
+        // LinkedHashSet: de-duplicated, because two suites referencing one library condition is
+        // the ordinary case — that reuse is what the library is for.
+        Set<UUID> referenced = new LinkedHashSet<>();
+        live.forEach(attachment -> referenced.add(attachment.getConditionId()));
+
+        Map<UUID, Condition> library = new HashMap<>();
+        conditions.findLiveByIds(referenced).forEach(condition ->
+                library.put(condition.getId(), condition));
+
+        Map<UUID, List<SuiteConditionView>> grouped = new HashMap<>();
+        for (SuiteCondition attachment : live) {
+            Condition condition = library.get(attachment.getConditionId());
+            if (condition == null) {
+                // The library entry was retired. Serving it would offer a withdrawn precondition
+                // as current; see SuiteConditionView for why the omission is the honest answer and
+                // what actually closes it.
+                continue;
+            }
+            grouped.computeIfAbsent(attachment.getSuiteId(), key -> new ArrayList<>())
+                    .add(SuiteConditionView.of(attachment, condition));
+        }
+        return grouped;
+    }
+}
