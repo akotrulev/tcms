@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '../api/client';
 import { SessionRecoveryContext, type SessionRecoveryValue } from './sessionRecoveryContextValue';
+import { subscribeSession } from './sessionChannel';
 import { useAuth } from './useAuth';
 import { useSessionRecovery } from './useSessionRecovery';
 
@@ -104,6 +105,29 @@ export function SessionRecoveryProvider({ children }: { children: ReactNode }) {
     if (!userRef.current) return;
     setOpen(true);
   }, []);
+
+  /**
+   * A sign-in on another tab settles this one.
+   *
+   * Without this, the multi-tab story is half-built: sign out in tab A and tab B corrects itself,
+   * but sign back in and tab B sits on a modal password prompt for a session that is already
+   * valid — the user types their password a second time to be told nothing was wrong. A sign-out
+   * closes it too, because `RequireAuth` is about to navigate this tab to the login screen and a
+   * non-dismissible dialog riding over that transition is the worse of the two things on screen.
+   *
+   * Only the dialog is closed here. Refetching, and the harder question of whether the cache is
+   * still *this user's* to show, belong to `SessionReplayBridge`, which can see the query client
+   * — and which runs after this, so the two never race.
+   */
+  useEffect(
+    () =>
+      subscribeSession(() => {
+        setOpen(false);
+        setPassword('');
+        setFormError(null);
+      }),
+    [],
+  );
 
   const value = useMemo<SessionRecoveryValue>(
     () => ({ reportUnauthorized, registerUnsavedWork, hasUnsavedWork, registerReauthHandler }),
@@ -227,7 +251,8 @@ export function SessionRecoveryProvider({ children }: { children: ReactNode }) {
 }
 
 /**
- * Registers the post-re-authentication replay.
+ * Registers the post-re-authentication replay, and settles the query cache after a session
+ * transition made in another tab.
  *
  * Mounted **inside** `QueryClientProvider`, which is the whole point: it is the one place that
  * can see both the query client and the session provider. Renders nothing.
@@ -235,10 +260,45 @@ export function SessionRecoveryProvider({ children }: { children: ReactNode }) {
 export function SessionReplayBridge() {
   const queryClient = useQueryClient();
   const { registerReauthHandler } = useSessionRecovery();
+  const { user } = useAuth();
 
   useEffect(
     () => registerReauthHandler(() => queryClient.refetchQueries({ type: 'active' })),
     [queryClient, registerReauthHandler],
+  );
+
+  /*
+    Who this tab believed was signed in *before* the message arrived.
+
+    Written during render, so at message time it still holds the pre-transition value even though
+    `AuthProvider` — which subscribes first, being mounted above — has already called `setUser`.
+    That is the whole reason the comparison lives here and not there: React has not re-rendered
+    yet, so this is the only place both identities are legible at once.
+  */
+  const previousEmail = useRef<string | null>(null);
+  previousEmail.current = user?.email ?? null;
+
+  useEffect(
+    () =>
+      subscribeSession((message) => {
+        // A different person is now holding this browser's token. Every cached answer was
+        // computed for the previous user under their grants, and TanStack would happily render
+        // it: the project list, their name in the rail, the permission answers `useCan` gates on.
+        // This is the one cross-tab case that is a data-exposure bug and not a cosmetic one.
+        const identityChanged =
+          message.type === 'signed-out' || message.email !== previousEmail.current;
+
+        if (identityChanged) {
+          queryClient.clear();
+          return;
+        }
+
+        // Same user signing back in — most often this tab's own expired session being renewed
+        // from a sibling. The cache is still theirs, so it is refreshed rather than discarded,
+        // which is the same replay `reportUnauthorized`'s dialog performs.
+        void queryClient.refetchQueries({ type: 'active' });
+      }),
+    [queryClient],
   );
 
   return null;

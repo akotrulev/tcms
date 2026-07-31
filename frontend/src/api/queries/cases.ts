@@ -1,5 +1,6 @@
 /** The case list, the case, its writes, its versions and its execution history. */
 import {
+  keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
@@ -35,9 +36,25 @@ export function useCases(
         signal,
         timeoutMs: TIMEOUTS.interactive,
       }),
-    // Keep the previous page's rows on screen while the next one loads, so paging doesn't
-    // flash an empty grid.
-    placeholderData: (previous) => previous,
+    /**
+     * Keep the previous key's rows on screen while the next ones load, so changing a filter or
+     * a page does not flash a skeleton over data the user is reading. The filters live in the
+     * URL, so **every keystroke in the search box is a new query key** — without this the grid
+     * empties and refills as you type, which reads as the list breaking rather than narrowing.
+     *
+     * `keepPreviousData` rather than the equivalent inline `(previous) => previous`: TanStack
+     * memoizes the placeholder by comparing the *identity* of this option against the previous
+     * render's (`queryObserver.ts`), and an inline arrow is a new identity every render, so the
+     * memoized branch is never taken and the placeholder is recomputed on each pass. Identical
+     * result today, and the kind of thing that stops being identical the moment a `select` is
+     * added — `select` re-runs on every recompute.
+     *
+     * What this does NOT do, deliberately: a *failed* first load of a new key still shows the
+     * failed body, not the old rows. TanStack only substitutes placeholder data while the query
+     * is `pending`, which is the correct line — rows for the filter you replaced, presented as
+     * the answer to the filter you typed, would be a lie the staleness marker cannot fix.
+     */
+    placeholderData: keepPreviousData,
   });
 }
 
