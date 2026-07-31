@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BigCase — Direction A · Casefile</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#141A22;
+    --slate:#5B6B80;
+    --faint:#8593A5;
+    --paper:#FFFFFF;
+    --sunken:#F5F7FA;
+    --border:#DDE3EA;
+    --border-strong:#C3CCD8;
+    --steel:#1F6F8B;
+    --steel-hover:#175A72;
+    --steel-wash:#EAF2F6;
+
+    --passed:#2E7D5B; --failed:#C0392B; --blocked:#B7791F;
+    --skipped:#6B7280; --untested:#9CA3AF; --retest:#7C5CBF;
+
+    --display:'Space Grotesk',system-ui,sans-serif;
+    --body:'IBM Plex Sans',system-ui,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:980px;margin:0 auto;padding:0 32px}
+
+  /* ---- masthead: generous negative space, quiet ---- */
+  .mast{padding:96px 0 72px;border-bottom:1px solid var(--border)}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin:0 0 28px}
+  .mast h1{font-family:var(--display);font-weight:700;font-size:clamp(34px,6vw,58px);line-height:1.05;letter-spacing:-.02em;margin:0 0 20px}
+  .mast p{max-width:52ch;color:var(--slate);font-size:17px;margin:0}
+
+  section{padding:64px 0;border-bottom:1px solid var(--border)}
+  h2{font-family:var(--display);font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin:0 0 32px}
+  h3{font-family:var(--body);font-size:14px;font-weight:600;margin:0 0 12px}
+  .note{color:var(--slate);font-size:14px;max-width:60ch}
+
+  .row{display:flex;gap:56px;flex-wrap:wrap;align-items:flex-end}
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:40px}
+  .grid2>div{display:grid;grid-template-rows:1fr auto}
+  .grid2 .plate{height:100%}
+
+  .plate{background:var(--sunken);border:1px solid var(--border);border-radius:6px;padding:40px;display:flex;align-items:center;justify-content:center;min-height:150px}
+  .plate.dark{background:var(--ink);border-color:#2A3340}
+  .cap{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:10px;letter-spacing:.04em}
+
+  .lockup{display:flex;align-items:center;gap:13px}
+  .lockup .name{font-family:var(--display);font-weight:700;font-size:27px;letter-spacing:-.022em}
+  .lockup .name em{font-style:normal;color:var(--steel)}
+  .lockup.on-dark .name{color:#E8EDF3}
+  .lockup.on-dark .name em{color:#6BA8C4}
+
+  .sizes{display:flex;align-items:flex-end;gap:32px}
+  .sizes>div{text-align:center}
+
+  /* ---- swatches ---- */
+  .sw{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px;border:1px solid var(--border);border-radius:6px;overflow:hidden}
+  .sw div{padding:14px 12px;min-height:96px;display:flex;flex-direction:column;justify-content:flex-end}
+  .sw b{font-size:12px;font-weight:600;display:block}
+  .sw code{font-family:var(--mono);font-size:11px;opacity:.72;display:block}
+
+  @media (max-width:760px){.sw{grid-template-columns:repeat(3,minmax(0,1fr))}}
+  .statusbar{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  .chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;padding:3px 9px;border-radius:3px;border:1px solid}
+  .dot{width:7px;height:7px;border-radius:50%;flex:none}
+
+  /* ---- type ---- */
+  .spec{border-top:1px solid var(--border);padding-top:20px;margin-top:20px}
+  .spec:first-of-type{border-top:0;padding-top:0;margin-top:0}
+  .spec .role{font-family:var(--mono);font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px}
+  .d1{font-family:var(--display);font-weight:700;font-size:40px;letter-spacing:-.024em;line-height:1.1;margin:0}
+  .b1{font-size:16px;max-width:56ch;margin:0;color:var(--ink)}
+  .m1{font-family:var(--mono);font-size:14px;margin:0;color:var(--slate)}
+
+  /* ---- in-situ app ---- */
+  .app{border:1px solid var(--border);border-radius:6px;overflow:hidden;font-size:13px}
+  .app-top{height:52px;display:flex;align-items:center;gap:20px;padding:0 16px;border-bottom:1px solid var(--border);background:var(--paper)}
+  .app-top .lockup .name{font-size:17px}
+  .app-nav{display:flex;gap:18px;margin-left:6px;color:var(--slate);font-size:13px}
+  .app-nav span.on{color:var(--ink);font-weight:600;box-shadow:inset 0 -2px 0 var(--steel);padding-bottom:16px}
+  .btn{margin-left:auto;background:var(--steel);color:#fff;border:0;border-radius:4px;padding:6px 13px;font:inherit;font-weight:500;font-size:13px;cursor:pointer}
+  .app-body{display:flex}
+  .rail{width:190px;border-right:1px solid var(--border);background:var(--sunken);padding:14px 12px;color:var(--slate);font-size:13px}
+  .rail div{padding:5px 8px;border-radius:4px}
+  .rail div.on{background:var(--steel-wash);color:var(--steel);font-weight:600}
+  .list{flex:1}
+  .tr{display:grid;grid-template-columns:92px 1fr 110px;gap:12px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border)}
+  .tr:last-child{border-bottom:0}
+  .tr .chip{justify-self:start}
+  .tr.head{background:var(--sunken);color:var(--faint);font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-family:var(--mono)}
+  .key{font-family:var(--mono);font-size:12px;color:var(--slate);background:var(--sunken);border:1px solid var(--border);border-radius:3px;padding:1px 6px;justify-self:start}
+
+  footer{padding:56px 0 96px;color:var(--slate);font-size:14px}
+  footer ul{padding-left:18px;margin:10px 0 0;max-width:62ch}
+  footer li{margin-bottom:7px}
+  strong{font-weight:600;color:var(--ink)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="mast">
+    <p class="eyebrow">BigCase · Identity direction A</p>
+    <h1>Casefile</h1>
+    <p>The system of record for what was tested. Quiet, archival, built to be looked at for eight hours
+    a day without shouting. The brand supplies the chrome; the test results supply the colour.</p>
+  </header>
+
+  <!-- ============ LOGO ============ -->
+  <section>
+    <h2>Mark &amp; lockup</h2>
+    <p class="note" style="margin:-16px 0 32px">Two brackets — the assertion syntax every engineer here reads all
+    day — enclosing a tabbed block: a case file. Container and code in one glyph.</p>
+
+    <div class="grid2">
+      <div>
+        <div class="plate">
+          <svg width="112" height="112" viewBox="0 0 48 48" fill="none" aria-label="BigCase mark">
+            <path d="M15 10 H10 V38 H15" stroke="#141A22" stroke-width="3.4" stroke-linecap="square"/>
+            <path d="M33 10 H38 V38 H33" stroke="#141A22" stroke-width="3.4" stroke-linecap="square"/>
+            <path d="M20 15 h7 v3 h2.5 a2 2 0 0 1 2 2 v14 a2 2 0 0 1 -2 2 H18.5 a2 2 0 0 1 -2 -2 V20 a2 2 0 0 1 2 -2 h1.5 z" fill="#1F6F8B"/>
+          </svg>
+        </div>
+        <p class="cap">Mark — 112px</p>
+      </div>
+      <div>
+        <div class="plate">
+          <div class="lockup">
+            <svg width="40" height="40" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+              <path d="M15 10 H10 V38 H15" stroke="#141A22" stroke-width="3.4" stroke-linecap="square"/>
+              <path d="M33 10 H38 V38 H33" stroke="#141A22" stroke-width="3.4" stroke-linecap="square"/>
+              <path d="M20 15 h7 v3 h2.5 a2 2 0 0 1 2 2 v14 a2 2 0 0 1 -2 2 H18.5 a2 2 0 0 1 -2 -2 V20 a2 2 0 0 1 2 -2 h1.5 z" fill="#1F6F8B"/>
+            </svg>
+            <span class="name">Big<em>Case</em></span>
+          </div>
+        </div>
+        <p class="cap">Horizontal lockup</p>
+      </div>
+    </div>
+
+    <div class="grid2" style="margin-top:32px">
+      <div>
+        <div class="plate dark">
+          <div class="lockup on-dark">
+            <svg width="40" height="40" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+              <path d="M15 10 H10 V38 H15" stroke="#E8EDF3" stroke-width="3.4" stroke-linecap="square"/>
+              <path d="M33 10 H38 V38 H33" stroke="#E8EDF3" stroke-width="3.4" stroke-linecap="square"/>
+              <path d="M20 15 h7 v3 h2.5 a2 2 0 0 1 2 2 v14 a2 2 0 0 1 -2 2 H18.5 a2 2 0 0 1 -2 -2 V20 a2 2 0 0 1 2 -2 h1.5 z" fill="#6BA8C4"/>
+            </svg>
+            <span class="name">Big<em>Case</em></span>
+          </div>
+        </div>
+        <p class="cap">On dark — accent desaturated, not inverted</p>
+      </div>
+      <div>
+        <div class="plate">
+          <div class="sizes">
+            <div>
+              <svg width="48" height="48" viewBox="0 0 48 48" fill="none"><rect width="48" height="48" rx="10" fill="#141A22"/><path d="M17 14 H13 V34 H17" stroke="#E8EDF3" stroke-width="2.6" stroke-linecap="square"/><path d="M31 14 H35 V34 H31" stroke="#E8EDF3" stroke-width="2.6" stroke-linecap="square"/><path d="M21.5 16 h5 v3 h2 a1.6 1.6 0 0 1 1.6 1.6 v11 a1.6 1.6 0 0 1 -1.6 1.6 H19.5 a1.6 1.6 0 0 1 -1.6 -1.6 V20.6 a1.6 1.6 0 0 1 1.6 -1.6 h2 z" fill="#6BA8C4"/></svg>
+              <p class="cap">App icon 48</p>
+            </div>
+            <div>
+              <svg width="28" height="28" viewBox="0 0 48 48" fill="none"><rect width="48" height="48" rx="10" fill="#141A22"/><path d="M17 14 H13 V34 H17" stroke="#E8EDF3" stroke-width="2.6" stroke-linecap="square"/><path d="M31 14 H35 V34 H31" stroke="#E8EDF3" stroke-width="2.6" stroke-linecap="square"/><path d="M21.5 16 h5 v3 h2 a1.6 1.6 0 0 1 1.6 1.6 v11 a1.6 1.6 0 0 1 -1.6 1.6 H19.5 a1.6 1.6 0 0 1 -1.6 -1.6 V20.6 a1.6 1.6 0 0 1 1.6 -1.6 h2 z" fill="#6BA8C4"/></svg>
+              <p class="cap">28</p>
+            </div>
+            <div>
+              <svg width="16" height="16" viewBox="0 0 48 48" fill="none"><rect width="48" height="48" rx="10" fill="#141A22"/><path d="M17 14 H13 V34 H17" stroke="#E8EDF3" stroke-width="3.4" stroke-linecap="square"/><path d="M31 14 H35 V34 H31" stroke="#E8EDF3" stroke-width="3.4" stroke-linecap="square"/><path d="M21 17 h6 a1.6 1.6 0 0 1 1.6 1.6 v11 a1.6 1.6 0 0 1 -1.6 1.6 H21 a1.6 1.6 0 0 1 -1.6 -1.6 V18.6 a1.6 1.6 0 0 1 1.6 -1.6 z" fill="#6BA8C4"/></svg>
+              <p class="cap">Favicon 16</p>
+            </div>
+          </div>
+        </div>
+        <p class="cap">The tab drops below 20px; the silhouette survives</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ COLOUR ============ -->
+  <section>
+    <h2>Colour</h2>
+    <h3>Brand &amp; neutrals</h3>
+    <div class="sw">
+      <div style="background:#141A22;color:#fff"><b>Ink</b><code>#141A22</code></div>
+      <div style="background:#1F6F8B;color:#fff"><b>Steel — action</b><code>#1F6F8B</code></div>
+      <div style="background:#175A72;color:#fff"><b>Steel hover</b><code>#175A72</code></div>
+      <div style="background:#5B6B80;color:#fff"><b>Slate — muted</b><code>#5B6B80</code></div>
+      <div style="background:#EAF2F6;color:#141A22"><b>Steel wash</b><code>#EAF2F6</code></div>
+      <div style="background:#F5F7FA;color:#141A22"><b>Sunken</b><code>#F5F7FA</code></div>
+      <div style="background:#FFFFFF;color:#141A22;box-shadow:inset 0 0 0 1px #DDE3EA"><b>Surface</b><code>#FFFFFF</code></div>
+    </div>
+
+    <h3 style="margin-top:36px">Status keeps the whole saturation budget</h3>
+    <p class="note">Brand steel sits at 196°. No status hue is within 40° of it, so a chip never reads as
+    a brand element and an action never reads as a verdict.</p>
+    <div class="statusbar">
+      <span class="chip" style="color:#2E7D5B;border-color:#B8DBC9;background:#EEF7F2"><i class="dot" style="background:#2E7D5B"></i>Passed</span>
+      <span class="chip" style="color:#C0392B;border-color:#EFC3BD;background:#FCF0EE"><i class="dot" style="background:#C0392B"></i>Failed</span>
+      <span class="chip" style="color:#B7791F;border-color:#E8D3A8;background:#FBF5E9"><i class="dot" style="background:#B7791F"></i>Blocked</span>
+      <span class="chip" style="color:#7C5CBF;border-color:#D3C7EC;background:#F4F1FB"><i class="dot" style="background:#7C5CBF"></i>Retest</span>
+      <span class="chip" style="color:#6B7280;border-color:#D6DAE0;background:#F4F5F7"><i class="dot" style="background:#6B7280"></i>Skipped</span>
+      <span class="chip" style="color:#5B6B80;border-color:#D6DDE6;background:#F4F7FA"><i class="dot" style="background:#9CA3AF"></i>Untested</span>
+    </div>
+  </section>
+
+  <!-- ============ TYPE ============ -->
+  <section>
+    <h2>Typography</h2>
+    <div class="spec">
+      <p class="role">Display — Space Grotesk 700 · headings, wordmark, empty-state titles</p>
+      <p class="d1">Nothing shipped untested</p>
+    </div>
+    <div class="spec">
+      <p class="role">Body — IBM Plex Sans 400/500/600 · all UI text</p>
+      <p class="b1">A suite is a folder, a project is a whole client product, and a case is the smallest
+      thing you can be right or wrong about. BigCase keeps all three, per company, in one place.</p>
+    </div>
+    <div class="spec">
+      <p class="role">Utility — IBM Plex Mono 400/500 · identifiers, keys, counts, timestamps</p>
+      <p class="m1">BC-1042 · TR-88 · 2026-07-31 14:02 UTC · 214/230 executed</p>
+    </div>
+  </section>
+
+  <!-- ============ IN SITU ============ -->
+  <section>
+    <h2>In the product</h2>
+    <div class="app">
+      <div class="app-top">
+        <div class="lockup">
+          <svg width="26" height="26" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+            <path d="M15 10 H10 V38 H15" stroke="#141A22" stroke-width="3.6" stroke-linecap="square"/>
+            <path d="M33 10 H38 V38 H33" stroke="#141A22" stroke-width="3.6" stroke-linecap="square"/>
+            <path d="M20 15 h7 v3 h2.5 a2 2 0 0 1 2 2 v14 a2 2 0 0 1 -2 2 H18.5 a2 2 0 0 1 -2 -2 V20 a2 2 0 0 1 2 -2 h1.5 z" fill="#1F6F8B"/>
+          </svg>
+          <span class="name">Big<em>Case</em></span>
+        </div>
+        <nav class="app-nav"><span class="on">Cases</span><span>Runs</span><span>Reports</span></nav>
+        <button class="btn">New case</button>
+      </div>
+      <div class="app-body">
+        <div class="rail">
+          <div class="on">Checkout</div>
+          <div style="padding-left:20px">Payments</div>
+          <div style="padding-left:20px">Refunds</div>
+          <div>Onboarding</div>
+        </div>
+        <div class="list">
+          <div class="tr head"><span>Key</span><span>Title</span><span>Last result</span></div>
+          <div class="tr"><span class="key">BC-1042</span><span>Card declined shows the issuer message</span>
+            <span class="chip" style="color:#2E7D5B;border-color:#B8DBC9;background:#EEF7F2"><i class="dot" style="background:#2E7D5B"></i>Passed</span></div>
+          <div class="tr"><span class="key">BC-1043</span><span>Refund above the original amount is rejected</span>
+            <span class="chip" style="color:#C0392B;border-color:#EFC3BD;background:#FCF0EE"><i class="dot" style="background:#C0392B"></i>Failed</span></div>
+          <div class="tr"><span class="key">BC-1044</span><span>Expired session recovers in place on save</span>
+            <span class="chip" style="color:#B7791F;border-color:#E8D3A8;background:#FBF5E9"><i class="dot" style="background:#B7791F"></i>Blocked</span></div>
+          <div class="tr"><span class="key">BC-1045</span><span>Suite tree keeps order after a folder move</span>
+            <span class="chip" style="color:#5B6B80;border-color:#D6DDE6;background:#F4F7FA"><i class="dot" style="background:#9CA3AF"></i>Untested</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <strong>Where the boldness is spent:</strong> the identifier. <code style="font-family:var(--mono)">BC-1042</code>
+    is a first-class typographic object — boxed, monospaced, always the leftmost thing on a row — because
+    it is what people actually say out loud to each other.
+    <ul>
+      <li><strong>Ships fastest.</strong> Closest to the tokens already in <code style="font-family:var(--mono)">index.css</code> — steel moves 3 points, nothing else changes.</li>
+      <li><strong>Risk:</strong> restraint read as blandness. It will not win a screenshot on social; it will win a Tuesday afternoon.</li>
+      <li><strong>Fonts:</strong> Space Grotesk (SIL OFL), IBM Plex Sans/Mono (SIL OFL) — all self-hostable, no CDN dependency in production.</li>
+    </ul>
+  </footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BigCase — Direction C · Matrix</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --midnight:#111634;
+    --indigo:#2F3D9E;
+    --indigo-hover:#26327F;
+    --indigo-dark-ui:#8C97E0;
+    --indigo-wash:#EDEFFA;
+
+    --cyan:#00A6C7;
+    --cyan-wash:#E4F5F9;
+
+    --slate:#5A6280;
+    --faint:#8C93AB;
+    --surface:#FFFFFF;
+    --sunken:#F4F5FA;
+    --line:#DCDFEC;
+
+    --passed:#2E7D5B; --failed:#C0392B; --blocked:#B7791F;
+    --skipped:#6B7280; --untested:#9CA3AF; --retest:#7C5CBF;
+
+    --display:'Sora',system-ui,sans-serif;
+    --body:'Inter',system-ui,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;color:var(--midnight);font-family:var(--body);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;
+    background:var(--surface);
+    background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);
+    background-size:64px 64px;background-position:-1px -1px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 28px;background:var(--surface);border-left:1px solid var(--line);border-right:1px solid var(--line)}
+
+  .mast{padding:72px 0 56px;border-bottom:1px solid var(--line)}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin:0 0 20px}
+  .mast h1{font-family:var(--display);font-weight:700;font-size:clamp(36px,7vw,66px);line-height:1;letter-spacing:-.03em;margin:0 0 18px}
+  .mast p{max-width:52ch;color:var(--slate);font-size:16px;margin:0}
+
+  section{padding:52px 0;border-bottom:1px solid var(--line)}
+  h2{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--indigo);margin:0 0 24px;
+     display:flex;align-items:center;gap:10px}
+  h2::before{content:"";width:9px;height:9px;background:var(--indigo);flex:none}
+  h3{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--slate);margin:28px 0 12px}
+  .note{color:var(--slate);font-size:14px;max-width:60ch;margin:-8px 0 26px}
+
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:1px;background:var(--line);border:1px solid var(--line)}
+  .cell{background:var(--surface);padding:36px;display:flex;align-items:center;justify-content:center;min-height:180px;height:100%}
+  .cell.dark{background:var(--midnight)}
+  .cell.wash{background:var(--sunken)}
+  .cap{font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:.04em;padding:8px 10px;background:var(--sunken);border-top:1px solid var(--line)}
+  .box{display:grid;grid-template-rows:1fr auto}
+
+  .lockup{display:flex;align-items:center;gap:12px}
+  .lockup .name{font-family:var(--display);font-weight:500;font-size:26px;letter-spacing:-.03em}
+  .lockup .name b{font-weight:700}
+  .sizes{display:flex;align-items:flex-end;gap:30px}
+  .sizes>div{text-align:center}
+  .sizes p{margin:8px 0 0;font-family:var(--mono);font-size:10.5px;color:var(--faint)}
+
+  .sw{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line)}
+  .sw div{padding:14px 12px;min-height:100px;display:flex;flex-direction:column;justify-content:flex-end}
+  .sw b{font-size:11.5px;font-weight:600;display:block}
+  .sw code{font-family:var(--mono);font-size:10.5px;opacity:.75;display:block}
+
+  @media (max-width:760px){.sw{grid-template-columns:repeat(3,minmax(0,1fr))}}
+  .statusbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .chip{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:500;padding:3px 8px;border-radius:2px;border:1px solid}
+  .dot{width:6px;height:6px;border-radius:1px;flex:none}
+  .btn{background:var(--indigo);color:#fff;border:0;border-radius:2px;padding:6px 13px;font:inherit;font-size:12.5px;font-weight:500;cursor:pointer}
+
+  .spec{border-top:1px solid var(--line);padding-top:20px;margin-top:20px}
+  .spec:first-of-type{border-top:0;padding-top:0;margin-top:0}
+  .role{font-family:var(--mono);font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px}
+  .d1{font-family:var(--display);font-weight:700;font-size:clamp(26px,4.6vw,42px);letter-spacing:-.032em;line-height:1.08;margin:0}
+  .b1{font-size:15.5px;max-width:56ch;margin:0}
+  .m1{font-family:var(--mono);font-size:13.5px;margin:0;color:var(--slate)}
+
+  /* ---- in situ ---- */
+  .app{border:1px solid var(--line);font-size:12.5px;background:var(--surface)}
+  .app-top{height:50px;display:flex;align-items:center;gap:22px;padding:0 14px;border-bottom:1px solid var(--line)}
+  .app-top .lockup .name{font-size:16px}
+  .app-nav{display:flex;gap:18px;color:var(--slate);font-size:12.5px}
+  .app-nav .on{color:var(--indigo);font-weight:600}
+  .app-body{display:flex}
+  .rail{width:186px;border-right:1px solid var(--line);padding:12px 10px;color:var(--slate);background:var(--sunken)}
+  .rail div{padding:4px 8px;border-radius:2px}
+  .rail div.on{background:var(--indigo-wash);color:var(--indigo);font-weight:600}
+  .list{flex:1}
+  .tr{display:grid;grid-template-columns:92px 1fr 108px;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+  .tr:last-child{border-bottom:0}
+  .tr .chip{justify-self:start}
+  .tr.head{background:var(--sunken);color:var(--faint);font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-family:var(--mono)}
+  .key{font-family:var(--mono);font-size:11.5px;color:var(--indigo);background:var(--indigo-wash);border-radius:2px;padding:1px 6px;justify-self:start}
+
+  footer{padding:48px 0 88px;color:var(--slate);font-size:14px}
+  footer ul{padding-left:18px;margin:10px 0 0;max-width:62ch}
+  footer li{margin-bottom:7px}
+  strong{color:var(--midnight);font-weight:600}
+  code{font-family:var(--mono)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="mast">
+    <p class="eyebrow">BigCase · Identity direction C</p>
+    <h1>Matrix</h1>
+    <p>A suite is a grid — cases down, runs across, one cell per verdict. The identity is built from that
+    grid, and the name is drawn literally: one big cell among the small ones.</p>
+  </header>
+
+  <!-- ============ LOGO ============ -->
+  <section>
+    <h2>Mark &amp; lockup</h2>
+    <p class="note">Nine modules. The top-left four merge into one — the big case. The bottom-right module
+    holds the cyan: the one cell that changed since the last run.</p>
+
+    <div class="grid2">
+      <div class="box">
+        <div class="cell">
+          <svg width="112" height="112" viewBox="0 0 48 48" aria-label="BigCase mark">
+            <rect x="1" y="1" width="29.5" height="29.5" rx="3" fill="#2F3D9E"/>
+            <rect x="34" y="1" width="13" height="13" rx="2" fill="#C3C8E2"/>
+            <rect x="34" y="17.5" width="13" height="13" rx="2" fill="#C3C8E2"/>
+            <rect x="1" y="34" width="13" height="13" rx="2" fill="#C3C8E2"/>
+            <rect x="17.5" y="34" width="13" height="13" rx="2" fill="#C3C8E2"/>
+            <rect x="34" y="34" width="13" height="13" rx="2" fill="#00A6C7"/>
+          </svg>
+        </div>
+        <p class="cap">Mark — 112px</p>
+      </div>
+      <div class="box">
+        <div class="cell">
+          <div class="lockup">
+            <svg width="38" height="38" viewBox="0 0 48 48" aria-hidden="true">
+              <rect x="1" y="1" width="29.5" height="29.5" rx="3" fill="#2F3D9E"/>
+              <rect x="34" y="1" width="13" height="13" rx="2" fill="#C3C8E2"/>
+              <rect x="34" y="17.5" width="13" height="13" rx="2" fill="#C3C8E2"/>
+              <rect x="1" y="34" width="13" height="13" rx="2" fill="#C3C8E2"/>
+              <rect x="17.5" y="34" width="13" height="13" rx="2" fill="#C3C8E2"/>
+              <rect x="34" y="34" width="13" height="13" rx="2" fill="#00A6C7"/>
+            </svg>
+            <span class="name"><b>Big</b>Case</span>
+          </div>
+        </div>
+        <p class="cap">Horizontal lockup — weight, not colour, splits the name</p>
+      </div>
+      <div class="box">
+        <div class="cell dark">
+          <div class="lockup" style="color:#E9EBF5">
+            <svg width="38" height="38" viewBox="0 0 48 48" aria-hidden="true">
+              <rect x="1" y="1" width="29.5" height="29.5" rx="3" fill="#8C97E0"/>
+              <rect x="34" y="1" width="13" height="13" rx="2" fill="#4E5885"/>
+              <rect x="34" y="17.5" width="13" height="13" rx="2" fill="#4E5885"/>
+              <rect x="1" y="34" width="13" height="13" rx="2" fill="#4E5885"/>
+              <rect x="17.5" y="34" width="13" height="13" rx="2" fill="#4E5885"/>
+              <rect x="34" y="34" width="13" height="13" rx="2" fill="#33BBD6"/>
+            </svg>
+            <span class="name"><b>Big</b>Case</span>
+          </div>
+        </div>
+        <p class="cap">On midnight — both accents desaturated deliberately</p>
+      </div>
+      <div class="box">
+        <div class="cell wash">
+          <div class="sizes">
+            <div>
+              <svg width="48" height="48" viewBox="0 0 48 48"><rect width="48" height="48" rx="10" fill="#111634"/><g transform="translate(9 9) scale(.625)"><rect x="1" y="1" width="29.5" height="29.5" rx="3" fill="#8C97E0"/><rect x="34" y="1" width="13" height="13" rx="2" fill="#4A5378"/><rect x="34" y="17.5" width="13" height="13" rx="2" fill="#4A5378"/><rect x="1" y="34" width="13" height="13" rx="2" fill="#4A5378"/><rect x="17.5" y="34" width="13" height="13" rx="2" fill="#4A5378"/><rect x="34" y="34" width="13" height="13" rx="2" fill="#33BBD6"/></g></svg>
+              <p>Icon 48</p>
+            </div>
+            <div>
+              <svg width="28" height="28" viewBox="0 0 48 48"><rect width="48" height="48" rx="10" fill="#111634"/><g transform="translate(9 9) scale(.625)"><rect x="1" y="1" width="29.5" height="29.5" rx="3" fill="#8C97E0"/><rect x="34" y="1" width="13" height="13" rx="2" fill="#4A5378"/><rect x="34" y="17.5" width="13" height="13" rx="2" fill="#4A5378"/><rect x="1" y="34" width="13" height="13" rx="2" fill="#4A5378"/><rect x="17.5" y="34" width="13" height="13" rx="2" fill="#4A5378"/><rect x="34" y="34" width="13" height="13" rx="2" fill="#33BBD6"/></g></svg>
+              <p>28</p>
+            </div>
+            <div>
+              <svg width="16" height="16" viewBox="0 0 48 48"><rect width="48" height="48" rx="10" fill="#111634"/><rect x="9" y="9" width="19" height="19" rx="2" fill="#8C97E0"/><rect x="31" y="31" width="8" height="8" rx="1" fill="#33BBD6"/></svg>
+              <p>Favicon 16</p>
+            </div>
+          </div>
+        </div>
+        <p class="cap">At 16px the grid simplifies to two cells — big and changed</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ COLOUR ============ -->
+  <section>
+    <h2>Colour</h2>
+    <h3>Brand &amp; neutrals</h3>
+    <div class="sw">
+      <div style="background:#111634;color:#E9EBF5"><b>Midnight</b><code>#111634</code></div>
+      <div style="background:#2F3D9E;color:#fff"><b>Indigo — action</b><code>#2F3D9E</code></div>
+      <div style="background:#26327F;color:#fff"><b>Indigo hover</b><code>#26327F</code></div>
+      <div style="background:#00A6C7;color:#04252C"><b>Cyan — signature</b><code>#00A6C7</code></div>
+      <div style="background:#5A6280;color:#fff"><b>Slate</b><code>#5A6280</code></div>
+      <div style="background:#EDEFFA;color:#111634"><b>Indigo wash</b><code>#EDEFFA</code></div>
+      <div style="background:#F4F5FA;color:#111634"><b>Sunken</b><code>#F4F5FA</code></div>
+    </div>
+
+    <h3>Status keeps the whole saturation budget</h3>
+    <p class="note" style="margin-top:0">Cyan is a <em>chrome</em> colour — the logo cell, a focus ring, the
+    "changed since last run" marker. It never appears on a result. Indigo carries actions and active nav;
+    the closest status hue is retest violet, 30° away and used at a third of indigo's darkness.</p>
+    <div class="statusbar">
+      <span class="chip" style="color:#2E7D5B;border-color:#B8DBC9;background:#EEF7F2"><i class="dot" style="background:#2E7D5B"></i>Passed</span>
+      <span class="chip" style="color:#C0392B;border-color:#EFC3BD;background:#FCF0EE"><i class="dot" style="background:#C0392B"></i>Failed</span>
+      <span class="chip" style="color:#B7791F;border-color:#E8D3A8;background:#FBF5E9"><i class="dot" style="background:#B7791F"></i>Blocked</span>
+      <span class="chip" style="color:#7C5CBF;border-color:#D3C7EC;background:#F4F1FB"><i class="dot" style="background:#7C5CBF"></i>Retest</span>
+      <span class="chip" style="color:#6B7280;border-color:#D6DAE0;background:#F4F5F7"><i class="dot" style="background:#6B7280"></i>Skipped</span>
+      <span class="chip" style="color:#5A6280;border-color:#D8DBE8;background:#F5F6FA"><i class="dot" style="background:#9CA3AF"></i>Untested</span>
+      <button class="btn" style="margin-left:12px">New run</button>
+    </div>
+  </section>
+
+  <!-- ============ TYPE ============ -->
+  <section>
+    <h2>Typography</h2>
+    <div class="spec">
+      <p class="role">Display — Sora 600/700 · headings and wordmark, tight tracking</p>
+      <p class="d1">Two hundred and thirty cases,<br>one grid, one truth</p>
+    </div>
+    <div class="spec">
+      <p class="role">Body — Inter 400/500/600 · all UI text</p>
+      <p class="b1">Sora's geometry echoes the mark's modules, so the headline and the logo look built by
+      the same hand. Inter keeps dense tables legible at 12.5px, which is where this product actually lives.</p>
+    </div>
+    <div class="spec">
+      <p class="role">Utility — IBM Plex Mono 400/500 · identifiers, counts, timestamps</p>
+      <p class="m1">BC-1042 · TR-88 · 2026-07-31 14:02 UTC · 214/230 executed</p>
+    </div>
+  </section>
+
+  <!-- ============ IN SITU ============ -->
+  <section>
+    <h2>In the product</h2>
+    <div class="app">
+      <div class="app-top">
+        <div class="lockup">
+          <svg width="24" height="24" viewBox="0 0 48 48" aria-hidden="true">
+            <rect x="1" y="1" width="29.5" height="29.5" rx="3" fill="#2F3D9E"/>
+            <rect x="34" y="1" width="13" height="13" rx="2" fill="#C3C8E2"/>
+            <rect x="34" y="17.5" width="13" height="13" rx="2" fill="#C3C8E2"/>
+            <rect x="1" y="34" width="13" height="13" rx="2" fill="#C3C8E2"/>
+            <rect x="17.5" y="34" width="13" height="13" rx="2" fill="#C3C8E2"/>
+            <rect x="34" y="34" width="13" height="13" rx="2" fill="#00A6C7"/>
+          </svg>
+          <span class="name"><b>Big</b>Case</span>
+        </div>
+        <nav class="app-nav"><span class="on">Cases</span><span>Runs</span><span>Reports</span></nav>
+        <button class="btn" style="margin-left:auto">New case</button>
+      </div>
+      <div class="app-body">
+        <div class="rail">
+          <div class="on">Checkout</div>
+          <div style="padding-left:20px">Payments</div>
+          <div style="padding-left:20px">Refunds</div>
+          <div>Onboarding</div>
+        </div>
+        <div class="list">
+          <div class="tr head"><span>Key</span><span>Title</span><span>Last result</span></div>
+          <div class="tr"><span class="key">BC-1042</span><span>Card declined shows the issuer message</span>
+            <span class="chip" style="color:#2E7D5B;border-color:#B8DBC9;background:#EEF7F2"><i class="dot" style="background:#2E7D5B"></i>Passed</span></div>
+          <div class="tr"><span class="key">BC-1043</span><span>Refund above the original amount is rejected</span>
+            <span class="chip" style="color:#C0392B;border-color:#EFC3BD;background:#FCF0EE"><i class="dot" style="background:#C0392B"></i>Failed</span></div>
+          <div class="tr"><span class="key">BC-1044</span><span>Expired session recovers in place on save</span>
+            <span class="chip" style="color:#B7791F;border-color:#E8D3A8;background:#FBF5E9"><i class="dot" style="background:#B7791F"></i>Blocked</span></div>
+          <div class="tr"><span class="key">BC-1045</span><span>Suite tree keeps order after a folder move</span>
+            <span class="chip" style="color:#5A6280;border-color:#D8DBE8;background:#F5F6FA"><i class="dot" style="background:#9CA3AF"></i>Untested</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <strong>Where the boldness is spent:</strong> the module grid, carried out of the logo and into the page
+    itself — the faint 64px rule behind this document is the same grid. The signature element is the cyan
+    "changed" cell, which becomes a real UI affordance, not just a logo detail.
+    <ul>
+      <li><strong>Most extensible</strong> — the mark generates favicons, empty-state illustrations, loading skeletons and report covers without new drawing.</li>
+      <li><strong>Risk:</strong> nine-square logos are a crowded genre. It earns its place only because the 2×2 merge means something specific here.</li>
+      <li><strong>Cost:</strong> medium. New action colour and one new display face; the neutral ramp shifts cool but keeps its structure.</li>
+      <li><strong>Fonts:</strong> Sora (SIL OFL), Inter (SIL OFL), IBM Plex Mono (SIL OFL) — all self-hostable.</li>
+    </ul>
+  </footer>
+
+</div>
+</body>
+</html>

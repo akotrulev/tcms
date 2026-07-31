@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BigCase — Direction B · Signal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@112,600;112,700;112,800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --graphite:#0F1115;
+    --graphite-2:#191D24;
+    --bone:#FAFAF8;
+    --bone-2:#F0F0EC;
+    --line:#DCDCD6;
+    --line-dark:#2B313B;
+    --grey:#5C636E;
+    --grey-light:#9AA0AA;
+
+    --magenta:#C0246B;
+    --magenta-hover:#A31A59;
+    --magenta-dark-ui:#E8639D;
+    --magenta-wash:#FCEDF3;
+
+    --passed:#2E7D5B; --failed:#C0392B; --blocked:#B7791F;
+    --skipped:#6B7280; --untested:#9CA3AF; --retest:#7C5CBF;
+
+    --display:'Archivo',system-ui,sans-serif;
+    --body:'Inter',system-ui,sans-serif;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bone);color:var(--graphite);font-family:var(--body);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1040px;margin:0 auto;padding:0 32px}
+  .disp{font-family:var(--display);font-variation-settings:'wdth' 112;font-weight:800;text-transform:uppercase;letter-spacing:-.012em}
+
+  /* ---- dark hero: controlled density, high contrast ---- */
+  .hero{background:var(--graphite);color:var(--bone);padding:88px 0 80px}
+  .hero .wrap{position:relative}
+  .hero .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--magenta-dark-ui);margin:0 0 22px}
+  .hero h1{font-size:clamp(46px,10vw,104px);line-height:.92;margin:0 0 26px}
+  .hero .rule{height:5px;background:var(--magenta);width:180px;margin:0 0 26px}
+  .hero p{max-width:50ch;color:#B9BFC9;font-size:17px;margin:0}
+
+  section{padding:68px 0;border-bottom:1px solid var(--line)}
+  h2{font-family:var(--display);font-variation-settings:'wdth' 112;font-weight:700;text-transform:uppercase;font-size:14px;letter-spacing:.12em;margin:0 0 8px}
+  h2::after{content:"";display:block;width:34px;height:3px;background:var(--magenta);margin-top:10px}
+  h3{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--grey);margin:32px 0 12px}
+  .note{color:var(--grey);font-size:14px;max-width:60ch;margin:22px 0 30px}
+
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:28px}
+  .grid2>div{display:grid;grid-template-rows:1fr auto}
+  .grid2 .plate{height:100%}
+  .plate{background:var(--bone-2);border:1px solid var(--line);padding:44px;display:flex;align-items:center;justify-content:center;min-height:160px}
+  .plate.dark{background:var(--graphite);border-color:var(--graphite)}
+  .plate.hot{background:var(--magenta);border-color:var(--magenta)}
+  .cap{font-family:var(--mono);font-size:11px;color:var(--grey);margin-top:9px;letter-spacing:.03em}
+
+  .lockup{display:flex;align-items:center;gap:14px}
+  .lockup .name{font-family:var(--display);font-variation-settings:'wdth' 112;font-weight:800;text-transform:uppercase;font-size:28px;letter-spacing:-.008em;line-height:1}
+  .sizes{display:flex;align-items:flex-end;gap:34px}
+  .sizes>div{text-align:center}
+
+  .sw{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:0;border:1px solid var(--line)}
+  .sw div{padding:16px 13px;min-height:104px;display:flex;flex-direction:column;justify-content:flex-end;border-right:1px solid rgba(0,0,0,.06)}
+  .sw b{font-size:12px;font-weight:600;display:block;text-transform:uppercase;letter-spacing:.04em}
+  .sw code{font-family:var(--mono);font-size:11px;opacity:.75;display:block}
+
+  @media (max-width:760px){.sw{grid-template-columns:repeat(3,minmax(0,1fr))}}
+  .statusbar{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;padding:3px 8px;border-radius:2px;border:1px solid;font-family:var(--body)}
+  .dot{width:6px;height:6px;flex:none}
+
+  .spec{border-top:1px solid var(--line);padding-top:22px;margin-top:22px}
+  .spec:first-of-type{border-top:0;padding-top:0;margin-top:0}
+  .role{font-family:var(--mono);font-size:11px;color:var(--grey);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px}
+  .d1{font-family:var(--display);font-variation-settings:'wdth' 112;font-weight:800;text-transform:uppercase;font-size:clamp(30px,5.6vw,54px);line-height:.95;letter-spacing:-.015em;margin:0}
+  .b1{font-size:16px;max-width:56ch;margin:0}
+  .m1{font-family:var(--mono);font-size:14px;margin:0;color:var(--grey)}
+
+  /* ---- in situ ---- */
+  .app{border:1px solid var(--line);font-size:13px;background:#fff}
+  .app-top{height:54px;display:flex;align-items:center;gap:24px;padding:0 16px;background:var(--graphite);color:var(--bone)}
+  .app-top .lockup .name{font-size:17px}
+  .app-nav{display:flex;gap:20px;color:#A6ADB8;font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.06em}
+  .app-nav .on{color:#fff;box-shadow:inset 0 -3px 0 var(--magenta);padding-bottom:17px}
+  .btn{margin-left:auto;background:var(--magenta);color:#fff;border:0;padding:7px 14px;font:inherit;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;cursor:pointer}
+  .app-body{display:flex}
+  .rail{width:190px;border-right:1px solid var(--line);padding:14px 10px;color:var(--grey);font-size:13px;background:var(--bone-2)}
+  .rail div{padding:5px 8px}
+  .rail div.on{background:#fff;color:var(--graphite);font-weight:600;box-shadow:inset 3px 0 0 var(--magenta)}
+  .list{flex:1}
+  .tr{display:grid;grid-template-columns:96px 1fr 112px;gap:12px;align-items:center;padding:11px 16px;border-bottom:1px solid var(--line)}
+  .tr:last-child{border-bottom:0}
+  .tr .chip{justify-self:start}
+  .tr.head{background:var(--bone-2);color:var(--grey);font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-family:var(--mono)}
+  .key{font-family:var(--mono);font-size:12px;font-weight:500;color:var(--graphite);justify-self:start;box-shadow:inset 0 -6px 0 var(--magenta-wash)}
+
+  footer{padding:56px 0 96px;color:var(--grey);font-size:14px}
+  footer ul{padding-left:18px;margin:10px 0 0;max-width:62ch}
+  footer li{margin-bottom:7px}
+  strong{color:var(--graphite);font-weight:600}
+  code{font-family:var(--mono)}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="wrap">
+    <p class="eyebrow">BigCase · Identity direction B</p>
+    <h1 class="disp">Signal</h1>
+    <div class="rule"></div>
+    <p>A product with a spine. Near-monochrome graphite, one hot accent spent only on the thing you
+    are meant to press, and a wordmark wide enough to hold a page on its own.</p>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- ============ LOGO ============ -->
+  <section>
+    <h2>Mark &amp; lockup</h2>
+    <p class="note">An open <em>C</em> — a case with its lid off — holding a solid block. The gap faces
+    right, into the wordmark, so the mark points at the name instead of sitting beside it.</p>
+
+    <div class="grid2">
+      <div>
+        <div class="plate">
+          <svg width="116" height="116" viewBox="0 0 48 48" fill="none" aria-label="BigCase mark">
+            <path d="M37.92 14.25 A17 17 0 1 0 37.92 33.75" stroke="#0F1115" stroke-width="6" stroke-linecap="butt"/>
+            <rect x="17.5" y="17.5" width="13" height="13" rx="1.5" fill="#C0246B"/>
+          </svg>
+        </div>
+        <p class="cap">Mark — 116px</p>
+      </div>
+      <div>
+        <div class="plate">
+          <div class="lockup">
+            <svg width="42" height="42" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+              <path d="M37.92 14.25 A17 17 0 1 0 37.92 33.75" stroke="#0F1115" stroke-width="6" stroke-linecap="butt"/>
+              <rect x="17.5" y="17.5" width="13" height="13" rx="1.5" fill="#C0246B"/>
+            </svg>
+            <span class="name">BigCase</span>
+          </div>
+        </div>
+        <p class="cap">Horizontal lockup</p>
+      </div>
+      <div>
+        <div class="plate dark">
+          <div class="lockup" style="color:#FAFAF8">
+            <svg width="42" height="42" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+              <path d="M37.92 14.25 A17 17 0 1 0 37.92 33.75" stroke="#FAFAF8" stroke-width="6" stroke-linecap="butt"/>
+              <rect x="17.5" y="17.5" width="13" height="13" rx="1.5" fill="#E8639D"/>
+            </svg>
+            <span class="name">BigCase</span>
+          </div>
+        </div>
+        <p class="cap">On graphite — accent lifted to #E8639D</p>
+      </div>
+      <div>
+        <div class="plate hot">
+          <div class="lockup" style="color:#fff">
+            <svg width="42" height="42" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+              <path d="M37.92 14.25 A17 17 0 1 0 37.92 33.75" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+              <rect x="17.5" y="17.5" width="13" height="13" rx="1.5" fill="#0F1115"/>
+            </svg>
+            <span class="name">BigCase</span>
+          </div>
+        </div>
+        <p class="cap">Reversed on accent — one-colour safe</p>
+      </div>
+    </div>
+
+    <div class="plate" style="margin-top:28px;justify-content:flex-start;gap:40px">
+      <div class="sizes">
+        <div>
+          <svg width="48" height="48" viewBox="0 0 48 48"><rect width="48" height="48" fill="#0F1115"/><path d="M35.6 16.4 A13.5 13.5 0 1 0 35.6 31.6" stroke="#FAFAF8" stroke-width="5" fill="none"/><rect x="19.5" y="19.5" width="9" height="9" rx="1" fill="#E8639D"/></svg>
+          <p class="cap">Icon 48</p>
+        </div>
+        <div>
+          <svg width="28" height="28" viewBox="0 0 48 48"><rect width="48" height="48" fill="#0F1115"/><path d="M35.6 16.4 A13.5 13.5 0 1 0 35.6 31.6" stroke="#FAFAF8" stroke-width="5" fill="none"/><rect x="19.5" y="19.5" width="9" height="9" rx="1" fill="#E8639D"/></svg>
+          <p class="cap">28</p>
+        </div>
+        <div>
+          <svg width="16" height="16" viewBox="0 0 48 48"><rect width="48" height="48" fill="#0F1115"/><path d="M35.6 16.4 A13.5 13.5 0 1 0 35.6 31.6" stroke="#FAFAF8" stroke-width="6.5" fill="none"/><rect x="19" y="19" width="10" height="10" fill="#E8639D"/></svg>
+          <p class="cap">Favicon 16</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ COLOUR ============ -->
+  <section>
+    <h2>Colour</h2>
+    <h3>Brand &amp; neutrals</h3>
+    <div class="sw">
+      <div style="background:#0F1115;color:#FAFAF8"><b>Graphite</b><code>#0F1115</code></div>
+      <div style="background:#191D24;color:#FAFAF8"><b>Graphite 2</b><code>#191D24</code></div>
+      <div style="background:#C0246B;color:#fff"><b>Magenta — action</b><code>#C0246B</code></div>
+      <div style="background:#A31A59;color:#fff"><b>Magenta hover</b><code>#A31A59</code></div>
+      <div style="background:#5C636E;color:#fff"><b>Grey</b><code>#5C636E</code></div>
+      <div style="background:#F0F0EC;color:#0F1115"><b>Bone 2</b><code>#F0F0EC</code></div>
+      <div style="background:#FAFAF8;color:#0F1115"><b>Bone</b><code>#FAFAF8</code></div>
+    </div>
+
+    <h3>Status keeps the whole saturation budget</h3>
+    <p class="note" style="margin-top:0">The one real risk in this direction: magenta (330°) against failed
+    red (6°). They are separated here by <em>shape</em> as well as hue — the action is a hard-edged filled
+    button, a verdict is always an outlined chip with a dot and a word. Colour is never the only signal.</p>
+    <div class="statusbar">
+      <span class="chip" style="color:#2E7D5B;border-color:#B8DBC9;background:#EEF7F2"><i class="dot" style="background:#2E7D5B"></i>Passed</span>
+      <span class="chip" style="color:#C0392B;border-color:#EFC3BD;background:#FCF0EE"><i class="dot" style="background:#C0392B"></i>Failed</span>
+      <span class="chip" style="color:#B7791F;border-color:#E8D3A8;background:#FBF5E9"><i class="dot" style="background:#B7791F"></i>Blocked</span>
+      <span class="chip" style="color:#7C5CBF;border-color:#D3C7EC;background:#F4F1FB"><i class="dot" style="background:#7C5CBF"></i>Retest</span>
+      <span class="chip" style="color:#6B7280;border-color:#D6DAE0;background:#F4F5F7"><i class="dot" style="background:#6B7280"></i>Skipped</span>
+      <span class="chip" style="color:#5C636E;border-color:#D9DCE0;background:#F5F6F7"><i class="dot" style="background:#9CA3AF"></i>Untested</span>
+      <button class="btn" style="margin-left:14px">New run</button>
+    </div>
+  </section>
+
+  <!-- ============ TYPE ============ -->
+  <section>
+    <h2>Typography</h2>
+    <div class="spec">
+      <p class="role">Display — Archivo 800, width 112 · wordmark and headings only, always uppercase</p>
+      <p class="d1">Every case has a<br>last known verdict</p>
+    </div>
+    <div class="spec">
+      <p class="role">Body — Inter 400/500/600 · all UI text</p>
+      <p class="b1">Archivo is loud, so it is rationed: page titles and the wordmark, nothing else. Inter
+      does the work. The contrast between the two <em>is</em> the typographic idea.</p>
+    </div>
+    <div class="spec">
+      <p class="role">Utility — JetBrains Mono 400/500 · identifiers, counts, timestamps</p>
+      <p class="m1">BC-1042 · TR-88 · 2026-07-31 14:02 UTC · 214/230 executed</p>
+    </div>
+  </section>
+
+  <!-- ============ IN SITU ============ -->
+  <section>
+    <h2>In the product</h2>
+    <div class="app">
+      <div class="app-top">
+        <div class="lockup">
+          <svg width="26" height="26" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+            <path d="M35.6 16.4 A13.5 13.5 0 1 0 35.6 31.6" stroke="#FAFAF8" stroke-width="5.5" fill="none"/>
+            <rect x="19.5" y="19.5" width="9" height="9" rx="1" fill="#E8639D"/>
+          </svg>
+          <span class="name">BigCase</span>
+        </div>
+        <nav class="app-nav"><span class="on">Cases</span><span>Runs</span><span>Reports</span></nav>
+        <button class="btn">New case</button>
+      </div>
+      <div class="app-body">
+        <div class="rail">
+          <div class="on">Checkout</div>
+          <div style="padding-left:20px">Payments</div>
+          <div style="padding-left:20px">Refunds</div>
+          <div>Onboarding</div>
+        </div>
+        <div class="list">
+          <div class="tr head"><span>Key</span><span>Title</span><span>Last result</span></div>
+          <div class="tr"><span class="key">BC-1042</span><span>Card declined shows the issuer message</span>
+            <span class="chip" style="color:#2E7D5B;border-color:#B8DBC9;background:#EEF7F2"><i class="dot" style="background:#2E7D5B"></i>Passed</span></div>
+          <div class="tr"><span class="key">BC-1043</span><span>Refund above the original amount is rejected</span>
+            <span class="chip" style="color:#C0392B;border-color:#EFC3BD;background:#FCF0EE"><i class="dot" style="background:#C0392B"></i>Failed</span></div>
+          <div class="tr"><span class="key">BC-1044</span><span>Expired session recovers in place on save</span>
+            <span class="chip" style="color:#B7791F;border-color:#E8D3A8;background:#FBF5E9"><i class="dot" style="background:#B7791F"></i>Blocked</span></div>
+          <div class="tr"><span class="key">BC-1045</span><span>Suite tree keeps order after a folder move</span>
+            <span class="chip" style="color:#5C636E;border-color:#D9DCE0;background:#F5F6F7"><i class="dot" style="background:#9CA3AF"></i>Untested</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <strong>Where the boldness is spent:</strong> the wide uppercase wordmark and the single magenta stroke.
+    Nothing else in the interface is allowed to be loud.
+    <ul>
+      <li><strong>Most distinctive of the three</strong> — a magenta-accented QA tool is not a thing anyone else is shipping.</li>
+      <li><strong>Risk:</strong> magenta next to failure red on a dense results screen. Mitigated by shape, but it is a real cost and worth a live look before committing.</li>
+      <li><strong>Cost:</strong> largest change to <code>index.css</code> — new action colour, new dark-mode pair, two new font families.</li>
+      <li><strong>Fonts:</strong> Archivo (SIL OFL), Inter (SIL OFL), JetBrains Mono (SIL OFL) — all self-hostable.</li>
+    </ul>
+  </footer>
+
+</div>
+</body>
+</html>
