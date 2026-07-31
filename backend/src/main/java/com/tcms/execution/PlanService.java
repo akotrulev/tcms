@@ -1,0 +1,132 @@
+package com.tcms.execution;
+
+import com.tcms.project.ProjectService;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * Test plans — the {@code execution} module's first read.
+ *
+ * <h2>Two gates, borrowed unchanged</h2>
+ *
+ * <p>{@link ProjectService#readVisible} answers "may this caller see this project" — company
+ * membership, then the explicit project grant — exactly as every read in {@code repository} does.
+ * Nothing in this package decides that question itself; a second answer to "may they?" is the bug
+ * class plan §6b names, and the quieter of two answers is the one that decides what a client reads.
+ *
+ * <p>The second gate is inside the query: {@link TestPlanRepository#findLiveInProject} matches the
+ * project as well as the plan. Without it a plan id from a sibling project resolves through a path
+ * naming a project the caller does hold — and every cross-company test still passes, because the row
+ * is in the caller's own company.
+ *
+ * <h2>What a plan does not carry yet, and why saying so is better than computing something</h2>
+ *
+ * <p>{@code passRate} and {@code coverage} are null, always. Both are aggregates over the plan's
+ * runs and both belong to the statistics endpoint, which this slice does not implement (see the
+ * contract's own note on that path). The contract marks them nullable; the SPA renders a null as
+ * "not measured". Any number this service could cheaply invent would be a different number from the
+ * one the statistics endpoint will produce, on the same screen, and the first person to notice would
+ * be a client reading a report.
+ */
+@Service
+public class PlanService {
+
+    private final ProjectService projects;
+    private final TestPlanRepository plans;
+    private final ConfigurationRepository configurations;
+    private final CaseFacts cases;
+    private final PlanCriteria criteria;
+
+    public PlanService(
+            ProjectService projects,
+            TestPlanRepository plans,
+            ConfigurationRepository configurations,
+            CaseFacts cases,
+            PlanCriteria criteria) {
+
+        this.projects = projects;
+        this.plans = plans;
+        this.configurations = configurations;
+        this.cases = cases;
+        this.criteria = criteria;
+    }
+
+    /**
+     * A project's plans, or empty when the caller may not see the project.
+     *
+     * <p>An empty <em>list</em> and an empty {@link Optional} mean different things and the
+     * controller renders them differently: the first is a reachable project with no plans, which is
+     * the state of every freshly provisioned project, and the second is a 404.
+     */
+    @Transactional(readOnly = true)
+    public Optional<List<TestPlanView>> list(UUID userId, UUID projectId) {
+        return projects.readVisible(userId, projectId, project -> {
+            List<TestPlan> rows = plans.findLiveInProject(project.getId());
+            Map<UUID, Long> caseCounts = cases.caseCountsByPlan(
+                    project.getId(), rows.stream().map(TestPlan::getId).toList());
+            List<ConfigurationView> projectConfigurations = configurationsOf(project.getId());
+
+            return rows.stream()
+                    .map(plan -> view(plan, caseCounts, projectConfigurations))
+                    .toList();
+        });
+    }
+
+    /** One plan, or empty when the caller may not see the project or the plan is not in it. */
+    @Transactional(readOnly = true)
+    public Optional<TestPlanView> findOne(UUID userId, UUID projectId, UUID planId) {
+        return projects.readVisible(userId, projectId, project -> project)
+                .flatMap(project -> plans.findLiveInProject(project.getId(), planId))
+                .map(plan -> view(
+                        plan,
+                        cases.caseCountsByPlan(plan.getProjectId(), List.of(plan.getId())),
+                        configurationsOf(plan.getProjectId())));
+    }
+
+    /**
+     * The wire shape, assembled once for both endpoints.
+     *
+     * <p>{@code configurations} is the <em>project's</em> list rather than a per-plan one, because
+     * {@code configuration} has no plan column: ERD §5's diagram draws {@code TEST_PLAN ||--o{
+     * CONFIGURATION} and {@code V1} implements it per project. The contract puts the array on the
+     * plan, so the plan serves what a run created from it may choose between — which is the question
+     * the field is read to answer.
+     */
+    private TestPlanView view(
+            TestPlan plan, Map<UUID, Long> caseCounts, List<ConfigurationView> configurations) {
+
+        return new TestPlanView(
+                plan.getId(),
+                plan.getKey(),
+                plan.getKeySeq(),
+                plan.getName(),
+                plan.getStatus(),
+                plan.getMilestoneName(),
+                plan.getMilestoneDate(),
+                // A plan with no scope items has no GROUP BY row at all, so zero is the normal path
+                // for a plan someone has only just named — not a fallback for a broken query.
+                caseCounts.getOrDefault(plan.getId(), 0L),
+                null,
+                null,
+                plan.getDescription(),
+                criteria.parse(plan.getEntryCriteria()),
+                criteria.parse(plan.getExitCriteria()),
+                configurations,
+                plan.getCurrentVersionNo(),
+                plan.getLockVersion());
+    }
+
+    private List<ConfigurationView> configurationsOf(UUID projectId) {
+        return configurations.findByProjectIdOrderByIsDefaultDescNameAsc(projectId).stream()
+                .map(configuration -> new ConfigurationView(
+                        configuration.getId(),
+                        configuration.getName(),
+                        configuration.isDefault(),
+                        criteria.attributes(configuration.getAttributes())))
+                .toList();
+    }
+}

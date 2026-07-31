@@ -63,12 +63,15 @@ class ModuleStructureTest {
 
         assertThat(detected)
                 .as("""
-                        The six modules that exist today. Adding a module here is expected as the plan's \
-                        remaining modules land (execution, documentation, reporting, work, shared) — but \
-                        it must be a deliberate edit, so that whoever adds one also reads the \
-                        allowedDependencies rule they are now subject to.""")
+                        The seven modules that exist today — `execution` joined them in backend M2 \
+                        slice 1. Adding a module here is expected as the plan's remaining modules land \
+                        (documentation, reporting, work, shared) — but it must be a deliberate edit, so \
+                        that whoever adds one also reads the allowedDependencies rule they are now \
+                        subject to. In `execution`'s case that rule is the whole design: it may not \
+                        depend on `repository`, and its package comment records what it does instead.""")
                 .containsExactly(
-                        "auth", "identity", "project", "provisioning", "repository", "tenancy");
+                        "auth", "execution", "identity", "project", "provisioning", "repository",
+                        "tenancy");
     }
 
     @Test
