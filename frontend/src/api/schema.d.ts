@@ -3320,7 +3320,14 @@ export interface components {
             /** Format: uuid */
             id: string;
             role: components["schemas"]["Role"];
-            user: components["schemas"]["UserRef"];
+            /**
+             * @description **Null on a team grant.** `ck_role_assignment_subject` is user *xor* team, and
+             *     `POST /role-assignments` takes exactly one of `userId` and `teamId` — so a grant
+             *     made to a team names no user, and the previous non-nullable `$ref` made the
+             *     generated type claim otherwise. Third time this idiom has been needed for the same
+             *     reason: see `EntityVersion.createdBy` and `TestExecutionSummary.executedBy`.
+             */
+            user: components["schemas"]["UserRef"] | null;
             team?: {
                 /** Format: uuid */
                 id: string;

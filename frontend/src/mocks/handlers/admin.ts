@@ -130,13 +130,12 @@ export const adminHandlers = [
     const created: (typeof db.roleAssignments)[number] = {
       id: newId(),
       role,
-      // Null for a team grant. The contract declares `user` required and non-nullable and the
-      // server cannot honour that — ck_role_assignment_subject makes it user XOR team — so the
-      // mock answers the shape the server answers rather than the one the schema declares. See
-      // handoff §39; this cast goes when the contract is corrected.
-      user: (person
+      // Null for a team grant — ck_role_assignment_subject makes the subject user XOR team.
+      // The contract said `user` was required and non-nullable, which the server could not
+      // honour; corrected at integration (§41), so the cast lane B left here is gone.
+      user: person
         ? { id: person.id, displayName: person.displayName, email: person.email, avatarUrl: null }
-        : null) as (typeof db.roleAssignments)[number]['user'],
+        : null,
       team: team ? { id: team.id, name: team.name } : null,
       projectId,
       projectName: project?.name ?? null,
