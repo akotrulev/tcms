@@ -11,7 +11,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useState } from 'react';
-import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
+import { Link as RouterLink, useParams } from 'react-router-dom';
 import type { TestPlan } from '../../api/types';
 import { usePlans, useProject } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
@@ -28,7 +28,6 @@ import { PlanCreateDialog } from './PlanCreateDialog';
  */
 export function PlanListPage() {
   const { projectId = '' } = useParams();
-  const navigate = useNavigate();
   const project = useProject(projectId);
   const plans = usePlans(projectId);
   const [creating, setCreating] = useState(false);
@@ -72,7 +71,20 @@ export function PlanListPage() {
           projectId={projectId}
           open
           onClose={() => setCreating(false)}
-          onCreated={(plan) => navigate(`/projects/${projectId}/plans/${plan.id}`)}
+          /*
+            Stays on the list, and that is the live browser pass talking rather than a preference.
+            `/plans/:planId` is the plan STATISTICS route, and that endpoint is deliberately
+            unimplemented server-side (§38: `bySuite` needs the live suite tree, `coveragePercent`
+            a repository-wide denominator, `trend` a `reporting` module that does not exist). So
+            navigating there on success showed the user a red "Something didn't load" toast and a
+            "Not found" panel one second after their plan was created successfully — the create
+            worked and the app said it had not.
+
+            The list is the honest destination until statistics exists: the new plan is the first
+            row, with the case count its scope expands to. Point this back at the plan the day
+            that endpoint is served.
+          */
+          onCreated={() => setCreating(false)}
         />
       )}
 

@@ -101,17 +101,35 @@ function RunBody({ data, projectId, runId }: { data: TestRunDetail; projectId: s
           <PassRateSummary counts={data.counts} testId="RunDetail.PassRate" />
           <ResultBar counts={data.counts} height={14} showLegend testId="RunDetail.ResultBar" />
           <Stack direction="row" sx={{ gap: 3, flexWrap: 'wrap' }}>
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-              Started {formatDateTime(data.startedAt)}
-            </Typography>
+            {/*
+              Three states, not two. Until runs could be created, every fixture was IN_PROGRESS
+              with a `startedAt`, so the un-started case had never been rendered — and the first
+              live run created through the new endpoint read "Started — · Still running", which
+              is two false claims about a run nobody has opened yet.
+
+              A run starts when somebody records the first result, not when it is named (see
+              `TestRun.create`), so a null `startedAt` is an ordinary and common state rather
+              than missing data.
+            */}
+            {data.startedAt ? (
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                Started {formatDateTime(data.startedAt)}
+              </Typography>
+            ) : (
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                Not started yet
+              </Typography>
+            )}
             {data.completedAt ? (
               <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                 Finished {formatDateTime(data.completedAt)}
               </Typography>
             ) : (
-              <Typography variant="caption" sx={{ color: 'var(--color-info)' }}>
-                Still running
-              </Typography>
+              data.startedAt && (
+                <Typography variant="caption" sx={{ color: 'var(--color-info)' }}>
+                  Still running
+                </Typography>
+              )
             )}
           </Stack>
         </Stack>
