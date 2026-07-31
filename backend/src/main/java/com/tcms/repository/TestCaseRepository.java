@@ -89,4 +89,47 @@ public interface TestCaseRepository extends JpaRepository<TestCase, UUID> {
             """)
     boolean existsByAutomationKeyOtherThan(
             @Param("automationKey") String automationKey, @Param("caseId") UUID caseId);
+
+    /**
+     * The same check for a case that does not exist yet, and therefore with nothing to exclude.
+     *
+     * <p>Deliberately a second method rather than
+     * {@link #existsByAutomationKeyOtherThan}(key, {@code UUID.randomUUID()}). A random id passed as
+     * "the case to exclude" reads as if it excludes something, works by accident, and is the line
+     * somebody later copies into a path where the exclusion matters. Every qualification the sibling's
+     * header gives — company-wide, and soft-deleted rows still hold their keys — applies here
+     * unchanged, because it is the same partial unique index doing the enforcing.
+     */
+    @Query("""
+            SELECT COUNT(tc) > 0 FROM TestCase tc
+             WHERE tc.automationKey = :automationKey
+            """)
+    boolean existsByAutomationKey(@Param("automationKey") String automationKey);
+
+    /**
+     * The case a previous request with this {@code Idempotency-Key} already created, if any.
+     *
+     * <h2>Scoped to the project because the constraint is</h2>
+     *
+     * <p>{@code test_case_created_idempotency_key_idx} is unique on
+     * {@code (company_id, project_id, created_idempotency_key)} and this query names exactly those
+     * three — company through RLS and the Hibernate filter, the other two explicitly. A lookup wider
+     * or narrower than the constraint enforcing it is the failure
+     * {@link #existsByAutomationKeyOtherThan}'s header describes from the other direction: the check
+     * passes and the insert fails, so the caller gets a 500 out of a request that validated.
+     *
+     * <h2>No {@code deletedAt IS NULL}, and that is the whole point</h2>
+     *
+     * <p>A retry whose original case has since been deleted must still be recognised as a retry —
+     * otherwise the second attempt creates a duplicate of something somebody deliberately removed, and
+     * the index would refuse it anyway. The caller decides what to answer for a replay pointing at a
+     * deleted case; this method's job is to say the key was used.
+     */
+    @Query("""
+            SELECT tc FROM TestCase tc
+             WHERE tc.projectId = :projectId
+               AND tc.createdIdempotencyKey = :idempotencyKey
+            """)
+    Optional<TestCase> findByIdempotencyKey(
+            @Param("projectId") UUID projectId, @Param("idempotencyKey") String idempotencyKey);
 }

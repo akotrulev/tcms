@@ -53,15 +53,15 @@ record ApiProblem(
                 null);
     }
 
-    static ApiProblem forbidden() {
-        return new ApiProblem(
-                BLANK_TYPE,
-                "Not allowed",
-                403,
-                // Says what they cannot do, not which permission they lack: the permission key is
-                // not actionable by someone who cannot grant it to themselves, and naming it
-                // publishes the catalogue to exactly the caller who is not entitled to it.
-                "You do not have permission to edit test cases in this project.",
-                null);
+    /**
+     * @param detail what the caller cannot do, in their words — <strong>never the permission
+     *               key</strong>. A key is not actionable by someone who cannot grant it to
+     *               themselves, and naming it publishes the catalogue to exactly the caller who is not
+     *               entitled to it. Passed in rather than fixed because the action differs per
+     *               endpoint and "you cannot do that" tells a user nothing about which of the three
+     *               things on the screen was refused.
+     */
+    static ApiProblem forbidden(String detail) {
+        return new ApiProblem(BLANK_TYPE, "Not allowed", 403, detail, null);
     }
 }

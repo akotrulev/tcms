@@ -717,7 +717,18 @@ export interface paths {
             };
         };
         put?: never;
-        /** Create a test case */
+        /**
+         * Create a test case
+         * @description `key` is server-allocated from the company's counter (`TC-n`, sequential per **company** and
+         *     therefore shared across its projects — §6t). `lifecycleStatus` is always `DRAFT`: a status an
+         *     ordinary create could set is an approval its author granted themselves, which belongs to the
+         *     review workflow (§6g). The creator becomes the owner — `ownerId` on the input is refused, since
+         *     naming someone else needs a membership check.
+         *
+         *     Version **1** is written in the same transaction as the case, so a case created here has a
+         *     gapless history. Cases that predate this endpoint have no v1 and their first edit is v2; see
+         *     `EntityVersion`.
+         */
         post: {
             parameters: {
                 query?: {
@@ -743,7 +754,21 @@ export interface paths {
                     releaseVersion?: string;
                     sort?: string;
                 };
-                header?: never;
+                header?: {
+                    /**
+                     * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
+                     *     already succeeded answers **200** with the case that intent created, instead of creating a
+                     *     second one — so pressing Save again after a timeout is safe.
+                     *
+                     *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
+                     *     it across retries. A key generated per attempt is the mistake that makes the header look
+                     *     right and do nothing.
+                     *
+                     *     Scoped to the project the request is addressed to, which is the scope the uniqueness
+                     *     constraint behind it uses. Optional: omitted, every call creates. At most 200 characters.
+                     */
+                    "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                };
                 path: {
                     projectId: components["parameters"]["ProjectId"];
                 };
@@ -755,8 +780,11 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description Created — key is server-allocated (TC-n, per company) */
-                201: {
+                /**
+                 * @description **A replay.** The `Idempotency-Key` had already created this case, so nothing was created
+                 *     by this request — which is why it is not a 201 and carries no `Location`.
+                 */
+                200: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -764,6 +792,20 @@ export interface paths {
                         "application/json": components["schemas"]["TestCase"];
                     };
                 };
+                /** @description Created — key is server-allocated (TC-n, per company) */
+                201: {
+                    headers: {
+                        /** @description The created case's own URL. */
+                        Location?: string;
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TestCase"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
             };
         };
         delete?: never;
@@ -948,6 +990,7 @@ export interface paths {
                         "application/json": components["schemas"]["TestCase"];
                     };
                 };
+                400: components["responses"]["BadRequest"];
                 403: components["responses"]["Forbidden"];
                 404: components["responses"]["NotFound"];
                 409: components["responses"]["Conflict"];
@@ -2941,6 +2984,25 @@ export interface components {
                 "application/json": components["schemas"]["Problem"];
             };
         };
+        /**
+         * @description The request was understood and will not be stored. `Problem.errors` is keyed by the field
+         *     name **as spelled on the input schema**, so a form can land each message on the input that
+         *     caused it.
+         *
+         *     Two things arrive as a 400 that a reader might expect elsewhere. A value that is legal in
+         *     isolation but not offered by this project — a `suiteId` from another project — is a field
+         *     error rather than a 404, because the target resolved fine and the picker is where the message
+         *     belongs. And a field the endpoint does not yet implement is **refused rather than ignored**:
+         *     accepting it would be a save that reports success and discards what the user typed.
+         */
+        BadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Problem"];
+            };
+        };
         /** @description Not found */
         NotFound: {
             headers: {
@@ -3003,6 +3065,19 @@ export interface components {
          *     the SPA always sends it.
          */
         IfMatch: string;
+        /**
+         * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
+         *     already succeeded answers **200** with the case that intent created, instead of creating a
+         *     second one — so pressing Save again after a timeout is safe.
+         *
+         *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
+         *     it across retries. A key generated per attempt is the mistake that makes the header look
+         *     right and do nothing.
+         *
+         *     Scoped to the project the request is addressed to, which is the scope the uniqueness
+         *     constraint behind it uses. Optional: omitted, every call creates. At most 200 characters.
+         */
+        IdempotencyKey: string;
     };
     requestBodies: never;
     headers: never;

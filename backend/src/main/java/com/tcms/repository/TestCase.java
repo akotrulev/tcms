@@ -1,5 +1,6 @@
 package com.tcms.repository;
 
+import com.tcms.tenancy.CompanyContext;
 import com.tcms.tenancy.CompanyFilter;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -19,15 +20,18 @@ import org.hibernate.annotations.Filter;
  * executions FK the case and pin the <em>version</em> they ran (§3 lesson 1), so hard-deleting one
  * would rewrite what every historical run covered. Every read must exclude deleted rows explicitly.
  *
- * <h2>A mutator now, and still no factory</h2>
+ * <h2>A factory and a mutator, and the factory arrived with its caller</h2>
  *
- * <p>{@link #applyEdit} arrived with {@code PATCH}, and is one method rather than a field's worth of
- * setters for the reason its own comment gives. There is still no factory, and the reason has not
- * changed: a factory with no caller is where the {@code company_id} rule gets forgotten. The create
- * endpoint brings it, along with the two things that make <em>creating</em> a case harder than
- * editing one — allocating {@code key}/{@code key_seq} from the company's {@code key_sequence} row,
- * and writing the first {@code test_case_version} in the same transaction so history starts at v1
- * rather than at the first edit.
+ * <p>{@link #applyEdit} arrived with {@code PATCH} and {@link #create} with {@code POST}, in that
+ * order and deliberately: a factory with no caller is where the {@code company_id} rule gets
+ * forgotten. Both take a validated {@link CaseEdit} and neither enforces anything, so there is one
+ * place a rule about a case's content lives.
+ *
+ * <p>The two things that make <em>creating</em> a case harder than editing one are both outside this
+ * class, because neither is a property of the row: the {@code key}/{@code key_seq} pair is allocated
+ * by {@link com.tcms.tenancy.DisplayKeys} from the company's counter, and the first
+ * {@code test_case_version} is written by {@link CaseVersions} in the same transaction so history
+ * starts at v1 rather than at the first edit.
  *
  * <h2>Plain UUID foreign keys, no associations</h2>
  *
@@ -56,10 +60,14 @@ import org.hibernate.annotations.Filter;
  *
  * <p>{@code search_vector} is mapped nowhere on purpose: it is a {@code TSVECTOR} maintained by a
  * V2 trigger, it has no Java-side meaning, and mapping it would put a type Hibernate has no
- * converter for into every {@code SELECT} the entity generates. {@code created_at} /
- * {@code created_by} / {@code updated_by} have no field on the contract's shape, and
- * {@code ddl-auto: validate} checks that mapped columns exist rather than that existing columns are
- * mapped — so leaving them off is safe and keeps the list of what this endpoint can leak short.
+ * converter for into every {@code SELECT} the entity generates.
+ *
+ * <p>{@code created_at} and {@code created_by} were on that list while nothing created a case. They
+ * are mapped now, by the same argument {@code updated_by} was: a row that says nothing about when it
+ * was created or by whom is an audit column that looks present and answers nothing, and the moment
+ * there is an {@code INSERT} the values are available for free. Neither is on the contract's shape,
+ * so neither is served — {@code ddl-auto: validate} checks that mapped columns exist rather than the
+ * reverse, so mapping more than the wire carries is safe.
  */
 @Entity
 @Table(name = "test_case")
@@ -205,6 +213,34 @@ public class TestCase {
     @Column(name = "owner_id")
     private UUID ownerId;
 
+    /**
+     * When the row was created. Defaulted to {@code now()} in the schema, and set explicitly by
+     * {@link #create} anyway: the default would be the database's clock while every other timestamp
+     * in one request comes from the injected {@link java.time.Clock}, and two clocks in one
+     * transaction is how {@code created_at} ends up after the version row that snapshots it.
+     */
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
+
+    /**
+     * Who created the case. Nullable, and null on every row that predates {@code POST} — there is no
+     * backfill, for the reason {@link #updatedBy} gives. Like every {@code created_by} in this schema
+     * it carries no FK to {@code app_user}; see {@link TestCaseVersion#getCreatedBy()}.
+     */
+    @Column(name = "created_by", updatable = false)
+    private UUID createdBy;
+
+    /**
+     * The {@code Idempotency-Key} the creating request carried, or null (migration V11).
+     *
+     * <p>Write-once and never served: it exists so a retried create returns <em>this</em> case rather
+     * than making a second one. {@code updatable = false} is the mapping-level half of that — an edit
+     * cannot move a key onto a different case, which would make the original creation replayable into
+     * the wrong row.
+     */
+    @Column(name = "created_idempotency_key", updatable = false)
+    private String createdIdempotencyKey;
+
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
@@ -231,6 +267,64 @@ public class TestCase {
 
     /** JPA only. */
     protected TestCase() {
+    }
+
+    /**
+     * A new case — <strong>the only way one comes into existence.</strong>
+     *
+     * <h2>What is server-assigned, and why none of it is a request field</h2>
+     *
+     * <ul>
+     *   <li><strong>{@code companyId} from {@link CompanyContext}</strong>, never an argument. ERD
+     *       §0.1 point 2: a company taken from a parameter is a company some future call site can get
+     *       wrong, and this row is the client's content.</li>
+     *   <li><strong>{@code key} / {@code keySeq} from the company's counter</strong>, passed in
+     *       already allocated so this class is not a second place that knows how numbering works.
+     *       They are {@code updatable = false}, so a case can never be renumbered.</li>
+     *   <li><strong>{@code lifecycleStatus = DRAFT}</strong>, matching the column's default and
+     *       {@code TestCaseInput}'s omission of the field. A case that could be created
+     *       {@code APPROVED} is an approval its author granted themselves, which is the review
+     *       workflow's decision to make (plan §6g) and not a create's.</li>
+     *   <li><strong>{@code currentVersionNo = 1}</strong> paired with the v1 row the caller writes.
+     *       The column defaults to 1, and relying on the default is the trap: {@link
+     *       CaseVersions#decide} would then number the <em>first</em> version 2, reproducing on a new
+     *       case exactly the v1 gap that is only defensible for cases predating versioning.</li>
+     *   <li><strong>{@code ownerId = creatorId}.</strong> {@code ownerId} is refused as a request
+     *       field — choosing another person's case needs a membership check this slice does not build
+     *       — but a case with no owner at all is a row nobody is answerable for, and authorship is
+     *       what {@code case:delete}'s {@code OWN} qualifier will resolve against. The author owns
+     *       what they wrote until something reassigns it.</li>
+     * </ul>
+     *
+     * @param edit           already validated and normalized — see {@link CaseEdit}
+     * @param creatorId      the authenticated caller, never a value from the request body
+     * @param idempotencyKey the request's {@code Idempotency-Key}, or null when it sent none
+     */
+    static TestCase create(
+            UUID projectId,
+            String key,
+            long keySeq,
+            CaseEdit edit,
+            UUID creatorId,
+            String idempotencyKey,
+            Instant now) {
+
+        TestCase created = new TestCase();
+        created.id = UUID.randomUUID();
+        created.companyId = CompanyContext.require();
+        created.projectId = projectId;
+        created.key = key;
+        created.keySeq = keySeq;
+        created.lifecycleStatus = LifecycleStatus.DRAFT;
+        created.currentVersionNo = 1;
+        created.ownerId = creatorId;
+        created.createdAt = now;
+        created.createdBy = creatorId;
+        created.createdIdempotencyKey = idempotencyKey;
+        // Every content field through the same method an edit uses, so a field added to CaseEdit
+        // cannot arrive on edits and be silently missing on creates.
+        created.applyEdit(edit, creatorId, now);
+        return created;
     }
 
     /**

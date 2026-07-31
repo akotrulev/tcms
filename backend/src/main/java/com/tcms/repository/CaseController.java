@@ -1,5 +1,6 @@
 package com.tcms.repository;
 
+import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -52,15 +54,28 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/projects/{projectId}/cases")
 public class CaseController {
 
+    /**
+     * The header carrying one <em>user intent</em> to create, so a retry is not a second case.
+     *
+     * <p>Not a constant on {@code HttpHeaders} — it is an IETF draft header, not an RFC 9110 one, and
+     * spelling it once here is better than three string literals across the controller and its test.
+     */
+    static final String IDEMPOTENCY_KEY = "Idempotency-Key";
+
     private final CaseService search;
     private final CaseDetailService detail;
     private final CaseUpdateService cases;
+    private final CaseCreateService creation;
 
     public CaseController(
-            CaseService search, CaseDetailService detail, CaseUpdateService cases) {
+            CaseService search,
+            CaseDetailService detail,
+            CaseUpdateService cases,
+            CaseCreateService creation) {
         this.search = search;
         this.detail = detail;
         this.cases = cases;
+        this.creation = creation;
     }
 
     /**
@@ -128,6 +143,60 @@ public class CaseController {
     }
 
     /**
+     * Creates a case.
+     *
+     * <h2>201 for a new case, 200 for a replay, and the difference is the point</h2>
+     *
+     * <p>{@code Idempotency-Key} identifies one <em>user intent</em>, not one attempt — the SPA
+     * generates it when the editor mounts and reuses it across retries, which is what makes pressing
+     * Save again after a timeout safe. A replay answers <strong>200</strong> with the case that intent
+     * already created, so a client can distinguish "this call made it" from "this call found it", and
+     * a retry is not recorded anywhere as a second creation. The MSW mock has answered exactly this
+     * since Phase 1; until now the real server ignored the header entirely.
+     *
+     * <p>{@code Location} names the created case, which is what 201 means. The SPA reads the body
+     * rather than the header — it needs the whole case to seed its cache — so this is for every other
+     * client, and for the contract not to describe a 201 with nothing to fetch.
+     *
+     * <h2>No {@code If-Match}, deliberately</h2>
+     *
+     * <p>A precondition asserts something about state the caller already read, and there is none. The
+     * lost-update race a create can actually have is "did my retry land twice", which is what the
+     * idempotency key answers.
+     *
+     * <h2>403 and 404 mean here exactly what they mean on the edit below</h2>
+     *
+     * <p>An unreachable project is 404 with no body — including for a member of the company holding no
+     * grant on it — and 403 is reached only after that gate has passed, when the caller is looking at
+     * the project's case list and pressing New. Viewer is the role this refuses: it holds
+     * {@code project:read} like every other role and not {@code case:create}.
+     */
+    @PostMapping
+    public ResponseEntity<Object> create(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @RequestHeader(name = IDEMPOTENCY_KEY, required = false) String idempotencyKey,
+            @RequestBody CaseUpdateRequest request) {
+
+        CaseCreateService.Outcome outcome = creation.create(
+                UUID.fromString(jwt.getSubject()), projectId, request, trimToNull(idempotencyKey));
+
+        return switch (outcome) {
+            case CaseCreateService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
+            case CaseCreateService.Outcome.Forbidden ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiProblem.forbidden(
+                            "You do not have permission to create test cases in this project."));
+            case CaseCreateService.Outcome.Invalid invalid ->
+                    ResponseEntity.badRequest().body(ApiProblem.validation(invalid.errors()));
+            case CaseCreateService.Outcome.Created created -> ResponseEntity
+                    .created(location(projectId, created.view().id()))
+                    .body(created.view());
+            // Not 201, and not a Location either: nothing was created by THIS request.
+            case CaseCreateService.Outcome.Replayed replayed -> ResponseEntity.ok(replayed.view());
+        };
+    }
+
+    /**
      * Edits a case — <strong>the first write this application serves.</strong>
      *
      * <h2>403 exists here, and it does not weaken the 404-not-403 rule</h2>
@@ -174,7 +243,8 @@ public class CaseController {
         return switch (outcome) {
             case CaseUpdateService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
             case CaseUpdateService.Outcome.Forbidden ignored ->
-                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiProblem.forbidden());
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiProblem.forbidden(
+                            "You do not have permission to edit test cases in this project."));
             case CaseUpdateService.Outcome.Invalid invalid ->
                     ResponseEntity.badRequest().body(ApiProblem.validation(invalid.errors()));
             case CaseUpdateService.Outcome.Stale ignored ->
@@ -216,6 +286,30 @@ public class CaseController {
      * can debug from the header they can see. A weak tag ({@code W/"7"}) is not accepted: weak
      * comparison is explicitly the wrong semantics for a lost-update check.
      */
+    /**
+     * The created case's own URL, built from the path this controller is mapped on rather than from a
+     * request-relative builder: {@code fromCurrentRequest} would echo whatever host or proxy prefix the
+     * caller sent, which is a header-controlled value in a response.
+     */
+    private static URI location(UUID projectId, UUID caseId) {
+        return URI.create("/api/v1/projects/" + projectId + "/cases/" + caseId);
+    }
+
+    /**
+     * Blank is the same as absent for {@code Idempotency-Key}.
+     *
+     * <p>{@code Idempotency-Key: } (empty) would otherwise be stored as {@code ''} and become a key
+     * every other empty-header request in the project replays against — one case, permanently, for
+     * every caller that sends the header wrong.
+     */
+    private static String trimToNull(String header) {
+        if (header == null) {
+            return null;
+        }
+        String trimmed = header.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
     private static Long parseIfMatch(String header) {
         if (header == null || header.isBlank()) {
             return null;

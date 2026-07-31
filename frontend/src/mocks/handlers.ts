@@ -14,7 +14,6 @@ import { verdictFor } from './faults';
 import type {
   Artifact,
   BulkResult,
-  CaseConditionRef,
   EntityVersion,
   Facet,
   LifecycleStatus,
@@ -495,6 +494,25 @@ export const handlers = [
     const errors: Record<string, string[]> = {};
     if (!title) errors.title = ['Enter a title.'];
     if (!suiteId) errors.suiteId = ['Choose a suite.'];
+    /*
+      The six fields the real endpoint refuses, refused here in the same words.
+
+      Each needs a write path the backend has not built (a membership check for the owner,
+      cardinality validation for classification, the library-vs-inline shape for conditions). The
+      mock echoing them back would make mock mode accept a payload live mode rejects — the exact
+      divergence that let the SPA put `lockVersion` in the PATCH body for months, because no server
+      read either. Absent means unchanged; present means 400, in both modes.
+    */
+    for (const field of [
+      'ownerId',
+      'classificationValueIds',
+      'tags',
+      'automationTags',
+      'preconditions',
+      'postconditions',
+    ]) {
+      if (body[field] != null) errors[field] = ['This field cannot be changed here yet.'];
+    }
     if (Object.keys(errors).length) {
       return HttpResponse.json(
         { type: 'about:blank', title: 'Validation failed', status: 400, detail: 'Check the highlighted fields.', errors },
@@ -520,13 +538,13 @@ export const handlers = [
       lifecycleStatus: 'DRAFT',
       automationStatus: (body.automationStatus as TestCase['automationStatus']) ?? 'MANUAL',
       stepFormat: (body.stepFormat as TestCase['stepFormat']) ?? 'STRUCTURED',
-      owner: (body.ownerId ? users.find((u) => u.id === body.ownerId) : undefined)
-        ? userRef(users.findIndex((u) => u.id === body.ownerId))
-        : userRef(0),
+      // The creator owns what they wrote — `ownerId` is refused above, so there is nothing to
+      // resolve. `userRef(0)` is this mock's stand-in for the signed-in user throughout.
+      owner: userRef(0),
       testType: (body.testType as string) ?? null,
       testLevel: (body.testLevel as string) ?? null,
       features: [],
-      tags: (body.tags as string[]) ?? [],
+      tags: [],
       healthSignals: ['NEVER_EXECUTED'],
       lastResult: null,
       updatedAt: new Date().toISOString(),
@@ -535,13 +553,13 @@ export const handlers = [
       expectedOutcome: (body.expectedOutcome as string) ?? null,
       severity: (body.severity as TestCase['priority']) ?? 'MEDIUM',
       estimatedDurationSec: (body.estimatedDurationSec as number) ?? null,
-      automationTags: (body.automationTags as string[]) ?? [],
+      automationTags: [],
       automationKey: (body.automationKey as string) ?? null,
       notAutomatableReason: (body.notAutomatableReason as string) ?? null,
       gherkinSource: (body.gherkinSource as string) ?? null,
       steps,
-      preconditions: (body.preconditions as CaseConditionRef[]) ?? [],
-      postconditions: (body.postconditions as CaseConditionRef[]) ?? [],
+      preconditions: [],
+      postconditions: [],
       relatedDocuments: [],
       currentVersionNo: 1,
       lockVersion: 1,

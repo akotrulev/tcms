@@ -52,8 +52,12 @@ import org.springframework.stereotype.Component;
  * edited text as the original and destroy the only thing history is for. Backfilling a synthetic v1
  * from the current row would be worse: it would assert that the pre-edit content was the post-edit
  * content, in a table whose entire purpose is that past claims stay true. The version list showing
- * "v2 (earliest recorded)" tells the truth — history began when it began. Cases created after the
- * create endpoint ships get their v1 written with them and have no gap.
+ * "v2 (earliest recorded)" tells the truth — history began when it began.
+ *
+ * <p><strong>Cases created through {@code POST} have no gap</strong>, as of backend M1 slice 8: their
+ * v1 is written with them by {@link #initial}, in the same transaction as the row. So the two
+ * populations are distinguishable by exactly the fact that matters — whether a v1 exists — rather
+ * than by a flag somebody has to maintain.
  */
 @Component
 public class CaseVersions {
@@ -82,6 +86,29 @@ public class CaseVersions {
      * @param contentHash  carried so {@link #write} does not recompute it and cannot disagree
      */
     record Decision(int versionNo, boolean isNew, String contentHash) {
+    }
+
+    /**
+     * The first version of a case being created — always v1, always new, never a lookup.
+     *
+     * <h2>Why this is a separate method and not {@link #decide} on a fresh row</h2>
+     *
+     * <p>{@code decide} answers {@code currentVersionNo + 1}, and a new row's counter is 1 before
+     * anything is written — so a created case would take <strong>v2</strong> and its v1 would never
+     * exist. That gap is honest for the cases that predate this write path (see the class header) and
+     * indefensible for one created after it: the version list's first entry would be missing for every
+     * case in the product, forever, and the reason would look like the same historical accident.
+     *
+     * <p>It also cannot be a lookup. {@code decide} compares against the newest stored version, and a
+     * case being created has none — {@code findNewestForCase} on an id that does not exist yet is a
+     * query whose empty answer means two different things.
+     *
+     * <p>The hash is computed by the same {@link #hash} as an edit's, which is what makes the next
+     * save comparable: a create followed by a save of identical content writes no v2, because the two
+     * hashes are over the same normalized shape.
+     */
+    Decision initial(CaseEdit edit) {
+        return new Decision(1, true, hash(edit));
     }
 
     /**
