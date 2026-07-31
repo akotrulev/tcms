@@ -222,6 +222,55 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/Project' }
+    post:
+      tags: [projects]
+      summary: Create a project
+      description: |
+        Requires `project:create`, which is a **COMPANY-scope** permission — the only write in
+        this contract whose gate is not a grant on the target, because the target does not exist
+        yet. Held by Company Admin and Instance Admin only (roles spec §A3); a Test Lead running
+        a project is not entitled to start another one.
+
+        `key` is **supplied by the client**, not allocated. Display keys (`TC-n`, `TS-n`) are
+        server-allocated from the company's counter because they number rows; a project key is a
+        2–10 character label a human chooses, types and reads back in URLs — "OLB" for Online
+        Banking — so allocating "P-3" would replace the one identifier in the system that is
+        meant to be memorable. It is immutable once set (see `Project.key`) and unique per
+        company, so two clients may both key a project `OLB`.
+
+        **A key already used in this company is a `400` keyed on `key`, not a `409`.** The form
+        has a field to put the message on, and the caller's next action is to type a different
+        key rather than to reload. That also makes the endpoint safe to retry without an
+        `Idempotency-Key`: the retry of a create that in fact succeeded cannot make a second
+        project, because the key is taken by the first — which is why this endpoint deliberately
+        does not accept the header that `POST …/cases` does.
+
+        The created project is seeded exactly as `provision-company` seeds a first project — the
+        Feature dimension, the six execution statuses and the Default configuration — so a
+        project created here and one created by the operator CLI are the same thing.
+
+        **No project grant is created for the caller.** Every route to `project:create` already
+        carries `project:read` over every project in the company (a Company Admin's COMPANY-scope
+        grant, an Instance Admin's SYSTEM one), so the new project is immediately in the caller's
+        `GET /projects`. Minting a PROJECT-scope grant for them would instead make `myRole` claim
+        a per-project role they do not hold.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectInput' }
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location:
+              description: The created project's own URL.
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
 
   /projects/{projectId}:
     parameters: [{ $ref: '#/components/parameters/ProjectId' }]
@@ -1354,6 +1403,32 @@ components:
             listed project always carries a grant — but Viewer is the default, never
             Test Engineer (plan §6b).
           example: Viewer
+
+    ProjectInput:
+      type: object
+      required: [key, name]
+      description: |
+        The body of `POST /projects`. Deliberately three fields: `archived`, `caseCount` and
+        `myRole` are server-owned or computed per caller, and a field on an input schema is a
+        field somebody eventually binds — a create that could set `archived` would let a project
+        be born retired.
+      properties:
+        key:
+          type: string
+          pattern: '^[A-Z0-9]{2,10}$'
+          example: OLB
+          description: |
+            Client-supplied and immutable, unique per company. Rejected with a field error on
+            `key` when the company already uses it — see the endpoint description for why that is
+            a 400 rather than a 409.
+        name:
+          type: string
+          maxLength: 200
+          example: Acme Online Banking
+          description: |
+            A whole client product or engagement, not a feature area. "Payments" is a Feature
+            value or a suite folder, never a project (plan §1).
+        description: { type: string, nullable: true, maxLength: 2000 }
 
     ClassificationDimension:
       type: object

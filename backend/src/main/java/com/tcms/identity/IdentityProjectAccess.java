@@ -69,6 +69,22 @@ public class IdentityProjectAccess implements ProjectAccess {
     /**
      * {@inheritDoc}
      *
+     * <p>{@link PermissionEvaluator#evaluateCompanyWide} rather than {@link
+     * PermissionEvaluator#evaluate} over every project: that method exists precisely for the
+     * company-level capabilities its own javadoc names, {@code project:create} among them, and it
+     * returns the SYSTEM and COMPANY terms with no project's grants folded in. Asking the
+     * project-scoped question here and OR-ing the answers would make leading one project a licence
+     * to create another.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public boolean canDoInCompany(UUID userId, String permission) {
+        return permissions.evaluateCompanyWide(userId).has(permission);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
      * <p>Three lines, and each is a decision:
      *
      * <ul>

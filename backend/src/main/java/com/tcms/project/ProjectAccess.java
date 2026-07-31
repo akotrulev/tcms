@@ -94,6 +94,29 @@ public interface ProjectAccess {
     boolean canDoOnAuthored(UUID userId, UUID projectId, String permission, UUID authorId);
 
     /**
+     * Does this caller hold {@code permission} <strong>company-wide</strong>, in the company
+     * currently open — with no project in the question at all?
+     *
+     * <h2>Why a project-less variant has to exist, and why it is not {@link #canDo} with a null</h2>
+     *
+     * <p>{@code project:create} is the one write in the contract whose target does not exist when
+     * the gate runs. Every other write asks "may they do this <em>to that project</em>", and the
+     * answer folds in the PROJECT term. There is no project to fold in here, and passing a null
+     * project id into {@link #canDo} would not merely be ugly — the evaluator refuses it, because a
+     * null there silently answers a different question than the caller asked.
+     *
+     * <p>It is also not "the union of what they hold on some project". A Test Lead holds
+     * {@code project:settings} on the project they run; company-wide they hold nothing of the kind,
+     * and a gate that unioned their project grants would let them start new projects because they
+     * lead an old one. The implementation must therefore resolve this through the evaluator's
+     * <em>company-wide</em> question (SYSTEM + COMPANY terms only) rather than by iterating projects.
+     *
+     * @param permission a COMPANY- or SYSTEM-scope permission key, a constant at the call site for
+     *                   the reason {@link ProjectService#writeGranted} gives
+     */
+    boolean canDoInCompany(UUID userId, String permission);
+
+    /**
      * The caller's <strong>PROJECT-scope</strong> role name per project across the whole
      * company, strongest grant winning — one lookup for the entire list rather than one per
      * project.

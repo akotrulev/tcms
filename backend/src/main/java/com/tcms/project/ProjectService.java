@@ -8,6 +8,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -233,6 +234,35 @@ public class ProjectService {
     }
 
     /**
+     * <strong>The gate for a write that has no project to be gated on.</strong> Runs {@code write}
+     * only if the caller holds {@code permission} company-wide in the company currently open.
+     *
+     * <h2>Two states, not three — and the missing one is the interesting part</h2>
+     *
+     * <p>{@link #writeGranted} has an {@link GateResult.Unreachable} state because a project id in
+     * the request may name nothing the caller can see, and telling that apart from "no permission"
+     * turns the endpoint into an oracle (§6t). A create names no target: there is nothing to
+     * conceal the existence of, so the only refusal is {@link GateResult.Denied} and it is honest.
+     * The type stays {@link GateResult} anyway so the controller's switch is the same exhaustive
+     * shape as every other write's — and so a later variant that <em>does</em> take a target
+     * (create-in-folder, say) has nowhere to quietly drop the 404 arm.
+     *
+     * <p>The company itself is never a parameter. {@link CompanyContext#require()} is read inside
+     * the write, and {@code CompanyAwareTransactionManager} has already turned the same value into
+     * the RLS GUC for this transaction — so a project can only be created into the session's own
+     * company, whatever a request body says (ERD §0.1 point 2).
+     *
+     * @param permission a COMPANY-scope key, constant at the call site — see {@link #writeGranted}
+     */
+    @Transactional
+    public <T> GateResult<T> createGranted(UUID userId, String permission, Supplier<T> write) {
+        if (!access.canDoInCompany(userId, permission)) {
+            return new GateResult.Denied<>();
+        }
+        return new GateResult.Allowed<>(write.get());
+    }
+
+    /**
      * The gate itself — <strong>the one implementation of "may this caller see this project".</strong>
      *
      * <p>Private and unannotated on purpose. Every caller ({@link #findVisible} in this class,
@@ -270,6 +300,25 @@ public class ProjectService {
                 // null when the caller reaches this project through a COMPANY-scope grant —
                 // the contract's stated meaning of myRole, not a lookup that failed.
                 roleNames.get(project.getId()));
+    }
+
+    /**
+     * The wire shape of a project that was created moments ago, assembled by the <em>same</em>
+     * method the list and detail endpoints use.
+     *
+     * <p>Package-private and deliberately not a second assembler: {@link ProjectView} has two
+     * per-caller fields, and a create that built them itself is how the response to a create comes
+     * to differ from the response to the {@code GET} the client makes right after it — the field
+     * that would drift first being {@code myRole}, which is null for exactly the callers who are
+     * able to reach this endpoint.
+     *
+     * <p>An empty count map rather than a query: a project created in this transaction has no
+     * cases, and {@link #view} already treats an absent project as zero because a {@code GROUP BY}
+     * cannot invent rows. Running the count anyway would be a round trip whose only possible answer
+     * is the default.
+     */
+    ProjectView viewOfCreated(Project project, UUID userId) {
+        return view(project, Map.of(), access.projectRoleNames(userId));
     }
 
     private Map<UUID, Long> caseCounts(UUID companyId, List<UUID> projectIds) {

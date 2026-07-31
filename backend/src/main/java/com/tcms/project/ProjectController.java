@@ -1,12 +1,20 @@
 package com.tcms.project;
 
+import java.net.URI;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -47,10 +55,16 @@ public class ProjectController {
 
     private final ProjectService projects;
     private final ProjectConfigurationService configuration;
+    private final ProjectCreateService creates;
 
-    public ProjectController(ProjectService projects, ProjectConfigurationService configuration) {
+    public ProjectController(
+            ProjectService projects,
+            ProjectConfigurationService configuration,
+            ProjectCreateService creates) {
+
         this.projects = projects;
         this.configuration = configuration;
+        this.creates = creates;
     }
 
     /**
@@ -63,6 +77,46 @@ public class ProjectController {
     @GetMapping
     public List<ProjectView> list(@AuthenticationPrincipal Jwt jwt) {
         return projects.listVisible(UUID.fromString(jwt.getSubject()));
+    }
+
+    /**
+     * Creates a project — <strong>the first write on this controller, and the only one in the
+     * application whose gate is not a grant on its target.</strong>
+     *
+     * <h2>Why there is no 404 here</h2>
+     *
+     * <p>Every other write answers 404 for an unreachable target and 403 for a readable one it may
+     * not change, and the order matters because telling the two apart is an oracle (§6t). This
+     * request names no target: a caller without {@code project:create} has learned nothing from the
+     * 403 except a fact about their own grants. So the two outcomes are 403 and 400, and adding a
+     * 404 would mean inventing something for it to conceal.
+     *
+     * <h2>Why the errors are {@link ProblemDetail} and not a record</h2>
+     *
+     * <p>{@code repository.ApiProblem} and {@code InvitationController.ProblemBody} are two copies
+     * of the RFC-7807 envelope already, and the first records in its own header that the right home
+     * is a {@code shared} module which does not exist yet. A third copy would be the cost of that
+     * postponement compounding. Spring's own {@link ProblemDetail} serializes to the same shape the
+     * contract's {@code Problem} declares — {@code type}, {@code title}, {@code status},
+     * {@code detail}, plus {@code errors} as a property — so this module needs no envelope of its
+     * own and the eventual extraction has one fewer copy to reconcile.
+     */
+    @PostMapping
+    public ResponseEntity<Object> create(
+            @AuthenticationPrincipal Jwt jwt, @RequestBody ProjectWriteRequest request) {
+
+        ProjectCreateService.Outcome outcome =
+                creates.create(UUID.fromString(jwt.getSubject()), request);
+
+        return switch (outcome) {
+            case ProjectCreateService.Outcome.Created created -> ResponseEntity
+                    .created(location(created.view().id()))
+                    .body(created.view());
+            case ProjectCreateService.Outcome.Invalid invalid ->
+                    ResponseEntity.badRequest().body(validationProblem(invalid.errors()));
+            case ProjectCreateService.Outcome.Forbidden ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(forbiddenProblem());
+        };
     }
 
     @GetMapping("/{projectId}")
@@ -109,5 +163,58 @@ public class ProjectController {
         return configuration.findStatuses(UUID.fromString(jwt.getSubject()), projectId)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /**
+     * A genuine race on {@code uq_project_key}, answered as the field error it would have been a
+     * moment earlier rather than as a 500.
+     *
+     * <p>{@link ProjectCreateService} checks the key inside the write transaction, which closes the
+     * window to the width of one statement and does not close it: two Company Admins submitting
+     * {@code OLB} at the same instant both see no row and one of them loses at the constraint. The
+     * loser's request is not a server fault — their input is simply now taken — so it gets the same
+     * 400 on the same field, and the message reads identically whether it lost the race or arrived
+     * a minute late.
+     *
+     * <p>Handled here rather than caught in the service for the reason {@code CaseController} gives
+     * about its own race handler: the violation is thrown on <em>commit</em>, after the service
+     * method has returned, so there is nothing inside it left to catch. Not covered by the suite —
+     * reproducing it needs two interleaved transactions — which is stated rather than implied.
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<Object> onKeyRace(DataIntegrityViolationException violation) {
+        return ResponseEntity.badRequest().body(validationProblem(Map.of(
+                "key", List.of("Another project in this company already uses that key."))));
+    }
+
+    /**
+     * The created project's own URL, built from this controller's mapping rather than from a
+     * request-relative builder: {@code fromCurrentRequest} would echo whatever host or proxy prefix
+     * the caller sent, which is a header-controlled value in a response.
+     */
+    private static URI location(UUID projectId) {
+        return URI.create("/api/v1/projects/" + projectId);
+    }
+
+    private static ProblemDetail validationProblem(Map<String, List<String>> errors) {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        problem.setTitle("Validation failed");
+        // The SPA renders the per-field messages beside the inputs, so this line must not repeat
+        // them — it says where to look, and the fields say what is wrong. Same sentence the
+        // repository module's envelope uses, deliberately: two different ways of saying this is how
+        // one product starts sounding like two.
+        problem.setDetail("Check the highlighted fields.");
+        problem.setProperty("errors", errors);
+        return problem;
+    }
+
+    private static ProblemDetail forbiddenProblem() {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
+        problem.setTitle("Not allowed");
+        // What they cannot do, in their words, and never the permission key: a key is not actionable
+        // by someone who cannot grant it to themselves, and naming it publishes the catalogue to
+        // exactly the caller who is not entitled to it.
+        problem.setDetail("You do not have permission to create projects in this company.");
+        return problem;
     }
 }
