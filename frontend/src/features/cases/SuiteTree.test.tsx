@@ -134,21 +134,40 @@ describe('SuiteTree — the descendant-inclusive count', () => {
   })
 
   /**
-   * **Characterisation, not approval.** A suite whose `parentId` names a suite absent from the
-   * payload is bucketed under that missing id and never reached from the root, so it renders
-   * nowhere — and its cases are unreachable through the tree, with no empty state and no error
-   * to say so.
+   * **Flipped in Phase 5, from characterisation to a requirement.**
    *
-   * Today the endpoint returns a project's whole suite list, so the input cannot occur and this
-   * is not a live defect. It is pinned because the assumption is invisible in the code: the day
-   * the suite list is paginated, filtered, or served during a parent's soft delete, this test
-   * goes from documenting a shape to failing on a real one — which is the point at which
-   * somebody has to decide whether orphans are dropped or surfaced at the root.
+   * §36 pinned the old behaviour — an orphan was bucketed under a parent id that is not in the
+   * payload, never reached from the root, and therefore rendered nowhere with no empty state and
+   * no error — as "documented, not endorsed", on the argument that the endpoint returns a whole
+   * project's suite list so the input cannot occur.
+   *
+   * The review's verdict was that the decision it deferred is not a close call. The condition
+   * arrives the first time the list is paginated, filtered, permission-scoped, or served during a
+   * parent's soft delete, and it arrives *silently*: a folder and every case under it vanish with
+   * nothing on screen to say so. Surfacing at the root is wrong about hierarchy and right about
+   * existence, and being wrong visibly beats being wrong invisibly.
    */
-  it('drops a suite whose parent is absent from the payload (documented, not endorsed)', () => {
+  it('surfaces a suite whose parent is absent from the payload at the root, rather than dropping it', () => {
     renderTree([suite('2', 'Orphan', 'missing-parent', 5)])
-    expect(screen.queryByRole('treeitem', { name: /Orphan/ })).not.toBeInTheDocument()
-    expect(screen.queryByText('5')).not.toBeInTheDocument()
+    expect(screen.getByRole('treeitem', { name: /Orphan/ })).toBeInTheDocument()
+    expect(countOf('Orphan')).toBe(5)
+  })
+
+  it('still rolls an orphan into no ancestor it cannot see', () => {
+    // The orphan sits beside the real root, not inside it — re-parenting to the root must not
+    // invent a containment that would inflate somebody else's count.
+    renderTree([suite('1', 'Real root', null, 3), suite('2', 'Orphan', 'missing-parent', 5)])
+    expect(countOf('Real root')).toBe(3)
+    expect(countOf('Orphan')).toBe(5)
+  })
+
+  it('still drops a cycle, which cannot be drawn at all', () => {
+    // Both nodes name a parent that IS present, so neither is an orphan — and neither is
+    // reachable from the root. Dropping is the correct answer, and it must not become an
+    // infinite recursion now that unresolvable parents are re-homed.
+    renderTree([suite('1', 'A', '2', 1), suite('2', 'B', '1', 1)])
+    expect(screen.queryByRole('treeitem', { name: /A/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('treeitem', { name: /B/ })).not.toBeInTheDocument()
   })
 })
 

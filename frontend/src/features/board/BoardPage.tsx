@@ -334,44 +334,62 @@ function WorkCard({
       {/*
         Dragging is not the only way to move a card. A keyboard user gets the same capability
         from these buttons, and they carry the disabled reason rather than disappearing.
+
+        **The reason has to be reachable, and for a disabled control it isn't by default.** MUI
+        sets `pointer-events: none` on a disabled button, so no hover ever reaches a `Tooltip`
+        wrapped straight around one — and on this board 14 of the 24 move buttons are disabled,
+        because a derived card follows its source. Every one of them greyed out and explained
+        nothing, which is the worse half of disable-don't-hide: the affordance says "no" and
+        refuses to say why. `PermissionGate` already documents this trap and solves it with a
+        span anchor; the same solution belongs here rather than a second invention.
       */}
       <Stack direction="row" sx={{ gap: 0.5, mt: 1, flexWrap: 'wrap' }}>
         {COLUMNS.filter((column) => column !== item.status).map((column) => {
           const allowed = item.allowedTransitions.includes(column);
-          return (
-            <Tooltip
-              key={column}
-              title={
-                allowed
-                  ? `Move to ${column}`
-                  : item.derived
-                    ? `This card follows its source, so it can't be moved to ${column}`
-                    : `Not a valid move from ${item.status}`
-              }
+          const button = (
+            <Box
+              component="button"
+              type="button"
+              disabled={!allowed}
+              aria-disabled={!allowed}
+              onClick={() => onMove(column)}
+              data-testid={`Board.Card.MoveTo.${column.replace(/\s/g, '')}`}
+              sx={{
+                font: 'inherit',
+                fontSize: '0.6875rem',
+                px: 0.75,
+                py: 0.25,
+                borderRadius: 0.5,
+                border: '1px solid',
+                borderColor: 'divider',
+                bgcolor: 'transparent',
+                color: allowed ? 'text.secondary' : 'text.disabled',
+                cursor: allowed ? 'pointer' : 'not-allowed',
+                '&:hover:not(:disabled)': { borderColor: 'primary.main', color: 'primary.main' },
+              }}
             >
-              <Box
-                component="button"
-                type="button"
-                disabled={!allowed}
-                aria-disabled={!allowed}
-                onClick={() => onMove(column)}
-                data-testid={`Board.Card.MoveTo.${column.replace(/\s/g, '')}`}
-                sx={{
-                  font: 'inherit',
-                  fontSize: '0.6875rem',
-                  px: 0.75,
-                  py: 0.25,
-                  borderRadius: 0.5,
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  bgcolor: 'transparent',
-                  color: allowed ? 'text.secondary' : 'text.disabled',
-                  cursor: allowed ? 'pointer' : 'not-allowed',
-                  '&:hover:not(:disabled)': { borderColor: 'primary.main', color: 'primary.main' },
-                }}
-              >
-                → {column}
-              </Box>
+              → {column}
+            </Box>
+          );
+
+          const title = allowed
+            ? `Move to ${column}`
+            : item.derived
+              ? `This card follows its source, so it can't be moved to ${column}`
+              : `Not a valid move from ${item.status}`;
+
+          return (
+            <Tooltip key={column} title={title}>
+              {allowed ? (
+                button
+              ) : (
+                // The anchor that actually receives the hover. `role="none"` because it is
+                // scaffolding, and `cursor: not-allowed` states the verdict before the tooltip
+                // has had time to open.
+                <Box component="span" role="none" sx={{ display: 'inline-flex', cursor: 'not-allowed' }}>
+                  {button}
+                </Box>
+              )}
             </Tooltip>
           );
         })}
