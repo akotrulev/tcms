@@ -13,11 +13,32 @@ import react from '@vitejs/plugin-react'
  */
 const buildId = process.env.VITE_BUILD_ID ?? `local-${Date.now().toString(36)}`
 
+/**
+ * Where `VITE_API_MODE=live` sends `/api/v1`.
+ *
+ * A **proxy**, not a CORS grant: the browser keeps talking to its own origin, so no preflight,
+ * no `Access-Control-Allow-*` configuration on the backend, and no cross-origin rules to relax
+ * in production that a developer's machine then depends on. In the shipped product the SPA is
+ * served from the same Spring Boot jar as the API, which is same-origin by construction — the
+ * proxy exists so dev matches that arrangement instead of inventing a looser one.
+ */
+const apiProxyTarget = process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:8080'
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
   define: {
     __BUILD_ID__: JSON.stringify(buildId),
+  },
+  server: {
+    proxy: {
+      // Configured in both modes and harmless in mock mode: MSW intercepts at the service
+      // worker, so a mocked request never reaches the dev server to be proxied.
+      '/api': {
+        target: apiProxyTarget,
+        changeOrigin: true,
+      },
+    },
   },
   build: {
     /**

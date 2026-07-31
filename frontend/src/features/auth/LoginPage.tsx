@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { ApiError } from '../../api/client';
+import { IS_MOCK_API } from '../../app/apiMode';
 import { Identifier } from '../../components/Identifier';
 import { useAuth } from '../../auth/useAuth';
 
@@ -21,10 +22,38 @@ type LoginInput = z.infer<typeof LoginSchema>;
 
 const TestIdPrefix = 'Login';
 
+/**
+ * One sentence for every rejected sign-in, and it is this screen's job to keep it that way.
+ *
+ * The API answers **401 with an empty body** on purpose: unknown address, wrong password,
+ * not-yet-activated and deactivated are one failure, because told apart they turn this form
+ * into a directory of who exists on the instance — and email is unique instance-wide, so that
+ * directory spans every client. Rendering `error.detail` here would have shown whatever reason
+ * phrase the transport happened to supply ("Unauthorized"), which is both unhelpful and the
+ * wrong shape of answer. Anything that is *not* a rejection — a network fault, a 500 — reads
+ * differently, because that difference is about our service, not about the account.
+ */
+function describeSignInFailure(error: unknown): string {
+  if (error instanceof ApiError && error.status === 401) {
+    return "That email and password don't match an account.";
+  }
+  return "Couldn't sign you in. Check your connection and try again.";
+}
+
 export function LoginPage() {
   const { user, login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  const navState = location.state as { from?: string; acceptedEmail?: string } | null;
+
+  /**
+   * Set when they arrived straight from redeeming an invitation. Accepting answers 204 rather
+   * than a session (one token-issuing path), so this screen has to explain why they are being
+   * asked to sign in immediately after choosing a password — otherwise it reads as the accept
+   * having failed.
+   */
+  const acceptedEmail = navState?.acceptedEmail;
 
   const {
     register,
@@ -34,7 +63,17 @@ export function LoginPage() {
     formState: { errors, isSubmitting },
   } = useForm<LoginInput>({
     resolver: zodResolver(LoginSchema),
-    defaultValues: { email: 'ana.petrova@example.com', password: '', rememberMe: true },
+    defaultValues: {
+      /*
+        A seeded address is a convenience of the mock API, where any password of 4+ characters
+        signs you in as that user. Against the real backend it is worse than nothing: it
+        prefills an account that does not exist on the instance. The invitee's own address wins
+        over both.
+      */
+      email: acceptedEmail ?? (IS_MOCK_API ? 'ana.petrova@example.com' : ''),
+      password: '',
+      rememberMe: true,
+    },
     // Feedback on blur, not per keystroke — validating as someone types an email tells
     // them it's invalid before they've finished typing it.
     mode: 'onBlur',
@@ -44,7 +83,7 @@ export function LoginPage() {
   if (user) return <Navigate to="/" replace />;
 
   /** Where the auth gate sent them from, so sign-in returns them there. */
-  const from = (location.state as { from?: string } | null)?.from ?? '/';
+  const from = navState?.from ?? '/';
 
   const onSubmit = handleSubmit(async (data) => {
     try {
@@ -59,10 +98,7 @@ export function LoginPage() {
       }
       setError('root', {
         type: 'server',
-        message:
-          error instanceof ApiError
-            ? error.detail
-            : "Couldn't sign you in. Check your connection and try again.",
+        message: describeSignInFailure(error),
       });
       setFocus('password');
     }
@@ -113,6 +149,12 @@ export function LoginPage() {
           <Typography variant="h2" component="h1" sx={{ mb: 2.5 }}>
             Sign in
           </Typography>
+
+          {acceptedEmail && (
+            <Alert severity="success" sx={{ mb: 2 }} data-testid={`${TestIdPrefix}.Accepted`}>
+              Your account is ready. Sign in with the password you just chose.
+            </Alert>
+          )}
 
           {errors.root && (
             <Alert severity="error" role="alert" sx={{ mb: 2 }} data-testid={`${TestIdPrefix}.Error`}>

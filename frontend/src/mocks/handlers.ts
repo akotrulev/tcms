@@ -280,19 +280,78 @@ export const handlers = [
 
   http.post(`${API}/auth/logout`, () => new HttpResponse(null, { status: 204 })),
 
+  /*
+    Invitation redemption. Both handlers answer a **bodiless 404** for every rejection —
+    unknown token, already redeemed, and (in the real service) expired, membership removed or
+    account deactivated. That is the contract, and it is a security property rather than
+    laziness: told apart, the responses would let anyone with a token-shaped string learn which
+    addresses exist on this instance. A mock that helpfully explained "already used" would make
+    the UI's one non-committal panel look like a bug and invite someone to "improve" it.
+  */
+  http.get(`${API}/auth/invitations/:token`, async ({ params }) => {
+    await delay(LATENCY);
+    const invitation = db.invitations.get(String(params.token));
+    if (!invitation || invitation.consumed) return new HttpResponse(null, { status: 404 });
+
+    return HttpResponse.json({
+      email: invitation.email,
+      displayName: invitation.displayName,
+      passwordRequired: invitation.passwordRequired,
+    });
+  }),
+
+  http.post(`${API}/auth/invitations/:token/accept`, async ({ params, request }) => {
+    await delay(LATENCY);
+    const invitation = db.invitations.get(String(params.token));
+    if (!invitation || invitation.consumed) return new HttpResponse(null, { status: 404 });
+
+    const body = (await request.json().catch(() => ({}))) as { password?: string };
+    const password = body?.password;
+
+    // 422 — and unlike the 404s, this one DOES carry a reason: it describes the password just
+    // submitted, not the account or the instance, so saying "too short" leaks nothing.
+    if (invitation.passwordRequired) {
+      if (!password) {
+        return problem(422, 'The password was not accepted', 'Choose a password to activate your account.');
+      }
+      // Counted in bytes, matching BCrypt's real limit and the server's own check.
+      const bytes = new TextEncoder().encode(password).length;
+      if (bytes < 12) {
+        return problem(422, 'The password was not accepted', 'Use at least 12 characters.');
+      }
+      if (bytes > 72) {
+        return problem(422, 'The password was not accepted', 'That is too long — 72 bytes is the maximum.');
+      }
+    } else if (password) {
+      // Rejected rather than ignored: holding an invitation to a second company must not confer
+      // the ability to overwrite an existing credential.
+      return problem(
+        422,
+        'The password was not accepted',
+        'This account already has a password. Sign in with the one you use today.',
+      );
+    }
+
+    // Consumed only after the password was accepted, so a typo cannot burn the only way in.
+    invitation.consumed = true;
+    return new HttpResponse(null, { status: 204 });
+  }),
+
   http.get(`${API}/me`, ({ request }) => requireAuth(request) ?? HttpResponse.json(currentUser)),
 
+  /*
+    One project, one answer — `{ projectId, permissions }`, matching the contract and the real
+    MeController. This handler used to return an ARRAY of per-project entries, which nothing
+    consumed and no endpoint ever produced; it would have failed the first consumer written
+    against it the moment live mode existed. Drift in an unused handler is still drift.
+  */
   http.get(`${API}/me/permissions`, ({ request }) => {
     const denied = requireAuth(request);
     if (denied) return denied;
+
+    const projectId = new URL(request.url).searchParams.get('projectId');
     const lead = roles.find((r) => r.name === 'Test Lead');
-    return HttpResponse.json(
-      projects.map((p) => ({
-        projectId: p.id,
-        roleName: p.myRole,
-        permissions: lead?.permissions ?? [],
-      })),
-    );
+    return HttpResponse.json({ projectId, permissions: lead?.permissions ?? [] });
   }),
 
   // -------------------------------------------------------------- projects ----

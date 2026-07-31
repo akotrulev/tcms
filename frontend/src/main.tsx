@@ -8,6 +8,7 @@ import './index.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
+import { IS_MOCK_API } from './app/apiMode';
 import { Providers } from './app/Providers';
 import { AppRouter } from './app/router';
 import { clearSkewGuard } from './app/versionSkew';
@@ -18,16 +19,33 @@ import { reportClientError } from './lib/reportClientError';
 /**
  * Entry point.
  *
- * MSW starts before the app renders, and only in development. The `await` here is the point:
- * mounting first and starting the worker second gives a race where the app's opening
- * requests slip past the interceptor and fail against a server that doesn't exist yet.
+ * MSW starts before the app renders, and only in development **and only in mock mode**. The
+ * `await` here is the point: mounting first and starting the worker second gives a race where
+ * the app's opening requests slip past the interceptor and fail against a server that doesn't
+ * exist yet.
  *
  * The dynamic import keeps the mock handlers and their fixtures out of the production
  * bundle entirely — `import.meta.env.DEV` is statically false in a production build, so the
- * whole branch is tree-shaken away.
+ * whole branch is tree-shaken away. `IS_MOCK_API` carries that same `DEV` check, so the guard
+ * survives the mode switch rather than being replaced by it.
  */
 async function startMockApi(): Promise<void> {
+  /*
+    This literal `import.meta.env.DEV` test must stay the FIRST statement, and must not be
+    replaced by the equivalent check inside `IS_MOCK_API`. Vite replaces `import.meta.env.DEV`
+    with `false` in place, so Rollup proves the rest of this function unreachable and drops the
+    dynamic import with it. Behind an imported constant it cannot: routing the same check
+    through `IS_MOCK_API` shipped MSW, its handlers and its fixtures as a 485 kB production
+    chunk — measured in the build output, which is the arbiter here.
+  */
   if (!import.meta.env.DEV) return;
+
+  if (!IS_MOCK_API) {
+    // Said out loud, because the failure mode of getting this wrong is a login screen that
+    // rejects the password you know is right — against an API nobody is serving.
+    console.info('[tcms] API mode: live — requests go to the dev proxy, MSW is not running.');
+    return;
+  }
 
   const { worker } = await import('./mocks/browser');
   await worker.start({

@@ -3,6 +3,8 @@ import { Suspense, lazy } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from './AppShell';
 import { RequireAuth } from '../auth/RequireAuth';
+import { SessionGate } from '../auth/SessionGate';
+import { AcceptInvitationPage } from '../features/auth/AcceptInvitationPage';
 import { LoginPage } from '../features/auth/LoginPage';
 import { NotFoundPage } from '../features/NotFoundPage';
 import { ProjectsPage } from '../features/projects/ProjectsPage';
@@ -10,7 +12,8 @@ import { ProjectsPage } from '../features/projects/ProjectsPage';
 /**
  * Route topology.
  *
- * `/login` is the only public route. Everything else sits behind `<RequireAuth>` inside the
+ * `/login` and `/accept-invitation` are the public routes — the second because someone holding
+ * an invitation has no account to authenticate with. Everything else sits behind `<RequireAuth>` inside the
  * persistent `<AppShell>` — a layout, so the rail and its state survive navigation.
  *
  * Feature routes are **project-scoped** (`/projects/:projectId/…`) because a project is a real
@@ -83,8 +86,26 @@ function RouteFallback() {
 
 export function AppRouter() {
   return (
+    <SessionGate>
+      <AppRoutes />
+    </SessionGate>
+  );
+}
+
+/**
+ * Split from `AppRouter` so no route is matched — and no route's queries fire — until the
+ * stored token has been confirmed against `/me`. See `SessionGate`.
+ */
+function AppRoutes() {
+  return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      {/*
+        Public, and it has to be: the holder of an invitation has no account yet, by definition.
+        The path matches the backend's `tcms.invitation.accept-path`, and the token arrives in
+        the query string exactly as `InvitationProperties` builds the emailed link.
+      */}
+      <Route path="/accept-invitation" element={<AcceptInvitationPage />} />
 
       <Route element={<RequireAuth />}>
         <Route element={<AppShell />}>

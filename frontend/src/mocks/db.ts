@@ -110,6 +110,26 @@ interface Store {
    * exercised rather than merely declared.
    */
   idempotency: Map<string, TestCase>;
+  /**
+   * Outstanding invitations, keyed by their token.
+   *
+   * Two seeded tokens rather than one, because the accept screen has two genuinely different
+   * shapes and only one of them is the obvious case: an invitee with no account chooses a
+   * password, while someone already on the instance being added to a second company must NOT
+   * be offered one (the API rejects a password there rather than ignoring it).
+   *
+   * Redeeming sets `consumed`, so a second use answers 404 exactly as the real service does —
+   * single-use is the property the screen's "this link no longer works" panel exists for, and
+   * a mock that let a token work twice would make it unreachable.
+   */
+  invitations: Map<string, MockInvitation>;
+}
+
+export interface MockInvitation {
+  email: string;
+  displayName: string;
+  passwordRequired: boolean;
+  consumed: boolean;
 }
 
 export const db: Store = {
@@ -128,6 +148,28 @@ export const db: Store = {
   configurations: clone(configurations),
   workItems: [],
   idempotency: new Map(),
+  invitations: new Map<string, MockInvitation>([
+    [
+      // Open /accept-invitation?token=new-user-token to walk the first-account path.
+      'new-user-token',
+      {
+        email: 'nina.marek@example.com',
+        displayName: 'Nina Marek',
+        passwordRequired: true,
+        consumed: false,
+      },
+    ],
+    [
+      // …and ?token=existing-user-token for the second-company path, which offers no password.
+      'existing-user-token',
+      {
+        email: 'ana.petrova@example.com',
+        displayName: 'Ana Petrova',
+        passwordRequired: false,
+        consumed: false,
+      },
+    ],
+  ]),
 };
 
 sequences.set('TC', db.cases.length);

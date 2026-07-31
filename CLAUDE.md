@@ -50,7 +50,11 @@ docker compose run --rm backend provision-company --slug=acme --name="Acme" \
 ```
 
 The frontend is deliberately **not** in compose: `npm run dev` with MSW needs no backend, and
-starting one would slow the loop without making it more real.
+starting one would slow the loop without making it more real. It can nonetheless be pointed at the
+real API — `VITE_API_MODE=live` in `frontend/.env.local` proxies `/api` to `localhost:8080` (see
+`frontend/.env.example`). Mock stays the default. **After changing `.env.local`, kill vite and
+`rm -rf node_modules/.vite`**: an in-place restart leaves a stale optimize-deps hash and the page
+renders blank with an empty console.
 
 ```bash
 # Backend — REQUIRES Docker; every test boots a real Postgres 17 via Testcontainers
@@ -65,7 +69,8 @@ cd backend
 # Frontend — no backend needed; MSW intercepts /api/v1 in dev
 cd frontend
 npm install
-npm run dev          # http://localhost:5173 — sign in with any password of 4+ chars
+npm run dev          # http://localhost:5173 — mock mode: sign in with any password of 4+ chars
+                     # live mode: redeem the /accept-invitation link provision-company prints
 npm run build        # THE gate: tsc -b + vite build
 npm run lint         # oxlint, must stay at 0 warnings — a gate, not advisory
 npm run gen:api      # regenerate src/api/schema.d.ts after ANY openapi.yaml change

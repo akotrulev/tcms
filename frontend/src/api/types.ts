@@ -11,6 +11,7 @@ type S = components['schemas'];
 // auth & identity
 export type AuthResult = S['AuthResult'];
 export type CurrentUser = S['CurrentUser'];
+export type InvitationPreview = S['InvitationPreview'];
 export type UserRef = S['UserRef'];
 export type User = S['User'];
 export type Team = S['Team'];

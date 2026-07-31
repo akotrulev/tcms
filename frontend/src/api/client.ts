@@ -1,6 +1,8 @@
 /**
- * Thin fetch wrapper. All requests go to /api/v1 and are intercepted by MSW in
- * development — there is no backend yet (see src/mocks/).
+ * Thin fetch wrapper. All requests go to /api/v1 — served in development either by MSW
+ * (`VITE_API_MODE=mock`, the default; see src/mocks/) or by the real Spring Boot API through
+ * the Vite dev proxy (`VITE_API_MODE=live`). Same origin either way, so nothing here changes
+ * between the two.
  *
  * Two things here are load-bearing rather than boilerplate:
  *
@@ -178,7 +180,10 @@ async function request<T>(path: string, init: RequestInit = {}, options: Request
   if (res.status === 204) return undefined as T;
 
   if (!res.ok) {
-    let detail = res.statusText;
+    // `statusText` is empty over HTTP/2 and on any bodiless response the origin didn't label —
+    // the real API's 401, for one. Without a floor here `ApiError.detail` becomes '' and every
+    // consumer that falls back to it renders a blank message.
+    let detail = res.statusText || `The request failed (HTTP ${res.status}).`;
     let fieldErrors: Record<string, string[]> | null = null;
     try {
       const body = await res.json();

@@ -33,6 +33,7 @@ import type {
   DocPageSummary,
   EntityVersion,
   ExecutionHistoryEntry,
+  InvitationPreview,
   Paged,
   PlanStatistics,
   Project,
@@ -61,6 +62,7 @@ import type { CaseFilters } from './types';
  */
 export const keys = {
   me: ['me'] as const,
+  invitation: (token: string) => ['invitation', token] as const,
   projects: ['projects'] as const,
   project: (id: string) => ['projects', id] as const,
   classification: (p: string) => ['projects', p, 'classification'] as const,
@@ -103,6 +105,47 @@ export function useCurrentUser(): UseQueryResult<CurrentUser> {
   return useQuery({
     queryKey: keys.me,
     queryFn: ({ signal }) => api.get<CurrentUser>('/me', { signal }),
+  });
+}
+
+/**
+ * What an invitation admits its holder to — the screen that precedes acceptance.
+ *
+ * Three things here are deliberate and all three are security properties of the contract
+ * rather than UI preferences:
+ *
+ *   - **`meta: { handled: true }`.** Every failure of this endpoint is a 404 with no body
+ *     (unknown token, expired, already redeemed, membership removed, account deactivated —
+ *     told apart they would let a stranger probe which addresses exist on the instance). The
+ *     page renders that as one non-committal message; a notification saying "Not found" in the
+ *     corner would add nothing and read as a bug.
+ *   - **No retry.** 404 is not transient, and the retry policy already excludes 4xx — stated
+ *     here because a token is single-use and re-requesting it is never useful.
+ *   - **`staleTime: Infinity`.** A refetch after the token has been redeemed would turn the
+ *     success screen into "invitation not found" under the user's hands.
+ */
+export function useInvitationPreview(token: string): UseQueryResult<InvitationPreview> {
+  return useQuery({
+    queryKey: keys.invitation(token),
+    queryFn: ({ signal }) => api.get<InvitationPreview>(`/auth/invitations/${encodeURIComponent(token)}`, { signal }),
+    enabled: token.length > 0,
+    staleTime: Infinity,
+    meta: { handled: true },
+  });
+}
+
+/**
+ * Redeems the invitation. Answers 204 — a session is *not* issued here (see the contract):
+ * the invitee signs in afterwards with the password they just chose, which keeps token
+ * issuance to a single path and proves the password round-tripped.
+ */
+export function useAcceptInvitation(token: string): UseMutationResult<void, Error, { password?: string }> {
+  return useMutation({
+    mutationFn: (input: { password?: string }) =>
+      api.post<void>(`/auth/invitations/${encodeURIComponent(token)}/accept`, input),
+    // The form owns every outcome: a 422 lands on the password field, a 404 replaces the whole
+    // panel. Neither is improved by a notification in the corner of a page with one purpose.
+    meta: { handled: true },
   });
 }
 
