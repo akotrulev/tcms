@@ -4,7 +4,6 @@ import {
   Divider,
   Drawer,
   IconButton,
-  Link as MuiLink,
   ListItemIcon,
   ListItemText,
   Menu,
@@ -398,9 +397,15 @@ function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
 }
 
 /**
- * A slim utility footer — this is a focused internal tool, so it carries version, help and
- * legal, not a marketing fat footer. Semantic `<footer>` so it forms a `contentinfo`
- * landmark, and the columns are explicitly labeled rather than a vague "Resources".
+ * A slim utility footer — this is a focused internal tool, so it carries the build it is running,
+ * not a marketing fat footer. Semantic `<footer>`, so it forms a `contentinfo` landmark.
+ *
+ * It used to also carry "Documentation" and "Contact support", both `href="#"`. Neither
+ * destination exists yet, and a link that goes nowhere is worse than an absent one: it costs a
+ * click, teaches the user the footer is decorative, and sits in the tab order of every page in the
+ * app. **They come back when they have somewhere to point** — a self-hosted instance's support
+ * contact is per-deployment configuration, not a constant, so it belongs with the instance
+ * settings that release rather than hard-coded here.
  */
 function AppFooter() {
   return (
@@ -415,20 +420,9 @@ function AppFooter() {
         color: 'text.secondary',
       }}
     >
-      <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        sx={{ gap: { xs: 1, sm: 3 }, alignItems: { sm: 'center' }, fontSize: '0.75rem' }}
-      >
-        <Typography variant="caption">
-          TCMS <Identifier variant="muted">0.1.0</Identifier>
-        </Typography>
-        <MuiLink href="#" variant="caption" data-testid="AppFooter.Documentation">
-          Documentation
-        </MuiLink>
-        <MuiLink href="#" variant="caption" data-testid="AppFooter.Support">
-          Contact support
-        </MuiLink>
-      </Stack>
+      <Typography variant="caption">
+        TCMS <Identifier variant="muted">0.1.0</Identifier>
+      </Typography>
     </Box>
   );
 }

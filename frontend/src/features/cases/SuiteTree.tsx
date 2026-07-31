@@ -48,10 +48,30 @@ interface TreeNode {
   totalCases: number;
 }
 
+/**
+ * Builds the tree, and — deliberately — **surfaces orphans at the root rather than dropping them**.
+ *
+ * A suite whose `parentId` names a suite that is not in this payload has no place to hang. The
+ * obvious implementation buckets by parent and walks from `null`, which never reaches it: the
+ * folder renders nowhere, with no empty state and no error, and every case inside it is
+ * unreachable through the tree. §36 pinned that as a *characterisation* test — "documented, not
+ * endorsed" — on the argument that the endpoint returns a project's whole suite list, so the input
+ * cannot occur today.
+ *
+ * Phase 5's verdict is that documenting it is not enough. The condition arrives the first time the
+ * list is paginated, filtered, permission-scoped, or served mid-way through a parent's soft
+ * delete, and it arrives *silently* — data loss with no signal is the one failure mode a tree must
+ * not have. Re-parenting to the root is wrong about hierarchy and right about existence, and being
+ * wrong visibly is strictly better than being wrong invisibly.
+ */
 function buildTree(suites: Suite[]): TreeNode[] {
+  const present = new Set(suites.map((suite) => suite.id));
   const byParent = new Map<string | null, Suite[]>();
   for (const suite of suites) {
-    const key = suite.parentId ?? null;
+    // An unresolvable parent is treated as no parent. A cycle is untouched by this: every node in
+    // one has a parent that *is* present, so it stays unreachable and is still dropped — which is
+    // the correct answer for a structure that cannot be drawn.
+    const key = suite.parentId && present.has(suite.parentId) ? suite.parentId : null;
     const bucket = byParent.get(key);
     if (bucket) bucket.push(suite);
     else byParent.set(key, [suite]);
@@ -118,9 +138,13 @@ export function SuiteTree({
     "default" moved on every write and the warning became routine.
 
     Controlling it also fixes the behaviour underneath the warning: creating a suite inside a
-    collapsed folder used to leave it invisible, because nothing expanded the parent. `expanded`
-    starts as the ancestors of the selection and is merged forward, so a user's own collapse is
-    never undone by a refetch.
+    collapsed folder used to leave it invisible, because nothing expanded the parent.
+
+    `expanded` is seeded ONCE, from the ancestors of the selection at mount — which is what makes a
+    deep-linked `?suiteId=` arrive with its context open. It is deliberately not re-seeded when the
+    selection changes afterwards: every later selection either comes from the tree itself (already
+    visible) or from a write, which expands its own parent explicitly below. Re-seeding would undo
+    a collapse the user performed on purpose, which is the behaviour this replaced.
   */
   const [expanded, setExpanded] = useState<string[]>(ancestorsOfSelection);
 
@@ -186,13 +210,13 @@ export function SuiteTree({
 
   return (
     <Box>
-      <Stack
-        direction="row"
-        sx={{ alignItems: 'center', justifyContent: 'space-between', px: 1.5, pb: 0.5 }}
-      >
-        <Typography variant="overline" sx={{ color: 'text.secondary' }}>
-          Suites
-        </Typography>
+      {/*
+        No heading here. The panel this tree lives in is already titled "Suites", and an overline
+        repeating the word directly beneath it was the app's clearest case of an accessory that
+        earns nothing — two labels for one thing, one of them shouting. The row survives because
+        the action does; the label does not.
+      */}
+      <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'flex-end', px: 1.5, pb: 0.5 }}>
         {/*
           Creates under the CURRENT selection, which is the folder the user is already looking at,
           and at the root when the selection is "All cases". Naming the target in the label rather

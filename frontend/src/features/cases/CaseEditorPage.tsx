@@ -21,8 +21,8 @@ import { useSnackbar } from 'notistack';
 import { useUnsavedWork } from '../../auth/useSessionRecovery';
 import { Controller, useFieldArray, useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
-import { z } from 'zod';
 import { ApiError } from '../../api/client';
+import { CaseSchema, type CaseInput } from './caseSchema';
 import { useCase, useClassification, useCreateCase, useSuites, useUpdateCase } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
@@ -34,69 +34,12 @@ import type { TestCase } from '../../api/types';
 /**
  * Case authoring form.
  *
- * The schema below is the single source of truth for what a case *is* on the client, and it
- * is deliberately narrower than the read model: it contains only fields the update path
- * actually persists. That is field gating by construction — TypeScript won't let the form
- * bind something the API ignores, so an edit can never show a success toast and quietly
- * discard the value, which is the highest-severity form defect there is.
- *
- * Notably absent: `lifecycleStatus`. Status moves through explicit review and approval
- * actions with their own side effects, so it is not an editable dropdown here — a `<select>`
- * would bypass the transition guards entirely.
+ * The schema it binds lives in `./caseSchema` rather than here. It used to be module-private in
+ * this file, which is exactly why its four cross-field refinements went untested through Phase 4
+ * (§36) and were still an open follow-up in §37 — a rule nothing can import is a rule only a human
+ * can check. Moving it out, rather than exporting it from here, keeps this file a component module
+ * and Fast Refresh working.
  */
-
-const StepSchema = z.object({
-  id: z.string().nullable().optional(),
-  keyword: z.string().nullable().optional(),
-  action: z.string().min(1, 'Describe the action.'),
-  testData: z.string().nullable().optional(),
-  expectedResult: z.string().nullable().optional(),
-  sharedStepId: z.string().nullable().optional(),
-});
-
-const CaseSchema = z
-  .object({
-    title: z.string().min(1, 'Enter a title.').max(300, 'Keep the title under 300 characters.'),
-    suiteId: z.string().min(1, 'Choose a suite.'),
-    objective: z.string().nullable(),
-    description: z.string().nullable(),
-    expectedOutcome: z.string().nullable(),
-    priority: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']),
-    automationStatus: z.enum(['MANUAL', 'TO_BE_AUTOMATED', 'AUTOMATED', 'NOT_AUTOMATABLE']),
-    automationKey: z.string().nullable(),
-    notAutomatableReason: z.string().nullable(),
-    // Held as the string the number input actually produces and converted at submit, rather
-    // than coerced in the schema: a coercion makes the schema's input and output types
-    // diverge, which then fights the form's own typing for no benefit here.
-    estimatedDurationSec: z
-      .string()
-      .nullable()
-      .refine((value) => !value || /^\d+$/.test(value), 'Enter a whole number of seconds.'),
-    stepFormat: z.enum(['STRUCTURED', 'GHERKIN']),
-    gherkinSource: z.string().nullable(),
-    steps: z.array(StepSchema),
-    changeComment: z.string().nullable(),
-  })
-  // Cross-field rules the server also enforces. Both live in the schema rather than in the
-  // submit handler, so the message lands on the field that caused it.
-  .refine((data) => data.stepFormat !== 'GHERKIN' || !!data.gherkinSource?.trim(), {
-    path: ['gherkinSource'],
-    message: 'Write the scenario, or switch to structured steps.',
-  })
-  .refine((data) => data.stepFormat !== 'STRUCTURED' || data.steps.length > 0, {
-    path: ['steps'],
-    message: 'Add at least one step, or switch to Gherkin.',
-  })
-  .refine((data) => data.automationStatus !== 'NOT_AUTOMATABLE' || !!data.notAutomatableReason?.trim(), {
-    path: ['notAutomatableReason'],
-    message: 'Say why this case cannot be automated.',
-  })
-  .refine((data) => data.automationStatus !== 'AUTOMATED' || !!data.automationKey?.trim(), {
-    path: ['automationKey'],
-    message: 'Give the automated test that covers this case, so results can be matched to it.',
-  });
-
-type CaseInput = z.infer<typeof CaseSchema>;
 
 const TestIdPrefix = 'CaseEditor';
 

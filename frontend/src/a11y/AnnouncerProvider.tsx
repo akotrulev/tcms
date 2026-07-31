@@ -32,25 +32,26 @@ export function AnnouncerProvider({ children }: { children: ReactNode }) {
   return (
     <AnnouncerContext value={value}>
       {children}
+      {/*
+        Visually hidden but still announced, via the ONE `.sr-only` rule in `index.css`.
+
+        This used to be a hand-written copy of that rule in `sx`, and the copy was wrong in a way
+        that is invisible to the type system and to every gate: MUI's `sx` runs `width`/`height`
+        through the sizing transform, where a **number ≤ 1 means a fraction** — so `width: 1` and
+        `height: 1` resolved to `100%`, not `1px`, and `margin: -1` to `-8px` of theme spacing.
+        The region was therefore a full-viewport absolutely-positioned block, clipped so nobody
+        could see it, adding ~900px of empty scrollable page below the footer on every screen.
+
+        The lesson is the shared-layer rule in CLAUDE.md, not the units: a second implementation of
+        something the shared layer already owns is where the drift lives.
+      */}
       <Box
+        component="div"
+        className="sr-only"
         data-testid="Announcer"
         role="status"
         aria-live="polite"
         aria-atomic="true"
-        sx={{
-          // Visually hidden but still announced. `display: none` and `visibility: hidden` both
-          // remove the node from the accessibility tree, which would silence it entirely.
-          position: 'absolute',
-          width: 1,
-          height: 1,
-          padding: 0,
-          margin: -1,
-          overflow: 'hidden',
-          clip: 'rect(0 0 0 0)',
-          clipPath: 'inset(50%)',
-          whiteSpace: 'nowrap',
-          border: 0,
-        }}
       >
         {message}
       </Box>

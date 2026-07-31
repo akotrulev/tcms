@@ -10,6 +10,7 @@ import type { TestCaseSummary } from '../../api/types';
 import { AutomationLabel, HealthChip, LifecycleChip, PriorityLabel, StatusDot } from '../../components/StatusChip';
 import { Identifier } from '../../components/Identifier';
 import { formatAge, formatDateTime } from '../../lib/format';
+import { DEFAULT_SORT } from './useCaseFilters';
 
 /**
  * The case grid. Server-side paging, sorting, and filtering throughout — a repository of a
@@ -223,6 +224,29 @@ export function CaseGrid({
     },
   ];
 
+  /**
+   * The grid may only be told to sort by a column it actually has.
+   *
+   * The default sort is `keySeq,asc` — the server's stable insertion order, which has no column
+   * here because "TC-7 before TC-12" is what the *Key* column already shows. Handing that field
+   * to `sortModel` looked harmless: the rows arrive in the right order either way, the URL is
+   * clean, and every gate stayed green. What it actually did was make the grid sanitize an
+   * unknown field out of its model **during its own render** and echo the correction back through
+   * `onSortModelChange` → `setSort` → `setSearchParams`, i.e. a router state update while a
+   * different component was rendering. React logged "Cannot update a component (`BrowserRouter`)
+   * while rendering a different component (`DataGridRaw`)" on every single load of this screen,
+   * and nothing else went wrong — which is why it survived three browser passes.
+   *
+   * Filtering to known fields makes the model the grid is given equal to the model it would
+   * compute, so there is nothing to echo. A sort the grid can't display simply shows no arrow,
+   * which is the truth.
+   */
+  const knownFields = new Set(columns.map((column) => column.field));
+  const sortModel: GridSortModel =
+    sortField && knownFields.has(sortField)
+      ? [{ field: sortField, sort: sortDir as GridSortModel[0]['sort'] }]
+      : [];
+
   return (
     <DataGrid<TestCaseSummary>
       rows={rows}
@@ -240,10 +264,13 @@ export function CaseGrid({
         if (model.page !== page) onPageChange(model.page);
       }}
       pageSizeOptions={[25, 50, 100]}
-      sortModel={sortField ? [{ field: sortField, sort: sortDir as GridSortModel[0]['sort'] }] : []}
+      sortModel={sortModel}
       onSortModelChange={(model) => {
         const next = model[0];
-        onSortChange(next ? `${next.field},${next.sort ?? 'asc'}` : 'keySeq,asc');
+        const value = next ? `${next.field},${next.sort ?? 'asc'}` : DEFAULT_SORT;
+        // Guard the echo as well as the input: an emission that restates the sort we are already
+        // on must not write to the URL, whatever else changes above.
+        if (value !== sort) onSortChange(value);
       }}
       // A leading checkbox column: row-click-only selection is undiscoverable, and bulk
       // editing is the workflow this screen exists to make survivable.
