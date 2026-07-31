@@ -1,7 +1,7 @@
 import { Box, Tooltip } from '@mui/material';
 import type { ReactNode } from 'react';
 import type { PermissionKey } from '../api/types';
-import { useCan } from '../auth/useCan';
+import { useCan, useCanInCompany } from '../auth/useCan';
 
 /**
  * The one place a permission the caller lacks becomes a disabled control with a reason.
@@ -32,7 +32,17 @@ export function PermissionGate({
   wrapper = 'inline',
   children,
 }: {
-  projectId: string | undefined;
+  /**
+   * The project the action happens in, or **`'company'`** for an action that has no project —
+   * today only "New project", whose permission (`project:create`) is COMPANY scope because the
+   * project it would create does not exist to be asked about.
+   *
+   * A literal rather than a second component: the tooltip wrapper below is the thing that is easy
+   * to get wrong once per call site, and two components would be two places to get it wrong. The
+   * verdict itself still comes from two different hooks, so neither scope can answer the other's
+   * question.
+   */
+  projectId: string | undefined | 'company';
   permission: PermissionKey;
   /**
    * How the denied branch's tooltip anchor lays out. `inline` suits a flex row of buttons;
@@ -44,7 +54,12 @@ export function PermissionGate({
   /** Receives the verdict; renders the control with its own notion of `disabled`. */
   children: (state: { allowed: boolean; reason: string | undefined }) => ReactNode;
 }) {
-  const gate = useCan(projectId);
+  // Both hooks run on every render — they must, and calling one conditionally would be the hook
+  // order violation React cannot recover from. The unused one is a cache read, not a request: its
+  // query is either already resolved or disabled.
+  const inProject = useCan(projectId === 'company' ? undefined : projectId);
+  const inCompany = useCanInCompany(projectId === 'company');
+  const gate = projectId === 'company' ? inCompany : inProject;
   const allowed = gate.can(permission);
   const reason = gate.reason(permission);
 

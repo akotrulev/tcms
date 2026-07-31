@@ -322,7 +322,65 @@ export interface paths {
             };
         };
         put?: never;
-        post?: never;
+        /**
+         * Create a project
+         * @description Requires `project:create`, which is a **COMPANY-scope** permission — the only write in
+         *     this contract whose gate is not a grant on the target, because the target does not exist
+         *     yet. Held by Company Admin and Instance Admin only (roles spec §A3); a Test Lead running
+         *     a project is not entitled to start another one.
+         *
+         *     `key` is **supplied by the client**, not allocated. Display keys (`TC-n`, `TS-n`) are
+         *     server-allocated from the company's counter because they number rows; a project key is a
+         *     2–10 character label a human chooses, types and reads back in URLs — "OLB" for Online
+         *     Banking — so allocating "P-3" would replace the one identifier in the system that is
+         *     meant to be memorable. It is immutable once set (see `Project.key`) and unique per
+         *     company, so two clients may both key a project `OLB`.
+         *
+         *     **A key already used in this company is a `400` keyed on `key`, not a `409`.** The form
+         *     has a field to put the message on, and the caller's next action is to type a different
+         *     key rather than to reload. That also makes the endpoint safe to retry without an
+         *     `Idempotency-Key`: the retry of a create that in fact succeeded cannot make a second
+         *     project, because the key is taken by the first — which is why this endpoint deliberately
+         *     does not accept the header that `POST …/cases` does.
+         *
+         *     The created project is seeded exactly as `provision-company` seeds a first project — the
+         *     Feature dimension, the six execution statuses and the Default configuration — so a
+         *     project created here and one created by the operator CLI are the same thing.
+         *
+         *     **No project grant is created for the caller.** Every route to `project:create` already
+         *     carries `project:read` over every project in the company (a Company Admin's COMPANY-scope
+         *     grant, an Instance Admin's SYSTEM one), so the new project is immediately in the caller's
+         *     `GET /projects`. Minting a PROJECT-scope grant for them would instead make `myRole` claim
+         *     a per-project role they do not hold.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ProjectInput"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        /** @description The created project's own URL. */
+                        Location?: string;
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Project"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                403: components["responses"]["Forbidden"];
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -1011,7 +1069,23 @@ export interface paths {
         };
         put?: never;
         post?: never;
-        /** Soft-delete a test case */
+        /**
+         * Soft-delete a test case
+         * @description Soft-deletes the case. Past runs pinned the version they executed and must keep
+         *     resolving what they covered, so the row survives, no read returns it, and the
+         *     display and automation keys stay reserved.
+         *
+         *     Requires `case:delete`, which is **`OWN`-qualified for Test Engineer** (roles spec
+         *     §A5): a lead deletes any case, a test engineer only cases they authored. Both
+         *     refusals are `403` and they carry **different messages** — "you cannot delete cases
+         *     here" is false for an engineer who deletes their own every day, and would send them
+         *     to ask for a permission they hold.
+         *
+         *     No `If-Match`: there is no lost-delete for a precondition to prevent, and a stale
+         *     version would refuse the delete over an edit the caller does not care about.
+         *
+         *     Nothing cascades. Steps, conditions, tags and attachments stay on the row.
+         */
         delete: {
             parameters: {
                 query?: never;
@@ -1038,6 +1112,8 @@ export interface paths {
                     };
                     content?: never;
                 };
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
             };
         };
         options?: never;
@@ -2283,6 +2359,28 @@ export interface components {
              * @example Viewer
              */
             myRole: string | null;
+        };
+        /**
+         * @description The body of `POST /projects`. Deliberately three fields: `archived`, `caseCount` and
+         *     `myRole` are server-owned or computed per caller, and a field on an input schema is a
+         *     field somebody eventually binds — a create that could set `archived` would let a project
+         *     be born retired.
+         */
+        ProjectInput: {
+            /**
+             * @description Client-supplied and immutable, unique per company. Rejected with a field error on
+             *     `key` when the company already uses it — see the endpoint description for why that is
+             *     a 400 rather than a 409.
+             * @example OLB
+             */
+            key: string;
+            /**
+             * @description A whole client product or engagement, not a feature area. "Payments" is a Feature
+             *     value or a suite folder, never a project (plan §1).
+             * @example Acme Online Banking
+             */
+            name: string;
+            description?: string | null;
         };
         ClassificationDimension: {
             /** Format: uuid */

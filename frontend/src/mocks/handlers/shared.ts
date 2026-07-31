@@ -7,8 +7,8 @@
  * refusing the same write in two different sentences.
  */
 import { HttpResponse } from 'msw';
-import { projects, roles } from '../fixtures/core';
-import { users } from '../db';
+import { roles } from '../fixtures/core';
+import { db, users } from '../db';
 
 export const API = '/api/v1';
 
@@ -42,9 +42,13 @@ export const MAX_SUITE_NAME = 150;
  * Shared by `GET /me/permissions` and by the writes that refuse — so the mock cannot enable a
  * control through one answer and then accept the write it should have refused. An unknown project
  * yields nothing, matching the real endpoint: unreachable and non-existent are indistinguishable.
+ *
+ * Reads the **store**, not the fixture: a project created through `POST /projects` has to be
+ * answerable here too, or the screens of a just-created project would all report "that project
+ * does not exist" through a permission set nobody could explain.
  */
 export function permissionsOn(projectId: string): string[] {
-  const project = projects.find((p) => p.id === projectId);
+  const project = db.projects.find((p) => p.id === projectId);
   const role = roles.find((r) => r.name === project?.myRole);
   return [...(role?.permissions ?? [])].sort();
 }

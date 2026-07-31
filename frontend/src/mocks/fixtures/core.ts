@@ -17,6 +17,7 @@ import type {
   CurrentUser,
   DocPage,
   DocPageSummary,
+  PermissionKey,
   Project,
   Role,
   RoleAssignment,
@@ -299,6 +300,22 @@ export const roleAssignments: RoleAssignment[] = [
  * which is exactly why company membership conveys no project visibility at all (§6b) — a regular
  * user sees only the projects they hold a grant on.
  */
+/**
+ * The caller's **COMPANY-scope** grant, which is a different question from any project's `myRole`.
+ *
+ * The real `GET /me/permissions` with no `projectId` answers the SYSTEM + COMPANY terms only, and
+ * the seeded persona here is an ordinary member: a Test Lead on one project, a Viewer on another,
+ * and no company-level powers. So they hold `company:read` and **not** `project:create` — which is
+ * why "New project" on the picker renders *disabled with its reason* in mock mode.
+ *
+ * That is the honest answer for this persona and it leaves the enabled branch unreachable here.
+ * **Add `'project:create'` to this array to drive the create dialog against the mock**; the live
+ * mode this slice unblocks is where the happy path is actually exercised, against a real Company
+ * Admin. A mock that granted it unconditionally would be §31's defect in reverse — a fixture that
+ * can only ever render one branch of a two-branch affordance.
+ */
+export const companyScopePermissions: PermissionKey[] = ['company:read'];
+
 export const projects: Project[] = [
   {
     id: PROJECT_ID,

@@ -19,6 +19,7 @@ import type {
   Condition,
   Configuration,
   DocPage,
+  Project,
   Suite,
   TestCase,
   TestCaseSummary,
@@ -36,6 +37,7 @@ import {
   docPageDetail,
   docPages,
   plans,
+  projects,
   runs,
   sharedSteps,
   statusByKind,
@@ -62,6 +64,14 @@ export function newId(): string {
 // ------------------------------------------------------------------ the store ----
 
 interface Store {
+  /**
+   * The project list — mutable, because it is now written to.
+   *
+   * It was read straight from the fixture until `POST /projects` existed, and a create that does
+   * not land in the list is precisely the lie this store exists to prevent: the picker would report
+   * success and then render the same cards it rendered before.
+   */
+  projects: Project[];
   suites: Suite[];
   cases: TestCaseSummary[];
   /** Full detail, lazily materialized on first read so edits survive a re-read. */
@@ -109,6 +119,7 @@ export interface MockInvitation {
 }
 
 export const db: Store = {
+  projects: clone(projects),
   suites: clone(suites),
   cases: clone(caseSummaries),
   caseDetails: new Map(),

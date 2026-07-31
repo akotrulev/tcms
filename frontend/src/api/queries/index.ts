@@ -26,8 +26,14 @@
  */
 export { base, keys } from './keys';
 
-export { useAcceptInvitation, useCurrentUser, useInvitationPreview, useMyPermissions } from './identity';
-export { useClassification, useProject, useProjects, useStatuses } from './projects';
+export {
+  useAcceptInvitation,
+  useCurrentUser,
+  useInvitationPreview,
+  useMyCompanyPermissions,
+  useMyPermissions,
+} from './identity';
+export { useClassification, useCreateProject, useProject, useProjects, useStatuses } from './projects';
 export {
   useCreateSuite,
   useDeleteSuite,

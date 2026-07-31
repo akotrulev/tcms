@@ -80,3 +80,31 @@ export function useMyPermissions(projectId: string | undefined): UseQueryResult<
     meta: { handled: true },
   });
 }
+
+/**
+ * What this caller may do **in the company**, with no project in the question.
+ *
+ * The same endpoint with `projectId` omitted, and a genuinely different answer: the SYSTEM and
+ * COMPANY terms only, deliberately *not* the union of the caller's project grants. A Test Lead
+ * holds `project:settings` on the project they run and nothing company-wide, so this is the only
+ * question that can gate a company-scope affordance — today, `project:create` on the picker.
+ *
+ * Separate hook rather than `useMyPermissions(undefined)`, which is disabled by design: a screen
+ * calling that before its route params resolve wants "no answer yet", not "ask about the company".
+ * Two questions that differ only in a missing argument is how one silently gets asked for the
+ * other.
+ *
+ * @param enabled `false` where the question is not being asked. `PermissionGate` renders on every
+ *   project screen and consults one scope or the other, and a hook cannot be called conditionally —
+ *   so without this gate the company question would be fired from every gated button in the app,
+ *   which is a request per screen to answer something no screen there is asking.
+ */
+export function useMyCompanyPermissions(enabled = true): UseQueryResult<EffectivePermissions> {
+  return useQuery({
+    queryKey: keys.companyPermissions,
+    queryFn: ({ signal }) => api.get<EffectivePermissions>('/me/permissions', { signal }),
+    enabled,
+    staleTime: 5 * 60_000,
+    meta: { handled: true },
+  });
+}

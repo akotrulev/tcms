@@ -1,10 +1,13 @@
-import { Box, Stack, Typography } from '@mui/material';
-import { Link as RouterLink } from 'react-router-dom';
+import { Box, Button, Stack, Typography } from '@mui/material';
+import { useState } from 'react';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useProjects } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader } from '../../components/PageHeader';
+import { PermissionGate } from '../../components/PermissionGate';
 import { formatCount } from '../../lib/format';
+import { ProjectCreateDialog } from './ProjectCreateDialog';
 
 /**
  * Project picker. Reached explicitly, and also the fallback when a URL names a project the
@@ -12,10 +15,54 @@ import { formatCount } from '../../lib/format';
  */
 export function ProjectsPage() {
   const projects = useProjects();
+  const navigate = useNavigate();
+  const [creating, setCreating] = useState(false);
 
   return (
     <Box>
-      <PageHeader testId="Projects.Header" title="Projects" subtitle="Pick a project to work in." />
+      <PageHeader
+        testId="Projects.Header"
+        title="Projects"
+        subtitle="Pick a project to work in."
+        actions={
+          /*
+            The app's only COMPANY-scope affordance, and therefore the only `PermissionGate` that
+            asks the company question: `project:create` is held by Company Admin and above, and
+            there is no project for it to be held on. Disabled with a reason rather than hidden —
+            a Test Lead seeing a greyed "New project" learns the capability exists and who to ask;
+            seeing nothing at all learns the product cannot do it, which is a lie.
+          */
+          <PermissionGate projectId="company" permission="project:create">
+            {({ allowed }) => (
+              <Button
+                variant="contained"
+                disabled={!allowed}
+                onClick={() => setCreating(true)}
+                data-testid="Projects.New"
+              >
+                New project
+              </Button>
+            )}
+          </PermissionGate>
+        }
+      />
+
+      {/*
+        Conditionally rendered, so the form mounts fresh each time — see the dialog's own note on
+        why it must not `reset()` itself.
+      */}
+      {creating && (
+        <ProjectCreateDialog
+          open
+          onClose={() => setCreating(false)}
+          /*
+            Straight into the project the user just made. They created it to work in it, and the
+            picker they would otherwise land back on now has one more card on it that they would
+            have to find and click.
+          */
+          onCreated={(project) => void navigate(`/projects/${project.id}`)}
+        />
+      )}
 
       <DataRegion
         testId="Projects.List"

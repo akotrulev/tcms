@@ -24,6 +24,7 @@ export type RoleScope = Role['scope'];
 
 // project
 export type Project = S['Project'];
+export type ProjectInput = S['ProjectInput'];
 export type ClassificationDimension = S['ClassificationDimension'];
 export type ClassificationValue = S['ClassificationValue'];
 export type CaseStatus = S['CaseStatus'];

@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
-import { useMyPermissions } from '../api/queries';
-import type { PermissionKey } from '../api/types';
+import { useMyCompanyPermissions, useMyPermissions } from '../api/queries';
+import type { EffectivePermissions, PermissionKey } from '../api/types';
 import { permissionLabels } from '../lib/permissions';
+import type { UseQueryResult } from '@tanstack/react-query';
 
 /**
  * Whether this caller may do a thing here — and, when they may not, the sentence that says so.
@@ -29,8 +30,9 @@ import { permissionLabels } from '../lib/permissions';
  * a query that renders nothing. The server is still the gate either way, so the cheap failure is
  * the enabled one.
  *
- * Reads permissions for **one project**. There is no company-wide variant here because no screen
- * needs one yet; the endpoint answers that question (`projectId` omitted) when one does.
+ * Reads permissions for **one project**. {@link useCanInCompany} is the company-wide variant, which
+ * the project picker's "New project" needed — `project:create` is COMPANY scope and there is no
+ * project to ask about.
  */
 export interface Gate {
   /** True when the caller holds the permission — or when the answer could not be obtained. */
@@ -40,10 +42,29 @@ export interface Gate {
 }
 
 export function useCan(projectId: string | undefined): Gate {
-  const query = useMyPermissions(projectId);
-
   // `isPending` covers the disabled case too (no projectId → the query never runs), which is the
   // right answer: without a project there is nothing to be permitted in.
+  return useGate(useMyPermissions(projectId), 'in this project');
+}
+
+/**
+ * The same verdict asked **of the company**, with no project in the question.
+ *
+ * Its own hook rather than a scope argument on {@link useCan}, because the two read different
+ * endpoints' answers and a screen must not be able to slip from one to the other by passing an
+ * `undefined` id. The three states, the fall-open on failure and the asymmetry behind it are
+ * identical — that part is shared, so a change to the policy cannot land in one and not the other.
+ *
+ * The sentence differs, and it has to: "you don't have permission to create projects in this
+ * project" would send a Test Lead to ask their project admin for something only a Company Admin can
+ * grant.
+ */
+export function useCanInCompany(enabled = true): Gate {
+  return useGate(useMyCompanyPermissions(enabled), 'in this company');
+}
+
+/** The one implementation of the three states, so the two scopes cannot drift apart. */
+function useGate(query: UseQueryResult<EffectivePermissions>, where: string): Gate {
   const pending = query.isPending && !query.isError;
   const held = query.data?.permissions;
 
@@ -53,9 +74,9 @@ export function useCan(projectId: string | undefined): Gate {
       reason: (permission) => {
         if (pending) return 'Checking your permissions…';
         if (!held || held.includes(permission)) return undefined;
-        return `You don't have permission to ${permissionLabels[permission]} in this project.`;
+        return `You don't have permission to ${permissionLabels[permission]} ${where}.`;
       },
     }),
-    [pending, held],
+    [pending, held, where],
   );
 }

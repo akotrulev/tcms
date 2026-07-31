@@ -47,6 +47,15 @@ export const keys = {
   roles: ['roles'] as const,
   roleAssignments: (p?: string) => ['role-assignments', p ?? 'ALL'] as const,
   workItems: (p: string, mine: boolean) => ['work-items', p, mine] as const,
+  /**
+   * The caller's permissions with **no project in the question** — a different answer from
+   * `permissions(projectId)` and therefore a different key.
+   *
+   * Not `permissions('')`: an empty string is a project id that failed to arrive, and reusing the
+   * project-keyed factory for the company-wide question would make a screen that renders before
+   * its route params resolve read the company answer and cache it as that project's.
+   */
+  companyPermissions: ['me', 'permissions', 'company'] as const,
 };
 
 export const base = (projectId: string) => `/projects/${projectId}`;

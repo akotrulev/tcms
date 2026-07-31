@@ -1,7 +1,7 @@
 /** Sign-in, sign-out, invitation redemption, and the two questions about the caller. */
 import { HttpResponse, delay, http } from 'msw';
 import { db } from '../db';
-import { currentUser } from '../fixtures/core';
+import { companyScopePermissions, currentUser } from '../fixtures/core';
 import { API, LATENCY, permissionsOn, problem, requireAuth } from './shared';
 
 export const authHandlers = [
@@ -100,15 +100,19 @@ export const authHandlers = [
     **Viewer** — MOB, seeded that way precisely because read-only is the default on joining.
 
     No project id means the company-wide question, which the real endpoint answers with the
-    SYSTEM + COMPANY terms only — deliberately NOT the union of the caller's project grants.
-    `company:read` is the honest mock of that for a plain member.
+    SYSTEM + COMPANY terms only — deliberately NOT the union of the caller's project grants. The
+    answer is `companyScopePermissions`, a named fixture rather than a literal here, because it is
+    now consulted twice: by this handler and by `POST /projects`, whose gate must agree with the
+    button this answer disables. Its own comment says what to add to drive the enabled branch.
   */
   http.get(`${API}/me/permissions`, ({ request }) => {
     const denied = requireAuth(request);
     if (denied) return denied;
 
     const projectId = new URL(request.url).searchParams.get('projectId');
-    if (!projectId) return HttpResponse.json({ projectId: null, permissions: ['company:read'] });
+    if (!projectId) {
+      return HttpResponse.json({ projectId: null, permissions: companyScopePermissions });
+    }
 
     // An unknown project answers with the empty set rather than a 404, matching the real
     // endpoint: an unreachable project and a non-existent one must be indistinguishable (§6t).
