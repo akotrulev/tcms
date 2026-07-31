@@ -1,0 +1,128 @@
+package com.tcms.repository;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * {@code TestCase} in {@code docs/specs/openapi.yaml} — one whole case, the detail screen's body.
+ *
+ * <h2>Flat, because {@code allOf} is flat</h2>
+ *
+ * <p>The contract declares {@code allOf: [TestCaseSummary, {…}]}, which is one JSON object with
+ * both sets of keys at the top level — not a summary nested under a field. So the summary's
+ * seventeen components are repeated here rather than held as a {@link TestCaseSummaryView} member.
+ *
+ * <p>The repetition is deliberate and the two alternatives are both worse. {@code @JsonUnwrapped}
+ * on a nested record produces the right JSON by a mechanism nothing in this codebase uses, and
+ * whose failure mode is a silently nested response. Composing the response as a {@code Map} gives
+ * up the compile-time check that {@code openapi.yaml}'s required fields are all present, which is
+ * the check that catches a renamed field. What matters is that the <em>values</em> are not
+ * re-derived: {@link #of} takes a {@link TestCaseSummaryView} built by {@link CaseSummaries} — the
+ * same object the grid renders — and copies it component by component, so a grid row and a detail
+ * page cannot disagree about a case. The copying is mechanical; the resolution is shared.
+ *
+ * <h2>Two fields the contract has and this response does not</h2>
+ *
+ * <ol>
+ *   <li><strong>{@code relatedDocuments}.</strong> Sourced from {@code doc_link} against
+ *       {@code doc_page} / {@code doc_block}, which are the {@code documentation} module — and that
+ *       module does not exist. Nothing can create a link, so no case has one. The contract does not
+ *       mark the field required and the SPA already renders its absence as an empty panel, which is
+ *       exactly true. Serializing {@code []} would say the same thing while claiming the question
+ *       had been asked.</li>
+ *   <li><strong>{@code lastResult}.</strong> Sourced from {@code test_execution}; the
+ *       {@code execution} module does not exist either. Same call as {@link TestCaseSummaryView}
+ *       makes, and made the same way for the same reason — the SPA reads a missing
+ *       {@code lastResult} as "Never run".</li>
+ * </ol>
+ *
+ * @param gherkinSource null for a {@code STRUCTURED} case; {@link #steps} is empty for a
+ *              {@code GHERKIN} one. The two are alternatives (plan §6a) and the SPA branches on
+ *              {@link #stepFormat} rather than on which of them is populated — which is what keeps
+ *              a case that somehow carries both from rendering twice.
+ * @param steps  never null. Empty is a real and common state: a case can be created with a title
+ *              and filled in later, and the SPA has an empty state that says so.
+ * @param preconditions resolved through {@link CaseConditions} — inherited entries first, marked,
+ *              naming the suite they came from.
+ * @param currentVersionNo the authored version, {@code v7} beside the title. Not
+ *              {@link #lockVersion}; see {@link TestCase#getCurrentVersionNo()} for why showing the
+ *              wrong one puts a number beside the title that no history entry matches.
+ * @param lockVersion on the wire because the SPA sends it back on a PATCH, so a concurrent edit is
+ *              a 409 rather than a silent overwrite (plan §6j). The one internal that earns its
+ *              place in a response.
+ */
+public record TestCaseDetailView(
+        UUID id,
+        String key,
+        long keySeq,
+        String title,
+        UUID suiteId,
+        String suiteName,
+        Priority priority,
+        LifecycleStatus lifecycleStatus,
+        AutomationStatus automationStatus,
+        StepFormat stepFormat,
+        UserRefView owner,
+        String testType,
+        String testLevel,
+        List<String> features,
+        List<String> tags,
+        List<HealthSignal> healthSignals,
+        Instant updatedAt,
+        String description,
+        String objective,
+        String expectedOutcome,
+        Priority severity,
+        Integer estimatedDurationSec,
+        List<String> automationTags,
+        String automationKey,
+        String notAutomatableReason,
+        String gherkinSource,
+        List<TestStepView> steps,
+        List<CaseConditionRefView> preconditions,
+        List<CaseConditionRefView> postconditions,
+        int currentVersionNo,
+        long lockVersion) {
+
+    static TestCaseDetailView of(
+            TestCase row,
+            TestCaseSummaryView summary,
+            List<String> automationTags,
+            List<TestStepView> steps,
+            CaseConditions.Resolved conditions) {
+
+        return new TestCaseDetailView(
+                summary.id(),
+                summary.key(),
+                summary.keySeq(),
+                summary.title(),
+                summary.suiteId(),
+                summary.suiteName(),
+                summary.priority(),
+                summary.lifecycleStatus(),
+                summary.automationStatus(),
+                summary.stepFormat(),
+                summary.owner(),
+                summary.testType(),
+                summary.testLevel(),
+                summary.features(),
+                summary.tags(),
+                summary.healthSignals(),
+                summary.updatedAt(),
+                row.getDescription(),
+                row.getObjective(),
+                row.getExpectedOutcome(),
+                row.getSeverity(),
+                row.getEstimatedDurationSec(),
+                automationTags,
+                row.getAutomationKey(),
+                row.getNotAutomatableReason(),
+                row.getGherkinSource(),
+                steps,
+                conditions.preconditions(),
+                conditions.postconditions(),
+                row.getCurrentVersionNo(),
+                row.getLockVersion());
+    }
+}

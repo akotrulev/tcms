@@ -1294,7 +1294,15 @@ components:
               type: string
               nullable: true
               description: Case-level, alongside per-step expected results (plan §6m).
-            severity: { $ref: '#/components/schemas/Priority' }
+            severity:
+              # Nullable because test_case.severity is — priority is NOT NULL DEFAULT 'MEDIUM'
+              # and this column has no default at all, which is the schema saying the two are
+              # different fields. A team that does not distinguish "how bad is a failure" from
+              # "how soon should it run" leaves it unset rather than being made to repeat itself,
+              # and inventing MEDIUM here would put a judgement on the wire that nobody made.
+              # Same divergence, resolved the same way, as TestCaseSummary.owner.
+              allOf: [{ $ref: '#/components/schemas/Priority' }]
+              nullable: true
             estimatedDurationSec: { type: integer, nullable: true }
             automationTags:
               type: array

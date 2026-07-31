@@ -290,9 +290,22 @@ function ConditionPanel({
         </Typography>
       ) : (
         <Stack sx={{ gap: 1.5 }}>
-          {[...conditions]
-            .sort((a, b) => a.position - b.position)
-            .map((condition) => (
+          {/*
+           * Rendered in the order the server sent, and NOT re-sorted by `position`.
+           *
+           * `position` is sibling order *within one suite* — it says nothing about which suite
+           * comes first. A case's list is assembled across its whole ancestry (plan §6f:
+           * inherited walking the suite path upward, outermost folder first, then the case's
+           * own), so sorting by position interleaves depths and puts a rule set three folders
+           * down ahead of the one it depends on. Exactly the trap `SuiteRepository` records for
+           * the suite tree, where ordering the flat list by position lets a child precede its
+           * own parent.
+           *
+           * It sorted here until the live pass, and it was invisible against the mock: the mock
+           * hands out one flat ascending sequence, so position order and resolution order agree
+           * there and only there.
+           */}
+          {conditions.map((condition) => (
               <Box
                 key={condition.id}
                 data-testid={`${testId}.Item`}

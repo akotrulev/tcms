@@ -30,11 +30,14 @@ import java.util.UUID;
  *       with the condition-authoring endpoint that first makes an inline row reachable, which is
  *       also the first moment the question has a real answer: either the contract grows an inline
  *       title or {@code title} becomes nullable. Nothing can create one today.</li>
- *   <li><strong>{@code kind} (PRE / POST) has nowhere to go.</strong> The column exists and the
- *       distinction is real — a postcondition is cleanup, not setup — but {@code CaseConditionRef}
- *       carries no field for it, so the list arrives undifferentiated. Adding one is an
- *       {@code openapi.yaml} change with a consumer on the other side, and there is no consumer of
- *       suite conditions at all yet.</li>
+ *   <li><strong>{@code kind} (PRE / POST) has nowhere to go <em>in this shape</em>.</strong> The
+ *       column exists, the distinction is real — a postcondition is cleanup, not setup — and it is
+ *       mapped as of the case detail slice, which reads it. But {@code CaseConditionRef} carries no
+ *       field for it, so this list still arrives undifferentiated. The case endpoint does not need
+ *       one: it has <em>two arrays</em>, and which array a row is in says what the field would have.
+ *       A suite has one array and therefore genuinely loses the distinction. Closing it is an
+ *       {@code openapi.yaml} change with a consumer on the other side, and the SPA's suite tree
+ *       does not render conditions at all yet.</li>
  * </ol>
  *
  * <p>A third case drops out quietly and is worth naming: an attachment whose library condition has

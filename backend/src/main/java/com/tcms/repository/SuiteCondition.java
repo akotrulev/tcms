@@ -3,6 +3,8 @@ package com.tcms.repository;
 import com.tcms.tenancy.CompanyFilter;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.util.UUID;
@@ -17,10 +19,13 @@ import org.hibernate.annotations.Filter;
  * form has no representable shape yet, and {@link SuiteConditionRepository#findForSuites} for
  * where that exclusion is enforced.
  *
- * <p>{@code kind} ({@code PRE}/{@code POST}) is deliberately not mapped: the contract's
- * {@code CaseConditionRef} has no field to carry it, so mapping it here would produce a value with
- * nowhere to go. It is a real gap and it is recorded on {@link SuiteConditionView}, not papered
- * over by inventing a field the SPA's generated types do not have.
+ * <p>{@link #kind} ({@code PRE}/{@code POST}) <strong>is mapped as of the case detail slice</strong>,
+ * having been left off through §24 on the rule that a field mapped before its reader goes stale
+ * unnoticed. The reader is {@link CaseConditions}: a case's response has two lists, and this is
+ * what decides which one an inherited row lands in. The gap it was recorded as is narrower now and
+ * still real — {@code GET /projects/{projectId}/suites} serves {@code CaseConditionRef}, which
+ * carries no {@code kind} field, so <em>that</em> response still arrives undifferentiated. See
+ * {@link SuiteConditionView}.
  *
  * <p>{@code conditionId} is a plain {@code UUID} rather than a mapped {@code @ManyToOne}. Same
  * choice the {@code project} module made for {@code ClassificationValue.dimensionId}, same reason:
@@ -42,6 +47,11 @@ public class SuiteCondition {
     @Column(name = "suite_id", nullable = false, updatable = false)
     private UUID suiteId;
 
+    /** Setup or cleanup — which of the inheriting case's two lists this row joins. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "kind", nullable = false)
+    private ConditionKind kind;
+
     @Column(name = "position", nullable = false)
     private int position;
 
@@ -59,6 +69,10 @@ public class SuiteCondition {
 
     public UUID getSuiteId() {
         return suiteId;
+    }
+
+    public ConditionKind getKind() {
+        return kind;
     }
 
     public int getPosition() {

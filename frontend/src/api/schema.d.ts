@@ -2198,7 +2198,7 @@ export interface components {
             objective?: string | null;
             /** @description Case-level, alongside per-step expected results (plan §6m). */
             expectedOutcome?: string | null;
-            severity?: components["schemas"]["Priority"];
+            severity?: components["schemas"]["Priority"] | null;
             estimatedDurationSec?: number | null;
             automationTags?: string[];
             /**

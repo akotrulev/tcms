@@ -45,9 +45,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class CaseController {
 
     private final CaseService cases;
+    private final CaseDetailService detail;
 
-    public CaseController(CaseService cases) {
+    public CaseController(CaseService cases, CaseDetailService detail) {
         this.cases = cases;
+        this.detail = detail;
     }
 
     /**
@@ -86,6 +88,30 @@ public class CaseController {
                 releaseVersion, page, size, sort);
 
         return cases.search(UUID.fromString(jwt.getSubject()), projectId, request)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /**
+     * One whole case.
+     *
+     * <p><strong>Both path segments are gates, and the 404 covers three different failures</strong>
+     * — an unreachable project, a case that does not exist, and a case that exists in a project the
+     * caller was not granted. They answer identically and with no body, because telling them apart
+     * turns {@code /projects/{granted}/cases/{id}} into a probe for case ids elsewhere in the
+     * company. {@link CaseDetailService#findOne} collapses all three into an empty
+     * {@link java.util.Optional} so this method has nothing to un-collapse.
+     *
+     * <p>{@code caseId} is a UUID and never a display key. {@code TC-1} is company-scoped and
+     * therefore guessable, which is exactly why plan §6t keeps display keys out of API paths.
+     */
+    @GetMapping("/{caseId}")
+    public ResponseEntity<TestCaseDetailView> findOne(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID caseId) {
+
+        return detail.findOne(UUID.fromString(jwt.getSubject()), projectId, caseId)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }

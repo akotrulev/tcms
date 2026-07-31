@@ -11,7 +11,6 @@ import java.util.Collection;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -55,48 +54,38 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Thirteen or so for any page size, rather than three plus five per row. The number is worth
  * writing down because the shape that produces it is unremarkable to read and one mapped
- * {@code @ManyToOne} away from being 5N.
+ * {@code @ManyToOne} away from being 5N. Items 6 and 7 now happen inside {@link CaseSummaries};
+ * moving them did not change the count.
+ *
+ * <h2>What this class no longer does</h2>
+ *
+ * <p>Turning {@link TestCase} rows into {@link TestCaseSummaryView} lives in {@link CaseSummaries},
+ * because {@code GET /projects/{projectId}/cases/{caseId}} owes the same fields — {@code TestCase}
+ * is {@code allOf: [TestCaseSummary, …]} — and a second implementation of "which Test Type does
+ * this case show" is how a grid and a detail page come to disagree about one case. What stays here
+ * is what only a <em>list</em> has: the scope resolution, the paging, and the facets.
  */
 @Service
 public class CaseService {
-
-    /**
-     * The dimension keys V2 seeds. Matched by key rather than by position or name: the name is
-     * per-company and a client may rename theirs (the two locked ones are locked against
-     * <em>deletion</em>, not against renaming), while the key is what {@code openapi.yaml}'s
-     * {@code testTypeId} / {@code testLevelId} / {@code featureId} parameters are named after.
-     */
-    private static final String FEATURE = "feature";
-    private static final String TEST_TYPE = "test_type";
-    private static final String TEST_LEVEL = "test_level";
 
     private final ProjectService projects;
     private final ProjectConfigurationService configuration;
     private final SuiteRepository suites;
     private final CaseSearch search;
-    private final CaseTagRepository tags;
-    private final CaseClassificationRepository classifications;
-    private final CaseHealthRepository health;
-    private final CaseOwners owners;
+    private final CaseSummaries summaries;
 
     public CaseService(
             ProjectService projects,
             ProjectConfigurationService configuration,
             SuiteRepository suites,
             CaseSearch search,
-            CaseTagRepository tags,
-            CaseClassificationRepository classifications,
-            CaseHealthRepository health,
-            CaseOwners owners) {
+            CaseSummaries summaries) {
 
         this.projects = projects;
         this.configuration = configuration;
         this.suites = suites;
         this.search = search;
-        this.tags = tags;
-        this.classifications = classifications;
-        this.health = health;
-        this.owners = owners;
+        this.summaries = summaries;
     }
 
     /**
@@ -137,14 +126,14 @@ public class CaseService {
         CaseScope scope = new CaseScope(
                 projectId,
                 suiteIds,
-                subtreeOf(request.featureId(), FEATURE, vocabularies),
-                subtreeOf(request.testTypeId(), TEST_TYPE, vocabularies),
-                subtreeOf(request.testLevelId(), TEST_LEVEL, vocabularies));
+                subtreeOf(request.featureId(), DimensionKeys.FEATURE, vocabularies),
+                subtreeOf(request.testTypeId(), DimensionKeys.TEST_TYPE, vocabularies),
+                subtreeOf(request.testLevelId(), DimensionKeys.TEST_LEVEL, vocabularies));
 
         List<TestCase> cases = search.page(request, scope);
 
         return new CasePageView(
-                summaries(companyId, cases, liveSuites, vocabularies),
+                summaries.render(companyId, cases, liveSuites, vocabularies),
                 request.page(),
                 request.size(),
                 search.total(request, scope),
@@ -269,141 +258,6 @@ public class CaseService {
             }
         }
         return scope;
-    }
-
-    // =====================================================================
-    // rendering
-    // =====================================================================
-
-    private List<TestCaseSummaryView> summaries(
-            UUID companyId,
-            List<TestCase> cases,
-            List<Suite> liveSuites,
-            List<ClassificationDimensionView> vocabularies) {
-
-        if (cases.isEmpty()) {
-            return List.of();
-        }
-
-        List<UUID> caseIds = cases.stream().map(TestCase::getId).toList();
-
-        Map<UUID, String> suiteNames = new HashMap<>();
-        liveSuites.forEach(suite -> suiteNames.put(suite.getId(), suite.getName()));
-
-        Map<UUID, List<String>> tagsByCase = tagsByCase(caseIds);
-        Map<UUID, List<HealthSignal>> healthByCase = healthByCase(caseIds);
-        Map<UUID, UserRefView> ownersById = owners.resolve(companyId, ownerIds(cases));
-        ClassifiedCases classified = classify(caseIds, vocabularies);
-
-        return cases.stream()
-                .map(row -> new TestCaseSummaryView(
-                        row.getId(),
-                        row.getKey(),
-                        row.getKeySeq(),
-                        row.getTitle(),
-                        row.getSuiteId(),
-                        // Every case in the page is in a live suite by construction — the query is
-                        // bounded by that set — so this default is unreachable rather than a
-                        // fallback. Empty rather than a placeholder, because a name this endpoint
-                        // could not resolve is not a name it should invent.
-                        suiteNames.getOrDefault(row.getSuiteId(), ""),
-                        row.getPriority(),
-                        row.getLifecycleStatus(),
-                        row.getAutomationStatus(),
-                        row.getStepFormat(),
-                        // Null for an unowned case, and null for one whose owner account no longer
-                        // resolves. Both are honest; see TestCaseSummaryView.
-                        row.getOwnerId() == null ? null : ownersById.get(row.getOwnerId()),
-                        classified.single(row.getId(), TEST_TYPE),
-                        classified.single(row.getId(), TEST_LEVEL),
-                        classified.all(row.getId(), FEATURE),
-                        tagsByCase.getOrDefault(row.getId(), List.of()),
-                        healthByCase.getOrDefault(row.getId(), List.of()),
-                        row.getUpdatedAt()))
-                .toList();
-    }
-
-    /** Distinct, non-null owner ids — the input to one membership query and one account query. */
-    private static Set<UUID> ownerIds(List<TestCase> cases) {
-        Set<UUID> ids = new LinkedHashSet<>();
-        for (TestCase row : cases) {
-            if (row.getOwnerId() != null) {
-                ids.add(row.getOwnerId());
-            }
-        }
-        return ids;
-    }
-
-    private Map<UUID, List<String>> tagsByCase(List<UUID> caseIds) {
-        Map<UUID, List<String>> grouped = new HashMap<>();
-        for (CaseTag tag : tags.findForCases(caseIds)) {
-            grouped.computeIfAbsent(tag.getCaseId(), key -> new ArrayList<>()).add(tag.getTag());
-        }
-        return grouped;
-    }
-
-    private Map<UUID, List<HealthSignal>> healthByCase(List<UUID> caseIds) {
-        Map<UUID, List<HealthSignal>> grouped = new HashMap<>();
-        for (CaseHealth row : health.findForCases(caseIds)) {
-            grouped.put(row.getCaseId(), row.signals());
-        }
-        return grouped;
-    }
-
-    /**
-     * The page's classifications, resolved to names and bucketed by dimension key.
-     *
-     * <p>Values absent from the live vocabulary are dropped: a retired value is still attached to
-     * every case that carried it, and rendering it would present a withdrawn classification as
-     * current — the same omission {@code SuiteConditionView} makes for a retired condition, for the
-     * same reason.
-     */
-    private ClassifiedCases classify(
-            List<UUID> caseIds, List<ClassificationDimensionView> vocabularies) {
-
-        Map<UUID, String> nameByValue = new HashMap<>();
-        Map<UUID, String> keyByDimension = new HashMap<>();
-        for (ClassificationDimensionView dimension : vocabularies) {
-            keyByDimension.put(dimension.id(), dimension.key());
-            for (ClassificationValueView value : dimension.values()) {
-                nameByValue.put(value.id(), value.name());
-            }
-        }
-
-        Map<UUID, Map<String, List<String>>> byCase = new HashMap<>();
-        for (CaseClassification assignment : classifications.findForCases(caseIds)) {
-            String name = nameByValue.get(assignment.getValueId());
-            String dimension = keyByDimension.get(assignment.getDimensionId());
-            if (name == null || dimension == null) {
-                continue;
-            }
-            byCase.computeIfAbsent(assignment.getCaseId(), key -> new LinkedHashMap<>())
-                    .computeIfAbsent(dimension, key -> new ArrayList<>())
-                    .add(name);
-        }
-        byCase.values().forEach(dimensions -> dimensions.values().forEach(names -> names.sort(null)));
-        return new ClassifiedCases(byCase);
-    }
-
-    /**
-     * One page's classifications, keyed case → dimension key → value names.
-     *
-     * <p>{@link #single} exists because Test Type and Test Level are SINGLE-cardinality dimensions
-     * and the contract gives each a scalar field. It returns the first name rather than refusing a
-     * second: the cardinality is enforced by a V2 trigger at write time, so a second value here
-     * would mean the trigger had been bypassed — and a list endpoint is the wrong place to discover
-     * that, and the worst place to fail the whole page over it.
-     */
-    private record ClassifiedCases(Map<UUID, Map<String, List<String>>> byCase) {
-
-        String single(UUID caseId, String dimensionKey) {
-            List<String> names = all(caseId, dimensionKey);
-            return names.isEmpty() ? null : names.getFirst();
-        }
-
-        List<String> all(UUID caseId, String dimensionKey) {
-            return byCase.getOrDefault(caseId, Map.of()).getOrDefault(dimensionKey, List.of());
-        }
     }
 
     // =====================================================================
