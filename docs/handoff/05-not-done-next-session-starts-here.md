@@ -62,6 +62,11 @@ Modified: `Providers.tsx` (nesting order is load-bearing — see its header comm
 
 ### Phases 4–5 — next
 
+> **→ superseded for Phase 4: it shipped in §36.** Vitest + RTL are installed and 203 tests are
+> green and in CI. The target list below was the right one and was largely followed — read §36 for
+> what was covered, what was deliberately left (`CaseSchema`'s refinements, still module-private in
+> `CaseEditorPage.tsx`), and the two findings the tests produced. **Phase 5 is still not started.**
+
 **Unblocked.** The §9 corrections landed, so Phase 4 tests will be written against shapes that survive. `lib/permissions.ts` and `lib/results.ts` are the highest-value targets — both pure and both load-bearing.
 
 - **Phase 4:** Vitest + RTL. Nothing is installed yet. Highest-value targets are the logic-bearing units, not the markup: `useCaseFilters` (URL round-tripping), `lib/results` (denominator arithmetic), `lib/format` (`compareReleaseVersions`), `lib/describeError` (the retryable/isAuth matrix), `DataRegion`'s state matrix, `app/versionSkew` (the once-only guard), and the `CaseSchema` cross-field refinements.

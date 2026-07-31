@@ -669,6 +669,12 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/EntityVersion' }
+        '404':
+          # An unreachable project, a case in a sibling project, a soft-deleted case and an
+          # absent one all answer 404 — the same concealment the case detail uses, so a
+          # caller cannot probe for what exists outside its grants. Distinct from a 200 with
+          # an empty array, which means the case is real and has no recorded versions.
+          $ref: '#/components/responses/NotFound'
 
   /projects/{projectId}/cases/{caseId}/history:
     parameters:
@@ -1799,7 +1805,15 @@ components:
       required: [versionNo, createdBy, createdAt, pinned]
       properties:
         versionNo: { type: integer }
-        createdBy: { $ref: '#/components/schemas/UserRef' }
+        createdBy:
+          # Nullable because test_case_version.created_by is, and carries no FK to
+          # app_user (§28 finding 1). Two real states reach this field: nobody was
+          # recorded (rows predating the first write path), and the recorded id names
+          # no surviving account. Declaring it non-nullable made every consumer's
+          # generated type lie, and the SPA carried a hand-widened alias to compensate
+          # — §35 found it. Same treatment as TestCaseSummary.owner above.
+          allOf: [{ $ref: '#/components/schemas/UserRef' }]
+          nullable: true
         createdAt: { type: string, format: date-time }
         changeComment: { type: string, nullable: true }
         pinned: { type: boolean }

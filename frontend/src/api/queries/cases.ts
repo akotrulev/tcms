@@ -165,24 +165,16 @@ export function useBulkCases(projectId: string): UseMutationResult<BulkResult, E
 }
 
 /**
- * One authored version, **with the author widened to nullable**.
+ * One authored version.
  *
- * `EntityVersion` in the contract declares `createdBy` as a required, non-null `UserRef`, and the
- * server cannot honour that: `test_case_version.created_by` is a nullable column with no foreign
- * key to `app_user`, so a version can be genuinely unattributed (imported content) or carry an id
- * that resolves to no account. It serves `null` for both, which is the honest answer — inventing a
- * name would be a false claim about who changed a test.
- *
- * Hand-written here for the same reason `CaseHistoryResponse` below is: the generated type is not
- * usable as-is, and the alternative is a `!` at every call site, which is how a real `null` becomes
- * a blank line on the panel instead of "Unknown author". **`openapi.yaml` should say
- * `nullable: true` on `createdBy`** — the same fix `TestCaseSummary.owner` already carries for
- * exactly this reason — and this alias is deleted when it does. The contract is one lane's to
- * change; see `docs/handoff/35-m1-s12-case-versions.md`.
+ * `createdBy` is nullable straight from the generated type: `test_case_version.created_by` is a
+ * nullable column with no foreign key to `app_user`, so a version can be genuinely unattributed
+ * (imported content) or carry an id that resolves to no account. The server serves `null` for
+ * both, which is the honest answer — inventing a name would be a false claim about who changed a
+ * test. §35 shipped against a hand-widened alias because the contract still said non-null; the
+ * contract was corrected at integration and the alias deleted with it.
  */
-export type CaseVersion = Omit<EntityVersion, 'createdBy'> & {
-  createdBy: EntityVersion['createdBy'] | null;
-};
+export type CaseVersion = EntityVersion;
 
 /**
  * A case's authored history, newest first.

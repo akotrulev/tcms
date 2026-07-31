@@ -1217,6 +1217,7 @@ export interface paths {
                         "application/json": components["schemas"]["EntityVersion"][];
                     };
                 };
+                404: components["responses"]["NotFound"];
             };
         };
         put?: never;
@@ -2629,7 +2630,7 @@ export interface components {
         };
         EntityVersion: {
             versionNo: number;
-            createdBy: components["schemas"]["UserRef"];
+            createdBy: components["schemas"]["UserRef"] | null;
             /** Format: date-time */
             createdAt: string;
             changeComment?: string | null;
