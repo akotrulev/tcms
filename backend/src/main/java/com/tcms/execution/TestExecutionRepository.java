@@ -55,6 +55,32 @@ public interface TestExecutionRepository extends JpaRepository<TestExecution, UU
     List<Object[]> tallyByRun(@Param("runIds") Collection<UUID> runIds);
 
     /**
+     * Every execution belonging to any live run of one plan.
+     *
+     * <p>The unit the statistics endpoint aggregates over. A plan is typically covered by several
+     * runs — a nightly CI run, a manual regression run, a re-run of the failures — so "the plan's
+     * results" is the union across them and "the latest result" is resolved <strong>per case</strong>
+     * rather than per run (plan §6p). That is why this returns rows rather than a tally: which row
+     * wins is a question about the aggregation policy, and a {@code GROUP BY} would have to be
+     * rewritten for each of the five.
+     *
+     * <p><strong>Deleted runs are excluded.</strong> Runs are soft-deleted, and a plan's readiness
+     * must not be argued from a run somebody withdrew — §6p's rule that deleted runs "must not
+     * orphan history" is about the case timeline, where the entry is marked and kept; a
+     * *current-state* figure is the other case, and counting a withdrawn run there would restore a
+     * result the person deleting it meant to retract.
+     *
+     * <p>Returns the run's own columns alongside, so {@code byConfiguration} and {@code trend} do not
+     * re-query per run: {@code [execution, runId, runKey, configurationId, startedAt]}. An execution
+     * has no configuration of its own — {@code configuration_id} is on {@code test_run} (V1), because
+     * a run is by definition one pass in one configuration.
+     */
+    @Query("SELECT e, r.id, r.key, r.configurationId, r.startedAt "
+            + "FROM TestExecution e JOIN TestRun r ON r.id = e.runId "
+            + "WHERE e.projectId = :projectId AND r.planId = :planId AND r.deletedAt IS NULL")
+    List<Object[]> findForPlan(@Param("projectId") UUID projectId, @Param("planId") UUID planId);
+
+    /**
      * The defects linked to a batch of executions, as {@code [id, executionId, externalKey,
      * provider, url, statusCache]}.
      *

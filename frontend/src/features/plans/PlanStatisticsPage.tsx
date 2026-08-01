@@ -15,6 +15,7 @@ import {
 } from '@mui/material';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlineOutlined';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlineOutlined';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutlineOutlined';
 import { useState } from 'react';
 import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
 import type { AggregationPolicy, Criterion, PlanStatistics } from '../../api/types';
@@ -23,7 +24,7 @@ import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { DenominatorToggle, PassRateSummary, ResultBar, ResultCountsCell } from '../../components/ResultBar';
-import { type Denominator } from '../../lib/results';
+import { criterionState, type Denominator } from '../../lib/results';
 import { StatusChip } from '../../components/StatusChip';
 import { formatCount, formatDateTime, formatPercent } from '../../lib/format';
 import { aggregationHelp, aggregationLabels } from '../../lib/labels';
@@ -156,9 +157,24 @@ function StatisticsBody({
               />
               <ResultBar counts={data.counts} height={14} showLegend testId="PlanStats.ResultBar" />
               {data.latestExecutionAt && (
-                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                /*
+                  This caption used to read "the read model is catching up, so counts may lag by
+                  a few seconds" — the opposite warning to the one `stale` carries. The figures
+                  are recomputed per request and never lag; `stale` means NOTHING HAS BEEN
+                  EXECUTED IN TWO WEEKS, and plan §6p calls a page showing old numbers as current
+                  the most dangerous screen in the product. Reassuring the reader was exactly the
+                  wrong response, and it went unnoticed because until the endpoint went live the
+                  mock never set the flag.
+                */
+                <Typography
+                  variant="caption"
+                  sx={{ color: data.stale ? 'var(--color-blocked)' : 'text.secondary' }}
+                  data-testid="PlanStats.Freshness"
+                >
                   Latest result {formatDateTime(data.latestExecutionAt)}
-                  {data.stale && ' — the read model is catching up, so counts may lag by a few seconds.'}
+                  {data.stale
+                    && ' — nothing has been executed against this plan in over two weeks. These'
+                      + ' numbers describe the past, not the build you are about to ship.'}
                 </Typography>
               )}
             </Stack>
@@ -228,25 +244,45 @@ function StatisticsBody({
  */
 function ExitCriteria({ criteria }: { criteria: Criterion[] }) {
   if (criteria.length === 0) return null;
-  const unmet = criteria.filter((c) => !c.met);
+  // `met: null` is "not evaluated", which is neither met nor unmet. The server returns it for
+  // metrics it cannot answer from a plan's own results — open_critical needs the issue tracker,
+  // cases_approved the review workflow. Treating null as unmet (`!c.met`) put a red cross and a
+  // release-blocking count against a gate nobody had checked; it only became reachable when the
+  // statistics endpoint went live, because the mock had always supplied a boolean.
+  const unmet = criteria.filter((c) => criterionState(c) === 'UNMET');
+  const unevaluated = criteria.filter((c) => criterionState(c) === 'NOT_EVALUATED');
 
   return (
     <Panel
       title="Exit criteria"
       testId="PlanStats.ExitCriteria"
       actions={
-        <Chip
-          size="small"
-          label={unmet.length === 0 ? 'All met' : `${unmet.length} unmet`}
-          data-testid="PlanStats.ExitCriteria.Summary"
-          sx={{
-            bgcolor: 'transparent',
-            color: unmet.length === 0 ? 'var(--color-passed)' : 'var(--color-failed)',
-            border: `1px solid color-mix(in srgb, ${
-              unmet.length === 0 ? 'var(--color-passed)' : 'var(--color-failed)'
-            } 45%, transparent)`,
-          }}
-        />
+        <Stack direction="row" sx={{ gap: 0.75, alignItems: 'center' }}>
+          <Chip
+            size="small"
+            label={unmet.length === 0 ? 'All met' : `${unmet.length} unmet`}
+            data-testid="PlanStats.ExitCriteria.Summary"
+            sx={{
+              bgcolor: 'transparent',
+              color: unmet.length === 0 ? 'var(--color-passed)' : 'var(--color-failed)',
+              border: `1px solid color-mix(in srgb, ${
+                unmet.length === 0 ? 'var(--color-passed)' : 'var(--color-failed)'
+              } 45%, transparent)`,
+            }}
+          />
+          {unevaluated.length > 0 && (
+            <Chip
+              size="small"
+              label={`${unevaluated.length} not evaluated`}
+              data-testid="PlanStats.ExitCriteria.Unevaluated"
+              sx={{
+                bgcolor: 'transparent',
+                color: 'text.secondary',
+                border: '1px solid color-mix(in srgb, currentColor 30%, transparent)',
+              }}
+            />
+          )}
+        </Stack>
       }
     >
       <Stack sx={{ gap: 1 }}>
@@ -268,38 +304,57 @@ function ExitCriteria({ criteria }: { criteria: Criterion[] }) {
             reaches 100%.
           </Typography>
         )}
-        {criteria.map((criterion) => (
-          <Stack
-            key={criterion.metric}
-            direction="row"
-            sx={{ alignItems: 'center', gap: 1.5 }}
-            data-testid="PlanStats.ExitCriteria.Item"
-          >
-            <Box sx={{ display: 'flex', color: criterion.met ? 'var(--color-passed)' : 'var(--color-failed)' }}>
-              {criterion.met ? (
-                <CheckCircleOutlineIcon fontSize="small" />
-              ) : (
-                <ErrorOutlineIcon fontSize="small" />
-              )}
-            </Box>
-            <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }}>
-              {criterion.label}
-            </Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-              target <Identifier variant="muted">{criterion.op} {criterion.value}</Identifier>
-            </Typography>
-            <Identifier
-              sx={{
-                minWidth: 64,
-                textAlign: 'right',
-                color: criterion.met ? 'var(--color-passed)' : 'var(--color-failed)',
-                fontWeight: 600,
-              }}
+        {criteria.map((criterion, index) => {
+          // Three states, not two. A criterion the server could not evaluate is grey and says so,
+          // rather than borrowing the failed colour and reading as a blocker.
+          const state = criterionState(criterion);
+          const color =
+            state === 'NOT_EVALUATED'
+              ? 'text.secondary'
+              : state === 'MET'
+                ? 'var(--color-passed)'
+                : 'var(--color-failed)';
+
+          return (
+            <Stack
+              // Metric is not unique — a plan may gate on pass_rate per configuration — so the
+              // index is part of the key rather than the whole of it being the metric.
+              key={`${criterion.metric}-${index}`}
+              direction="row"
+              sx={{ alignItems: 'center', gap: 1.5 }}
+              data-testid="PlanStats.ExitCriteria.Item"
             >
-              {criterion.actual ?? '—'}
-            </Identifier>
-          </Stack>
-        ))}
+              <Box sx={{ display: 'flex', color }}>
+                {state === 'NOT_EVALUATED' ? (
+                  <HelpOutlineIcon fontSize="small" />
+                ) : state === 'MET' ? (
+                  <CheckCircleOutlineIcon fontSize="small" />
+                ) : (
+                  <ErrorOutlineIcon fontSize="small" />
+                )}
+              </Box>
+              <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }}>
+                {criterion.label}
+                {state === 'NOT_EVALUATED' && (
+                  <Typography
+                    component="span"
+                    variant="caption"
+                    sx={{ color: 'text.secondary', ml: 1 }}
+                    data-testid="PlanStats.ExitCriteria.Item.NotEvaluated"
+                  >
+                    — not evaluated: nothing in TCMS measures this yet
+                  </Typography>
+                )}
+              </Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                target <Identifier variant="muted">{criterion.op} {criterion.value}</Identifier>
+              </Typography>
+              <Identifier sx={{ minWidth: 64, textAlign: 'right', color, fontWeight: 600 }}>
+                {criterion.actual ?? '—'}
+              </Identifier>
+            </Stack>
+          );
+        })}
       </Stack>
     </Panel>
   );

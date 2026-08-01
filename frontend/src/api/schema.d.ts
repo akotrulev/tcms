@@ -1562,12 +1562,18 @@ export interface paths {
         };
         /**
          * Current plan state from the latest execution
-         * @description **Not implemented server-side as of backend M2 slice 1.** Every other path in this
-         *     tag is live; this one is still answered by the SPA's mock. The shape spans three
-         *     modules — `execution` for the results, `repository` for `bySuite`, `reporting` for
-         *     the trend and the coverage denominator — and `reporting` does not exist. Declared
-         *     here so the shape stays fixed, and named as unimplemented so a client is not misled
-         *     by its presence.
+         * @description Live since backend M2 slice 3. Computed on read from `test_execution` rather than
+         *     from the `plan_snapshot` rollup plan §6p specifies — that rollup belongs to
+         *     `reporting`, which does not exist, and a figure recomputed per request cannot go
+         *     stale relative to a result recorded a second ago, which is the property a tester
+         *     checks immediately after saving one. The cost is one grouped scan per view, bounded
+         *     by the plan's own scope; revisit when a plan's execution count makes it visible.
+         *
+         *     **Two of the five criterion metrics are evaluated** — `pass_rate` and `coverage`,
+         *     the two this endpoint's own numbers support. `open_critical` needs the M4 issue
+         *     tracker, `cases_approved` the review workflow, and `build_available` is modelled
+         *     nowhere; those return `met` and `actual` as null, meaning *not evaluated*, which is
+         *     a different thing from unmet.
          */
         get: {
             parameters: {
@@ -1595,6 +1601,15 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["PlanStatistics"];
+                    };
+                };
+                /** @description The `aggregation` parameter is not one of the five policies. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
                 404: components["responses"]["NotFound"];
@@ -3193,11 +3208,23 @@ export interface components {
             planVersionNo: number;
             aggregationPolicy: components["schemas"]["AggregationPolicy"];
             counts: components["schemas"]["ResultCounts"];
-            /** @description A headline figure, not a footnote — 89% pass over 40% coverage is not green (plan §6p). */
+            /**
+             * @description Distinct in-scope cases carrying any result, over every case in scope, times 100.
+             *     A headline figure, not a footnote — 89% pass over 40% coverage is not green
+             *     (plan §6p). Independent of `aggregation`: a case is covered or it is not,
+             *     whichever way its several results resolve to one.
+             */
             coveragePercent: number;
             /** Format: date-time */
             latestExecutionAt?: string | null;
-            /** @description True when nothing has executed recently. A stale page shown as current is dangerous. */
+            /**
+             * @description **Nothing has been executed against this plan in 14 days** — not a freshness
+             *     warning about the figures themselves, which are computed per request. Plan §6p:
+             *     "a plan page showing 94% from three weeks ago, presented as current, is the most
+             *     dangerous screen in the product". False for a plan with no results at all, which
+             *     is un-started rather than stale, and the `counts.total == counts.notRun` branch
+             *     already says so in plainer words.
+             */
             stale: boolean;
             byConfiguration: {
                 configuration: string;
@@ -3211,7 +3238,7 @@ export interface components {
                 counts: components["schemas"]["ResultCounts"];
             }[];
             blockers: components["schemas"]["TestExecutionSummary"][];
-            notRun: components["schemas"]["TestCaseSummary"][];
+            notRun: components["schemas"]["PlanCaseRef"][];
             exitCriteria: components["schemas"]["Criterion"][];
             trend: {
                 runKey: string;
@@ -3219,6 +3246,25 @@ export interface components {
                 executedAt: string;
                 passRate: number;
             }[];
+        };
+        /**
+         * @description A case named in a plan's scope, carrying only what a plan-level list renders.
+         *     Deliberately not TestCaseSummary: the `execution` module may not read the
+         *     repository's tables except through one seam class (ERD §0.2), and every field
+         *     beyond these six would widen that seam to serve a panel that shows a key, a
+         *     title and a suite name.
+         */
+        PlanCaseRef: {
+            /** Format: uuid */
+            id: string;
+            /** @example TC-1 */
+            key: string;
+            /** @description Sort by this — text keys do not order correctly (TC-10000 < TC-9999). */
+            keySeq: number;
+            title: string;
+            /** Format: uuid */
+            suiteId: string;
+            suiteName: string;
         };
         ReportDefinition: {
             /** Format: uuid */

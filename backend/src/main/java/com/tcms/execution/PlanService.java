@@ -23,14 +23,18 @@ import org.springframework.transaction.annotation.Transactional;
  * naming a project the caller does hold — and every cross-company test still passes, because the row
  * is in the caller's own company.
  *
- * <h2>What a plan does not carry yet, and why saying so is better than computing something</h2>
+ * <h2>{@code passRate} and {@code coverage} stay null, and now for a better reason</h2>
  *
- * <p>{@code passRate} and {@code coverage} are null, always. Both are aggregates over the plan's
- * runs and both belong to the statistics endpoint, which this slice does not implement (see the
- * contract's own note on that path). The contract marks them nullable; the SPA renders a null as
- * "not measured". Any number this service could cheaply invent would be a different number from the
- * one the statistics endpoint will produce, on the same screen, and the first person to notice would
- * be a client reading a report.
+ * <p>They were null because the statistics endpoint did not exist. It does
+ * ({@link PlanStatisticsService}), and they are still null — because filling them here would mean
+ * resolving every plan's executions <em>once per row of the plan list</em>, which is that endpoint
+ * run N times for a screen that shows a bar.
+ *
+ * <p>The deeper reason is the one that would survive making it cheap: a pass rate has no meaning
+ * without the aggregation policy that produced it, and the list has nowhere to state one. Two
+ * numbers computed under different policies, on two screens, neither of which says which — that is
+ * the §6p ambiguity the whole statistics page is shaped to remove. The contract marks both nullable
+ * and the SPA renders a null as "not measured", which is true.
  */
 @Service
 public class PlanService {

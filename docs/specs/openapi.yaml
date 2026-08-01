@@ -858,18 +858,29 @@ paths:
       tags: [execution, reporting]
       summary: Current plan state from the latest execution
       description: |
-        **Not implemented server-side as of backend M2 slice 1.** Every other path in this
-        tag is live; this one is still answered by the SPA's mock. The shape spans three
-        modules — `execution` for the results, `repository` for `bySuite`, `reporting` for
-        the trend and the coverage denominator — and `reporting` does not exist. Declared
-        here so the shape stays fixed, and named as unimplemented so a client is not misled
-        by its presence.
+        Live since backend M2 slice 3. Computed on read from `test_execution` rather than
+        from the `plan_snapshot` rollup plan §6p specifies — that rollup belongs to
+        `reporting`, which does not exist, and a figure recomputed per request cannot go
+        stale relative to a result recorded a second ago, which is the property a tester
+        checks immediately after saving one. The cost is one grouped scan per view, bounded
+        by the plan's own scope; revisit when a plan's execution count makes it visible.
+
+        **Two of the five criterion metrics are evaluated** — `pass_rate` and `coverage`,
+        the two this endpoint's own numbers support. `open_critical` needs the M4 issue
+        tracker, `cases_approved` the review workflow, and `build_available` is modelled
+        nowhere; those return `met` and `actual` as null, meaning *not evaluated*, which is
+        a different thing from unmet.
       responses:
         '200':
           description: Statistics
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PlanStatistics' }
+        '400':
+          description: The `aggregation` parameter is not one of the five policies.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
         '404':
           # Same four states as the plan detail above.
           $ref: '#/components/responses/NotFound'
@@ -2422,11 +2433,21 @@ components:
         counts: { $ref: '#/components/schemas/ResultCounts' }
         coveragePercent:
           type: number
-          description: A headline figure, not a footnote — 89% pass over 40% coverage is not green (plan §6p).
+          description: |
+            Distinct in-scope cases carrying any result, over every case in scope, times 100.
+            A headline figure, not a footnote — 89% pass over 40% coverage is not green
+            (plan §6p). Independent of `aggregation`: a case is covered or it is not,
+            whichever way its several results resolve to one.
         latestExecutionAt: { type: string, format: date-time, nullable: true }
         stale:
           type: boolean
-          description: True when nothing has executed recently. A stale page shown as current is dangerous.
+          description: |
+            **Nothing has been executed against this plan in 14 days** — not a freshness
+            warning about the figures themselves, which are computed per request. Plan §6p:
+            "a plan page showing 94% from three weeks ago, presented as current, is the most
+            dangerous screen in the product". False for a plan with no results at all, which
+            is un-started rather than stale, and the `counts.total == counts.notRun` branch
+            already says so in plainer words.
         byConfiguration:
           type: array
           items:
@@ -2449,8 +2470,14 @@ components:
           type: array
           items: { $ref: '#/components/schemas/TestExecutionSummary' }
         notRun:
+          # Was TestCaseSummary until M2 slice 3, and narrowing it was the price of keeping
+          # the `execution` -> `repository` seam one class wide. TestCaseSummary requires
+          # features, tags, healthSignals, automationStatus, owner and updatedAt — none of
+          # which this panel renders, and every one of which would have to be re-derived
+          # here from case_classification, case_tag, case_health and app_user, duplicating
+          # repository.CaseSummaries inside a module forbidden to import it.
           type: array
-          items: { $ref: '#/components/schemas/TestCaseSummary' }
+          items: { $ref: '#/components/schemas/PlanCaseRef' }
         exitCriteria:
           type: array
           items: { $ref: '#/components/schemas/Criterion' }
@@ -2463,6 +2490,25 @@ components:
               runKey: { type: string }
               executedAt: { type: string, format: date-time }
               passRate: { type: number }
+
+    PlanCaseRef:
+      type: object
+      description: |
+        A case named in a plan's scope, carrying only what a plan-level list renders.
+        Deliberately not TestCaseSummary: the `execution` module may not read the
+        repository's tables except through one seam class (ERD §0.2), and every field
+        beyond these six would widen that seam to serve a panel that shows a key, a
+        title and a suite name.
+      required: [id, key, keySeq, title, suiteId, suiteName]
+      properties:
+        id: { type: string, format: uuid }
+        key: { type: string, example: TC-1 }
+        keySeq:
+          type: integer
+          description: Sort by this — text keys do not order correctly (TC-10000 < TC-9999).
+        title: { type: string }
+        suiteId: { type: string, format: uuid }
+        suiteName: { type: string }
 
     ReportDefinition:
       type: object

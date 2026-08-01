@@ -251,7 +251,20 @@ export const planStatistics: PlanStatistics = {
     durationMs: 1800,
     defects: [{ id: uid(800 + i, 'j'), externalKey: `PAY-9${90 + i}`, provider: 'JIRA', url: 'https://example.com/browse/PAY-990', statusCache: i % 2 ? 'In Progress' : 'Open' }],
   })),
-  notRun: caseSummaries.filter((c) => !c.lastResult).slice(0, 5),
+  // Projected down to PlanCaseRef's six fields rather than handed the whole summary. The mock
+  // used to serve a full TestCaseSummary here, which the contract no longer declares — and a mock
+  // richer than the contract is a mock that lets a page read a field the real server never sends.
+  notRun: caseSummaries
+    .filter((c) => !c.lastResult)
+    .slice(0, 5)
+    .map((c) => ({
+      id: c.id,
+      key: c.key,
+      keySeq: c.keySeq,
+      title: c.title,
+      suiteId: c.suiteId,
+      suiteName: c.suiteName,
+    })),
   exitCriteria: plans[0].exitCriteria ?? [],
   trend: [
     { runKey: 'TR-413', executedAt: '2026-07-24T02:30:00Z', passRate: 95.3 },

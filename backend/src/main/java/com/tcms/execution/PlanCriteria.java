@@ -74,6 +74,66 @@ class PlanCriteria {
         return List.copyOf(parsed);
     }
 
+    /**
+     * The same criteria, with {@code met} and {@code actual} filled in for every metric
+     * {@code actuals} can answer.
+     *
+     * <p><strong>A metric with no actual keeps both fields null, and null means "not evaluated" —
+     * which is not "unmet".</strong> Of the five metrics plans are written with, this endpoint's own
+     * numbers support two: {@code pass_rate} and {@code coverage}. {@code open_critical} needs defect
+     * severities from an issue tracker (the {@code IssueTracker} port is M4), {@code cases_approved}
+     * needs the review workflow, and {@code build_available} is modelled nowhere in the product.
+     * Returning {@code false} for those would say the gate had been checked and failed, and a release
+     * meeting would be reading a red cross that means "we did not look".
+     *
+     * <p>This is the field {@link CriterionView#met} was declared nullable for, and M2 slice 1 left
+     * null on every criterion because there was no statistics endpoint to evaluate one. Now some are
+     * answerable and some still are not, so the nullability finally does the work it was declared
+     * for rather than standing in for an unimplemented endpoint.
+     */
+    List<CriterionView> evaluate(List<CriterionView> criteria, Map<String, Double> actuals) {
+        List<CriterionView> evaluated = new ArrayList<>(criteria.size());
+        for (CriterionView criterion : criteria) {
+            Double actual = actuals.get(criterion.metric());
+            evaluated.add(actual == null
+                    ? criterion
+                    : new CriterionView(
+                            criterion.metric(),
+                            criterion.op(),
+                            criterion.value(),
+                            criterion.label(),
+                            satisfies(actual, criterion.op(), criterion.value()),
+                            // Rounded to one decimal on the way out, not in the comparison above: a
+                            // gate at ">= 95" must not be met by a 94.96 that rounds to 95.0 on the
+                            // screen beside it. The displayed number is the approximation; the
+                            // verdict is not.
+                            Math.round(actual * 10.0) / 10.0));
+        }
+        return List.copyOf(evaluated);
+    }
+
+    /**
+     * @return null when the operator is not one of the six, so an unrecognised predicate reads as
+     *         "not evaluated" rather than as failed. A criterion authored with {@code =>} instead of
+     *         {@code >=} is a typo in the plan, and rendering it as a blocking red gate would send
+     *         someone looking for a defect that is really a text field.
+     */
+    private static Boolean satisfies(double actual, String op, double target) {
+        return switch (op) {
+            case ">=" -> actual >= target;
+            case ">" -> actual > target;
+            case "<=" -> actual <= target;
+            case "<" -> actual < target;
+            // Tolerance rather than ==, because both sides are doubles and the left one is usually a
+            // division: "coverage = 100" must be met by 100.00000000000001, which is what
+            // 305/305*100 can produce. The tolerance is far below one display decimal, so nothing
+            // visibly short of the target can pass.
+            case "=", "==" -> Math.abs(actual - target) < 1e-9;
+            case "!=", "<>" -> Math.abs(actual - target) >= 1e-9;
+            default -> null;
+        };
+    }
+
     /** A configuration's attribute map. Values are coerced to text: the contract declares strings. */
     Map<String, String> attributes(String attributes) {
         if (attributes == null || attributes.isBlank()) {

@@ -1,10 +1,13 @@
 package com.tcms.execution;
 
 import java.net.URI;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -16,6 +19,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -37,10 +41,14 @@ public class PlanController {
 
     private final PlanService plans;
     private final PlanCreateService creates;
+    private final PlanStatisticsService statistics;
 
-    public PlanController(PlanService plans, PlanCreateService creates) {
+    public PlanController(
+            PlanService plans, PlanCreateService creates, PlanStatisticsService statistics) {
+
         this.plans = plans;
         this.creates = creates;
+        this.statistics = statistics;
     }
 
     /**
@@ -67,6 +75,36 @@ public class PlanController {
 
         return plans.findOne(UUID.fromString(jwt.getSubject()), projectId, planId)
                 .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /**
+     * Where the plan stands right now (plan §6p).
+     *
+     * <p>{@code aggregation} is bound as a {@code String} and parsed here rather than declared as the
+     * enum. Spring's own converter would answer a bare 400 whose body names the Java type and the
+     * rejected value, which publishes an internal class name and tells the caller nothing about what
+     * it should have sent; the five valid policies are worth naming, since choosing between them is
+     * the whole point of the parameter.
+     */
+    @GetMapping("/{planId}/statistics")
+    public ResponseEntity<Object> statistics(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID planId,
+            @RequestParam(name = "aggregation", required = false) String aggregation) {
+
+        AggregationPolicy policy;
+        try {
+            policy = aggregation == null || aggregation.isBlank()
+                    ? AggregationPolicy.DEFAULT
+                    : AggregationPolicy.valueOf(aggregation.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException unknown) {
+            return ResponseEntity.badRequest().body(unknownPolicyProblem(aggregation));
+        }
+
+        return statistics.statistics(UUID.fromString(jwt.getSubject()), projectId, planId, policy)
+                .<ResponseEntity<Object>>map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
@@ -104,6 +142,25 @@ public class PlanController {
             case PlanCreateService.Outcome.Invalid invalid ->
                     ResponseEntity.badRequest().body(validationProblem(invalid.errors()));
         };
+    }
+
+    /**
+     * Names the five, unlike the permission refusal below.
+     *
+     * <p>The two are not in tension: §32's rule is that a <em>permission key</em> must not be named
+     * to a caller who cannot grant it to themselves, because that publishes the catalogue. An
+     * aggregation policy is public vocabulary already on every response and in the SPA's own
+     * dropdown, and withholding it would leave the caller guessing at a closed set.
+     */
+    private static ProblemDetail unknownPolicyProblem(String rejected) {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        problem.setTitle("Unknown aggregation policy");
+        problem.setDetail("'" + rejected + "' is not an aggregation policy. Valid values: "
+                + Arrays.stream(AggregationPolicy.values())
+                        .map(Enum::name)
+                        .collect(Collectors.joining(", "))
+                + ".");
+        return problem;
     }
 
     private static ProblemDetail validationProblem(Map<String, List<String>> errors) {

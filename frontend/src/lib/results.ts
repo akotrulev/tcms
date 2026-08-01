@@ -51,3 +51,27 @@ export function sumCounts(all: ResultCounts[]): ResultCounts {
     { passed: 0, failed: 0, blocked: 0, skipped: 0, notRun: 0, total: 0 },
   );
 }
+
+/**
+ * Whether an exit criterion was met, was not met, or was never evaluated.
+ *
+ * **Three states, not two, and conflating the last two is a release-safety bug.** The server
+ * sets `met` to null for metrics a plan's own numbers cannot answer — `open_critical` needs the
+ * issue tracker, `cases_approved` the review workflow, `build_available` nothing that exists.
+ * A `!criterion.met` test reads those as failed and puts a red cross and an "N unmet" count
+ * against gates nobody has checked, which is the opposite of the honest answer: the release may
+ * well be fine, and the reader is being told it is blocked.
+ *
+ * It is here rather than inline in `PlanStatisticsPage` because a second reading of `met`
+ * somewhere else is how the two would come to disagree — the rule this project applies to
+ * labels, formats and permissions, and this is the same kind of thing.
+ */
+export type CriterionState = 'MET' | 'UNMET' | 'NOT_EVALUATED';
+
+export function criterionState(criterion: { met?: boolean | null }): CriterionState {
+  if (criterion.met === true) return 'MET';
+  if (criterion.met === false) return 'UNMET';
+  // null AND undefined: the contract marks the field nullable, and a server that omits it
+  // entirely is saying the same thing as one that sends null.
+  return 'NOT_EVALUATED';
+}

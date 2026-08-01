@@ -34,6 +34,11 @@ import org.springframework.stereotype.Component;
  *   <li><strong>Which cases a plan's scope covers</strong> — {@link #caseIdsInPlanScope}, the same
  *       expansion returning ids instead of a count, because creating a run needs the members and
  *       not the size of the set.</li>
+ *   <li><strong>…and which cases those are</strong> — {@link #casesInPlanScope}, the same expansion
+ *       a third time, returning the rows. The plan statistics endpoint must name the cases nobody
+ *       has executed and group every in-scope case under its suite, and neither is answerable from
+ *       ids alone. <em>This is the one method here that reads a live case's content</em>;
+ *       {@link ScopedCase} says why that is correct rather than a lapse.</li>
  *   <li><strong>Which of a set of ids name live rows in this project</strong> —
  *       {@link #liveSuiteIds} and {@link #liveCaseIds}, so a plan's scope items and a run's case
  *       list are validated rather than trusted. {@code plan_scope_item.suite_id} and
@@ -250,6 +255,81 @@ class CaseFacts {
                 .map(row -> (UUID) ((Object[]) row)[0])
                 .toList();
         return rows;
+    }
+
+    /**
+     * One in-scope case, with the suite it sits in.
+     *
+     * <p><strong>The live case, and here that is the right one</strong> — which makes this the only
+     * method on this class that reads {@code test_case} for its content rather than its id, and the
+     * exception is worth stating. Everything else about an execution is pinned, because an execution
+     * is a claim about a fixed text. A <em>not-run</em> case is the opposite: it is a claim about
+     * work still outstanding, so it must name the case as it is now and the suite it is in now. A
+     * pinned title here would send someone to look for a case under a name it no longer has.
+     *
+     * @param suiteName the suite's own name, not its path. The panel renders it at the end of a row
+     *                  as context for the title, and a six-level path there would be the widest
+     *                  column on the screen carrying the least information.
+     */
+    record ScopedCase(
+            UUID id,
+            String key,
+            long keySeq,
+            String title,
+            UUID suiteId,
+            String suiteKey,
+            String suiteName) {
+    }
+
+    /**
+     * The live cases a plan's scope covers, with their suites.
+     *
+     * <p><strong>The third caller of the same scope expansion</strong>, and the reason all three are
+     * in this file: {@link #caseCountsByPlan} counts it, {@link #caseIdsInPlanScope} lists its ids,
+     * and this returns its rows. A plan whose statistics said "312 cases" while its own detail said
+     * 307 would have two numbers on two screens with nothing to identify the wrong one, which is
+     * exactly the defect §32 found on the suite tree. Kept adjacent so the predicate cannot drift;
+     * {@code PlanStatisticsTest} asserts the two agree over the same fixture.
+     *
+     * <p>Ordered by {@code key_seq} for {@link #caseIdsInPlanScope}'s reason — a not-run list is read
+     * as a work list, and {@code TC-10000} sorts before {@code TC-9999} as text.
+     */
+    List<ScopedCase> casesInPlanScope(UUID projectId, UUID planId) {
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = entities.createNativeQuery("""
+                        SELECT DISTINCT c.id, c.key, c.key_seq, c.title,
+                                        c.suite_id, cs.key, cs.name
+                        FROM plan_scope_item i
+                        LEFT JOIN suite s ON s.id = i.suite_id AND s.deleted_at IS NULL
+                        JOIN test_case c
+                          ON c.project_id = :projectId
+                         AND c.deleted_at IS NULL
+                         AND ( (i.case_id IS NOT NULL AND c.id = i.case_id)
+                            OR (i.suite_id IS NOT NULL AND c.suite_id IN (
+                                    SELECT d.id FROM suite d
+                                    WHERE d.project_id = s.project_id
+                                      AND d.deleted_at IS NULL
+                                      AND d.path <@ s.path)) )
+                        JOIN suite cs ON cs.id = c.suite_id
+                        WHERE i.plan_id = :planId
+                        ORDER BY c.key_seq
+                        """)
+                .setParameter("projectId", projectId)
+                .setParameter("planId", planId)
+                .getResultList();
+
+        List<ScopedCase> scoped = new ArrayList<>(rows.size());
+        for (Object[] row : rows) {
+            scoped.add(new ScopedCase(
+                    (UUID) row[0],
+                    (String) row[1],
+                    ((Number) row[2]).longValue(),
+                    (String) row[3],
+                    (UUID) row[4],
+                    (String) row[5],
+                    (String) row[6]));
+        }
+        return List.copyOf(scoped);
     }
 
     /**

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ResultCounts } from '../api/types'
-import { executedCount, passRate, sumCounts } from './results'
+import { criterionState, executedCount, passRate, sumCounts } from './results'
 
 /**
  * Count arithmetic. Every number on the dashboard, the run detail, the plan statistics screen
@@ -158,5 +158,42 @@ describe('sumCounts — the rollup', () => {
     const averagedPercentages = (100 + 50) / 2
     expect(averagedPercentages).toBe(75)
     expect(rolled).not.toBeCloseTo(averagedPercentages, 1)
+  })
+})
+
+/**
+ * Exit-criterion state — three values, and the reason the third one exists.
+ *
+ * The plan statistics page classified criteria with `!criterion.met`, which reads `null` as
+ * unmet. `null` means the SERVER COULD NOT EVALUATE IT: `open_critical` needs the M4 issue
+ * tracker, `cases_approved` the review workflow. So a plan that was perfectly shippable showed
+ * red crosses and "3 unmet" against gates nobody had checked.
+ *
+ * It survived every gate and every browser pass for one reason: **the mock always supplied a
+ * boolean**, so the null branch was unreachable until the live endpoint landed. That is the §45
+ * shape — a defect that only becomes possible when a slice makes a state reachable — and it is
+ * why this is pinned in a unit test rather than trusted to the next browser pass.
+ */
+describe('criterionState', () => {
+  it('distinguishes met, unmet and never-evaluated', () => {
+    expect(criterionState({ met: true })).toBe('MET')
+    expect(criterionState({ met: false })).toBe('UNMET')
+    expect(criterionState({ met: null })).toBe('NOT_EVALUATED')
+  })
+
+  it('treats an omitted met exactly as null — both say "we did not look"', () => {
+    expect(criterionState({})).toBe('NOT_EVALUATED')
+    expect(criterionState({ met: undefined })).toBe('NOT_EVALUATED')
+  })
+
+  /** The defect, stated as the predicate that caused it. */
+  it('does NOT let an unevaluated criterion count towards the unmet total', () => {
+    const criteria = [{ met: true }, { met: false }, { met: null }, {}]
+
+    const unmet = criteria.filter((c) => criterionState(c) === 'UNMET')
+    const naive = criteria.filter((c) => !c.met)
+
+    expect(unmet).toHaveLength(1)
+    expect(naive).toHaveLength(3)
   })
 })
