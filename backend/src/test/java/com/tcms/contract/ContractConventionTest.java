@@ -180,6 +180,50 @@ class ContractConventionTest {
                 .isEmpty();
     }
 
+    // ------------------------------------------------------ path parameters ----
+
+    /**
+     * A path item's shared {@code parameters} block must declare only path parameters.
+     *
+     * <p>Query parameters placed there are inherited by <strong>every</strong> operation under
+     * that path, including the ones that have no use for them. It reads as a tidy way to avoid
+     * repeating a filter block and it is not: it is a claim, in the generated types, that a
+     * create accepts the list's paging and filtering.
+     *
+     * <p>This is the third face of the same defect family as the two checks above and
+     * {@link com.tcms.repository.DashboardEndpointTest}'s filter-key assertion. The mechanism is
+     * always <em>a query parameter and its handler disagreeing silently</em>: §47 emitted a key
+     * no operation declared, §49 sent one the contract had not declared, and here the contract
+     * declares one no handler will ever bind. None of the three throws anywhere.
+     */
+    @Test
+    @DisplayName("a path item declares no query parameters — they belong to the operation")
+    void pathItemsDeclareOnlyPathParameters() {
+        List<String> offenders = new ArrayList<>();
+
+        for (Map.Entry<String, Set<String>> entry : contract.pathLevelQueryParameters().entrySet()) {
+            offenders.add(entry.getKey() + "  declares " + entry.getValue()
+                    + " for all of " + contract.methodsOf(entry.getKey()));
+        }
+
+        assertThat(offenders)
+                .as("""
+                        A query parameter on the path item is inherited by every operation under it.
+
+                        `parameters` at path level applies to the whole path item, so a filter block
+                        written once for the list is also declared on the POST beside it. The generated
+                        types then offer `?page=2&ownerId=…` on a create, `openapi-typescript` renders
+                        it as a legitimate query shape, and nothing rejects it at runtime either —
+                        Spring ignores a parameter no handler binds.
+
+                        The path item is the right home for `{projectId}` and `{caseId}`, which every
+                        operation under it genuinely takes. Move query parameters down into the
+                        operation that reads them, even at the cost of repeating a block.
+
+                        Path items declaring query parameters:""")
+                .isEmpty();
+    }
+
     // -------------------------------------------------------------- helpers ----
 
     /**

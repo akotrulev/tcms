@@ -121,6 +121,46 @@ public final class OpenApiContract {
         return names;
     }
 
+    /**
+     * The query parameters declared on the path item itself, per path — i.e. the ones every
+     * operation under that path inherits whether it binds them or not. Paths with none are
+     * absent from the map, so an empty map is the passing state.
+     */
+    Map<String, Set<String>> pathLevelQueryParameters() {
+        Map<String, Set<String>> offenders = new LinkedHashMap<>();
+        map(root, "paths").forEach((path, item) -> {
+            Set<String> names = new LinkedHashSet<>();
+            collectQueryParameters(asMap(item).get("parameters"), names);
+            if (!names.isEmpty()) {
+                offenders.put(path, names);
+            }
+        });
+        return offenders;
+    }
+
+    /** The HTTP methods declared under a path, uppercased — for a failure message. */
+    List<String> methodsOf(String path) {
+        return asMap(map(root, "paths").get(path)).keySet().stream()
+                .filter(OPERATION_KEYS::contains)
+                .map(key -> key.toUpperCase(java.util.Locale.ROOT))
+                .toList();
+    }
+
+    /**
+     * The query parameters one operation accepts: its own plus the path item's, since the
+     * server sees no difference between the two.
+     *
+     * <p>Distinct from {@link #queryParameterNames(String)}, which unions every operation under
+     * a path — the right question for "would this path accept the key at all", and the wrong one
+     * for "must this handler bind it".
+     */
+    Set<String> queryParametersOf(Operation operation) {
+        Set<String> names = new LinkedHashSet<>();
+        collectQueryParameters(asMap(map(root, "paths").get(operation.path())).get("parameters"), names);
+        collectQueryParameters(operation.body().get("parameters"), names);
+        return names;
+    }
+
     private void collectQueryParameters(Object parameters, Set<String> into) {
         if (!(parameters instanceof List<?> list)) {
             return;

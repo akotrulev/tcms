@@ -452,13 +452,14 @@ paths:
         in: path
         required: true
         schema: { type: string, format: uuid }
-      - name: versionNo
-        in: query
-        description: Filter to one suite version. Omit for all.
-        schema: { type: integer }
     get:
       tags: [repository, reporting]
       summary: Suite execution history — pass % per execution
+      parameters:
+        - name: versionNo
+          in: query
+          description: Filter to one suite version. Omit for all.
+          schema: { type: integer }
       description: |
         Each entry is one execution of the suite, grouped by (run, suite, configuration),
         summarized as counts. Percentages are derived client-side so the
@@ -484,68 +485,73 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
 
   /projects/{projectId}/cases:
+    # Only the path variable is shared. The filter block below belongs to the GET and lived
+    # here until the binding check found what that meant: a path item's parameters apply to
+    # EVERY operation under it, so the POST beside it declared `?page=2&ownerId=…` on a create
+    # — generated into the client's types, and ignored by the server if anyone sent it.
     parameters:
       - { $ref: '#/components/parameters/ProjectId' }
-      - { $ref: '#/components/parameters/Page' }
-      - { $ref: '#/components/parameters/Size' }
-      - name: q
-        in: query
-        description: |
-          Free text over title and description. A value matching the case-key
-          pattern (TC-n) short-circuits to an exact lookup (plan §6q).
-        schema: { type: string }
-      - name: suiteId
-        in: query
-        description: Includes descendant suites by default.
-        schema: { type: string, format: uuid }
-      - name: featureId
-        in: query
-        description: Includes descendant features by default (plan §6q).
-        schema: { type: string, format: uuid }
-      - name: testTypeId
-        in: query
-        schema: { type: string, format: uuid }
-      - name: testLevelId
-        in: query
-        schema: { type: string, format: uuid }
-      - name: ownerId
-        in: query
-        description: |
-          Cases owned by one person. Added for the dashboard's by-owner breakdown, whose
-          segments are links carrying this predicate (plan §6o) — without it those links
-          dropped the owner and silently opened *everyone's* cases in that status.
-        schema: { type: string, format: uuid }
-      - name: lifecycleStatus
-        in: query
-        schema:
-          type: array
-          items: { $ref: '#/components/schemas/LifecycleStatus' }
-      - name: automationStatus
-        in: query
-        schema:
-          type: array
-          items: { $ref: '#/components/schemas/AutomationStatus' }
-      - name: priority
-        in: query
-        schema:
-          type: array
-          items: { $ref: '#/components/schemas/Priority' }
-      - name: healthSignal
-        in: query
-        description: Dashboard tile drill-down (plan §6o).
-        schema:
-          type: array
-          items: { $ref: '#/components/schemas/HealthSignal' }
-      - name: releaseVersion
-        in: query
-        description: Cases executed in this release (filters via executions).
-        schema: { type: string }
-      - name: sort
-        in: query
-        schema: { type: string, example: 'keySeq,asc' }
     get:
       tags: [repository]
       summary: Search and filter test cases
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/Size' }
+        - name: q
+          in: query
+          description: |
+            Free text over title and description. A value matching the case-key
+            pattern (TC-n) short-circuits to an exact lookup (plan §6q).
+          schema: { type: string }
+        - name: suiteId
+          in: query
+          description: Includes descendant suites by default.
+          schema: { type: string, format: uuid }
+        - name: featureId
+          in: query
+          description: Includes descendant features by default (plan §6q).
+          schema: { type: string, format: uuid }
+        - name: testTypeId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: testLevelId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: ownerId
+          in: query
+          description: |
+            Cases owned by one person. Added for the dashboard's by-owner breakdown, whose
+            segments are links carrying this predicate (plan §6o) — without it those links
+            dropped the owner and silently opened *everyone's* cases in that status.
+          schema: { type: string, format: uuid }
+        - name: lifecycleStatus
+          in: query
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/LifecycleStatus' }
+        - name: automationStatus
+          in: query
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/AutomationStatus' }
+        - name: priority
+          in: query
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/Priority' }
+        - name: healthSignal
+          in: query
+          description: Dashboard tile drill-down (plan §6o).
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/HealthSignal' }
+        - name: releaseVersion
+          in: query
+          description: Cases executed in this release (filters via executions).
+          schema: { type: string }
+        - name: sort
+          in: query
+          schema: { type: string, example: 'keySeq,asc' }
       responses:
         '200':
           description: Matching cases plus facet counts
@@ -715,34 +721,6 @@ paths:
     parameters:
       - { $ref: '#/components/parameters/ProjectId' }
       - { $ref: '#/components/parameters/CaseId' }
-      - name: scope
-        in: query
-        description: |
-          Which versions the summary and the timeline cover. `CURRENT_VERSION` is the default and
-          the safe one: blending results across versions reports a pass rate for a test whose text
-          changed underneath it (plan §6p).
-
-          Deliberately NOT expressible as `caseVersionNo`, though it looks like it should be. The
-          UI's chip says "Current version", not "v7" — and "current" is resolved server-side, so a
-          case edited between the page load and this request is still summarized against the version
-          that is current NOW. A client sending `caseVersionNo=7` has pinned v7 forever and would
-          quietly report a stale scope after the next save.
-        schema:
-          type: string
-          enum: [CURRENT_VERSION, ALL_VERSIONS]
-          default: CURRENT_VERSION
-      - name: caseVersionNo
-        in: query
-        description: |
-          One explicit version — what a click on a version marker asks for. Wins over `scope` when
-          both are sent, because it is the more specific of the two requests.
-        schema: { type: integer }
-      - name: releaseVersion
-        in: query
-        schema: { type: string }
-      - name: configurationId
-        in: query
-        schema: { type: string, format: uuid }
     get:
       tags: [repository, reporting]
       summary: Pass/fail execution history for a case
@@ -750,6 +728,40 @@ paths:
         Timeline of every execution, attributed to the case version executed, plus
         version-change markers so "the edit broke it" is readable at a glance
         (plan §6p).
+
+        Plan §6p also describes narrowing this timeline by **release version** and by
+        **configuration**, and both were declared here from §49 until the binding check
+        found that neither reaches a handler — `CaseHistoryController` binds `scope` and
+        `caseVersionNo` and nothing else, so a caller sending `?configurationId=…` got the
+        whole timeline back with a 200 and no indication it had been ignored. Deleted rather
+        than implemented, because nothing sends them: an unimplemented filter in the contract
+        is worse than an absent one, since `schema.d.ts` generates it and the absence of an
+        error reads as success. Re-add contract-first when a screen needs one — the service
+        already groups by (version, configuration) for the flakiness figure, so the data is
+        there.
+      parameters:
+        - name: scope
+          in: query
+          description: |
+            Which versions the summary and the timeline cover. `CURRENT_VERSION` is the default and
+            the safe one: blending results across versions reports a pass rate for a test whose text
+            changed underneath it (plan §6p).
+
+            Deliberately NOT expressible as `caseVersionNo`, though it looks like it should be. The
+            UI's chip says "Current version", not "v7" — and "current" is resolved server-side, so a
+            case edited between the page load and this request is still summarized against the version
+            that is current NOW. A client sending `caseVersionNo=7` has pinned v7 forever and would
+            quietly report a stale scope after the next save.
+          schema:
+            type: string
+            enum: [CURRENT_VERSION, ALL_VERSIONS]
+            default: CURRENT_VERSION
+        - name: caseVersionNo
+          in: query
+          description: |
+            One explicit version — what a click on a version marker asks for. Wins over `scope` when
+            both are sent, because it is the more specific of the two requests.
+          schema: { type: integer }
       responses:
         '200':
           description: History
@@ -780,16 +792,17 @@ paths:
   /projects/{projectId}/conditions:
     parameters:
       - { $ref: '#/components/parameters/ProjectId' }
-      - name: q
-        in: query
-        description: Typeahead query. Ranked by relevance blended with usageCount (plan §6h).
-        schema: { type: string }
-      - name: type
-        in: query
-        schema: { type: string, enum: [PRE, POST, BOTH] }
     get:
       tags: [repository]
       summary: Reusable pre/post condition library
+      parameters:
+        - name: q
+          in: query
+          description: Typeahead query. Ranked by relevance blended with usageCount (plan §6h).
+          schema: { type: string }
+        - name: type
+          in: query
+          schema: { type: string, enum: [PRE, POST, BOTH] }
       responses:
         '200':
           description: Conditions
@@ -804,12 +817,13 @@ paths:
   /projects/{projectId}/shared-steps:
     parameters:
       - { $ref: '#/components/parameters/ProjectId' }
-      - name: q
-        in: query
-        schema: { type: string }
     get:
       tags: [repository]
       summary: Reusable step library
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string }
       responses:
         '200':
           description: Shared steps
@@ -914,17 +928,18 @@ paths:
         in: path
         required: true
         schema: { type: string, format: uuid }
-      - name: aggregation
-        in: query
-        description: |
-          How to resolve a case executed many times. The chosen policy is echoed
-          back and MUST be displayed — two teams reading "94% pass" otherwise mean
-          different things (plan §6e).
-        schema:
-          $ref: '#/components/schemas/AggregationPolicy'
     get:
       tags: [execution, reporting]
       summary: Current plan state from the latest execution
+      parameters:
+        - name: aggregation
+          in: query
+          description: |
+            How to resolve a case executed many times. The chosen policy is echoed
+            back and MUST be displayed — two teams reading "94% pass" otherwise mean
+            different things (plan §6e).
+          schema:
+            $ref: '#/components/schemas/AggregationPolicy'
       description: |
         Live since backend M2 slice 3. Computed on read from `test_execution` rather than
         from the `plan_snapshot` rollup plan §6p specifies — that rollup belongs to
@@ -956,15 +971,16 @@ paths:
   /projects/{projectId}/runs:
     parameters:
       - { $ref: '#/components/parameters/ProjectId' }
-      - name: planId
-        in: query
-        schema: { type: string, format: uuid }
-      - name: releaseVersion
-        in: query
-        schema: { type: string }
     get:
       tags: [execution]
       summary: Test runs
+      parameters:
+        - name: planId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: releaseVersion
+          in: query
+          schema: { type: string }
       description: |
         `planId` and `releaseVersion` are both **exact-match** filters, and both narrow rather
         than resolve: a `planId` naming a plan in another project narrows the list to nothing
@@ -1145,16 +1161,17 @@ paths:
   /projects/{projectId}/artifacts:
     parameters:
       - { $ref: '#/components/parameters/ProjectId' }
-      - name: scope
-        in: query
-        schema: { type: string, enum: [PROJECT, PLAN] }
-      - name: planId
-        in: query
-        description: When scope=PLAN, project-scope artifacts are also returned, flagged inherited.
-        schema: { type: string, format: uuid }
     get:
       tags: [artifacts]
       summary: Artifact register
+      parameters:
+        - name: scope
+          in: query
+          schema: { type: string, enum: [PROJECT, PLAN] }
+        - name: planId
+          in: query
+          description: When scope=PLAN, project-scope artifacts are also returned, flagged inherited.
+          schema: { type: string, format: uuid }
       responses:
         '200':
           description: Artifacts

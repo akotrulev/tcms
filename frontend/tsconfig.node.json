@@ -23,6 +23,11 @@
     `vitest.config.ts` is typechecked here alongside `vite.config.ts` — both are node-side
     config, neither is application source. Leaving it out would mean `npm run build` never
     looks at it, and a broken test config would only surface when someone ran the tests.
+
+    `contractParameters.test.ts` is the third, and the odd one out only by location: it sits in
+    `src/` beside the module it inspects, but it reads `openapi.yaml` off disk and drives the
+    TypeScript compiler over `src/api/queries`, so it needs `types: ["node"]` — which is exactly
+    what `tsconfig.app.json` must not have. See the note there.
   */
-  "include": ["vite.config.ts", "vitest.config.ts"]
+  "include": ["vite.config.ts", "vitest.config.ts", "src/api/contractParameters.test.ts"]
 }

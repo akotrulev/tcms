@@ -751,10 +751,7 @@ export interface paths {
     };
     "/projects/{projectId}/suites/{suiteId}/history": {
         parameters: {
-            query?: {
-                /** @description Filter to one suite version. Omit for all. */
-                versionNo?: number;
-            };
+            query?: never;
             header?: never;
             path: {
                 projectId: components["parameters"]["ProjectId"];
@@ -809,35 +806,7 @@ export interface paths {
     };
     "/projects/{projectId}/cases": {
         parameters: {
-            query?: {
-                page?: components["parameters"]["Page"];
-                size?: components["parameters"]["Size"];
-                /**
-                 * @description Free text over title and description. A value matching the case-key
-                 *     pattern (TC-n) short-circuits to an exact lookup (plan §6q).
-                 */
-                q?: string;
-                /** @description Includes descendant suites by default. */
-                suiteId?: string;
-                /** @description Includes descendant features by default (plan §6q). */
-                featureId?: string;
-                testTypeId?: string;
-                testLevelId?: string;
-                /**
-                 * @description Cases owned by one person. Added for the dashboard's by-owner breakdown, whose
-                 *     segments are links carrying this predicate (plan §6o) — without it those links
-                 *     dropped the owner and silently opened *everyone's* cases in that status.
-                 */
-                ownerId?: string;
-                lifecycleStatus?: components["schemas"]["LifecycleStatus"][];
-                automationStatus?: components["schemas"]["AutomationStatus"][];
-                priority?: components["schemas"]["Priority"][];
-                /** @description Dashboard tile drill-down (plan §6o). */
-                healthSignal?: components["schemas"]["HealthSignal"][];
-                /** @description Cases executed in this release (filters via executions). */
-                releaseVersion?: string;
-                sort?: string;
-            };
+            query?: never;
             header?: never;
             path: {
                 projectId: components["parameters"]["ProjectId"];
@@ -915,35 +884,7 @@ export interface paths {
          */
         post: {
             parameters: {
-                query?: {
-                    page?: components["parameters"]["Page"];
-                    size?: components["parameters"]["Size"];
-                    /**
-                     * @description Free text over title and description. A value matching the case-key
-                     *     pattern (TC-n) short-circuits to an exact lookup (plan §6q).
-                     */
-                    q?: string;
-                    /** @description Includes descendant suites by default. */
-                    suiteId?: string;
-                    /** @description Includes descendant features by default (plan §6q). */
-                    featureId?: string;
-                    testTypeId?: string;
-                    testLevelId?: string;
-                    /**
-                     * @description Cases owned by one person. Added for the dashboard's by-owner breakdown, whose
-                     *     segments are links carrying this predicate (plan §6o) — without it those links
-                     *     dropped the owner and silently opened *everyone's* cases in that status.
-                     */
-                    ownerId?: string;
-                    lifecycleStatus?: components["schemas"]["LifecycleStatus"][];
-                    automationStatus?: components["schemas"]["AutomationStatus"][];
-                    priority?: components["schemas"]["Priority"][];
-                    /** @description Dashboard tile drill-down (plan §6o). */
-                    healthSignal?: components["schemas"]["HealthSignal"][];
-                    /** @description Cases executed in this release (filters via executions). */
-                    releaseVersion?: string;
-                    sort?: string;
-                };
+                query?: never;
                 header?: {
                     /**
                      * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
@@ -1269,27 +1210,7 @@ export interface paths {
     };
     "/projects/{projectId}/cases/{caseId}/history": {
         parameters: {
-            query?: {
-                /**
-                 * @description Which versions the summary and the timeline cover. `CURRENT_VERSION` is the default and
-                 *     the safe one: blending results across versions reports a pass rate for a test whose text
-                 *     changed underneath it (plan §6p).
-                 *
-                 *     Deliberately NOT expressible as `caseVersionNo`, though it looks like it should be. The
-                 *     UI's chip says "Current version", not "v7" — and "current" is resolved server-side, so a
-                 *     case edited between the page load and this request is still summarized against the version
-                 *     that is current NOW. A client sending `caseVersionNo=7` has pinned v7 forever and would
-                 *     quietly report a stale scope after the next save.
-                 */
-                scope?: "CURRENT_VERSION" | "ALL_VERSIONS";
-                /**
-                 * @description One explicit version — what a click on a version marker asks for. Wins over `scope` when
-                 *     both are sent, because it is the more specific of the two requests.
-                 */
-                caseVersionNo?: number;
-                releaseVersion?: string;
-                configurationId?: string;
-            };
+            query?: never;
             header?: never;
             path: {
                 projectId: components["parameters"]["ProjectId"];
@@ -1309,6 +1230,17 @@ export interface paths {
          * @description Timeline of every execution, attributed to the case version executed, plus
          *     version-change markers so "the edit broke it" is readable at a glance
          *     (plan §6p).
+         *
+         *     Plan §6p also describes narrowing this timeline by **release version** and by
+         *     **configuration**, and both were declared here from §49 until the binding check
+         *     found that neither reaches a handler — `CaseHistoryController` binds `scope` and
+         *     `caseVersionNo` and nothing else, so a caller sending `?configurationId=…` got the
+         *     whole timeline back with a 200 and no indication it had been ignored. Deleted rather
+         *     than implemented, because nothing sends them: an unimplemented filter in the contract
+         *     is worse than an absent one, since `schema.d.ts` generates it and the absence of an
+         *     error reads as success. Re-add contract-first when a screen needs one — the service
+         *     already groups by (version, configuration) for the flakiness figure, so the data is
+         *     there.
          */
         get: {
             parameters: {
@@ -1330,8 +1262,6 @@ export interface paths {
                      *     both are sent, because it is the more specific of the two requests.
                      */
                     caseVersionNo?: number;
-                    releaseVersion?: string;
-                    configurationId?: string;
                 };
                 header?: never;
                 path: {
@@ -1377,11 +1307,7 @@ export interface paths {
     };
     "/projects/{projectId}/conditions": {
         parameters: {
-            query?: {
-                /** @description Typeahead query. Ranked by relevance blended with usageCount (plan §6h). */
-                q?: string;
-                type?: "PRE" | "POST" | "BOTH";
-            };
+            query?: never;
             header?: never;
             path: {
                 projectId: components["parameters"]["ProjectId"];
@@ -1427,9 +1353,7 @@ export interface paths {
     };
     "/projects/{projectId}/shared-steps": {
         parameters: {
-            query?: {
-                q?: string;
-            };
+            query?: never;
             header?: never;
             path: {
                 projectId: components["parameters"]["ProjectId"];
@@ -1621,14 +1545,7 @@ export interface paths {
     };
     "/projects/{projectId}/plans/{planId}/statistics": {
         parameters: {
-            query?: {
-                /**
-                 * @description How to resolve a case executed many times. The chosen policy is echoed
-                 *     back and MUST be displayed — two teams reading "94% pass" otherwise mean
-                 *     different things (plan §6e).
-                 */
-                aggregation?: components["schemas"]["AggregationPolicy"];
-            };
+            query?: never;
             header?: never;
             path: {
                 projectId: components["parameters"]["ProjectId"];
@@ -1701,10 +1618,7 @@ export interface paths {
     };
     "/projects/{projectId}/runs": {
         parameters: {
-            query?: {
-                planId?: string;
-                releaseVersion?: string;
-            };
+            query?: never;
             header?: never;
             path: {
                 projectId: components["parameters"]["ProjectId"];
@@ -1762,10 +1676,7 @@ export interface paths {
          */
         post: {
             parameters: {
-                query?: {
-                    planId?: string;
-                    releaseVersion?: string;
-                };
+                query?: never;
                 header?: {
                     /**
                      * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
@@ -2069,11 +1980,7 @@ export interface paths {
     };
     "/projects/{projectId}/artifacts": {
         parameters: {
-            query?: {
-                scope?: "PROJECT" | "PLAN";
-                /** @description When scope=PLAN, project-scope artifacts are also returned, flagged inherited. */
-                planId?: string;
-            };
+            query?: never;
             header?: never;
             path: {
                 projectId: components["parameters"]["ProjectId"];
