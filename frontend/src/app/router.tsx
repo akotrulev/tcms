@@ -67,6 +67,9 @@ const ExecutionPage = lazy(() =>
   import('../features/runs/ExecutionPage').then((m) => ({ default: m.ExecutionPage })),
 );
 const DocsPage = lazy(() => import('../features/docs/DocsPage').then((m) => ({ default: m.DocsPage })));
+const DocPageEditorPage = lazy(() =>
+  import('../features/docs/DocPageEditorPage').then((m) => ({ default: m.DocPageEditorPage })),
+);
 const ArtifactsPage = lazy(() =>
   import('../features/artifacts/ArtifactsPage').then((m) => ({ default: m.ArtifactsPage })),
 );
@@ -246,6 +249,19 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <DocsPage />
+              </Suspense>
+            }
+          />
+          {/*
+            A route rather than a mode flag on the page above: editing a specification is a long
+            form, and `ui-rules` puts those on a URL — bookmarkable, back-button-friendly, and
+            reload-safe. The same call `CaseEditorPage` makes.
+          */}
+          <Route
+            path="/projects/:projectId/docs/:pageId/edit"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <DocPageEditorPage />
               </Suspense>
             }
           />

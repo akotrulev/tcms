@@ -72,7 +72,15 @@ export {
   useSubmitResult,
   type ExecutionResultInput,
 } from './runs';
-export { useArtifacts, useDocPage, useDocPages } from './documentation';
+export {
+  useArtifacts,
+  useCreateDocPage,
+  useDeleteDocPage,
+  useDocPage,
+  useDocPages,
+  useSetDocPageStatus,
+  useUpdateDocPage,
+} from './documentation';
 export { useDashboard } from './reporting';
 export {
   useGrantRole,

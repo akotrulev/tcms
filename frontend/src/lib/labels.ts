@@ -11,6 +11,8 @@
 import type {
   AggregationPolicy,
   AutomationStatus,
+  DocBlockType,
+  DocPageStatus,
   HealthSignal,
   LifecycleStatus,
   Priority,
@@ -25,6 +27,34 @@ export const lifecycleLabels = {
   APPROVED: 'Approved',
   DEPRECATED: 'Deprecated',
 } as const satisfies Record<LifecycleStatus, string>;
+
+/**
+ * Block types, in the contract's own lower-case spelling.
+ *
+ * The keys are lower case because the wire is — this is the one enum in the product that does not
+ * shout, and the map exists so the *editor's* type picker and the reader's rendering cannot end up
+ * calling a `list` two different things.
+ */
+export const docBlockTypeLabel = {
+  heading: 'Heading',
+  paragraph: 'Paragraph',
+  list: 'List',
+  code: 'Code',
+  table: 'Table',
+  image: 'Image',
+} as const satisfies Record<DocBlockType, string>;
+
+/**
+ * A page's publication state.
+ *
+ * Not a lifecycle: nothing computes from it, and it moves only because somebody holding
+ * `doc:publish` said so. Labeled here anyway so the chip, the action button and the header agree.
+ */
+export const docPageStatusLabel = {
+  DRAFT: 'Draft',
+  PUBLISHED: 'Published',
+  ARCHIVED: 'Archived',
+} as const satisfies Record<DocPageStatus, string>;
 
 export const automationLabels = {
   MANUAL: 'Manual',

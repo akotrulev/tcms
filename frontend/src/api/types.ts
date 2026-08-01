@@ -74,6 +74,10 @@ export type PlanStatistics = S['PlanStatistics'];
 export type DocPage = S['DocPage'];
 export type DocPageSummary = S['DocPageSummary'];
 export type DocBlock = S['DocBlock'];
+export type DocPageInput = S['DocPageInput'];
+export type DocBlockInput = S['DocBlockInput'];
+export type DocPageStatus = S['DocPageSummary']['status'];
+export type DocBlockType = S['DocBlock']['blockType'];
 export type DocLink = S['DocLink'];
 export type Artifact = S['Artifact'];
 

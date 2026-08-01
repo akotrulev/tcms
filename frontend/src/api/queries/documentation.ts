@@ -1,7 +1,7 @@
 /** The documentation space and the artifact register. */
-import { useQuery, type UseQueryResult } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { api, qs } from '../client';
-import type { Artifact, DocPage, DocPageSummary } from '../types';
+import type { Artifact, DocPage, DocPageInput, DocPageStatus, DocPageSummary } from '../types';
 import { base, keys } from './keys';
 
 export function useDocPages(projectId: string): UseQueryResult<DocPageSummary[]> {
@@ -16,6 +16,98 @@ export function useDocPage(projectId: string, pageId: string | undefined): UseQu
     queryKey: keys.docPage(projectId, pageId ?? ''),
     queryFn: ({ signal }) => api.get<DocPage>(`${base(projectId)}/doc-pages/${pageId}`, { signal }),
     enabled: !!pageId,
+  });
+}
+
+/**
+ * Creates a page.
+ *
+ * `status` is deliberately absent from `DocPageInput` — the server always creates a `DRAFT`, and
+ * publishing is a different endpoint with a different permission. A `status` here would be a field
+ * the write path ignores, which `ui-rules` names as the worst kind of form defect.
+ */
+export function useCreateDocPage(projectId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: DocPageInput) => api.post<DocPage>(`${base(projectId)}/doc-pages`, input),
+    // The dialog renders field errors on its own inputs and the 403 in its own alert, so the
+    // global notification would be a second, vaguer copy of a message already on screen.
+    meta: { handled: true },
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.docPages(projectId) }),
+  });
+}
+
+/**
+ * Retitles a page and replaces its blocks.
+ *
+ * `lockVersion` travels as `If-Match`, never in the body — the header is where the contract puts
+ * it, and a body field would be a value on the input schema that must never persist. §52's suite
+ * rename is the precedent: the SPA sent it in the body for as long as no server read it.
+ *
+ * **Every block that already exists must be sent back with its `id`.** Omitting an id makes the
+ * server issue a new one, which is the same as deleting the block and creating a replacement —
+ * and every case linked to it points at nothing afterwards, silently (plan §6i/§6m). The editor
+ * carries the ids through its form state for exactly this reason.
+ */
+export function useUpdateDocPage(projectId: string, pageId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ lockVersion, ...input }: DocPageInput & { lockVersion: number }) =>
+      api.patch<DocPage>(`${base(projectId)}/doc-pages/${pageId}`, input, {
+        headers: { 'If-Match': String(lockVersion) },
+      }),
+    meta: { handled: true },
+    onSuccess: (page) => {
+      client.setQueryData(keys.docPage(projectId, pageId), page);
+      void client.invalidateQueries({ queryKey: keys.docPages(projectId) });
+    },
+  });
+}
+
+/**
+ * Publishes, unpublishes or archives a page.
+ *
+ * A separate hook rather than a `status` field on the edit, because it is a separate permission
+ * (`doc:publish`, which Test Engineer does not hold) — and `ui-rules` is explicit that a state
+ * transition is an action, never an editable status control.
+ */
+export function useSetDocPageStatus(projectId: string, pageId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (status: DocPageStatus) =>
+      api.put<DocPage>(`${base(projectId)}/doc-pages/${pageId}/status`, { status }),
+    meta: { handled: true },
+    onSuccess: (page) => {
+      client.setQueryData(keys.docPage(projectId, pageId), page);
+      void client.invalidateQueries({ queryKey: keys.docPages(projectId) });
+    },
+  });
+}
+
+export function useDeleteDocPage(projectId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (pageId: string) => api.del<void>(`${base(projectId)}/doc-pages/${pageId}`),
+    // The 409 here says a case still links to this page's content, or that it has children —
+    // messages the dialog shows in place, beside the page they are about. Handed to the global
+    // surface they would arrive as a toast detached from the thing they describe.
+    meta: { handled: true },
+    /*
+      The list, and deliberately NOT the deleted page's own query.
+
+      `removeQueries` on a key that still has a mounted observer does not just forget the data —
+      it makes that observer refetch immediately, and the row is gone, so the answer is a 404.
+      The live pass saw the result: a delete that succeeded rendered "Not found" in the panel and
+      raised a global "Something didn't load", while the tree beside it correctly showed the page
+      was gone.
+
+      Leaving the key alone lets the screen keep showing what it had for the instant before the
+      caller navigates away, after which the entry is garbage-collected like any other. The
+      screen's own redirect (see `DocsPage`) is what guarantees nobody is left reading it.
+    */
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.docPages(projectId) });
+    },
   });
 }
 

@@ -1,8 +1,115 @@
 /** The documentation space and the artifact register. */
 import { HttpResponse, delay, http } from 'msw';
-import type { Artifact } from '../../api/types';
-import { db } from '../db';
-import { API, LATENCY, notFound } from './shared';
+import type { Artifact, DocBlock, DocPage, DocPageStatus, DocPageSummary } from '../../api/types';
+import { allocateDocPageKey, db, newId } from '../db';
+import { API, LATENCY, notFound, permissionsOn, problem } from './shared';
+
+/** Mirrors the server's own cap, so the message lands on the field without a round trip. */
+const MAX_TITLE = 200;
+
+type BlockInput = { id?: string | null; blockType?: string; level?: number | null; text?: string };
+type PageInput = { title?: string; parentId?: string | null; blocks?: BlockInput[] };
+
+const BLOCK_TYPES = ['heading', 'paragraph', 'list', 'code', 'table', 'image'];
+
+/**
+ * The page as both stores hold it.
+ *
+ * `db.docPages` is the tree and `db.docPageDetails` is the body, and every write has to touch
+ * both — a create that only pushed a summary would produce a page in the sidebar that 404s when
+ * clicked, which is a shape only the mock can have and therefore one only the mock can teach
+ * somebody is normal.
+ */
+function upsert(page: DocPage) {
+  const summary: DocPageSummary = {
+    id: page.id,
+    key: page.key,
+    parentId: page.parentId,
+    title: page.title,
+    slug: page.slug,
+    status: page.status,
+    updatedAt: page.updatedAt,
+  };
+  const index = db.docPages.findIndex((p) => p.id === page.id);
+  if (index < 0) db.docPages.push(summary);
+  else db.docPages[index] = summary;
+  db.docPageDetails[page.id] = page;
+  return page;
+}
+
+/** The stored page, filled in for the fixture pages that carry no authored body. */
+function load(pageId: string): DocPage | null {
+  const stored = db.docPageDetails[pageId];
+  if (stored) return stored;
+  const summary = db.docPages.find((p) => p.id === pageId);
+  if (!summary) return null;
+  return { ...summary, currentVersionNo: 1, lockVersion: 1, blocks: [] };
+}
+
+/**
+ * Validates a page payload the way the server does, field keys included.
+ *
+ * Written from the server's rules rather than from what the editor happens to send, which is the
+ * §52 lesson applied to a write: a handler that only accepts what one client produces is a handler
+ * that agrees with that client and with nothing else. The level rule and the unknown-id refusal in
+ * particular exist so the editor's own error handling has something to render in dev.
+ */
+function validate(input: PageInput, existingIds: string[], onCreate: boolean) {
+  const errors: Record<string, string[]> = {};
+
+  const title = input.title?.trim() ?? '';
+  if (!title) errors.title = ['Enter a title.'];
+  else if (title.length > MAX_TITLE) {
+    errors.title = [`Keep the title under ${MAX_TITLE} characters.`];
+  }
+
+  const seen = new Set<string>();
+  (input.blocks ?? []).forEach((block, index) => {
+    const at = `blocks[${index}]`;
+    if (!block.blockType || !BLOCK_TYPES.includes(block.blockType)) {
+      errors[`${at}.blockType`] = [
+        'Choose a block type: heading, paragraph, list, code, table or image.',
+      ];
+    }
+    if (block.text == null) errors[`${at}.text`] = ['Enter text.'];
+
+    if (block.blockType === 'heading') {
+      if (block.level == null) errors[`${at}.level`] = ['Choose a heading depth between 1 and 6.'];
+      else if (block.level < 1 || block.level > 6) {
+        errors[`${at}.level`] = ['Heading depth is between 1 and 6.'];
+      }
+    } else if (block.level != null) {
+      // Refused, not dropped: a level on a paragraph means the client believes it is sending a
+      // heading, and honouring the type while discarding the depth renders that belief silently.
+      errors[`${at}.level`] = ['Only a heading has a depth.'];
+    }
+
+    if (!block.id) return;
+    if (onCreate) {
+      errors[`${at}.id`] = ["A new page's blocks are created with it; leave the id out."];
+    } else if (!existingIds.includes(block.id)) {
+      errors[`${at}.id`] = ['That block is not on this page. Leave the id out to add a new block.'];
+    } else if (seen.has(block.id)) {
+      errors[`${at}.id`] = ['This block appears twice in the page.'];
+    }
+    seen.add(block.id);
+  });
+
+  return errors;
+}
+
+/** `doc:edit` / `doc:publish` on the project in the path — the gate the SPA's buttons mirror. */
+function gate(projectId: string, permission: string) {
+  return permissionsOn(projectId).includes(permission)
+    ? null
+    : problem(
+        403,
+        'Not allowed',
+        `You do not have permission to ${
+          permission === 'doc:publish' ? 'publish' : 'edit'
+        } documentation pages in this project.`,
+      );
+}
 
 export const documentationHandlers = [
   http.get(`${API}/projects/:projectId/doc-pages`, async () => {
@@ -10,15 +117,219 @@ export const documentationHandlers = [
     return HttpResponse.json(db.docPages);
   }),
 
+  http.post(`${API}/projects/:projectId/doc-pages`, async ({ params, request }) => {
+    await delay(LATENCY);
+    const refused = gate(String(params.projectId), 'doc:edit');
+    if (refused) return refused;
+
+    const body = (await request.json()) as PageInput;
+
+    const errors = validate(body, [], true);
+    // A parent outside the project is a FIELD error, not a 404: the project resolved, and the
+    // message belongs on the picker.
+    if (body.parentId && !db.docPages.some((p) => p.id === body.parentId)) {
+      errors.parentId = ['That page is not in this project.'];
+    }
+    if (Object.keys(errors).length > 0) {
+      return problem(400, 'Validation failed', 'Check the highlighted fields.', errors);
+    }
+
+    const { key, keySeq } = allocateDocPageKey();
+    const title = body.title!.trim();
+    const page: DocPage = {
+      id: newId(),
+      key,
+      parentId: body.parentId ?? null,
+      title,
+      // Derived from the title ONCE and suffixed with the sequence, exactly as the server does.
+      // It is never recomputed on a retitle — a slug that follows the title is the heading-anchor
+      // failure at page scale.
+      slug: `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-+)|(-+$)/g, '') || 'page'}-${keySeq}`,
+      // Always DRAFT: a status an ordinary create could set is an approval its author granted
+      // themselves, and publishing is a different permission entirely (§6g).
+      status: 'DRAFT',
+      updatedAt: new Date().toISOString(),
+      currentVersionNo: 1,
+      lockVersion: 0,
+      blocks: (body.blocks ?? []).map((block, position) => ({
+        id: newId(),
+        position,
+        blockType: block.blockType as DocBlock['blockType'],
+        level: block.level ?? null,
+        text: block.text ?? '',
+        // Absent on the wire from the real server; null here because the fixture type has the
+        // key. Either way the SPA renders no marker, which is the honest answer while nothing
+        // can create a link.
+        coverage: null,
+      })),
+    };
+    return HttpResponse.json(upsert(page), { status: 201 });
+  }),
+
   http.get(`${API}/projects/:projectId/doc-pages/:pageId`, async ({ params }) => {
     await delay(LATENCY);
-    const page = db.docPageDetails[String(params.pageId)];
-    if (page) return HttpResponse.json(page);
-
     // Pages without authored blocks are a normal state in a young docs space.
-    const summary = db.docPages.find((p) => p.id === params.pageId);
-    if (!summary) return notFound('That page');
-    return HttpResponse.json({ ...summary, currentVersionNo: 1, lockVersion: 1, blocks: [] });
+    const page = load(String(params.pageId));
+    return page ? HttpResponse.json(page) : notFound('That page');
+  }),
+
+  http.patch(`${API}/projects/:projectId/doc-pages/:pageId`, async ({ params, request }) => {
+    await delay(LATENCY);
+    const refused = gate(String(params.projectId), 'doc:edit');
+    if (refused) return refused;
+
+    const page = load(String(params.pageId));
+    if (!page) return notFound('That page');
+
+    // The precondition is the HEADER, never a body field (§52).
+    const ifMatch = request.headers.get('If-Match');
+    if (ifMatch !== null && ifMatch.trim() !== '') {
+      const expected = Number(ifMatch.replace(/^"|"$/g, ''));
+      if (Number.isNaN(expected)) {
+        return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+          'If-Match': ["Send the page's lockVersion as the If-Match header, or omit the header."],
+        });
+      }
+      if (expected !== page.lockVersion) {
+        return problem(
+          409,
+          'Someone else saved first',
+          'Reload the page to see the newer version, then reapply your change.',
+        );
+      }
+    }
+
+    const body = (await request.json()) as PageInput;
+    const existing = page.blocks ?? [];
+    const errors = validate(body, existing.map((b) => b.id), false);
+    if (body.parentId !== undefined && body.parentId !== null && body.parentId !== page.parentId) {
+      errors.parentId = ['Moving a page is not supported yet. Leave the parent unchanged.'];
+    }
+    if (Object.keys(errors).length > 0) {
+      return problem(400, 'Validation failed', 'Check the highlighted fields.', errors);
+    }
+
+    let blocks = existing;
+    if (body.blocks !== undefined) {
+      const kept = new Set(body.blocks.map((b) => b.id).filter(Boolean));
+
+      /*
+        The refusal that protects traceability, and the reason this handler implements it rather
+        than always succeeding: nothing in mock mode can create a doc_link either, so a handler
+        that skipped the check would leave the editor's 409 branch unreachable in the mode the app
+        is developed in — which is exactly how §55's three-state defect got as far as a live pass.
+        The fixture's own `coverage.linkedCases` stands in for the link count.
+      */
+      const breaking = existing
+        .filter((block) => !kept.has(block.id))
+        .reduce((total, block) => total + (block.coverage?.linkedCases ?? 0), 0);
+      if (breaking > 0) {
+        return problem(
+          409,
+          'Something still links here',
+          `${breaking} ${breaking === 1 ? 'link points' : 'links point'} at content you are ` +
+            'removing, and deleting it would break them silently. Remove the links first, or ' +
+            'archive the page instead — an archived page keeps its links resolvable.',
+        );
+      }
+
+      // Identity is decided by the submitted id, never by position or by matching text. A block
+      // sent with its id keeps that id however much its text changed (plan §6i/§6m).
+      blocks = body.blocks.map((input, position) => {
+        const previous = input.id ? existing.find((b) => b.id === input.id) : undefined;
+        return {
+          id: previous?.id ?? newId(),
+          position,
+          blockType: input.blockType as DocBlock['blockType'],
+          level: input.level ?? null,
+          text: input.text ?? '',
+          coverage: previous?.coverage ?? null,
+        };
+      });
+    }
+
+    const title = body.title!.trim();
+    // A retitle IS content here, unlike a suite rename, so it authors a version — but only when
+    // something actually changed, or opening a page and pressing Save would manufacture history.
+    const changed =
+      title !== page.title || JSON.stringify(blocks) !== JSON.stringify(existing);
+
+    return HttpResponse.json(
+      upsert({
+        ...page,
+        title,
+        blocks,
+        currentVersionNo: page.currentVersionNo + (changed ? 1 : 0),
+        lockVersion: page.lockVersion + 1,
+        updatedAt: new Date().toISOString(),
+      }),
+    );
+  }),
+
+  http.put(`${API}/projects/:projectId/doc-pages/:pageId/status`, async ({ params, request }) => {
+    await delay(LATENCY);
+    // doc:publish, NOT doc:edit — the whole reason this is a second endpoint.
+    const refused = gate(String(params.projectId), 'doc:publish');
+    if (refused) return refused;
+
+    const page = load(String(params.pageId));
+    if (!page) return notFound('That page');
+
+    const { status } = (await request.json()) as { status?: string };
+    if (!status || !['DRAFT', 'PUBLISHED', 'ARCHIVED'].includes(status)) {
+      return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+        status: ['Choose a status: DRAFT, PUBLISHED or ARCHIVED.'],
+      });
+    }
+
+    // No version bump: nobody authored anything. Idempotent — setting the status a page already
+    // has is agreement, not a conflict.
+    return HttpResponse.json(
+      upsert({
+        ...page,
+        status: status as DocPageStatus,
+        lockVersion: page.lockVersion + 1,
+        updatedAt: new Date().toISOString(),
+      }),
+    );
+  }),
+
+  http.delete(`${API}/projects/:projectId/doc-pages/:pageId`, async ({ params }) => {
+    await delay(LATENCY);
+    const refused = gate(String(params.projectId), 'doc:edit');
+    if (refused) return refused;
+
+    const pageId = String(params.pageId);
+    const index = db.docPages.findIndex((p) => p.id === pageId);
+    if (index < 0) return notFound('That page');
+
+    const children = db.docPages.filter((p) => p.parentId === pageId).length;
+    if (children > 0) {
+      return problem(
+        409,
+        'Page is not empty',
+        `This page has ${children} ${children === 1 ? 'child page' : 'child pages'}. ` +
+          'Move or delete them first.',
+      );
+    }
+
+    const linked = (load(pageId)?.blocks ?? []).reduce(
+      (total, block) => total + (block.coverage?.linkedCases ?? 0),
+      0,
+    );
+    if (linked > 0) {
+      return problem(
+        409,
+        'Something still links here',
+        `${linked} ${linked === 1 ? 'link points' : 'links point'} at content you are removing, ` +
+          'and deleting it would break them silently. Remove the links first, or archive the ' +
+          'page instead — an archived page keeps its links resolvable.',
+      );
+    }
+
+    db.docPages.splice(index, 1);
+    delete db.docPageDetails[pageId];
+    return new HttpResponse(null, { status: 204 });
   }),
 
   http.get(`${API}/projects/:projectId/artifacts`, async ({ request }) => {

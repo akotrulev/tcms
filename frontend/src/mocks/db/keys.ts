@@ -37,6 +37,7 @@ sequences.set('TC', db.cases.length);
 sequences.set('TS', db.suites.length);
 sequences.set('TP', db.plans.length);
 sequences.set('TR', 418);
+sequences.set('DOC', db.docPages.length);
 
 export function allocateCaseKey() {
   return nextKey('TC', 0);
@@ -52,4 +53,8 @@ export function allocatePlanKey() {
 
 export function allocateRunKey() {
   return nextKey('TR', 0);
+}
+
+export function allocateDocPageKey() {
+  return nextKey('DOC', 0);
 }
