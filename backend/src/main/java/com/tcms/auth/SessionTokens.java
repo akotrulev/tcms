@@ -1,5 +1,6 @@
 package com.tcms.auth;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.UUID;
 import org.springframework.security.oauth2.jwt.JwsHeader;
@@ -53,9 +54,17 @@ public class SessionTokens {
     private final JwtEncoder encoder;
     private final JwtProperties properties;
 
-    public SessionTokens(JwtEncoder encoder, JwtProperties properties) {
+    /**
+     * The application clock rather than {@code Instant.now()}, so this agrees with every
+     * other timestamp the instance produces and a session can be issued at a controlled
+     * moment in a test. See {@code TcmsApplication#clock()} for why it is truncated.
+     */
+    private final Clock clock;
+
+    public SessionTokens(JwtEncoder encoder, JwtProperties properties, Clock clock) {
         this.encoder = encoder;
         this.properties = properties;
+        this.clock = clock;
     }
 
     /** A minted token and the moment it stops being accepted. */
@@ -69,7 +78,7 @@ public class SessionTokens {
      *                  permissions only, which is the correct answer rather than a failure.
      */
     public Session issue(UUID userId, UUID companyId, int permissionVersion, boolean rememberMe) {
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         Instant expiresAt = now.plus(properties.ttlFor(rememberMe));
 
         JwtClaimsSet.Builder claims = JwtClaimsSet.builder()

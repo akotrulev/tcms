@@ -7,6 +7,7 @@ import com.tcms.project.ProjectService;
 import com.tcms.tenancy.AuditEvent;
 import com.tcms.tenancy.AuditEventRepository;
 import com.tcms.tenancy.CompanyContext;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -68,6 +69,14 @@ public class ExecutionService {
     private final CaseFacts cases;
     private final AuditEventRepository auditEvents;
 
+    /**
+     * The application clock, not {@code Instant.now()} — it is truncated to the resolution
+     * of a {@code timestamptz} (see {@code TcmsApplication#clock()}), and a result whose
+     * {@code executedAt} is stamped at nanosecond precision comes back from a re-read as a
+     * different value than the one this method returned.
+     */
+    private final Clock clock;
+
     public ExecutionService(
             ProjectService projects,
             TestRunRepository runs,
@@ -76,7 +85,8 @@ public class ExecutionService {
             ResultStatuses statuses,
             ExecutionViews views,
             CaseFacts cases,
-            AuditEventRepository auditEvents) {
+            AuditEventRepository auditEvents,
+            Clock clock) {
 
         this.projects = projects;
         this.runs = runs;
@@ -86,6 +96,7 @@ public class ExecutionService {
         this.views = views;
         this.cases = cases;
         this.auditEvents = auditEvents;
+        this.clock = clock;
     }
 
     /** The outcome of a write, so the controller maps statuses and never re-decides anything. */
@@ -144,7 +155,7 @@ public class ExecutionService {
             Long expectedVersion) {
 
         UUID companyId = CompanyContext.require();
-        Instant now = Instant.now();
+        Instant now = clock.instant();
 
         Optional<TestExecution> found = resolve(userId, projectId, runId, executionId);
         if (found.isEmpty()) {

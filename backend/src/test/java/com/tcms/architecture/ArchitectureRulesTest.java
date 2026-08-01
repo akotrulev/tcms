@@ -20,6 +20,12 @@ import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.lang.ConditionEvents;
 import com.tngtech.archunit.lang.SimpleConditionEvent;
 import com.tngtech.archunit.lang.syntax.ArchRuleDefinition;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.OffsetDateTime;
+import java.time.ZonedDateTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.event.EventListener;
@@ -208,6 +214,52 @@ class ArchitectureRulesTest {
                         module reaching in is reaching for the caller's session, and a service that \
                         can see the session is one that will eventually decide authorization itself \
                         rather than asking PermissionEvaluator""");
+
+        rule.check(PRODUCTION);
+    }
+
+    @Test
+    @DisplayName("nothing reads the wall clock directly — the Clock bean is the only time source")
+    void nothingCallsNowDirectly() {
+        // The mechanical half of the fix for the defect that kept master red on CI from
+        // 2026-07-31 to 2026-08-02 (HANDOFF §58). TcmsApplication#clock() is truncated to
+        // microseconds because that is what a Postgres timestamptz stores; an Instant taken
+        // straight from the wall clock carries nanoseconds, so a value that is returned in
+        // memory and later read back out of the database is TWO DIFFERENT VALUES differing
+        // in the last three digits, and nothing in the type system says so.
+        //
+        // Every call site that bypasses the bean silently re-opens it, which is not
+        // hypothetical: ExecutionService.record and SessionTokens.issue were both doing
+        // exactly this when the bean was fixed, and ExecutionService stamps an executedAt
+        // that is both persisted and returned — the identical shape as the invitation
+        // expiry that broke.
+        //
+        // Why a rule rather than a convention: this defect CANNOT FAIL on macOS, where
+        // Clock.systemUTC() already yields only microseconds, and since 2026-08-02 CI runs
+        // no tests at all. There is no observer left. A grep at review time is the only
+        // other candidate and it is the thing that already missed twice.
+        //
+        // The Clock-taking overloads (Instant.now(Clock), LocalDate.now(Clock)) are
+        // deliberately NOT banned — they take the injected bean and are the supported way
+        // to derive a local date from it.
+        ArchRule rule = noClasses()
+                .that().resideInAPackage(ROOT_PACKAGE + "..")
+                .should().callMethod(Instant.class, "now")
+                .orShould().callMethod(LocalDate.class, "now")
+                .orShould().callMethod(LocalDateTime.class, "now")
+                .orShould().callMethod(LocalTime.class, "now")
+                .orShould().callMethod(OffsetDateTime.class, "now")
+                .orShould().callMethod(ZonedDateTime.class, "now")
+                .orShould().callMethod(System.class, "currentTimeMillis")
+                .because("""
+                        the one Clock bean is truncated to the resolution of a Postgres timestamptz \
+                        (TcmsApplication#clock), so a timestamp taken from the wall clock instead is \
+                        a value the database cannot store and therefore changes when it is read back \
+                        — which is what returned an invitation expiry that differed from the stored \
+                        one, and what made provision-company print a time that was not the time. \
+                        Inject Clock and call clock.instant(); the Clock-taking now(clock) overloads \
+                        are fine. This is unobservable on macOS and CI no longer runs the suite, so \
+                        the rule is the only thing watching""");
 
         rule.check(PRODUCTION);
     }
