@@ -1988,7 +1988,51 @@ export interface paths {
             };
         };
         put?: never;
-        post?: never;
+        /**
+         * Create a documentation page
+         * @description `key` is server-allocated from the company's counter (`DOC-n`, sequential per **company**,
+         *     §6t) and `path` is derived from it, never from the title — a retitled page must not move.
+         *     Requires `doc:edit`.
+         *
+         *     `status` is always `DRAFT` and is not an input, for the reason a created case's status is
+         *     not: a state an ordinary create could set is an approval its author granted themselves
+         *     (§6g). Publishing is `PUT .../status` and a different permission.
+         *
+         *     Blocks may be sent with the page or left for a later `PATCH`. **Block ids are
+         *     server-generated here and never derived from the text** — see `DocBlockInput`.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DocPageInput"];
+                };
+            };
+            responses: {
+                /** @description Created — key is server-allocated (DOC-n, per company) */
+                201: {
+                    headers: {
+                        /** @description The created page's own URL. */
+                        Location?: string;
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DocPage"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -2009,6 +2053,11 @@ export interface paths {
          * Page with blocks and per-block coverage
          * @description Each block carries the cases linked to it and their latest results — the
          *     inline coverage marker that makes people maintain links (plan §6i).
+         *
+         *     `coverage` is **absent** until something can create a `doc_link`. Nothing can yet, so no
+         *     block has one, and serializing a zeroed marker would say "nothing verifies this" when the
+         *     truthful statement is that the question has not been asked. Same call, for the same reason,
+         *     as `TestCase.relatedDocuments`.
          */
         get: {
             parameters: {
@@ -2036,6 +2085,185 @@ export interface paths {
             };
         };
         put?: never;
+        post?: never;
+        /**
+         * Delete a page
+         * @description Soft-deletes a page and its blocks. Requires `doc:edit` — deleting is not split off into a
+         *     permission of its own the way `suite:delete` is, because a page has no subtree of other
+         *     people's work beneath it; the destructive-folder-action reasoning that split those two does
+         *     not apply here.
+         *
+         *     **The page must have no child pages**, which answer `409` naming the count. A cascade would
+         *     remove pages the request never mentioned.
+         *
+         *     Refused with `409` when a case links to one of its blocks, for the reason the `PATCH` is:
+         *     traceability is not collateral.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                    pageId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Deleted. No body. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                /**
+                 * @description The page has child pages, or a case links to one of its blocks. `detail` names which
+                 *     and how many.
+                 */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /**
+         * Retitle a page and replace its blocks
+         * @description Requires `doc:edit`. Send the page's `lockVersion` as `If-Match`; the SPA always does, so a
+         *     concurrent edit is a `409` rather than a silent overwrite (§6j).
+         *
+         *     **`blocks` is the whole page, in order — and identity survives it.** A block sent with its
+         *     `id` keeps that id however much its text changed, so a fixed typo does not break the links
+         *     pointing at it (§6i/§6m). A block sent without an `id` is new. A block *omitted* is
+         *     deleted, and a deleted block that something links to is refused with `409` rather than
+         *     cascaded away — the link is somebody's traceability record, not this request's business.
+         *
+         *     An `id` that is not a block of this page is a `400`, never a silent create: a client that
+         *     believes it edited a block must not have created a different one.
+         *
+         *     `status` is not editable here — see `PUT .../status`.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: {
+                    /**
+                     * @description The `lockVersion` the client read, as a decimal string. Mismatch yields 409.
+                     *
+                     *     **The precondition travels in the header, never in the body.** A PATCH body states the
+                     *     desired state; the version the client happened to read is an assertion about the state it
+                     *     started from, and mixing the two means a field on the input schema that must never be
+                     *     persisted. Omitting the header skips the check — a last-write-wins save, which is correct
+                     *     for a caller that genuinely has no prior read (an importer) and wrong for an editor, so
+                     *     the SPA always sends it.
+                     */
+                    "If-Match"?: components["parameters"]["IfMatch"];
+                };
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                    pageId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DocPageInput"];
+                };
+            };
+            responses: {
+                /** @description Updated */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DocPage"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                /**
+                 * @description Either the `If-Match` did not match the stored `lockVersion`, or the edit removes a
+                 *     block that a case still links to. `detail` says which, and the second names how many.
+                 */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/projects/{projectId}/doc-pages/{pageId}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                pageId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Publish, unpublish or archive a page
+         * @description Requires `doc:publish`, which Test Engineer does **not** hold while `doc:edit` is held by
+         *     everyone who writes (roles spec §A2).
+         *
+         *     **A separate endpoint rather than a `status` field on the `PATCH`, because it is a separate
+         *     permission.** One endpoint whose gate depends on which fields the body happened to carry is
+         *     one whose `403` no client can predict, and whose disabled-state the SPA cannot render — the
+         *     two things §31 exists to prevent.
+         *
+         *     Idempotent: setting the status a page already has answers `200`, not a conflict.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                    pageId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DocPageStatusInput"];
+                };
+            };
+            responses: {
+                /** @description Updated */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DocPage"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+            };
+        };
         post?: never;
         delete?: never;
         options?: never;
@@ -3746,6 +3974,48 @@ export interface components {
                 notRun: number;
                 caseKeys: string[];
             } | null;
+        };
+        DocPageInput: {
+            title: string;
+            /**
+             * Format: uuid
+             * @description The page this one nests under, or null for a root page. Accepted on create; on a
+             *     `PATCH` it must match the page's current parent — a different value is a `400` rather
+             *     than a silently ignored field, because reparenting rewrites every descendant's `path`
+             *     and a client must not be able to believe a move happened. Same rule, and the same
+             *     reason, as `SuiteInput.parentId`.
+             */
+            parentId?: string | null;
+            /**
+             * @description The page's whole content, in array order — `position` is not sent, because two clients
+             *     disagreeing about the numbers is a reordering nobody asked for.
+             *
+             *     Omitted on a create means an empty page, which is a real and useful state. Omitted on a
+             *     `PATCH` leaves the blocks alone: that is a retitle, and it must not be a way to empty a
+             *     page by forgetting a field.
+             */
+            blocks?: components["schemas"]["DocBlockInput"][];
+        };
+        DocBlockInput: {
+            /**
+             * Format: uuid
+             * @description The id of an existing block on this page, to edit it **in place**. Absent means a new
+             *     block, whose id the server generates.
+             *
+             *     This field is what makes traceability survive editing: a block keeps its id however
+             *     much its text changes, so a link to it does not break when somebody fixes a typo
+             *     (plan §6i/§6m). Sending an id belonging to another page — or to no block — is a `400`.
+             */
+            id?: string | null;
+            /** @enum {string} */
+            blockType: "heading" | "paragraph" | "list" | "code" | "table" | "image";
+            /** @description Heading depth. Required for `heading`, refused on every other type. */
+            level?: number | null;
+            text: string;
+        };
+        DocPageStatusInput: {
+            /** @enum {string} */
+            status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
         };
         DocLink: {
             /** Format: uuid */
