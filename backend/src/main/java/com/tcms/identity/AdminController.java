@@ -24,12 +24,13 @@ import org.springframework.web.bind.annotation.RestController;
  * The company's administration surface — its people, its org chart, the role catalogue, and the
  * grants that decide who can see which project.
  *
- * <p>Six endpoints under one contract tag ({@code admin}) and therefore one controller, the same
+ * <p>Seven endpoints under one contract tag ({@code admin}) and therefore one controller, the same
  * arrangement {@code ProjectController} explains. They are not one <em>gate</em>: the reads answer
- * to {@code company:read} and the two writes answer to a permission chosen by the scope of the
- * grant being made. Every one of those verdicts is computed in {@link AdminDirectoryService} /
- * {@link RoleGrantService} and merely <em>rendered</em> here — an endpoint that decides "may they?"
- * for itself is how two implementations diverge (plan §6b).
+ * to {@code company:read}, the two grant writes answer to a permission chosen by the scope of the
+ * grant being made, and the invite answers to {@code company:members}. Every one of those verdicts
+ * is computed in {@link AdminDirectoryService} / {@link RoleGrantService} /
+ * {@link MembershipInviteService} and merely <em>rendered</em> here — an endpoint that decides
+ * "may they?" for itself is how two implementations diverge (plan §6b).
  *
  * <h2>The caller comes from the token and the company from the context</h2>
  *
@@ -52,16 +53,52 @@ public class AdminController {
 
     private final AdminDirectoryService directory;
     private final RoleGrantService grants;
+    private final MembershipInviteService invites;
 
-    public AdminController(AdminDirectoryService directory, RoleGrantService grants) {
+    public AdminController(
+            AdminDirectoryService directory,
+            RoleGrantService grants,
+            MembershipInviteService invites) {
+
         this.directory = directory;
         this.grants = grants;
+        this.invites = invites;
     }
 
     /** The people in this company, by display name. */
     @GetMapping("/users")
     public List<UserView> users(@AuthenticationPrincipal Jwt jwt) {
         return directory.listUsers(caller(jwt));
+    }
+
+    /**
+     * Invites a person into this company — <strong>the write that ends "a provisioned company plus
+     * hand-written SQL" for its people</strong>, as {@code POST /role-assignments} did for their
+     * access.
+     *
+     * <p>{@code 201} when a fresh activation link was minted, {@code 200} when there was nothing to
+     * mint — the person is already an active member, or an unexpired invitation is outstanding and
+     * was deliberately left alone. The distinction is the useful one for a client, because 201 is
+     * the only answer after which a message is on its way.
+     *
+     * <p>No {@code Location} header, unlike the grant: what this creates is a membership, and the
+     * URL that would describe it is the directory the caller is already on. The one resource with
+     * its own URL here is the invitation, and that URL is a secret ({@link UserInvitationView}).
+     */
+    @PostMapping("/users")
+    public ResponseEntity<Object> invite(
+            @AuthenticationPrincipal Jwt jwt, @RequestBody UserInvitationRequest request) {
+
+        return switch (invites.invite(caller(jwt), request)) {
+            case MembershipInviteService.Invite.Invited invited ->
+                    ResponseEntity.status(HttpStatus.CREATED).body(invited.view());
+            case MembershipInviteService.Invite.Unchanged unchanged ->
+                    ResponseEntity.ok(unchanged.view());
+            case MembershipInviteService.Invite.Invalid invalid ->
+                    ResponseEntity.badRequest().body(validationProblem(invalid.errors()));
+            case MembershipInviteService.Invite.Forbidden ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(forbiddenProblem());
+        };
     }
 
     /** The org chart, with each team's people and the projects its grants reach. */

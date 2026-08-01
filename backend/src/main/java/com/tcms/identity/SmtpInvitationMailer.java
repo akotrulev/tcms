@@ -35,6 +35,12 @@ public class SmtpInvitationMailer implements InvitationMailer {
         this.fromAddress = fromAddress;
     }
 
+    /** This bean exists only when {@code spring.mail.host} is set, so: always. */
+    @Override
+    public boolean isConfigured() {
+        return true;
+    }
+
     @Override
     public void send(InvitationMessage message) {
         SimpleMailMessage mail = new SimpleMailMessage();

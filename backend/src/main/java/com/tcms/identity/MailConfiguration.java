@@ -38,16 +38,37 @@ public class MailConfiguration {
      * <p>WARN rather than INFO because an install in this state cannot onboard anyone by
      * email — the operator has to carry the link from the console by hand every time, and
      * nobody should discover that from a support ticket.
+     *
+     * <p>A named class rather than the lambda it used to be: {@link InvitationMailer} gained
+     * {@code isConfigured()} and stopped being a functional interface, which is the point — the
+     * "no relay" state is now something a caller can <em>ask about</em> and report, rather than
+     * something only this log line knows.
      */
     @Bean
     @ConditionalOnMissingBean(InvitationMailer.class)
     public InvitationMailer unconfiguredInvitationMailer() {
-        Logger log = LoggerFactory.getLogger(MailConfiguration.class);
-        return message -> log.warn(
-                "No SMTP relay is configured (spring.mail.host is unset), so the invitation for "
-                        + "{} to '{}' was NOT emailed. The invitation is valid — deliver the "
-                        + "activation link printed by provision-company by hand, or configure a "
-                        + "relay.",
-                message.toEmail(), message.companyName());
+        return new UnconfiguredInvitationMailer();
+    }
+
+    /** Logs loudly and delivers nothing. See {@link #unconfiguredInvitationMailer()}. */
+    static final class UnconfiguredInvitationMailer implements InvitationMailer {
+
+        private static final Logger log =
+                LoggerFactory.getLogger(UnconfiguredInvitationMailer.class);
+
+        @Override
+        public boolean isConfigured() {
+            return false;
+        }
+
+        @Override
+        public void send(InvitationMessage message) {
+            log.warn(
+                    "No SMTP relay is configured (spring.mail.host is unset), so the invitation "
+                            + "for {} to '{}' was NOT emailed. The invitation is valid — deliver "
+                            + "the activation link printed by provision-company by hand, or "
+                            + "configure a relay.",
+                    message.toEmail(), message.companyName());
+        }
     }
 }

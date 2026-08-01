@@ -109,6 +109,30 @@ public class CompanyMembership {
         this.status = MembershipStatus.REMOVED;
     }
 
+    /**
+     * Brings an offboarded person back to {@link MembershipStatus#INVITED} so they can accept
+     * again — the case {@code POST /users} would otherwise answer wrongly.
+     *
+     * <p>A {@code REMOVED} membership is filtered out of the directory, so an administrator
+     * re-inviting a returning contractor sees an empty list and types the address as if it were
+     * new. Without this the row is found, is not {@code ACTIVE}, and
+     * {@link InvitationService#issueIfPending} happily mints a token that
+     * {@code InvitationService#accept} then refuses — because redemption requires
+     * {@code INVITED}. A <strong>dead link</strong>, reported to the inviter as a success.
+     *
+     * <p>{@code acceptedAt} is cleared: it would otherwise say the person accepted before they
+     * were re-invited. Their old {@code role_assignment} rows are left alone and become live
+     * again on acceptance, which is what {@link #remove()} promises — offboarding is one status
+     * update, and so is its reversal.
+     */
+    public void reinvite(String displayName, UUID invitedBy, Instant now) {
+        this.displayName = displayName;
+        this.status = MembershipStatus.INVITED;
+        this.invitedBy = invitedBy;
+        this.invitedAt = now;
+        this.acceptedAt = null;
+    }
+
     public void rename(String newDisplayName) {
         this.displayName = newDisplayName;
     }

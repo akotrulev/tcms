@@ -185,21 +185,54 @@ public class AdminDirectoryService {
         Map<UUID, Set<String>> teamNames = teamNamesByUser();
 
         return present.stream()
-                .map(membership -> {
-                    AppUser account = accounts.get(membership.getUserId());
-                    return new UserView(
-                            membership.getUserId(),
-                            membership.getDisplayName(),
-                            account == null ? null : account.getEmail(),
-                            membership.getAvatarUrl(),
-                            statusOf(membership, account),
-                            // Withheld from an ordinary member — see UserView#lastLoginAt.
-                            administers && account != null ? account.getLastLoginAt() : null,
-                            List.copyOf(teamNames.getOrDefault(
-                                    membership.getUserId(), Set.of())));
-                })
+                .map(membership -> assemble(
+                        membership,
+                        accounts.get(membership.getUserId()),
+                        administers,
+                        teamNames.getOrDefault(membership.getUserId(), Set.of())))
                 .sorted((left, right) -> left.displayName().compareToIgnoreCase(right.displayName()))
                 .toList();
+    }
+
+    /**
+     * One person, assembled exactly as {@link #listUsers} assembles the list — for the write path
+     * that has just created or found them.
+     *
+     * <p>Package-private and sharing {@link #assemble}, rather than a second rendering inside
+     * {@link MembershipInviteService}: the status rule below is the non-obvious part of this class
+     * (a person {@code ACTIVE} elsewhere is {@code INVITED} <em>here</em>), and a copy of it that
+     * drifted would have the invitation response and the directory disagreeing about the person
+     * they both just named. This is the same reason {@link #view} is shared with the grant writer.
+     *
+     * @param administers the caller's {@code company:members} verdict, already computed by the
+     *                    gate that let them write at all — asked again here would be N more
+     *                    permission evaluations for a question just answered
+     */
+    @Transactional(readOnly = true)
+    UserView userViewOf(CompanyMembership membership, boolean administers) {
+        AppUser account = users.findById(membership.getUserId()).orElse(null);
+        return assemble(
+                membership,
+                account,
+                administers,
+                teamNamesByUser().getOrDefault(membership.getUserId(), Set.of()));
+    }
+
+    private static UserView assemble(
+            CompanyMembership membership,
+            AppUser account,
+            boolean administers,
+            Set<String> teamNames) {
+
+        return new UserView(
+                membership.getUserId(),
+                membership.getDisplayName(),
+                account == null ? null : account.getEmail(),
+                membership.getAvatarUrl(),
+                statusOf(membership, account),
+                // Withheld from an ordinary member — see UserView#lastLoginAt.
+                administers && account != null ? account.getLastLoginAt() : null,
+                List.copyOf(teamNames));
     }
 
     /** The org chart, with each team's people and the projects its grants reach. */
