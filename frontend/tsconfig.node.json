@@ -33,6 +33,8 @@
     "vite.config.ts",
     "vitest.config.ts",
     "src/api/contractParameters.test.ts",
-    "src/api/apiResponseTypes.test.ts"
+    "src/api/apiResponseTypes.test.ts",
+    "src/api/contractOperations.test.ts",
+    "src/api/contractIntrospection.ts"
   ]
 }

@@ -31,5 +31,10 @@
     `vitest.config.ts` records against `globals: true`. It is compiled by `tsconfig.node.json`
     instead, so `npm run build` still covers it.
   */
-  "exclude": ["src/api/contractParameters.test.ts", "src/api/apiResponseTypes.test.ts"]
+  "exclude": [
+    "src/api/contractParameters.test.ts",
+    "src/api/apiResponseTypes.test.ts",
+    "src/api/contractOperations.test.ts",
+    "src/api/contractIntrospection.ts"
+  ]
 }
