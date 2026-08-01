@@ -715,9 +715,27 @@ paths:
     parameters:
       - { $ref: '#/components/parameters/ProjectId' }
       - { $ref: '#/components/parameters/CaseId' }
+      - name: scope
+        in: query
+        description: |
+          Which versions the summary and the timeline cover. `CURRENT_VERSION` is the default and
+          the safe one: blending results across versions reports a pass rate for a test whose text
+          changed underneath it (plan §6p).
+
+          Deliberately NOT expressible as `caseVersionNo`, though it looks like it should be. The
+          UI's chip says "Current version", not "v7" — and "current" is resolved server-side, so a
+          case edited between the page load and this request is still summarized against the version
+          that is current NOW. A client sending `caseVersionNo=7` has pinned v7 forever and would
+          quietly report a stale scope after the next save.
+        schema:
+          type: string
+          enum: [CURRENT_VERSION, ALL_VERSIONS]
+          default: CURRENT_VERSION
       - name: caseVersionNo
         in: query
-        description: Omit for all versions; the UI defaults the summary to current.
+        description: |
+          One explicit version — what a click on a version marker asks for. Wins over `scope` when
+          both are sent, because it is the more specific of the two requests.
         schema: { type: integer }
       - name: releaseVersion
         in: query
@@ -751,6 +769,11 @@ paths:
                   versionMarkers:
                     type: array
                     items: { $ref: '#/components/schemas/VersionMarker' }
+        # 400 is reachable on a READ, which is unusual enough to state: `scope` is a closed set and
+        # an unrecognised value is refused by name rather than silently falling back to a default,
+        # because a silent fallback is how a client asking the wrong question gets a confident
+        # answer to a different one.
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 
@@ -2101,7 +2124,16 @@ components:
       properties:
         versionNo: { type: integer }
         occurredAt: { type: string, format: date-time }
-        author: { $ref: '#/components/schemas/UserRef' }
+        author:
+          # Nullable because test_case_version.created_by is a nullable column with NO foreign key
+          # to app_user (handoff §28, finding 1), so both "nobody was recorded" and "the recorded id
+          # names no account" are states of a real row. Inventing a name for either would put an
+          # author on the one table whose entire purpose is that past claims stay true.
+          #
+          # `repository`'s EntityVersion already ships null here and diverged from this contract
+          # silently to do it (§35). Declared rather than left as a second undeclared divergence.
+          allOf: [{ $ref: '#/components/schemas/UserRef' }]
+          nullable: true
         changeComment: { type: string, nullable: true }
 
     # --------------------------------------------------------- execution ---
@@ -2388,7 +2420,7 @@ components:
 
     ExecutionHistoryEntry:
       type: object
-      required: [executionId, statusKind, statusName, statusColor, caseVersionNo, runId, runKey, runName, configuration, executedBy, source, executedAt, evidenceCount, defects]
+      required: [executionId, statusKind, statusName, statusColor, caseVersionNo, runId, runKey, runName, runDeleted, configuration, executedBy, source, executedAt, evidenceCount, defects]
       properties:
         executionId: { type: string, format: uuid }
         statusKind: { $ref: '#/components/schemas/StatusKind' }
@@ -2400,9 +2432,32 @@ components:
         runId: { type: string, format: uuid }
         runKey: { type: string }
         runName: { type: string }
+        runDeleted:
+          type: boolean
+          description: |
+            The run holding this result has been withdrawn. The entry stays — plan §6p: "deleted
+            runs must not orphan history … with the entry marked rather than vanishing", and
+            history that quietly loses rows is worse than no history.
+
+            This is the field that makes that rule expressible, and it is required because the
+            alternative reading of an absent flag is "not deleted", which is the dangerous default:
+            a withdrawn failure would read as a live one. A client MUST mark the entry and MUST NOT
+            offer navigation into the run, which answers 404.
+
+            Note the contrast with the plan-statistics endpoint, which EXCLUDES deleted runs
+            entirely: that one reports current state, where counting a retracted result would
+            restore it. A timeline is the other case.
+          example: false
         planKey: { type: string, nullable: true }
         configuration: { type: string }
-        executedBy: { $ref: '#/components/schemas/UserRef' }
+        executedBy:
+          # Nullable for two independent reasons, both reachable: test_execution.executed_by is a
+          # nullable column (an execution row nobody has recorded yet has none), and the id has no
+          # cascade, so "the account that recorded this has since been removed" is a state real rows
+          # reach. The SPA has always guarded this with `entry.executedBy?.displayName` — the type
+          # said it could not be null while the only consumer assumed it could.
+          allOf: [{ $ref: '#/components/schemas/UserRef' }]
+          nullable: true
         executedByToken: { type: string, nullable: true }
         source: { type: string, enum: [MANUAL, INGESTED] }
         executedAt: { type: string, format: date-time }

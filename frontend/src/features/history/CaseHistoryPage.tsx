@@ -243,9 +243,13 @@ function VersionRow({ marker, last }: { marker: VersionMarker; last: boolean }) 
       <Rail color="var(--color-action-primary)" last={last} filled={false} />
       <Box sx={{ pb: 2.5, flex: 1, minWidth: 0 }}>
         <Stack direction="row" sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          {/* v1 is the case being authored, not edited — since §29 a created case gets its v1
+              written alongside it. "Edited to v1" put a change at the bottom of every timeline
+              that nobody made, which is the opposite of what a reader scanning for "what changed?"
+              needs. Caught in the live browser pass, not by any gate. */}
           <Chip
             size="small"
-            label={`Edited to v${marker.versionNo}`}
+            label={marker.versionNo === 1 ? 'Created at v1' : `Edited to v${marker.versionNo}`}
             sx={{
               bgcolor: 'color-mix(in srgb, var(--color-action-primary) 12%, transparent)',
               color: 'var(--color-action-primary)',
@@ -254,7 +258,11 @@ function VersionRow({ marker, last }: { marker: VersionMarker; last: boolean }) 
             }}
           />
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            {marker.author.displayName} · {formatDateTime(marker.occurredAt)}
+            {/* `author` is genuinely nullable: test_case_version.created_by has no foreign key, so
+                "nobody was recorded" and "the account is gone" are both real rows. Naming an author
+                anyway would put a person's name on the one table whose purpose is that past claims
+                stay true — so the edit is reported without one. */}
+            {marker.author?.displayName ?? 'Unknown author'} · {formatDateTime(marker.occurredAt)}
           </Typography>
         </Stack>
         {marker.changeComment && (
@@ -282,9 +290,27 @@ function ExecutionRow({
       <Box sx={{ pb: 2.5, flex: 1, minWidth: 0 }}>
         <Stack direction="row" sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
           {entry.statusKind && <StatusChip kind={entry.statusKind} testId="CaseHistory.Timeline.Status" />}
-          <RouterLink to={`/projects/${projectId}/runs/${entry.runId}`} data-testid="CaseHistory.Timeline.RunLink">
-            <Identifier>{entry.runKey}</Identifier>
-          </RouterLink>
+          {/* A withdrawn run keeps its result on this timeline — §6p, "the entry marked rather than
+              vanishing" — but the run itself answers 404, so the key is rendered as plain text
+              instead of a link. Offering navigation that lands on a not-found page reads as a
+              broken app rather than as a deleted run, which is why the chip beside it says which. */}
+          {entry.runDeleted ? (
+            <Tooltip title="This run was deleted. The result is kept, because history that quietly loses rows is worse than no history.">
+              <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                <Identifier variant="muted">{entry.runKey}</Identifier>
+                <Chip
+                  size="small"
+                  label="Run deleted"
+                  data-testid="CaseHistory.Timeline.RunDeleted"
+                  sx={{ height: 20, fontSize: '0.6875rem', color: 'text.secondary' }}
+                />
+              </Box>
+            </Tooltip>
+          ) : (
+            <RouterLink to={`/projects/${projectId}/runs/${entry.runId}`} data-testid="CaseHistory.Timeline.RunLink">
+              <Identifier>{entry.runKey}</Identifier>
+            </RouterLink>
+          )}
           <Typography variant="body2" sx={{ color: 'text.secondary', minWidth: 0 }}>
             {entry.runName}
           </Typography>

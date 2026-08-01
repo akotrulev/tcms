@@ -58,6 +58,10 @@ function entry(
     runId: uid(runIdx, 'k'),
     runKey: `TR_${String(400 + runIdx).padStart(4, '0')}`,
     runName: `Nightly regression #${400 + runIdx}`,
+    // The mock's runs are all live. A withdrawn one is exercised by the backend's own test rather
+    // than here: MSW has no delete-a-run affordance to reach it through, and a fixture row marked
+    // deleted with no way to produce it would be scenery.
+    runDeleted: false,
     planKey: 'TP-1',
     configuration: configurations[configIdx].name,
     executedBy: source === 'MANUAL' ? ref(2) : ref(0),

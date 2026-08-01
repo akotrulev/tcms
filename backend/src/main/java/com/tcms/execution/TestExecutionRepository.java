@@ -81,6 +81,55 @@ public interface TestExecutionRepository extends JpaRepository<TestExecution, UU
     List<Object[]> findForPlan(@Param("projectId") UUID projectId, @Param("planId") UUID planId);
 
     /**
+     * Every execution of one case, across every run, as {@code [execution, run]}.
+     *
+     * <p><strong>Deleted runs are INCLUDED here, and that is the difference from
+     * {@link #findForPlan}</strong> — the two are otherwise the same join and the contrast is the
+     * whole point. §6p: "deleted runs must not orphan history … with the entry marked rather than
+     * vanishing". A timeline is a record of what happened; a plan's statistics are a claim about
+     * where things stand. Counting a withdrawn result in the second would restore a verdict somebody
+     * retracted, and dropping it from the first would silently shorten history. So this returns the
+     * row and {@code CaseHistoryService} marks it.
+     *
+     * <p>Returns the whole run rather than columns: a history entry names the run's key, name, plan,
+     * configuration, release, build and source, which is most of the entity, and a projection
+     * listing seven columns positionally is the shape that breaks silently when one is inserted.
+     * A case's runs are bounded by how many times it has been executed, so this is not the
+     * hundreds-of-rows-per-request case {@link #findForRun} is tuned for.
+     *
+     * <p>Ordered by execution time, oldest first, with {@code NULLS LAST}: an execution nobody has
+     * recorded has no {@code executedAt}, and it belongs at the end as work outstanding rather than
+     * at the beginning as the oldest event. The id breaks ties so the order is stable across two
+     * calls — without it a case executed twice in one run comes back in whichever order the
+     * database chose, and the flakiness figure computed from that order would move between requests.
+     */
+    @Query("SELECT e, r FROM TestExecution e JOIN TestRun r ON r.id = e.runId "
+            + "WHERE e.projectId = :projectId AND e.caseId = :caseId "
+            + "ORDER BY e.executedAt ASC NULLS LAST, e.id ASC")
+    List<Object[]> findForCase(
+            @Param("projectId") UUID projectId, @Param("caseId") UUID caseId);
+
+    /**
+     * How many evidence rows hang off each of a batch of executions, as {@code [executionId, count]}.
+     *
+     * <p>Native and grouped, for {@link #findDefectLinks}'s reasons exactly: {@code evidence} has no
+     * entity because nothing in the product uploads one — {@code evidence:attach} has no endpoint —
+     * and an entity would be a mapped write surface for a table with no writer.
+     *
+     * <p>It is queried rather than answered as a constant {@code 0} for the other half of that same
+     * argument: a count nobody looked up is a claim, not a lookup, and an ingested run could carry
+     * evidence this module did not create. An execution with no rows is simply absent from the
+     * result, and the caller reads it as zero.
+     */
+    @Query(value = """
+            SELECT e.execution_id, COUNT(*)
+            FROM evidence e
+            WHERE e.execution_id IN (:executionIds)
+            GROUP BY e.execution_id
+            """, nativeQuery = true)
+    List<Object[]> countEvidence(@Param("executionIds") Collection<UUID> executionIds);
+
+    /**
      * The defects linked to a batch of executions, as {@code [id, executionId, externalKey,
      * provider, url, statusCache]}.
      *

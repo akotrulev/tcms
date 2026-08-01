@@ -3,12 +3,14 @@ package com.tcms.execution;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
@@ -49,13 +51,24 @@ import org.springframework.stereotype.Component;
  *       <em>the write half of the pin</em> and the first thing in this module that reads a
  *       {@code repository} row in order to store its id. Everything the pin is for depends on this
  *       being resolved once, at creation, and never re-resolved.</li>
+ *   <li><strong>Which version a single case is on, and whether it is reachable at all</strong> —
+ *       {@link #currentVersionNo}. The case timeline's default scope is "the current version", and
+ *       <em>current</em> has to be resolved here because it is a {@code repository} fact; the same
+ *       lookup doubles as the existence check that turns an unknown case into a 404, so the history
+ *       endpoint never needs a second query to ask whether the case is real.</li>
+ *   <li><strong>When each version was authored, by whom, and why</strong> —
+ *       {@link #versionMarkers}, the metadata beside the snapshot {@link #pinnedCases} already
+ *       reads. This is what makes a timeline say <em>"green, green, edited to v5, red, red"</em>
+ *       (plan §6p), and reading it here rather than calling {@code repository}'s own
+ *       {@code GET /versions} is the point of the seam: this module reads rows it holds ids into,
+ *       it does not call the other module.</li>
  * </ol>
  *
- * <p>The last two are new in M2 slice 2 and they are deliberately <strong>here</strong> rather than
- * in the two create services. Adding a second class that names {@code test_case} would end the one
- * property that makes this seam reviewable — that a reader can find every crossing by opening one
- * file — and it would end it for the most tempting reason there is, which is that the new query is
- * short.
+ * <p>Items 5–6 are new in M2 slice 2 and 7–8 in M1 slice 15, and they are deliberately
+ * <strong>here</strong> rather than in the services that want them. Adding a second class that
+ * names {@code test_case} would end the one property that makes this seam reviewable — that a
+ * reader can find every crossing by opening one file — and it would end it for the most tempting
+ * reason there is, which is that the new query is short.
  *
  * <h2>Native SQL, and why there is no entity for either table</h2>
  *
@@ -409,6 +422,104 @@ class CaseFacts {
             pins.put((UUID) row[0], (UUID) row[1]);
         }
         return pins;
+    }
+
+    /**
+     * The version one live case is on right now, or empty if the case is not reachable.
+     *
+     * <p><strong>Two questions in one query, deliberately.</strong> "Which version is current" and
+     * "does this case exist in this project" have the same answer shape and the same predicate, and
+     * asking them separately would let the history endpoint answer 200-with-zeros for a case id that
+     * names nothing — the failure mode where a typo in a URL reads as a case nobody has ever run.
+     *
+     * <p>The project predicate is the second gate, exactly as on {@link #liveCaseIds}: RLS refuses
+     * another company's case and the caller's project grant has already been checked, but a case id
+     * from a <em>sibling project in the same company</em> would otherwise resolve through a path
+     * naming a project the caller does hold.
+     *
+     * <p>A soft-deleted case is unreachable, so its history is too. That is the same line
+     * {@code repository} draws on the case detail, and a timeline for a case whose detail answers
+     * 404 would be a page with no way back to its own subject.
+     */
+    Optional<Integer> currentVersionNo(UUID projectId, UUID caseId) {
+        @SuppressWarnings("unchecked")
+        List<Integer> rows = entities.createNativeQuery("""
+                        SELECT c.current_version_no
+                        FROM test_case c
+                        WHERE c.project_id = :projectId
+                          AND c.deleted_at IS NULL
+                          AND c.id = :caseId
+                        """)
+                .setParameter("projectId", projectId)
+                .setParameter("caseId", caseId)
+                .getResultList()
+                .stream()
+                .map(value -> value == null ? null : ((Number) value).intValue())
+                .toList();
+
+        return rows.isEmpty() ? Optional.empty() : Optional.ofNullable(rows.get(0));
+    }
+
+    /**
+     * When each version of a case was authored, by whom, and with what comment.
+     *
+     * @param authorId nullable, and it is {@code created_by} rather than a join to a person:
+     *                 resolving names is {@link ExecutionPeople}'s job, in one batch, and doing it
+     *                 in SQL here would put an {@code identity} table into the one query set whose
+     *                 whole discipline is naming as few foreign tables as possible.
+     */
+    record VersionMark(int versionNo, Instant occurredAt, UUID authorId, String changeComment) {
+    }
+
+    /**
+     * Every authored version of one case, oldest first.
+     *
+     * <p>Ordered ascending because the marker list is merged into a timeline the client sorts for
+     * itself; ascending is the order the versions happened in, which is the one order that is
+     * meaningful without further context.
+     *
+     * <p><strong>An empty list is an ordinary answer, not a missing case.</strong> A case authored
+     * before §29 wrote a v1 alongside its case has no version rows at all, and the timeline then
+     * shows executions with no markers between them — which is honest. The caller has already
+     * established the case is reachable via {@link #currentVersionNo}, so emptiness here cannot be
+     * confused with absence.
+     */
+    List<VersionMark> versionMarkers(UUID caseId) {
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = entities.createNativeQuery("""
+                        SELECT v.version_no, v.created_at, v.created_by, v.change_comment
+                        FROM test_case_version v
+                        WHERE v.case_id = :caseId
+                        ORDER BY v.version_no
+                        """)
+                .setParameter("caseId", caseId)
+                .getResultList();
+
+        List<VersionMark> marks = new ArrayList<>(rows.size());
+        for (Object[] row : rows) {
+            marks.add(new VersionMark(
+                    ((Number) row[0]).intValue(),
+                    toInstant(row[1]),
+                    (UUID) row[2],
+                    (String) row[3]));
+        }
+        return List.copyOf(marks);
+    }
+
+    /**
+     * {@code TIMESTAMPTZ} arrives as {@link java.sql.Timestamp} through a native query, unlike the
+     * {@link Instant} an entity mapping would hand back — the one place this class pays for reading
+     * rows rather than mapping them.
+     */
+    private static Instant toInstant(Object value) {
+        return switch (value) {
+            case null -> null;
+            case Instant instant -> instant;
+            case java.sql.Timestamp timestamp -> timestamp.toInstant();
+            case java.time.OffsetDateTime offset -> offset.toInstant();
+            default -> throw new IllegalStateException(
+                    "Unexpected timestamp type " + value.getClass());
+        };
     }
 
     private PinnedCase parse(int versionNo, String snapshot) {

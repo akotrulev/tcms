@@ -1270,7 +1270,22 @@ export interface paths {
     "/projects/{projectId}/cases/{caseId}/history": {
         parameters: {
             query?: {
-                /** @description Omit for all versions; the UI defaults the summary to current. */
+                /**
+                 * @description Which versions the summary and the timeline cover. `CURRENT_VERSION` is the default and
+                 *     the safe one: blending results across versions reports a pass rate for a test whose text
+                 *     changed underneath it (plan §6p).
+                 *
+                 *     Deliberately NOT expressible as `caseVersionNo`, though it looks like it should be. The
+                 *     UI's chip says "Current version", not "v7" — and "current" is resolved server-side, so a
+                 *     case edited between the page load and this request is still summarized against the version
+                 *     that is current NOW. A client sending `caseVersionNo=7` has pinned v7 forever and would
+                 *     quietly report a stale scope after the next save.
+                 */
+                scope?: "CURRENT_VERSION" | "ALL_VERSIONS";
+                /**
+                 * @description One explicit version — what a click on a version marker asks for. Wins over `scope` when
+                 *     both are sent, because it is the more specific of the two requests.
+                 */
                 caseVersionNo?: number;
                 releaseVersion?: string;
                 configurationId?: string;
@@ -1298,7 +1313,22 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    /** @description Omit for all versions; the UI defaults the summary to current. */
+                    /**
+                     * @description Which versions the summary and the timeline cover. `CURRENT_VERSION` is the default and
+                     *     the safe one: blending results across versions reports a pass rate for a test whose text
+                     *     changed underneath it (plan §6p).
+                     *
+                     *     Deliberately NOT expressible as `caseVersionNo`, though it looks like it should be. The
+                     *     UI's chip says "Current version", not "v7" — and "current" is resolved server-side, so a
+                     *     case edited between the page load and this request is still summarized against the version
+                     *     that is current NOW. A client sending `caseVersionNo=7` has pinned v7 forever and would
+                     *     quietly report a stale scope after the next save.
+                     */
+                    scope?: "CURRENT_VERSION" | "ALL_VERSIONS";
+                    /**
+                     * @description One explicit version — what a click on a version marker asks for. Wins over `scope` when
+                     *     both are sent, because it is the more specific of the two requests.
+                     */
                     caseVersionNo?: number;
                     releaseVersion?: string;
                     configurationId?: string;
@@ -1332,6 +1362,7 @@ export interface paths {
                         };
                     };
                 };
+                400: components["responses"]["BadRequest"];
                 401: components["responses"]["Unauthorized"];
                 404: components["responses"]["NotFound"];
             };
@@ -2954,7 +2985,7 @@ export interface components {
             versionNo: number;
             /** Format: date-time */
             occurredAt: string;
-            author: components["schemas"]["UserRef"];
+            author: components["schemas"]["UserRef"] | null;
             changeComment?: string | null;
         };
         TestPlanSummary: {
@@ -3189,9 +3220,25 @@ export interface components {
             runId: string;
             runKey: string;
             runName: string;
+            /**
+             * @description The run holding this result has been withdrawn. The entry stays — plan §6p: "deleted
+             *     runs must not orphan history … with the entry marked rather than vanishing", and
+             *     history that quietly loses rows is worse than no history.
+             *
+             *     This is the field that makes that rule expressible, and it is required because the
+             *     alternative reading of an absent flag is "not deleted", which is the dangerous default:
+             *     a withdrawn failure would read as a live one. A client MUST mark the entry and MUST NOT
+             *     offer navigation into the run, which answers 404.
+             *
+             *     Note the contrast with the plan-statistics endpoint, which EXCLUDES deleted runs
+             *     entirely: that one reports current state, where counting a retracted result would
+             *     restore it. A timeline is the other case.
+             * @example false
+             */
+            runDeleted: boolean;
             planKey?: string | null;
             configuration: string;
-            executedBy: components["schemas"]["UserRef"];
+            executedBy: components["schemas"]["UserRef"] | null;
             executedByToken?: string | null;
             /** @enum {string} */
             source: "MANUAL" | "INGESTED";

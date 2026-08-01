@@ -154,7 +154,9 @@ function SuiteHistoryBody({
                             }}
                           />
                           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                            {boundary.author.displayName} · {formatDateTime(boundary.occurredAt)}
+                            {/* Nullable for CaseHistoryPage's recorded reason. */}
+                            {boundary.author?.displayName ?? 'Unknown author'} ·{' '}
+                            {formatDateTime(boundary.occurredAt)}
                           </Typography>
                           {boundary.changeComment && (
                             <Typography variant="caption" sx={{ color: 'text.primary' }}>
