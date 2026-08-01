@@ -4,10 +4,13 @@
 Hetzner CX23 at `203.0.113.10` (Helsinki), Ubuntu 24.04.4, serving
 `https://tcms.203-0-113-10.sslip.io` behind Caddy on a Let's Encrypt cert, with Postgres 17.10
 host-native and the two-role split live: `tcms_owner` and `tcms_app` both `rolsuper=f`,
-`rolbypassrls=f`, database owned by the migration role. **Infrastructure only — the product is not
-on it.** No image built, Flyway has never run, and the four RLS rows of the runbook's §12 checklist
-are still ⬜. The runbook was authored 2026-07-30 and marked *not yet executed*; executing it found
-**four errors in it**, and the shape of two of them is the finding: each presents as a symptom the
+`rolbypassrls=f`, database owned by the migration role. **The product is now on it** (updated
+2026-08-02): `0.1.1` deployed from GHCR, 18 migrations all `installed_by=tcms_owner`, the SPA behind
+Caddy, mail relaying, and **every RLS row of the runbook's checklist green on the real box** —
+`tcms_app` owns 0 objects, 56 tables FORCE RLS, a context-less `SELECT` returns 0 rows on both a
+cold and a warm connection, and `ALTER TABLE … DISABLE ROW LEVEL SECURITY` as `tcms_app` is refused.
+The runbook was authored 2026-07-30 and marked *not yet executed*; executing it found
+**seven errors in it** (E1–E7, now folded into the procedure as traps A–E), and the shape of two of them is the finding: each presents as a symptom the
 document already explains, attributed to the wrong cause. **E2** — `ufw` drops container→host
 Postgres on `docker0`, presenting as the connection timeout §6 blames on a wrong bridge subnet (the
 bridge was right). **E3** — §9's `log` block cannot start under the packaged Caddy unit's
