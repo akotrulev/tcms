@@ -101,6 +101,7 @@ provisioning · auth · shared`.
 
 - `src/test/` is the `qa-api-java` peer's domain; this agent only adds tests alongside code it wrote.
 - Schema/DDL design (`docs/specs/*-erd.md`, RLS policy shape) is `data-architect`'s.
+- **CI runs `./gradlew build -x test` since 2026-08-02 — no backend tests run on push.** `./gradlew build` locally is the only test gate; nothing downstream repeats it.
 - **Two tests are `@Disabled`** — `InvitationServiceTest.reRunLeavesTheLiveLinkAlone` and
   `UserInvitationEndpointTest.secondInviteIsUnchanged`. A real defect, not flakes: the app returns an
   in-memory `Instant` (nanoseconds) where Postgres returns the round-trip (microseconds). One-line

@@ -65,6 +65,8 @@ renders blank with an empty console.
 # Backend — REQUIRES Docker; every test boots a real Postgres 17 via Testcontainers
 cd backend
 ./gradlew build                                  # THE gate: compile with -Werror + all tests
+                                                 # CI DOES NOT RUN THIS — see below. Running it
+                                                 # locally before pushing is now the only gate.
 ./gradlew test
 ./gradlew test --tests 'com.tcms.tenancy.RlsIsolationTest'          # single class
 ./gradlew test --tests 'com.tcms.tenancy.RlsIsolationTest.methodName'  # single test
@@ -80,6 +82,20 @@ npm run build        # THE gate: tsc -b + vite build
 npm run lint         # oxlint, must stay at 0 warnings — a gate, not advisory
 npm run gen:api      # regenerate src/api/schema.d.ts after ANY openapi.yaml change
 ```
+
+> **CI runs no backend tests** (changed 2026-08-02, for push-feedback speed: ~327s → ~60s).
+> `.github/workflows/ci.yml` runs `./gradlew build -x test`, so `-Werror` and the Modulith wiring
+> are still checked and nothing else is. There is no nightly lane either. **`./gradlew build` on
+> your own machine is the only thing that runs the 1000+ integration tests** — run it before you
+> push, because nothing downstream will.
+>
+> Know what your machine cannot see. On 2026-08-01 master was red for seven consecutive CI runs on
+> a defect that **cannot fail on macOS**: the app returns an in-memory `Instant` (nanoseconds) where
+> Postgres returns the round-trip (microseconds), and macOS's `Clock.systemUTC()` already yields
+> only microseconds. Every local gate was green; CI was the only observer. Anything sensitive to
+> Linux-vs-macOS now reaches master unobserved. `docs/handoff/58-the-first-real-deployment.md` has
+> the full account, and `docs/plans/2026-08-01-tcms-homelab-target.md` §9 is the standing proposal
+> for getting a Linux gate back.
 
 There is deliberately **no H2 fallback**: RLS, `ltree` and `citext` have no H2 equivalent, so an
 in-memory lane would test a schema the product never runs on. If Testcontainers reports
