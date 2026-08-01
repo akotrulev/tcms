@@ -2,8 +2,8 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-01
-**Baseline commit:** `a52fcab113125d855179a3080c26a4b97b54a8a0`
+**Last verified:** 2026-08-02
+**Baseline commit:** `68b9ffb`
 **Fingerprint files:** `backend/build.gradle.kts`, `backend/gradle/libs.versions.toml`, `backend/gradle/wrapper/gradle-wrapper.properties`
 
 > Authoritative docs win over this file. `CLAUDE.md`, `docs/HANDOFF.md` (an index — sections live in
@@ -27,9 +27,12 @@
   `ltree` and `citext` have no H2 equivalent. `systemProperty("api.version", …)` pins the Docker-29
   API floor (`build.gradle.kts:70`).
 - Single class: `./gradlew test --tests 'com.tcms.tenancy.RlsIsolationTest'`.
-- **`Clock.systemUTC()` on macOS yields only microsecond precision**, so any defect that depends on
-  sub-microsecond nanoseconds is invisible to a local run and fails only on Linux CI. This is not
-  hypothetical — see `docs/handoff/58-*.md`. `#confirmed`
+- **`Clock.systemUTC()` on macOS yields only microsecond precision** (re-measured 2026-08-02:
+  20000/20000 samples land on a whole microsecond), so any defect that depends on sub-microsecond
+  nanoseconds is invisible to a local run and could only ever fail on Linux CI — which no longer runs
+  tests. See `docs/handoff/58-*.md` and `60-*.md`. **A fix for this class is a no-op locally, so a
+  green suite is consistent with both the fixed and the unfixed code**; assert the decision, not only
+  the behaviour. `#confirmed`
 
 ## Layout
 
@@ -67,8 +70,14 @@ provisioning · auth · shared`.
   `deploy/postgres/initdb/10-tcms-roles.sql` (deployment),
   `src/test/resources/db/testinit/tcms-roles.sql` (suite), and the Hetzner runbook (which now
   *runs* the first file rather than carrying a copy — a copy drifted, see E1). `#confirmed`
-- **One `Clock` bean**, `TcmsApplication.java:49`, injected into ~10 services rather than
-  `Instant.now()` at call sites. `#confirmed`
+- **One `Clock` bean**, `TcmsApplication.java:52`, injected into ~10 services rather than
+  `Instant.now()` at call sites. **Truncated to microseconds** —
+  `Clock.tick(Clock.systemUTC(), Duration.ofNanos(1_000))` — because that is what a Postgres
+  `timestamptz` stores; an untruncated instant makes a value that is returned in memory and read back
+  two different values (§60). **`ArchitectureRulesTest.nothingCallsNowDirectly` forbids
+  `Instant.now()` and friends in production code**, so a new call site fails the build; the
+  `Clock`-taking overloads are allowed. `ClockResolutionTest` (`com.tcms.ops`) pins the bean's
+  identity, deliberately, because the behavioural assertion cannot fail on macOS. `#confirmed`
 - **Operator CLI**: `ApplicationRunner` beans that are inert unless their verb appears in the
   non-option args — `ProvisionCompanyCommand`, `IssueInvitationCommand`. The verb list lives in
   `OperatorCommands`, which `TcmsApplication.main` asks *before the context exists* to pick
@@ -102,15 +111,18 @@ provisioning · auth · shared`.
 - `src/test/` is the `qa-api-java` peer's domain; this agent only adds tests alongside code it wrote.
 - Schema/DDL design (`docs/specs/*-erd.md`, RLS policy shape) is `data-architect`'s.
 - **CI runs `./gradlew build -x test` since 2026-08-02 — no backend tests run on push.** `./gradlew build` locally is the only test gate; nothing downstream repeats it.
-- **Two tests are `@Disabled`** — `InvitationServiceTest.reRunLeavesTheLiveLinkAlone` and
-  `UserInvitationEndpointTest.secondInviteIsUnchanged`. A real defect, not flakes: the app returns an
-  in-memory `Instant` (nanoseconds) where Postgres returns the round-trip (microseconds). One-line
-  fix at `TcmsApplication.java:49` — `Clock.tick(Clock.systemUTC(), Duration.ofNanos(1_000))` — **not
-  yet applied**. `#confirmed`
+- ~~Two tests are `@Disabled`~~ **→ fixed and re-enabled 2026-08-02 (§60). No test is `@Disabled`;
+  the suite runs 1078 with 0 skipped**, and the `skipped` count is the cheapest way to check that
+  claim still holds. `#confirmed`
 - `reporting` module is still MSW-only on the frontend; no backend implementation yet.
 
 ## Session log
 
+- 2026-08-02 · FIX · Truncated the `Clock` bean to microseconds, closing §58's carried debt and
+  re-enabling the two `@Disabled` invitation tests. Swept the class: `ExecutionService.record` and
+  `SessionTokens.issue` both bypassed the bean with `Instant.now()` and now take it. Added
+  `ClockResolutionTest` and `ArchitectureRulesTest.nothingCallsNowDirectly` (verified red by
+  reintroducing the defect). Wrote the missing §59 and the new §60 handoff sections.
 - 2026-08-01 · EXTEND · Added the `issue-invitation` operator CLI + `InvitationService.reissue`, so a
   UI-raised invitation is deliverable on an instance with no SMTP relay. Created `OperatorCommands`
   to hold the verb list once. Cache created this run.
