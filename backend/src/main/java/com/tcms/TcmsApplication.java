@@ -1,6 +1,6 @@
 package com.tcms;
 
-import com.tcms.provisioning.ProvisionCompanyCommand;
+import com.tcms.provisioning.OperatorCommands;
 import java.time.Clock;
 import org.springframework.boot.Banner;
 import org.springframework.boot.WebApplicationType;
@@ -29,7 +29,7 @@ public class TcmsApplication {
         // exit — the operator sees a command that "hangs" after succeeding. Decided from
         // the raw arguments because the application type is fixed before the context (and
         // therefore before ApplicationArguments) exists.
-        boolean cli = ProvisionCompanyCommand.isRequestedBy(args);
+        boolean cli = OperatorCommands.isRequestedBy(args);
         new SpringApplicationBuilder(TcmsApplication.class)
                 .web(cli ? WebApplicationType.NONE : WebApplicationType.SERVLET)
                 // The banner is six lines of ASCII art between the operator and the usage

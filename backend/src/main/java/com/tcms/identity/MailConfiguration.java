@@ -63,12 +63,17 @@ public class MailConfiguration {
 
         @Override
         public void send(InvitationMessage message) {
+            // The link is deliberately NOT logged. It is the credential, and a log file is
+            // read by more people, and kept longer, than the terminal an operator ran a
+            // command in. `issue-invitation` is the supported way to obtain one.
             log.warn(
                     "No SMTP relay is configured (spring.mail.host is unset), so the invitation "
-                            + "for {} to '{}' was NOT emailed. The invitation is valid — deliver "
-                            + "the activation link printed by provision-company by hand, or "
-                            + "configure a relay.",
-                    message.toEmail(), message.companyName());
+                            + "for {} to '{}' was NOT emailed. The invitation is valid but "
+                            + "UNDELIVERED: only a digest of its token is stored, so this link "
+                            + "cannot be recovered from the database or reprinted. Issue a fresh "
+                            + "one and hand it over with: "
+                            + "issue-invitation --slug=<slug> --email={} — or configure a relay.",
+                    message.toEmail(), message.companyName(), message.toEmail());
         }
     }
 }

@@ -183,6 +183,65 @@ public class InvitationService {
             invitations.flush();
         }
 
+        return mint(companyId, userId, issuedBy, membership.get(), now);
+    }
+
+    /**
+     * Issues a <strong>replacement</strong> invitation, discarding any outstanding one.
+     *
+     * <p>The deliberate opposite of {@link #issueIfPending}, which leaves a live link alone
+     * because {@code provision-company} is re-runnable and a top-up must not invalidate a
+     * link already in somebody's inbox. Here the operator is explicitly asking for a new
+     * link, so replacing is the request rather than a side effect.
+     *
+     * <p><strong>Why this has to exist at all.</strong> Only a digest of a token is stored —
+     * {@code InvitationTokens.hash}, and {@code InvitationServiceTest} pins it, because a
+     * readable token in that table would make a database read enough to become a client's
+     * administrator. So a link that was not delivered cannot be recovered by anyone,
+     * including an operator with superuser on the box. On an instance with no SMTP relay,
+     * every invitation raised from the UI was therefore undeliverable: the API response
+     * carries no URL (it must not — that is the secret on a wire that logs), the
+     * unconfigured mailer logged only a warning, and {@code provision-company} refuses to
+     * replace an outstanding invitation and only ever addresses a company's first admin.
+     * Re-issuing is the only mechanism that can produce a working link, and this is it.
+     *
+     * <p>The previous token dies the moment the row is replaced, which is the property that
+     * makes re-issuing safe to offer: there is never more than one redeemable token for a
+     * membership, so a link recovered from an old mailbox cannot be used behind the
+     * operator's back.
+     *
+     * <p>Same contract as {@link #issueIfPending}: caller supplies the transaction and the
+     * company context. Returns {@link IssueOutcome#none()} for a membership that does not
+     * exist or has already been accepted — an active member needs a password reset, not an
+     * invitation, and minting one would be a way to take over a live account.
+     */
+    public IssueOutcome reissue(UUID companyId, UUID userId, UUID issuedBy) {
+        Instant now = clock.instant();
+
+        Optional<CompanyMembership> membership = memberships.findByCompanyIdAndUserId(companyId, userId);
+        if (membership.isEmpty() || membership.get().isActive()) {
+            return IssueOutcome.none();
+        }
+
+        invitations.findByCompanyIdAndUserIdAndConsumedAtIsNull(companyId, userId)
+                .ifPresent(existing -> {
+                    invitations.delete(existing);
+                    // Flushed before the insert: the partial unique index allows exactly one
+                    // outstanding row per (company, user), and JPA is free to order the insert
+                    // before the delete otherwise — which fails on the constraint rather than
+                    // replacing the row.
+                    invitations.flush();
+                });
+
+        return mint(companyId, userId, issuedBy, membership.get(), now);
+    }
+
+    /**
+     * Mints, stores and queues a fresh invitation. The one place a token is created, so the
+     * two entry points cannot drift on what "issued" means.
+     */
+    private IssueOutcome mint(
+            UUID companyId, UUID userId, UUID issuedBy, CompanyMembership membership, Instant now) {
         InvitationTokens.NewToken token = tokens.generate();
         Instant expiresAt = now.plus(properties.validity());
         invitations.saveAndFlush(MembershipInvitation.issue(
@@ -190,7 +249,7 @@ public class InvitationService {
         // The URL, not the secret: the secret has exactly one legitimate destination and
         // handing it around as a bare string invites a call site that logs it.
         String acceptUrl = properties.acceptUrl(token.secret());
-        sendAfterCommit(companyId, membership.get(), acceptUrl, expiresAt);
+        sendAfterCommit(companyId, membership, acceptUrl, expiresAt);
         return new IssueOutcome(Optional.of(acceptUrl), Optional.of(expiresAt), true);
     }
 

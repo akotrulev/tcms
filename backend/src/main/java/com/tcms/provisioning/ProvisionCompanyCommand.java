@@ -56,14 +56,15 @@ import org.springframework.stereotype.Component;
 @Component
 public class ProvisionCompanyCommand implements ApplicationRunner {
 
-    static final String COMMAND = "provision-company";
+    static final String COMMAND = OperatorCommands.PROVISION_COMPANY;
 
     /**
-     * Whether these raw {@code main} arguments invoke this command — asked by
-     * {@code TcmsApplication} before the context is built, to run non-web.
+     * Whether these raw {@code main} arguments invoke <em>this</em> command.
      *
-     * <p>Lives here rather than as a literal in {@code main} so the command name is
-     * spelled once. Two spellings that must agree, in two modules, is how a rename ships
+     * <p>{@code TcmsApplication} no longer asks this — it asks {@link OperatorCommands},
+     * which answers for every verb rather than only this one. Kept because it is the
+     * narrower question and its test pins it; the name itself is spelled once, in
+     * {@code OperatorCommands}, because two spellings that must agree is how a rename ships
      * a CLI that provisions correctly and then hangs on a servlet container nobody asked
      * for.
      */
