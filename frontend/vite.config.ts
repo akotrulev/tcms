@@ -1,5 +1,35 @@
-import { defineConfig } from 'vite'
+import { rm } from 'node:fs/promises'
+import { resolve } from 'node:path'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+
+/**
+ * Keeps MSW's service worker out of the production build.
+ *
+ * `msw init` puts `mockServiceWorker.js` in `public/`, and Vite copies `public/` verbatim — so a
+ * production `dist/` shipped it to the server. Nothing registers it: `main.tsx` gates the worker
+ * on a literal `import.meta.env.DEV` that Vite replaces with `false`, so this was a dead 8 kB
+ * file rather than an app serving fixtures.
+ *
+ * Removed anyway, because "dead unless someone registers it" is a property of today's code and
+ * the file's whole purpose is to intercept API calls. The alternative — moving it out of
+ * `public/` — means teaching MSW a non-default path in dev, i.e. breaking the working case to
+ * tidy the broken one.
+ *
+ * `deploy.yml`'s `web` job asserts `dist/` is clean; this is what makes that assertion pass, and
+ * it runs on a local `npm run build` too, so the two do not drift.
+ */
+function excludeMockServiceWorker(): Plugin {
+  return {
+    name: 'tcms-exclude-msw',
+    apply: 'build',
+    // `closeBundle` rather than `generateBundle`: public/ is copied outside the bundle graph,
+    // so the file does not exist as an emitted asset to filter — only as a file on disk.
+    async closeBundle() {
+      await rm(resolve(__dirname, 'dist/mockServiceWorker.js'), { force: true })
+    },
+  }
+}
 
 /**
  * `__BUILD_ID__` identifies the build a tab is running.
@@ -26,7 +56,7 @@ const apiProxyTarget = process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:80
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), excludeMockServiceWorker()],
   define: {
     __BUILD_ID__: JSON.stringify(buildId),
   },
