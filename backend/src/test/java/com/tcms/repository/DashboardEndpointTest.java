@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tcms.IntegrationTestBase;
+import com.tcms.contract.OpenApiContract;
 import com.tcms.identity.AppUser;
 import com.tcms.identity.AppUserRepository;
 import com.tcms.identity.CompanyMembership;
@@ -25,6 +26,8 @@ import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -557,6 +560,63 @@ class DashboardEndpointTest extends IntegrationTestBase {
             assertThat(activityOn(dashboardAs(LEAD, ACME, ACME_BANKING), daysAgo(2), "modified"))
                     .as("only TC-1's edit; TC-6's must not appear")
                     .isEqualTo(1);
+        }
+    }
+
+    // =====================================================================
+    // The contract check §47 said would have caught its own defect
+    // =====================================================================
+
+    @Nested
+    @DisplayName("Every emitted filter key is a parameter the case list actually declares")
+    class FilterKeysAreBound {
+
+        /**
+         * §6o makes every count the entrance to the list behind it. That rule has an edge which
+         * cost this endpoint a defect: <strong>Spring silently ignores an unbound query
+         * parameter</strong>, so a tile emitting a key {@code GET /cases} does not declare opens
+         * a <em>wider</em> set than its own heading promises, with a correct number on the tile.
+         * Nothing throws, no test fails, and the page looks right — §47 shipped
+         * "Ana · Approved · 34" as a link to everyone's 210 approved cases before catching it.
+         *
+         * <p>The count assertions elsewhere in this class do not catch it on their own. They
+         * compare a tile's count against the list its filter returns, which agrees perfectly
+         * whenever the fixture has a single owner, a single feature, or one of anything — and a
+         * fixture with one of something is the normal state of a freshly provisioned project.
+         * This assertion is about the <em>key</em>, so it holds regardless of what the data
+         * happens to look like.
+         *
+         * <p>It reads the emitted keys from a live response rather than from a list written here:
+         * a literal list would be a second place to update, and it would agree with a wrong
+         * implementation on the day someone added a key to only one of them.
+         */
+        @Test
+        @DisplayName("no tile or segment emits a filter key GET /cases would ignore")
+        void everyFilterKeyIsDeclaredByTheCaseList() throws Exception {
+            Set<String> declared = OpenApiContract.load()
+                    .queryParameterNames("/projects/{projectId}/cases");
+            JsonNode body = dashboardAs(LEAD, ACME, ACME_BANKING);
+
+            Set<String> emitted = new TreeSet<>();
+            for (String panel : List.of("lifecycle", "health")) {
+                body.get(panel).forEach(tile -> tile.get("filter").fieldNames()
+                        .forEachRemaining(emitted::add));
+            }
+            for (String panel : List.of("byFeature", "byOwner")) {
+                body.get(panel).forEach(bar -> bar.get("segments").forEach(
+                        segment -> segment.get("filter").fieldNames().forEachRemaining(emitted::add)));
+            }
+
+            assertThat(emitted)
+                    .as("the dashboard emitted no filters at all, so this asserted nothing")
+                    .isNotEmpty();
+            assertThat(emitted)
+                    .as("""
+                            Every key a dashboard filter emits must be a query parameter declared on \
+                            GET /projects/{projectId}/cases. An undeclared key is not rejected — it is \
+                            IGNORED, so the link opens an unfiltered superset under a heading that \
+                            names the filter. Declared: %s""", declared)
+                    .isSubsetOf(declared);
         }
     }
 

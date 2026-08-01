@@ -180,6 +180,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/CurrentUser' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
   /me/permissions:
     get:
@@ -208,6 +209,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/EffectivePermissions' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
   # ------------------------------------------------------------ projects ----
   /projects:
@@ -222,6 +224,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/Project' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
     post:
       tags: [projects]
       summary: Create a project
@@ -283,6 +286,8 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Project' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /projects/{projectId}/classification:
     parameters: [{ $ref: '#/components/parameters/ProjectId' }]
@@ -298,6 +303,8 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/ClassificationDimension' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /projects/{projectId}/statuses:
     parameters: [{ $ref: '#/components/parameters/ProjectId' }]
@@ -312,6 +319,8 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/CaseStatus' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   # ---------------------------------------------------------- repository ----
   /projects/{projectId}/suites:
@@ -327,6 +336,8 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/Suite' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
     post:
       tags: [repository]
       summary: Create a suite
@@ -372,6 +383,8 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Suite' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
     patch:
       tags: [repository]
       summary: Rename a suite
@@ -457,6 +470,9 @@ paths:
             application/json:
               schema:
                 type: object
+                # Both arrays are always sent; empty is the answer for a suite with no history,
+                # and an absent array would make the page unable to tell "none" from "not loaded".
+                required: [entries, versionMarkers]
                 properties:
                   entries:
                     type: array
@@ -464,6 +480,8 @@ paths:
                   versionMarkers:
                     type: array
                     items: { $ref: '#/components/schemas/VersionMarker' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /projects/{projectId}/cases:
     parameters:
@@ -537,6 +555,10 @@ paths:
                 allOf:
                   - $ref: '#/components/schemas/PageMeta'
                   - type: object
+                    # `required` does not descend through allOf — the PageMeta branch declares its
+                    # own and this one needs the same. `facets` is always sent, empty when the page
+                    # is: the grid distinguishes "no facets" from "facets not loaded".
+                    required: [items, facets]
                     properties:
                       items:
                         type: array
@@ -544,6 +566,8 @@ paths:
                       facets:
                         type: array
                         items: { $ref: '#/components/schemas/Facet' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
     post:
       tags: [repository]
       summary: Create a test case
@@ -604,6 +628,10 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/BulkResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /projects/{projectId}/cases/{caseId}:
     parameters:
@@ -711,6 +739,10 @@ paths:
             application/json:
               schema:
                 type: object
+                # All three always sent. `summary` in particular: a case with no executions still
+                # gets a summary of zeros, because the panel's job is to state the counts and an
+                # absent summary would render as a failed load rather than as "never executed".
+                required: [summary, entries, versionMarkers]
                 properties:
                   summary: { $ref: '#/components/schemas/CaseHistorySummary' }
                   entries:
@@ -719,6 +751,8 @@ paths:
                   versionMarkers:
                     type: array
                     items: { $ref: '#/components/schemas/VersionMarker' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /projects/{projectId}/conditions:
     parameters:
@@ -741,6 +775,8 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/Condition' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /projects/{projectId}/shared-steps:
     parameters:
@@ -759,6 +795,8 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/SharedStep' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   # ----------------------------------------------------------- execution ----
   /projects/{projectId}/plans:
@@ -1056,6 +1094,8 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/DocPageSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /projects/{projectId}/doc-pages/{pageId}:
     parameters:
@@ -1076,6 +1116,8 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/DocPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /projects/{projectId}/artifacts:
     parameters:
@@ -1098,6 +1140,8 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/Artifact' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   # ----------------------------------------------------------- reporting ----
   /projects/{projectId}/dashboard:
@@ -1129,6 +1173,8 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/ReportDefinition' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /projects/{projectId}/reports/generate:
     parameters: [{ $ref: '#/components/parameters/ProjectId' }]
@@ -1153,6 +1199,10 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ReportJob' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   # --------------------------------------------------------------- admin ----
   /users:
@@ -1167,6 +1217,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
   /teams:
     get:
@@ -1180,6 +1231,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/Team' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
   /roles:
     get:
@@ -1193,6 +1245,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/Role' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
   /role-assignments:
     get:
@@ -1210,6 +1263,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/RoleAssignment' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
     post:
       tags: [admin]
       summary: Grant a role to a user or a team
@@ -1311,6 +1365,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/WorkItem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
 # =============================================================================
 # COMPONENTS
@@ -1432,6 +1487,10 @@ components:
     # ------------------------------------------------------------ common ---
     Problem:
       type: object
+      # `errors` is the one optional member: `ApiProblem` is serialized NON_NULL, so a 404 or a
+      # 409 omits the key entirely rather than sending an empty object a client could read as
+      # "no fields were wrong". The other four are on every problem this API emits.
+      required: [type, title, status, detail]
       properties:
         type: { type: string }
         title: { type: string }
@@ -1456,6 +1515,10 @@ components:
 
     PageMeta:
       type: object
+      # Every list endpoint sends all three on every response, including an empty page — which is
+      # the case that matters, since `total: 0` is what tells a grid to render "no results" rather
+      # than to keep its spinner up.
+      required: [page, size, total]
       properties:
         page: { type: integer }
         size: { type: integer }
@@ -1472,6 +1535,9 @@ components:
           type: array
           items:
             type: object
+            # `required` does not descend into `items` — without this the facet chips could not
+            # read their own label or count without a null check on values the server always sends.
+            required: [id, label, count]
             properties:
               id: { type: string }
               label: { type: string }
@@ -1745,6 +1811,11 @@ components:
         lastResult:
           type: object
           nullable: true
+          # The whole object is null for a case that has never been executed; when it IS present
+          # every member is, `releaseVersion` as an explicit null for a run outside a release.
+          # Nullability belongs on the object, not on its members — a half-populated last result
+          # is not a state the server can produce.
+          required: [statusKind, executedAt, releaseVersion]
           properties:
             statusKind: { $ref: '#/components/schemas/StatusKind' }
             executedAt: { type: string, format: date-time }
@@ -2554,6 +2625,10 @@ components:
 
     ReportJob:
       type: object
+      # `downloadUrl` is null until the job reaches COMPLETED — always present, sometimes null, so
+      # it is required AND nullable. A poller reads `status` to decide whether to keep polling and
+      # must not have to null-check the field it polls on.
+      required: [jobId, status, format, downloadUrl]
       properties:
         jobId: { type: string, format: uuid }
         status: { type: string, enum: [PENDING, RUNNING, COMPLETED, FAILED] }
@@ -2577,6 +2652,10 @@ components:
       allOf:
         - $ref: '#/components/schemas/DocPageSummary'
         - type: object
+          # `required` does not descend through allOf, so this branch declares its own — the same
+          # repair TestCase and TestPlan already carry. Without it `lockVersion` cannot be sent as
+          # If-Match without a null check on a value every response has.
+          required: [blocks, currentVersionNo, lockVersion]
           properties:
             blocks:
               type: array
@@ -2692,6 +2771,9 @@ components:
           type: array
           items:
             type: object
+            # Same descent rule as CurrentUser.teams, which carries this comment already: a team's
+            # project row exists BECAUSE it has a grant, so all three are always populated.
+            required: [projectId, projectName, roleName]
             properties:
               projectId: { type: string, format: uuid }
               projectName: { type: string }

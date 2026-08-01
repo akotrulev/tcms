@@ -231,6 +231,7 @@ export interface paths {
                         "application/json": components["schemas"]["CurrentUser"];
                     };
                 };
+                401: components["responses"]["Unauthorized"];
             };
         };
         put?: never;
@@ -283,6 +284,7 @@ export interface paths {
                         "application/json": components["schemas"]["EffectivePermissions"];
                     };
                 };
+                401: components["responses"]["Unauthorized"];
             };
         };
         put?: never;
@@ -319,6 +321,7 @@ export interface paths {
                         "application/json": components["schemas"]["Project"][];
                     };
                 };
+                401: components["responses"]["Unauthorized"];
             };
         };
         put?: never;
@@ -417,6 +420,8 @@ export interface paths {
                         "application/json": components["schemas"]["Project"];
                     };
                 };
+                401: components["responses"]["Unauthorized"];
+                404: components["responses"]["NotFound"];
             };
         };
         put?: never;
@@ -460,6 +465,8 @@ export interface paths {
                         "application/json": components["schemas"]["ClassificationDimension"][];
                     };
                 };
+                401: components["responses"]["Unauthorized"];
+                404: components["responses"]["NotFound"];
             };
         };
         put?: never;
@@ -500,6 +507,8 @@ export interface paths {
                         "application/json": components["schemas"]["CaseStatus"][];
                     };
                 };
+                401: components["responses"]["Unauthorized"];
+                404: components["responses"]["NotFound"];
             };
         };
         put?: never;
@@ -540,6 +549,8 @@ export interface paths {
                         "application/json": components["schemas"]["Suite"][];
                     };
                 };
+                401: components["responses"]["Unauthorized"];
+                404: components["responses"]["NotFound"];
             };
         };
         put?: never;
@@ -621,6 +632,8 @@ export interface paths {
                         "application/json": components["schemas"]["Suite"];
                     };
                 };
+                401: components["responses"]["Unauthorized"];
+                404: components["responses"]["NotFound"];
             };
         };
         put?: never;
@@ -777,11 +790,13 @@ export interface paths {
                     };
                     content: {
                         "application/json": {
-                            entries?: components["schemas"]["SuiteRunSummary"][];
-                            versionMarkers?: components["schemas"]["VersionMarker"][];
+                            entries: components["schemas"]["SuiteRunSummary"][];
+                            versionMarkers: components["schemas"]["VersionMarker"][];
                         };
                     };
                 };
+                401: components["responses"]["Unauthorized"];
+                404: components["responses"]["NotFound"];
             };
         };
         put?: never;
@@ -876,11 +891,13 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["PageMeta"] & {
-                            items?: components["schemas"]["TestCaseSummary"][];
-                            facets?: components["schemas"]["Facet"][];
+                            items: components["schemas"]["TestCaseSummary"][];
+                            facets: components["schemas"]["Facet"][];
                         };
                     };
                 };
+                401: components["responses"]["Unauthorized"];
+                404: components["responses"]["NotFound"];
             };
         };
         put?: never;
@@ -1028,6 +1045,10 @@ export interface paths {
                         "application/json": components["schemas"]["BulkResult"];
                     };
                 };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
             };
         };
         delete?: never;
@@ -1305,12 +1326,14 @@ export interface paths {
                     };
                     content: {
                         "application/json": {
-                            summary?: components["schemas"]["CaseHistorySummary"];
-                            entries?: components["schemas"]["ExecutionHistoryEntry"][];
-                            versionMarkers?: components["schemas"]["VersionMarker"][];
+                            summary: components["schemas"]["CaseHistorySummary"];
+                            entries: components["schemas"]["ExecutionHistoryEntry"][];
+                            versionMarkers: components["schemas"]["VersionMarker"][];
                         };
                     };
                 };
+                401: components["responses"]["Unauthorized"];
+                404: components["responses"]["NotFound"];
             };
         };
         put?: never;
@@ -1359,6 +1382,8 @@ export interface paths {
                         "application/json": components["schemas"]["Condition"][];
                     };
                 };
+                401: components["responses"]["Unauthorized"];
+                404: components["responses"]["NotFound"];
             };
         };
         put?: never;
@@ -1403,6 +1428,8 @@ export interface paths {
                         "application/json": components["schemas"]["SharedStep"][];
                     };
                 };
+                401: components["responses"]["Unauthorized"];
+                404: components["responses"]["NotFound"];
             };
         };
         put?: never;
@@ -1949,6 +1976,8 @@ export interface paths {
                         "application/json": components["schemas"]["DocPageSummary"][];
                     };
                 };
+                401: components["responses"]["Unauthorized"];
+                404: components["responses"]["NotFound"];
             };
         };
         put?: never;
@@ -1995,6 +2024,8 @@ export interface paths {
                         "application/json": components["schemas"]["DocPage"];
                     };
                 };
+                401: components["responses"]["Unauthorized"];
+                404: components["responses"]["NotFound"];
             };
         };
         put?: never;
@@ -2043,6 +2074,8 @@ export interface paths {
                         "application/json": components["schemas"]["Artifact"][];
                     };
                 };
+                401: components["responses"]["Unauthorized"];
+                404: components["responses"]["NotFound"];
             };
         };
         put?: never;
@@ -2128,6 +2161,8 @@ export interface paths {
                         "application/json": components["schemas"]["ReportDefinition"][];
                     };
                 };
+                401: components["responses"]["Unauthorized"];
+                404: components["responses"]["NotFound"];
             };
         };
         put?: never;
@@ -2185,6 +2220,10 @@ export interface paths {
                         "application/json": components["schemas"]["ReportJob"];
                     };
                 };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
             };
         };
         delete?: never;
@@ -2219,6 +2258,7 @@ export interface paths {
                         "application/json": components["schemas"]["User"][];
                     };
                 };
+                401: components["responses"]["Unauthorized"];
             };
         };
         put?: never;
@@ -2255,6 +2295,7 @@ export interface paths {
                         "application/json": components["schemas"]["Team"][];
                     };
                 };
+                401: components["responses"]["Unauthorized"];
             };
         };
         put?: never;
@@ -2291,6 +2332,7 @@ export interface paths {
                         "application/json": components["schemas"]["Role"][];
                     };
                 };
+                401: components["responses"]["Unauthorized"];
             };
         };
         put?: never;
@@ -2329,6 +2371,7 @@ export interface paths {
                         "application/json": components["schemas"]["RoleAssignment"][];
                     };
                 };
+                401: components["responses"]["Unauthorized"];
             };
         };
         put?: never;
@@ -2489,6 +2532,7 @@ export interface paths {
                         "application/json": components["schemas"]["WorkItem"][];
                     };
                 };
+                401: components["responses"]["Unauthorized"];
             };
         };
         put?: never;
@@ -2504,10 +2548,10 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         Problem: {
-            type?: string;
-            title?: string;
-            status?: number;
-            detail?: string;
+            type: string;
+            title: string;
+            status: number;
+            detail: string;
             /**
              * @description RFC-7807 `errors` — field name to the messages that field failed on, present only on a
              *     validation rejection. The key is the field's name **as it appears on the input schema**
@@ -2524,9 +2568,9 @@ export interface components {
             } | null;
         };
         PageMeta: {
-            page?: number;
-            size?: number;
-            total?: number;
+            page: number;
+            size: number;
+            total: number;
         };
         /** @description Returned alongside results so filter counts render without a second request. */
         Facet: {
@@ -2534,9 +2578,9 @@ export interface components {
             key: string;
             label: string;
             values: {
-                id?: string;
-                label?: string;
-                count?: number;
+                id: string;
+                label: string;
+                count: number;
             }[];
         };
         UserRef: {
@@ -2732,10 +2776,10 @@ export interface components {
             tags: string[];
             healthSignals: components["schemas"]["HealthSignal"][];
             lastResult?: {
-                statusKind?: components["schemas"]["StatusKind"];
+                statusKind: components["schemas"]["StatusKind"];
                 /** Format: date-time */
-                executedAt?: string;
-                releaseVersion?: string | null;
+                executedAt: string;
+                releaseVersion: string | null;
             } | null;
             /** Format: date-time */
             updatedAt: string;
@@ -3317,11 +3361,11 @@ export interface components {
         };
         ReportJob: {
             /** Format: uuid */
-            jobId?: string;
+            jobId: string;
             /** @enum {string} */
-            status?: "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
-            format?: string;
-            downloadUrl?: string | null;
+            status: "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
+            format: string;
+            downloadUrl: string | null;
         };
         DocPageSummary: {
             /** Format: uuid */
@@ -3338,9 +3382,9 @@ export interface components {
             updatedAt: string;
         };
         DocPage: components["schemas"]["DocPageSummary"] & {
-            blocks?: components["schemas"]["DocBlock"][];
-            currentVersionNo?: number;
-            lockVersion?: number;
+            blocks: components["schemas"]["DocBlock"][];
+            currentVersionNo: number;
+            lockVersion: number;
         };
         DocBlock: {
             /**
@@ -3429,9 +3473,9 @@ export interface components {
             members: components["schemas"]["UserRef"][];
             projects: {
                 /** Format: uuid */
-                projectId?: string;
-                projectName?: string;
-                roleName?: string;
+                projectId: string;
+                projectName: string;
+                roleName: string;
             }[];
         };
         /**
