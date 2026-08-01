@@ -2,7 +2,7 @@
 import { HttpResponse, delay, http } from 'msw';
 import { db, newId } from '../db';
 import { companyScopePermissions, dimensions } from '../fixtures/core';
-import { API, LATENCY, notFound, problem, requireAuth } from './shared';
+import { API, LATENCY, notFound, problem, projectMembers, requireAuth } from './shared';
 
 /** Mirrors `ck_project_key_format` in V1 and `ProjectInput.key`'s pattern in the contract. */
 const KEY_PATTERN = /^[A-Z0-9]{2,10}$/;
@@ -97,4 +97,17 @@ export const projectHandlers = [
   }),
 
   http.get(`${API}/projects/:projectId/statuses`, () => HttpResponse.json(db.statuses)),
+
+  /*
+    Who may be given work here. 404 for an unreachable project rather than an empty array — the
+    contract declares it, and §6t requires an unreachable project and a non-existent one to be
+    indistinguishable. An empty member list would confirm that the project exists.
+  */
+  http.get(`${API}/projects/:projectId/members`, async ({ params }) => {
+    await delay(LATENCY);
+    const projectId = String(params.projectId);
+    return db.projects.some((p) => p.id === projectId)
+      ? HttpResponse.json(projectMembers(projectId))
+      : notFound('That project');
+  }),
 ];

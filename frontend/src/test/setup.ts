@@ -7,8 +7,19 @@
  * does not exist.
  */
 import '@testing-library/jest-dom/vitest'
-import { cleanup } from '@testing-library/react'
+import { cleanup, configure } from '@testing-library/react'
 import { afterEach, beforeEach, vi } from 'vitest'
+
+/**
+ * RTL's per-wait timeout, raised from its 1000 ms default — the smaller half of §54's flake fix.
+ *
+ * The larger half is `testTimeout` in `vitest.config.ts`, whose comment carries the diagnosis.
+ * This one has to stay **well below** it: `asyncUtilTimeout` is the budget for a single `waitFor`,
+ * and setting the two equal (the first attempt) lets one wait consume the whole test, turning an
+ * assertion failure into a bare "Test timed out" that names nothing. Kept at a quarter of the test
+ * budget so a wait that genuinely never resolves still reports itself as the wait that failed.
+ */
+configure({ asyncUtilTimeout: 5000 })
 
 /**
  * jsdom implements neither `matchMedia` nor `ResizeObserver`, and MUI reaches for both — the

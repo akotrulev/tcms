@@ -37,8 +37,12 @@ export function workItems(projectId: string, projectKey: string): WorkItem[] {
           projectId,
           projectKey,
           linkedKey: e.caseKey,
-          // A derived card may only move where its source can legally go.
-          allowedTransitions: ['IN_PROGRESS', 'DONE'],
+          // EMPTY, like the server's. This read `['IN_PROGRESS', 'DONE']` until §54, so mock
+          // mode offered a move on a derived card that live mode disables and refuses with a
+          // 409 — the mock proving a capability the product does not have, which is the exact
+          // divergence class §52 and §53 were each spent on. A derived card follows its source;
+          // §6l's eventual "move to Done opens the execution" is a navigation, not a transition.
+          allowedTransitions: [],
         })),
     );
 
@@ -63,7 +67,7 @@ export function workItems(projectId: string, projectKey: string): WorkItem[] {
       projectId,
       projectKey,
       linkedKey: c.key,
-      allowedTransitions: ['IN_REVIEW', 'DONE'],
+      allowedTransitions: [],
     }));
 
   const fromStale: WorkItem[] = db.cases
@@ -87,7 +91,7 @@ export function workItems(projectId: string, projectKey: string): WorkItem[] {
       projectId,
       projectKey,
       linkedKey: c.key,
-      allowedTransitions: ['TODO', 'IN_PROGRESS', 'DONE'],
+      allowedTransitions: [],
     }));
 
   return [...db.workItems.filter((w) => w.projectId === projectId), ...fromExecutions, ...fromReviews, ...fromStale];

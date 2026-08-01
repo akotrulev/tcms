@@ -3,7 +3,19 @@ import { HttpResponse, delay, http } from 'msw';
 import type { WorkItem } from '../../api/types';
 import { addWorkItem, db, newId, workItems } from '../db';
 import { currentUser, projects } from '../fixtures/core';
-import { API, LATENCY, problem, userRef } from './shared';
+import { workItemColumns } from '../../lib/labels';
+import { API, LATENCY, problem, projectMembers } from './shared';
+
+/**
+ * Which task each `Idempotency-Key` created, so a retry can be recognised.
+ *
+ * Kept beside the store rather than on the row, because the server's own column
+ * (`work_item.created_idempotency_key`, V17) is **never on the wire** — it is write-once and read
+ * only by the replay lookup. Putting it on the mock's `WorkItem` would make the mock the one place
+ * a client could see it, which is the drift this file's own header warns about in the other
+ * direction. Module state, so a reload clears it exactly as the mock store does.
+ */
+const createdByIntent = new Map<string, string>();
 
 export const workItemHandlers = [
   http.get(`${API}/work-items`, async ({ request }) => {
@@ -18,9 +30,27 @@ export const workItemHandlers = [
     return HttpResponse.json(items);
   }),
 
+  /*
+    Create.
+
+    **The `Idempotency-Key` is genuinely honoured here**, and that is the rule this project has
+    paid for twice: a mock that accepts a header nothing reads is how the SPA sent one for sixteen
+    slices while every retry created another row (§29 for cases, §53 for this endpoint). The
+    property is provable in mock mode or it is not a property.
+  */
   http.post(`${API}/work-items`, async ({ request }) => {
     await delay(LATENCY);
     const body = (await request.json()) as Record<string, unknown>;
+
+    const idempotencyKey = request.headers.get('Idempotency-Key');
+    if (idempotencyKey) {
+      const already = db.workItems.find((w) => w.id === createdByIntent.get(idempotencyKey));
+      // 200, not 201, and answered BEFORE validation — the client is asking "did my intent
+      // land", so a retry whose payload has since drifted must still get the card it made
+      // rather than a 400 sending it to fix fields on something that already exists.
+      if (already) return HttpResponse.json(already);
+    }
+
     const title = String(body.title ?? '').trim();
     if (!title) {
       return HttpResponse.json(
@@ -46,12 +76,23 @@ export const workItemHandlers = [
       // Unassigned unless the caller said otherwise — the mock used to assign every new
       // task to the current user, which made the unclaimed pool §6l calls for unreachable
       // and, worse, made `mine=true` look like it worked when nothing had been assigned.
-      assignee: body.assigneeId ? userRef(0) : undefined,
+      //
+      // **And the id the caller sent is the id that lands.** Until §54 this resolved to
+      // `userRef(0)` for ANY assignee, so the picker built in that slice would have shown the
+      // colleague you chose and rendered the first person in the directory on the card — a
+      // wrong answer that looks like a real one, in mock mode only.
+      assignee: body.assigneeId
+        ? (projectMembers(project.id).find((m) => m.id === body.assigneeId) ?? undefined)
+        : undefined,
       projectId: project.id,
       projectKey: project.key,
       linkedKey: null,
-      allowedTransitions: ['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'DONE'],
+      // Every column but the one it is in, from the contract's enum rather than a literal
+      // list — the fifth (BLOCKED) arrived in §54 and a hand-written array here is exactly
+      // what would have kept the mock one column behind the server.
+      allowedTransitions: workItemColumns.filter((column) => column !== 'TODO'),
     };
+    if (idempotencyKey) createdByIntent.set(idempotencyKey, item.id);
     return HttpResponse.json(addWorkItem(item), { status: 201 });
   }),
 

@@ -51,6 +51,28 @@ export const workItemStatusLabels = {
   DONE: 'Done',
 } as const satisfies Record<WorkItemStatus, string>;
 
+/**
+ * The board's columns, left to right — §6l's order.
+ *
+ * Here rather than in `BoardPage`, because it is not only the board that needs it: the mock's
+ * `POST /work-items` computes `allowedTransitions` from the same set, and a hand-written array
+ * there is exactly what keeps mock mode one column behind the server. Order is a display
+ * decision and this is the display layer.
+ *
+ * **Derived from the label map, which is the part that makes it exhaustive.** That map is
+ * `satisfies Record<WorkItemStatus, string>`, so a status added to the contract is a compile error
+ * until it is labelled — and taking the columns from its keys means it then has a column too,
+ * automatically. Writing them out again as a second literal is what would let the two diverge, and
+ * the direction it diverges is a card that exists, is returned by the API, and appears nowhere on
+ * screen (§53's reason for leaving BLOCKED out until §54 could add all three pieces at once).
+ *
+ * The assertion is the one cast in this file and it is justified by the line above it: the object
+ * has exactly the enum's keys, checked by the compiler, so `Object.keys` cannot produce anything
+ * else. `BoardPage` additionally asserts the result covers `WorkItemStatus` — a guard that fails
+ * loudly if this reasoning ever stops holding.
+ */
+export const workItemColumns = Object.keys(workItemStatusLabels) as WorkItemStatus[];
+
 export const priorityLabels = {
   CRITICAL: 'Critical',
   HIGH: 'High',

@@ -66,6 +66,28 @@ export const userRef = (i: number) => ({
   avatarUrl: null,
 });
 
+/**
+ * The people who may be given work in a project — `GET /projects/{id}/members`.
+ *
+ * Shared, and read by **both** the members endpoint and `POST /work-items`, for the reason the
+ * server shares its own predicate between the same two places: a picker that offers somebody the
+ * create refuses is a form the user fills in correctly and cannot submit. Two functions here would
+ * reproduce that defect inside the mock, where it is hardest to notice because nothing 400s.
+ *
+ * **What the fixture can and cannot express.** The server's rule is *active membership AND a grant
+ * on this project*. The first half is real here — Lena Fischer is `DEACTIVATED` and is therefore
+ * absent, which is the awkward row the picker has to handle. The second is not: the mock has no
+ * per-project grant data, so every active person is a member of every project. A live pass is what
+ * proves the grant half, and §54 ran one.
+ */
+export function projectMembers(projectId: string) {
+  if (!db.projects.some((p) => p.id === projectId)) return [];
+  return users
+    .filter((u) => u.status === 'ACTIVE')
+    .map((u) => ({ id: u.id, displayName: u.displayName, email: u.email, avatarUrl: null }))
+    .sort((a, b) => a.displayName.localeCompare(b.displayName));
+}
+
 export interface ListQuery {
   page: number;
   size: number;

@@ -7,7 +7,7 @@ import {
   type UseQueryResult,
 } from '@tanstack/react-query';
 import { api } from '../client';
-import type { CaseStatus, ClassificationDimension, Project, ProjectInput } from '../types';
+import type { CaseStatus, ClassificationDimension, Project, ProjectInput, UserRef } from '../types';
 import { base, keys } from './keys';
 
 export function useProjects(): UseQueryResult<Project[]> {
@@ -50,6 +50,35 @@ export function useProject(projectId: string | undefined): UseQueryResult<Projec
     queryKey: keys.project(projectId ?? ''),
     queryFn: ({ signal }) => api.get<Project>(base(projectId!), { signal }),
     enabled: !!projectId,
+    staleTime: 5 * 60_000,
+  });
+}
+
+/**
+ * The people who can be given work in this project.
+ *
+ * The server defines this as *active company members holding a grant on the project*, and
+ * validates `assigneeId` on `POST /work-items` against the same predicate — one implementation,
+ * two callers. That is what makes a picker built from this list honest: it cannot offer somebody
+ * the create will refuse, which would be a form the user fills in correctly and cannot submit.
+ *
+ * **`enabled` rather than an unconditional fetch.** The only consumer is a dialog, and a board
+ * nobody is adding a task to should not be asking who could be assigned one. The gate is a
+ * parameter rather than being derived from `projectId`, because the dialog's open state is the
+ * thing that decides it.
+ *
+ * `staleTime` matches the other per-project vocabularies: staffing changes on the timescale of
+ * onboarding, not of a page view, and a picker that refetches every time it opens flashes an
+ * empty select for no reason.
+ */
+export function useProjectMembers(
+  projectId: string,
+  enabled: boolean,
+): UseQueryResult<UserRef[]> {
+  return useQuery({
+    queryKey: keys.projectMembers(projectId),
+    queryFn: ({ signal }) => api.get<UserRef[]>(`${base(projectId)}/members`, { signal }),
+    enabled: enabled && !!projectId,
     staleTime: 5 * 60_000,
   });
 }

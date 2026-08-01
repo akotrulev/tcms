@@ -33,7 +33,14 @@ export {
   useMyCompanyPermissions,
   useMyPermissions,
 } from './identity';
-export { useClassification, useCreateProject, useProject, useProjects, useStatuses } from './projects';
+export {
+  useClassification,
+  useCreateProject,
+  useProject,
+  useProjectMembers,
+  useProjects,
+  useStatuses,
+} from './projects';
 export {
   useCreateSuite,
   useDeleteSuite,

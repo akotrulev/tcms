@@ -52,6 +52,31 @@ export default mergeConfig(
       /** Spies and mock call history reset between tests — leaked history is order-dependent flake. */
       restoreMocks: true,
       clearMocks: true,
+      /**
+       * Raised from vitest's 5 s default, to fix a real flake §54 diagnosed.
+       *
+       * The suite was failing 1–6 tests per full run at random — `GrantRoleDialog`, `SuiteTree`,
+       * `RunCreateDialog`, `PermissionGate`, spread across files that share nothing but this
+       * environment — while every one of them passed alone. Reproduced on a tree with §54's own
+       * new tests removed, so it predates them.
+       *
+       * The cause is duration, not correctness: a `userEvent` test that types a sentence and then
+       * drives a MUI popover is dozens of real-timer round trips through React's scheduler, and
+       * with files running in parallel on a busy machine the slowest of them crosses five seconds.
+       * The failure says so — *Test timed out in 5000ms*, never an assertion.
+       *
+       * **The first attempt raised RTL's `asyncUtilTimeout` instead and made it worse**, which is
+       * worth recording: that is the budget for one `waitFor`, so setting it to the same 5 s as
+       * the test budget let a single wait consume the entire test. Two timeouts, and the failing
+       * message named which one.
+       *
+       * A budget for waiting is not an assertion. A genuinely broken expectation still fails, just
+       * later. What this stops is a green program being reported red because the machine was busy —
+       * which costs more than the seconds it saves, since the usual response to an intermittent red
+       * is to re-run until it passes, and that habit is what hides a real intermittent defect when
+       * one finally arrives.
+       */
+      testTimeout: 20_000,
       coverage: {
         provider: 'v8',
         reporter: ['text', 'html'],

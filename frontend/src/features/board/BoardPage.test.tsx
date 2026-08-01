@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import type { WorkItem } from '../../api/types'
 import { createTestQueryClient } from '../../test/queryClient'
 import { TestProviders } from '../../test/TestProviders'
+import { workItemColumns } from '../../lib/labels'
 import { Board } from './BoardPage'
 
 /**
@@ -59,14 +60,19 @@ describe('Board columns', () => {
     renderBoard([
       card({ id: '1', title: 'Waiting', status: 'TODO' }),
       card({ id: '2', title: 'Underway', status: 'IN_PROGRESS' }),
-      card({ id: '3', title: 'Checking', status: 'IN_REVIEW' }),
-      card({ id: '4', title: 'Finished', status: 'DONE' }),
+      card({ id: '3', title: 'Stuck', status: 'BLOCKED' }),
+      card({ id: '4', title: 'Checking', status: 'IN_REVIEW' }),
+      card({ id: '5', title: 'Finished', status: 'DONE' }),
     ])
 
     // Asserted per column rather than "all four render": a card whose status matches no column
     // renders nowhere at all, and a test that only counted cards would pass on an empty board.
     expect(within(screen.getByTestId('Board.Column.TODO')).getByText('Waiting')).toBeTruthy()
     expect(within(screen.getByTestId('Board.Column.IN_PROGRESS')).getByText('Underway')).toBeTruthy()
+    // BLOCKED is §54's fifth column, and it is the one this assertion exists for: the enum member
+    // and the column landed together precisely so that a card in this status could never be
+    // returned by the API and rendered nowhere.
+    expect(within(screen.getByTestId('Board.Column.BLOCKED')).getByText('Stuck')).toBeTruthy()
     expect(within(screen.getByTestId('Board.Column.IN_REVIEW')).getByText('Checking')).toBeTruthy()
     expect(within(screen.getByTestId('Board.Column.DONE')).getByText('Finished')).toBeTruthy()
   })
@@ -76,7 +82,9 @@ describe('Board columns', () => {
     // complete — and "nothing is in review" is a useful thing for the screen to say.
     renderBoard([card({ id: '1', title: 'Only one', status: 'TODO' })])
 
-    for (const column of ['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'DONE']) {
+    // Derived from the same list the board renders from, so a status added to the contract is
+    // covered here the moment it is labelled — rather than by somebody remembering this array.
+    for (const column of workItemColumns) {
       expect(screen.getByTestId(`Board.Column.${column}`)).toBeTruthy()
     }
   })

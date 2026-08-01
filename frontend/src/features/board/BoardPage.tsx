@@ -11,7 +11,7 @@ import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { formatCount } from '../../lib/format';
-import { healthLabels, priorityLabels, workItemStatusLabels } from '../../lib/labels';
+import { healthLabels, priorityLabels, workItemColumns, workItemStatusLabels } from '../../lib/labels';
 
 /**
  * The kanban board (plan §6l).
@@ -27,39 +27,34 @@ import { healthLabels, priorityLabels, workItemStatusLabels } from '../../lib/la
 /**
  * The columns, left to right, as the contract's status codes.
  *
- * Order is a display decision and lives here; the *vocabulary* is the contract's
- * (`WorkItemStatus`) and the words are `workItemStatusLabels`'. Before §53 all three were
- * this one array of English strings, which is how the board and the mock came to agree on
- * a spelling no server had ever been asked to produce.
+ * The *vocabulary* is the contract's (`WorkItemStatus`) and the words are
+ * `workItemStatusLabels`'. Before §53 all three were one array of English strings written here,
+ * which is how the board and the mock came to agree on a spelling no server had ever been asked
+ * to produce.
+ *
+ * The list itself moved to `lib/labels.ts` in §54, because the board is no longer its only
+ * consumer: the mock's `POST /work-items` computes `allowedTransitions` from the same set, and it
+ * held its own literal — one column behind the server the moment a fifth arrived.
  */
-const COLUMNS = [
-  'TODO',
-  'IN_PROGRESS',
-  'BLOCKED',
-  'IN_REVIEW',
-  'DONE',
-] as const satisfies readonly WorkItemStatus[];
-type Column = (typeof COLUMNS)[number];
+const COLUMNS = workItemColumns;
+type Column = WorkItemStatus;
 
 /**
  * Every `WorkItemStatus` has a column — asserted by the compiler, not by a reader.
  *
- * `satisfies readonly WorkItemStatus[]` above is only half a check: it rejects a column that is
- * not a status, and happily accepts a *subset*. That asymmetry is exactly the hole §53 described
- * when it left `BLOCKED` out of the enum on purpose — "a status with no column is a card that
- * exists, is returned by the API, and appears nowhere on screen", invisible rather than
- * misplaced. Adding the value to the contract without this line would ship that defect the moment
- * a server answered `BLOCKED`, and nothing would fail.
+ * `workItemColumns` is derived from the label map's keys, so this should hold structurally. It is
+ * asserted anyway because the derivation ends in a type assertion (`as WorkItemStatus[]`), and an
+ * assertion is a claim the compiler stops checking. The thing being claimed is the whole reason
+ * §53 refused to add `BLOCKED` to the contract on its own: a status with no column is a card that
+ * exists, is returned by the API, and appears **nowhere on screen** — invisible rather than
+ * misplaced, and nothing fails.
  *
- * So the missing direction is asserted here. `Record<never, never>` is `{}`, so an exhaustive
- * `COLUMNS` typechecks; a status without a column makes it `Record<'BLOCKED', never>` and the
- * empty object no longer satisfies it. Written as a `Record` rather than the shorter
- * `extends never ? true : never` on purpose — that form errors with "Type 'true' is not
- * assignable to type 'never'", which says nothing, while this one **names the missing status**:
- * *Property 'BLOCKED' is missing*. A guard whose failure message does not identify the cause gets
- * silenced rather than fixed.
+ * Written as a `Record` rather than the shorter `extends never ? true : never` on purpose — that
+ * form errors with "Type 'true' is not assignable to type 'never'", which says nothing, while
+ * this one **names the missing status**: *Property 'BLOCKED' is missing*. A guard whose failure
+ * message does not identify the cause gets silenced rather than fixed.
  */
-const _everyStatusHasAColumn: Record<Exclude<WorkItemStatus, Column>, never> = {};
+const _everyStatusHasAColumn: Record<Exclude<WorkItemStatus, (typeof COLUMNS)[number]>, never> = {};
 void _everyStatusHasAColumn;
 
 const kindLabels: Record<WorkItem['kind'], string> = {
@@ -139,13 +134,20 @@ export function BoardPage() {
         }
       />
 
-      <TaskCreateDialog
-        projectId={projectId}
-        mine={mine}
-        open={creating}
-        onClose={() => setCreating(false)}
-        onCreated={(task) => enqueueSnackbar(`Added “${task.title}”`, { variant: 'success' })}
-      />
+      {/*
+        Conditionally rendered, so the form — and the create hook's per-intent Idempotency-Key —
+        mount fresh each time. See the dialog's header: left permanently mounted, one key would
+        serve every task typed on this page and the second create would replay the first.
+      */}
+      {creating && (
+        <TaskCreateDialog
+          projectId={projectId}
+          mine={mine}
+          open
+          onClose={() => setCreating(false)}
+          onCreated={(task) => enqueueSnackbar(`Added “${task.title}”`, { variant: 'success' })}
+        />
+      )}
 
       <DataRegion
         testId="Board.Content"
@@ -237,7 +239,7 @@ export function Board({ items, projectId, mine }: { items: WorkItem[]; projectId
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' },
+          gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: `repeat(${COLUMNS.length}, 1fr)` },
           gap: 2,
           alignItems: 'start',
         }}

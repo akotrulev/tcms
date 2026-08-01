@@ -14,7 +14,7 @@ import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { ApiError } from '../../api/client';
-import { useCreateWorkItem } from '../../api/queries';
+import { useCreateWorkItem, useProjectMembers } from '../../api/queries';
 import type { WorkItem } from '../../api/types';
 import { describeError } from '../../lib/describeError';
 import { priorityLabels } from '../../lib/labels';
@@ -43,12 +43,32 @@ import { priorityLabels } from '../../lib/labels';
  * - **kind** — a client able to send `EXECUTION` would materialise a derived item, which is the one
  *   thing §6l's whole design exists to prevent. The server ignores it; this form cannot send it.
  *
- * ## The assignee field is deliberately not here yet
+ * ## The assignee picker, and why its list comes from the server
  *
- * The server accepts `assigneeId` and validates it against the project's members. A picker needs
- * the project's member list, which has no endpoint the SPA can call — `GET /projects/{id}/members`
- * does not exist. Rather than ship a free-text UUID box, tasks are created unassigned and the
- * unclaimed pool (§6l) is the default. Recorded in §53's *Not done*.
+ * §53 shipped this dialog without one, because `GET /projects/{id}/members` did not exist and the
+ * alternative was a free-text UUID box. It exists as of §54, and what matters is *which* list it
+ * is: the server defines the project's members as active company members holding a grant on the
+ * project, and validates `assigneeId` on the create against **the same predicate**. So this select
+ * cannot offer somebody the submit will refuse — which is §31's disable-don't-hide rule applied to
+ * a set rather than to a button, and the reason the picker is not simply `GET /users`. The
+ * company directory would have listed colleagues who cannot open this project at all, and the
+ * only person to ever see the problem would be the assignee, who gets a 404 when they click the
+ * card.
+ *
+ * **"Unassigned" is the default and is a real choice, not an empty state.** §6l's unclaimed pool
+ * is how work gets picked up rather than handed out; defaulting to the author makes it
+ * unreachable, and the correction is invisible once made because the author's own name looks
+ * plausible on the card.
+ *
+ * ## Mounting, and the idempotency key that depends on it
+ *
+ * This dialog is rendered only while `open` — `{creating && <TaskCreateDialog … />}` in
+ * `BoardPage`, the arrangement `RunCreateDialog` and `PlanCreateDialog` already use. It was
+ * mounted unconditionally until §54, which was harmless while the form was stateless and stops
+ * being harmless the moment `useCreateWorkItem` holds one `Idempotency-Key` per mount: a
+ * persistently mounted dialog would reuse one key for every task typed on that page, and the
+ * second create would come back as a **replay of the first** — a save the user watched succeed
+ * that stored nothing. Remounting is what makes "one key per user intent" literally true.
  */
 
 /** Mirrors `WorkItemEdit.MAX_TITLE` and the contract's `maxLength`. */
@@ -64,15 +84,20 @@ const TaskSchema = z.object({
   description: z.string().max(MAX_DESCRIPTION).optional(),
   priority: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']),
   dueDate: z.string().optional(),
+  // '' is "unassigned", which is a legitimate answer rather than a missing one — see the header.
+  // Not validated against the member list here: the list is asynchronous and the server holds the
+  // real rule, so a client-side membership check would be a second authority that is wrong
+  // whenever it is out of date.
+  assigneeId: z.string().optional(),
 });
 
 type TaskFormInput = z.infer<typeof TaskSchema>;
 
 const TestId = 'Board.Create';
 
-type FormField = 'title' | 'description' | 'priority' | 'dueDate';
+type FormField = 'title' | 'description' | 'priority' | 'dueDate' | 'assigneeId';
 
-const FIELDS: readonly FormField[] = ['title', 'description', 'priority', 'dueDate'];
+const FIELDS: readonly FormField[] = ['title', 'description', 'priority', 'dueDate', 'assigneeId'];
 
 function applyServerError(
   error: unknown,
@@ -86,9 +111,11 @@ function applyServerError(
         setError(field as FormField, messages.join(' '));
         landed = true;
       } else {
-        // `projectId` and `assigneeId` have no control on this form, so their sentences go to the
-        // banner rather than nowhere — the RunCreateDialog rule, and the reason a validation
-        // failure can never render as a silent no-op.
+        // `projectId` and `Idempotency-Key` have no control on this form, so their sentences go
+        // to the banner rather than nowhere — the RunCreateDialog rule, and the reason a
+        // validation failure can never render as a silent no-op. `assigneeId` left this branch
+        // in §54: it has a select now, and a refusal about who was chosen belongs on the control
+        // that chose them.
         stray.push(messages.join(' '));
       }
     }
@@ -116,6 +143,9 @@ export function TaskCreateDialog({
   onCreated: (task: WorkItem) => void;
 }) {
   const create = useCreateWorkItem(projectId, mine);
+  // The dialog only exists while it is open (see the header), so `open` is the honest gate: the
+  // query runs once per intent to add a task, and a board nobody is adding to asks nobody.
+  const members = useProjectMembers(projectId, open);
   const {
     register,
     handleSubmit,
@@ -124,7 +154,13 @@ export function TaskCreateDialog({
     formState: { errors },
   } = useForm<TaskFormInput>({
     resolver: zodResolver(TaskSchema),
-    defaultValues: { title: '', description: '', priority: 'MEDIUM', dueDate: '' },
+    defaultValues: {
+      title: '',
+      description: '',
+      priority: 'MEDIUM',
+      dueDate: '',
+      assigneeId: '',
+    },
     mode: 'onBlur',
   });
 
@@ -142,7 +178,10 @@ export function TaskCreateDialog({
         // a malformed date rather than an absent one, and the server would answer 400 for a field
         // the user never filled in.
         dueDate: values.dueDate?.trim() || null,
-        assigneeId: null,
+        // '' is the "Unassigned" option, and it has to become `null` rather than travel as an
+        // empty string: the contract types this as `uuid | null`, so '' is a malformed id and the
+        // server would answer 400 for the choice the form offers by default.
+        assigneeId: values.assigneeId?.trim() || null,
       });
       onCreated(created);
       onClose();
@@ -223,6 +262,50 @@ export function TaskCreateDialog({
                 {...register('dueDate')}
               />
             </Stack>
+
+            {/*
+              The assignee. Disabled while the list is loading rather than rendered empty — an
+              enabled select showing only "Unassigned" reads as "there is nobody to assign this
+              to", which is a claim, and a wrong one on every project with colleagues on it.
+
+              A failure is not a blocker: the field says so and stays usable at "Unassigned", so a
+              members request that 500s costs the assignment and not the task. The alternative —
+              failing the whole dialog — would make an optional field able to stop a create.
+            */}
+            <TextField
+              label="Assignee"
+              select
+              fullWidth
+              disabled={members.isPending}
+              defaultValue=""
+              error={!!errors.assigneeId}
+              helperText={
+                errors.assigneeId?.message ??
+                (members.isError
+                  ? "Couldn't load the project's members. The task can still be added unassigned."
+                  : members.isPending
+                    ? 'Loading the people on this project…'
+                    : 'Leave unassigned so anyone on the project can pick it up.')
+              }
+              slotProps={{ htmlInput: { 'data-testid': `${TestId}.Assignee` } }}
+              {...register('assigneeId')}
+            >
+              <MenuItem value="" data-testid={`${TestId}.Assignee.None`}>
+                Unassigned
+              </MenuItem>
+              {(members.data ?? []).map((person) => (
+                <MenuItem
+                  key={person.id}
+                  value={person.id}
+                  // Keyed by the person's id, not a shared `.Option` — the test-id audit
+                  // requires distinct locators, and selecting a MUI option is a click on the
+                  // menu item rather than a value assignment.
+                  data-testid={`${TestId}.Assignee.${person.id}`}
+                >
+                  {person.displayName}
+                </MenuItem>
+              ))}
+            </TextField>
           </Stack>
         </DialogContent>
         <DialogActions>
