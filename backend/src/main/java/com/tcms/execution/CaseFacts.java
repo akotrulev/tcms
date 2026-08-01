@@ -62,9 +62,17 @@ import org.springframework.stereotype.Component;
  *       (plan §6p), and reading it here rather than calling {@code repository}'s own
  *       {@code GET /versions} is the point of the seam: this module reads rows it holds ids into,
  *       it does not call the other module.</li>
+ *   <li><strong>Which cases sit under one suite</strong> — {@link #caseIdsInSuiteSubtree}. A suite's
+ *       execution history is a query over this module's tables, but <em>which executions belong to
+ *       the suite</em> is a {@code repository} fact and only the {@code ltree} path answers it for a
+ *       folder's descendants.</li>
+ *   <li><strong>When each version of a suite was authored</strong> — {@link #suiteVersionMarkers},
+ *       {@link #versionMarkers}' counterpart over {@code suite_version}, so a suite timeline can say
+ *       <em>"the membership changed here"</em> beside the pass rate that moved (plan §6p).</li>
  * </ol>
  *
- * <p>Items 5–6 are new in M2 slice 2 and 7–8 in M1 slice 15, and they are deliberately
+ * <p>Items 5–6 are new in M2 slice 2, 7–8 in M1 slice 15 and 9–10 in M1 slice 16, and they are
+ * deliberately
  * <strong>here</strong> rather than in the services that want them. Adding a second class that
  * names {@code test_case} would end the one property that makes this seam reviewable — that a
  * reader can find every crossing by opening one file — and it would end it for the most tempting
@@ -493,6 +501,91 @@ class CaseFacts {
                         ORDER BY v.version_no
                         """)
                 .setParameter("caseId", caseId)
+                .getResultList();
+
+        List<VersionMark> marks = new ArrayList<>(rows.size());
+        for (Object[] row : rows) {
+            marks.add(new VersionMark(
+                    ((Number) row[0]).intValue(),
+                    toInstant(row[1]),
+                    (UUID) row[2],
+                    (String) row[3]));
+        }
+        return List.copyOf(marks);
+    }
+
+    /**
+     * Every case sitting in one suite <strong>or any suite beneath it</strong>, as ids.
+     *
+     * <p>The subtree, not the folder's own rows, and the contract's own description says why: a
+     * folder's history means the folder's, and §6p's rollup rule is to sum leaf counts. Own-cases-only
+     * would make every intermediate folder report an empty history — which reads as "never executed"
+     * for a subtree that runs nightly. {@code <@} is the {@code ltree} descendant-or-self operator,
+     * the same one {@link #caseCountsByPlan} expands a plan's suite items with.
+     *
+     * <p><strong>Soft-deleted cases are INCLUDED</strong>, which is the opposite of every other
+     * method here and is the same rule as {@code findForSuiteCases}' deleted runs. A history entry
+     * says what a run covered at the time; dropping a case somebody deleted last week would silently
+     * lower the totals of runs that finished before the deletion, and the row a reader is checking
+     * against would change under them. Deleted <em>suites</em> are excluded: a folder that no longer
+     * exists cannot be the subject of this page, and its cases are reachable through wherever they
+     * live now.
+     *
+     * <p><strong>Membership is read as it is now, not as it was.</strong> A case moved between suites
+     * takes its whole execution history with it, because {@code test_execution} pins the case
+     * <em>version</em> and not the suite. §6p's {@code execution_fact} read model stores
+     * {@code suite_path} per row for exactly this reason; until that model has a writer, this is the
+     * honest approximation and the limitation is stated rather than hidden.
+     *
+     * <p>Empty is an ordinary answer — an empty folder — and the caller has already established the
+     * suite is reachable, so it cannot be confused with absence.
+     */
+    List<UUID> caseIdsInSuiteSubtree(UUID projectId, UUID suiteId) {
+        @SuppressWarnings("unchecked")
+        List<UUID> ids = entities.createNativeQuery("""
+                        SELECT c.id
+                        FROM suite root
+                        JOIN suite d
+                          ON d.project_id = root.project_id
+                         AND d.deleted_at IS NULL
+                         AND d.path <@ root.path
+                        JOIN test_case c ON c.suite_id = d.id
+                        WHERE root.project_id = :projectId
+                          AND root.deleted_at IS NULL
+                          AND root.id = :suiteId
+                        """)
+                .setParameter("projectId", projectId)
+                .setParameter("suiteId", suiteId)
+                .getResultList();
+        return List.copyOf(ids);
+    }
+
+    /**
+     * When each version of one suite was authored, by whom, and why — {@link #versionMarkers} for a
+     * suite instead of a case, reading {@code suite_version} instead of {@code test_case_version}.
+     *
+     * <p>A second method rather than a table parameter, for {@link #liveIds}' inverse reason: those
+     * two tables answer the <em>same</em> question with identical columns, while these two differ in
+     * what a version <em>means</em> — a case version is content, a suite version is composition
+     * ({@code repository.SuiteVersions} says so). Sharing the query would invite a future filter
+     * meant for one to be applied to both.
+     *
+     * <p><strong>Expect at most one mark per suite today, and that is a property of the writer, not
+     * of this query.</strong> {@code SuiteVersions} writes v1 at creation and nothing since — a
+     * rename is content, and the moves that change composition are not built. So the timeline's
+     * version-marker rail is structurally empty until the case-move slice writes a v2. Reading it
+     * anyway is §3 lesson 5: the rows are recorded from M1 precisely so the screen that renders them
+     * needs no backfill.
+     */
+    List<VersionMark> suiteVersionMarkers(UUID suiteId) {
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = entities.createNativeQuery("""
+                        SELECT v.version_no, v.created_at, v.created_by, v.change_comment
+                        FROM suite_version v
+                        WHERE v.suite_id = :suiteId
+                        ORDER BY v.version_no
+                        """)
+                .setParameter("suiteId", suiteId)
                 .getResultList();
 
         List<VersionMark> marks = new ArrayList<>(rows.size());

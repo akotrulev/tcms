@@ -764,13 +764,15 @@ export interface paths {
          * @description Each entry is one execution of the suite, grouped by (run, suite, configuration),
          *     summarized as counts. Percentages are derived client-side so the
          *     "of executed" vs "of total" toggle works without a round trip (plan §6p).
+         *
+         *     **Scope is the suite and its descendants.** A folder's history means the folder's, and
+         *     §6p's rollup rule is to sum leaf counts — so a parent's entry covers every case beneath
+         *     it. The alternative (own cases only) makes every intermediate folder report an empty
+         *     history, which reads as "never executed" for a subtree that runs nightly.
          */
         get: {
             parameters: {
-                query?: {
-                    /** @description Filter to one suite version. Omit for all. */
-                    versionNo?: number;
-                };
+                query?: never;
                 header?: never;
                 path: {
                     projectId: components["parameters"]["ProjectId"];
@@ -786,10 +788,7 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": {
-                            entries: components["schemas"]["SuiteRunSummary"][];
-                            versionMarkers: components["schemas"]["VersionMarker"][];
-                        };
+                        "application/json": components["schemas"]["SuiteHistoryResponse"];
                     };
                 };
                 401: components["responses"]["Unauthorized"];
@@ -3155,6 +3154,17 @@ export interface components {
             evidenceCount: number;
             defects: components["schemas"]["DefectLink"][];
         };
+        /**
+         * @description A NAMED schema rather than an inline object on the operation, and that is the point of it.
+         *     Inline, the SPA typed its own `{ runs, versionMarkers }` literal at the call site — and
+         *     called the array `runs` while this contract called it `entries`. Nothing compared the two
+         *     spellings, because a hand-written type argument is not generated from anything. Named, the
+         *     SPA imports `SuiteHistoryResponse` and the compiler is the comparison (§51).
+         */
+        SuiteHistoryResponse: {
+            entries: components["schemas"]["SuiteRunSummary"][];
+            versionMarkers: components["schemas"]["VersionMarker"][];
+        };
         SuiteRunSummary: {
             /** Format: uuid */
             runId: string;
@@ -3163,9 +3173,21 @@ export interface components {
             suiteVersionNo: number;
             configuration: string;
             releaseVersion?: string | null;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description The most recent result recorded against this suite in this run, falling back to the
+             *     run's own start when nothing in the suite has been executed yet — a run that has
+             *     opened but recorded nothing is still history ("this suite is in flight"), and the
+             *     page sorts by this field, so it cannot be null.
+             */
             executedAt: string;
             counts: components["schemas"]["ResultCounts"];
+            /**
+             * @description The run was soft-deleted. §6p: deleted runs must not orphan history — the entry stays
+             *     and is marked, because history that quietly loses rows is worse than no history. Same
+             *     field, same reason, as `ExecutionHistoryEntry.runDeleted` (§49).
+             */
+            runDeleted: boolean;
         };
         RepositoryDashboard: {
             /** Format: date-time */

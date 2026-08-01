@@ -110,6 +110,39 @@ public interface TestExecutionRepository extends JpaRepository<TestExecution, UU
             @Param("projectId") UUID projectId, @Param("caseId") UUID caseId);
 
     /**
+     * One suite's executions, already tallied, as {@code [runId, statusId, count, lastExecutedAt]}.
+     *
+     * <p><strong>Grouped in the database rather than in Java</strong>, which is the difference from
+     * {@link #findForCase} and the reason this is a separate query rather than a wider call to that
+     * one. A case's timeline names every execution individually and is bounded by how often one case
+     * has run; a suite's history names none of them — it renders one row per run carrying counts — and
+     * its input is every execution of every case in a subtree. Fetching those to count them in a loop
+     * would pull a project's entire execution table through the persistence context to produce a
+     * dozen rows.
+     *
+     * <p>The grouping stops at {@code status_id} rather than answering the six buckets, because the
+     * mapping from a status to a bucket is {@code StatusKind} — a project-configurable vocabulary
+     * that {@link ResultStatuses} resolves and SQL here has no access to. So this returns
+     * (run × status) tallies and the service folds them.
+     *
+     * <p><strong>Deleted runs are INCLUDED</strong>, exactly as in {@link #findForCase} and for the
+     * same §6p rule: a history entry is a record of what happened, so the row stays and the service
+     * marks it. Contrast {@link #findForPlan}, which excludes them because a plan's statistics are a
+     * claim about where things stand.
+     *
+     * <p>{@code MAX(executedAt)} is the entry's timestamp: the most recent result recorded against
+     * the suite in that run. It is null for a run that has opened but recorded nothing, and the
+     * service falls back to the run's own start — the contract marks {@code executedAt} required and
+     * the page sorts by it.
+     */
+    @Query("SELECT e.runId, e.statusId, COUNT(e), MAX(e.executedAt) "
+            + "FROM TestExecution e "
+            + "WHERE e.projectId = :projectId AND e.caseId IN :caseIds "
+            + "GROUP BY e.runId, e.statusId")
+    List<Object[]> tallyForCases(
+            @Param("projectId") UUID projectId, @Param("caseIds") Collection<UUID> caseIds);
+
+    /**
      * How many evidence rows hang off each of a batch of executions, as {@code [executionId, count]}.
      *
      * <p>Native and grouped, for {@link #findDefectLinks}'s reasons exactly: {@code evidence} has no

@@ -212,6 +212,15 @@ public class TestRun {
         return startedAt;
     }
 
+    /**
+     * When the run was created — <strong>null on no run</strong>, unlike {@link #getStartedAt},
+     * which is null on every run until somebody records the first result (see the factory above).
+     * That is what makes this the last fallback for a suite history entry's required timestamp.
+     */
+    Instant getCreatedAt() {
+        return createdAt;
+    }
+
     Instant getCompletedAt() {
         return completedAt;
     }
