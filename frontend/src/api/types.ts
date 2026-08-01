@@ -77,6 +77,8 @@ export type Artifact = S['Artifact'];
 
 // work
 export type WorkItem = S['WorkItem'];
+export type WorkItemStatus = S['WorkItemStatus'];
+export type WorkItemInput = S['WorkItemInput'];
 
 // enums
 export type LifecycleStatus = S['LifecycleStatus'];

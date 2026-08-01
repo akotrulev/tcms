@@ -37,22 +37,27 @@ export const workItemHandlers = [
       kind: 'TASK',
       title,
       description: (body.description as string) ?? null,
-      status: (body.status as string) ?? 'To do',
+      // Not `body.status`: the contract has no status on WorkItemInput, because a create
+      // that could choose its column is a move nobody recorded (see the schema's note).
+      status: 'TODO',
       priority: (body.priority as WorkItem['priority']) ?? 'MEDIUM',
       dueDate: (body.dueDate as string) ?? null,
       overdue: false,
-      assignee: userRef(0),
+      // Unassigned unless the caller said otherwise — the mock used to assign every new
+      // task to the current user, which made the unclaimed pool §6l calls for unreachable
+      // and, worse, made `mine=true` look like it worked when nothing had been assigned.
+      assignee: body.assigneeId ? userRef(0) : undefined,
       projectId: project.id,
       projectKey: project.key,
       linkedKey: null,
-      allowedTransitions: ['To do', 'In progress', 'In review', 'Done'],
+      allowedTransitions: ['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'DONE'],
     };
     return HttpResponse.json(addWorkItem(item), { status: 201 });
   }),
 
   http.patch(`${API}/work-items/:itemId`, async ({ params, request }) => {
     await delay(120);
-    const body = (await request.json()) as { status?: string };
+    const body = (await request.json()) as { status?: WorkItem['status'] };
     const item = db.workItems.find((w) => w.id === params.itemId);
 
     // Derived cards are not stored, so their status can't be written here at all — it is

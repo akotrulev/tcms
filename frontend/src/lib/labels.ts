@@ -16,6 +16,7 @@ import type {
   Priority,
   StatusKind,
   StepFormat,
+  WorkItemStatus,
 } from '../api/types';
 
 export const lifecycleLabels = {
@@ -31,6 +32,23 @@ export const automationLabels = {
   AUTOMATED: 'Automated',
   NOT_AUTOMATABLE: 'Not automatable',
 } as const satisfies Record<AutomationStatus, string>;
+
+/**
+ * Board columns (plan §6l).
+ *
+ * The reason this map exists at all: until §53 the board compared `item.status` against
+ * these English strings *directly*, and the contract typed `status` as an unconstrained
+ * `string`. The mock served 'To do' because the page expected 'To do', so mock mode agreed
+ * with itself and no gate could see that a real server choosing `TODO` would file every
+ * card into no column and render an empty board. Naming the codes here puts the vocabulary
+ * on the contract's side of the comparison — §52's lesson, one level down.
+ */
+export const workItemStatusLabels = {
+  TODO: 'To do',
+  IN_PROGRESS: 'In progress',
+  IN_REVIEW: 'In review',
+  DONE: 'Done',
+} as const satisfies Record<WorkItemStatus, string>;
 
 export const priorityLabels = {
   CRITICAL: 'Critical',

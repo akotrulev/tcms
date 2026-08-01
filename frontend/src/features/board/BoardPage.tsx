@@ -3,13 +3,13 @@ import { useSnackbar } from 'notistack';
 import { useState } from 'react';
 import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
-import type { WorkItem } from '../../api/types';
+import type { WorkItem, WorkItemStatus } from '../../api/types';
 import { useMoveWorkItem, useProject, useWorkItems } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { formatCount } from '../../lib/format';
-import { priorityLabels } from '../../lib/labels';
+import { priorityLabels, workItemStatusLabels } from '../../lib/labels';
 
 /**
  * The kanban board (plan §6l).
@@ -22,7 +22,15 @@ import { priorityLabels } from '../../lib/labels';
  * drop and silently reverting it on the next refresh.
  */
 
-const COLUMNS = ['To do', 'In progress', 'In review', 'Done'] as const;
+/**
+ * The columns, left to right, as the contract's status codes.
+ *
+ * Order is a display decision and lives here; the *vocabulary* is the contract's
+ * (`WorkItemStatus`) and the words are `workItemStatusLabels`'. Before §53 all three were
+ * this one array of English strings, which is how the board and the mock came to agree on
+ * a spelling no server had ever been asked to produce.
+ */
+const COLUMNS = ['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'DONE'] as const satisfies readonly WorkItemStatus[];
 type Column = (typeof COLUMNS)[number];
 
 const kindLabels: Record<WorkItem['kind'], string> = {
@@ -116,10 +124,10 @@ function Board({ items, projectId, mine }: { items: WorkItem[]; projectId: strin
         item.derived
           ? `${item.linkedKey ?? 'That card'} mirrors ${
               item.kind === 'EXECUTION' ? 'an execution' : 'a review'
-            }, so it can't be moved to ${column}. Update the ${
+            }, so it can't be moved to ${workItemStatusLabels[column]}. Update the ${
               item.kind === 'EXECUTION' ? 'execution' : 'review'
             } and the card follows.`
-          : `That card can't move to ${column} from ${item.status}.`,
+          : `That card can't move to ${workItemStatusLabels[column]} from ${workItemStatusLabels[item.status]}.`,
       );
       return;
     }
@@ -176,14 +184,14 @@ function Board({ items, projectId, mine }: { items: WorkItem[]; projectId: strin
               onDrop={() => {
                 if (dragging) void handleDrop(dragging, column);
               }}
-              data-testid={`Board.Column.${column.replace(/\s/g, '')}`}
+              data-testid={`Board.Column.${column}`}
             >
               <Panel
                 dense
                 title={
                   <Stack direction="row" sx={{ alignItems: 'center', gap: 1 }}>
                     <Typography variant="h5" component="h2">
-                      {column}
+                      {workItemStatusLabels[column]}
                     </Typography>
                     <Identifier variant="muted">{formatCount(columnItems.length)}</Identifier>
                   </Stack>
@@ -353,7 +361,7 @@ function WorkCard({
               disabled={!allowed}
               aria-disabled={!allowed}
               onClick={() => onMove(column)}
-              data-testid={`Board.Card.MoveTo.${column.replace(/\s/g, '')}`}
+              data-testid={`Board.Card.MoveTo.${column}`}
               sx={{
                 font: 'inherit',
                 fontSize: '0.6875rem',
@@ -368,15 +376,15 @@ function WorkCard({
                 '&:hover:not(:disabled)': { borderColor: 'primary.main', color: 'primary.main' },
               }}
             >
-              → {column}
+              → {workItemStatusLabels[column]}
             </Box>
           );
 
           const title = allowed
-            ? `Move to ${column}`
+            ? `Move to ${workItemStatusLabels[column]}`
             : item.derived
-              ? `This card follows its source, so it can't be moved to ${column}`
-              : `Not a valid move from ${item.status}`;
+              ? `This card follows its source, so it can't be moved to ${workItemStatusLabels[column]}`
+              : `Not a valid move from ${workItemStatusLabels[item.status]}`;
 
           return (
             <Tooltip key={column} title={title}>

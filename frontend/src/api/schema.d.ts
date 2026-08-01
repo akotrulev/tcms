@@ -2441,17 +2441,21 @@ export interface paths {
         };
         /**
          * Kanban board contents
-         * @description Returns real tasks AND derived items (assigned executions, pending reviews,
-         *     stale cases) in one list. Derived items carry sourceType/sourceId and are
-         *     NOT stored — their status is computed from the source, so a card can never
-         *     diverge from its execution (plan §6l).
+         * @description Returns real tasks AND derived items in one list. Derived items carry
+         *     sourceType/sourceId and are NOT stored — their status is computed from the
+         *     source on every read, so a card can never diverge from its execution (plan §6l).
+         *
+         *     **Two of the five §6l generators are implemented.** `EXECUTION` cards come from
+         *     assigned, unrecorded executions in live runs; `CASE_MAINTENANCE` cards come from
+         *     `case_health`. `REVIEW`, `DOC_UPDATE` and `DEFECT` require modules that do not
+         *     exist yet and are absent rather than empty — the `kind` enum keeps them so the
+         *     SPA's labels stay complete.
          */
         get: {
             parameters: {
-                query?: {
-                    projectId?: string;
-                    /** @description Omit and pass mine=true for the personal board. */
-                    assigneeId?: string;
+                query: {
+                    projectId: string;
+                    /** @description Restrict to items assigned to the caller — the personal board. */
                     mine?: boolean;
                 };
                 header?: never;
@@ -2470,14 +2474,154 @@ export interface paths {
                     };
                 };
                 401: components["responses"]["Unauthorized"];
+                404: components["responses"]["NotFound"];
             };
         };
+        put?: never;
+        /**
+         * Create a task
+         * @description `workitem:manage` — Instance Admin, Company Admin, Test Lead and Test Engineer
+         *     (roles spec §A6). Viewer and Automation Service do not hold it.
+         *
+         *     **`kind` is not a field on the request.** Every row this creates is a `TASK`.
+         *     A client able to POST `kind: EXECUTION` could materialise a derived item, which
+         *     is the one thing §6l's design exists to prevent: the moment a card's status is
+         *     stored separately from its execution's, the two diverge and the board stops being
+         *     trusted. Derived items have no create endpoint because they are not stored.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: {
+                    /**
+                     * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
+                     *     already succeeded answers **200** with the case that intent created, instead of creating a
+                     *     second one — so pressing Save again after a timeout is safe.
+                     *
+                     *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
+                     *     it across retries. A key generated per attempt is the mistake that makes the header look
+                     *     right and do nothing.
+                     *
+                     *     Scoped to the project the request is addressed to, which is the scope the uniqueness
+                     *     constraint behind it uses. Optional: omitted, every call creates. At most 200 characters.
+                     */
+                    "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["WorkItemInput"];
+                };
+            };
+            responses: {
+                /** @description Replayed — this Idempotency-Key already created a task */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["WorkItem"];
+                    };
+                };
+                /** @description Created */
+                201: {
+                    headers: {
+                        /** @description The new work item's canonical URL. */
+                        Location?: string;
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["WorkItem"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/work-items/{workItemId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description A stored task's UUID. Derived items carry a synthetic, non-UUID id
+                 *     (`execution:{uuid}`), which is deliberately not addressable here — see the 409.
+                 */
+                workItemId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Move a card to another column
+         * @description `workitem:manage`. The only mutable field is `status`, because the board is the
+         *     only screen that writes here; editing a task's title or due date is a separate
+         *     slice with no affordance yet.
+         *
+         *     **A derived item's id is refused with a `409`, not a `404`.** The card exists and
+         *     the caller can see it; what is impossible is *storing* a status for it. Answering
+         *     404 would read as "that card is gone" and invite a reload that brings it straight
+         *     back. The message names the action that does work — move the execution.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /**
+                     * @description A stored task's UUID. Derived items carry a synthetic, non-UUID id
+                     *     (`execution:{uuid}`), which is deliberately not addressable here — see the 409.
+                     */
+                    workItemId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["WorkItemStatusUpdate"];
+                };
+            };
+            responses: {
+                /** @description Moved */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["WorkItem"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                /**
+                 * @description This card mirrors a source and its status is not stored. Also the answer when
+                 *     the requested column is not in the card's `allowedTransitions`.
+                 */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
         trace?: never;
     };
 }
@@ -3559,7 +3703,7 @@ export interface components {
             kind: "TASK" | "EXECUTION" | "REVIEW" | "DOC_UPDATE" | "CASE_MAINTENANCE" | "DEFECT";
             title: string;
             description?: string | null;
-            status: string;
+            status: components["schemas"]["WorkItemStatus"];
             priority: components["schemas"]["Priority"];
             /** Format: date */
             dueDate?: string | null;
@@ -3570,8 +3714,52 @@ export interface components {
             projectKey: string;
             /** @example TC-42 */
             linkedKey?: string | null;
-            /** @description Columns a derived card may legally move to; others reject the drop. */
-            allowedTransitions: string[];
+            /**
+             * @description Columns this card may legally move to; others reject the drop. Empty for a
+             *     derived card whose source offers no board-driven action.
+             */
+            allowedTransitions: components["schemas"]["WorkItemStatus"][];
+        };
+        /**
+         * @description A board column, as a stable code rather than its English label.
+         *
+         *     **It was an unconstrained `string` until §53, and that was the defect.** The SPA
+         *     compared it against display text (`'To do'`), the mock served the same display
+         *     text, and mock mode therefore agreed with itself perfectly — while any server that
+         *     chose `TODO` would have filed every card into no column at all and rendered an
+         *     empty board with no error. Same family as §52's `runs`/`entries`, one level down:
+         *     not a field the two sides spelled differently, but a field whose *vocabulary* the
+         *     contract never fixed, so neither side could be wrong.
+         *
+         *     The label lives in `frontend/src/lib/labels.ts`, where a new member is a compile
+         *     error until it is labelled. §6l's per-board configurable columns therefore become
+         *     configuration over this enum rather than a contract change per column.
+         * @enum {string}
+         */
+        WorkItemStatus: "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE";
+        /**
+         * @description A new task. `status` is absent on purpose: a task starts in `TODO`, and letting a
+         *     create choose its column would allow "create it in Done", which is a move without
+         *     a move ever being recorded.
+         */
+        WorkItemInput: {
+            /** Format: uuid */
+            projectId: string;
+            title: string;
+            description?: string | null;
+            priority?: components["schemas"]["Priority"];
+            /** Format: date */
+            dueDate?: string | null;
+            /**
+             * Format: uuid
+             * @description Omit to leave the task unassigned. **Unassigned, not "assigned to me"** — a
+             *     board where every task silently belongs to whoever typed it cannot express the
+             *     unclaimed pool §6l calls for, and the correction is invisible once made.
+             */
+            assigneeId?: string | null;
+        };
+        WorkItemStatusUpdate: {
+            status: components["schemas"]["WorkItemStatus"];
         };
     };
     responses: {

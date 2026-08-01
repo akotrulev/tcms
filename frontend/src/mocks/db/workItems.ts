@@ -29,7 +29,7 @@ export function workItems(projectId: string, projectKey: string): WorkItem[] {
           kind: 'EXECUTION' as const,
           title: e.caseTitle,
           description: `Execute in ${run.name}`,
-          status: 'In progress',
+          status: 'IN_PROGRESS',
           priority: 'HIGH' as const,
           dueDate: null,
           overdue: false,
@@ -38,7 +38,7 @@ export function workItems(projectId: string, projectKey: string): WorkItem[] {
           projectKey,
           linkedKey: e.caseKey,
           // A derived card may only move where its source can legally go.
-          allowedTransitions: ['In progress', 'Done'],
+          allowedTransitions: ['IN_PROGRESS', 'DONE'],
         })),
     );
 
@@ -52,7 +52,7 @@ export function workItems(projectId: string, projectKey: string): WorkItem[] {
       kind: 'REVIEW' as const,
       title: `Review ${c.title}`,
       description: null,
-      status: 'In review',
+      status: 'IN_REVIEW',
       priority: c.priority,
       dueDate: null,
       overdue: false,
@@ -63,7 +63,7 @@ export function workItems(projectId: string, projectKey: string): WorkItem[] {
       projectId,
       projectKey,
       linkedKey: c.key,
-      allowedTransitions: ['In review', 'Done'],
+      allowedTransitions: ['IN_REVIEW', 'DONE'],
     }));
 
   const fromStale: WorkItem[] = db.cases
@@ -76,7 +76,7 @@ export function workItems(projectId: string, projectKey: string): WorkItem[] {
       kind: 'CASE_MAINTENANCE' as const,
       title: `Update ${c.key} — ${c.healthSignals.includes('STALE_AUTOMATION') ? 'automation stopped reporting' : 'linked spec changed'}`,
       description: null,
-      status: 'To do',
+      status: 'TODO',
       priority: 'MEDIUM' as const,
       dueDate: null,
       overdue: false,
@@ -87,7 +87,7 @@ export function workItems(projectId: string, projectKey: string): WorkItem[] {
       projectId,
       projectKey,
       linkedKey: c.key,
-      allowedTransitions: ['To do', 'In progress', 'Done'],
+      allowedTransitions: ['TODO', 'IN_PROGRESS', 'DONE'],
     }));
 
   return [...db.workItems.filter((w) => w.projectId === projectId), ...fromExecutions, ...fromReviews, ...fromStale];
