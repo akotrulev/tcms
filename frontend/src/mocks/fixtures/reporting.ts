@@ -115,14 +115,19 @@ export const suiteVersionMarkers: VersionMarker[] = [
 ];
 
 export const suiteHistoryEntries: SuiteRunSummary[] = [
-  { runId: uid(18, 'k'), runKey: 'TR-418', runName: 'Nightly regression #418', suiteVersionNo: 3, configuration: 'Chrome / Windows', releaseVersion: '4.3.0', executedAt: '2026-07-30T02:41:00Z', counts: { passed: 41, failed: 4, blocked: 2, skipped: 0, notRun: 0, total: 47 } },
-  { runId: uid(17, 'k'), runKey: 'TR-417', runName: 'Nightly regression #417', suiteVersionNo: 3, configuration: 'Chrome / Windows', releaseVersion: '4.3.0', executedAt: '2026-07-29T02:38:00Z', counts: { passed: 44, failed: 2, blocked: 1, skipped: 0, notRun: 0, total: 47 } },
-  { runId: uid(16, 'k'), runKey: 'TR-416', runName: 'Nightly regression #416', suiteVersionNo: 3, configuration: 'Chrome / Windows', releaseVersion: '4.3.0', executedAt: '2026-07-28T02:36:00Z', counts: { passed: 40, failed: 5, blocked: 1, skipped: 1, notRun: 0, total: 47 } },
-  { runId: uid(15, 'k'), runKey: 'TR-415', runName: 'Nightly regression #415', suiteVersionNo: 3, configuration: 'Chrome / Windows', releaseVersion: '4.3.0', executedAt: '2026-07-27T02:34:00Z', counts: { passed: 39, failed: 6, blocked: 2, skipped: 0, notRun: 0, total: 47 } },
+  { runId: uid(18, 'k'), runKey: 'TR-418', runName: 'Nightly regression #418', suiteVersionNo: 3, configuration: 'Chrome / Windows', releaseVersion: '4.3.0', executedAt: '2026-07-30T02:41:00Z', runDeleted: false, counts: { passed: 41, failed: 4, blocked: 2, skipped: 0, notRun: 0, total: 47 } },
+  // Opened and not yet worked: every case outstanding. The row the server answers with the RUN's
+  // own timestamp because nothing in the suite has been executed in it (§52).
+  { runId: uid(19, 'k'), runKey: 'TR-419', runName: 'Release 4.4 sign-off run', suiteVersionNo: 3, configuration: 'Safari / macOS', releaseVersion: '4.4.0', executedAt: '2026-07-30T09:00:00Z', runDeleted: false, counts: { passed: 0, failed: 0, blocked: 0, skipped: 0, notRun: 47, total: 47 } },
+  { runId: uid(17, 'k'), runKey: 'TR-417', runName: 'Nightly regression #417', suiteVersionNo: 3, configuration: 'Chrome / Windows', releaseVersion: '4.3.0', executedAt: '2026-07-29T02:38:00Z', runDeleted: false, counts: { passed: 44, failed: 2, blocked: 1, skipped: 0, notRun: 0, total: 47 } },
+  // Withdrawn afterwards. §6p keeps it and marks it — history that quietly loses rows is worse
+  // than no history — so the grid must render a row it cannot navigate into.
+  { runId: uid(16, 'k'), runKey: 'TR-416', runName: 'Nightly regression #416', suiteVersionNo: 3, configuration: 'Chrome / Windows', releaseVersion: '4.3.0', executedAt: '2026-07-28T02:36:00Z', runDeleted: true, counts: { passed: 40, failed: 5, blocked: 1, skipped: 1, notRun: 0, total: 47 } },
+  { runId: uid(15, 'k'), runKey: 'TR-415', runName: 'Nightly regression #415', suiteVersionNo: 3, configuration: 'Chrome / Windows', releaseVersion: '4.3.0', executedAt: '2026-07-27T02:34:00Z', runDeleted: false, counts: { passed: 39, failed: 6, blocked: 2, skipped: 0, notRun: 0, total: 47 } },
   // Before v3 the suite had 43 cases — the drop after "added 4 cases" is new coverage,
   // not a regression, which is exactly what the version marker exists to say.
-  { runId: uid(14, 'k'), runKey: 'TR-414', runName: 'Release 4.2 sign-off run', suiteVersionNo: 2, configuration: 'Chrome / Windows', releaseVersion: '4.2.1', executedAt: '2026-07-25T16:20:00Z', counts: { passed: 43, failed: 0, blocked: 0, skipped: 0, notRun: 0, total: 43 } },
-  { runId: uid(13, 'k'), runKey: 'TR-413', runName: 'Nightly regression #413', suiteVersionNo: 2, configuration: 'Chrome / Windows', releaseVersion: '4.2.1', executedAt: '2026-07-24T02:30:00Z', counts: { passed: 41, failed: 2, blocked: 0, skipped: 0, notRun: 0, total: 43 } },
+  { runId: uid(14, 'k'), runKey: 'TR-414', runName: 'Release 4.2 sign-off run', suiteVersionNo: 2, configuration: 'Chrome / Windows', releaseVersion: '4.2.1', executedAt: '2026-07-25T16:20:00Z', runDeleted: false, counts: { passed: 43, failed: 0, blocked: 0, skipped: 0, notRun: 0, total: 43 } },
+  { runId: uid(13, 'k'), runKey: 'TR-413', runName: 'Nightly regression #413', suiteVersionNo: 2, configuration: 'Chrome / Windows', releaseVersion: '4.2.1', executedAt: '2026-07-24T02:30:00Z', runDeleted: false, counts: { passed: 41, failed: 2, blocked: 0, skipped: 0, notRun: 0, total: 43 } },
 ];
 
 // ---------------------------------------------------------------- dashboard ----

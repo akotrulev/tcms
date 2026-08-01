@@ -20,6 +20,7 @@ import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
 import { formatCount, formatRatio } from '../../lib/format';
 import { PlanCreateDialog } from './PlanCreateDialog';
+import { ScrollX } from '../../components/ScrollX';
 
 /**
  * Test plans. Deliberately a compact table rather than a card grid: a lead comparing four
@@ -126,105 +127,107 @@ function PlanTable({ rows, projectId }: { rows: TestPlan[]; projectId: string })
   });
 
   return (
-    <Table size="small" data-testid="Plans.Grid">
-      <TableHead>
-        <TableRow>
-          <TableCell sx={{ color: 'text.secondary' }}>Plan</TableCell>
-          <TableCell sx={{ color: 'text.secondary', width: 110 }}>Status</TableCell>
-          <TableCell sx={{ color: 'text.secondary', width: 170 }}>Milestone</TableCell>
-          <TableCell sx={{ color: 'text.secondary', width: 80 }} align="right">
-            Cases
-          </TableCell>
-          <TableCell sx={{ color: 'text.secondary', width: 100 }} align="right">
-            Pass rate
-          </TableCell>
-          <TableCell sx={{ color: 'text.secondary', width: 100 }} align="right">
-            Coverage
-          </TableCell>
-          <TableCell sx={{ color: 'text.secondary', width: 110 }} align="right">
-            Exit criteria
-          </TableCell>
-        </TableRow>
-      </TableHead>
-      <TableBody>
-        {sorted.map((plan) => {
-          const unmet = (plan.exitCriteria ?? []).filter((c) => !c.met).length;
-          const criteriaCount = (plan.exitCriteria ?? []).length;
-
-          return (
-            <TableRow key={plan.id} data-testid="Plans.Row" hover>
-              <TableCell>
-                <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1, minWidth: 0 }}>
-                  <RouterLink to={`/projects/${projectId}/plans/${plan.id}`} data-testid="Plans.Row.Link">
-                    <Identifier>{plan.key}</Identifier>
-                  </RouterLink>
-                  <RouterLink
-                    to={`/projects/${projectId}/plans/${plan.id}`}
-                    style={{ color: 'inherit', textDecoration: 'none', minWidth: 0 }}
-                  >
-                    <Typography variant="body2" sx={{ fontWeight: 500 }} data-testid="Plans.Row.Name">
-                      {plan.name}
-                    </Typography>
-                  </RouterLink>
-                </Stack>
-              </TableCell>
-              <TableCell>
-                <Chip
-                  size="small"
-                  label={plan.status.toLowerCase()}
-                  data-testid="Plans.Row.Status"
-                  sx={{
-                    bgcolor: 'transparent',
-                    color: statusColor[plan.status] ?? 'text.secondary',
-                    border: `1px solid color-mix(in srgb, ${statusColor[plan.status] ?? 'var(--color-border)'} 45%, transparent)`,
-                  }}
-                />
-              </TableCell>
-              <TableCell sx={{ fontSize: '0.75rem' }}>
-                {plan.milestoneName ? (
-                  <>
-                    {plan.milestoneName}
-                    {plan.milestoneDate && (
-                      <Box sx={{ color: 'text.secondary' }}>
-                        <Identifier variant="muted">{plan.milestoneDate}</Identifier>
-                      </Box>
-                    )}
-                  </>
-                ) : (
-                  <Box sx={{ color: 'text.secondary' }}>—</Box>
-                )}
-              </TableCell>
-              <TableCell align="right">
-                <Identifier>{formatCount(plan.caseCount)}</Identifier>
-              </TableCell>
-              <TableCell align="right">
-                <Identifier>{formatRatio(plan.passRate)}</Identifier>
-              </TableCell>
-              <TableCell align="right">
-                <Identifier>{formatRatio(plan.coverage)}</Identifier>
-              </TableCell>
-              <TableCell align="right">
-                {criteriaCount === 0 ? (
-                  <Box sx={{ color: 'text.secondary', fontSize: '0.75rem' }}>None set</Box>
-                ) : (
+    <ScrollX>
+      <Table size="small" data-testid="Plans.Grid">
+        <TableHead>
+          <TableRow>
+            <TableCell sx={{ color: 'text.secondary' }}>Plan</TableCell>
+            <TableCell sx={{ color: 'text.secondary', width: 110 }}>Status</TableCell>
+            <TableCell sx={{ color: 'text.secondary', width: 170 }}>Milestone</TableCell>
+            <TableCell sx={{ color: 'text.secondary', width: 80 }} align="right">
+              Cases
+            </TableCell>
+            <TableCell sx={{ color: 'text.secondary', width: 100 }} align="right">
+              Pass rate
+            </TableCell>
+            <TableCell sx={{ color: 'text.secondary', width: 100 }} align="right">
+              Coverage
+            </TableCell>
+            <TableCell sx={{ color: 'text.secondary', width: 110 }} align="right">
+              Exit criteria
+            </TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {sorted.map((plan) => {
+            const unmet = (plan.exitCriteria ?? []).filter((c) => !c.met).length;
+            const criteriaCount = (plan.exitCriteria ?? []).length;
+  
+            return (
+              <TableRow key={plan.id} data-testid="Plans.Row" hover>
+                <TableCell>
+                  <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1, minWidth: 0 }}>
+                    <RouterLink to={`/projects/${projectId}/plans/${plan.id}`} data-testid="Plans.Row.Link">
+                      <Identifier>{plan.key}</Identifier>
+                    </RouterLink>
+                    <RouterLink
+                      to={`/projects/${projectId}/plans/${plan.id}`}
+                      style={{ color: 'inherit', textDecoration: 'none', minWidth: 0 }}
+                    >
+                      <Typography variant="body2" sx={{ fontWeight: 500 }} data-testid="Plans.Row.Name">
+                        {plan.name}
+                      </Typography>
+                    </RouterLink>
+                  </Stack>
+                </TableCell>
+                <TableCell>
                   <Chip
                     size="small"
-                    label={unmet === 0 ? 'All met' : `${unmet} unmet`}
-                    data-testid="Plans.Row.ExitCriteria"
+                    label={plan.status.toLowerCase()}
+                    data-testid="Plans.Row.Status"
                     sx={{
                       bgcolor: 'transparent',
-                      color: unmet === 0 ? 'var(--color-passed)' : 'var(--color-failed)',
-                      border: `1px solid color-mix(in srgb, ${
-                        unmet === 0 ? 'var(--color-passed)' : 'var(--color-failed)'
-                      } 45%, transparent)`,
+                      color: statusColor[plan.status] ?? 'text.secondary',
+                      border: `1px solid color-mix(in srgb, ${statusColor[plan.status] ?? 'var(--color-border)'} 45%, transparent)`,
                     }}
                   />
-                )}
-              </TableCell>
-            </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
+                </TableCell>
+                <TableCell sx={{ fontSize: '0.75rem' }}>
+                  {plan.milestoneName ? (
+                    <>
+                      {plan.milestoneName}
+                      {plan.milestoneDate && (
+                        <Box sx={{ color: 'text.secondary' }}>
+                          <Identifier variant="muted">{plan.milestoneDate}</Identifier>
+                        </Box>
+                      )}
+                    </>
+                  ) : (
+                    <Box sx={{ color: 'text.secondary' }}>—</Box>
+                  )}
+                </TableCell>
+                <TableCell align="right">
+                  <Identifier>{formatCount(plan.caseCount)}</Identifier>
+                </TableCell>
+                <TableCell align="right">
+                  <Identifier>{formatRatio(plan.passRate)}</Identifier>
+                </TableCell>
+                <TableCell align="right">
+                  <Identifier>{formatRatio(plan.coverage)}</Identifier>
+                </TableCell>
+                <TableCell align="right">
+                  {criteriaCount === 0 ? (
+                    <Box sx={{ color: 'text.secondary', fontSize: '0.75rem' }}>None set</Box>
+                  ) : (
+                    <Chip
+                      size="small"
+                      label={unmet === 0 ? 'All met' : `${unmet} unmet`}
+                      data-testid="Plans.Row.ExitCriteria"
+                      sx={{
+                        bgcolor: 'transparent',
+                        color: unmet === 0 ? 'var(--color-passed)' : 'var(--color-failed)',
+                        border: `1px solid color-mix(in srgb, ${
+                          unmet === 0 ? 'var(--color-passed)' : 'var(--color-failed)'
+                        } 45%, transparent)`,
+                      }}
+                    />
+                  )}
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </ScrollX>
   );
 }

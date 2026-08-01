@@ -13,7 +13,7 @@ import java.util.UUID;
  * SPA had typed its own {@code { runs, versionMarkers }} literal at the call site since Phase 1
  * while the contract said {@code entries}; nothing compared them, because a hand-written type
  * argument is generated from nothing. Naming the response schema is what put the compiler between
- * the two (§51).
+ * the two (§52).
  *
  * @param versionMarkers reuses {@link MarkerView} rather than declaring a twin, because the contract
  *                       reuses {@code VersionMarker}: a marker is a marker, and a second record with

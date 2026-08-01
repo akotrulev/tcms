@@ -24,12 +24,12 @@
   },
   "include": ["src"],
   /*
-    `contractParameters.test.ts` lives under `src` with every other test, but it is not
+    The two contract checks live under `src` with every other test, but they are not
     application source: it reads the filesystem and runs the TypeScript compiler over
     `src/api/queries`. Typechecking it here would mean adding "node" to `types` above, which
     puts `process`, `Buffer` and `__dirname` in scope for the whole SPA — the same objection
     `vitest.config.ts` records against `globals: true`. It is compiled by `tsconfig.node.json`
     instead, so `npm run build` still covers it.
   */
-  "exclude": ["src/api/contractParameters.test.ts"]
+  "exclude": ["src/api/contractParameters.test.ts", "src/api/apiResponseTypes.test.ts"]
 }

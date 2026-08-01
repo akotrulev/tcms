@@ -81,13 +81,24 @@ async function fromAnotherTab(message: SessionBroadcast) {
 }
 
 function Probe() {
-  const { user } = useAuth()
+  const { user, login, logout } = useAuth()
   const { reportUnauthorized } = useSessionRecovery()
   return (
     <div>
       <span data-testid="Probe.User">{user ? user.email : 'signed-out'}</span>
       <button data-testid="Probe.Expire" onClick={reportUnauthorized}>
         expire
+      </button>
+      {/* The same-tab transition. BroadcastChannel does not echo to its sender, so nothing the
+          suite above exercises reaches this path. */}
+      <button data-testid="Probe.SignOut" onClick={logout}>
+        sign out
+      </button>
+      <button
+        data-testid="Probe.SignInAsBob"
+        onClick={() => void login(bob.email, 'password', false)}
+      >
+        sign in as Bob
       </button>
     </div>
   )
@@ -268,5 +279,75 @@ describe('a session transition in another tab', () => {
 
       await waitFor(() => expect(screen.getByTestId('Probe.User')).toHaveTextContent('signed-out'))
     })
+  })
+})
+
+/**
+ * The same transition, performed by THIS tab — the half the suite above structurally cannot reach.
+ *
+ * `BroadcastChannel` never delivers a message to its sender, so every protection in
+ * `SessionReplayBridge`'s subscriber was running for every tab except the one the user was
+ * actually looking at. §52's live pass found it the obvious way: sign out, sign in as somebody
+ * from another company, and the *previous* company's project list was still on screen — served
+ * from a cache nothing had invalidated, and corrected only by a reload.
+ */
+describe('a session transition in THIS tab', () => {
+  beforeEach(() => {
+    // `login` posts; the stub writes the token the way the real endpoint's caller does.
+    vi.spyOn(api, 'post').mockImplementation(async (path: string) => {
+      if (path === '/auth/logout') return undefined as never
+      if (path !== '/auth/login') throw new Error(`unexpected POST ${path}`)
+      return { token: `token-for-${bob.email}`, user: bob } as never
+    })
+  })
+
+  it('empties the query cache when a different person signs in here', async () => {
+    storeSession(alice)
+    const { client } = renderTab()
+    await waitFor(() => expect(screen.getByTestId('Probe.User')).toHaveTextContent('alice@acme.test'))
+
+    client.setQueryData(['projects'], [{ id: 'p1', name: 'Alice’s project' }])
+
+    await act(async () => {
+      screen.getByTestId('Probe.SignOut').click()
+    })
+    await act(async () => {
+      screen.getByTestId('Probe.SignInAsBob').click()
+    })
+
+    await waitFor(() => expect(screen.getByTestId('Probe.User')).toHaveTextContent('bob@acme.test'))
+    expect(
+      client.getQueryData(['projects']),
+      'Bob is looking at Alice’s project list — the cache outlived the identity it was fetched for',
+    ).toBeUndefined()
+  })
+
+  it('empties it on sign-out alone, without waiting for the next sign-in', async () => {
+    storeSession(alice)
+    const { client } = renderTab()
+    await waitFor(() => expect(screen.getByTestId('Probe.User')).toHaveTextContent('alice@acme.test'))
+
+    client.setQueryData(['projects'], [{ id: 'p1', name: 'Alice’s project' }])
+
+    await act(async () => {
+      screen.getByTestId('Probe.SignOut').click()
+    })
+
+    await waitFor(() => expect(client.getQueryData(['projects'])).toBeUndefined())
+  })
+
+  it('keeps the cache through a restore that lands on the SAME identity', async () => {
+    // The guard against over-correcting: clearing on every identity value rather than on a
+    // change would discard a legitimate cache each time the session settles on mount.
+    storeSession(alice)
+    const { client } = renderTab()
+    await waitFor(() => expect(screen.getByTestId('Probe.User')).toHaveTextContent('alice@acme.test'))
+
+    client.setQueryData(['projects'], [{ id: 'p1', name: 'Alice’s project' }])
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(client.getQueryData(['projects'])).toBeDefined()
   })
 })

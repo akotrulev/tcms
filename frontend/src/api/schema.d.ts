@@ -3159,7 +3159,7 @@ export interface components {
          *     Inline, the SPA typed its own `{ runs, versionMarkers }` literal at the call site — and
          *     called the array `runs` while this contract called it `entries`. Nothing compared the two
          *     spellings, because a hand-written type argument is not generated from anything. Named, the
-         *     SPA imports `SuiteHistoryResponse` and the compiler is the comparison (§51).
+         *     SPA imports `SuiteHistoryResponse` and the compiler is the comparison (§52).
          */
         SuiteHistoryResponse: {
             entries: components["schemas"]["SuiteRunSummary"][];

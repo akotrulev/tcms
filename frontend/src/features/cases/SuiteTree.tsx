@@ -13,6 +13,7 @@ import {
 import { SimpleTreeView } from '@mui/x-tree-view/SimpleTreeView';
 import { TreeItem } from '@mui/x-tree-view/TreeItem';
 import { useMemo, useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import type { Suite } from '../../api/types';
 import { useCan } from '../../auth/useCan';
 import { PermissionGate } from '../../components/PermissionGate';
@@ -318,6 +319,24 @@ export function SuiteTree({
         onClose={() => setMenuFor(null)}
         data-testid="SuiteTree.Menu"
       >
+        {/*
+          The way into the suite's execution history — and until §52 there was no way at all: the
+          route and the page had existed since Phase 1 with nothing anywhere linking to them, so
+          the only way to reach the screen was to type its URL.
+
+          First in the menu and ungated, because it is the only READ here and it is the item most
+          people want. A folder's history needs no permission beyond seeing the project, which is
+          already true of anyone looking at this tree — wrapping it in a PermissionGate would gate
+          it on nothing and imply otherwise.
+        */}
+        <MenuItem
+          component={RouterLink}
+          to={menuFor ? `/projects/${projectId}/suites/${menuFor.suite.id}/history` : '#'}
+          data-testid="SuiteTree.Menu.History"
+          onClick={() => setMenuFor(null)}
+        >
+          <ListItemText>Execution history</ListItemText>
+        </MenuItem>
         <PermissionGate projectId={projectId} permission="suite:manage" wrapper="block">
           {({ allowed }) => (
             <MenuItem

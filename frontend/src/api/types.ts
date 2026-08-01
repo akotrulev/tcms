@@ -62,6 +62,7 @@ export type DefectLink = S['DefectLink'];
 export type CaseHistorySummary = S['CaseHistorySummary'];
 export type ExecutionHistoryEntry = S['ExecutionHistoryEntry'];
 export type SuiteRunSummary = S['SuiteRunSummary'];
+export type SuiteHistoryResponse = S['SuiteHistoryResponse'];
 export type RepositoryDashboard = S['RepositoryDashboard'];
 export type DashboardTile = S['DashboardTile'];
 export type DashboardBreakdown = S['DashboardBreakdown'];

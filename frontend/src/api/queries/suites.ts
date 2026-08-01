@@ -1,7 +1,7 @@
 /** The suite tree and its three writes. */
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { api } from '../client';
-import type { Suite, SuiteRunSummary, VersionMarker } from '../types';
+import type { Suite, SuiteHistoryResponse } from '../types';
 import { base, keys } from './keys';
 
 export function useSuites(projectId: string): UseQueryResult<Suite[]> {
@@ -63,17 +63,24 @@ export function useDeleteSuite(projectId: string) {
   });
 }
 
+/**
+ * One suite's execution history.
+ *
+ * The type argument is the **generated** `SuiteHistoryResponse`, and that is the whole lesson of
+ * §52. This hook used to declare its own `{ runs: SuiteRunSummary[]; … }` literal here — while the
+ * contract called the array `entries`. A hand-written type argument is generated from nothing, so
+ * the compiler had no second opinion to compare it against, and the page would have read
+ * `undefined` off the real server's body. `apiResponseTypes.test.ts` now refuses an inline literal
+ * at any `api.*` call site.
+ */
 export function useSuiteHistory(
   projectId: string,
   suiteId: string | undefined,
-): UseQueryResult<{ runs: SuiteRunSummary[]; versionMarkers: VersionMarker[] }> {
+): UseQueryResult<SuiteHistoryResponse> {
   return useQuery({
     queryKey: keys.suiteHistory(projectId, suiteId ?? ''),
     queryFn: ({ signal }) =>
-      api.get<{ runs: SuiteRunSummary[]; versionMarkers: VersionMarker[] }>(
-        `${base(projectId)}/suites/${suiteId}/history`,
-        { signal },
-      ),
+      api.get<SuiteHistoryResponse>(`${base(projectId)}/suites/${suiteId}/history`, { signal }),
     enabled: !!suiteId,
   });
 }

@@ -9,6 +9,8 @@ import { PageHeader, Panel } from '../../components/PageHeader';
 import { DenominatorToggle, ResultBar, ResultCountsCell } from '../../components/ResultBar';
 import { executedCount, type Denominator } from '../../lib/results';
 import { formatCount, formatDateTime } from '../../lib/format';
+import { subtreeCaseCount } from '../../lib/suites';
+import { ScrollX } from '../../components/ScrollX';
 
 /**
  * Suite execution history (plan §6p).
@@ -45,7 +47,16 @@ export function SuiteHistoryPage() {
             <>
               <Identifier variant="strong">{suite.key}</Identifier>
               <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                <Identifier variant="muted">{formatCount(suite.caseCount)}</Identifier> cases now
+                {/*
+                  The SUBTREE's count, because that is what the grid below is reporting on — the
+                  endpoint scopes a folder's history to the folder and everything beneath it. This
+                  read `suite.caseCount`, the folder's own rows, so a parent folder announced "3
+                  cases now" above a table of runs covering 47 (§52).
+                */}
+                <Identifier variant="muted">
+                  {formatCount(subtreeCaseCount(suites.data ?? [], suiteId))}
+                </Identifier>{' '}
+                cases now
               </Typography>
             </>
           )
@@ -53,25 +64,27 @@ export function SuiteHistoryPage() {
       />
 
       <DataRegion testId="SuiteHistory.Content" state={{ ...history, refetch: () => void history.refetch() }}>
-        {(data) => <SuiteHistoryBody runs={data.runs} markers={data.versionMarkers} projectId={projectId} />}
+        {(data) => (
+          <SuiteHistoryBody entries={data.entries} markers={data.versionMarkers} projectId={projectId} />
+        )}
       </DataRegion>
     </Box>
   );
 }
 
 function SuiteHistoryBody({
-  runs,
+  entries,
   markers,
   projectId,
 }: {
-  runs: SuiteRunSummary[];
+  entries: SuiteRunSummary[];
   markers: VersionMarker[];
   projectId: string;
 }) {
   const [denominator, setDenominator] = useState<Denominator>('EXECUTED');
 
   // Newest first, with the run key as a unique tiebreaker.
-  const sorted = [...runs].sort(
+  const sorted = [...entries].sort(
     (a, b) => b.executedAt.localeCompare(a.executedAt) || a.runKey.localeCompare(b.runKey),
   );
 
@@ -111,117 +124,145 @@ function SuiteHistoryBody({
         dense
         actions={<DenominatorToggle value={denominator} onChange={setDenominator} testId="SuiteHistory.Denominator" />}
       >
-        <Table size="small" data-testid="SuiteHistory.Grid">
-          <TableHead>
-            <TableRow>
-              <TableCell sx={{ color: 'text.secondary' }}>Run</TableCell>
-              <TableCell sx={{ color: 'text.secondary', width: 90 }}>Suite version</TableCell>
-              <TableCell sx={{ color: 'text.secondary', width: 150 }}>Configuration</TableCell>
-              <TableCell sx={{ color: 'text.secondary', width: 90 }}>Release</TableCell>
-              <TableCell sx={{ color: 'text.secondary', width: 170 }}>Result</TableCell>
-              <TableCell sx={{ color: 'text.secondary', width: 130 }} align="right">
-                Pass rate
-              </TableCell>
-              <TableCell sx={{ color: 'text.secondary', width: 90 }} align="right">
-                Cases
-              </TableCell>
-              <TableCell sx={{ color: 'text.secondary', width: 150 }}>Executed</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {sorted.map((run, index) => {
-              const previous = sorted[index - 1];
-              // A version boundary gets its own row so the change is impossible to miss.
-              const boundary =
-                previous !== undefined && previous.suiteVersionNo !== run.suiteVersionNo
-                  ? markers.find((m) => m.versionNo === previous.suiteVersionNo)
-                  : undefined;
-
-              return (
-                <Fragment key={run.runId}>
-                  {boundary && (
-                    <TableRow key={`marker-${boundary.versionNo}`} data-testid="SuiteHistory.VersionMarker">
-                      <TableCell colSpan={8} sx={{ bgcolor: 'action.hover', py: 1 }}>
-                        <Stack direction="row" sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                          <Chip
-                            size="small"
-                            label={`Suite changed to v${boundary.versionNo}`}
-                            sx={{
-                              bgcolor: 'color-mix(in srgb, var(--color-action-primary) 12%, transparent)',
-                              color: 'var(--color-action-primary)',
-                              border: '1px solid color-mix(in srgb, var(--color-action-primary) 40%, transparent)',
-                              fontWeight: 600,
-                            }}
-                          />
-                          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                            {/* Nullable for CaseHistoryPage's recorded reason. */}
-                            {boundary.author?.displayName ?? 'Unknown author'} ·{' '}
-                            {formatDateTime(boundary.occurredAt)}
-                          </Typography>
-                          {boundary.changeComment && (
-                            <Typography variant="caption" sx={{ color: 'text.primary' }}>
-                              {boundary.changeComment}
+        <ScrollX>
+          <Table size="small" data-testid="SuiteHistory.Grid">
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ color: 'text.secondary' }}>Run</TableCell>
+                <TableCell sx={{ color: 'text.secondary', width: 90 }}>Suite version</TableCell>
+                <TableCell sx={{ color: 'text.secondary', width: 150 }}>Configuration</TableCell>
+                <TableCell sx={{ color: 'text.secondary', width: 90 }}>Release</TableCell>
+                <TableCell sx={{ color: 'text.secondary', width: 170 }}>Result</TableCell>
+                <TableCell sx={{ color: 'text.secondary', width: 130 }} align="right">
+                  Pass rate
+                </TableCell>
+                <TableCell sx={{ color: 'text.secondary', width: 90 }} align="right">
+                  Cases
+                </TableCell>
+                <TableCell sx={{ color: 'text.secondary', width: 150 }}>Executed</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {sorted.map((run, index) => {
+                const previous = sorted[index - 1];
+                // A version boundary gets its own row so the change is impossible to miss.
+                const boundary =
+                  previous !== undefined && previous.suiteVersionNo !== run.suiteVersionNo
+                    ? markers.find((m) => m.versionNo === previous.suiteVersionNo)
+                    : undefined;
+  
+                return (
+                  <Fragment key={run.runId}>
+                    {boundary && (
+                      <TableRow key={`marker-${boundary.versionNo}`} data-testid="SuiteHistory.VersionMarker">
+                        <TableCell colSpan={8} sx={{ bgcolor: 'action.hover', py: 1 }}>
+                          <Stack direction="row" sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                            <Chip
+                              size="small"
+                              label={`Suite changed to v${boundary.versionNo}`}
+                              sx={{
+                                bgcolor: 'color-mix(in srgb, var(--color-action-primary) 12%, transparent)',
+                                color: 'var(--color-action-primary)',
+                                border: '1px solid color-mix(in srgb, var(--color-action-primary) 40%, transparent)',
+                                fontWeight: 600,
+                              }}
+                            />
+                            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                              {/* Nullable for CaseHistoryPage's recorded reason. */}
+                              {boundary.author?.displayName ?? 'Unknown author'} ·{' '}
+                              {formatDateTime(boundary.occurredAt)}
                             </Typography>
+                            {boundary.changeComment && (
+                              <Typography variant="caption" sx={{ color: 'text.primary' }}>
+                                {boundary.changeComment}
+                              </Typography>
+                            )}
+                          </Stack>
+                        </TableCell>
+                      </TableRow>
+                    )}
+  
+                    <TableRow data-testid="SuiteHistory.Row" hover>
+                      <TableCell>
+                        <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1, minWidth: 0 }}>
+                          {/*
+                            A withdrawn run keeps its row (§6p: history that quietly loses rows is
+                            worse than no history) but loses its link, because the run detail answers
+                            404 — offering navigation into it would be an invitation to a dead end.
+                            The key stays legible so the row can still be matched against a report.
+                          */}
+                          {run.runDeleted ? (
+                            <Identifier variant="muted">{run.runKey}</Identifier>
+                          ) : (
+                            <RouterLink to={`/projects/${projectId}/runs/${run.runId}`} data-testid="SuiteHistory.Row.RunLink">
+                              <Identifier>{run.runKey}</Identifier>
+                            </RouterLink>
+                          )}
+                          <Typography variant="body2" sx={{ color: 'text.secondary', minWidth: 0 }}>
+                            {run.runName}
+                          </Typography>
+                          {run.runDeleted && (
+                            <Tooltip title="This run was withdrawn. Its results stay on this timeline — they were true when they were recorded — but the run itself can no longer be opened.">
+                              <Chip
+                                size="small"
+                                label="withdrawn"
+                                data-testid="SuiteHistory.Row.Withdrawn"
+                                sx={{
+                                  flexShrink: 0,
+                                  bgcolor: 'transparent',
+                                  color: 'text.secondary',
+                                  border: '1px solid',
+                                  borderColor: 'divider',
+                                }}
+                              />
+                            </Tooltip>
                           )}
                         </Stack>
                       </TableCell>
+                      <TableCell>
+                        <Identifier variant="muted">v{run.suiteVersionNo}</Identifier>
+                      </TableCell>
+                      <TableCell sx={{ fontSize: '0.75rem' }}>{run.configuration ?? '—'}</TableCell>
+                      <TableCell>
+                        {run.releaseVersion ? <Identifier variant="muted">{run.releaseVersion}</Identifier> : '—'}
+                      </TableCell>
+                      <TableCell>
+                        <Tooltip
+                          title={`${formatCount(run.counts.passed)} passed · ${formatCount(
+                            run.counts.failed,
+                          )} failed · ${formatCount(run.counts.blocked)} blocked`}
+                        >
+                          <Box>
+                            <ResultBar counts={run.counts} testId="SuiteHistory.Row.ResultBar" />
+                          </Box>
+                        </Tooltip>
+                      </TableCell>
+                      <TableCell align="right">
+                        <ResultCountsCell
+                          counts={run.counts}
+                          denominator={denominator}
+                          testId="SuiteHistory.Row.PassRate"
+                        />
+                      </TableCell>
+                      <TableCell align="right">
+                        {/* The count each run actually covered, so a changed total is visible
+                            next to the rate it moved. */}
+                        <Tooltip title={`${formatCount(executedCount(run.counts))} executed`}>
+                          <Box>
+                            <Identifier>{formatCount(run.counts.total)}</Identifier>
+                          </Box>
+                        </Tooltip>
+                      </TableCell>
+                      <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                        {formatDateTime(run.executedAt)}
+                      </TableCell>
                     </TableRow>
-                  )}
-
-                  <TableRow data-testid="SuiteHistory.Row" hover>
-                    <TableCell>
-                      <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1, minWidth: 0 }}>
-                        <RouterLink to={`/projects/${projectId}/runs/${run.runId}`} data-testid="SuiteHistory.Row.RunLink">
-                          <Identifier>{run.runKey}</Identifier>
-                        </RouterLink>
-                        <Typography variant="body2" sx={{ color: 'text.secondary', minWidth: 0 }}>
-                          {run.runName}
-                        </Typography>
-                      </Stack>
-                    </TableCell>
-                    <TableCell>
-                      <Identifier variant="muted">v{run.suiteVersionNo}</Identifier>
-                    </TableCell>
-                    <TableCell sx={{ fontSize: '0.75rem' }}>{run.configuration ?? '—'}</TableCell>
-                    <TableCell>
-                      {run.releaseVersion ? <Identifier variant="muted">{run.releaseVersion}</Identifier> : '—'}
-                    </TableCell>
-                    <TableCell>
-                      <Tooltip
-                        title={`${formatCount(run.counts.passed)} passed · ${formatCount(
-                          run.counts.failed,
-                        )} failed · ${formatCount(run.counts.blocked)} blocked`}
-                      >
-                        <Box>
-                          <ResultBar counts={run.counts} testId="SuiteHistory.Row.ResultBar" />
-                        </Box>
-                      </Tooltip>
-                    </TableCell>
-                    <TableCell align="right">
-                      <ResultCountsCell
-                        counts={run.counts}
-                        denominator={denominator}
-                        testId="SuiteHistory.Row.PassRate"
-                      />
-                    </TableCell>
-                    <TableCell align="right">
-                      {/* The count each run actually covered, so a changed total is visible
-                          next to the rate it moved. */}
-                      <Tooltip title={`${formatCount(executedCount(run.counts))} executed`}>
-                        <Box>
-                          <Identifier>{formatCount(run.counts.total)}</Identifier>
-                        </Box>
-                      </Tooltip>
-                    </TableCell>
-                    <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-                      {formatDateTime(run.executedAt)}
-                    </TableCell>
-                  </TableRow>
-                </Fragment>
-              );
-            })}
-          </TableBody>
-        </Table>
+                  </Fragment>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </ScrollX>
       </Panel>
     </Stack>
   );

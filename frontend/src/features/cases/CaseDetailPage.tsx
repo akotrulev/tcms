@@ -29,6 +29,7 @@ import { CaseVersionPanel } from './CaseVersionPanel';
 import { AutomationLabel, HealthChip, LifecycleChip, PriorityLabel, StatusChip } from '../../components/StatusChip';
 import { formatAge, formatDateTime, formatSeconds } from '../../lib/format';
 import { stepFormatLabels } from '../../lib/labels';
+import { ScrollX } from '../../components/ScrollX';
 
 /**
  * Test case detail.
@@ -508,41 +509,43 @@ function StructuredSteps({ steps }: { steps: TestStep[] }) {
   }
 
   return (
-    <Table size="small" data-testid="CaseDetail.Steps.Grid">
-      <TableHead>
-        <TableRow>
-          <TableCell sx={{ width: 44, color: 'text.secondary' }}>#</TableCell>
-          <TableCell sx={{ color: 'text.secondary' }}>Action</TableCell>
-          <TableCell sx={{ color: 'text.secondary', width: '22%' }}>Test data</TableCell>
-          <TableCell sx={{ color: 'text.secondary', width: '32%' }}>Expected result</TableCell>
-        </TableRow>
-      </TableHead>
-      <TableBody>
-        {[...steps]
-          .sort((a, b) => a.position - b.position)
-          .map((step, index) => (
-            <TableRow key={step.id} data-testid="CaseDetail.Steps.Row">
-              <TableCell sx={{ verticalAlign: 'top' }}>
-                <Identifier variant="muted">{index + 1}</Identifier>
-              </TableCell>
-              <TableCell sx={{ verticalAlign: 'top' }} data-testid="CaseDetail.Steps.Row.Action">
-                {step.action}
-                {step.sharedStepId && (
-                  <Tooltip title="This step is shared. Editing it changes every case that uses it.">
-                    <Chip size="small" variant="outlined" label="Shared" sx={{ ml: 1 }} />
-                  </Tooltip>
-                )}
-              </TableCell>
-              <TableCell sx={{ verticalAlign: 'top', color: 'text.secondary' }}>
-                {step.testData || '—'}
-              </TableCell>
-              <TableCell sx={{ verticalAlign: 'top' }} data-testid="CaseDetail.Steps.Row.Expected">
-                {step.expectedResult || '—'}
-              </TableCell>
-            </TableRow>
-          ))}
-      </TableBody>
-    </Table>
+    <ScrollX>
+      <Table size="small" data-testid="CaseDetail.Steps.Grid">
+        <TableHead>
+          <TableRow>
+            <TableCell sx={{ width: 44, color: 'text.secondary' }}>#</TableCell>
+            <TableCell sx={{ color: 'text.secondary' }}>Action</TableCell>
+            <TableCell sx={{ color: 'text.secondary', width: '22%' }}>Test data</TableCell>
+            <TableCell sx={{ color: 'text.secondary', width: '32%' }}>Expected result</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {[...steps]
+            .sort((a, b) => a.position - b.position)
+            .map((step, index) => (
+              <TableRow key={step.id} data-testid="CaseDetail.Steps.Row">
+                <TableCell sx={{ verticalAlign: 'top' }}>
+                  <Identifier variant="muted">{index + 1}</Identifier>
+                </TableCell>
+                <TableCell sx={{ verticalAlign: 'top' }} data-testid="CaseDetail.Steps.Row.Action">
+                  {step.action}
+                  {step.sharedStepId && (
+                    <Tooltip title="This step is shared. Editing it changes every case that uses it.">
+                      <Chip size="small" variant="outlined" label="Shared" sx={{ ml: 1 }} />
+                    </Tooltip>
+                  )}
+                </TableCell>
+                <TableCell sx={{ verticalAlign: 'top', color: 'text.secondary' }}>
+                  {step.testData || '—'}
+                </TableCell>
+                <TableCell sx={{ verticalAlign: 'top' }} data-testid="CaseDetail.Steps.Row.Expected">
+                  {step.expectedResult || '—'}
+                </TableCell>
+              </TableRow>
+            ))}
+        </TableBody>
+      </Table>
+    </ScrollX>
   );
 }
 

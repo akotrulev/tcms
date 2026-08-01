@@ -28,6 +28,7 @@ import { criterionState, type Denominator } from '../../lib/results';
 import { StatusChip } from '../../components/StatusChip';
 import { formatCount, formatDateTime, formatPercent } from '../../lib/format';
 import { aggregationHelp, aggregationLabels } from '../../lib/labels';
+import { ScrollX } from '../../components/ScrollX';
 
 /**
  * Plan statistics (plan §6p).
@@ -388,38 +389,40 @@ function BreakdownTable({
   }
 
   return (
-    <Table size="small" data-testid={`${testId}.Grid`}>
-      <TableBody>
-        {rows.map((row) => (
-          <TableRow key={row.id} data-testid={`${testId}.Row`}>
-            <TableCell sx={{ border: 0, pl: 0, width: '40%' }}>
-              <Stack direction="row" sx={{ alignItems: 'center', gap: 1, minWidth: 0 }}>
-                {row.identifier && <Identifier variant="muted">{row.identifier}</Identifier>}
-                {row.href ? (
-                  <RouterLink to={row.href} data-testid={`${testId}.Row.Link`}>
-                    <Typography variant="body2" component="span">
-                      {row.label}
-                    </Typography>
-                  </RouterLink>
-                ) : (
-                  <Typography variant="body2">{row.label}</Typography>
-                )}
-              </Stack>
-            </TableCell>
-            <TableCell sx={{ border: 0, width: '35%' }}>
-              <ResultBar counts={row.counts} />
-            </TableCell>
-            <TableCell sx={{ border: 0, pr: 0 }} align="right">
-              <ResultCountsCell
-                counts={row.counts}
-                denominator={denominator}
-                testId={`${testId}.Row.PassRate`}
-              />
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <ScrollX>
+      <Table size="small" data-testid={`${testId}.Grid`}>
+        <TableBody>
+          {rows.map((row) => (
+            <TableRow key={row.id} data-testid={`${testId}.Row`}>
+              <TableCell sx={{ border: 0, pl: 0, width: '40%' }}>
+                <Stack direction="row" sx={{ alignItems: 'center', gap: 1, minWidth: 0 }}>
+                  {row.identifier && <Identifier variant="muted">{row.identifier}</Identifier>}
+                  {row.href ? (
+                    <RouterLink to={row.href} data-testid={`${testId}.Row.Link`}>
+                      <Typography variant="body2" component="span">
+                        {row.label}
+                      </Typography>
+                    </RouterLink>
+                  ) : (
+                    <Typography variant="body2">{row.label}</Typography>
+                  )}
+                </Stack>
+              </TableCell>
+              <TableCell sx={{ border: 0, width: '35%' }}>
+                <ResultBar counts={row.counts} />
+              </TableCell>
+              <TableCell sx={{ border: 0, pr: 0 }} align="right">
+                <ResultCountsCell
+                  counts={row.counts}
+                  denominator={denominator}
+                  testId={`${testId}.Row.PassRate`}
+                />
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </ScrollX>
   );
 }
 
@@ -522,84 +525,86 @@ function Blockers({
           not defects.
         </Typography>
       ) : (
-        <Table size="small" data-testid="PlanStats.Blockers.Grid">
-          <TableHead>
-            <TableRow>
-              <TableCell sx={{ color: 'text.secondary' }}>Case</TableCell>
-              <TableCell sx={{ color: 'text.secondary', width: 110 }}>Result</TableCell>
-              <TableCell sx={{ color: 'text.secondary', width: 130 }}>Defects</TableCell>
-              <TableCell sx={{ color: 'text.secondary', width: 150 }}>Executed</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {blockers.map((blocker) => (
-              <TableRow key={blocker.id} data-testid="PlanStats.Blockers.Row">
-                <TableCell>
-                  <Stack direction="row" sx={{ alignItems: 'center', gap: 1, minWidth: 0 }}>
-                    <RouterLink
-                      to={`/projects/${projectId}/cases/${blocker.caseId}`}
-                      data-testid="PlanStats.Blockers.Row.CaseLink"
-                    >
-                      <Identifier>{blocker.caseKey}</Identifier>
-                    </RouterLink>
-                    <Tooltip title={blocker.caseTitle}>
-                      <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {blocker.caseTitle}
-                      </Box>
-                    </Tooltip>
-                    {/* The version that failed, not the current one — a case edited since
-                        would otherwise silently rewrite what this row means. */}
-                    <Tooltip title="The case version this run executed">
-                      <Box>
-                        <Identifier variant="muted">v{blocker.caseVersionNo}</Identifier>
-                      </Box>
-                    </Tooltip>
-                  </Stack>
-                </TableCell>
-                <TableCell>
-                  {blocker.status?.kind && <StatusChip kind={blocker.status.kind} />}
-                </TableCell>
-                <TableCell>
-                  {blocker.defects.length === 0 ? (
-                    <Typography variant="caption" sx={{ color: 'var(--color-blocked)' }}>
-                      No defect linked
-                    </Typography>
-                  ) : (
-                    <Stack sx={{ gap: 0.25 }}>
-                      {blocker.defects.map((defect) => (
-                        <Box
-                          key={defect.id}
-                          component="a"
-                          href={defect.url}
-                          target="_blank"
-                          rel="noopener"
-                          data-testid="PlanStats.Blockers.Row.DefectLink"
-                          sx={{ fontSize: '0.75rem' }}
-                        >
-                          <Identifier>{defect.externalKey}</Identifier>
-                          {defect.statusCache && (
-                            <Box component="span" sx={{ color: 'text.secondary', ml: 0.5 }}>
-                              {defect.statusCache}
-                            </Box>
-                          )}
-                          <Box component="span" sx={{ ml: 0.5, color: 'text.secondary' }} aria-hidden="true">
-                            ↗
-                          </Box>
-                          <Box component="span" className="sr-only">
-                            (opens in a new tab)
-                          </Box>
-                        </Box>
-                      ))}
-                    </Stack>
-                  )}
-                </TableCell>
-                <TableCell sx={{ color: 'text.secondary', fontSize: '0.75rem' }}>
-                  {formatDateTime(blocker.executedAt)}
-                </TableCell>
+        <ScrollX>
+          <Table size="small" data-testid="PlanStats.Blockers.Grid">
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ color: 'text.secondary' }}>Case</TableCell>
+                <TableCell sx={{ color: 'text.secondary', width: 110 }}>Result</TableCell>
+                <TableCell sx={{ color: 'text.secondary', width: 130 }}>Defects</TableCell>
+                <TableCell sx={{ color: 'text.secondary', width: 150 }}>Executed</TableCell>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHead>
+            <TableBody>
+              {blockers.map((blocker) => (
+                <TableRow key={blocker.id} data-testid="PlanStats.Blockers.Row">
+                  <TableCell>
+                    <Stack direction="row" sx={{ alignItems: 'center', gap: 1, minWidth: 0 }}>
+                      <RouterLink
+                        to={`/projects/${projectId}/cases/${blocker.caseId}`}
+                        data-testid="PlanStats.Blockers.Row.CaseLink"
+                      >
+                        <Identifier>{blocker.caseKey}</Identifier>
+                      </RouterLink>
+                      <Tooltip title={blocker.caseTitle}>
+                        <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {blocker.caseTitle}
+                        </Box>
+                      </Tooltip>
+                      {/* The version that failed, not the current one — a case edited since
+                          would otherwise silently rewrite what this row means. */}
+                      <Tooltip title="The case version this run executed">
+                        <Box>
+                          <Identifier variant="muted">v{blocker.caseVersionNo}</Identifier>
+                        </Box>
+                      </Tooltip>
+                    </Stack>
+                  </TableCell>
+                  <TableCell>
+                    {blocker.status?.kind && <StatusChip kind={blocker.status.kind} />}
+                  </TableCell>
+                  <TableCell>
+                    {blocker.defects.length === 0 ? (
+                      <Typography variant="caption" sx={{ color: 'var(--color-blocked)' }}>
+                        No defect linked
+                      </Typography>
+                    ) : (
+                      <Stack sx={{ gap: 0.25 }}>
+                        {blocker.defects.map((defect) => (
+                          <Box
+                            key={defect.id}
+                            component="a"
+                            href={defect.url}
+                            target="_blank"
+                            rel="noopener"
+                            data-testid="PlanStats.Blockers.Row.DefectLink"
+                            sx={{ fontSize: '0.75rem' }}
+                          >
+                            <Identifier>{defect.externalKey}</Identifier>
+                            {defect.statusCache && (
+                              <Box component="span" sx={{ color: 'text.secondary', ml: 0.5 }}>
+                                {defect.statusCache}
+                              </Box>
+                            )}
+                            <Box component="span" sx={{ ml: 0.5, color: 'text.secondary' }} aria-hidden="true">
+                              ↗
+                            </Box>
+                            <Box component="span" className="sr-only">
+                              (opens in a new tab)
+                            </Box>
+                          </Box>
+                        ))}
+                      </Stack>
+                    )}
+                  </TableCell>
+                  <TableCell sx={{ color: 'text.secondary', fontSize: '0.75rem' }}>
+                    {formatDateTime(blocker.executedAt)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </ScrollX>
       )}
     </Panel>
   );

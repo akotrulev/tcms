@@ -29,5 +29,10 @@
     TypeScript compiler over `src/api/queries`, so it needs `types: ["node"]` — which is exactly
     what `tsconfig.app.json` must not have. See the note there.
   */
-  "include": ["vite.config.ts", "vitest.config.ts", "src/api/contractParameters.test.ts"]
+  "include": [
+    "vite.config.ts",
+    "vitest.config.ts",
+    "src/api/contractParameters.test.ts",
+    "src/api/apiResponseTypes.test.ts"
+  ]
 }

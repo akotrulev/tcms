@@ -150,8 +150,11 @@ export const suiteHandlers = [
 
   http.get(`${API}/projects/:projectId/suites/:suiteId/history`, async () => {
     await delay(LATENCY);
+    // `entries`, which is what the contract has always called it. This handler said `runs` and so
+    // did the hook's hand-written type, so the two agreed with each other and with nothing else —
+    // mock mode rendered perfectly and live mode would have rendered an empty grid (§52).
     return HttpResponse.json({
-      runs: reporting.suiteHistoryEntries,
+      entries: reporting.suiteHistoryEntries,
       versionMarkers: reporting.suiteVersionMarkers,
     });
   }),

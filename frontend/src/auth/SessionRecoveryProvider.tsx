@@ -278,6 +278,30 @@ export function SessionReplayBridge() {
   const previousEmail = useRef<string | null>(null);
   previousEmail.current = user?.email ?? null;
 
+  /*
+    The same transition, in the tab that PERFORMED it — which the subscription below cannot see.
+
+    `BroadcastChannel` deliberately does not echo to its sender (`sessionChannel` says so), so
+    every word of the comment on that handler applies here and none of it was running for the one
+    tab that mattered most. Signing out and signing in as somebody else in the same tab left the
+    previous user's project list, their name and their permission answers on screen, served from a
+    cache nothing had invalidated. Found in §52's live pass: a fresh sign-in rendered the
+    *previous* company's project, and only a reload corrected it.
+
+    Cleared on a *change of identity*, not on every identity: the first non-null value is this
+    tab's own sign-in or a restored session, where the cache is either empty or already this
+    user's. The ref is written in the effect rather than during render, so it holds what was true
+    at the last commit.
+  */
+  const cachedFor = useRef<string | null>(null);
+  useEffect(() => {
+    const current = user?.email ?? null;
+    if (cachedFor.current !== null && cachedFor.current !== current) {
+      queryClient.clear();
+    }
+    cachedFor.current = current;
+  }, [user, queryClient]);
+
   useEffect(
     () =>
       subscribeSession((message) => {

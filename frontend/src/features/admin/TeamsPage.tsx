@@ -24,6 +24,7 @@ import { describeError } from '../../lib/describeError';
 import { formatAge, formatCount, formatDateTime } from '../../lib/format';
 import { allPermissions, groupByArea, holdsEveryPermission } from '../../lib/permissions';
 import { GrantRoleDialog } from './GrantRoleDialog';
+import { ScrollX } from '../../components/ScrollX';
 
 /**
  * Teams, roles and the org chart (plan §6b, §6k).
@@ -113,59 +114,61 @@ export function TeamsPage() {
             empty={{ kind: 'no-records', title: 'No accounts', body: 'No user accounts exist yet.' }}
           >
             {(rows) => (
-              <Table size="small" data-testid="Admin.Users.Grid">
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ color: 'text.secondary' }}>Name</TableCell>
-                    <TableCell sx={{ color: 'text.secondary' }}>Email</TableCell>
-                    <TableCell sx={{ color: 'text.secondary', width: 120 }}>Status</TableCell>
-                    <TableCell sx={{ color: 'text.secondary' }}>Teams</TableCell>
-                    <TableCell sx={{ color: 'text.secondary', width: 140 }}>Last signed in</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {[...rows]
-                    .sort(
-                      (a, b) =>
-                        // Deactivated accounts last — they're reference, not the working set.
-                        Number(a.status === 'DEACTIVATED') - Number(b.status === 'DEACTIVATED') ||
-                        a.displayName.localeCompare(b.displayName),
-                    )
-                    .map((user) => (
-                      <TableRow key={user.id} data-testid="Admin.Users.Row" hover>
-                        <TableCell sx={{ fontWeight: 500 }}>{user.displayName}</TableCell>
-                        <TableCell sx={{ color: 'text.secondary' }}>{user.email}</TableCell>
-                        <TableCell>
-                          <Chip
-                            size="small"
-                            label={user.status.toLowerCase()}
-                            data-testid="Admin.Users.Row.Status"
-                            sx={{
-                              bgcolor: 'transparent',
-                              color:
-                                user.status === 'ACTIVE' ? 'var(--color-passed)' : 'var(--color-deprecated)',
-                              border: `1px solid color-mix(in srgb, ${
-                                user.status === 'ACTIVE' ? 'var(--color-passed)' : 'var(--color-deprecated)'
-                              } 45%, transparent)`,
-                            }}
-                          />
-                        </TableCell>
-                        <TableCell sx={{ fontSize: '0.75rem' }}>
-                          {user.teams.length === 0 ? (
-                            <Box sx={{ color: 'text.secondary' }}>None</Box>
-                          ) : (
-                            user.teams.join(', ')
-                          )}
-                        </TableCell>
-                        <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-                          <Tooltip title={formatDateTime(user.lastLoginAt)}>
-                            <Box component="span">{formatAge(user.lastLoginAt)}</Box>
-                          </Tooltip>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                </TableBody>
-              </Table>
+              <ScrollX>
+                <Table size="small" data-testid="Admin.Users.Grid">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ color: 'text.secondary' }}>Name</TableCell>
+                      <TableCell sx={{ color: 'text.secondary' }}>Email</TableCell>
+                      <TableCell sx={{ color: 'text.secondary', width: 120 }}>Status</TableCell>
+                      <TableCell sx={{ color: 'text.secondary' }}>Teams</TableCell>
+                      <TableCell sx={{ color: 'text.secondary', width: 140 }}>Last signed in</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {[...rows]
+                      .sort(
+                        (a, b) =>
+                          // Deactivated accounts last — they're reference, not the working set.
+                          Number(a.status === 'DEACTIVATED') - Number(b.status === 'DEACTIVATED') ||
+                          a.displayName.localeCompare(b.displayName),
+                      )
+                      .map((user) => (
+                        <TableRow key={user.id} data-testid="Admin.Users.Row" hover>
+                          <TableCell sx={{ fontWeight: 500 }}>{user.displayName}</TableCell>
+                          <TableCell sx={{ color: 'text.secondary' }}>{user.email}</TableCell>
+                          <TableCell>
+                            <Chip
+                              size="small"
+                              label={user.status.toLowerCase()}
+                              data-testid="Admin.Users.Row.Status"
+                              sx={{
+                                bgcolor: 'transparent',
+                                color:
+                                  user.status === 'ACTIVE' ? 'var(--color-passed)' : 'var(--color-deprecated)',
+                                border: `1px solid color-mix(in srgb, ${
+                                  user.status === 'ACTIVE' ? 'var(--color-passed)' : 'var(--color-deprecated)'
+                                } 45%, transparent)`,
+                              }}
+                            />
+                          </TableCell>
+                          <TableCell sx={{ fontSize: '0.75rem' }}>
+                            {user.teams.length === 0 ? (
+                              <Box sx={{ color: 'text.secondary' }}>None</Box>
+                            ) : (
+                              user.teams.join(', ')
+                            )}
+                          </TableCell>
+                          <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                            <Tooltip title={formatDateTime(user.lastLoginAt)}>
+                              <Box component="span">{formatAge(user.lastLoginAt)}</Box>
+                            </Tooltip>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              </ScrollX>
             )}
           </DataRegion>
         </Panel>
@@ -286,91 +289,93 @@ function AssignmentTable({ rows }: { rows: RoleAssignment[] }) {
   };
 
   return (
-    <Table size="small" data-testid="Admin.Assignments.Grid">
-      <TableHead>
-        <TableRow>
-          <TableCell sx={{ color: 'text.secondary' }}>Who</TableCell>
-          <TableCell sx={{ color: 'text.secondary', width: 140 }}>Role</TableCell>
-          <TableCell sx={{ color: 'text.secondary', width: 180 }}>Project</TableCell>
-          <TableCell sx={{ color: 'text.secondary', width: 160 }}>Granted via</TableCell>
-          <TableCell sx={{ color: 'text.secondary', width: 130 }}>Granted</TableCell>
-          <TableCell sx={{ color: 'text.secondary', width: 110 }} align="right">
-            {/* Header intentionally blank-labelled: the column holds one action per row. */}
-            Access
-          </TableCell>
-        </TableRow>
-      </TableHead>
-      <TableBody>
-        {[...rows]
-          // `projectName` is null for a system-scoped role (an Admin holds it instance-wide,
-          // not on a project), so those sort first under an explicit label rather than
-          // crashing the comparator or drifting to the bottom unexplained.
-          .sort(
-            (a, b) =>
-              (a.projectName ?? '').localeCompare(b.projectName ?? '') ||
-              (a.user?.displayName ?? '').localeCompare(b.user?.displayName ?? ''),
-          )
-          .map((assignment) => (
-            <TableRow key={assignment.id} data-testid="Admin.Assignments.Row" hover>
-              <TableCell sx={{ fontWeight: 500 }}>{assignment.user?.displayName ?? '—'}</TableCell>
-              <TableCell>
-                <Chip size="small" variant="outlined" label={assignment.role.name} />
-              </TableCell>
-              <TableCell>
-                {assignment.projectName ?? (
-                  <Tooltip title="A system-scoped role applies across every project.">
-                    <Box component="span" sx={{ color: 'text.secondary' }}>
-                      Instance-wide
-                    </Box>
-                  </Tooltip>
-                )}
-              </TableCell>
-              <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-                {/* Whether a role came through a team or directly determines how you revoke
-                    it — removing a person from a project won't help if the team grants it. */}
-                {assignment.team ? `${assignment.team.name} (team)` : 'granted directly'}
-              </TableCell>
-              <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-                {formatDateTime(assignment.grantedAt)}
-                {rowErrors[assignment.id] && (
-                  <Alert
-                    severity="error"
-                    role="alert"
-                    sx={{ mt: 0.5, py: 0, fontSize: '0.7rem' }}
-                    data-testid="Admin.Assignments.Row.Error"
-                  >
-                    {rowErrors[assignment.id]}
-                  </Alert>
-                )}
-              </TableCell>
-              <TableCell align="right">
-                {/*
-                  The same scope-dependent gate the server applies, and the same one the grant
-                  dialog applies — a row naming a project asks that project's `project:members`, a
-                  company-wide row asks `company:members`. Disabled with a reason rather than
-                  hidden: an action cell that empties on some rows shifts the whole column.
-                */}
-                <PermissionGate
-                  projectId={assignment.projectId ?? 'company'}
-                  permission={assignment.projectId ? 'project:members' : 'company:members'}
-                >
-                  {({ allowed }) => (
-                    <Button
-                      size="small"
-                      color="error"
-                      disabled={!allowed || revoke.isPending}
-                      onClick={() => void onRevoke(assignment)}
-                      data-testid="Admin.Assignments.Row.Revoke"
-                    >
-                      Revoke
-                    </Button>
+    <ScrollX>
+      <Table size="small" data-testid="Admin.Assignments.Grid">
+        <TableHead>
+          <TableRow>
+            <TableCell sx={{ color: 'text.secondary' }}>Who</TableCell>
+            <TableCell sx={{ color: 'text.secondary', width: 140 }}>Role</TableCell>
+            <TableCell sx={{ color: 'text.secondary', width: 180 }}>Project</TableCell>
+            <TableCell sx={{ color: 'text.secondary', width: 160 }}>Granted via</TableCell>
+            <TableCell sx={{ color: 'text.secondary', width: 130 }}>Granted</TableCell>
+            <TableCell sx={{ color: 'text.secondary', width: 110 }} align="right">
+              {/* Header intentionally blank-labelled: the column holds one action per row. */}
+              Access
+            </TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {[...rows]
+            // `projectName` is null for a system-scoped role (an Admin holds it instance-wide,
+            // not on a project), so those sort first under an explicit label rather than
+            // crashing the comparator or drifting to the bottom unexplained.
+            .sort(
+              (a, b) =>
+                (a.projectName ?? '').localeCompare(b.projectName ?? '') ||
+                (a.user?.displayName ?? '').localeCompare(b.user?.displayName ?? ''),
+            )
+            .map((assignment) => (
+              <TableRow key={assignment.id} data-testid="Admin.Assignments.Row" hover>
+                <TableCell sx={{ fontWeight: 500 }}>{assignment.user?.displayName ?? '—'}</TableCell>
+                <TableCell>
+                  <Chip size="small" variant="outlined" label={assignment.role.name} />
+                </TableCell>
+                <TableCell>
+                  {assignment.projectName ?? (
+                    <Tooltip title="A system-scoped role applies across every project.">
+                      <Box component="span" sx={{ color: 'text.secondary' }}>
+                        Instance-wide
+                      </Box>
+                    </Tooltip>
                   )}
-                </PermissionGate>
-              </TableCell>
-            </TableRow>
-          ))}
-      </TableBody>
-    </Table>
+                </TableCell>
+                <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                  {/* Whether a role came through a team or directly determines how you revoke
+                      it — removing a person from a project won't help if the team grants it. */}
+                  {assignment.team ? `${assignment.team.name} (team)` : 'granted directly'}
+                </TableCell>
+                <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                  {formatDateTime(assignment.grantedAt)}
+                  {rowErrors[assignment.id] && (
+                    <Alert
+                      severity="error"
+                      role="alert"
+                      sx={{ mt: 0.5, py: 0, fontSize: '0.7rem' }}
+                      data-testid="Admin.Assignments.Row.Error"
+                    >
+                      {rowErrors[assignment.id]}
+                    </Alert>
+                  )}
+                </TableCell>
+                <TableCell align="right">
+                  {/*
+                    The same scope-dependent gate the server applies, and the same one the grant
+                    dialog applies — a row naming a project asks that project's `project:members`, a
+                    company-wide row asks `company:members`. Disabled with a reason rather than
+                    hidden: an action cell that empties on some rows shifts the whole column.
+                  */}
+                  <PermissionGate
+                    projectId={assignment.projectId ?? 'company'}
+                    permission={assignment.projectId ? 'project:members' : 'company:members'}
+                  >
+                    {({ allowed }) => (
+                      <Button
+                        size="small"
+                        color="error"
+                        disabled={!allowed || revoke.isPending}
+                        onClick={() => void onRevoke(assignment)}
+                        data-testid="Admin.Assignments.Row.Revoke"
+                      >
+                        Revoke
+                      </Button>
+                    )}
+                  </PermissionGate>
+                </TableCell>
+              </TableRow>
+            ))}
+        </TableBody>
+      </Table>
+    </ScrollX>
   );
 }
 

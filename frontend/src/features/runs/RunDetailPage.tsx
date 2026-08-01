@@ -10,6 +10,7 @@ import { PassRateSummary, ResultBar } from '../../components/ResultBar';
 import { StatusChip } from '../../components/StatusChip';
 import { formatCount, formatDateTime, formatDuration } from '../../lib/format';
 import { statusLabels } from '../../lib/labels';
+import { ScrollX } from '../../components/ScrollX';
 
 /**
  * A run's execution list — the tester's work queue.
@@ -177,112 +178,114 @@ function RunBody({ data, projectId, runId }: { data: TestRunDetail; projectId: s
             </Typography>
           </Box>
         ) : (
-          <Table size="small" data-testid="RunDetail.Executions.Grid">
-            <TableHead>
-              <TableRow>
-                {/*
-                  There was an "Execution" column here showing TE_0001. Executions no longer
-                  carry a display key (plan §6t) — they are reached through their run or case —
-                  so the column had no data to show. The row→detail affordance moved onto the
-                  case title below, which is what a tester actually recognises.
-                */}
-                <TableCell sx={{ color: 'text.secondary' }}>Case</TableCell>
-                <TableCell sx={{ color: 'text.secondary', width: 116 }}>Result</TableCell>
-                <TableCell sx={{ color: 'text.secondary', width: 130 }}>Defects</TableCell>
-                <TableCell sx={{ color: 'text.secondary', width: 90 }} align="right">
-                  Duration
-                </TableCell>
-                <TableCell sx={{ color: 'text.secondary', width: 150 }}>Executed by</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {sorted.map((execution) => (
-                <TableRow key={execution.id} data-testid="RunDetail.Executions.Row" hover>
-                  <TableCell>
-                    <Stack direction="row" sx={{ alignItems: 'center', gap: 1, minWidth: 0 }}>
-                      <RouterLink
-                        to={`/projects/${projectId}/cases/${execution.caseId}`}
-                        data-testid="RunDetail.Executions.Row.CaseLink"
-                      >
-                        <Identifier>{execution.caseKey}</Identifier>
-                      </RouterLink>
-                      {/* The row→detail affordance: opens this execution, not the case. */}
-                      <Tooltip title={execution.caseTitle}>
-                        <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          <RouterLink
-                            to={`/projects/${projectId}/runs/${runId}/executions/${execution.id}`}
-                            data-testid="RunDetail.Executions.Row.Link"
-                          >
-                            {execution.caseTitle}
-                          </RouterLink>
-                        </Box>
-                      </Tooltip>
-                      {/*
-                        The pinned case version. This is what makes past results honest: the
-                        case may have been edited five times since, and this row still says
-                        which text was executed.
-                      */}
-                      <Tooltip title="The case version this execution ran against">
-                        <Box sx={{ flexShrink: 0 }}>
-                          <Identifier variant="muted">v{execution.caseVersionNo}</Identifier>
-                        </Box>
-                      </Tooltip>
-                    </Stack>
+          <ScrollX>
+            <Table size="small" data-testid="RunDetail.Executions.Grid">
+              <TableHead>
+                <TableRow>
+                  {/*
+                    There was an "Execution" column here showing TE_0001. Executions no longer
+                    carry a display key (plan §6t) — they are reached through their run or case —
+                    so the column had no data to show. The row→detail affordance moved onto the
+                    case title below, which is what a tester actually recognises.
+                  */}
+                  <TableCell sx={{ color: 'text.secondary' }}>Case</TableCell>
+                  <TableCell sx={{ color: 'text.secondary', width: 116 }}>Result</TableCell>
+                  <TableCell sx={{ color: 'text.secondary', width: 130 }}>Defects</TableCell>
+                  <TableCell sx={{ color: 'text.secondary', width: 90 }} align="right">
+                    Duration
                   </TableCell>
-                  <TableCell>
-                    {execution.status?.kind ? (
-                      <StatusChip kind={execution.status.kind} testId="RunDetail.Executions.Row.Status" />
-                    ) : (
-                      <Typography variant="caption" sx={{ color: 'text.secondary' }} data-testid="RunDetail.Executions.Row.Status">
-                        {statusLabels.UNTESTED}
-                      </Typography>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {execution.defects.length === 0 ? (
-                      <Box sx={{ color: 'text.secondary', fontSize: '0.75rem' }}>—</Box>
-                    ) : (
-                      <Stack sx={{ gap: 0.25 }}>
-                        {execution.defects.map((defect) => (
-                          <Box
-                            key={defect.id}
-                            component="a"
-                            href={defect.url}
-                            target="_blank"
-                            rel="noopener"
-                            sx={{ fontSize: '0.75rem' }}
-                            data-testid="RunDetail.Executions.Row.DefectLink"
-                          >
-                            <Identifier>{defect.externalKey}</Identifier>
-                            <Box component="span" aria-hidden="true" sx={{ ml: 0.5, color: 'text.secondary' }}>
-                              ↗
-                            </Box>
-                            <Box component="span" className="sr-only">
-                              (opens in a new tab)
-                            </Box>
-                          </Box>
-                        ))}
-                      </Stack>
-                    )}
-                  </TableCell>
-                  <TableCell align="right" sx={{ fontSize: '0.75rem' }}>
-                    <Identifier variant="muted">{formatDuration(execution.durationMs)}</Identifier>
-                  </TableCell>
-                  <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-                    {execution.executedAt ? (
-                      <Tooltip title={formatDateTime(execution.executedAt)}>
-                        <Box component="span">{execution.executedBy?.displayName ?? 'CI'}</Box>
-                      </Tooltip>
-                    ) : (
-                      <Box component="span">
-                        {execution.assignee ? `assigned to ${execution.assignee.displayName}` : 'unassigned'}
-                      </Box>
-                    )}
-                  </TableCell>
+                  <TableCell sx={{ color: 'text.secondary', width: 150 }}>Executed by</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHead>
+              <TableBody>
+                {sorted.map((execution) => (
+                  <TableRow key={execution.id} data-testid="RunDetail.Executions.Row" hover>
+                    <TableCell>
+                      <Stack direction="row" sx={{ alignItems: 'center', gap: 1, minWidth: 0 }}>
+                        <RouterLink
+                          to={`/projects/${projectId}/cases/${execution.caseId}`}
+                          data-testid="RunDetail.Executions.Row.CaseLink"
+                        >
+                          <Identifier>{execution.caseKey}</Identifier>
+                        </RouterLink>
+                        {/* The row→detail affordance: opens this execution, not the case. */}
+                        <Tooltip title={execution.caseTitle}>
+                          <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <RouterLink
+                              to={`/projects/${projectId}/runs/${runId}/executions/${execution.id}`}
+                              data-testid="RunDetail.Executions.Row.Link"
+                            >
+                              {execution.caseTitle}
+                            </RouterLink>
+                          </Box>
+                        </Tooltip>
+                        {/*
+                          The pinned case version. This is what makes past results honest: the
+                          case may have been edited five times since, and this row still says
+                          which text was executed.
+                        */}
+                        <Tooltip title="The case version this execution ran against">
+                          <Box sx={{ flexShrink: 0 }}>
+                            <Identifier variant="muted">v{execution.caseVersionNo}</Identifier>
+                          </Box>
+                        </Tooltip>
+                      </Stack>
+                    </TableCell>
+                    <TableCell>
+                      {execution.status?.kind ? (
+                        <StatusChip kind={execution.status.kind} testId="RunDetail.Executions.Row.Status" />
+                      ) : (
+                        <Typography variant="caption" sx={{ color: 'text.secondary' }} data-testid="RunDetail.Executions.Row.Status">
+                          {statusLabels.UNTESTED}
+                        </Typography>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {execution.defects.length === 0 ? (
+                        <Box sx={{ color: 'text.secondary', fontSize: '0.75rem' }}>—</Box>
+                      ) : (
+                        <Stack sx={{ gap: 0.25 }}>
+                          {execution.defects.map((defect) => (
+                            <Box
+                              key={defect.id}
+                              component="a"
+                              href={defect.url}
+                              target="_blank"
+                              rel="noopener"
+                              sx={{ fontSize: '0.75rem' }}
+                              data-testid="RunDetail.Executions.Row.DefectLink"
+                            >
+                              <Identifier>{defect.externalKey}</Identifier>
+                              <Box component="span" aria-hidden="true" sx={{ ml: 0.5, color: 'text.secondary' }}>
+                                ↗
+                              </Box>
+                              <Box component="span" className="sr-only">
+                                (opens in a new tab)
+                              </Box>
+                            </Box>
+                          ))}
+                        </Stack>
+                      )}
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontSize: '0.75rem' }}>
+                      <Identifier variant="muted">{formatDuration(execution.durationMs)}</Identifier>
+                    </TableCell>
+                    <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                      {execution.executedAt ? (
+                        <Tooltip title={formatDateTime(execution.executedAt)}>
+                          <Box component="span">{execution.executedBy?.displayName ?? 'CI'}</Box>
+                        </Tooltip>
+                      ) : (
+                        <Box component="span">
+                          {execution.assignee ? `assigned to ${execution.assignee.displayName}` : 'unassigned'}
+                        </Box>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollX>
         )}
       </Panel>
     </Stack>
