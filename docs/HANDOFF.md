@@ -1,7 +1,25 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-01 (latest section: **§57, the `documentation` module** — the biggest MSW-only
-surface, closed. `GET`/`POST /doc-pages`, `GET`/`PATCH`/`DELETE /doc-pages/{id}`,
+**Date:** 2026-08-01 (latest section: **§58, the first real deployment** — the box exists.
+Hetzner CX23 at `203.0.113.10` (Helsinki), Ubuntu 24.04.4, serving
+`https://tcms.203-0-113-10.sslip.io` behind Caddy on a Let's Encrypt cert, with Postgres 17.10
+host-native and the two-role split live: `tcms_owner` and `tcms_app` both `rolsuper=f`,
+`rolbypassrls=f`, database owned by the migration role. **Infrastructure only — the product is not
+on it.** No image built, Flyway has never run, and the four RLS rows of the runbook's §12 checklist
+are still ⬜. The runbook was authored 2026-07-30 and marked *not yet executed*; executing it found
+**four errors in it**, and the shape of two of them is the finding: each presents as a symptom the
+document already explains, attributed to the wrong cause. **E2** — `ufw` drops container→host
+Postgres on `docker0`, presenting as the connection timeout §6 blames on a wrong bridge subnet (the
+bridge was right). **E3** — §9's `log` block cannot start under the packaged Caddy unit's
+`ProtectSystem=full` sandbox, and `caddy validate` says *"Valid configuration"*, and
+`chown caddy:caddy` makes `sudo -u caddy touch` succeed while the service stays down; the fix is a
+`LogsDirectory=` drop-in. **E1 is the one that generalises**: §6 carried a third copy of the
+privilege-split SQL under the instruction *"keep the two in step, they are the same contract"* — and
+it had already drifted, missing the `GRANT EXECUTE ON FUNCTIONS` that V7's `SECURITY DEFINER`
+function needs. V1–V5 would still have come up green, because V7 re-grants itself; the *next* such
+function would have failed at runtime, in a component with no test that could see it. The fix was to
+**delete** §6's copy rather than correct it. Same family as §48. Before that: **§57, the
+`documentation` module** — the biggest MSW-only surface, closed. `GET`/`POST /doc-pages`, `GET`/`PATCH`/`DELETE /doc-pages/{id}`,
 `PUT /doc-pages/{id}/status` and **`V18`**, which seeds the `doc_space` that `doc_page.space_id` has
 required since `V1` and **nothing had ever created** — the documentation module's `V5`, found by the
 first code that needed it. Three sessions in a row (§54, §55, §56) recorded that these reads needed
@@ -215,3 +233,4 @@ See [`docs/plans/2026-07-31-parallel-execution-rework.md`](plans/2026-07-31-para
 | [§55](handoff/55-m1-s19-inviting-a-colleague.md) | Inviting a colleague — the write nine sessions named, and the field the live pass added |
 | [§56](handoff/56-m1-s20-removing-a-person.md) | Removing a person — the half §55 named on its way out, and the token that outlived the status |
 | [§57](handoff/57-m1-s21-the-documentation-module.md) | The `documentation` module — the biggest MSW-only surface, and the block id that must survive an edit |
+| [§58](handoff/58-the-first-real-deployment.md) | The first real deployment — the box exists, and four things the runbook only learned by being run |
