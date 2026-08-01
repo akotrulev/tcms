@@ -35,27 +35,73 @@ package com.tcms.repository;
  * enum. Left out rather than added: putting it on the wire would invent a member the SPA has no
  * label for (in {@code lib/labels.ts} a new member is a compile error until it is labelled), and
  * adding it to {@code openapi.yaml} is a contract change with no consumer on the other side.
+ *
+ * <h2>Severity and label are here for the same reason the attribute is</h2>
+ *
+ * <p>The dashboard's "Needs attention" panel sorts its tiles by severity rather than alphabetically,
+ * because the panel is the one people act on and the two error-severity signals mean something is
+ * wrong <em>now</em>. Both properties sit beside the attribute so that adding a tenth signal is one
+ * line here and nothing anywhere else — the alternative, a severity map in {@code DashboardService},
+ * is a second list to keep in step and the symptom of missing an entry would be a genuinely broken
+ * case tiled as neutral.
+ *
+ * <p>The split: <strong>ERROR</strong> is "the case is now wrong" — its spec moved, or its
+ * automation is failing against a case that has since changed. <strong>WARNING</strong> is "this is
+ * decaying" — an approval or an execution old enough to stop meaning anything. <strong>INFO</strong>
+ * is "something is missing but nothing is broken" — no requirement link, no home.
  */
 public enum HealthSignal {
 
-    OUTDATED_SPEC_CHANGED("outdatedSpecChanged"),
-    STALE_APPROVAL("staleApproval"),
-    CONDITION_DRIFT("conditionDrift"),
-    STALE_AUTOMATION("staleAutomation"),
-    NEVER_EXECUTED("neverExecuted"),
-    LONG_UNEXECUTED("longUnexecuted"),
-    UNLINKED("unlinked"),
-    FAILING_REPEATEDLY("failingRepeatedly"),
-    ORPHANED("orphaned");
+    // Declaration order is unchanged and load-bearing: CaseSearch.tallyHealth selects one
+    // aggregate per constant and reads the results back BY POSITION. Sorting for display is
+    // severity()'s job and happens where the tiles are built.
+    OUTDATED_SPEC_CHANGED("outdatedSpecChanged", Severity.ERROR, "Outdated — spec changed"),
+    STALE_APPROVAL("staleApproval", Severity.WARNING, "Stale approval"),
+    CONDITION_DRIFT("conditionDrift", Severity.ERROR, "Condition drift"),
+    STALE_AUTOMATION("staleAutomation", Severity.ERROR, "Stale automation"),
+    NEVER_EXECUTED("neverExecuted", Severity.WARNING, "Never executed"),
+    LONG_UNEXECUTED("longUnexecuted", Severity.WARNING, "Not run in 90 days"),
+    UNLINKED("unlinked", Severity.INFO, "Unlinked"),
+    FAILING_REPEATEDLY("failingRepeatedly", Severity.WARNING, "Failing repeatedly"),
+    ORPHANED("orphaned", Severity.INFO, "Orphaned");
+
+    /**
+     * {@code DashboardTile.severity} in {@code openapi.yaml}. Ordered worst first, which is the
+     * order the "Needs attention" panel sorts by.
+     *
+     * <p>Public because it is on the wire — {@link DashboardView.TileView} exposes it, and a
+     * package-private type behind a public accessor is a shape Jackson has no reason to be asked to
+     * reflect over.
+     */
+    public enum Severity {
+        ERROR,
+        WARNING,
+        INFO,
+        NEUTRAL
+    }
 
     private final String attribute;
+    private final Severity severity;
+    private final String label;
 
-    HealthSignal(String attribute) {
+    HealthSignal(String attribute, Severity severity, String label) {
         this.attribute = attribute;
+        this.severity = severity;
+        this.label = label;
     }
 
     /** The {@link CaseHealth} field this signal is stored in. */
     String attribute() {
         return attribute;
+    }
+
+    /** How loudly a dashboard tile for this signal shouts. */
+    Severity severity() {
+        return severity;
+    }
+
+    /** How this signal is written on a dashboard tile — see {@link LifecycleStatus#label()}. */
+    String label() {
+        return label;
     }
 }

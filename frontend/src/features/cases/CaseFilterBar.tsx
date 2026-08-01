@@ -53,11 +53,14 @@ export function CaseFilterBar({
   facets,
   dimensions,
   total,
+  ownerName,
 }: {
   state: CaseFilterState;
   facets: Facet[] | undefined;
   dimensions: ClassificationDimension[] | undefined;
   total: number | undefined;
+  /** Display name behind an active `ownerId`, when the loaded rows can supply one. */
+  ownerName?: string;
 }) {
   const { filters, hasActiveFilters, setFilter, clearFilters } = state;
 
@@ -183,6 +186,24 @@ export function CaseFilterBar({
           );
         })}
       </Stack>
+
+      {/*
+        The owner filter has no control of its own — it arrives only from a dashboard by-owner
+        segment — so without this the user lands on a narrowed list with nothing saying whose
+        cases they are looking at, and "Clear filters" as the only clue that it is narrowed at
+        all. A filter the UI applies but never states is the same defect class as one it drops:
+        both render a plausible page that answers a different question than the heading claims.
+      */}
+      {filters.ownerId && (
+        <Box>
+          <Chip
+            size="small"
+            label={`Owner: ${ownerName ?? 'one owner'}`}
+            onDelete={() => setFilter('ownerId', undefined)}
+            data-testid={`${TestIdPrefix}.Owner`}
+          />
+        </Box>
+      )}
 
       <Stack direction="row" sx={{ gap: 1.5, alignItems: 'center' }}>
         <Typography variant="body2" sx={{ color: 'text.secondary' }} data-testid={`${TestIdPrefix}.ResultCount`}>

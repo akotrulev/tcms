@@ -490,6 +490,13 @@ paths:
       - name: testLevelId
         in: query
         schema: { type: string, format: uuid }
+      - name: ownerId
+        in: query
+        description: |
+          Cases owned by one person. Added for the dashboard's by-owner breakdown, whose
+          segments are links carrying this predicate (plan §6o) — without it those links
+          dropped the owner and silently opened *everyone's* cases in that status.
+        schema: { type: string, format: uuid }
       - name: lifecycleStatus
         in: query
         schema:
@@ -1107,6 +1114,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/RepositoryDashboard' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /projects/{projectId}/reports:
     parameters: [{ $ref: '#/components/parameters/ProjectId' }]
@@ -2349,7 +2357,9 @@ components:
     # --------------------------------------------------------- reporting ---
     RepositoryDashboard:
       type: object
-      required: [generatedAt, lifecycle, health, byFeature, byOwner, automationCoverage, recentActivity]
+      required:
+        [generatedAt, lifecycle, health, healthComputedAt, byFeature, byOwner,
+         automationCoverage, recentActivity]
       properties:
         generatedAt: { type: string, format: date-time }
         lifecycle:
@@ -2358,6 +2368,18 @@ components:
         health:
           type: array
           items: { $ref: '#/components/schemas/DashboardTile' }
+        healthComputedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            When these signals were last derived, or **null when they never have been**.
+            The two are not the same and must not render the same: an empty `health` array
+            with a timestamp means "nothing is wrong", while one with `null` means "nobody
+            has looked". `case_health` is a read model with no writer yet (plan §6o), so
+            this is null in every deployment today — and a "Needs attention" panel that
+            renders empty without saying so is the reassuring-but-false screen §6p exists
+            to prevent.
         byFeature:
           type: array
           items: { $ref: '#/components/schemas/DashboardBreakdown' }
@@ -2376,14 +2398,22 @@ components:
               type: number
               description: automated / (total - notAutomatable) — honestly denominated (plan §6c).
         recentActivity:
+          description: |
+            Thirty days ending today, UTC, one point per day including days with no
+            activity. **There is deliberately no `approved` series.** Nothing in the schema
+            records *when* a case was approved — `test_case.lifecycle_status` is current
+            state, and `audit_event.changes` carries the version number rather than a field
+            diff by design — so the series could only ever be zero, and a flat zero line
+            states "nobody approved anything this month" about a client's work rather than
+            "this is not measured". It returns when the review workflow (§6g) gives
+            approval a timestamp to count.
           type: array
           items:
             type: object
-            required: [date, created, approved, modified]
+            required: [date, created, modified]
             properties:
               date: { type: string, format: date }
               created: { type: integer }
-              approved: { type: integer }
               modified: { type: integer }
 
     DashboardTile:

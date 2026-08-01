@@ -101,6 +101,8 @@ export interface CaseFilters {
   featureId?: string;
   testTypeId?: string;
   testLevelId?: string;
+  /** One owner. Exists so the dashboard's by-owner bars link to the cases they counted (§6o). */
+  ownerId?: string;
   lifecycleStatus?: LifecycleStatus[];
   automationStatus?: AutomationStatus[];
   priority?: Priority[];

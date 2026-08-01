@@ -106,6 +106,7 @@ public class CaseController {
             @RequestParam(required = false) UUID featureId,
             @RequestParam(required = false) UUID testTypeId,
             @RequestParam(required = false) UUID testLevelId,
+            @RequestParam(required = false) UUID ownerId,
             @RequestParam(required = false) List<LifecycleStatus> lifecycleStatus,
             @RequestParam(required = false) List<AutomationStatus> automationStatus,
             @RequestParam(required = false) List<Priority> priority,
@@ -116,7 +117,7 @@ public class CaseController {
             @RequestParam(defaultValue = CaseSort.DEFAULT) String sort) {
 
         CaseQuery request = new CaseQuery(
-                q, suiteId, featureId, testTypeId, testLevelId,
+                q, suiteId, featureId, testTypeId, testLevelId, ownerId,
                 lifecycleStatus, automationStatus, priority, healthSignal,
                 releaseVersion, page, size, sort);
 

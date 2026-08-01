@@ -93,27 +93,35 @@ function DashboardBody({ data, projectId }: { data: RepositoryDashboard; project
         title="Needs attention"
         testId="Dashboard.Health"
         actions={
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            Each tile opens the cases behind it
-          </Typography>
+          data.healthComputedAt !== null && (
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+              Each tile opens the cases behind it
+            </Typography>
+          )
         }
       >
-        <TileRow
-          tiles={[...data.health].sort((a, b) => severityRank(a.severity) - severityRank(b.severity))}
-          casesPath={casesPath}
-          testId="Dashboard.Health"
-        />
+        <HealthPanel data={data} casesPath={casesPath} />
       </Panel>
 
       <Stack direction={{ xs: 'column', lg: 'row' }} sx={{ gap: 3, alignItems: 'stretch' }}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Panel title="By feature" testId="Dashboard.ByFeature">
-            <BreakdownList rows={data.byFeature} casesPath={casesPath} testId="Dashboard.ByFeature" />
+            <BreakdownList
+              rows={data.byFeature}
+              casesPath={casesPath}
+              testId="Dashboard.ByFeature"
+              emptyMessage="No case has been given a feature yet. Features are a per-project vocabulary you define, and cases are classified against it."
+            />
           </Panel>
         </Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Panel title="By owner" testId="Dashboard.ByOwner">
-            <BreakdownList rows={data.byOwner} casesPath={casesPath} testId="Dashboard.ByOwner" />
+            <BreakdownList
+              rows={data.byOwner}
+              casesPath={casesPath}
+              testId="Dashboard.ByOwner"
+              emptyMessage="No case has an owner yet."
+            />
           </Panel>
         </Box>
       </Stack>
@@ -126,6 +134,46 @@ function DashboardBody({ data, projectId }: { data: RepositoryDashboard; project
         <ActivityChart activity={data.recentActivity} />
       </Panel>
     </Stack>
+  );
+}
+
+/**
+ * The three states of "Needs attention", which are genuinely three and not two.
+ *
+ * An empty tile list is a **claim** that nothing is wrong. That claim is only true if somebody
+ * looked, and `healthComputedAt` is the server saying whether anybody has: it is `null` while
+ * `case_health` has no writer, which is every deployment today. Rendering the empty panel and
+ * the never-computed panel identically is the same defect as §46's `met: null` reading as a
+ * failed gate — a reassuring sentence where the honest one is "we don't know yet".
+ *
+ * Exported for its own test: two of these three branches are unreachable through the mock (which
+ * always supplies both a timestamp and tiles), and §46's finding is that no test written before a
+ * state is reachable can fail on it.
+ */
+export function HealthPanel({ data, casesPath }: { data: RepositoryDashboard; casesPath: string }) {
+  if (data.healthComputedAt === null) {
+    return (
+      <Typography variant="body2" sx={{ color: 'text.secondary' }} data-testid="Dashboard.Health.NotComputed">
+        Health signals have not been computed for this project yet, so this panel is empty
+        because nothing has been checked — not because nothing is wrong.
+      </Typography>
+    );
+  }
+
+  if (data.health.length === 0) {
+    return (
+      <Typography variant="body2" sx={{ color: 'text.secondary' }} data-testid="Dashboard.Health.Clear">
+        Nothing needs attention. Last checked {formatDateTime(data.healthComputedAt)}.
+      </Typography>
+    );
+  }
+
+  return (
+    <TileRow
+      tiles={[...data.health].sort((a, b) => severityRank(a.severity) - severityRank(b.severity))}
+      casesPath={casesPath}
+      testId="Dashboard.Health"
+    />
   );
 }
 
@@ -217,11 +265,28 @@ function BreakdownList({
   rows,
   casesPath,
   testId,
+  emptyMessage,
 }: {
   rows: DashboardBreakdown[];
   casesPath: string;
   testId: string;
+  emptyMessage: string;
 }) {
+  /*
+    A breakdown with no rows renders an empty bordered box — a panel with a heading and nothing
+    under it, which reads as a failed load rather than as "nobody has classified anything yet".
+    Live data reaches this immediately: a project's Feature vocabulary starts empty by design
+    (inventing a client's taxonomy is how a controlled vocabulary gets worked around), so this is
+    the FIRST state of the panel on every real project, not an edge case.
+  */
+  if (rows.length === 0) {
+    return (
+      <Typography variant="body2" sx={{ color: 'text.secondary' }} data-testid={`${testId}.Empty`}>
+        {emptyMessage}
+      </Typography>
+    );
+  }
+
   const max = Math.max(
     1,
     ...rows.map((row) => row.segments.reduce((sum, segment) => sum + segment.count, 0)),
@@ -334,19 +399,26 @@ function AutomationCoverage({
 }
 
 /**
- * A 30-day activity chart, in CSS grid. No chart library: three series over thirty points
+ * A 30-day activity chart, in CSS grid. No chart library: two series over thirty points
  * does not justify the bundle, and a hand-drawn bar column can carry a real accessible
  * label per day, which most chart wrappers make awkward.
+ *
+ * **There used to be an "Approved" series and it was removed with the contract's field.**
+ * Nothing in the schema records *when* a case was approved — `lifecycleStatus` is current state,
+ * and the audit trail deliberately stores the version number rather than a field diff — so the
+ * server can only ever have sent zeros. A flat zero line labelled "Approved" states that nobody
+ * approved anything this month, which is a claim about the client's work rather than an admission
+ * that it is not measured. It comes back when the review workflow (§6g) gives approval a
+ * timestamp.
  */
 function ActivityChart({ activity }: { activity: RepositoryDashboard['recentActivity'] }) {
-  const max = Math.max(1, ...activity.map((d) => Math.max(d.created, d.approved, d.modified)));
+  const max = Math.max(1, ...activity.map((d) => Math.max(d.created, d.modified)));
 
   return (
     <Box>
       <Stack direction="row" sx={{ gap: 2, mb: 1.5 }}>
         {[
           { label: 'Created', color: 'var(--color-info)' },
-          { label: 'Approved', color: 'var(--color-passed)' },
           { label: 'Modified', color: 'var(--color-skipped)' },
         ].map((series) => (
           <Stack key={series.label} direction="row" sx={{ alignItems: 'center', gap: 0.75 }}>
@@ -360,16 +432,23 @@ function ActivityChart({ activity }: { activity: RepositoryDashboard['recentActi
         {activity.map((day) => (
           <Tooltip
             key={day.date}
-            title={`${day.date} — ${day.created} created, ${day.approved} approved, ${day.modified} modified`}
+            title={`${day.date} — ${day.created} created, ${day.modified} modified`}
           >
             <Stack
               direction="row"
               sx={{ flex: 1, gap: '1px', alignItems: 'flex-end', height: '100%', minWidth: 0 }}
-              aria-label={`${day.date}: ${day.created} created, ${day.approved} approved, ${day.modified} modified`}
+              aria-label={`${day.date}: ${day.created} created, ${day.modified} modified`}
             >
-              <Box sx={{ flex: 1, height: `${(day.created / max) * 100}%`, bgcolor: 'var(--color-info)', minHeight: 1 }} />
-              <Box sx={{ flex: 1, height: `${(day.approved / max) * 100}%`, bgcolor: 'var(--color-passed)', minHeight: 1 }} />
-              <Box sx={{ flex: 1, height: `${(day.modified / max) * 100}%`, bgcolor: 'var(--color-skipped)', minHeight: 1 }} />
+              {/*
+                `minHeight: '1px'` as a STRING, and that is not a style preference. MUI's sizing
+                system transforms a unitless number ≤ 1 into a percentage, so `minHeight: 1` means
+                `minHeight: 100%` — which forced EVERY bar to full height and drew a month of
+                uniform activity for a project that had one busy day. It survived three browser
+                passes because the mock fixture has activity on most days, so a chart that was
+                always wrong looked like a chart with data in it.
+              */}
+              <Box sx={{ flex: 1, height: `${(day.created / max) * 100}%`, bgcolor: 'var(--color-info)', minHeight: '1px' }} />
+              <Box sx={{ flex: 1, height: `${(day.modified / max) * 100}%`, bgcolor: 'var(--color-skipped)', minHeight: '1px' }} />
             </Stack>
           </Tooltip>
         ))}

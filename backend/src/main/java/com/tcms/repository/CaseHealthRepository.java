@@ -1,5 +1,6 @@
 package com.tcms.repository;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
@@ -31,4 +32,21 @@ public interface CaseHealthRepository extends JpaRepository<CaseHealth, UUID> {
              WHERE h.caseId IN :caseIds
             """)
     List<CaseHealth> findForCases(@Param("caseIds") Collection<UUID> caseIds);
+
+    /**
+     * The most recent moment any of this project's health was derived, or null if it never has been.
+     *
+     * <p>The dashboard's one job for it is telling those two apart. An empty "Needs attention" panel
+     * with a timestamp means the project is clean; the same panel with nothing behind it means
+     * nobody has looked, and rendering them identically is the reassuring-but-false screen. Null is
+     * the answer in every deployment today, because no writer for this read model exists yet.
+     *
+     * <p>{@code MAX} rather than a row count, so the panel can eventually say <em>when</em> — and so
+     * a project whose health is computed per case does not report a moment that belongs to one row.
+     */
+    @Query("""
+            SELECT MAX(h.computedAt) FROM CaseHealth h
+             WHERE h.projectId = :projectId
+            """)
+    Instant latestComputedAt(@Param("projectId") UUID projectId);
 }

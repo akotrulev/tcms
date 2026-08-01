@@ -84,6 +84,8 @@ final class CaseSpecifications {
         classified(scope.testTypeIds(), root, query, cb).ifPresent(all::add);
         classified(scope.testLevelIds(), root, query, cb).ifPresent(all::add);
 
+        owner(request, root, cb).ifPresent(all::add);
+
         anyOf(request.lifecycleStatus(), root.get("lifecycleStatus"), cb).ifPresent(all::add);
         anyOf(request.automationStatus(), root.get("automationStatus"), cb).ifPresent(all::add);
         anyOf(request.priority(), root.get("priority"), cb).ifPresent(all::add);
@@ -233,6 +235,29 @@ final class CaseSpecifications {
                         cb.equal(health.get("caseId"), root.get("id")),
                         cb.or(anySignal.toArray(Predicate[]::new))));
         return Optional.of(cb.exists(raised));
+    }
+
+    /**
+     * {@code ownerId} — the cases one person owns.
+     *
+     * <p>A plain equality on the column, deliberately without a membership check. Whether the id
+     * names anyone at all is not asked: an id belonging to another company matches nothing, because
+     * {@code owner_id} on a case in <em>this</em> company can only ever hold a user this company
+     * knows — and answering differently for "no such person" than for "that person owns nothing"
+     * would make the parameter an oracle for user ids the caller cannot otherwise reach, the same
+     * reasoning {@link CaseService#subtreeOf} gives for classification values.
+     *
+     * <p>Unowned cases are reachable through no value of this filter, which is correct rather than a
+     * gap: {@code ownerId=} empty means "no opinion" over HTTP, so an "unassigned" filter would need
+     * a sentinel the contract does not define. The dashboard's by-owner breakdown has the matching
+     * shape — it lists people, and cases with no owner are counted in no row.
+     */
+    private static Optional<Predicate> owner(
+            CaseQuery request, Root<TestCase> root, CriteriaBuilder cb) {
+
+        return request.ownerId() == null
+                ? Optional.empty()
+                : Optional.of(cb.equal(root.get("ownerId"), request.ownerId()));
     }
 
     /**

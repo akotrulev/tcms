@@ -180,6 +180,38 @@ describe('useCaseFilters — writing the URL', () => {
     expect(search(result).get('suiteId')).toBe('s-1')
   })
 
+  it('round-trips ownerId, which arrives only from a dashboard drill-down', () => {
+    /*
+      The by-owner bars on the dashboard are links carrying `ownerId`, and there is no control
+      in the filter bar that sets it. So this parameter's ONLY path into the app is a URL
+      somebody else wrote — which makes the round trip the whole of its correctness, and makes
+      `hasActiveFilters` load-bearing: without it the list would read as unfiltered and offer no
+      way back to everyone's cases.
+    */
+    const { result } = harness('/projects/p/cases?ownerId=u-7&lifecycleStatus=DRAFT')
+
+    expect(result.current.filters.ownerId).toBe('u-7')
+
+    act(() => result.current.setFilter('ownerId', undefined))
+    expect(search(result).has('ownerId')).toBe(false)
+    expect(result.current.filters.lifecycleStatus).toEqual(['DRAFT'])
+  })
+
+  it('counts ownerId ALONE as an active filter', () => {
+    /*
+      Split out from the round trip above, which asserted this against a URL that ALSO carried a
+      lifecycleStatus — so `hasActiveFilters` was true either way and dropping ownerId from the
+      filter set left the test green. A fixture that cannot distinguish the right behaviour from
+      the wrong one proves nothing; found by mutating the parameter out.
+
+      It matters because this is the ONLY filter with no control in the bar: if it does not count
+      as active, the list renders narrowed with no "Clear filters" and no way back.
+    */
+    const { result } = harness('/projects/p/cases?ownerId=u-7')
+
+    expect(result.current.hasActiveFilters).toBe(true)
+  })
+
   it('replaces the history entry rather than pushing one per keystroke', async () => {
     const { result } = harness('/projects/p/cases')
 

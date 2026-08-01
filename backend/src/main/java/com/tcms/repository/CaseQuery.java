@@ -21,6 +21,9 @@ import java.util.regex.Pattern;
  *                        that silently stops including children the day someone does is worse
  *                        than one that never did
  * @param testLevelId     a Test Level value, on the same terms
+ * @param ownerId         the case's owner. Exact, not a subtree and not a name search — it exists
+ *                        to make the dashboard's by-owner segments reproduce their own counts
+ *                        (plan §6o), and those segments carry an id
  * @param lifecycleStatus OR within the list, AND against the other filters. Empty means "no
  *                        opinion", never "match nothing" — an unset filter and an
  *                        explicitly-empty one arrive identically over HTTP, so they cannot be
@@ -38,6 +41,7 @@ public record CaseQuery(
         UUID featureId,
         UUID testTypeId,
         UUID testLevelId,
+        UUID ownerId,
         List<LifecycleStatus> lifecycleStatus,
         List<AutomationStatus> automationStatus,
         List<Priority> priority,
@@ -52,6 +56,26 @@ public record CaseQuery(
 
     /** The contract's stated maximum. A larger request is clamped, never refused. */
     public static final int MAX_SIZE = 200;
+
+    /**
+     * Every case in scope — no filter of any kind, which is what a whole-project tally counts over.
+     *
+     * <p>Exists so {@link DashboardService} can reuse {@link CaseSearch}'s tallies rather than write
+     * its own {@code GROUP BY} over its own predicate. That reuse is the point and not a saving:
+     * a dashboard tile is a <em>link into the case list</em>, so the tile's count and the list it
+     * opens must be the same query. Sharing {@link CaseSpecifications} makes them the same query by
+     * construction, instead of two predicates that agree until one of them learns about
+     * soft-deleted suites and the other does not.
+     *
+     * <p>Paging is irrelevant here — the tallies and the count select aggregates, never a page — so
+     * the defaults are left as they are rather than given meaningless values.
+     */
+    static CaseQuery unfiltered() {
+        return new CaseQuery(
+                null, null, null, null, null, null,
+                List.of(), List.of(), List.of(), List.of(),
+                null, 0, DEFAULT_SIZE, null);
+    }
 
     /**
      * {@code TC-1}, and the underscore spelling the SPA's mock also accepts.

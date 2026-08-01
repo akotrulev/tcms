@@ -191,6 +191,14 @@ export const dashboard: RepositoryDashboard = {
   generatedAt: '2026-07-30T09:42:00Z',
   lifecycle: lifecycleTiles,
   health: healthTiles,
+  /*
+    The mock supplies a timestamp because its health tiles carry counts — a fixture whose
+    signals were computed. The REAL server returns null here, because nothing writes
+    case_health yet, and the page must render both. Keeping the mock on the populated branch
+    is deliberate: it is the branch the tiles above exercise, and the null branch has its own
+    unit test rather than being the only thing the mock can show.
+  */
+  healthComputedAt: '2026-07-30T09:40:00Z',
   byFeature,
   byOwner,
   automationCoverage: {
@@ -207,7 +215,9 @@ export const dashboard: RepositoryDashboard = {
     return {
       date: d.toISOString().slice(0, 10),
       created: [0, 2, 5, 1, 8, 3, 0, 0, 4, 9, 12, 6, 2, 0, 0, 7, 11, 4, 3, 5, 0, 0, 9, 14, 8, 6, 2, 0, 0, 3][i],
-      approved: [0, 1, 3, 0, 5, 2, 0, 0, 2, 6, 9, 4, 1, 0, 0, 4, 8, 2, 2, 3, 0, 0, 6, 10, 5, 4, 1, 0, 0, 2][i],
+      // No `approved` series: nothing in the schema records when a case was approved, so the
+      // real server cannot send one. A mock richer than the contract is a mock that lets a page
+      // read a field the server never sends (§46).
       modified: [1, 4, 8, 3, 12, 6, 1, 0, 7, 14, 18, 9, 4, 1, 0, 11, 16, 7, 5, 8, 0, 1, 13, 21, 12, 9, 3, 1, 0, 5][i],
     };
   }),

@@ -123,6 +123,12 @@ function filterCases(url: URL): TestCaseSummary[] {
     if (value) rows = rows.filter((c) => c.testLevel === value.name);
   }
 
+  // The dashboard's by-owner segments link here carrying this. Without it the mock drill-down
+  // silently opens everyone's cases while the live one narrows correctly — a mock-vs-live
+  // divergence that would make the browser pass disagree with the test suite.
+  const ownerId = p.get('ownerId');
+  if (ownerId) rows = rows.filter((c) => c.owner?.id === ownerId);
+
   const multi = (key: string) => p.getAll(key).filter(Boolean);
 
   const lifecycle = multi('lifecycleStatus');

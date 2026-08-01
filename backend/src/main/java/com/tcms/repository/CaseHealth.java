@@ -5,6 +5,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -36,9 +37,16 @@ import org.hibernate.annotations.Filter;
  * referential integrity. It is nonetheless under {@code FORCE ROW LEVEL SECURITY} like every other
  * company-owned table, so the missing FK costs nothing in isolation terms.
  *
- * <p>{@code computed_at} is not mapped. It matters to whatever recomputes this and to nothing on
- * the read side; a summary that showed "health as of…" would be reporting on the freshness of a
- * job the user cannot see or trigger.
+ * <p><del>{@code computed_at} is not mapped. It matters to whatever recomputes this and to nothing
+ * on the read side; a summary that showed "health as of…" would be reporting on the freshness of a
+ * job the user cannot see or trigger.</del> <strong>→ superseded by the dashboard.</strong> The
+ * reasoning held while the only reader was a per-case chip list, where absent signals and
+ * uncomputed signals render identically and harmlessly. It fails for a panel headed <em>"Needs
+ * attention"</em>: empty there is a <em>claim</em> that nothing needs attention, and with no writer
+ * for this table that claim is false in every deployment. The column is what tells the two apart,
+ * so it is mapped and {@code DashboardView.healthComputedAt} carries it. The original objection is
+ * still right about what not to do with it — the SPA reports "not computed yet", never a job's
+ * freshness.
  */
 @Entity
 @Table(name = "case_health")
@@ -90,6 +98,17 @@ public class CaseHealth {
      */
     @Column(name = "incomplete", nullable = false)
     private boolean incomplete;
+
+    /**
+     * When this row was last derived.
+     *
+     * <p>Mapped for the dashboard, which reports the newest of these across a project so that "no
+     * signal is raised" and "no signal has been computed" render as different sentences. Nothing
+     * writes it yet, so the aggregate over an empty table is null — which is exactly the state the
+     * dashboard needs to be able to distinguish.
+     */
+    @Column(name = "computed_at", nullable = false)
+    private Instant computedAt;
 
     /** JPA only. */
     protected CaseHealth() {

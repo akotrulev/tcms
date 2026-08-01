@@ -808,6 +808,12 @@ export interface paths {
                 featureId?: string;
                 testTypeId?: string;
                 testLevelId?: string;
+                /**
+                 * @description Cases owned by one person. Added for the dashboard's by-owner breakdown, whose
+                 *     segments are links carrying this predicate (plan §6o) — without it those links
+                 *     dropped the owner and silently opened *everyone's* cases in that status.
+                 */
+                ownerId?: string;
                 lifecycleStatus?: components["schemas"]["LifecycleStatus"][];
                 automationStatus?: components["schemas"]["AutomationStatus"][];
                 priority?: components["schemas"]["Priority"][];
@@ -840,6 +846,12 @@ export interface paths {
                     featureId?: string;
                     testTypeId?: string;
                     testLevelId?: string;
+                    /**
+                     * @description Cases owned by one person. Added for the dashboard's by-owner breakdown, whose
+                     *     segments are links carrying this predicate (plan §6o) — without it those links
+                     *     dropped the owner and silently opened *everyone's* cases in that status.
+                     */
+                    ownerId?: string;
                     lifecycleStatus?: components["schemas"]["LifecycleStatus"][];
                     automationStatus?: components["schemas"]["AutomationStatus"][];
                     priority?: components["schemas"]["Priority"][];
@@ -900,6 +912,12 @@ export interface paths {
                     featureId?: string;
                     testTypeId?: string;
                     testLevelId?: string;
+                    /**
+                     * @description Cases owned by one person. Added for the dashboard's by-owner breakdown, whose
+                     *     segments are links carrying this predicate (plan §6o) — without it those links
+                     *     dropped the owner and silently opened *everyone's* cases in that status.
+                     */
+                    ownerId?: string;
                     lifecycleStatus?: components["schemas"]["LifecycleStatus"][];
                     automationStatus?: components["schemas"]["AutomationStatus"][];
                     priority?: components["schemas"]["Priority"][];
@@ -2069,6 +2087,7 @@ export interface paths {
                         "application/json": components["schemas"]["RepositoryDashboard"];
                     };
                 };
+                404: components["responses"]["NotFound"];
             };
         };
         put?: never;
@@ -3155,6 +3174,17 @@ export interface components {
             generatedAt: string;
             lifecycle: components["schemas"]["DashboardTile"][];
             health: components["schemas"]["DashboardTile"][];
+            /**
+             * Format: date-time
+             * @description When these signals were last derived, or **null when they never have been**.
+             *     The two are not the same and must not render the same: an empty `health` array
+             *     with a timestamp means "nothing is wrong", while one with `null` means "nobody
+             *     has looked". `case_health` is a read model with no writer yet (plan §6o), so
+             *     this is null in every deployment today — and a "Needs attention" panel that
+             *     renders empty without saying so is the reassuring-but-false screen §6p exists
+             *     to prevent.
+             */
+            healthComputedAt: string | null;
             byFeature: components["schemas"]["DashboardBreakdown"][];
             byOwner: components["schemas"]["DashboardBreakdown"][];
             automationCoverage: {
@@ -3165,11 +3195,20 @@ export interface components {
                 /** @description automated / (total - notAutomatable) — honestly denominated (plan §6c). */
                 coveragePercent: number;
             };
+            /**
+             * @description Thirty days ending today, UTC, one point per day including days with no
+             *     activity. **There is deliberately no `approved` series.** Nothing in the schema
+             *     records *when* a case was approved — `test_case.lifecycle_status` is current
+             *     state, and `audit_event.changes` carries the version number rather than a field
+             *     diff by design — so the series could only ever be zero, and a flat zero line
+             *     states "nobody approved anything this month" about a client's work rather than
+             *     "this is not measured". It returns when the review workflow (§6g) gives
+             *     approval a timestamp to count.
+             */
             recentActivity: {
                 /** Format: date */
                 date: string;
                 created: number;
-                approved: number;
                 modified: number;
             }[];
         };

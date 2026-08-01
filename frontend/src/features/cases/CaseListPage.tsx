@@ -116,6 +116,19 @@ export function CaseListPage() {
             facets={cases.data?.facets}
             dimensions={dimensions.data}
             total={cases.data?.total}
+            /*
+              Resolved from the rows rather than fetched: every row in an owner-filtered list
+              has that owner by construction, so the first one names them. There is no user
+              lookup to call here and adding one to label a chip would be a request per
+              navigation. Undefined when the filter matches nothing — the bar says "one owner"
+              instead, which is still more than the silence this replaced.
+            */
+            ownerName={
+              filters.ownerId
+                ? cases.data?.items.find((row) => row.owner?.id === filters.ownerId)?.owner
+                    ?.displayName
+                : undefined
+            }
           />
 
           {selection.length > 0 && (
