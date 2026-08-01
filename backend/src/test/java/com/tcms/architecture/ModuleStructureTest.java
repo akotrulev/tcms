@@ -63,15 +63,18 @@ class ModuleStructureTest {
 
         assertThat(detected)
                 .as("""
-                        The seven modules that exist today — `execution` joined them in backend M2 \
-                        slice 1. Adding a module here is expected as the plan's remaining modules land \
-                        (documentation, reporting, work, shared) — but it must be a deliberate edit, so \
-                        that whoever adds one also reads the allowedDependencies rule they are now \
-                        subject to. In `execution`'s case that rule is the whole design: it may not \
-                        depend on `repository`, and its package comment records what it does instead.""")
+                        The eight modules that exist today — `execution` joined them in backend M2 \
+                        slice 1 and `work` in §53. Adding a module here is expected as the plan's \
+                        remaining modules land (documentation, reporting, shared) — but it must be a \
+                        deliberate edit, so that whoever adds one also reads the allowedDependencies \
+                        rule they are now subject to. In `execution`'s case that rule is the whole \
+                        design: it may not depend on `repository`, and its package comment records \
+                        what it does instead. `work` is the sharper case — it may depend on NEITHER \
+                        `execution` nor `repository`, while the derived half of the board is made \
+                        entirely of their rows, so both edges are concentrated in `work.BoardFacts`.""")
                 .containsExactly(
                         "auth", "execution", "identity", "project", "provisioning", "repository",
-                        "tenancy");
+                        "tenancy", "work");
     }
 
     @Test

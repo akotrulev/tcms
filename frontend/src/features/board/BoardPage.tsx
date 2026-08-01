@@ -1,6 +1,8 @@
-import { Alert, Box, Chip, Stack, Tooltip, Typography } from '@mui/material';
+import { Alert, Box, Button, Chip, Stack, Tooltip, Typography } from '@mui/material';
 import { useSnackbar } from 'notistack';
 import { useState } from 'react';
+import { PermissionGate } from '../../components/PermissionGate';
+import { TaskCreateDialog } from './TaskCreateDialog';
 import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import type { WorkItem, WorkItemStatus } from '../../api/types';
@@ -49,6 +51,8 @@ export function BoardPage() {
 
   const project = useProject(projectId);
   const items = useWorkItems(projectId, mine);
+  const [creating, setCreating] = useState(false);
+  const { enqueueSnackbar } = useSnackbar();
 
   return (
     <Box>
@@ -62,7 +66,7 @@ export function BoardPage() {
         ]}
         subtitle="Tasks alongside the work the repository already knows about — assigned executions, pending reviews and cases that need attention."
         actions={
-          <Stack direction="row" sx={{ gap: 0.5 }}>
+          <Stack direction="row" sx={{ gap: 0.5, alignItems: 'center' }}>
             {(
               [
                 { value: false, label: 'Everyone' },
@@ -85,8 +89,35 @@ export function BoardPage() {
                 sx={{ cursor: 'pointer' }}
               />
             ))}
+            {/*
+              Disable-don't-hide (§31): a Viewer sees the button greyed with a reason, which teaches
+              that the capability exists and is worth asking for. Hiding it would teach that the
+              product cannot do it, which is a lie.
+            */}
+            <PermissionGate projectId={projectId} permission="workitem:manage">
+              {({ allowed }) => (
+                <Button
+                  variant="contained"
+                  size="small"
+                  disabled={!allowed}
+                  onClick={() => setCreating(true)}
+                  data-testid="Board.NewTask"
+                  sx={{ ml: 1 }}
+                >
+                  New task
+                </Button>
+              )}
+            </PermissionGate>
           </Stack>
         }
+      />
+
+      <TaskCreateDialog
+        projectId={projectId}
+        mine={mine}
+        open={creating}
+        onClose={() => setCreating(false)}
+        onCreated={(task) => enqueueSnackbar(`Added “${task.title}”`, { variant: 'success' })}
       />
 
       <DataRegion
@@ -107,7 +138,8 @@ export function BoardPage() {
   );
 }
 
-function Board({ items, projectId, mine }: { items: WorkItem[]; projectId: string; mine: boolean }) {
+/** Exported for its test — the columns and the refusal are the logic worth pinning. */
+export function Board({ items, projectId, mine }: { items: WorkItem[]; projectId: string; mine: boolean }) {
   const { enqueueSnackbar } = useSnackbar();
   const move = useMoveWorkItem(projectId, mine);
   const [dragging, setDragging] = useState<WorkItem | null>(null);

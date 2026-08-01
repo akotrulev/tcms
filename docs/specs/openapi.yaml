@@ -1425,7 +1425,15 @@ paths:
         is the one thing §6l's design exists to prevent: the moment a card's status is
         stored separately from its execution's, the two diverge and the board stops being
         trusted. Derived items have no create endpoint because they are not stored.
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      # NO Idempotency-Key, unlike POST /cases and POST /plans — and this is a deliberate
+      # omission rather than an oversight. `work_item` has no created_idempotency_key
+      # column and no partial index for one (V14 added both for plans and cases), so
+      # honouring the header needs a migration. Declaring it here without that column is
+      # precisely §50's defect in its worse direction: the header would be in the reviewed
+      # spec, generated into schema.d.ts and offered by autocomplete, while the server
+      # ignored it — so a client would believe its retries were deduplicated when every
+      # one of them created another card. Recorded in §53's Not done; the repair is
+      # contract-first, together with the column.
       requestBody:
         required: true
         content:
@@ -1438,14 +1446,6 @@ paths:
             Location:
               schema: { type: string }
               description: The new work item's canonical URL.
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/WorkItem' }
-        '200':
-          # A retry carrying an Idempotency-Key that already created a task. Same reasoning
-          # as POST /plans: 200 rather than 201 so a client can tell "I made this" from
-          # "I already had this", and no Location, because this request created nothing.
-          description: Replayed — this Idempotency-Key already created a task
           content:
             application/json:
               schema: { $ref: '#/components/schemas/WorkItem' }

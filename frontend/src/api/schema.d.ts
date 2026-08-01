@@ -2492,21 +2492,7 @@ export interface paths {
         post: {
             parameters: {
                 query?: never;
-                header?: {
-                    /**
-                     * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
-                     *     already succeeded answers **200** with the case that intent created, instead of creating a
-                     *     second one — so pressing Save again after a timeout is safe.
-                     *
-                     *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
-                     *     it across retries. A key generated per attempt is the mistake that makes the header look
-                     *     right and do nothing.
-                     *
-                     *     Scoped to the project the request is addressed to, which is the scope the uniqueness
-                     *     constraint behind it uses. Optional: omitted, every call creates. At most 200 characters.
-                     */
-                    "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
-                };
+                header?: never;
                 path?: never;
                 cookie?: never;
             };
@@ -2516,15 +2502,6 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description Replayed — this Idempotency-Key already created a task */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["WorkItem"];
-                    };
-                };
                 /** @description Created */
                 201: {
                     headers: {
