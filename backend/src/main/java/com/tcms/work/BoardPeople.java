@@ -4,7 +4,7 @@ import com.tcms.identity.AppUser;
 import com.tcms.identity.AppUserRepository;
 import com.tcms.identity.CompanyMembership;
 import com.tcms.identity.CompanyMembershipRepository;
-import com.tcms.identity.MembershipStatus;
+import com.tcms.identity.ProjectMembershipService;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -28,33 +28,41 @@ class BoardPeople {
 
     private final CompanyMembershipRepository memberships;
     private final AppUserRepository users;
+    private final ProjectMembershipService projectMembers;
 
-    BoardPeople(CompanyMembershipRepository memberships, AppUserRepository users) {
+    BoardPeople(
+            CompanyMembershipRepository memberships,
+            AppUserRepository users,
+            ProjectMembershipService projectMembers) {
+
         this.memberships = memberships;
         this.users = users;
+        this.projectMembers = projectMembers;
     }
 
     /**
-     * Whether {@code userId} is an <strong>active member of this company</strong>.
+     * Whether {@code userId} may be handed work in this project.
      *
-     * <p>Not the same question as "does this id name an account", and {@code ExecutionPeople}'s
-     * header records what conflating them costs: {@code app_user} is instance-level with no
-     * {@code company_id} (ERD §0.1's exception list, because one person works with several clients),
-     * so an existence check accepts a user belonging to <em>another client entirely</em>. On this
-     * module's surface that would mean assigning a client's task to a stranger and printing their
-     * name on this company's board.
+     * <p>Delegated in full to {@code identity.ProjectMembershipService}, and that delegation is the
+     * §54 change worth knowing about. This module used to answer half the question itself —
+     * "is this an active member of the company" — and {@code BoardService} ANDed the other half
+     * ("do they hold a grant on the project") from {@code ProjectAccess}. Both halves were right and
+     * the arrangement was still wrong, because {@code GET /projects/{id}/members} now builds the
+     * SPA's assignee picker from the same rule. Two expressions of one predicate drift, and the
+     * direction they drift is the harmful one: a picker offering somebody the create refuses is a
+     * form the user fills in correctly and cannot submit.
      *
-     * <p>{@code ACTIVE}, not merely present: an {@code INVITED} membership conveys nothing until it
-     * is accepted, so an unaccepted invitation must not become a way to be handed work.
+     * <p>So there is one implementation and this is a call to it. What is asked of {@code identity}
+     * is still never <em>may the caller</em> — the gate stays {@code project.ProjectService} — but
+     * <em>may this other person be given work</em>, which is a fact about the assignee and belongs
+     * where memberships and grants are resolved.
      *
-     * <p><strong>Company membership is necessary and not sufficient here.</strong>
-     * {@code BoardService} additionally requires a project grant before accepting an assignee —
-     * see {@code WorkItemEdit}'s header for the defect that prevents: a card assigned to a colleague
-     * who cannot open the project it lives in, visible on their board and 404 when they click it.
+     * <p>The {@code companyId} parameter is gone with the delegation: the company is
+     * {@link com.tcms.tenancy.CompanyContext}'s, which is where the callee reads it from, and
+     * passing it was an opportunity to pass the wrong one.
      */
-    boolean isActiveMember(UUID companyId, UUID userId) {
-        return memberships.existsByCompanyIdAndUserIdAndStatus(
-                companyId, userId, MembershipStatus.ACTIVE);
+    boolean isAssignableTo(UUID userId, UUID projectId) {
+        return projectMembers.isAssignableTo(userId, projectId);
     }
 
     /**

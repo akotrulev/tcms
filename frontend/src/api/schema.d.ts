@@ -519,6 +519,72 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * People who can be given work in this project
+         * @description The people a project-scoped assignment may name: **active members of this company
+         *     who hold a grant on this project**. Both halves are load-bearing and each alone
+         *     admits a defect —
+         *
+         *     - membership without a grant is a colleague who can sign in and cannot open the
+         *       project, so a task assigned to them is visible on their board and 404s when they
+         *       click it;
+         *     - a grant without active membership is an unaccepted invitation, which conveys
+         *       nothing until it is redeemed.
+         *
+         *     **This is the same predicate the write side enforces**, not an approximation of it.
+         *     `POST /work-items` validates `assigneeId` against exactly this set, so a picker
+         *     built from this list can never offer somebody the server will refuse — which is the
+         *     §31 rule (disable-don't-hide) applied to a *set* rather than to a button.
+         *
+         *     Grants reach a person directly, through a team, or company-wide, so this cannot be
+         *     answered by reading `role_assignment` for the project: it is resolved through the
+         *     permission evaluator, the one place effective permissions are computed (plan §6b).
+         *
+         *     Ordered by display name. The name is the **membership's**, not the account's
+         *     canonical one (§6u) — the same person is "A. Kotrulev" to one client and "Aleksandar
+         *     (Contractor)" to another.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Members */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UserRef"][];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/suites": {
         parameters: {
             query?: never;
@@ -2492,7 +2558,21 @@ export interface paths {
         post: {
             parameters: {
                 query?: never;
-                header?: never;
+                header?: {
+                    /**
+                     * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
+                     *     already succeeded answers **200** with the case that intent created, instead of creating a
+                     *     second one — so pressing Save again after a timeout is safe.
+                     *
+                     *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
+                     *     it across retries. A key generated per attempt is the mistake that makes the header look
+                     *     right and do nothing.
+                     *
+                     *     Scoped to the project the request is addressed to, which is the scope the uniqueness
+                     *     constraint behind it uses. Optional: omitted, every call creates. At most 200 characters.
+                     */
+                    "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                };
                 path?: never;
                 cookie?: never;
             };
@@ -2502,6 +2582,18 @@ export interface paths {
                 };
             };
             responses: {
+                /**
+                 * @description **A replay.** The `Idempotency-Key` had already created this task, so nothing was
+                 *     created by this request — which is why it is not a 201 and carries no `Location`.
+                 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["WorkItem"];
+                    };
+                };
                 /** @description Created */
                 201: {
                     headers: {
@@ -3711,9 +3803,21 @@ export interface components {
          *     The label lives in `frontend/src/lib/labels.ts`, where a new member is a compile
          *     error until it is labelled. §6l's per-board configurable columns therefore become
          *     configuration over this enum rather than a contract change per column.
+         *
+         *     **`BLOCKED` arrived in §54 and it is the fifth column, not merely a fifth value.**
+         *     §53 left it out on purpose and said why: the board renders exactly the columns this
+         *     enum names, so a status with no column would be a card that exists, is returned by
+         *     this API, and appears **nowhere on screen** — invisible rather than misplaced, which
+         *     is the worse of the two failures. That made adding it a contract change *plus* a
+         *     label *plus* a grid column, and shipping only the first is how the invisible card
+         *     gets there. All three land together, and `boardColumns.test.ts` now derives the
+         *     board's columns from this enum so the next member cannot arrive without one.
+         *
+         *     Ordered as §6l lists them, and the order on the wire is not the display order —
+         *     `BoardPage`'s `COLUMNS` owns that. The enum's job is the vocabulary.
          * @enum {string}
          */
-        WorkItemStatus: "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE";
+        WorkItemStatus: "TODO" | "IN_PROGRESS" | "BLOCKED" | "IN_REVIEW" | "DONE";
         /**
          * @description A new task. `status` is absent on purpose: a task starts in `TODO`, and letting a
          *     create choose its column would allow "create it in Done", which is a move without

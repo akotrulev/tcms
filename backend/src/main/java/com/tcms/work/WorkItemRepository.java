@@ -49,4 +49,25 @@ public interface WorkItemRepository extends JpaRepository<WorkItem, UUID> {
      */
     @Query("SELECT w FROM WorkItem w WHERE w.id = :id AND w.deletedAt IS NULL")
     Optional<WorkItem> findLiveById(@Param("id") UUID id);
+
+    /**
+     * The task a previous request with this {@code Idempotency-Key} created, if any (V17).
+     *
+     * <p><strong>The predicates are exactly the columns of
+     * {@code work_item_created_idempotency_key_idx}</strong>, and that is a correctness requirement
+     * rather than a coincidence: a lookup narrower than the constraint finds nothing and then
+     * violates the index on insert — a validated request that 500s. {@code company_id} is the third
+     * column and is supplied by the Hibernate filter and RLS rather than named here.
+     *
+     * <p>Deliberately <em>not</em> filtered on {@code deletedAt}, unlike both queries above, and the
+     * difference is the whole point of this one. A retry of a create whose task has since been
+     * removed must still be recognised as that same intent — answering "no such task, here is a new
+     * one" would resurrect something somebody deleted, on a request that was only ever asking
+     * whether the first attempt landed. {@code TestPlanRepository} carries the same note; the two
+     * must not drift.
+     */
+    @Query("SELECT w FROM WorkItem w WHERE w.projectId = :projectId "
+            + "AND w.createdIdempotencyKey = :key")
+    Optional<WorkItem> findByIdempotencyKey(
+            @Param("projectId") UUID projectId, @Param("key") String key);
 }

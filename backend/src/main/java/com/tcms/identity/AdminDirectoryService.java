@@ -392,8 +392,14 @@ public class AdminDirectoryService {
      *
      * <p>{@link CompanyMembership#getDisplayName} and not {@link AppUser#getCanonicalName}: §6u, and
      * the reason {@link UserRefView} says so at length.
+     *
+     * <p>Package-private rather than private since §54, so {@link ProjectMembershipService} can
+     * render its list from the same assembly. The alternative was a second implementation of the
+     * §6u display-name rule in the same module — and the codebase already keeps a running tally of
+     * forced copies of this shape ({@code work.UserRefView}); adding one that was not forced would
+     * make that tally meaningless.
      */
-    private Map<UUID, UserRefView> peopleById() {
+    Map<UUID, UserRefView> peopleById() {
         UUID companyId = CompanyContext.require();
         List<CompanyMembership> present = memberships.findByCompanyId(companyId);
         if (present.isEmpty()) {

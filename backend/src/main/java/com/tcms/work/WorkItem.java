@@ -103,6 +103,22 @@ public class WorkItem {
     @Column(name = "lock_version", nullable = false)
     private long lockVersion;
 
+    /**
+     * The {@code Idempotency-Key} the create request carried, or null (V17).
+     *
+     * <p>{@code updatable = false} for {@code TestPlan}'s reason: it records <em>which request made
+     * this row</em>, which is a fact about the past. A later write that changed it would make a
+     * replay of the original intent create a second card — the exact failure the column prevents,
+     * reintroduced by the one code path nobody would think to check.
+     *
+     * <p>No getter. Nothing reads this off an entity: the replay lookup goes through
+     * {@code WorkItemRepository.findByIdempotencyKey}, which queries the three columns of the
+     * partial unique index, and a getter would invite a caller to compare in memory over a set the
+     * database has already narrowed.
+     */
+    @Column(name = "created_idempotency_key", updatable = false)
+    private String createdIdempotencyKey;
+
     /** JPA only. */
     protected WorkItem() {
     }
@@ -119,7 +135,12 @@ public class WorkItem {
      * point 2) — the caller supplies a {@code projectId}, and which company that project is in is
      * not theirs to assert.
      */
-    static WorkItem create(UUID projectId, WorkItemEdit edit, UUID creatorId, Instant now) {
+    static WorkItem create(
+            UUID projectId,
+            WorkItemEdit edit,
+            UUID creatorId,
+            String idempotencyKey,
+            Instant now) {
         WorkItem created = new WorkItem();
         created.id = UUID.randomUUID();
         created.companyId = CompanyContext.require();
@@ -135,6 +156,7 @@ public class WorkItem {
         created.createdBy = creatorId;
         created.updatedAt = now;
         created.updatedBy = creatorId;
+        created.createdIdempotencyKey = idempotencyKey;
         return created;
     }
 

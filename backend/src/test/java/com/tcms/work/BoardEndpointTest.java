@@ -214,9 +214,17 @@ class BoardEndpointTest extends IntegrationTestBase {
             // §53's whole finding on the frontend side: the SPA compared status to 'To do' and the
             // mock served 'To do', so mock mode agreed with itself while a real server answering
             // TODO would have filed every card into no column. This is that check on the server.
+            //
+            // The valid set is DERIVED from the enum rather than listed. It was listed until §54,
+            // and the literal list is what would have quietly gone stale when BLOCKED was added —
+            // a check whose expected values are maintained by hand stops checking the thing it was
+            // written for the moment somebody forgets to widen it.
+            List<String> columns = java.util.Arrays.stream(WorkItemStatus.values())
+                    .map(Enum::name)
+                    .toList();
+
             for (JsonNode card : boardAs(LEAD, PROJECT)) {
-                assertThat(card.get("status").asText())
-                        .isIn("TODO", "IN_PROGRESS", "IN_REVIEW", "DONE");
+                assertThat(card.get("status").asText()).isIn(columns);
             }
         }
     }
@@ -300,7 +308,11 @@ class BoardEndpointTest extends IntegrationTestBase {
                     .isEqualTo("TODO");
             assertThat(created.get("derived").asBoolean()).isFalse();
             assertThat(created.get("kind").asText()).isEqualTo("TASK");
-            assertThat(created.get("allowedTransitions")).hasSize(3);
+            // Every column but the one it is in. Sized from the enum rather than written as `4`,
+            // for the reason the status check above now gives: a hand-maintained expectation is
+            // the first thing to go stale when the enum grows, and it grew in this slice.
+            assertThat(created.get("allowedTransitions"))
+                    .hasSize(WorkItemStatus.values().length - 1);
         }
 
         @Test
@@ -390,15 +402,127 @@ class BoardEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("an unknown column is 400 and names the four")
+        @DisplayName("an unknown column is 400 and names the valid ones")
         void unknownColumnsAreRefused() throws Exception {
+            // This test used to send "BLOCKED" as its unknown value, which stopped being unknown
+            // in §54 — so it would have gone green for the wrong reason, asserting a 400 that was
+            // now a successful move. Worth recording: a negative test whose input becomes valid
+            // does not fail, it silently stops testing anything.
             String id = createAs(LEAD, """
                     {"projectId":"%s","title":"Movable"}""".formatted(PROJECT), 201)
                     .get("id").asText();
 
-            JsonNode problem = patchAs(LEAD, id, "BLOCKED", 400);
+            JsonNode problem = patchAs(LEAD, id, "PARKED", 400);
 
-            assertThat(problem.get("detail").asText()).contains("TODO", "IN_PROGRESS", "DONE");
+            assertThat(problem.get("detail").asText())
+                    .contains("TODO", "IN_PROGRESS", "BLOCKED", "IN_REVIEW", "DONE");
+        }
+
+        @Test
+        @DisplayName("BLOCKED is a real column a task can be moved into and back out of")
+        void blockedIsAColumn() throws Exception {
+            // §53 left BLOCKED out of the enum on purpose because the board renders exactly the
+            // columns the enum names, and a status with no column is a card that exists, is
+            // returned by this API, and appears nowhere on screen. The value, the label and the
+            // fifth grid column arrive together in §54; this is the server half.
+            String id = createAs(LEAD, """
+                    {"projectId":"%s","title":"Waiting on the API team"}""".formatted(PROJECT), 201)
+                    .get("id").asText();
+
+            assertThat(patchAs(LEAD, id, "BLOCKED", 200).get("status").asText()).isEqualTo("BLOCKED");
+            // Out again, with no return-to-sender rule: the board is where people correct their own
+            // record, and a board that argues is a board people stop updating.
+            assertThat(patchAs(LEAD, id, "DONE", 200).get("status").asText()).isEqualTo("DONE");
+        }
+    }
+
+    @Nested
+    @DisplayName("Idempotency-Key — a retry must not leave two cards on the board")
+    class Idempotency {
+
+        @Test
+        @DisplayName("the same key twice answers 200 with the task the first call made")
+        void aRetryReplays() throws Exception {
+            // 201 then 200, and the SAME id. Two identical cards in To do are two people picking up
+            // the same work and the second one finding it already done — which is worse on a board
+            // than anywhere else, because a coordination surface that misstates how much work there
+            // is stops being used.
+            String body = """
+                    {"projectId":"%s","title":"Only once"}""".formatted(PROJECT);
+
+            JsonNode first = createAs(LEAD, body, 201, "intent-54-a");
+            JsonNode replay = createAs(LEAD, body, 200, "intent-54-a");
+
+            assertThat(replay.get("id").asText()).isEqualTo(first.get("id").asText());
+            assertThat(titlesOf(boardAs(LEAD, PROJECT)))
+                    .filteredOn("Only once"::equals)
+                    .as("the retry must not have left a second card")
+                    .hasSize(1);
+        }
+
+        @Test
+        @DisplayName("a replay answers with the task it made even when the payload has drifted")
+        void aReplayIgnoresTheNewPayload() throws Exception {
+            // The client is asking "did my intent land", not "please apply this body". Validating
+            // first would send it to fix fields on a card that already exists — CaseCreateService's
+            // rule, and the reason the replay lookup runs before validation.
+            JsonNode first = createAs(LEAD, """
+                    {"projectId":"%s","title":"As typed"}""".formatted(PROJECT), 201, "intent-54-b");
+
+            JsonNode replay = createAs(LEAD, """
+                    {"projectId":"%s","title":"   "}""".formatted(PROJECT), 200, "intent-54-b");
+
+            assertThat(replay.get("id").asText()).isEqualTo(first.get("id").asText());
+            assertThat(replay.get("title").asText()).isEqualTo("As typed");
+        }
+
+        @Test
+        @DisplayName("two different keys create two tasks")
+        void differentKeysAreDifferentIntents() throws Exception {
+            String body = """
+                    {"projectId":"%s","title":"Twice on purpose"}""".formatted(PROJECT);
+
+            JsonNode first = createAs(LEAD, body, 201, "intent-54-c");
+            JsonNode second = createAs(LEAD, body, 201, "intent-54-d");
+
+            assertThat(second.get("id").asText()).isNotEqualTo(first.get("id").asText());
+        }
+
+        @Test
+        @DisplayName("a key the caller cannot reach the project with is 404, not a replay")
+        void aReplayIsStillGated() throws Exception {
+            // Recognising somebody else's key would confirm that something exists in a project the
+            // caller may not know about — which is why the lookup runs inside the gate rather than
+            // in front of it.
+            createAs(LEAD, """
+                    {"projectId":"%s","title":"Lead's"}""".formatted(PROJECT), 201, "intent-54-e");
+
+            createAs(NO_GRANT, """
+                    {"projectId":"%s","title":"Lead's"}""".formatted(PROJECT), 404, "intent-54-e");
+        }
+
+        @Test
+        @DisplayName("an over-long key is refused as a field error, not indexed")
+        void anOverLongKeyIsRefused() throws Exception {
+            JsonNode problem = createAs(LEAD, """
+                    {"projectId":"%s","title":"Hostile header"}""".formatted(PROJECT), 400,
+                    "x".repeat(201));
+
+            assertThat(problem.get("errors").has("Idempotency-Key")).isTrue();
+        }
+
+        @Test
+        @DisplayName("no key at all still creates, every time")
+        void theHeaderIsOptional() throws Exception {
+            String body = """
+                    {"projectId":"%s","title":"Unkeyed"}""".formatted(PROJECT);
+
+            JsonNode first = createAs(LEAD, body, 201);
+            JsonNode second = createAs(LEAD, body, 201);
+
+            // The partial index is ON (created_idempotency_key IS NOT NULL) precisely so that two
+            // unkeyed creates are not a uniqueness violation on NULL.
+            assertThat(second.get("id").asText()).isNotEqualTo(first.get("id").asText());
         }
     }
 
@@ -498,11 +622,21 @@ class BoardEndpointTest extends IntegrationTestBase {
     }
 
     private JsonNode createAs(UUID userId, String body, int expectedStatus) throws Exception {
-        var response = mvc.perform(MockMvcRequestBuilders.post("/api/v1/work-items")
-                        .header("Authorization", "Bearer " + tokenFor(userId, ACME))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(body))
-                .andReturn().getResponse();
+        return createAs(userId, body, expectedStatus, null);
+    }
+
+    private JsonNode createAs(UUID userId, String body, int expectedStatus, String idempotencyKey)
+            throws Exception {
+
+        var request = MockMvcRequestBuilders.post("/api/v1/work-items")
+                .header("Authorization", "Bearer " + tokenFor(userId, ACME))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body);
+        if (idempotencyKey != null) {
+            request = request.header("Idempotency-Key", idempotencyKey);
+        }
+
+        var response = mvc.perform(request).andReturn().getResponse();
 
         assertThat(response.getStatus()).isEqualTo(expectedStatus);
         String content = response.getContentAsString();

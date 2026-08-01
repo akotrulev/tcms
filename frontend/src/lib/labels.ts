@@ -46,6 +46,7 @@ export const automationLabels = {
 export const workItemStatusLabels = {
   TODO: 'To do',
   IN_PROGRESS: 'In progress',
+  BLOCKED: 'Blocked',
   IN_REVIEW: 'In review',
   DONE: 'Done',
 } as const satisfies Record<WorkItemStatus, string>;

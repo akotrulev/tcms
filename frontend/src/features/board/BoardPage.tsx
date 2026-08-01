@@ -32,8 +32,35 @@ import { healthLabels, priorityLabels, workItemStatusLabels } from '../../lib/la
  * this one array of English strings, which is how the board and the mock came to agree on
  * a spelling no server had ever been asked to produce.
  */
-const COLUMNS = ['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'DONE'] as const satisfies readonly WorkItemStatus[];
+const COLUMNS = [
+  'TODO',
+  'IN_PROGRESS',
+  'BLOCKED',
+  'IN_REVIEW',
+  'DONE',
+] as const satisfies readonly WorkItemStatus[];
 type Column = (typeof COLUMNS)[number];
+
+/**
+ * Every `WorkItemStatus` has a column — asserted by the compiler, not by a reader.
+ *
+ * `satisfies readonly WorkItemStatus[]` above is only half a check: it rejects a column that is
+ * not a status, and happily accepts a *subset*. That asymmetry is exactly the hole §53 described
+ * when it left `BLOCKED` out of the enum on purpose — "a status with no column is a card that
+ * exists, is returned by the API, and appears nowhere on screen", invisible rather than
+ * misplaced. Adding the value to the contract without this line would ship that defect the moment
+ * a server answered `BLOCKED`, and nothing would fail.
+ *
+ * So the missing direction is asserted here. `Record<never, never>` is `{}`, so an exhaustive
+ * `COLUMNS` typechecks; a status without a column makes it `Record<'BLOCKED', never>` and the
+ * empty object no longer satisfies it. Written as a `Record` rather than the shorter
+ * `extends never ? true : never` on purpose — that form errors with "Type 'true' is not
+ * assignable to type 'never'", which says nothing, while this one **names the missing status**:
+ * *Property 'BLOCKED' is missing*. A guard whose failure message does not identify the cause gets
+ * silenced rather than fixed.
+ */
+const _everyStatusHasAColumn: Record<Exclude<WorkItemStatus, Column>, never> = {};
+void _everyStatusHasAColumn;
 
 const kindLabels: Record<WorkItem['kind'], string> = {
   TASK: 'Task',

@@ -2,7 +2,6 @@ package com.tcms.work;
 
 import com.tcms.project.GateResult;
 import com.tcms.project.Project;
-import com.tcms.project.ProjectAccess;
 import com.tcms.project.ProjectService;
 import com.tcms.tenancy.CompanyContext;
 import java.time.Clock;
@@ -54,8 +53,10 @@ public class BoardService {
     private static final String PREFIX_EXECUTION = "execution:";
     private static final String PREFIX_CASE = "case:";
 
+    /** {@code CaseCreateService}'s cap, for its reason: the header is attacker-controlled. */
+    private static final int MAX_IDEMPOTENCY_KEY = 200;
+
     private final ProjectService projects;
-    private final ProjectAccess access;
     private final WorkItemRepository tasks;
     private final BoardFacts facts;
     private final BoardPeople people;
@@ -63,14 +64,12 @@ public class BoardService {
 
     BoardService(
             ProjectService projects,
-            ProjectAccess access,
             WorkItemRepository tasks,
             BoardFacts facts,
             BoardPeople people,
             Clock clock) {
 
         this.projects = projects;
-        this.access = access;
         this.tasks = tasks;
         this.facts = facts;
         this.people = people;
@@ -111,9 +110,16 @@ public class BoardService {
      * answers {@code Unreachable} for a project the caller cannot see. That collapses "no such
      * project", "another company's project" and "a project you hold no grant on" into one 404,
      * which is the same answer every project-scoped path gives.
+     *
+     * @param idempotencyKey the request's {@code Idempotency-Key} header, or null when absent
+     *                       (V17). Honoured from the first day the header is <em>declared</em>,
+     *                       which is §53's whole reason for leaving it undeclared until the column
+     *                       existed — see {@code openapi.yaml} on this operation.
      */
     @Transactional
-    public GateResult<CreateOutcome> create(UUID userId, WorkItemWriteRequest request) {
+    public GateResult<CreateOutcome> create(
+            UUID userId, WorkItemWriteRequest request, String idempotencyKey) {
+
         UUID projectId = request.projectId();
         if (projectId == null) {
             // Before the gate, and deliberately not a 404: there is no project to be unable to
@@ -124,6 +130,26 @@ public class BoardService {
         }
 
         return projects.writeGranted(userId, projectId, "workitem:manage", project -> {
+            // The replay is answered INSIDE the gate and BEFORE validation, and both halves are
+            // deliberate. Inside, because a caller who cannot reach the project must get the same
+            // 404 they would get for a first attempt — recognising their key would confirm that
+            // something exists there. Before, because a retry of a create that succeeded must
+            // answer with the task it made even if the payload has since drifted: the client is
+            // asking "did my intent land", and a 400 would send it to fix fields on a card that
+            // already exists. PlanCreateService and CaseCreateService order it the same way.
+            if (idempotencyKey != null) {
+                if (idempotencyKey.length() > MAX_IDEMPOTENCY_KEY) {
+                    return new CreateOutcome.Invalid(Map.of("Idempotency-Key",
+                            List.of("Send a key of at most " + MAX_IDEMPOTENCY_KEY
+                                    + " characters.")));
+                }
+                Optional<WorkItem> already =
+                        tasks.findByIdempotencyKey(project.getId(), idempotencyKey);
+                if (already.isPresent()) {
+                    return new CreateOutcome.Replayed(viewOf(already.get(), project));
+                }
+            }
+
             WorkItemEdit.Outcome outcome =
                     WorkItemEdit.validateCreate(request, assignableUsers(project, request));
 
@@ -132,7 +158,7 @@ public class BoardService {
                         new CreateOutcome.Invalid(invalid.errors());
                 case WorkItemEdit.Outcome.Valid valid -> {
                     WorkItem created = tasks.save(WorkItem.create(
-                            project.getId(), valid.edit(), userId, clock.instant()));
+                            project.getId(), valid.edit(), userId, idempotencyKey, clock.instant()));
                     yield new CreateOutcome.Created(viewOf(created, project));
                 }
             };
@@ -396,17 +422,23 @@ public class BoardService {
      * Who may be assigned: active members of this company holding a grant on this project.
      *
      * <p>Both halves are necessary and {@code WorkItemEdit}'s header explains what each one alone
-     * lets through. The set is computed only when the request names an assignee, because the common
-     * case is an unassigned task and this is a membership scan.
+     * lets through. Since §54 neither half is expressed here — the predicate lives in
+     * {@code identity.ProjectMembershipService} and is the same one
+     * {@code GET /projects/{id}/members} filters the picker with, so this validator cannot refuse
+     * somebody the SPA was just shown. {@code BoardPeople.isAssignableTo} carries the account of
+     * why that had to stop being two ANDed calls at this line.
+     *
+     * <p>The set is computed only when the request names an assignee, because the common case is an
+     * unassigned task (§6l's unclaimed pool) and this is a membership scan.
      */
     private Set<UUID> assignableUsers(Project project, WorkItemWriteRequest request) {
         UUID assigneeId = request.assigneeId();
         if (assigneeId == null) {
             return Set.of();
         }
-        boolean assignable = people.isActiveMember(CompanyContext.require(), assigneeId)
-                && access.canView(assigneeId, project.getId());
-        return assignable ? Set.of(assigneeId) : Set.of();
+        return people.isAssignableTo(assigneeId, project.getId())
+                ? Set.of(assigneeId)
+                : Set.of();
     }
 
     private static boolean isDerived(String cardId) {
@@ -426,6 +458,14 @@ public class BoardService {
         }
 
         record Created(WorkItemView view) implements CreateOutcome {
+        }
+
+        /**
+         * A retry of a create that already succeeded. 200, so "I made this" stays distinguishable
+         * from "this already existed" — the distinction {@code PlanCreateService.Outcome.Replayed}
+         * draws, and the reason neither carries a {@code Location}.
+         */
+        record Replayed(WorkItemView view) implements CreateOutcome {
         }
     }
 

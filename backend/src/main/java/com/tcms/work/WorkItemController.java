@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -73,13 +74,23 @@ public class WorkItemController {
     /**
      * Creates a task. Always a {@code TASK} — see {@code WorkItemWriteRequest} on why {@code kind}
      * is not an input.
+     *
+     * <p>{@code Idempotency-Key} is optional and honoured (V17) — a retry answers <strong>200 with
+     * the task it already made</strong> rather than 201 with a second card. §53 shipped this
+     * endpoint without the header and wrote the reason into the contract: declaring it with no
+     * column behind it would put it in the reviewed spec, in {@code schema.d.ts} and in
+     * autocomplete while the server ignored it, so a client would believe its retries were
+     * deduplicated when every one created another card. The declaration and the column land in the
+     * same slice, which is the ordering that makes the promise true.
      */
     @PostMapping
     public ResponseEntity<Object> create(
-            @AuthenticationPrincipal Jwt jwt, @RequestBody WorkItemWriteRequest request) {
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestBody WorkItemWriteRequest request) {
 
         GateResult<BoardService.CreateOutcome> gate =
-                board.create(UUID.fromString(jwt.getSubject()), request);
+                board.create(UUID.fromString(jwt.getSubject()), request, idempotencyKey);
 
         return switch (gate) {
             case GateResult.Unreachable<BoardService.CreateOutcome> ignored ->
@@ -92,6 +103,10 @@ public class WorkItemController {
                 case BoardService.CreateOutcome.Created created -> ResponseEntity
                         .created(URI.create("/api/v1/work-items/" + created.view().id()))
                         .body(created.view());
+                // No Location: nothing was created by THIS request, and a 200 carrying one would
+                // read as a create to anything following the header rather than the status.
+                case BoardService.CreateOutcome.Replayed replayed ->
+                        ResponseEntity.ok(replayed.view());
             };
         };
     }
