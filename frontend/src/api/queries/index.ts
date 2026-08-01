@@ -77,6 +77,7 @@ export { useDashboard } from './reporting';
 export {
   useGrantRole,
   useInviteUser,
+  useRemoveUser,
   useRevokeRole,
   useRoleAssignments,
   useRoles,

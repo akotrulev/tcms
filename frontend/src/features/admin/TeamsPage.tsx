@@ -14,7 +14,8 @@ import {
 } from '@mui/material';
 import { useMemo, useState } from 'react';
 import { ApiError } from '../../api/client';
-import type { Role, RoleAssignment, Team } from '../../api/types';
+import { useAuth } from '../../auth/useAuth';
+import type { Role, RoleAssignment, Team, User } from '../../api/types';
 import { useRevokeRole, useRoleAssignments, useRoles, useTeams, useUsers } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
@@ -25,6 +26,7 @@ import { formatAge, formatCount, formatDateTime } from '../../lib/format';
 import { allPermissions, groupByArea, holdsEveryPermission } from '../../lib/permissions';
 import { GrantRoleDialog } from './GrantRoleDialog';
 import { InviteUserDialog } from './InviteUserDialog';
+import { RemoveUserDialog } from './RemoveUserDialog';
 import { ScrollX } from '../../components/ScrollX';
 
 /**
@@ -52,6 +54,13 @@ export function TeamsPage() {
   const users = useUsers();
   const [granting, setGranting] = useState(false);
   const [inviting, setInviting] = useState(false);
+  /*
+    The person being removed, not a boolean: the dialog names them, so it needs the row. Held here
+    rather than per row so exactly one confirmation can be open, and cleared on close so the next
+    one mounts fresh (§54's dialog-state lesson, same reason `inviting` mounts conditionally).
+  */
+  const [removing, setRemoving] = useState<User | null>(null);
+  const { user: signedIn } = useAuth();
 
   return (
     <Box>
@@ -89,6 +98,10 @@ export function TeamsPage() {
           `open={false}` keeps one component instance — and therefore one set of field state and
           one mutation result — across every use of it (§54). */}
       {inviting && <InviteUserDialog open onClose={() => setInviting(false)} />}
+
+      {removing && (
+        <RemoveUserDialog open user={removing} onClose={() => setRemoving(null)} />
+      )}
 
       <Stack sx={{ gap: 3 }}>
         <Panel title="Team structure" testId="Admin.Teams">
@@ -157,6 +170,10 @@ export function TeamsPage() {
                       <TableCell sx={{ color: 'text.secondary', width: 120 }}>Status</TableCell>
                       <TableCell sx={{ color: 'text.secondary' }}>Teams</TableCell>
                       <TableCell sx={{ color: 'text.secondary', width: 140 }}>Last signed in</TableCell>
+                      <TableCell sx={{ color: 'text.secondary', width: 110 }} align="right">
+                        {/* One action per row; the header names the column, not the verb. */}
+                        Membership
+                      </TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -197,6 +214,45 @@ export function TeamsPage() {
                             <Tooltip title={formatDateTime(user.lastLoginAt)}>
                               <Box component="span">{formatAge(user.lastLoginAt)}</Box>
                             </Tooltip>
+                          </TableCell>
+                          <TableCell align="right">
+                            {/*
+                              Two independent reasons this can be disabled, and they are disabled
+                              with DIFFERENT sentences on purpose (§31 is about the reason as much
+                              as the state): not holding `company:members`, which `PermissionGate`
+                              answers, and naming yourself, which only the session can answer. The
+                              server refuses the second with a 400 either way — the dialog renders
+                              it — but a button that invites a refusal the client could have
+                              predicted is the thing §31 exists to stop.
+                            */}
+                            <PermissionGate projectId="company" permission="company:members">
+                              {({ allowed }) => {
+                                const self = user.id === signedIn?.id;
+                                return (
+                                  <Tooltip
+                                    title={
+                                      self
+                                        ? 'You cannot remove yourself. Ask another administrator.'
+                                        : ''
+                                    }
+                                  >
+                                    {/* A disabled button fires no events, so the tooltip needs a
+                                        wrapper that does — MUI's documented workaround. */}
+                                    <Box component="span">
+                                      <Button
+                                        size="small"
+                                        color="error"
+                                        disabled={!allowed || self}
+                                        onClick={() => setRemoving(user)}
+                                        data-testid="Admin.Users.Row.Remove"
+                                      >
+                                        Remove
+                                      </Button>
+                                    </Box>
+                                  </Tooltip>
+                                );
+                              }}
+                            </PermissionGate>
                           </TableCell>
                         </TableRow>
                       ))}

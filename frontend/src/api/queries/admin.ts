@@ -78,6 +78,35 @@ export function useInviteUser(): UseMutationResult<UserInvitation, Error, UserIn
 }
 
 /**
+ * Removes a person from the company — the offboarding half of `company:members`.
+ *
+ * Three decisions, and the second is the one that is easy to get backwards:
+ *
+ *   - **`meta: { handled: true }`.** The confirmation dialog renders the refusal itself, next to
+ *     the name it is about.
+ *   - **The role assignments and the project list are invalidated too, unlike `useInviteUser`.**
+ *     An invitation conveys nothing, so nothing else can have changed; a removal makes every grant
+ *     that person holds inert, which is exactly an authorization change. `GET /role-assignments`
+ *     answers the grants the caller may administer and the removed person's rows are still among
+ *     them — the server keeps them, deliberately, so re-inviting restores their access.
+ *   - **A 204 is the only success, and it means "they are not a member here" rather than "a row
+ *     was written".** Removing somebody twice answers the same way; nothing here distinguishes it,
+ *     because nothing the caller can act on differs.
+ */
+export function useRemoveUser(): UseMutationResult<void, Error, string> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: string) => api.del<void>(`/users/${encodeURIComponent(userId)}`),
+    meta: { handled: true },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.users });
+      void client.invalidateQueries({ queryKey: ['role-assignments'] });
+      void client.invalidateQueries({ queryKey: keys.projects });
+    },
+  });
+}
+
+/**
  * Grants a role to a person or a team — the write that lets a colleague see a project at all.
  *
  * Four things here are decisions rather than defaults:

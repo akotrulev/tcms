@@ -113,6 +113,49 @@ export const adminHandlers = [
     );
   }),
 
+  /*
+    Remove. Three properties are mirrored from `MembershipRemovalService`, and the middle one is
+    the property the screen renders differently — a mock that always answered 204 would make the
+    branch unreachable in development, which is how §55's three-state defect got as far as a live
+    pass:
+
+      1. **The gate is `company:members` at company scope**, from the same source the button's
+         `PermissionGate` reads, so what the UI disables and what the write refuses agree.
+      2. **Removing yourself is a 400 keyed on `userId`.** The row's own button is disabled for
+         exactly this reason, so the refusal should be unreachable through the UI — which is
+         precisely why the mock has to be able to produce it: a disable that stops working is
+         invisible until something on the other side says no.
+      3. **They actually leave the directory**, so the list the caller is looking at changes. A
+         handler that answered 204 and wrote nothing would prove the dialog rather than the
+         feature.
+
+    Not modelled: the session revocation and the cancelled invitation. Neither is observable from
+    the SPA — the removed person is not the one holding this screen — and inventing an observable
+    for them here would be a mock asserting something the product does not show.
+  */
+  http.delete(`${API}/users/:userId`, async ({ params, request }) => {
+    const denied = requireAuth(request);
+    if (denied) return denied;
+    await delay(LATENCY);
+
+    if (!companyScopePermissions.includes('company:members')) return forbidden();
+
+    const userId = String(params.userId);
+    if (userId === currentUser.id) {
+      return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+        userId: [
+          'You cannot remove yourself from this company. Ask another administrator to do it.',
+        ],
+      });
+    }
+
+    const at = users.findIndex((u) => u.id === userId);
+    // 204 whether they were there or not: a repeated request and an id that names nobody here
+    // both end in the state the caller asked for.
+    if (at >= 0) users.splice(at, 1);
+    return new HttpResponse(null, { status: 204 });
+  }),
+
   http.get(`${API}/teams`, async () => {
     await delay(LATENCY);
     return HttpResponse.json(teams);
