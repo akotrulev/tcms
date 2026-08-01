@@ -76,6 +76,7 @@ export { useArtifacts, useDocPage, useDocPages } from './documentation';
 export { useDashboard } from './reporting';
 export {
   useGrantRole,
+  useInviteUser,
   useRevokeRole,
   useRoleAssignments,
   useRoles,

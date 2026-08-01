@@ -24,6 +24,7 @@ import { describeError } from '../../lib/describeError';
 import { formatAge, formatCount, formatDateTime } from '../../lib/format';
 import { allPermissions, groupByArea, holdsEveryPermission } from '../../lib/permissions';
 import { GrantRoleDialog } from './GrantRoleDialog';
+import { InviteUserDialog } from './InviteUserDialog';
 import { ScrollX } from '../../components/ScrollX';
 
 /**
@@ -50,6 +51,7 @@ export function TeamsPage() {
   const assignments = useRoleAssignments();
   const users = useUsers();
   const [granting, setGranting] = useState(false);
+  const [inviting, setInviting] = useState(false);
 
   return (
     <Box>
@@ -83,6 +85,11 @@ export function TeamsPage() {
         <GrantRoleDialog open onClose={() => setGranting(false)} onGranted={() => setGranting(false)} />
       )}
 
+      {/* Conditionally mounted, like every other create dialog here: a form mounted behind
+          `open={false}` keeps one component instance — and therefore one set of field state and
+          one mutation result — across every use of it (§54). */}
+      {inviting && <InviteUserDialog open onClose={() => setInviting(false)} />}
+
       <Stack sx={{ gap: 3 }}>
         <Panel title="Team structure" testId="Admin.Teams">
           <DataRegion
@@ -106,7 +113,34 @@ export function TeamsPage() {
           </DataRegion>
         </Panel>
 
-        <Panel title="People" testId="Admin.Users" dense>
+        <Panel
+          title="People"
+          testId="Admin.Users"
+          dense
+          actions={
+            /*
+              GATED, unlike "Grant a role" above — and the contrast is the point. That button is
+              the app's one deliberately ungated opener because the permission its form will ask
+              for is chosen by a field inside the form. This one is known before anything renders:
+              `company:members`, company scope, always. So §31's disable-don't-hide rule applies in
+              its ordinary form, and a Test Lead sees the capability exists and is worth asking
+              for rather than a product that appears unable to add people.
+            */
+            <PermissionGate projectId="company" permission="company:members">
+              {({ allowed }) => (
+                <Button
+                  size="small"
+                  variant="contained"
+                  disabled={!allowed}
+                  onClick={() => setInviting(true)}
+                  data-testid="Admin.Invite.Open"
+                >
+                  Invite a person
+                </Button>
+              )}
+            </PermissionGate>
+          }
+        >
           <DataRegion
             testId="Admin.Users.List"
             state={{ ...users, refetch: () => void users.refetch() }}

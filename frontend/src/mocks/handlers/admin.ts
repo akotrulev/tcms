@@ -19,6 +19,9 @@ function mayStaff(projectId: string | null | undefined): boolean {
     : companyScopePermissions.includes('company:members');
 }
 
+/** `InvitationProperties.validity`'s default, so the dialog renders a realistic expiry. */
+const inSevenDays = () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
 const forbidden = () =>
   problem(403, 'Not allowed', 'You do not have permission to manage access here.');
 
@@ -26,6 +29,88 @@ export const adminHandlers = [
   http.get(`${API}/users`, async () => {
     await delay(LATENCY);
     return HttpResponse.json(users);
+  }),
+
+  /*
+    Invite. Four properties are mirrored from `MembershipInviteService`, because each is something
+    the dialog can only be developed against if the mock behaves the same way — and the fourth is
+    the one a mock most easily gets wrong in the flattering direction:
+
+      1. **The gate is `company:members` at company scope**, from the same source
+         `GET /me/permissions` answers with, so the button `PermissionGate` disables and the write
+         this refuses cannot disagree.
+      2. **Validation is the server's**, field for field, so a message that lands on an input here
+         is the message that lands on it live.
+      3. **The person genuinely joins the directory as INVITED.** A handler that answered 201 and
+         wrote nothing would prove the dialog and not the feature — the list would stay as it was
+         and nobody would notice until the live pass.
+      4. **A second invitation of the same address is a 200 that mints nothing**, matched
+         case-insensitively (`citext`). This is the property the dialog *renders differently*, so a
+         mock that always answered 201 would make the "nothing was sent" branch unreachable in
+         development and untested anywhere. Same class as §54's accepted-and-ignored
+         `Idempotency-Key`.
+
+    Not modelled: reusing an account that already exists on the instance. There is only one company
+    in the mock, so the branch has nothing to be distinguishable *from* — its whole point is that a
+    Company Admin cannot tell it apart, and the backend suite drives both sides of it.
+  */
+  http.post(`${API}/users`, async ({ request }) => {
+    const denied = requireAuth(request);
+    if (denied) return denied;
+    await delay(LATENCY);
+
+    if (!companyScopePermissions.includes('company:members')) {
+      return problem(403, 'Not allowed', 'You do not have permission to manage access here.');
+    }
+
+    const body = (await request.json()) as { email?: string; displayName?: string };
+    const email = (body.email ?? '').trim();
+    const displayName = (body.displayName ?? '').trim();
+
+    const errors: Record<string, string[]> = {};
+    if (!email) errors.email = ['Enter the email address to invite.'];
+    else if (email.length > 320) errors.email = ['That email address is too long.'];
+    else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      errors.email = ['Enter a valid email address.'];
+    }
+    if (!displayName) errors.displayName = ['Enter the name to show for this person.'];
+    else if (displayName.length > 200) {
+      errors.displayName = ['Keep the name to 200 characters or fewer.'];
+    }
+    if (Object.keys(errors).length > 0) {
+      return problem(400, 'Validation failed', 'Check the highlighted fields.', errors);
+    }
+
+    const existing = users.find((u) => u.email?.toLowerCase() === email.toLowerCase());
+    if (existing) {
+      // Already a member, or already invited. Either way nothing is minted and nothing is sent —
+      // and an outstanding link is left alone rather than replaced.
+      return HttpResponse.json({
+        user: existing,
+        // `issued: false` is the whole point of the branch — the dialog reads it to tell "there
+        // was nowhere to send it" from "there was nothing to send", and a mock that hard-coded
+        // `true` here would make the wrong copy look right in development.
+        issued: false,
+        emailed: false,
+        expiresAt: existing.status === 'INVITED' ? inSevenDays() : null,
+      });
+    }
+
+    const invited: (typeof users)[number] = {
+      id: newId(),
+      displayName,
+      email,
+      avatarUrl: null,
+      status: 'INVITED',
+      lastLoginAt: null,
+      teams: [],
+    };
+    users.push(invited);
+
+    return HttpResponse.json(
+      { user: invited, issued: true, emailed: true, expiresAt: inSevenDays() },
+      { status: 201 },
+    );
   }),
 
   http.get(`${API}/teams`, async () => {

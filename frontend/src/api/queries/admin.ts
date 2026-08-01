@@ -7,7 +7,15 @@ import {
   type UseQueryResult,
 } from '@tanstack/react-query';
 import { api, qs } from '../client';
-import type { Role, RoleAssignment, RoleAssignmentInput, Team, User } from '../types';
+import type {
+  Role,
+  RoleAssignment,
+  RoleAssignmentInput,
+  Team,
+  User,
+  UserInvitation,
+  UserInvitationInput,
+} from '../types';
 import { keys } from './keys';
 
 export function useUsers(): UseQueryResult<User[]> {
@@ -37,6 +45,35 @@ export function useRoleAssignments(projectId?: string): UseQueryResult<RoleAssig
   return useQuery({
     queryKey: keys.roleAssignments(projectId),
     queryFn: ({ signal }) => api.get<RoleAssignment[]>(`/role-assignments${qs({ projectId })}`, { signal }),
+  });
+}
+
+/**
+ * Invites a person into the company — the write that gets a colleague in at all.
+ *
+ * The two decisions here:
+ *
+ *   - **`meta: { handled: true }`.** The dialog lands field errors on its own inputs and a 403 in
+ *     its own alert, so a global toast would be a vaguer second copy of a message already on the
+ *     screen the user is reading.
+ *   - **Only the people list is invalidated, deliberately.** An invitation is not a grant: the
+ *     invitee holds nothing until somebody grants them a role, so neither `role-assignments` nor
+ *     `projects` can have changed. Invalidating them would imply an authorization change that did
+ *     not happen — and it is the *other* direction of the mistake `useGrantRole` records above.
+ *
+ * There is **no `Idempotency-Key`**, and its absence is the design rather than an omission: the
+ * identity of this request is the email address, so the server's own retry path finds the
+ * membership it already made. A key per mount would add nothing and would need the mounting
+ * discipline §54 had to repair.
+ */
+export function useInviteUser(): UseMutationResult<UserInvitation, Error, UserInvitationInput> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UserInvitationInput) => api.post<UserInvitation>('/users', input),
+    meta: { handled: true },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.users });
+    },
   });
 }
 

@@ -2265,7 +2265,81 @@ export interface paths {
             };
         };
         put?: never;
-        post?: never;
+        /**
+         * Invite a person into this company
+         * @description The way a colleague gets into the company at all. Until this endpoint existed, the only
+         *     account a provisioned company had was the Company Admin the operator CLI created, and a
+         *     second person could be added **only by hand-written SQL** — which is what every fixture
+         *     in the suite had to do (handoff §54).
+         *
+         *     Gated on **`company:members`** at COMPANY scope — Company Admin and Instance Admin only.
+         *     That permission is defined as "invite, remove, set membership display names" (roles spec
+         *     §A3), so this is the read of it the catalogue always intended.
+         *
+         *     The person is created as an **`INVITED` membership** and receives an activation link,
+         *     the same `POST /auth/invitations/{token}/accept` flow the CLI's first admin uses.
+         *     Membership conveys authentication and **zero project visibility** (roles spec §A1), so
+         *     an invited colleague signs in to an empty project list until somebody grants them a role
+         *     with `POST /role-assignments`. That is two deliberate steps, not an oversight.
+         *
+         *     **The response cannot be used to discover whether an address already has an account on
+         *     this instance.** `app_user` is instance-level and its email is unique instance-wide, so
+         *     one person may belong to several companies (§6s). Inviting an address that already has
+         *     an account reuses it and answers **exactly as inviting a brand-new address does** — same
+         *     status, same body shape, same `displayName` (the one the inviter typed, per §6u; never
+         *     the account's own name, which belongs to another client). Without that, this endpoint
+         *     would be a membership oracle for every other company on the instance.
+         *
+         *     **Re-inviting is idempotent and carries no `Idempotency-Key`.** The identity of the
+         *     request is the email address, so a retry finds the membership it already created:
+         *
+         *     - a membership that is already `ACTIVE` → `200` with that person, nothing sent;
+         *     - an outstanding, unexpired invitation → `200`, and the existing link is **left alone**
+         *       rather than replaced, because a fresh token would invalidate the one already in the
+         *       invitee's inbox;
+         *     - no membership, or one whose invitation has lapsed → `201` and a new link.
+         *
+         *     `emailed` is `false` when the instance has **no SMTP relay configured**. The invitation
+         *     is still valid — an operator must carry the link across by hand, exactly as they do for
+         *     `provision-company` — and saying so is what stops the invitee from waiting for a message
+         *     that is never coming.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UserInvitationInput"];
+                };
+            };
+            responses: {
+                /** @description Already a member, or an unexpired invitation was already outstanding. Nothing sent. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UserInvitation"];
+                    };
+                };
+                /** @description Invited */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UserInvitation"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -3647,6 +3721,59 @@ export interface components {
             /** Format: date-time */
             lastLoginAt?: string | null;
             teams: string[];
+        };
+        /**
+         * @description There is no `companyId` and no role. The company comes from the session's context (ERD
+         *     §0.1 point 2), and what the person may *do* is a separate grant — `POST /role-assignments`
+         *     — so that inviting somebody can never be the act that also gives them access.
+         */
+        UserInvitationInput: {
+            /**
+             * Format: email
+             * @description Case-insensitive (`citext`). Matching an account that already exists on the instance
+             *     reuses it silently — see the operation's description for why the answer must not
+             *     differ.
+             */
+            email: string;
+            /**
+             * @description **This company's** name for the person (§6u), stored on the membership rather than on
+             *     the account. A contractor is legitimately "A. Kotrulev" to one client and
+             *     "Aleks (Vendor)" to another, and neither may see or overwrite the other's.
+             */
+            displayName: string;
+        };
+        /**
+         * @description The activation link itself is deliberately **absent**. It is a live single-use secret with
+         *     exactly one legitimate destination (the invitee's inbox); putting it in an API response
+         *     publishes it to devtools, to any proxy log, and to whatever the SPA caches.
+         */
+        UserInvitation: {
+            user: components["schemas"]["User"];
+            /**
+             * @description Whether **this call minted a fresh activation link**. `false` means there was nothing
+             *     to mint — the person is already an active member, or an unexpired invitation was
+             *     outstanding and was deliberately left alone.
+             *
+             *     It carries the same fact as `201` vs `200`, and it is on the body because the two
+             *     reasons a link was not *sent* are not otherwise distinguishable: `emailed: false` with
+             *     `issued: true` is "no relay on this install", and with `issued: false` it is "nothing
+             *     needed sending". A client that infers the first from `emailed` alone tells an
+             *     administrator with a perfectly good relay that their mail is broken, every time they
+             *     click twice.
+             */
+            issued: boolean;
+            /**
+             * @description Whether the activation link was handed to a configured SMTP relay. `false` means either
+             *     that the instance has none and an operator must deliver the link by hand, or that
+             *     nothing was minted to send — see `issued`. Never that the invitation failed.
+             */
+            emailed: boolean;
+            /**
+             * Format: date-time
+             * @description When the outstanding invitation lapses. **Null when there is nothing to accept** —
+             *     the person is already an active member.
+             */
+            expiresAt: string | null;
         };
         Team: {
             /** Format: uuid */
