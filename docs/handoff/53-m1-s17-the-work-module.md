@@ -238,6 +238,11 @@ browser:   LIVE mode against a freshly provisioned company — see "What the liv
 
 ## Not done
 
+> **→ The first, second and fourth items below are done in §54**, together, and the *together* is
+> the point: the header arrived with the column that honours it (`V17`), and `BLOCKED` arrived with
+> its label and its grid column. The third — the symmetric backend check — is still not built.
+> The reasoning below is kept because §54's design follows from it rather than replacing it.
+
 - **`POST /work-items` honours no `Idempotency-Key`, and the contract no longer declares one.**
   `work_item` has no `created_idempotency_key` column or partial index (`V14` added both for plans
   and cases), so honouring the header needs a migration. Declaring it without the column would be
