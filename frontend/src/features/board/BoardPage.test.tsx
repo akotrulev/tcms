@@ -146,6 +146,79 @@ describe('Moving a card', () => {
   })
 })
 
+describe('Why a card is on the board', () => {
+  it('renders a maintenance card’s reason, labelled', () => {
+    // The defect the live pass found, and it was invisible to every gate: the server has always
+    // sent `description` and the backend test asserts it, but `WorkCard` never rendered the field.
+    // On screen a maintenance card was its case title and a chip, directly above an EXECUTION card
+    // with the *same title* — two cards, the same words, neither explaining itself.
+    renderBoard([
+      card({
+        id: 'case:abc',
+        title: 'Full refund to card',
+        derived: true,
+        kind: 'CASE_MAINTENANCE',
+        description: 'NEVER_EXECUTED',
+        linkedKey: 'TC-1',
+        allowedTransitions: [],
+      }),
+    ])
+
+    // Labelled through the same map the dashboard uses, not the raw signal name — one value must
+    // not read two ways across two screens.
+    expect(screen.getByTestId('Board.Card.Reason').textContent).toBe('Never executed')
+  })
+
+  it('labels every signal when a case raises more than one', () => {
+    renderBoard([
+      card({
+        id: 'case:abc',
+        title: 'Full refund to card',
+        derived: true,
+        kind: 'CASE_MAINTENANCE',
+        description: 'NEVER_EXECUTED, STALE_APPROVAL',
+        allowedTransitions: [],
+      }),
+    ])
+
+    const reason = screen.getByTestId('Board.Card.Reason').textContent
+    expect(reason).toContain('Never executed')
+    expect(reason).toContain('Approved before its last edit')
+  })
+
+  it('passes an unrecognised signal through rather than dropping it', () => {
+    // A signal the SPA has no word for yet is still a reason. Dropping it silently would put the
+    // card back in exactly the state this rendering exists to fix.
+    renderBoard([
+      card({
+        id: 'case:abc',
+        title: 'Something',
+        derived: true,
+        kind: 'CASE_MAINTENANCE',
+        description: 'A_SIGNAL_FROM_THE_FUTURE',
+        allowedTransitions: [],
+      }),
+    ])
+
+    expect(screen.getByTestId('Board.Card.Reason').textContent).toBe('A_SIGNAL_FROM_THE_FUTURE')
+  })
+
+  it('shows an execution card’s run without treating it as a signal', () => {
+    renderBoard([
+      card({
+        id: 'execution:abc',
+        title: 'Full refund to card',
+        derived: true,
+        kind: 'EXECUTION',
+        description: 'Execute in Regression 1.0',
+        allowedTransitions: [],
+      }),
+    ])
+
+    expect(screen.getByTestId('Board.Card.Reason').textContent).toBe('Execute in Regression 1.0')
+  })
+})
+
 describe('Card ordering', () => {
   it('puts overdue cards above higher-priority ones that are not', () => {
     // The sort is overdue-first THEN priority. A critical card that is not yet late must not bury

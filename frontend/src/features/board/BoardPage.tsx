@@ -11,7 +11,7 @@ import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { formatCount } from '../../lib/format';
-import { priorityLabels, workItemStatusLabels } from '../../lib/labels';
+import { healthLabels, priorityLabels, workItemStatusLabels } from '../../lib/labels';
 
 /**
  * The kanban board (plan §6l).
@@ -136,6 +136,30 @@ export function BoardPage() {
       </DataRegion>
     </Box>
   );
+}
+
+/**
+ * A card's reason, in the reader's words.
+ *
+ * A `CASE_MAINTENANCE` card's `description` is a comma-separated list of raw signal names
+ * (`NEVER_EXECUTED, STALE_APPROVAL`) — deliberately, because the words belong to `lib/labels.ts`
+ * and `BoardService` says so in its own comment: the `work` module cannot import
+ * `repository.HealthSignal`, and inventing a second set of words there is exactly how one value
+ * comes to read three different ways across the grid, the dashboard and the board.
+ *
+ * So the labelling happens here, through the **same `healthLabels` map the dashboard's "Needs
+ * attention" panel uses**. An unrecognised code falls through as itself rather than being dropped:
+ * a signal the SPA has no word for yet is still a reason, and silently discarding it would put the
+ * card back in the state this function exists to fix.
+ */
+function describeCard(item: WorkItem): string {
+  if (item.kind !== 'CASE_MAINTENANCE' || !item.description) return item.description ?? '';
+  return item.description
+    .split(',')
+    .map((signal) => signal.trim())
+    .filter(Boolean)
+    .map((signal) => healthLabels[signal as keyof typeof healthLabels] ?? signal)
+    .join(' · ');
 }
 
 /** Exported for its test — the columns and the refusal are the logic worth pinning. */
@@ -341,6 +365,29 @@ function WorkCard({
       <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }} data-testid="Board.Card.Title">
         {item.title}
       </Typography>
+
+      {/*
+        **The card has to say WHY, and until the live pass it didn't.**
+
+        `description` was not rendered at all. The server has always sent one — a maintenance card
+        carries its health signals, an execution card carries the run it belongs to — and the
+        backend test asserts it. Nobody ever saw it. On screen a maintenance card read as its case
+        title and a chip, sitting directly above an execution card with the *same title*: two cards,
+        the same words, different meanings, neither explaining itself.
+
+        That is the failure `BoardService.cardFor` warns about in its own javadoc — "a card whose
+        reason is hidden behind a click gets ignored in bulk" — shipped anyway, because the server
+        was right and the screen was silent. Only driving it showed that.
+      */}
+      {item.description && (
+        <Typography
+          variant="caption"
+          sx={{ display: 'block', color: 'text.secondary', mb: 0.5 }}
+          data-testid="Board.Card.Reason"
+        >
+          {describeCard(item)}
+        </Typography>
+      )}
 
       {item.linkedKey && (
         <RouterLink
