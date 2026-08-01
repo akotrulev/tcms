@@ -107,6 +107,19 @@ public abstract class IntegrationTestBase {
         registry.add("tcms.auth.jwt.secret",
                 () -> "test-only-signing-key-not-for-any-real-deployment");
 
+        // The case-health recompute is a WRITE on a timer, over every company in the
+        // database. Left enabled it fires two minutes into a multi-minute suite run and
+        // rewrites case_health for whichever fixtures have seeded by then — most visibly
+        // DashboardEndpointTest, whose subject is that healthComputedAt is null. That
+        // presents as a test which passes alone and fails in the suite at a different
+        // point each run, which is §19's first defect and the hardest kind to attribute.
+        //
+        // Off here rather than in a test-only application.yml: this file is already the
+        // one place the suite states how it differs from a deployment, and a second
+        // properties source is a second place to look. CaseHealthRecomputeTest turns it
+        // back on for its own context and otherwise drives the service directly.
+        registry.add("tcms.case-health.enabled", () -> false);
+
         // Production sizes this at 20. The suite must not.
         //
         // Spring caches one context per distinct configuration, and this suite now has

@@ -74,6 +74,14 @@ tcms:
     validity: P7D
     from-address: ${TCMS_MAIL_FROM:tcms@localhost}
 
+  case-health:
+    # How stale a case's newest recorded result may be before LONG_UNEXECUTED is raised.
+    # §6o's suggested default. INSTANCE-WIDE, and §6o says it should be per project —
+    # plan §8 open question #30 is still open and there is no project settings table to
+    # hold it, so this is the fallback a project setting will one day override rather
+    # than a decision that it never should. See CaseHealthProperties.
+    long-unexecuted: ${TCMS_LONG_UNEXECUTED:P90D}
+
   # spring.mail.host is deliberately NOT defaulted. Boot only auto-configures a
   # JavaMailSender when it is set, and MailConfiguration turns its absence into a loud
   # warning rather than a startup failure — an install with no relay still works, it just
