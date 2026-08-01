@@ -161,9 +161,16 @@ public class AppUser {
      * revocation instead of "effective when the token expires".
      *
      * <p>Called from {@link #activate} and {@link #deactivate} so status changes cannot
-     * forget it. <strong>The other call sites do not exist yet</strong> — grant and
-     * membership mutation still only happens in provisioning, which creates rather than
-     * changes — and that gap is recorded here rather than being silently assumed covered.
+     * forget it, and from {@link MembershipRemovalService} — the company membership change
+     * above, and the first caller outside this class. Removing somebody whose token is still
+     * valid leaves them authenticated inside a company they are no longer in, for as long as
+     * the token lasts.
+     *
+     * <p><strong>A grant change deliberately does not call it</strong>, and that is not the
+     * same gap: the session carries no grant claims, so {@link PermissionEvaluator} reads the
+     * database on every request and a revoke is effective on the next one.
+     * {@link RoleGrantService}'s header states the reasoning and names the day it changes.
+     * A team membership change has no writer yet.
      */
     public void revokeSessions() {
         this.permissionVersion++;

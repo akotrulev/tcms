@@ -1356,6 +1356,57 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
+  /users/{userId}:
+    # No query parameters on the path item, per §50.
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [admin]
+      summary: Remove a person from this company
+      description: |
+        Offboarding — the second third of **`company:members`** ("invite, remove, set membership
+        display names", roles spec §A3), gated exactly as `POST /users` is: COMPANY scope, so
+        Company Admin and Instance Admin only.
+
+        **It removes the membership, not the account.** `app_user` is instance-level and one
+        person may belong to several client companies (§6s), so deleting the account would offboard
+        them from every other client on the instance — and would orphan the authorship this
+        company's own history depends on. The membership goes to `REMOVED`, which zeroes their
+        permissions here (`CompanyMembership`: membership is a precondition, so every grant they
+        hold in this company becomes inert without being deleted). They disappear from `GET /users`
+        immediately.
+
+        **Their session is revoked, not left to expire.** A signed token stays valid until it
+        lapses, so without this the person keeps an authenticated session inside the company they
+        were just removed from — for hours. The `pv` epoch bump signs them out on their next
+        request. It is account-wide, so it signs them out of their *other* companies too; they
+        sign in again and nothing there has changed.
+
+        **Any outstanding invitation is cancelled.** Removing somebody who has not accepted yet
+        must not leave a live activation link behind — a later re-invite would find it outstanding,
+        report that a link is already on its way, and re-admit them on a token minted before the
+        offboarding.
+
+        **A caller may not remove themselves** — `400` keyed on `userId`. It is also what keeps a
+        company administrable without counting administrators: the only person who can run this
+        endpoint is one who holds `company:members`, and they cannot be the one who leaves.
+
+        **`204` whether they were a member or not.** A repeated request, a double-click and an id
+        that names nobody here all end in the state the caller asked for — and a member of another
+        company is *also* not here, so isolation and idempotence give the same answer (§6t).
+
+        **Re-inviting them later restores their previous project access**, because their grants
+        were made inert rather than deleted. That follows from the model rather than from this
+        endpoint, and it surprises people at an admin screen.
+      responses:
+        '204': { description: Removed, or was not a member here }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
   /teams:
     get:
       tags: [admin]

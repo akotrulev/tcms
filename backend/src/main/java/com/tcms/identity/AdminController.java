@@ -24,13 +24,14 @@ import org.springframework.web.bind.annotation.RestController;
  * The company's administration surface — its people, its org chart, the role catalogue, and the
  * grants that decide who can see which project.
  *
- * <p>Seven endpoints under one contract tag ({@code admin}) and therefore one controller, the same
+ * <p>Eight endpoints under one contract tag ({@code admin}) and therefore one controller, the same
  * arrangement {@code ProjectController} explains. They are not one <em>gate</em>: the reads answer
  * to {@code company:read}, the two grant writes answer to a permission chosen by the scope of the
- * grant being made, and the invite answers to {@code company:members}. Every one of those verdicts
- * is computed in {@link AdminDirectoryService} / {@link RoleGrantService} /
- * {@link MembershipInviteService} and merely <em>rendered</em> here — an endpoint that decides
- * "may they?" for itself is how two implementations diverge (plan §6b).
+ * grant being made, and the invite and the removal answer to {@code company:members}. Every one of
+ * those verdicts is computed in {@link AdminDirectoryService} / {@link RoleGrantService} /
+ * {@link MembershipInviteService} / {@link MembershipRemovalService} and merely <em>rendered</em>
+ * here — an endpoint that decides "may they?" for itself is how two implementations diverge
+ * (plan §6b).
  *
  * <h2>The caller comes from the token and the company from the context</h2>
  *
@@ -54,15 +55,18 @@ public class AdminController {
     private final AdminDirectoryService directory;
     private final RoleGrantService grants;
     private final MembershipInviteService invites;
+    private final MembershipRemovalService removals;
 
     public AdminController(
             AdminDirectoryService directory,
             RoleGrantService grants,
-            MembershipInviteService invites) {
+            MembershipInviteService invites,
+            MembershipRemovalService removals) {
 
         this.directory = directory;
         this.grants = grants;
         this.invites = invites;
+        this.removals = removals;
     }
 
     /** The people in this company, by display name. */
@@ -97,6 +101,34 @@ public class AdminController {
             case MembershipInviteService.Invite.Invalid invalid ->
                     ResponseEntity.badRequest().body(validationProblem(invalid.errors()));
             case MembershipInviteService.Invite.Forbidden ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(forbiddenProblem());
+        };
+    }
+
+    /**
+     * Removes a person from this company — the offboarding half of {@code company:members}.
+     *
+     * <p>{@code 204} whether they were a member or not, for the reason
+     * {@link RoleGrantService#revoke} gives about a grant that is not there: a repeated request and
+     * an id that names nobody here both end in the state the caller asked for, and a member of
+     * another company is <em>also</em> not here, so isolation and idempotence give one answer.
+     *
+     * <p>The one refusal a caller can act on is removing themselves, which comes back as a field
+     * error on {@code userId} — see {@link MembershipRemovalService}.
+     */
+    @DeleteMapping("/users/{userId}")
+    public ResponseEntity<Object> removeUser(
+            @AuthenticationPrincipal Jwt jwt, @PathVariable UUID userId) {
+
+        return switch (removals.remove(caller(jwt), userId)) {
+            case MembershipRemovalService.Removal.Removed ignored ->
+                    ResponseEntity.noContent().build();
+            case MembershipRemovalService.Removal.SelfRemoval ignored ->
+                    ResponseEntity.badRequest().body(validationProblem(Map.of(
+                            "userId", List.of(
+                                    "You cannot remove yourself from this company. Ask another "
+                                            + "administrator to do it."))));
+            case MembershipRemovalService.Removal.Forbidden ignored ->
                     ResponseEntity.status(HttpStatus.FORBIDDEN).body(forbiddenProblem());
         };
     }
