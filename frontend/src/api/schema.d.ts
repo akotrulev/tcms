@@ -1425,7 +1425,24 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Reusable step library */
+        /**
+         * Reusable step library
+         * @description Most-used first, narrowed by an optional title fragment — the same shape and the same
+         *     ranking rule as `/conditions` (plan §6h).
+         *
+         *     **`usageCount` is derived, not stored.** It counts the *distinct live cases* whose steps
+         *     reference this entry, computed by the query rather than read from `shared_step.usage_count`.
+         *     The stored column exists and stays at its `DEFAULT 0`: a denormalized counter has to be
+         *     maintained by every path that rewrites a case's steps, and a case edit replaces the whole
+         *     step list, so the counter drifts on the first path that forgets and nothing reveals it.
+         *     A number that ranks the picker has to be right to be worth showing.
+         *
+         *     Distinct *cases*, not step rows: a case may reference the same entry twice, and counting
+         *     rows would inflate it (the §6e rule about execution count versus distinct-case count).
+         *     This deliberately differs from `Condition.usageCount`, which is still the stored 0 —
+         *     a condition's usage spans `case_condition` **and** `suite_condition`, and the suite side
+         *     propagates by inheritance, so that count is a design question rather than a join.
+         */
         get: {
             parameters: {
                 query?: {
@@ -1453,7 +1470,55 @@ export interface paths {
             };
         };
         put?: never;
-        post?: never;
+        /**
+         * Add an entry to the reusable step library
+         * @description **`library:manage`** — Instance Admin, Company Admin, Test Lead and Test Engineer (roles
+         *     spec, Repository table). Viewer and Automation Service do not hold it. The spec's note
+         *     that library work is *"gated by an impact modal, not by permission"* is about **editing**
+         *     an entry, whose change propagates to every case referencing it; creating one propagates
+         *     nowhere, so the permission is the whole control here.
+         *
+         *     Until this operation existed the library was a read of a table **nothing could write**,
+         *     while `CaseStep.sharedStepId` had been accepted on case saves since M1 — so the product
+         *     could store a reference to a library it had no way to populate.
+         *
+         *     Shared steps are **project-scoped** (roles spec: two client products legitimately have
+         *     different login flows), so an entry is reachable only from the project it was created in.
+         *
+         *     No `Idempotency-Key`. A duplicate library entry is visible in the picker next to its twin
+         *     the moment the create returns — the same reasoning that keeps the header off `POST` suites
+         *     and on `POST` cases.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SharedStepInput"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SharedStep"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -3439,7 +3504,12 @@ export interface components {
             action: string;
             testData?: string | null;
             expectedResult?: string | null;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description Set ⇒ this step is a reference to a `/shared-steps` entry, and the UI marks it as
+             *     shared. Served unresolved: the id, not the block. `action` still carries the text,
+             *     so a reader never depends on a second fetch to see what the step says.
+             */
             sharedStepId?: string | null;
         };
         TestStepInput: {
@@ -3449,7 +3519,24 @@ export interface components {
             action: string;
             testData?: string | null;
             expectedResult?: string | null;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description A `/shared-steps` entry **of this project**. Accepted when the entry is live here, or
+             *     when this case's stored steps already reference it.
+             *
+             *     Both halves are load-bearing. Without the first, an id from a sibling project is
+             *     stored unchecked — it satisfies the foreign key, so nothing fails, and every reader of
+             *     the case then resolves a library entry through a project they were never granted; an
+             *     id naming nothing at all fails the foreign key and answers 500 where a field error
+             *     belongs. Without the second, **retiring a library entry makes every case using it
+             *     unsaveable**, which is worse than the defect the check closes: references survive a
+             *     retirement by design (the same rule `Condition` states for attachments), so a save
+             *     that merely leaves an existing reference alone must not be re-litigated against a
+             *     library that has moved on.
+             *
+             *     Refused as a field error rather than a 404 — the case and the project both resolved,
+             *     and the value came from a picker the message can land on.
+             */
             sharedStepId?: string | null;
         };
         Condition: {
@@ -3485,7 +3572,30 @@ export interface components {
             id: string;
             title: string;
             body: string[];
+            /**
+             * @description Distinct **live** cases whose steps reference this entry. Derived by the query, never
+             *     read from the stored column — see the `GET` description for why a denormalized counter
+             *     was refused. A retired case stops counting; retiring the entry itself does not
+             *     renumber anything, because the references survive it.
+             */
             usageCount: number;
+        };
+        /**
+         * @description `usageCount` is absent by construction: it is derived from the references to the entry, so
+         *     a client cannot state it, and offering the field would invite a value the server discards.
+         */
+        SharedStepInput: {
+            /**
+             * @description What the picker lists and what a referencing step shows as its action. The summary of
+             *     the block, not the first line of it.
+             */
+            title: string;
+            /**
+             * @description The ordered actions. A list rather than a paragraph for `Condition.body`'s reason —
+             *     "sign in" is realistically three actions (ERD §4). At least one, and blank entries are
+             *     dropped: an empty library block is a picker row that inserts nothing.
+             */
+            body: string[];
         };
         /**
          * @description One action, one argument, over a selection of cases.
