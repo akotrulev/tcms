@@ -34,6 +34,7 @@ import {
   paging,
   permissionsOn,
   problem,
+  projectMembers,
   requireAuth,
   userRef,
 } from './shared';
@@ -166,6 +167,83 @@ function facetsFor(rows: TestCaseSummary[]): Facet[] {
 }
 
 // ------------------------------------------------------------------ handlers ----
+
+/**
+ * Which permission a bulk action needs, and the sentence to refuse it with.
+ *
+ * Mirrors `BulkOperations.permission` and `BulkOperations.refusal`: only the *target status* can
+ * raise the requirement above `case:edit`, and the two refusals give opposite advice because a Test
+ * Engineer lacks only approval while a Viewer lacks everything.
+ *
+ * @returns the refusal sentence, or null when the caller may proceed
+ */
+function missingPermission(
+  action: string | undefined,
+  target: LifecycleStatus | undefined,
+  held: string[],
+): string | null {
+  const mayEdit = held.includes('case:edit');
+  const needsApproval = (action === 'SET_STATUS' || action === 'SUBMIT_FOR_REVIEW')
+    && target === 'APPROVED';
+
+  if (needsApproval && !held.includes('case:approve')) {
+    return mayEdit
+      ? 'Only a test lead can approve cases. Submit them for review instead.'
+      : 'You do not have permission to change cases in this project.';
+  }
+  if (!mayEdit) {
+    return 'You do not have permission to change cases in this project.';
+  }
+  return null;
+}
+
+/**
+ * The per-action argument requirement, as field errors — `BulkOperations.parse`'s half.
+ *
+ * Checked before the loop, like the server: one wrong dropdown must produce one message on that
+ * control, not five hundred identical skip reasons that bury it.
+ */
+function bulkArgumentError(
+  action: string | undefined,
+  payload: Record<string, unknown>,
+  target: LifecycleStatus | undefined,
+): Record<string, string[]> | null {
+  switch (action) {
+    case 'SET_STATUS':
+      return target ? null : { lifecycleStatus: ['Choose a status.'] };
+    case 'SUBMIT_FOR_REVIEW':
+      // A contradicting status would make the request apply as something other than it says.
+      return payload.lifecycleStatus && payload.lifecycleStatus !== 'IN_REVIEW'
+        ? {
+            lifecycleStatus: [
+              'SUBMIT_FOR_REVIEW always moves cases to In review. '
+                + 'Use SET_STATUS to choose a different status.',
+            ],
+          }
+        : null;
+    case 'SET_AUTOMATION_STATUS':
+      if (!payload.automationStatus) return { automationStatus: ['Choose an automation status.'] };
+      return payload.automationStatus === 'NOT_AUTOMATABLE'
+        && !String(payload.notAutomatableReason ?? '').trim()
+        ? { notAutomatableReason: ['Say why these cases cannot be automated.'] }
+        : null;
+    case 'MOVE_TO_SUITE':
+      if (!payload.suiteId) return { suiteId: ['Choose a suite to move these cases into.'] };
+      return db.suites.some((s) => s.id === payload.suiteId)
+        ? null
+        : { suiteId: ['That suite is not in this project.'] };
+    case 'ADD_TAGS':
+      return ((payload.tags as string[]) ?? []).some((t) => t.trim())
+        ? null
+        : { tags: ['Type at least one tag.'] };
+    case 'ATTACH_CONDITIONS':
+    case 'DETACH_CONDITIONS':
+      return payload.conditionId ? null : { conditionId: ['Choose a condition.'] };
+    // SET_OWNER needs nothing: a null ownerId is the unassign, not a missing argument.
+    default:
+      return null;
+  }
+}
 
 export const caseHandlers = [
   http.get(`${API}/projects/:projectId/cases`, async ({ request }) => {
@@ -310,16 +388,66 @@ export const caseHandlers = [
     return HttpResponse.json(saved, { status: 201 });
   }),
 
-  http.post(`${API}/projects/:projectId/cases/bulk`, async ({ request }) => {
+  /**
+   * Preview-then-commit bulk operations, in agreement with `CaseBulkService`.
+   *
+   * Two defects were fixed here when the server landed, and both are the "mock agrees with itself"
+   * class §52 names — each was invisible while this handler was the only implementation:
+   *
+   *  1. **Ids that resolved to nothing were DROPPED** (`if (!row) continue`), so `total` counted 44
+   *     while the three buckets accounted for 42 and the user was told nothing about the other two.
+   *     Every requested id now lands in exactly one bucket.
+   *  2. **Six of the eight actions answered "not supported yet"** while the contract declared them.
+   *
+   * It also enforces `case:approve`, from the same `permissionsOn` the mock's own
+   * `GET /me/permissions` answers — otherwise the dialog would enable the option in mock mode and
+   * the write would succeed, and the gate would only ever be seen in live mode.
+   */
+  http.post(`${API}/projects/:projectId/cases/bulk`, async ({ request, params }) => {
     await delay(LATENCY);
+    const projectId = String(params.projectId);
     const body = (await request.json()) as {
       caseIds?: string[];
       action?: string;
       dryRun?: boolean;
       payload?: Record<string, unknown>;
     };
-    const ids = body.caseIds ?? [];
-    const dryRun = body.dryRun ?? false;
+
+    // Absent means preview, matching the contract's default — the safe direction.
+    const dryRun = body.dryRun ?? true;
+    const payload = body.payload ?? {};
+    const action = body.action;
+
+    // De-duplicated, in the caller's order, exactly as the server does it.
+    const ids = [...new Set(body.caseIds ?? [])];
+    if (ids.length === 0) {
+      return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+        caseIds: ['Select at least one case.'],
+      });
+    }
+    if (ids.length > 500) {
+      return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+        caseIds: [`Select at most 500 cases at a time. This selection has ${ids.length}.`],
+      });
+    }
+
+    // SUBMIT_FOR_REVIEW is SET_STATUS(IN_REVIEW) — aliased here as it is on the server, so there is
+    // one implementation of the state change on this side too.
+    const target =
+      action === 'SUBMIT_FOR_REVIEW'
+        ? ('IN_REVIEW' as LifecycleStatus)
+        : (payload.lifecycleStatus as LifecycleStatus | undefined);
+
+    const held = permissionsOn(projectId);
+    const missing = missingPermission(action, target, held);
+    if (missing) {
+      return problem(403, 'Not allowed', missing);
+    }
+
+    const invalid = bulkArgumentError(action, payload, target);
+    if (invalid) {
+      return problem(400, 'Validation failed', 'Check the highlighted fields.', invalid);
+    }
 
     const changed: string[] = [];
     const unchanged: string[] = [];
@@ -327,26 +455,75 @@ export const caseHandlers = [
 
     for (const id of ids) {
       const row = db.cases.find((c) => c.id === id);
-      if (!row) continue;
+      if (!row) {
+        // NEVER dropped. See the handler comment — this is the accounting defect.
+        skipped.push({ key: id, reason: 'This case is no longer in this project.' });
+        continue;
+      }
+      const detail = db.caseDetails.get(id);
 
-      if (body.action === 'SET_STATUS') {
-        const target = body.payload?.lifecycleStatus as LifecycleStatus;
+      if (action === 'SET_STATUS' || action === 'SUBMIT_FOR_REVIEW') {
         if (row.lifecycleStatus === target) {
           unchanged.push(row.key);
-        } else if (target === 'APPROVED' && row.lifecycleStatus === 'DRAFT') {
-          // A real guard, not a mock formality: draft goes to review before approval.
+        } else if (target === 'APPROVED' && row.lifecycleStatus !== 'IN_REVIEW') {
+          // §6g: APPROVED is reachable only from IN_REVIEW. The wording is the server's, word for
+          // word — the same failure must not read as two different problems in the two modes.
           skipped.push({ key: row.key, reason: 'A draft must be reviewed before it can be approved.' });
         } else {
           if (!dryRun) {
-            row.lifecycleStatus = target;
-            const detail = db.caseDetails.get(id);
-            if (detail) detail.lifecycleStatus = target;
+            row.lifecycleStatus = target as LifecycleStatus;
+            if (detail) detail.lifecycleStatus = target as LifecycleStatus;
           }
           changed.push(row.key);
         }
-      } else if (body.action === 'ATTACH_CONDITIONS') {
-        const detail = caseDetail(id);
-        const condition = db.conditions.find((c) => c.id === body.payload?.conditionId);
+      } else if (action === 'SET_AUTOMATION_STATUS') {
+        const next = payload.automationStatus as TestCaseSummary['automationStatus'];
+        if (row.automationStatus === next) {
+          unchanged.push(row.key);
+        } else {
+          if (!dryRun) {
+            row.automationStatus = next;
+            if (detail) detail.automationStatus = next;
+          }
+          changed.push(row.key);
+        }
+      } else if (action === 'SET_OWNER') {
+        const next = (payload.ownerId as string | null) ?? null;
+        if ((row.owner?.id ?? null) === next) {
+          unchanged.push(row.key);
+        } else {
+          if (!dryRun) {
+            const owner = next === null ? null : projectMembers(projectId).find((m) => m.id === next) ?? null;
+            row.owner = owner;
+            if (detail) detail.owner = owner;
+          }
+          changed.push(row.key);
+        }
+      } else if (action === 'MOVE_TO_SUITE') {
+        const next = payload.suiteId as string;
+        if (row.suiteId === next) {
+          unchanged.push(row.key);
+        } else {
+          if (!dryRun) {
+            row.suiteId = next;
+            if (detail) detail.suiteId = next;
+          }
+          changed.push(row.key);
+        }
+      } else if (action === 'ADD_TAGS') {
+        const next = (payload.tags as string[]) ?? [];
+        const existing = row.tags ?? [];
+        if (next.every((tag) => existing.includes(tag))) {
+          unchanged.push(row.key);
+        } else {
+          if (!dryRun) {
+            row.tags = [...new Set([...existing, ...next])];
+            if (detail) detail.tags = row.tags;
+          }
+          changed.push(row.key);
+        }
+      } else if (action === 'ATTACH_CONDITIONS') {
+        const condition = db.conditions.find((c) => c.id === payload.conditionId);
         if (!detail || !condition) {
           skipped.push({ key: row.key, reason: 'The condition no longer exists.' });
         } else if (detail.preconditions?.some((p) => p.conditionId === condition.id)) {
@@ -369,12 +546,32 @@ export const caseHandlers = [
           }
           changed.push(row.key);
         }
+      } else if (action === 'DETACH_CONDITIONS') {
+        const attached = detail?.preconditions?.some((p) => p.conditionId === payload.conditionId);
+        if (!attached) {
+          unchanged.push(row.key);
+        } else {
+          if (!dryRun && detail) {
+            detail.preconditions = (detail.preconditions ?? []).filter(
+              (p) => p.conditionId !== payload.conditionId,
+            );
+          }
+          changed.push(row.key);
+        }
       } else {
         skipped.push({ key: row.key, reason: 'That operation is not supported yet.' });
       }
     }
 
-    const result: BulkResult = { dryRun, changed, unchanged, skipped, total: ids.length };
+    const result: BulkResult = {
+      dryRun,
+      changed,
+      unchanged,
+      skipped,
+      total: ids.length,
+      // One audit event for the whole operation, and none at all when nothing changed.
+      auditEventId: dryRun || changed.length === 0 ? null : newId(),
+    };
     return HttpResponse.json(result);
   }),
 

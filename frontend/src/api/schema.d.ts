@@ -3571,13 +3571,15 @@ export interface components {
              */
             conditionId?: string;
             /**
-             * @description Which list the attachment lands in, for `ATTACH_CONDITIONS`. `BOTH` is not offered:
+             * @description Which list the attachment lands in, for `ATTACH_CONDITIONS`; the server defaults it to
+             *     `PRE` when absent. Deliberately no `default:` here — openapi-typescript renders a
+             *     defaulted property as **required**, which would force every caller to send a value the
+             *     server is perfectly happy to choose. `BOTH` is not offered:
              *     it describes what a *library* condition may be used as, while an attachment is always
              *     one position in one of the two lists (see the `ConditionKind` javadoc).
-             * @default PRE
              * @enum {string}
              */
-            conditionKind: "PRE" | "POST";
+            conditionKind?: "PRE" | "POST";
         };
         /**
          * @description Every outcome is reported as a LIST OF KEYS, not a count. The UI has to name what

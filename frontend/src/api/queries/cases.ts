@@ -10,6 +10,7 @@ import {
 import { useRef } from 'react';
 import { TIMEOUTS, api, newIntentKey, qs } from '../client';
 import type {
+  BulkOperation,
   BulkResult,
   CaseFilters,
   CaseHistorySummary,
@@ -151,14 +152,22 @@ export function useDeleteCase(projectId: string) {
   });
 }
 
-export interface BulkInput {
-  caseIds: string[];
-  /** One of the contract's `BulkOperation.action` values. */
-  action: string;
-  /** Action-specific arguments — the contract's `payload`. */
-  payload?: Record<string, unknown>;
+/**
+ * A bulk operation, typed from the contract rather than restated.
+ *
+ * `action` was `string` and `payload` was `Record<string, unknown>` until the endpoint gained a
+ * server: nothing checked either end, so a misspelled `lifecycleStatis` was an argument the server
+ * silently did not receive. Both now come straight from `BulkOperation`, so the action list and the
+ * payload members are whatever `openapi.yaml` says and a typo is a compile error.
+ */
+export type BulkInput = Pick<BulkOperation, 'caseIds' | 'action' | 'payload'> & {
+  /**
+   * Always sent explicitly, though the contract defaults it to `true`. The default is the safe
+   * direction on the wire; being explicit here is what keeps `run(true)` and `run(false)` readable
+   * as "preview" and "commit" at the one call site that matters.
+   */
   dryRun: boolean;
-}
+};
 
 /**
  * Bulk edits are preview-then-commit: the same call with `dryRun` gives the preview, and

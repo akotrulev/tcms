@@ -1,6 +1,7 @@
 import {
   Alert,
   AlertTitle,
+  Autocomplete,
   Box,
   Button,
   Dialog,
@@ -10,13 +11,28 @@ import {
   MenuItem,
   Select,
   Stack,
+  TextField,
   Typography,
 } from '@mui/material';
-import { useEffect, useState } from 'react';
-import type { BulkResult, Condition, LifecycleStatus } from '../../api/types';
+import { useEffect, useMemo, useState } from 'react';
+import type {
+  AutomationStatus,
+  BulkPayload,
+  BulkResult,
+  Condition,
+  LifecycleStatus,
+} from '../../api/types';
+import { ApiError } from '../../api/client';
 import { Identifier } from '../../components/Identifier';
-import { lifecycleLabels } from '../../lib/labels';
-import { useBulkCases, useConditions } from '../../api/queries';
+import { PermissionGate } from '../../components/PermissionGate';
+import { automationLabels, lifecycleLabels } from '../../lib/labels';
+import {
+  useBulkCases,
+  useConditions,
+  useProjectMembers,
+  useSuites,
+} from '../../api/queries';
+import { describeError } from '../../lib/describeError';
 import { formatCount } from '../../lib/format';
 
 /**
@@ -30,15 +46,62 @@ import { formatCount } from '../../lib/format';
  * The result is reported **per item**, not as a blanket toast: "38 changed, 4 already
  * approved, 2 skipped" with the skipped ones named. A blanket success over a partial
  * failure is the worse half of that defect, because the user believes all 44 went through.
+ *
+ * ## Approving is gated separately from editing, inside one select
+ *
+ * `case:approve` is Lead-and-up while `case:edit` reaches Test Engineer (roles spec's Review
+ * table; plan §6g's single gate), so the server's permission depends on the *value* of the status
+ * field rather than on the action. §31's disable-don't-hide therefore applies to **one option**,
+ * not to the dialog: a Test Engineer gets a working dialog with "Approved" greyed out and a reason
+ * on hover, instead of a form that submits and comes back 403.
+ *
+ * That is possible here and was not in §61's artifact register, and the difference is worth
+ * knowing: `case:approve` is a real permission key, so `GET /me/permissions` carries it. §61's
+ * refusal turned on a *qualifier*, which is not on the wire at all — there the button had to enable
+ * and the server had to answer with a field error.
  */
 
-/** Contract `BulkOperation.action` values this dialog can drive. */
-type Action = 'SET_STATUS' | 'ATTACH_CONDITIONS';
+/** The contract's `BulkOperation.action` values, in the order the picker offers them. */
+type Action =
+  | 'SET_STATUS'
+  | 'SUBMIT_FOR_REVIEW'
+  | 'SET_OWNER'
+  | 'MOVE_TO_SUITE'
+  | 'ADD_TAGS'
+  | 'SET_AUTOMATION_STATUS'
+  | 'ATTACH_CONDITIONS'
+  | 'DETACH_CONDITIONS';
 
 const ACTIONS: { value: Action; label: string }[] = [
   { value: 'SET_STATUS', label: 'Change status' },
+  { value: 'SUBMIT_FOR_REVIEW', label: 'Submit for review' },
+  { value: 'SET_OWNER', label: 'Assign an owner' },
+  { value: 'MOVE_TO_SUITE', label: 'Move to a suite' },
+  { value: 'ADD_TAGS', label: 'Add tags' },
+  { value: 'SET_AUTOMATION_STATUS', label: 'Change automation status' },
   { value: 'ATTACH_CONDITIONS', label: 'Add a precondition' },
+  { value: 'DETACH_CONDITIONS', label: 'Remove a precondition' },
 ];
+
+/**
+ * The payload field each action reads, so a server error can be routed to the right control.
+ *
+ * Kept as data rather than as a chain of `if`s in the error handler: the server names the field it
+ * refused, and the mapping from field to control has to exist somewhere. A message that matches no
+ * control here falls back to the dialog-level alert rather than vanishing.
+ */
+const FIELDS = [
+  'caseIds',
+  'lifecycleStatus',
+  'automationStatus',
+  'notAutomatableReason',
+  'ownerId',
+  'suiteId',
+  'tags',
+  'conditionId',
+] as const;
+
+type FieldName = (typeof FIELDS)[number];
 
 const TestIdPrefix = 'Cases.BulkDialog';
 
@@ -57,34 +120,148 @@ export function BulkActionDialog({
 }) {
   const [action, setAction] = useState<Action>('SET_STATUS');
   const [lifecycleValue, setLifecycleValue] = useState<LifecycleStatus>('IN_REVIEW');
+  const [automationValue, setAutomationValue] = useState<AutomationStatus>('AUTOMATED');
+  const [notAutomatableReason, setNotAutomatableReason] = useState('');
+  const [ownerId, setOwnerId] = useState('');
+  const [suiteId, setSuiteId] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
   const [conditionId, setConditionId] = useState('');
-  const [preview, setPreview] = useState<BulkResult | null>(null);
 
+  const [preview, setPreview] = useState<BulkResult | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<FieldName, string>>>({});
+  const [rootError, setRootError] = useState<string | null>(null);
+
+  // Every list the dialog can need. `enabled` is not gated on the current action on purpose: these
+  // are small, cached per project, and shared with the screens behind this dialog, so fetching on
+  // open costs one round trip the user has usually already paid and removes a spinner from the
+  // moment they switch operation.
   const conditions = useConditions(projectId, '', 'PRE');
+  const suites = useSuites(projectId);
+  const members = useProjectMembers(projectId, action === 'SET_OWNER');
   const bulk = useBulkCases(projectId);
 
   // Changing the action or its argument invalidates any preview taken against the previous
   // one — committing a preview that describes a different operation is the bug this prevents.
   useEffect(() => {
     setPreview(null);
-  }, [action, lifecycleValue, conditionId]);
+    setFieldErrors({});
+    setRootError(null);
+  }, [
+    action,
+    lifecycleValue,
+    automationValue,
+    notAutomatableReason,
+    ownerId,
+    suiteId,
+    tags,
+    conditionId,
+  ]);
 
-  const payload =
-    action === 'SET_STATUS' ? { lifecycleStatus: lifecycleValue } : { conditionId };
-  const hasArgument = action === 'SET_STATUS' ? !!lifecycleValue : !!conditionId;
-  const canRun = selectedIds.length > 0 && hasArgument;
+  const payload: BulkPayload = useMemo(() => {
+    switch (action) {
+      case 'SET_STATUS':
+        return { lifecycleStatus: lifecycleValue };
+      case 'SET_AUTOMATION_STATUS':
+        return {
+          automationStatus: automationValue,
+          // Sent only where the column allows it, matching the server: a reason stored beside
+          // AUTOMATED is residue explaining an impossibility nobody claimed.
+          notAutomatableReason:
+            automationValue === 'NOT_AUTOMATABLE' ? notAutomatableReason.trim() : undefined,
+        };
+      case 'SET_OWNER':
+        // Empty means unassign, and `null` is how the contract spells that — `undefined` would be
+        // an absent member and the server would read it as "no argument".
+        return { ownerId: ownerId === '' ? null : ownerId };
+      case 'MOVE_TO_SUITE':
+        return { suiteId };
+      case 'ADD_TAGS':
+        return { tags };
+      case 'ATTACH_CONDITIONS':
+        return { conditionId, conditionKind: 'PRE' };
+      case 'DETACH_CONDITIONS':
+        return { conditionId };
+      case 'SUBMIT_FOR_REVIEW':
+        // The verb carries the status. Sending one would be a contradiction the server refuses.
+        return {};
+    }
+  }, [
+    action,
+    lifecycleValue,
+    automationValue,
+    notAutomatableReason,
+    ownerId,
+    suiteId,
+    tags,
+    conditionId,
+  ]);
+
+  /** Whether the argument is complete enough to be worth a round trip. */
+  const hasArgument = (): boolean => {
+    switch (action) {
+      case 'SET_STATUS':
+        return !!lifecycleValue;
+      case 'SET_AUTOMATION_STATUS':
+        return automationValue !== 'NOT_AUTOMATABLE' || notAutomatableReason.trim().length > 0;
+      case 'MOVE_TO_SUITE':
+        return !!suiteId;
+      case 'ADD_TAGS':
+        return tags.length > 0;
+      case 'ATTACH_CONDITIONS':
+      case 'DETACH_CONDITIONS':
+        return !!conditionId;
+      // Unassigning is a real choice, so an empty owner is a complete argument.
+      case 'SET_OWNER':
+      case 'SUBMIT_FOR_REVIEW':
+        return true;
+    }
+  };
+
+  const canRun = selectedIds.length > 0 && hasArgument();
 
   const run = async (dryRun: boolean) => {
-    const result = await bulk.mutateAsync({ caseIds: selectedIds, action, payload, dryRun });
-    if (dryRun) setPreview(result);
-    else {
-      onCommitted(result);
-      handleClose();
+    setFieldErrors({});
+    setRootError(null);
+    try {
+      const result = await bulk.mutateAsync({
+        caseIds: selectedIds,
+        action,
+        payload,
+        dryRun,
+      });
+      if (dryRun) setPreview(result);
+      else {
+        onCommitted(result);
+        handleClose();
+      }
+    } catch (error) {
+      applyServerError(error);
     }
+  };
+
+  /** Lands a 400's per-field messages on their controls; anything else on the dialog alert. */
+  const applyServerError = (error: unknown) => {
+    if (error instanceof ApiError && error.fieldErrors) {
+      const landed: Partial<Record<FieldName, string>> = {};
+      for (const [field, messages] of Object.entries(error.fieldErrors)) {
+        if ((FIELDS as readonly string[]).includes(field)) {
+          landed[field as FieldName] = messages.join(' ');
+        }
+      }
+      if (Object.keys(landed).length > 0) {
+        setFieldErrors(landed);
+        return;
+      }
+    }
+    // A refusal with no field — a 403, or a key this form has no control for. Showing nothing at
+    // all is worse than showing a vague message.
+    setRootError(describeError(error).body);
   };
 
   const handleClose = () => {
     setPreview(null);
+    setFieldErrors({});
+    setRootError(null);
     onClose();
   };
 
@@ -96,10 +273,7 @@ export function BulkActionDialog({
 
       <DialogContent dividers>
         <Stack sx={{ gap: 2 }}>
-          <Box>
-            <Typography variant="caption" component="label" htmlFor="bulk-operation" sx={{ display: 'block', mb: 0.5 }}>
-              Operation
-            </Typography>
+          <Field label="Operation" htmlFor="bulk-operation">
             <Select
               id="bulk-operation"
               size="small"
@@ -114,13 +288,10 @@ export function BulkActionDialog({
                 </MenuItem>
               ))}
             </Select>
-          </Box>
+          </Field>
 
-          {action === 'SET_STATUS' ? (
-            <Box>
-              <Typography variant="caption" component="label" htmlFor="bulk-status" sx={{ display: 'block', mb: 0.5 }}>
-                New status
-              </Typography>
+          {action === 'SET_STATUS' && (
+            <Field label="New status" htmlFor="bulk-status" error={fieldErrors.lifecycleStatus}>
               <Select
                 id="bulk-status"
                 size="small"
@@ -129,18 +300,150 @@ export function BulkActionDialog({
                 onChange={(event) => setLifecycleValue(event.target.value as LifecycleStatus)}
                 data-testid={`${TestIdPrefix}.Field.LifecycleStatus`}
               >
-                {Object.entries(lifecycleLabels).map(([key, label]) => (
-                  <MenuItem key={key} value={key}>
-                    {label}
+                {(Object.entries(lifecycleLabels) as [LifecycleStatus, string][]).map(
+                  ([key, label]) =>
+                    // Only APPROVED is gated. Wrapping every option would put a permission check
+                    // around seven values the server never refuses, and the tooltip wrapper inside
+                    // a MenuList needs the `block` anchor — see PermissionGate.
+                    key === 'APPROVED' ? (
+                      <PermissionGate
+                        key={key}
+                        projectId={projectId}
+                        permission="case:approve"
+                        wrapper="block"
+                      >
+                        {({ allowed }) => (
+                          <MenuItem
+                            value={key}
+                            disabled={!allowed}
+                            data-testid={`${TestIdPrefix}.Status.APPROVED`}
+                          >
+                            {label}
+                          </MenuItem>
+                        )}
+                      </PermissionGate>
+                    ) : (
+                      <MenuItem key={key} value={key}>
+                        {label}
+                      </MenuItem>
+                    ),
+                )}
+              </Select>
+            </Field>
+          )}
+
+          {action === 'SET_AUTOMATION_STATUS' && (
+            <>
+              <Field
+                label="Automation status"
+                htmlFor="bulk-automation"
+                error={fieldErrors.automationStatus}
+              >
+                <Select
+                  id="bulk-automation"
+                  size="small"
+                  fullWidth
+                  value={automationValue}
+                  onChange={(event) => setAutomationValue(event.target.value as AutomationStatus)}
+                  data-testid={`${TestIdPrefix}.Field.AutomationStatus`}
+                >
+                  {Object.entries(automationLabels).map(([key, label]) => (
+                    <MenuItem key={key} value={key}>
+                      {label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </Field>
+
+              {/* Required by V1's check constraint, so the field appears exactly when it applies
+                  rather than being always present and conditionally validated. */}
+              {automationValue === 'NOT_AUTOMATABLE' && (
+                <Field
+                  label="Why these cases cannot be automated"
+                  htmlFor="bulk-not-automatable"
+                  error={fieldErrors.notAutomatableReason}
+                >
+                  <TextField
+                    id="bulk-not-automatable"
+                    size="small"
+                    fullWidth
+                    value={notAutomatableReason}
+                    onChange={(event) => setNotAutomatableReason(event.target.value)}
+                    data-testid={`${TestIdPrefix}.Field.NotAutomatableReason`}
+                  />
+                </Field>
+              )}
+            </>
+          )}
+
+          {action === 'SET_OWNER' && (
+            <Field label="Owner" htmlFor="bulk-owner" error={fieldErrors.ownerId}>
+              <Select
+                id="bulk-owner"
+                size="small"
+                fullWidth
+                displayEmpty
+                value={ownerId}
+                onChange={(event) => setOwnerId(event.target.value)}
+                data-testid={`${TestIdPrefix}.Field.Owner`}
+              >
+                {/* The unassign option is offered explicitly rather than left as "pick nobody":
+                    clearing an owner across 40 cases is a real intent, and a blank that means two
+                    things is how it gets performed by accident. */}
+                <MenuItem value="">No owner</MenuItem>
+                {(members.data ?? []).map((member) => (
+                  <MenuItem key={member.id} value={member.id}>
+                    {member.displayName}
                   </MenuItem>
                 ))}
               </Select>
-            </Box>
-          ) : (
-            <Box>
-              <Typography variant="caption" component="label" htmlFor="bulk-condition" sx={{ display: 'block', mb: 0.5 }}>
-                Precondition
-              </Typography>
+            </Field>
+          )}
+
+          {action === 'MOVE_TO_SUITE' && (
+            <Field label="Destination suite" htmlFor="bulk-suite" error={fieldErrors.suiteId}>
+              <Select
+                id="bulk-suite"
+                size="small"
+                fullWidth
+                displayEmpty
+                value={suiteId}
+                onChange={(event) => setSuiteId(event.target.value)}
+                data-testid={`${TestIdPrefix}.Field.Suite`}
+              >
+                <MenuItem value="">Choose a suite…</MenuItem>
+                {(suites.data ?? []).map((suite) => (
+                  <MenuItem key={suite.id} value={suite.id}>
+                    {suite.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </Field>
+          )}
+
+          {action === 'ADD_TAGS' && (
+            <Field label="Tags" htmlFor="bulk-tags" error={fieldErrors.tags}>
+              <Autocomplete
+                multiple
+                freeSolo
+                options={[]}
+                value={tags}
+                onChange={(_event, value) => setTags(value as string[])}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    id="bulk-tags"
+                    size="small"
+                    placeholder="Type a tag and press Enter"
+                    data-testid={`${TestIdPrefix}.Field.Tags`}
+                  />
+                )}
+              />
+            </Field>
+          )}
+
+          {(action === 'ATTACH_CONDITIONS' || action === 'DETACH_CONDITIONS') && (
+            <Field label="Precondition" htmlFor="bulk-condition" error={fieldErrors.conditionId}>
               <Select
                 id="bulk-condition"
                 size="small"
@@ -157,8 +460,7 @@ export function BulkActionDialog({
                     {/* Omitted at zero rather than rendered as "used by 0". Nothing maintains
                         usage_count yet, so on a real instance every row would carry it — a label
                         stating a fact the data never made, and one that invites reading the
-                        order as a ranking when it is currently just the title. Same call as the
-                        dangling "Your role:" and the invented status colour. */}
+                        order as a ranking when it is currently just the title. */}
                     {condition.usageCount > 0 && (
                       <Box component="span" sx={{ ml: 1, color: 'text.secondary', fontSize: '0.75rem' }}>
                         used by {formatCount(condition.usageCount)}
@@ -167,14 +469,21 @@ export function BulkActionDialog({
                   </MenuItem>
                 ))}
               </Select>
-            </Box>
+            </Field>
+          )}
+
+          {action === 'SUBMIT_FOR_REVIEW' && (
+            <Alert severity="info" icon={false} data-testid={`${TestIdPrefix}.SubmitNote`}>
+              Moves the selected cases to <strong>In review</strong>. Approving them is a separate
+              step, and a test lead's.
+            </Alert>
           )}
 
           {preview && <BulkPreview result={preview} />}
 
-          {bulk.isError && (
+          {(rootError || fieldErrors.caseIds) && (
             <Alert severity="error" role="alert" data-testid={`${TestIdPrefix}.Error`}>
-              {bulk.error instanceof Error ? bulk.error.message : "Couldn't apply the change. Try again."}
+              {rootError ?? fieldErrors.caseIds}
             </Alert>
           )}
         </Stack>
@@ -204,6 +513,44 @@ export function BulkActionDialog({
         </Button>
       </DialogActions>
     </Dialog>
+  );
+}
+
+/**
+ * One labelled control, with its server-side error underneath.
+ *
+ * Extracted because the dialog now has seven of these and the label/error pairing is exactly the
+ * kind of two-line duplication that ends up inconsistent — one field showing its error in red
+ * caption, another in a helper text, a third silently swallowing it.
+ */
+function Field({
+  label,
+  htmlFor,
+  error,
+  children,
+}: {
+  label: string;
+  htmlFor: string;
+  error?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Box>
+      <Typography
+        variant="caption"
+        component="label"
+        htmlFor={htmlFor}
+        sx={{ display: 'block', mb: 0.5 }}
+      >
+        {label}
+      </Typography>
+      {children}
+      {error && (
+        <Typography variant="caption" role="alert" sx={{ color: 'error.main', mt: 0.5, display: 'block' }}>
+          {error}
+        </Typography>
+      )}
+    </Box>
   );
 }
 

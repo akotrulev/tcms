@@ -41,6 +41,7 @@ export type Condition = S['Condition'];
 export type CaseConditionRef = S['CaseConditionRef'];
 export type SharedStep = S['SharedStep'];
 export type BulkOperation = S['BulkOperation'];
+export type BulkPayload = S['BulkPayload'];
 export type BulkResult = S['BulkResult'];
 export type EntityVersion = S['EntityVersion'];
 export type VersionMarker = S['VersionMarker'];
