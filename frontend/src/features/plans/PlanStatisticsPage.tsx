@@ -24,6 +24,7 @@ import { usePlan, usePlanStatistics, useProject, useSetPlanStatus } from '../../
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
+import { ReviewPanel } from '../review/ReviewPanel';
 import { PermissionGate } from '../../components/PermissionGate';
 import { DenominatorToggle, PassRateSummary, ResultBar, ResultCountsCell } from '../../components/ResultBar';
 import { criterionState, type Denominator } from '../../lib/results';
@@ -131,6 +132,23 @@ export function PlanStatisticsPage() {
       <DataRegion testId="PlanStats.Content" state={{ ...statistics, refetch: () => void statistics.refetch() }}>
         {(data) => <StatisticsBody data={data} projectId={projectId} aggregation={aggregation} />}
       </DataRegion>
+
+      {/*
+        Below the report rather than above it. A plan's sign-off is the release-readiness signature
+        (§6g) and therefore tempting to put first — but this page is the report, most plans are
+        never submitted at all (review is optional and off by default), and an empty "Not in review"
+        panel above the numbers would be a permanent header for a feature most teams do not use.
+        `currentVersionNo` is passed so the panel can say the SCOPE has changed since the sign-off
+        was asked for, which is exactly what a plan version is (§74).
+      */}
+      <Box sx={{ mt: 3 }}>
+        <ReviewPanel
+          projectId={projectId}
+          subjectType="PLAN"
+          subjectId={planId}
+          currentVersionNo={plan.data?.currentVersionNo}
+        />
+      </Box>
     </Box>
   );
 }

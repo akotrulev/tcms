@@ -30,6 +30,13 @@ export const keys = {
     ['projects', p, 'cases', id, 'history', scope] as const,
   conditions: (p: string, q: string, type?: string) => ['projects', p, 'conditions', q, type ?? 'ALL'] as const,
   sharedSteps: (p: string, q: string) => ['projects', p, 'shared-steps', q] as const,
+  /**
+   * A subject's reviews. Keyed by the subject *type* as well as its id, because the id spaces are
+   * independent — a case and a suite may in principle carry the same uuid, and a key that dropped
+   * the type would serve one artifact's review trail for another.
+   */
+  reviews: (p: string, subjectType: string, subjectId: string) =>
+    ['projects', p, 'reviews', subjectType, subjectId] as const,
   plans: (p: string) => ['projects', p, 'plans'] as const,
   plan: (p: string, id: string) => ['projects', p, 'plans', id] as const,
   planStats: (p: string, id: string, aggregation: string) =>

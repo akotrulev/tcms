@@ -448,3 +448,36 @@ found, and both would have looked correct before it.
 **The row no browser can produce:** two leads moving one suite in the same instant. There is no
 `If-Match` on this endpoint by design (the target is absolute), so the race resolves to whichever
 lands second and both orders are legal moves. Recorded so its absence does not read as an oversight.
+
+---
+
+## §76 — the review record: the panel that shows a sign-off and cannot grant one
+
+**Built and NOT browser-verified.** The eleventh slice in the deferred queue.
+
+**Mock and live disagree by construction here, and both disagreements are deliberate.** The mock's
+fixtures carry an open review on `TP-5` and a *rejected* one on `TC-8` — so mock mode can show the
+panel's three shapes without driving a flow — while on a real instance **no artifact has a review
+row at all** until somebody submits one after this deploy, including the artifacts that are already
+`IN_REVIEW`. Row 1 is that state, and it cannot be reproduced once row 2 has run.
+
+| # | Flow | What must be true | Mode |
+|---|---|---|---|
+| 1 | Live: open a case or plan that is already **In review**, before submitting anything new | The panel reads **"Not in review"** while the artifact's own status chip says In review, and the empty-state body explains that submitting is part of the status. This is not a defect: the record starts now. `psql`: `SELECT count(*) FROM review` is 0. | **live only** |
+| 2 | Submit a plan for review (plan screen → Submit for review), then open the panel | State chip **In review**, "Submitted by *you*", the version pinned (`v1` on a fresh plan), an empty trail, and **no Approve button anywhere on the panel**. `psql`: one `review` row, `state = 'IN_REVIEW'`, `subject_version_no` equal to the plan's `current_version_no`. | mock + live |
+| 3 | As a **Test Engineer** on the same open review: type a comment, press **Looks good** | 201, the trail gains one row reading *Looks good · your name*, the comment renders under it, **the box clears**, and the plan is **still In review** — a peer verdict moves nothing. | mock + live |
+| 4 | Same caller, again: press **Request changes** with a different comment | **Both rows are there, oldest first.** Participations are append-only; a panel that replaced the first row would be hiding the fact somebody changed their mind, which is what the trail is for. | mock + live |
+| 5 | As a **Viewer** (holds `case:comment`, not `case:review`) open a case with an open review | Both buttons **greyed with a tooltip**, the trail fully readable. §31's disable-don't-hide over §6g's three tiers — and the tier boundary is invisible unless it is rendered. | mock + live |
+| 6 | As a lead: approve the plan from its own screen, then re-read the panel | State **Approved**, "Signed off by *you*" with a timestamp, an `APPROVAL / Approved` row at the end of the trail, and **the verdict form is gone** (not merely disabled). | mock + live |
+| 7 | Submit again as person A, then **send it back as person B** (Return to draft) | State reads **Sent back**, and the trail's last row is `APPROVAL / Sent back` naming **B**. | **live only** — needs two accounts |
+| 8 | Submit as person A and **withdraw it as A** (Return to draft) | State reads **Withdrawn** and **no verdict row is added**. Rows 7 and 8 are the same ladder edge and must read differently; this is the pair `V22` added a state for. | **live only** |
+| 9 | With a review open, edit the artifact so it writes a version (a plan's **scope**, a case's content), then re-read the panel | The warning appears: *"…has changed since it was submitted — the review covers v2, and you are looking at v3."* The version on the record must **not** move. | mock + live |
+| 10 | Withdraw and re-submit the same artifact twice | The panel shows the newest review at the top and an **"Earlier reviews"** list beneath it, each with its own state and version. `psql`: exactly one row with `state = 'IN_REVIEW'` for that subject. | mock + live |
+| 11 | Have the review approved in another tab, then press **Looks good** in the stale one | **409 in place, inside the panel** — *"This review has already ended. Submit the plan for review again to reopen it."* — not a toast, and the trail refreshes rather than the page. | mock + live |
+| 12 | The case detail sidebar at 390 px, with a two-line comment in the trail | The panel does not push the version history off screen, the comment wraps rather than overflowing, and the two buttons stay side by side or stack cleanly. | mock + live |
+| 13 | Bulk-submit ~20 cases from the case list, then open two of them | **Each has its own open review**, each pinned to that case's own version. The bulk path is the one §6g calls the common case, and it is the one place a per-row write could silently do nothing. | mock + live |
+
+**The row no browser can produce:** two people submitting the same artifact in the same instant.
+`V22`'s partial unique index is what decides it, and the loser gets a constraint violation rather
+than a second open review — recorded here so its absence does not read as an oversight, and queued
+as a backend check.

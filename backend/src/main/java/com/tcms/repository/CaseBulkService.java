@@ -5,6 +5,8 @@ import com.tcms.project.ClassificationDimensionView;
 import com.tcms.project.GateResult;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectService;
+import com.tcms.project.ReviewService;
+import com.tcms.project.ReviewSubjectType;
 import com.tcms.tenancy.AuditEvent;
 import com.tcms.tenancy.AuditEventRepository;
 import com.tcms.tenancy.CompanyContext;
@@ -104,6 +106,7 @@ public class CaseBulkService {
     private final TestStepRepository stepRows;
     private final CaseRenderer renderer;
     private final CaseVersions versions;
+    private final ReviewService reviews;
     private final AuditEventRepository auditEvents;
     private final Clock clock;
 
@@ -120,6 +123,7 @@ public class CaseBulkService {
             TestStepRepository stepRows,
             CaseRenderer renderer,
             CaseVersions versions,
+            ReviewService reviews,
             AuditEventRepository auditEvents,
             Clock clock) {
 
@@ -134,6 +138,7 @@ public class CaseBulkService {
         this.stepRows = stepRows;
         this.renderer = renderer;
         this.versions = versions;
+        this.reviews = reviews;
         this.auditEvents = auditEvents;
         this.clock = clock;
     }
@@ -279,7 +284,7 @@ public class CaseBulkService {
                 case BulkVerdict.Changed ignored -> {
                     // The one place dryRun is consulted. Everything above ran identically.
                     if (!dryRun) {
-                        mutate(companyId, userId, row, command, context, now);
+                        mutate(companyId, userId, project.getId(), row, command, context, now);
                     }
                     changed.add(row.getKey());
                     changedIds.add(row.getId());
@@ -502,13 +507,32 @@ public class CaseBulkService {
     private void mutate(
             UUID companyId,
             UUID userId,
+            UUID projectId,
             TestCase row,
             BulkCommand command,
             Context context,
             Instant now) {
 
         switch (command) {
-            case BulkCommand.SetStatus status -> row.moveToStatus(status.target(), userId, now);
+            case BulkCommand.SetStatus status -> {
+                row.moveToStatus(status.target(), userId, now);
+                // Per case, inside the one transaction the whole operation runs in — so submitting
+                // two hundred cases opens two hundred reviews, and approving them closes exactly
+                // the ones that were open. This is the product's whole approval path for a case
+                // (§62: CaseUpdateRequest omits the status deliberately), so a review record that
+                // skipped it would exist for suites and plans and not for the artifact §6g calls
+                // the common case. The version pinned is the case's current one, which is what
+                // V1's own column comment asks for: an approval applies to a SPECIFIC version,
+                // including its snapshotted conditions.
+                reviews.moved(
+                        projectId,
+                        ReviewSubjectType.CASE,
+                        row.getId(),
+                        row.getCurrentVersionNo(),
+                        LifecycleLadder.standingOf(status.target()),
+                        userId,
+                        now);
+            }
 
             case BulkCommand.SetAutomationStatus automation -> row.applyAutomationStatus(
                     automation.target(), automation.notAutomatableReason(), userId, now);

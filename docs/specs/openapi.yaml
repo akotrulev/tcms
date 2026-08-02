@@ -477,6 +477,111 @@ paths:
           # every project-scoped path in this contract answers 404 instead.
           $ref: '#/components/responses/NotFound'
 
+  # -------------------------------------------------------------- review ----
+  # One record for all three reviewable artifacts (plan §6g). The subject is a (type, id)
+  # pair in the query rather than a nested path, because a review is not owned by the case-,
+  # suite- or plan-shaped part of the URL space — three nested paths would be three routes
+  # into one service with nothing different to say.
+  /projects/{projectId}/reviews:
+    # Only the path variable is shared. The subject filter belongs to the GET: a path item's
+    # parameters apply to EVERY operation under it, which is how the case list's filters
+    # landed on the POST beside it (§50).
+    parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+    get:
+      tags: [projects]
+      operationId: listReviews
+      summary: The reviews of one case, suite or plan — newest first
+      description: |
+        Plan §6g's review record: who submitted this version for review, who said what while
+        it was open, and who eventually signed it off. A review is **history, not a mirror of
+        the artifact's status** — rescinding an approval does not rewrite the review that
+        granted it, and re-submitting opens a new record rather than reopening the old one.
+
+        Usually one row, occasionally several, and an **empty array is the ordinary answer**
+        for an artifact nobody has ever submitted.
+
+        `subjectVersionNo` is pinned when the artifact is submitted and never re-stamped, so a
+        client holding the artifact's current version can tell the reviewer is looking at
+        older content — §6g's diff-since-approval, from the side the server can answer.
+
+        Gated by project visibility alone. There is no `review:read` permission in the
+        catalogue and inventing one would be a 403 nobody can grant themselves out of: a
+        caller who may see the artifact may see who reviewed it, which is the point of keeping
+        the record at all.
+      parameters:
+        - name: subjectType
+          in: query
+          required: true
+          schema: { $ref: '#/components/schemas/ReviewSubjectType' }
+        - name: subjectId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Reviews, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Review' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /projects/{projectId}/reviews/{reviewId}/participations:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - name: reviewId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [projects]
+      operationId: recordReviewParticipation
+      summary: Record a peer verdict — LGTM or changes requested
+      description: |
+        §6g's **advisory** tier. Peer review happens *inside* `IN_REVIEW` and accumulates on
+        the item **without moving it**: the state machine has exactly one gate, held by
+        `*:approve`, and this endpoint is not it. Approving or rejecting an artifact is a move
+        on its own ladder (`PUT /suites/{suiteId}/status`, `PUT /plans/{planId}/status`,
+        `POST /cases/bulk`), so `APPROVED` and `REJECTED` are refused here as field errors —
+        accepting them would be a second, cheaper door to the same sign-off, held by everyone
+        with the advisory key.
+
+        **Which permission this costs is decided by the review's subject type**, not by
+        anything the request sends: `case:review`, `suite:review` or `plan:review`, at project
+        scope. All three are seeded by `V3`, granted since M0, and had no consumer in Java
+        until this endpoint.
+
+        Repeat verdicts are allowed and are not an error. Participations are **append-only**:
+        somebody who requests changes and later relents leaves both rows, in order, which is
+        the fact a review trail is kept for. Readers take the newest row per person as the
+        standing verdict.
+
+        `409` once the review has ended — nothing about the request is malformed, and the way
+        forward is to submit the artifact for review again.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReviewParticipationInput' }
+      responses:
+        '201':
+          description: |
+            The whole review, re-rendered. A verdict is only ever read in the context of the
+            trail it joins, so returning the row alone would let the panel show a state the
+            server does not have. No `Location`: a participation has no URL of its own, and
+            inventing one would promise a `GET` nothing serves.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Review' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
   # ---------------------------------------------------------- repository ----
   /projects/{projectId}/suites:
     parameters: [{ $ref: '#/components/parameters/ProjectId' }]
@@ -2772,6 +2877,86 @@ components:
         displayName: { type: string }
         email: { type: string }
         avatarUrl: { type: string, nullable: true }
+
+    # ------------------------------------------------------------- review ---
+    Review:
+      type: object
+      # Every field a panel needs to render the record without a second call. `participations`
+      # is required and may be empty: a review nobody has commented on yet is an ordinary
+      # state, and an absent array would make "no verdicts" indistinguishable from "the server
+      # did not send them" (§48's rule about required arrays).
+      required: [id, subjectType, subjectId, subjectVersionNo, state, createdAt, participations]
+      properties:
+        id: { type: string, format: uuid }
+        subjectType: { $ref: '#/components/schemas/ReviewSubjectType' }
+        subjectId: { type: string, format: uuid }
+        subjectVersionNo:
+          type: integer
+          description: |
+            The version submitted, pinned once. Compare it against the artifact's current
+            version to show that the content has moved on since the reviewer was asked.
+        state: { $ref: '#/components/schemas/ReviewState' }
+        submittedBy:
+          allOf: [{ $ref: '#/components/schemas/UserRef' }]
+          nullable: true
+          description: |
+            Null when the account no longer resolves — somebody offboarded since. Nullable
+            rather than omitted, because a verdict that was recorded stays recorded and the
+            absence is the honest answer (§66).
+        createdAt: { type: string, format: date-time }
+        approvedBy:
+          allOf: [{ $ref: '#/components/schemas/UserRef' }]
+          nullable: true
+        approvedAt: { type: string, format: date-time, nullable: true }
+        participations:
+          type: array
+          items: { $ref: '#/components/schemas/ReviewParticipation' }
+
+    ReviewParticipation:
+      type: object
+      required: [id, kind, verdict, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        user:
+          allOf: [{ $ref: '#/components/schemas/UserRef' }]
+          nullable: true
+        kind:
+          type: string
+          enum: [PEER_REVIEW, APPROVAL]
+          description: |
+            `PEER_REVIEW` is advisory and moves nothing. `APPROVAL` rows are written by the
+            server when the artifact's own ladder ends the review, and can never be created
+            through the participations endpoint.
+        verdict: { $ref: '#/components/schemas/ReviewVerdict' }
+        comment: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    ReviewParticipationInput:
+      type: object
+      required: [verdict]
+      properties:
+        verdict:
+          type: string
+          enum: [LGTM, CHANGES_REQUESTED]
+          description: |
+            The two advisory verdicts, and deliberately a narrower set than `ReviewVerdict`:
+            `APPROVED` and `REJECTED` end a review and belong to the artifact's status ladder.
+        comment: { type: string, nullable: true }
+
+    ReviewSubjectType:
+      type: string
+      enum: [CASE, SUITE, PLAN]
+
+    ReviewState:
+      type: string
+      # WITHDRAWN is V22's addition and the distinction it makes is the point: the submitter
+      # taking their own submission back is not a rejection, and writing one into the record a
+      # team keeps to show who said what would name a reviewer who never spoke.
+      enum: [IN_REVIEW, APPROVED, REJECTED, WITHDRAWN]
+
+    ReviewVerdict:
+      type: string
+      enum: [LGTM, CHANGES_REQUESTED, REJECTED, APPROVED]
 
     # -------------------------------------------------------------- enums ---
     LifecycleStatus:

@@ -22,19 +22,21 @@ import {
   db,
   descendantSuiteIds,
   newId,
+  reviewMoved,
   recordCaseVersion,
   reporting,
   writeCase,
 } from '../db';
 import { currentUser } from '../fixtures/core';
 import { lifecycleLabels } from '../../lib/labels';
-import { decide, needsApproval } from '../lifecycleLadder';
+import { decide, needsApproval, standingOf } from '../lifecycleLadder';
 import {
   API,
   LATENCY,
   notFound,
   paging,
   holdsOn,
+  meRef,
   permissionsOn,
   problem,
   projectMembers,
@@ -575,6 +577,17 @@ export const caseHandlers = [
           if (!dryRun) {
             row.lifecycleStatus = target as LifecycleStatus;
             if (detail) detail.lifecycleStatus = target as LifecycleStatus;
+            // Per case, exactly as the server does it inside the same transaction: this endpoint
+            // is the product's whole approval path for a case, so a mock that moved the status
+            // without touching the record would show an approved case with nobody's name on it.
+            reviewMoved(
+              projectId,
+              'CASE',
+              row.id,
+              detail?.currentVersionNo ?? 1,
+              standingOf(target as LifecycleStatus),
+              meRef(),
+            );
           }
           changed.push(row.key);
         }

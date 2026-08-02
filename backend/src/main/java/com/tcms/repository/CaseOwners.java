@@ -1,9 +1,6 @@
 package com.tcms.repository;
 
-import com.tcms.identity.AppUser;
-import com.tcms.identity.AppUserRepository;
-import com.tcms.identity.CompanyMembership;
-import com.tcms.identity.CompanyMembershipRepository;
+import com.tcms.project.PeopleDirectory;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -13,7 +10,7 @@ import org.springframework.stereotype.Component;
 /**
  * Case owners, rendered — a set of user ids in, a {@link UserRefView} each out.
  *
- * <h2>This is why the module now depends on {@code identity}, and what that dependency is not</h2>
+ * <h2>Where the naming rule lives, and why this class is no longer the one applying it</h2>
  *
  * <p>{@code repository}'s package comment used to say "not {@code identity}", and the reason it
  * gave was authorization: this module must never hold a second answer to "may they?". That is still
@@ -26,11 +23,13 @@ import org.springframework.stereotype.Component;
  * {@code identity} is one the architecture explicitly allows. There is no cycle:
  * {@code identity} depends on {@code tenancy} and {@code project}, never on this module.
  *
- * <p>The port-and-adapter shape {@code project} uses for {@code ProjectAccess} is deliberately
- * <em>not</em> repeated here. That inversion exists because {@code project} cannot depend on
- * {@code identity} without creating a cycle; this module can, so declaring a port would mean making
- * {@code identity} depend on the test repository in order to hand back a display name — an arrow
- * pointing the wrong way to avoid one that points the right way.
+ * <p>The port-and-adapter shape {@code project} uses for {@code ProjectAccess} was deliberately
+ * <em>not</em> repeated here, and that reasoning still stands as far as it went: that inversion
+ * exists because {@code project} cannot depend on {@code identity} without creating a cycle, and
+ * this module can. What it missed is that {@code project} then acquired a consumer of its own — the
+ * review panel's participants (§76) — so the port exists regardless, and the choice was no longer
+ * "port or direct call" but "one resolution or three". Hence {@link PeopleDirectory}, and hence this
+ * class is now the mapping and not the rule.
  *
  * <h2>Two queries for a page, never two per row</h2>
  *
@@ -41,12 +40,10 @@ import org.springframework.stereotype.Component;
 @Component
 public class CaseOwners {
 
-    private final CompanyMembershipRepository memberships;
-    private final AppUserRepository users;
+    private final PeopleDirectory people;
 
-    public CaseOwners(CompanyMembershipRepository memberships, AppUserRepository users) {
-        this.memberships = memberships;
-        this.users = users;
+    public CaseOwners(PeopleDirectory people) {
+        this.people = people;
     }
 
     /**
@@ -60,41 +57,30 @@ public class CaseOwners {
      *                  scope and this lookup's scope are visibly the same one
      */
     Map<UUID, UserRefView> resolve(UUID companyId, Collection<UUID> userIds) {
-        if (userIds.isEmpty()) {
-            // Not merely an optimization: an empty collection bound into SQL `IN ()` is a syntax
-            // error. A page whose every case is unowned is an ordinary state, not an edge one.
-            //
-            // A HashMap rather than Map.of(), and that is the whole point of the line. Map.of()
-            // throws NPE on get(null) by contract while HashMap answers null, so returning the
-            // immutable empty map would make this method's behaviour on an unresolvable id depend
-            // on whether the page happened to contain anybody resolvable — fine on every page with
-            // one named owner, a 500 on the page where nobody has one. The same shape was a real
-            // 500 in execution.ExecutionPeople (handoff §38). Callers still null-check, because
-            // "unattributed" is a rendering decision; they should not also be the only thing
-            // standing between a data-dependent map and a stack trace.
-            return new HashMap<>();
-        }
-
-        Map<UUID, String> displayNames = new HashMap<>();
-        for (CompanyMembership membership
-                : memberships.findByCompanyIdAndUserIdIn(companyId, userIds)) {
-            displayNames.put(membership.getUserId(), membership.getDisplayName());
-        }
-
+        // Delegated, not implemented. This method and execution.ExecutionPeople#resolve were
+        // byte-for-byte copies of one another, the second carrying the comment "the two classes must
+        // not disagree" — §58's E1 exactly: two hand-maintained copies under an instruction to keep
+        // them in step, surviving because neither module can import the other. The rule they were
+        // both applying (plan §6u, below) now lives in project.PeopleDirectory, which both may call,
+        // and §76 collapsed them onto it rather than adding a third copy for the review panel.
+        //
+        // What remains here is the mapping onto this module's own UserRefView — a shape, not a rule.
+        // Callers still null-check, because "unattributed" is a rendering decision; see
+        // TestCaseSummaryView#owner() for why an unresolvable owner produces a case with no owner
+        // rather than one that is hidden or given an invented one.
         Map<UUID, UserRefView> resolved = new HashMap<>();
-        for (AppUser user : users.findAllById(userIds)) {
-            resolved.put(user.getId(), new UserRefView(
-                    user.getId(),
-                    // The membership's name wins (plan §6u): the same person is labelled
-                    // separately per client, and neither may see the other's label. The account's
-                    // canonical name is the fallback for an owner who has since been offboarded
-                    // from this company — their authored cases stay, and a case whose owner column
-                    // is blank reads as data loss rather than as a person having left.
-                    displayNames.getOrDefault(user.getId(), user.getCanonicalName()),
-                    user.getEmail(),
-                    // Nullable in the contract and null for everyone: nothing uploads an avatar.
-                    null));
+        for (Map.Entry<UUID, com.tcms.project.UserRefView> person
+                : people.resolve(companyId, userIds).entrySet()) {
+            resolved.put(person.getKey(), new UserRefView(
+                    person.getValue().id(),
+                    person.getValue().displayName(),
+                    person.getValue().email(),
+                    person.getValue().avatarUrl()));
         }
+        // A HashMap all the way down, never Map.of(): the latter throws NPE on get(null) by
+        // contract, so an immutable empty map would make behaviour on an unresolvable id depend on
+        // whether the page happened to contain anybody resolvable — fine on every page with one
+        // named owner, a 500 on the page where nobody has one (§38).
         return resolved;
     }
 }

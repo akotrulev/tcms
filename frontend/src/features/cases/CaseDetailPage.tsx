@@ -25,6 +25,7 @@ import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
 import { CaseDeleteDialog } from './CaseDeleteDialog';
+import { ReviewPanel } from '../review/ReviewPanel';
 import { CaseVersionPanel } from './CaseVersionPanel';
 import { AutomationLabel, HealthChip, LifecycleChip, PriorityLabel, StatusChip } from '../../components/StatusChip';
 import { formatAge, formatDateTime, formatSeconds } from '../../lib/format';
@@ -304,6 +305,20 @@ export function CaseDetailPage() {
                       />
                     </Stack>
                   </Panel>
+
+                  {/*
+                    Above the version history and below the metadata, because it is the panel a
+                    reader acts on: an open review is a question somebody is waiting on an answer
+                    to, while the version list is reference material. `currentVersionNo` is passed
+                    so the panel can say the case has moved past the version under review — the
+                    server cannot compute that, holding only one of the two numbers.
+                  */}
+                  <ReviewPanel
+                    projectId={projectId}
+                    subjectType="CASE"
+                    subjectId={caseId}
+                    currentVersionNo={data.currentVersionNo}
+                  />
 
                   {/*
                     Below Ownership rather than above it: the sidebar reads as "what is this case"

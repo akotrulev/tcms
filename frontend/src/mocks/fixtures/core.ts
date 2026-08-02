@@ -679,6 +679,76 @@ export const plans: TestPlan[] = [
   },
 ];
 
+/**
+ * The review record's seed — plan §6g, and two rows that say different things on purpose.
+ *
+ * `TP-5` is in review **and has an open review** with a peer verdict on it: the ordinary state of
+ * something submitted since the record existed, and what the panel is for. Suite `TS-4` is in
+ * review and has **no** review row at all — which is not an oversight but the state every artifact
+ * that was already `IN_REVIEW` when this shipped is in, on every real instance, until somebody
+ * re-submits it. The panel has to read correctly in both, and a fixture set carrying only the tidy
+ * one would hide the second from every mock-mode pass (§72's rule about fixtures never sitting in
+ * the state a real install produces, applied from the other end).
+ *
+ * `TC-8`'s closed review is the third shape: a case whose review ended in a rejection, so the
+ * trail's `APPROVAL`/`REJECTED` row — the one no client can post — is rendered by something.
+ */
+const userRefOf = (i: number) => ({
+  id: users[i].id,
+  displayName: users[i].displayName,
+  email: users[i].email,
+  avatarUrl: null,
+});
+
+export const reviews = [
+  {
+    id: uid(1, 'w'),
+    projectId: projects[0].id,
+    subjectType: 'PLAN' as const,
+    subjectId: uid(5, 'l'),
+    subjectVersionNo: 1,
+    state: 'IN_REVIEW' as const,
+    submittedBy: userRefOf(1),
+    createdAt: '2026-07-29T11:20:00Z',
+    approvedBy: null,
+    approvedAt: null,
+    participations: [
+      {
+        id: uid(2, 'w'),
+        user: userRefOf(2),
+        kind: 'PEER_REVIEW' as const,
+        verdict: 'CHANGES_REQUESTED' as const,
+        comment: 'The settlement suite is missing from the scope.',
+        createdAt: '2026-07-29T14:05:00Z',
+      },
+    ],
+  },
+  {
+    id: uid(3, 'w'),
+    projectId: projects[0].id,
+    subjectType: 'CASE' as const,
+    // TC-8, the eighth case seed — spelled the way `fixtures/cases.ts` allocates its ids rather
+    // than imported, because that module already imports this one and the cycle would be real.
+    subjectId: uid(107, 'e'),
+    subjectVersionNo: 2,
+    state: 'REJECTED' as const,
+    submittedBy: userRefOf(2),
+    createdAt: '2026-07-24T09:00:00Z',
+    approvedBy: null,
+    approvedAt: null,
+    participations: [
+      {
+        id: uid(4, 'w'),
+        user: userRefOf(0),
+        kind: 'APPROVAL' as const,
+        verdict: 'REJECTED' as const,
+        comment: null,
+        createdAt: '2026-07-24T16:40:00Z',
+      },
+    ],
+  },
+];
+
 export const runs: TestRun[] = [
   { id: uid(1, 'k'), key: 'TR-418', name: 'Nightly regression #418', planId: plans[0].id, planKey: 'TP-1', configuration: configurations[0], status: 'COMPLETED', releaseVersion: '4.3.0', buildNumber: '#4471', source: 'INGESTED', startedAt: '2026-07-30T02:00:00Z', completedAt: '2026-07-30T02:41:00Z', counts: { passed: 37, failed: 4, blocked: 1, skipped: 0, notRun: 0, total: 42 } },
   { id: uid(2, 'k'), key: 'TR-417', name: 'Nightly regression #417', planId: plans[0].id, planKey: 'TP-1', configuration: configurations[0], status: 'COMPLETED', releaseVersion: '4.3.0', buildNumber: '#4470', source: 'INGESTED', startedAt: '2026-07-29T02:00:00Z', completedAt: '2026-07-29T02:38:00Z', counts: { passed: 39, failed: 2, blocked: 1, skipped: 0, notRun: 0, total: 42 } },

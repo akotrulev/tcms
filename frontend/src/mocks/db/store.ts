@@ -32,6 +32,7 @@ import type {
   WorkItem,
 } from '../../api/types';
 import type { CaseVersion } from '../../api/queries/cases';
+import type { MockReview } from './reviews';
 import { caseSummaries } from '../fixtures/cases';
 import {
   artifacts,
@@ -44,6 +45,7 @@ import {
   docPages,
   plans,
   projects,
+  reviews,
   roleAssignments,
   runs,
   sharedSteps,
@@ -104,6 +106,11 @@ interface Store {
   conditions: Condition[];
   sharedSteps: typeof sharedSteps;
   plans: TestPlan[];
+  /**
+   * The review record (plan §6g), mutable because submitting and approving write to it — the whole
+   * point of the panel is that a verdict recorded in mock mode is there on the next read.
+   */
+  reviews: MockReview[];
   runs: TestRun[];
   executions: Map<string, TestExecution[]>;
   docPages: typeof docPages;
@@ -190,6 +197,7 @@ export const db: Store = {
   conditions: clone(conditions),
   sharedSteps: clone(sharedSteps),
   plans: clone(plans),
+  reviews: clone(reviews) as MockReview[],
   runs: clone(runs),
   executions: new Map(),
   docPages: clone(docPages),

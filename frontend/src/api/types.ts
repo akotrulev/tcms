@@ -51,6 +51,22 @@ export type EntityVersion = S['EntityVersion'];
 export type VersionMarker = S['VersionMarker'];
 export type Facet = S['Facet'];
 
+// review (plan §6g) — one record over all three reviewable artifacts, so it sits between the
+// repository and execution blocks rather than inside either.
+export type Review = S['Review'];
+export type ReviewParticipation = S['ReviewParticipation'];
+export type ReviewParticipationInput = S['ReviewParticipationInput'];
+export type ReviewSubjectType = S['ReviewSubjectType'];
+export type ReviewState = S['ReviewState'];
+/**
+ * What a participation says. Read off `ReviewParticipation` rather than the *input* schema, for the
+ * reason `CriterionMetric` gives one module over and in the opposite direction: the input declares
+ * only the two advisory verdicts a client may send, while a response carries all four — the
+ * `APPROVED` and `REJECTED` rows the ladder writes. A label map keyed off the input would be a
+ * compile error waiting for the first approved review to render.
+ */
+export type ReviewVerdict = NonNullable<ReviewParticipation['verdict']>;
+
 // execution
 export type TestPlan = S['TestPlan'];
 export type TestPlanSummary = S['TestPlanSummary'];

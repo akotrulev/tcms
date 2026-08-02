@@ -12,6 +12,7 @@
  * discovered against a real backend.
  */
 import type { LifecycleStatus } from '../api/types';
+import type { ReviewStanding } from './db/reviews';
 
 export type LadderDecision =
   | { kind: 'move'; target: LifecycleStatus }
@@ -76,4 +77,18 @@ export function decide(
 export function needsApproval(current: LifecycleStatus, requested: LifecycleStatus): boolean {
   if (requested === 'APPROVED' || requested === 'DEPRECATED') return true;
   return RANK[requested] < RANK[current] && RANK[current] >= RANK.APPROVED;
+}
+
+/**
+ * Where a status sits relative to review — the server's `LifecycleLadder.standingOf`, and the whole
+ * of what the review record knows about this enum.
+ *
+ * `DEPRECATED` lands with `DRAFT` deliberately: retiring an artifact while it is under review ends
+ * the review the same way withdrawing does, because nobody judged the content — the question was
+ * taken off the table.
+ */
+export function standingOf(status: LifecycleStatus): ReviewStanding {
+  if (status === 'IN_REVIEW') return 'IN_REVIEW';
+  if (status === 'APPROVED') return 'APPROVED';
+  return 'OUTSIDE_REVIEW';
 }

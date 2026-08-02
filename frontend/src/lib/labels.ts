@@ -18,6 +18,9 @@ import type {
   LifecycleStatus,
   PlanStatus,
   Priority,
+  ReviewState,
+  ReviewSubjectType,
+  ReviewVerdict,
   RunStatus,
   StatusKind,
   StepFormat,
@@ -179,6 +182,49 @@ export const planStatusColors = {
 
 /** Whether the plan is over — the server's `PlanLifecycle.isClosed`, and the one copy of it here. */
 export const isPlanClosed = (status: PlanStatus) => status === 'CLOSED';
+
+/**
+ * The review record's four states (plan §6g), in the reader's words.
+ *
+ * `WITHDRAWN` and `REJECTED` are worded as the different acts they are, which is the whole reason
+ * `V22` added the fourth value: the submitter taking their own submission back is not a rejection,
+ * and a panel that called it one would name a reviewer who never spoke.
+ */
+export const reviewStateLabels = {
+  IN_REVIEW: 'In review',
+  APPROVED: 'Approved',
+  REJECTED: 'Sent back',
+  WITHDRAWN: 'Withdrawn',
+} as const satisfies Record<ReviewState, string>;
+
+/** Beside the labels, so a review state cannot be worded in one place and coloured in another. */
+export const reviewStateColors = {
+  IN_REVIEW: 'var(--color-info)',
+  APPROVED: 'var(--color-passed)',
+  REJECTED: 'var(--color-failed)',
+  WITHDRAWN: 'var(--color-skipped)',
+} as const satisfies Record<ReviewState, string>;
+
+/**
+ * What a participant said.
+ *
+ * All four verdicts, not the two a client may send: the trail also carries the `APPROVED` and
+ * `REJECTED` rows the artifact's own ladder writes, and a map keyed off the *input* enum would be a
+ * missing label on the first approved review anybody opened.
+ */
+export const reviewVerdictLabels = {
+  LGTM: 'Looks good',
+  CHANGES_REQUESTED: 'Changes requested',
+  APPROVED: 'Approved',
+  REJECTED: 'Sent back',
+} as const satisfies Record<ReviewVerdict, string>;
+
+/** What is under review, in the reader's words — used for the refusal a closed review answers. */
+export const reviewSubjectLabels = {
+  CASE: 'case',
+  SUITE: 'suite',
+  PLAN: 'plan',
+} as const satisfies Record<ReviewSubjectType, string>;
 
 /**
  * The metrics a plan's entry and exit criteria may be gated on, in the reader's words.

@@ -2,6 +2,8 @@ package com.tcms.repository;
 
 import com.tcms.project.GateResult;
 import com.tcms.project.ProjectService;
+import com.tcms.project.ReviewService;
+import com.tcms.project.ReviewSubjectType;
 import com.tcms.tenancy.AuditEvent;
 import com.tcms.tenancy.AuditEventRepository;
 import com.tcms.tenancy.CompanyContext;
@@ -93,6 +95,7 @@ public class SuiteStatusService {
     private final ProjectService projects;
     private final SuiteRepository suites;
     private final SuiteService tree;
+    private final ReviewService reviews;
     private final AuditEventRepository auditEvents;
     private final Clock clock;
 
@@ -100,12 +103,14 @@ public class SuiteStatusService {
             ProjectService projects,
             SuiteRepository suites,
             SuiteService tree,
+            ReviewService reviews,
             AuditEventRepository auditEvents,
             Clock clock) {
 
         this.projects = projects;
         this.suites = suites;
         this.tree = tree;
+        this.reviews = reviews;
         this.auditEvents = auditEvents;
         this.clock = clock;
     }
@@ -190,6 +195,19 @@ public class SuiteStatusService {
 
         suite.applyStatus(target, userId, now);
         suites.saveAndFlush(suite);
+
+        // Inside this transaction, so the folder's status and the record of who reviewed it commit
+        // together — see ReviewService#moved. The version pinned is the suite's current one, which
+        // for a suite means its composition (SuiteVersions): approving a folder is a statement about
+        // what was in it on the day, and that is exactly the number an auditor needs back.
+        reviews.moved(
+                projectId,
+                ReviewSubjectType.SUITE,
+                suite.getId(),
+                suite.getCurrentVersionNo(),
+                LifecycleLadder.standingOf(target),
+                userId,
+                now);
 
         auditEvents.save(AuditEvent.record(
                 projectId,

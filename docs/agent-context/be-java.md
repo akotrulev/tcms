@@ -3,7 +3,7 @@
 # be-java — orientation cache (TCMS)
 
 **Last verified:** 2026-08-02
-**Baseline commit:** `dc5a7db`
+**Baseline commit:** `086a669`
 **Fingerprint files:** `backend/build.gradle.kts`, `backend/gradle/libs.versions.toml`, `backend/gradle/wrapper/gradle-wrapper.properties`
 
 > Authoritative docs win over this file. `CLAUDE.md`, `docs/HANDOFF.md` (an index — sections live in
@@ -63,7 +63,7 @@ provisioning · auth · shared`.
   return zero rows, fail-closed and silent. `RepositoryTransactionTest` derives the repository list
   from the live context, so a new repository that forgets fails the build. `#confirmed`
 - **Flyway owns all DDL**; `hibernate.ddl-auto: validate`, `baseline-on-migrate: false`. Migrations
-  at `src/main/resources/db/migration`. **Head is `V21`; `V22` is the next free number.** Booting the
+  at `src/main/resources/db/migration`. **Head is `V22`; `V23` is the next free number.** Booting the
   real context in a test is itself a schema-drift gate. `#confirmed`
 - **Privilege split** — Flyway migrates as `tcms_owner`, the pool connects as `tcms_app`, neither is
   a superuser and neither holds `BYPASSRLS`. Mirrored in three places that must agree:
@@ -178,6 +178,35 @@ provisioning · auth · shared`.
   `PlanLifecycle.isClosed`'s first consumer** — §73 wrote it and `TestPlan.applyStatus` compares the
   enum inline — placed after the permission, before the `If-Match`, before validation (§72's order).
   `#confirmed`
+- **The REVIEW RECORD lives in `project`, and the placement is the design (§76).** `ReviewService` +
+  `Review`/`ReviewParticipation` + `ReviewController` + `GET /projects/{id}/reviews?subjectType&subjectId`
+  + `POST …/reviews/{id}/participations`. **A review's subject is an opaque triple** (`subject_type`,
+  `subject_id`, `subject_version_no`, no FK), which is what lets ONE record serve cases, suites and
+  plans — and three writers in TWO modules must reach it (`SuiteStatusService`, `CaseBulkService`,
+  `PlanStatusService`), so it can only live where both may call. A `review` module is **refused**:
+  `ArchitectureRules.FOUNDATION_MODULES` forbids naming anything but tenancy/identity/project in an
+  `allowedDependencies`, so it would need the product's first `CompanyScopedEvent` (still zero
+  implementations) with the event type in `tenancy`. **`ReviewService.moved` takes a
+  `ReviewStanding`** (OUTSIDE_REVIEW · IN_REVIEW · APPROVED), never a status — each ladder maps its
+  own enum (`LifecycleLadder.standingOf`, `PlanLifecycle.standingOf`) — and deliberately **not** where
+  the artifact came FROM: the open review row is that fact and is the better one. Called INSIDE each
+  ladder's transaction, so the status and the record commit together. **`V22`: a fourth state
+  `WITHDRAWN`**, because the shipped ladders put `IN_REVIEW → DRAFT` on the EDIT key, so the submitter
+  taking their own submission back walks the same edge as a colleague sending it back — derived from
+  `actorId.equals(createdBy)`, never sent — plus a **partial** unique index (one OPEN review per
+  subject; closed rows are the history). **The participation endpoint cannot write an `APPROVAL` row**:
+  `APPROVED`/`REJECTED` are field errors, or the advisory key becomes a second door to the sign-off.
+  Gate via `ProjectService.writeGrantedOnTarget` (§69's seam, **5th** consumer) on
+  `ReviewSubjectType.reviewPermission()`, resolving through `findInProject` — `findById` is
+  RLS-scoped to the COMPANY and accepts a sibling project's review. `#confirmed`
+- **`project.PeopleDirectory` is the ONE resolution of "what is this person called" (§76).** Port in
+  `project` (which may depend on `tenancy` only — its package comment prescribes exactly this),
+  implemented by `identity.IdentityPeopleDirectory`; `ProjectAccess` is the first instance of that
+  inversion. **`repository.CaseOwners` and `execution.ExecutionPeople` were byte-identical copies** of
+  plan §6u's rule under a comment saying they must not disagree (§58 E1) and now delegate — what is
+  left in each is the mapping onto its own module's `UserRefView`. The two null-key tests
+  (`CaseOwnersNullKeyTest`, `PeopleResolutionNullKeyTest`) now pass a stub returning `Map.of()`, the
+  worst case, and assert the wrapper still answers null-tolerantly (§38's 500). `#confirmed`
 - **§6g's authoring ladder is ONE class since §75 — `repository.LifecycleLadder`** — read by
   `SuiteStatusService` *and* `CaseBulkService`, because `LifecycleStatus` is the status of a suite
   **or** a case (`V1` spells the identical four-value constraint on both tables) and §6g draws one
@@ -352,16 +381,16 @@ provisioning · auth · shared`.
   `suite_version` was in for a long time. A plan timeline is the natural consumer and it is §6p's.
   `#confirmed`
 
-- **Four review-workflow permission keys still have no consumer in Java** — `case:review`,
-  `suite:review`, `plan:review`, `case:comment` — and §73 recorded that this is **correct rather than
-  an omission**: §6g puts peer review *inside* `IN_REVIEW`, accumulating on the item without moving
-  it, so those keys belong to comments/LGTM/request-changes, which do not exist. Since §75 the
-  reviewer half is the **only** unbuilt part of §6g: every item-side ladder now exists (case §62,
-  plan §73, suite §75). It needs **three** tables (`review`, `review_participation`,
-  `review_comment` — all schema-and-no-code) **and a `V22`**, because §6g's per-project opt-in
-  setting has nowhere to live: `project` has NO `settings` column, only `company` does. Both
-  `PlanLifecycle`'s and `LifecycleLadder`'s headers lean on that setting's absence to justify a
-  ladder that does not require approval, so building it changes two ladders as well. `#confirmed`
+- ~~**Four review-workflow permission keys still have no consumer in Java**~~ → **three of them got
+  one in §76** (`case:review`, `suite:review`, `plan:review`). **`case:comment` is still unconsumed
+  and that is correct**: `V3` grants it to **Viewer** and the review tier to Test Engineer and up —
+  §6g's three tiers — so it belongs to `review_comment`, which has no writer. What is now true
+  instead: **the reviewer apparatus's spine exists and its two extensions do not.** `review_comment`
+  is still schema-with-no-code, reviewer *assignment* does not exist (`review_participation` records
+  who spoke, not who was asked), and **the per-project settings row blocks four things at once** —
+  §6g's review opt-in, author-cannot-approve-own-work, `required_peer_reviews` (mapped, written from
+  the column default, read by nothing), and the edit-after-approval mode. `project` has no
+  `settings` column; `company` does. `#confirmed`
 
 - **`audit_event.target_type` is spelled two ways and nothing reads it yet.** Every service writes
   the snake_case table name (`test_run`, `test_case`, `test_plan`, `doc_page`, …) except
@@ -371,6 +400,22 @@ provisioning · auth · shared`.
   nothing, which is §45's absent-row family. Sweep it when the audit screen is built. `#confirmed`
 
 ## Session log
+
+- 2026-08-02 · EXTEND · The review record (§76) — `review` and `review_participation` get their first
+  writer ever, and `case:review`/`suite:review`/`plan:review` their first consumers. New:
+  `ReviewService`, `Review`, `ReviewParticipation`, `ReviewState`, `ReviewStanding`,
+  `ReviewSubjectType`, `ReviewView`, `ReviewParticipationView`, `ReviewParticipationRequest`,
+  `ReviewController`, `ReviewRepository`, `ReviewParticipationRepository`, `PeopleDirectory` +
+  `IdentityPeopleDirectory`, `project.UserRefView`, `LifecycleLadder.standingOf`,
+  `PlanLifecycle.standingOf`, `Suite.getCurrentVersionNo`, **`V22`**. **The placement decision is most
+  of the slice**: three writers in two modules that cannot depend on each other, so the record lives
+  in `project` and a `review` module is refused with its cost written down. **The E1 finding:** writing
+  the third consumer of §6u's naming rule exposed `CaseOwners` and `ExecutionPeople` as byte-identical
+  copies; both now delegate to the port. **`V22` adds `WITHDRAWN`** because a withdrawal is not a
+  rejection, plus the partial one-open-review index. 22 tests, 4 backend mutations run (**1 / 2 / 1 /
+  6**) and 3 frontend (1 each), 3 queued. **The frontend mutation that did not redden is the finding**:
+  `waitFor(...toBeDisabled())` passes on `useCan`'s pending state (§66), so the test was rewritten as a
+  positive assertion plus a barrier on `PermissionGate`'s denial wrapper.
 
 - 2026-08-02 · EXTEND · The suite lifecycle (§75) — `suite.lifecycle_status` had exactly one writer
   (`Suite.create`, writing `DRAFT`), so three of four values were unreachable and every suite on

@@ -1,5 +1,7 @@
 package com.tcms.repository;
 
+import com.tcms.project.ReviewStanding;
+
 /**
  * Plan §6g's authoring ladder over {@link LifecycleStatus} — <strong>one transition table and one
  * permission rule, shared by the two aggregates that share the enum.</strong>
@@ -198,6 +200,28 @@ final class LifecycleLadder {
         boolean unmaking =
                 rank(requested) < rank(current) && rank(current) >= rank(LifecycleStatus.APPROVED);
         return unmaking ? keys.approve() : keys.edit();
+    }
+
+    /**
+     * Where a status sits <strong>relative to review</strong> — the translation
+     * {@code project.ReviewService} needs, and the whole of what the reviewer apparatus knows about
+     * this enum.
+     *
+     * <p>One mapping for both aggregates, for the same reason this class is one table: a case and a
+     * suite share the enum, so a second copy in {@code SuiteStatusService} and a third in
+     * {@code CaseBulkService} would be two hand-maintained readings of one four-value switch.
+     *
+     * <p>{@code DEPRECATED} maps to {@link ReviewStanding#OUTSIDE_REVIEW} together with
+     * {@code DRAFT}, and that is deliberate rather than incidental: retiring an artifact <em>while
+     * it is under review</em> ends the review, and it ends it the same way withdrawing does. Nobody
+     * judged the content — the question was simply taken off the table.
+     */
+    static ReviewStanding standingOf(LifecycleStatus status) {
+        return switch (status) {
+            case DRAFT, DEPRECATED -> ReviewStanding.OUTSIDE_REVIEW;
+            case IN_REVIEW -> ReviewStanding.IN_REVIEW;
+            case APPROVED -> ReviewStanding.APPROVED;
+        };
     }
 
     /**

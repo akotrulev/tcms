@@ -2,6 +2,8 @@ package com.tcms.execution;
 
 import com.tcms.project.GateResult;
 import com.tcms.project.ProjectService;
+import com.tcms.project.ReviewService;
+import com.tcms.project.ReviewSubjectType;
 import com.tcms.tenancy.AuditEvent;
 import com.tcms.tenancy.AuditEventRepository;
 import java.time.Clock;
@@ -61,6 +63,7 @@ public class PlanStatusService {
     private final ProjectService projects;
     private final TestPlanRepository plans;
     private final PlanService views;
+    private final ReviewService reviews;
     private final AuditEventRepository auditEvents;
     private final Clock clock;
 
@@ -68,12 +71,14 @@ public class PlanStatusService {
             ProjectService projects,
             TestPlanRepository plans,
             PlanService views,
+            ReviewService reviews,
             AuditEventRepository auditEvents,
             Clock clock) {
 
         this.projects = projects;
         this.plans = plans;
         this.views = views;
+        this.reviews = reviews;
         this.auditEvents = auditEvents;
         this.clock = clock;
     }
@@ -144,6 +149,19 @@ public class PlanStatusService {
 
         plan.applyStatus(target, userId, now);
         plans.saveAndFlush(plan);
+
+        // Inside this transaction, so the plan's status and the record of who signed it off commit
+        // together — see ReviewService#moved. The version pinned is the plan's current one, and for
+        // a plan a version IS its scope (§74's PlanSnapshot), which is exactly what a release
+        // sign-off is a signature on: these suites, these cases, this milestone.
+        reviews.moved(
+                projectId,
+                ReviewSubjectType.PLAN,
+                plan.getId(),
+                plan.getCurrentVersionNo(),
+                PlanLifecycle.standingOf(target),
+                userId,
+                now);
 
         auditEvents.save(AuditEvent.record(
                 projectId,

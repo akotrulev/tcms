@@ -1,6 +1,45 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-02 (latest section: **§75, the suite lifecycle** — `suite.lifecycle_status` had
+**Date:** 2026-08-02 (latest section: **§76, the review record** — `review` and
+`review_participation` have been in `V1` since the beginning with **no entity, no query and no
+writer of any kind**, and §75 named this slice on its way out by *deriving* it rather than listing
+it: once the suite's ladder landed, **every item-side ladder existed** (case §62, plan §73, suite
+§75) and what was left was what §6g puts *inside* `IN_REVIEW`. **Three permission keys get their
+first consumer at once** — `case:review`, `suite:review`, `plan:review` — the seventh instance of
+§71's search, and the first time keys were left unconsumed *deliberately*; `case:comment` stays
+unconsumed and that is also correct, because `V3` grants it to **Viewer** and the review tier to
+Test Engineer, which is §6g's three tiers made observable. **The placement decision is most of the
+design.** A review's subject is an **opaque triple** with no FK, which is what lets one record serve
+all three artifacts — and three writers in *two* modules must reach it (`SuiteStatusService` and
+`CaseBulkService` in `repository`, `PlanStatusService` in `execution`), which cannot depend on each
+other. So it lives in **`project`**: `review.project_id` is `NOT NULL`, every gate on it is
+project-scope, and its every FK already points at the three tables plan §3 permits. **A `review`
+module was considered and refused** — it needs plan §3 and `ModuleStructureTest` amended and *still*
+could not be called by either module (a fourth foundation module is "a decision, not an import"),
+leaving the product's first domain event, whose type could live in neither end. What `project` costs
+is that it may depend on `tenancy` only, so names resolve through **`PeopleDirectory`**, the port its
+own package comment prescribes. **And writing the third consumer of "what is this person called"
+found the first two**: `CaseOwners` and `ExecutionPeople` were byte-identical copies of §6u's naming
+rule, the second under a comment saying *"the two classes must not disagree"* — §58's E1, surviving
+because neither module can import the other; both now delegate. **The ladder tells the record where
+the artifact landed and nothing else** (`ReviewStanding`, three values) — and deliberately **not**
+where it came from, because the open review row is that fact and is the better one. **`V22` adds a
+fourth state because a withdrawal is not a rejection**: the shipped ladders put `IN_REVIEW → DRAFT`
+on the *edit* key, so one edge is walked by two acts, and closing both as `REJECTED` writes a
+rejection nobody performed into the record kept to show an auditor who said what; the distinction is
+**derived, never sent**. Its other half is a **partial** unique index — one *open* review per
+subject, while the closed rows are the history. **The participation endpoint cannot write an
+`APPROVAL` row at all**: `APPROVED` and `REJECTED` are refused as field errors, because accepting
+either is a second, cheaper door to the sign-off §6g gates once, held by everyone with the advisory
+key; the gate is decided by the row (§69's seam, fifth consumer) and resolves through
+`findInProject`, never `findById`, which would accept a **sibling project's** review. **The record
+starts when a writer exists** — an artifact already `IN_REVIEW` has no row on any real instance until
+it is re-submitted, so the panel reads "Not in review" beside a chip saying In review, correctly.
+**Seven mutations run, three queued** — and the fifth is the one to read: it **failed to redden**,
+because `waitFor(...toBeDisabled())` is satisfied by `useCan`'s pending state, so a panel with a
+hard-coded permission passed it. §66's finding inside this slice's own tests, caught only by running
+the mutation. **`V23` is the next free number**, and the per-project settings row now blocks four
+things at once. Before that: **§75, the suite lifecycle** — `suite.lifecycle_status` had
 **exactly one writer**, `Suite.create` writing `DRAFT`, so three of four values were unreachable and
 **every suite on every real instance has been a draft for its entire life**; `Suite.applyEdit`'s own
 javadoc named the reason its mutator was absent and, by naming it, named this slice. §72's and §73's
@@ -640,7 +679,10 @@ de-conflicted".)
 > makes them arrive **later and in a batch**. **Until a queue is run, the slices in it are built and
 > unverified** — say so, rather than calling them done. §65 is the first, §66 the second,
 > §67 the third, §68 the fourth, §69 the fifth, §71 the sixth, §72 the seventh, §73 the eighth,
-> §74 the ninth; **§75 is the tenth, and its live-only rows lead for §72's reason exactly** — every
+> §74 the ninth, §75 the tenth; **§76 is the eleventh, and its first row is live-only AND
+> unrepeatable** — on a real instance no artifact has a review row at all, including the ones
+> already `IN_REVIEW`, and that state disappears the moment anything is submitted. §75's
+> **live-only rows lead for §72's reason exactly** — every
 > suite on a real instance is a draft and always has been, while the mock's fixtures have shipped
 > approved folders since Phase 1, so mock mode will look unchanged by the slice and live mode
 > changes completely. **§74's live-only rows lead for a NEW reason** — the mock's fixtures have
@@ -836,3 +878,4 @@ See [`docs/plans/2026-07-31-parallel-execution-rework.md`](plans/2026-07-31-para
 | [§73](handoff/73-the-plan-lifecycle.md) | The plan lifecycle — the ladder nothing could climb, and the gate decided by the edge |
 | [§74](handoff/74-the-plan-editor.md) | The plan editor — the gates nothing could author, and the optimistic lock that could not fail |
 | [§75](handoff/75-the-suite-lifecycle.md) | The suite lifecycle — the last status nothing ever wrote, and the rescind §73 left on cases |
+| [§76](handoff/76-the-review-record.md) | The review record — the tables three ladders were written for, and the tier below approval |

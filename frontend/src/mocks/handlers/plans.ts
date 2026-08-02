@@ -1,8 +1,9 @@
 /** Test plans and the plan statistics report. */
 import { HttpResponse, delay, http } from 'msw';
 import type { PlanStatus, TestPlan } from '../../api/types';
-import { allocatePlanKey, db, newId, planScopeCaseIds, reporting } from '../db';
-import { API, LATENCY, holdsOn, notFound, problem } from './shared';
+import { allocatePlanKey, db, newId, planScopeCaseIds, reporting, reviewMoved } from '../db';
+import type { ReviewStanding } from '../db';
+import { API, LATENCY, holdsOn, meRef, notFound, problem } from './shared';
 
 /** The server's `PlanLifecycle.permissionFor`, in the mock's own words. */
 function planMovePermission(current: PlanStatus, target: PlanStatus): string {
@@ -16,6 +17,19 @@ function planMovePermission(current: PlanStatus, target: PlanStatus): string {
   };
   // Taking an approval, a start or a closure back — the arm a target-keyed rule misses.
   return rank[target] < rank[current] && rank[current] >= rank.APPROVED ? 'plan:approve' : 'plan:edit';
+}
+
+/**
+ * Where a plan's status sits relative to review — the server's `PlanLifecycle.standingOf`.
+ *
+ * `ACTIVE` and `CLOSED` are outside review entirely, which is the arm the case-and-suite ladder
+ * does not have: starting an approved plan writes nothing to its review, and closing a release
+ * does not retract the sign-off it was started on.
+ */
+function planStandingOf(status: PlanStatus): ReviewStanding {
+  if (status === 'IN_REVIEW') return 'IN_REVIEW';
+  if (status === 'APPROVED') return 'APPROVED';
+  return 'OUTSIDE_REVIEW';
 }
 
 /** The server's transition table, refusal sentences included. `null` means the move is legal. */
@@ -297,6 +311,16 @@ export const planHandlers = [
     if (refusal) return problem(409, 'Not possible right now', refusal);
 
     plan.status = target;
+    // The review record moves with the status, inside the same handler the server writes it in the
+    // same transaction — see `db/reviews.ts` for the three rules and why nothing else writes rows.
+    reviewMoved(
+      projectId,
+      'PLAN',
+      plan.id,
+      plan.currentVersionNo,
+      planStandingOf(target),
+      meRef(),
+    );
     return HttpResponse.json(plan);
   }),
 

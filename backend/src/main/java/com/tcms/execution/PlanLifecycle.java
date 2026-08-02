@@ -1,5 +1,7 @@
 package com.tcms.execution;
 
+import com.tcms.project.ReviewStanding;
+
 /**
  * Which plan transitions are legal, and <strong>which permission each edge needs</strong> — the
  * whole ladder decided in one pure class.
@@ -172,6 +174,26 @@ final class PlanLifecycle {
                     ? new Decision.Refused(
                             "This plan has been closed. Reopen it before returning it to draft.")
                     : new Decision.Move(PlanStatus.DRAFT);
+        };
+    }
+
+    /**
+     * Where a status sits <strong>relative to review</strong> — the translation
+     * {@code project.ReviewService} needs, and the whole of what the reviewer apparatus knows about
+     * this enum.
+     *
+     * <p>{@code LifecycleLadder} carries the same method for the case-and-suite enum, and the two
+     * are not a duplicated rule: each maps a <em>different</em> enum, which is precisely why the
+     * review record takes a standing rather than a status. This one has the arm the other cannot —
+     * a plan that is {@code ACTIVE} or {@code CLOSED} is being executed, which is not a review state
+     * at all and must not read as one. Starting an approved plan therefore writes nothing to its
+     * review, and closing a release does not retract the sign-off it was started on.
+     */
+    static ReviewStanding standingOf(PlanStatus status) {
+        return switch (status) {
+            case DRAFT, ACTIVE, CLOSED -> ReviewStanding.OUTSIDE_REVIEW;
+            case IN_REVIEW -> ReviewStanding.IN_REVIEW;
+            case APPROVED -> ReviewStanding.APPROVED;
         };
     }
 

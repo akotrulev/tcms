@@ -30,6 +30,7 @@ import { libraryHandlers } from './library';
 import { planHandlers } from './plans';
 import { projectHandlers } from './projects';
 import { reportingHandlers } from './reporting';
+import { reviewHandlers } from './reviews';
 import { runHandlers } from './runs';
 import { suiteHandlers } from './suites';
 import { workItemHandlers } from './workItems';
@@ -45,6 +46,7 @@ export const handlers = [
   ...runHandlers,
   ...documentationHandlers,
   ...reportingHandlers,
+  ...reviewHandlers,
   ...adminHandlers,
   ...workItemHandlers,
 ];

@@ -7,12 +7,13 @@ import {
   db,
   newId,
   reporting,
+  reviewMoved,
   suiteCaseCount,
   suiteOwnCaseCount,
   suiteTree,
 } from '../db';
-import { decide, needsApproval } from '../lifecycleLadder';
-import { API, LATENCY, MAX_SUITE_NAME, notFound, permissionsOn, problem } from './shared';
+import { decide, needsApproval, standingOf } from '../lifecycleLadder';
+import { API, LATENCY, MAX_SUITE_NAME, meRef, notFound, permissionsOn, problem } from './shared';
 
 export const suiteHandlers = [
   http.get(`${API}/projects/:projectId/suites`, async () => {
@@ -162,7 +163,20 @@ export const suiteHandlers = [
     }
     // `unchanged` is a 200 with the suite and nothing written — no version, no bump, no audit —
     // so a repeated click cannot bury the change that actually happened.
-    if (decision.kind === 'move') suite.lifecycleStatus = decision.target;
+    if (decision.kind === 'move') {
+      suite.lifecycleStatus = decision.target;
+      // A suite's review pins its COMPOSITION version, which is what approving a folder is a
+      // statement about. The mock has no version number on a suite, so it pins 1 — the value a
+      // fresh suite carries — rather than inventing a counter the server would disagree with.
+      reviewMoved(
+        String(params.projectId),
+        'SUITE',
+        suite.id,
+        1,
+        standingOf(decision.target),
+        meRef(),
+      );
+    }
     return HttpResponse.json({ ...suite, caseCount: suiteOwnCaseCount(suite.id) });
   }),
 

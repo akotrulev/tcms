@@ -583,3 +583,63 @@ values were unreachable and `closed_at` was a column nothing filled. `plan:edit`
 | **Check** | migration-in-place |
 | **Mutation** | — |
 | **Must show** | **Nothing is owed. §75 adds no migration** — `suite.lifecycle_status` and its four-value check constraint have been in `V1` from the beginning; this slice is the first thing to write to the column. **`V22` is still free**, and the reviewer-apparatus slice that follows will need it (`project` has no `settings` column for §6g's per-project opt-in). |
+
+---
+
+## §76 — the review record: the reviewer apparatus's first writer
+
+**Four mutations run inline, three queued.** The slice's own tests all passed on the first run,
+which §66 established is the moment to distrust them — and the first frontend mutation below found
+exactly that: a `waitFor(...toBeDisabled())` satisfied by the pending state, proving nothing.
+
+### Run
+
+| | |
+|---|---|
+| **File** | `project/ReviewSubjectType.java`, `reviewPermission()` |
+| **Mutation** | answer `project:read` — a key every role holds — instead of the subject type's own |
+| **Result** | ✅ **RUN — reddens exactly 1**: *a Viewer holds case:comment and not plan:review, and is refused with 403*. Discriminating rather than vacuous, unlike §71's pair: `V3` grants Viewer the **comment** tier and withholds the **review** tier, which is §6g's three tiers made observable. |
+
+| | |
+|---|---|
+| **File** | `project/ReviewService.java`, `parseVerdict` |
+| **Mutation** | accept `APPROVED` and `REJECTED` as peer verdicts |
+| **Result** | ✅ **RUN — reddens exactly 2**, one per refused verdict. This is the slice's own gate: a participation endpoint that took either would be a second, cheaper door to the sign-off §6g gates once. |
+
+| | |
+|---|---|
+| **File** | `project/ReviewService.java`, `moved` |
+| **Mutation** | `withdrawnByItsSubmitter = false` — treat every send-back as a rejection |
+| **Result** | ✅ **RUN — reddens exactly 1**: *the submitter taking it back is a WITHDRAWAL, and writes no verdict*. The reason `V22` adds a fourth state rather than reusing `REJECTED`, in one assertion. |
+
+| | |
+|---|---|
+| **File** | `project/ReviewService.java`, `moved` |
+| **Mutation** | return early instead of closing an open review |
+| **Result** | ✅ **RUN — reddens exactly 6** — every close, on all three subject types, plus the 409 on a closed review. The breadth is the point: the open/close pair is one rule and half of it failing is not a local defect. |
+
+### Queued — not yet run
+
+| | |
+|---|---|
+| **File** | `project/ReviewService.java`, `moved` |
+| **Mutation** | re-stamp `subjectVersionNo` on the open review each time `moved` is called with `IN_REVIEW` |
+| **Must redden** | **exactly 1** — *an artifact edited while in review keeps the version it was submitted at*. Worth running because the assertion is the panel's whole reasoning: a re-stamped version makes every review agree with its artifact by construction, and the screen looks *more* consistent, not less. |
+
+| | |
+|---|---|
+| **File** | `project/ReviewRepository.java`, `findInProject` |
+| **Mutation** | resolve through `findById` instead — RLS still scopes it to the company |
+| **Must redden** | **exactly 1** — *a sibling project's review id is 404, not somebody else's review*. The §64/§68/§69 family: every cross-company test in the suite stays green, because the row is in the right company and the wrong project. |
+
+| | |
+|---|---|
+| **Check** | `V22`'s partial unique index |
+| **Mutation** | — (a race, not a code change) |
+| **Must show** | Two concurrent `PUT …/status` submissions of one artifact: **one succeeds and one fails on `uq_review_open_per_subject`**, rather than both inserting. Not reproducible through the suite — it needs two interleaved transactions — and recorded rather than implied, because the application check (`findOpenForSubject`) is exactly the shape §69's and §71's migrations existed to back. |
+
+| | |
+|---|---|
+| **Check** | migration-in-place |
+| **Mutation** | — |
+| **Must show** | **`V22` lands with this slice** (`V22__review_state_withdrawn_and_one_open_review.sql`) and is the first migration since `V21`. It drops and re-adds `review_state_check` and adds two indexes — no data rewrite, because the table has never held a row on any instance. **`V23` is the next free number.** |

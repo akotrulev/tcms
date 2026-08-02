@@ -297,6 +297,17 @@ public class Suite {
         return position;
     }
 
+    /**
+     * The composition version a review pins itself to ({@code SuiteVersions}).
+     *
+     * <p>Package-private and read by exactly one caller, {@code SuiteStatusService}: it is not on
+     * the wire — {@code SuiteView} serves no version number — and exposing it publicly would invite
+     * a second reading of "which version is current" beside {@code SuiteVersions}' own.
+     */
+    int getCurrentVersionNo() {
+        return currentVersionNo;
+    }
+
     public LifecycleStatus getLifecycleStatus() {
         return lifecycleStatus;
     }

@@ -7,7 +7,7 @@
  * refusing the same write in two different sentences.
  */
 import { HttpResponse } from 'msw';
-import { roles } from '../fixtures/core';
+import { currentUser, roles } from '../fixtures/core';
 import { db, users } from '../db';
 
 export const API = '/api/v1';
@@ -114,6 +114,20 @@ export function requireAuth(request: Request) {
     ? null
     : problem(401, 'Unauthorized', 'Your session expired. Sign in to continue.');
 }
+
+/**
+ * The signed-in person as a `UserRef` — who the mock attributes a write to.
+ *
+ * The mock has exactly one caller, so this is a constant rather than a lookup; it exists as a
+ * function so the handlers that record authorship read the same shape the wire carries, instead of
+ * passing `currentUser` (which has two fields a `UserRef` does not) into a review row.
+ */
+export const meRef = () => ({
+  id: currentUser.id,
+  displayName: currentUser.displayName,
+  email: currentUser.email,
+  avatarUrl: null,
+});
 
 export const userRef = (i: number) => ({
   id: users[i].id,

@@ -18,3 +18,11 @@ export { descendantSuiteIds, suiteCaseCount, suiteOwnCaseCount, suiteTree } from
 export { caseDetail, caseVersions, recordCaseVersion, writeCase } from './cases';
 export { materialiseRun, planScopeCaseIds, recountRun, runExecutions } from './executions';
 export { addWorkItem, workItems } from './workItems';
+export {
+  openReviewFor,
+  recordVerdict,
+  reviewMoved,
+  reviewsForSubject,
+  type MockReview,
+  type ReviewStanding,
+} from './reviews';
