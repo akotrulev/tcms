@@ -17,12 +17,16 @@ import AddIcon from '@mui/icons-material/Add';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
+import LibraryAddIcon from '@mui/icons-material/LibraryAddOutlined';
+import LinkOffIcon from '@mui/icons-material/LinkOffOutlined';
 import { useSnackbar } from 'notistack';
+import { useState } from 'react';
 import { useUnsavedWork } from '../../auth/useSessionRecovery';
 import { Controller, useFieldArray, useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import { CaseSchema, type CaseInput } from './caseSchema';
+import { SharedStepPicker } from './SharedStepPicker';
 import { useCase, useClassification, useCreateCase, useSuites, useUpdateCase } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
@@ -140,6 +144,7 @@ function CaseEditorForm({
   useUnsavedWork(isDirty && !isSubmitting, mode === 'edit' ? 'an edited test case' : 'a new test case');
 
   const steps = useFieldArray({ control, name: 'steps' });
+  const [pickerOpen, setPickerOpen] = useState(false);
   const stepFormat = watch('stepFormat');
   const automationStatus = watch('automationStatus');
 
@@ -399,6 +404,38 @@ function CaseEditorForm({
                   >
                     <Stack direction="row" sx={{ alignItems: 'center', gap: 1, mb: 1 }}>
                       <Identifier variant="muted">Step {index + 1}</Identifier>
+                      {/*
+                        Read off `fields` rather than through `watch('steps')`: sharedStepId is
+                        never edited by an input, so it only ever changes through append / update /
+                        remove — exactly the operations that refresh `fields`. Watching would
+                        re-render the whole step list on every keystroke in any field for a value
+                        that cannot have changed.
+                      */}
+                      {field.sharedStepId && (
+                        <>
+                          <Tooltip title="This step references the project's step library. Editing the library entry changes every case using it.">
+                            <Chip
+                              size="small"
+                              variant="outlined"
+                              label="Shared"
+                              data-testid={`${TestIdPrefix}.Steps.SharedChip`}
+                            />
+                          </Tooltip>
+                          <IconButton
+                            size="small"
+                            onClick={() =>
+                              // `update` rather than setValue: it refreshes `fields`, which is
+                              // what this row is reading. setValue would clear the reference in
+                              // the form values and leave the chip on screen.
+                              steps.update(index, { ...steps.fields[index], sharedStepId: null })
+                            }
+                            aria-label={`Detach step ${index + 1} from the library`}
+                            data-testid={`${TestIdPrefix}.Steps.Detach`}
+                          >
+                            <LinkOffIcon fontSize="small" />
+                          </IconButton>
+                        </>
+                      )}
                       <Box sx={{ flex: 1 }} />
                       {/*
                         Reordering is safe because a step keeps its stable id: results and
@@ -467,14 +504,28 @@ function CaseEditorForm({
                   </Box>
                 ))}
 
-                <Button
-                  startIcon={<AddIcon />}
-                  onClick={() => steps.append({ action: '', testData: '', expectedResult: '' })}
-                  data-testid={`${TestIdPrefix}.Steps.AddButton`}
-                  sx={{ alignSelf: 'flex-start' }}
-                >
-                  Add step
-                </Button>
+                <Stack direction="row" sx={{ gap: 1, alignSelf: 'flex-start' }}>
+                  <Button
+                    startIcon={<AddIcon />}
+                    onClick={() => steps.append({ action: '', testData: '', expectedResult: '' })}
+                    data-testid={`${TestIdPrefix}.Steps.AddButton`}
+                  >
+                    Add step
+                  </Button>
+                  {/*
+                    Not permission-gated: reading the library needs no permission beyond the
+                    project grant this page already required, and `library:manage` gates writing
+                    an entry — which the dialog gates on its own button. Gating here would refuse
+                    a Viewer the list they are allowed to read.
+                  */}
+                  <Button
+                    startIcon={<LibraryAddIcon />}
+                    onClick={() => setPickerOpen(true)}
+                    data-testid={`${TestIdPrefix}.Steps.InsertSharedButton`}
+                  >
+                    Insert shared step
+                  </Button>
+                </Stack>
               </Stack>
             )}
           </Panel>
@@ -668,6 +719,27 @@ function CaseEditorForm({
           </Stack>
         </Box>
       </Stack>
+
+      {/*
+        Mounted unconditionally and controlled by `open`, rather than rendered only when open:
+        MUI keeps the dialog out of the tree until it opens anyway, and an unmounted component
+        would re-run the library query from scratch on every open instead of reading the cache.
+      */}
+      <SharedStepPicker
+        projectId={projectId}
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onPick={(shared) =>
+          // The title, not the body — see SharedStepPicker. `id` is deliberately absent: this is
+          // a new step, and sending an id the case does not own is refused by the server.
+          steps.append({
+            action: shared.title,
+            testData: '',
+            expectedResult: '',
+            sharedStepId: shared.id,
+          })
+        }
+      />
     </Box>
   );
 }

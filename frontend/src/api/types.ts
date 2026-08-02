@@ -40,6 +40,7 @@ export type TestStep = S['TestStep'];
 export type Condition = S['Condition'];
 export type CaseConditionRef = S['CaseConditionRef'];
 export type SharedStep = S['SharedStep'];
+export type SharedStepInput = S['SharedStepInput'];
 export type BulkOperation = S['BulkOperation'];
 export type BulkPayload = S['BulkPayload'];
 export type BulkResult = S['BulkResult'];

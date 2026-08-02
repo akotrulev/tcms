@@ -7,7 +7,7 @@
  * pagination are exercised against something that behaves like a real repository.
  */
 import type { HealthSignal, TestCase, TestCaseSummary } from '../../api/types';
-import { conditions, currentUser, suites, uid, users } from './core';
+import { conditions, currentUser, sharedSteps, suites, uid, users } from './core';
 
 const ref = (i: number) => ({
   id: users[i].id,
@@ -117,7 +117,11 @@ const structuredSteps = (id: string) => [
   { id: `${id}-s1`, position: 0, keyword: null, action: 'Open the payment detail for a settled payment', testData: 'Payment ref: PMT-88213', expectedResult: 'The payment detail drawer opens showing status SETTLED', sharedStepId: null },
   { id: `${id}-s2`, position: 1, keyword: null, action: 'Click Refund and enter the refund amount', testData: 'Amount: 45.00 EUR', expectedResult: 'The refund form accepts the amount and enables Confirm', sharedStepId: null },
   { id: `${id}-s3`, position: 2, keyword: null, action: 'Select a refund reason and confirm', testData: 'Reason: Customer request', expectedResult: 'A confirmation toast reads "Refund submitted" and the drawer shows a pending refund line', sharedStepId: null },
-  { id: `${id}-s4`, position: 3, keyword: null, action: 'Open the audit log for the payment', testData: null, expectedResult: 'The newest audit entry records the refund, the amount, the reason and the acting user', sharedStepId: null },
+  // References a library entry, so the detail page's "Shared" chip is reachable in mock mode at
+  // all — it has rendered since Phase 1 against fixtures where every sharedStepId was null, so
+  // nothing had ever drawn it. It is also what gives the step library a non-zero usage count,
+  // which is the ranking the picker exists for.
+  { id: `${id}-s4`, position: 3, keyword: null, action: 'Open the audit log for the payment', testData: null, expectedResult: 'The newest audit entry records the refund, the amount, the reason and the acting user', sharedStepId: sharedSteps[1].id },
 ];
 
 const cond = (i: number, position: number, inherited = false, from: string | null = null) => ({

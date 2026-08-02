@@ -529,10 +529,16 @@ export const conditions: Condition[] = [
   { id: uid(8, 'n'), title: 'Restore the merchant balance', type: 'BOTH', body: ['Void any pending authorisations', 'Set the balance to 1000.00 EUR'], usageCount: 38 },
 ];
 
+// `usageCount` is DERIVED — the server counts the distinct live cases referencing each entry and
+// never reads the stored column, so the handler recomputes it here rather than serving these.
+// They are 0 rather than plausible numbers on purpose: a handler that forgot to derive would then
+// render an unranked picker, which is visible, instead of a confident fake that agrees with
+// nothing. The fixture carried 48/33/91 while no case referenced any of them, which is exactly
+// the "mock agrees with itself" divergence live mode would have exposed.
 export const sharedSteps: SharedStep[] = [
-  { id: uid(1, 'h'), title: 'Submit the refund form', body: ['Enter the refund amount', 'Select a reason', 'Confirm'], usageCount: 48 },
-  { id: uid(2, 'h'), title: 'Verify the audit entry', body: ['Open the audit log', 'Confirm the newest entry matches the action'], usageCount: 33 },
-  { id: uid(3, 'h'), title: 'Open the payment detail drawer', body: ['Click the payment row', 'Wait for the drawer'], usageCount: 91 },
+  { id: uid(1, 'h'), title: 'Submit the refund form', body: ['Enter the refund amount', 'Select a reason', 'Confirm'], usageCount: 0 },
+  { id: uid(2, 'h'), title: 'Verify the audit entry', body: ['Open the audit log', 'Confirm the newest entry matches the action'], usageCount: 0 },
+  { id: uid(3, 'h'), title: 'Open the payment detail drawer', body: ['Click the payment row', 'Wait for the drawer'], usageCount: 0 },
 ];
 
 // ------------------------------------------------------------------- artifacts ----
