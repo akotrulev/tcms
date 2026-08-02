@@ -3,7 +3,7 @@
 # be-java — orientation cache (TCMS)
 
 **Last verified:** 2026-08-02
-**Baseline commit:** `f551971`
+**Baseline commit:** `f02c08c`
 **Fingerprint files:** `backend/build.gradle.kts`, `backend/gradle/libs.versions.toml`, `backend/gradle/wrapper/gradle-wrapper.properties`
 
 > Authoritative docs win over this file. `CLAUDE.md`, `docs/HANDOFF.md` (an index — sections live in
@@ -63,7 +63,7 @@ provisioning · auth · shared`.
   return zero rows, fail-closed and silent. `RepositoryTransactionTest` derives the repository list
   from the live context, so a new repository that forgets fails the build. `#confirmed`
 - **Flyway owns all DDL**; `hibernate.ddl-auto: validate`, `baseline-on-migrate: false`. Migrations
-  at `src/main/resources/db/migration`. **Head is `V20`; `V21` is the next free number.** Booting the
+  at `src/main/resources/db/migration`. **Head is `V21`; `V22` is the next free number.** Booting the
   real context in a test is itself a schema-drift gate. `#confirmed`
 - **Privilege split** — Flyway migrates as `tcms_owner`, the pool connects as `tcms_app`, neither is
   a superuser and neither holds `BYPASSRLS`. Mirrored in three places that must agree:
@@ -152,6 +152,30 @@ provisioning · auth · shared`.
   view's javadoc was the outlier. `ClassificationValue.create` derives the `ltree` label from the
   **id** (`v` + uuid hex), like `Suite.create` and for one more reason: `tcms_ltree_label` answers
   the empty string for a name with no ASCII alphanumerics, which an `ltree` refuses. `#confirmed`
+- **The org chart has a writer since §71** — `TeamWriteService` + `TeamEdit` + `TeamController`
+  (which also took `GET /teams` off `AdminController`, so one path family lives in one class), and
+  `V21` behind it. **`company:teams` at COMPANY scope**, via a new `AdminReach.manageTeams()` term
+  read off the same already-resolved company-wide `PermissionSet` — a separate term from
+  `companyWide`, deliberately, though the seeded catalogue grants both to the same roles.
+  **A team member must be a COMPANY member**: `team_membership.user_id` references instance-level
+  `app_user` while `company_id` comes from the session, so a sibling company's account satisfies the
+  FK, the company column and RLS — and the evaluator's five projections resolve teams through
+  `team_membership` ALONE, never joining `company_membership`, while `AdminDirectoryService.refs`
+  drops an id it cannot place. Unchecked, that is an **invisible grant**; hence a 404 and a test that
+  asserts *no row was written*. `INVITED` counts, `REMOVED` does not.
+  **Delete is refused (409 + counts) while grants or child teams exist** — `role_assignment.team_id`
+  is `ON DELETE CASCADE`, so the delete would revoke silently; members do NOT block it.
+  A team **may be reparented**, unlike a classification value, because the parent edge is org-chart
+  structure and never a permission edge (§6k) — `TeamEdit.descends` walks upward with a visited set
+  so a pre-existing cycle refuses rather than hangs. V2's `tcms_enforce_team_hierarchy` stays the
+  backstop, never the answer. `#confirmed`
+- **`SeedDataTest.teamManagementAndMemberManagementAreStillHeldTogether` records a COINCIDENCE, not
+  an invariant.** `V3` grants `company:teams` and `company:members` to the same roles, so no persona
+  the suite can build can tell the org-chart gate's key from its neighbour's — a mutation swapping
+  them reddens nothing. When that check FAILS it is the good case: add the persona to
+  `TeamEndpointTest.Gate`, do not re-align the seed. The frontend's `TeamsPage.test.tsx` carries the
+  only test that can discriminate today, because it can mock a permission set the seed cannot
+  produce. `#confirmed`
 - **Classification writes** — `case_classification` got its first writer in §68.
   `ClassificationVocabulary` (built from the same `CaseRenderer#vocabularies` read the response
   needs, so validating costs no query) + `CaseClassifications` (the reconciler, `CaseSteps`'
@@ -220,6 +244,20 @@ provisioning · auth · shared`.
 
 ## Session log
 
+- 2026-08-02 · EXTEND · Team management (§71) — `team`'s first writer after readers on three sides
+  and none at all: `provision-company` seeds no team, `Team.create` had only test callers,
+  `rename`/`reparent` had none, so `GET /teams` answered `[]` on every real instance and the grant
+  path's team branch was unreachable. New: `TeamWriteService`, `TeamEdit`, `TeamInput`,
+  `TeamMemberInput`, `TeamController`, `AdminDirectoryService.teamViewOf`/`renderTeams`,
+  `AdminReach.manageTeams`, three repository counts/lookups, `V21`. `Team.create` gained a
+  `description` parameter (4 test call sites) and `rename`/`reparent` were COLLAPSED into
+  `applyEdit` — two mutators each stamping `updatedAt` for one PUT is a half-applied row waiting to
+  happen. **`company:teams` got its first consumer in Java** — the fourth instance of that shape.
+  **The finding is what the mutations could NOT do**: neither distinguishes `company:teams` from
+  `company:members`, because `V3` grants both to the same roles; recorded as a computed check rather
+  than papered over. 35 endpoint tests + 1 seed check, 2 mutations run inline (exactly 6 red / 2
+  red), 3 queued. **`V21` drops a constraint and creates an index in its place** — the first
+  migration to do that, so the queued in-place check is worth more than usual.
 - 2026-08-02 · EXTEND · The classification vocabulary editor (§69) — `classification_value`'s first
   Java writer; the gate that depends on the dimension row; `V20`. New seams above. **Two orientation
   findings before any code**: `locked` meant three different things and one of them made
