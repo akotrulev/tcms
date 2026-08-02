@@ -282,12 +282,6 @@ The rules that bite hardest:
   database**. Testcontainers cannot see this — it migrates a fresh container every time.
 - **Choose lanes by Modulith module, not by a "Next"-list order.** The boundaries are already
   enforced by ArchUnit, so the seam is machine-checked rather than hoped for.
-- **One branch per lane, merged serially in a declared landing order**, with the full gate re-run
-  after *each* merge. A worktree already implies a branch; the point is that integration happens at
-  a moment someone is watching. It protects against textual conflicts and against one strand
-  dropping another's commits — it does **not** protect against two lanes taking the same Flyway
-  number or the same fixture prefix, which merge clean. See the parallel plan §0.6 for the four
-  conflict classes and how each is resolved (`schema.d.ts` is regenerated, never hand-merged).
 - **One cache holder per agent type.** `docs/agent-context/*.md` is refreshed serially *before* a
   fan-out, read-only during it, and updated by one lane at integration. Two lanes of the same agent
   type write the same file, and its baseline stamp and prepended session log conflict every time —
