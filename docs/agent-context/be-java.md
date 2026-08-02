@@ -3,7 +3,7 @@
 # be-java — orientation cache (TCMS)
 
 **Last verified:** 2026-08-02
-**Baseline commit:** `cb3216a`
+**Baseline commit:** `34aa2a6`
 **Fingerprint files:** `backend/build.gradle.kts`, `backend/gradle/libs.versions.toml`, `backend/gradle/wrapper/gradle-wrapper.properties`
 
 > Authoritative docs win over this file. `CLAUDE.md`, `docs/HANDOFF.md` (an index — sections live in
@@ -136,11 +136,31 @@ provisioning · auth · shared`.
 - ~~Two tests are `@Disabled`~~ **→ fixed and re-enabled 2026-08-02 (§60). No test is `@Disabled`;
   the suite runs 1078 with 0 skipped**, and the `skipped` count is the cheapest way to check that
   claim still holds. `#confirmed`
-- **`reporting` is the last MSW-only surface** (§62 landed `cases/bulk`). `/reports` has no SPA hook
-  at all and `useSharedSteps` has no call site — dead contract, to delete or build.
+- **`/reports` is the only dead contract left** (§64 built the step library, §62 landed
+  `cases/bulk`). It is **M2.5's**, not a slice's — `ExecutionFact` read model, `ReportModel`,
+  Thymeleaf + headless-Chromium renderers, an async job pipeline, 7–8 weeks. Checked in §64 and
+  deliberately not started. `#confirmed`
+- **`ConditionRepository.findLibrary` orders by a column nothing maintains.** `usage_count` reads 0
+  on every condition row, so its `ORDER BY usageCount DESC` has never ranked anything. §64 solved
+  the same problem for shared steps by deriving the count; conditions were left alone because their
+  usage spans `case_condition` AND `suite_condition` with inheritance on the suite side, which is a
+  design question rather than a join. `#confirmed`
 
 ## Session log
 
+- 2026-08-02 · EXTEND · Built the shared-step library (§64), M1.5's other half. New: `SharedStep`
+  entity over V1's table (`usage_count` deliberately NOT mapped), `SharedStepRepository`/`Service`/
+  `Controller`/`View`/`Edit`/`Query`/`WriteRequest`/`Usage`, `GET` + `POST
+  /projects/{id}/shared-steps`. **`usageCount` is DERIVED** — distinct live cases, two queries
+  zipped and ranked in the service, because a denormalized counter must be recomputed by every path
+  that rewrites a step list and a case edit replaces the list wholesale. **`library:manage` got its
+  first consumer in Java.** Also a FIX: `CaseEdit.validate` gained `acceptableSharedStepIds` —
+  `sharedStepId` had been persisted unchecked since M1, so a sibling project's id satisfied the FK
+  and was stored while an unknown id was a 500. The rule is a UNION (live in project ∪ already
+  referenced by this case), and `CaseEdit.of` passes the stored half ALONE so a bulk action over a
+  case using a retired entry still reconstructs. Live pass found the emptiness check reporting "add
+  at least one step" about a step that was submitted and rejected — predates the slice, swept across
+  all three refusals. Fixture prefix `ab`. **No migration.** Mutation-verified twice.
 - 2026-08-02 · EXTEND · Built `POST /cases/bulk` (§62), all eight declared actions — the last
   MSW-only surface with a live consumer. New: `BulkAction`/`BulkCommand` (sealed)/`BulkOperations`
   (pure parse + permission)/`BulkVerdict`/`BulkResultView`/`CaseBulkService`, `CaseRenderer`

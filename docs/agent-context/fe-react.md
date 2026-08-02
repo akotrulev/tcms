@@ -3,7 +3,7 @@
 # fe-react — orientation cache (TCMS)
 
 **Last verified:** 2026-08-02
-**Baseline commit:** `cb3216a`
+**Baseline commit:** `34aa2a6`
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
 `frontend/vite.config.ts`
 
@@ -95,13 +95,28 @@
 ## Known unknowns
 
 - E2E / page objects are the `qa-ui-typescript` peer's; none exist here.
-- **`reporting` is the last MSW-only surface** (§62 landed `cases/bulk`), and it is dead contract:
-  `/reports` has no hook and `useSharedSteps` has no call site — delete or build.
+- **`/reports` is the only dead contract left** — no hook at all, and it belongs to **M2.5**
+  (`ExecutionFact`, `ReportModel`, renderers, a job pipeline), so it is a milestone rather than a
+  slice. §64 built the step library and gave `useSharedSteps` its first caller.
 - Lighthouse / Core-Web-Vitals never measured (handoff §5); `CaseListPage` is over its route budget
   with the reasoning recorded in `vite.config.ts`.
 
 ## Session log
 
+- 2026-08-02 · EXTEND · Built `SharedStepPicker` (§64) — the first consumer `useSharedSteps` has ever
+  had, reached from the case editor's step list, plus `useCreateSharedStep`. Inserting sets the
+  step's `action` to the entry's TITLE and its `sharedStepId` to the id: a shared block is a
+  reference resolved on read, so copying the body in yields a step that looks identical and stops
+  tracking its source. The picker is **not** permission-gated (reading needs only the project
+  grant); the inline create is, on `library:manage`. **Two mock defects**: the shared-step fixtures
+  carried usageCount 48/33/91 while no fixture case referenced any entry — the handler now derives
+  the count through `caseDetail`, since a summary row carries no steps — and `GET /shared-steps`
+  alone did not `requireAuth`. A fixture case now references an entry, so the detail page's "Shared"
+  chip is drawable in mock mode for the first time. **Harness trap**: `PermissionGate` swaps the DOM
+  node between its denied (tooltip-wrapped) and allowed (bare) branches, so a held reference never
+  becomes enabled — re-query inside `waitFor`; and since the gate is fail-closed while
+  `/me/permissions` is in flight, a "disabled" assertion is only non-vacuous when paired with an
+  enabling one. `#confirmed`
 - 2026-08-02 · EXTEND · Extended `BulkActionDialog` to all eight bulk actions (§62), typed
   `BulkInput`/`payload` from the contract (both were `string`/`Record<string,unknown>`), and brought
   the MSW handler into agreement with the new server — it had **dropped unresolvable ids** so the
