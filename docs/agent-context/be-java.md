@@ -3,7 +3,7 @@
 # be-java — orientation cache (TCMS)
 
 **Last verified:** 2026-08-02
-**Baseline commit:** `68b9ffb`
+**Baseline commit:** `30155fc`
 **Fingerprint files:** `backend/build.gradle.kts`, `backend/gradle/libs.versions.toml`, `backend/gradle/wrapper/gradle-wrapper.properties`
 
 > Authoritative docs win over this file. `CLAUDE.md`, `docs/HANDOFF.md` (an index — sections live in
@@ -63,7 +63,7 @@ provisioning · auth · shared`.
   return zero rows, fail-closed and silent. `RepositoryTransactionTest` derives the repository list
   from the live context, so a new repository that forgets fails the build. `#confirmed`
 - **Flyway owns all DDL**; `hibernate.ddl-auto: validate`, `baseline-on-migrate: false`. Migrations
-  at `src/main/resources/db/migration`. **Head is `V18`; `V19` is the next free number.** Booting the
+  at `src/main/resources/db/migration`. **Head is `V19`; `V20` is the next free number.** Booting the
   real context in a test is itself a schema-drift gate. `#confirmed`
 - **Privilege split** — Flyway migrates as `tcms_owner`, the pool connects as `tcms_app`, neither is
   a superuser and neither holds `BYPASSRLS`. Mirrored in three places that must agree:
@@ -78,6 +78,14 @@ provisioning · auth · shared`.
   `Instant.now()` and friends in production code**, so a new call site fails the build; the
   `Clock`-taking overloads are allowed. `ClockResolutionTest` (`com.tcms.ops`) pins the bean's
   identity, deliberately, because the behavioural assertion cannot fail on macOS. `#confirmed`
+- **Permission qualifiers** — `role_permission.qualifier` restricts WHICH ROWS a grant covers:
+  `ALL` · `OWN` (V12, by `created_by`) · `PLAN_SCOPE` (V19, by the row's scope). The evaluator answers
+  the qualifier; the **gate** applies it to the row, through `project.AuthorshipGate` /
+  `project.RowScopeGate` — the row's fact crosses into `identity` and a verdict comes back, so no
+  module holds a second reading of what a qualifier means. `PermissionQualifier.strongest` throws on
+  `OWN`+`PLAN_SCOPE` (incomparable axes); `SeedDataTest` keeps that unreachable by asserting no key
+  carries two different restrictive qualifiers. **A new qualifier value is a compile error at every
+  consumer** — the switches are exhaustive under `-Werror`, deliberately. `#confirmed`
 - **Operator CLI**: `ApplicationRunner` beans that are inert unless their verb appears in the
   non-option args — `ProvisionCompanyCommand`, `IssueInvitationCommand`. The verb list lives in
   `OperatorCommands`, which `TcmsApplication.main` asks *before the context exists* to pick
@@ -114,10 +122,22 @@ provisioning · auth · shared`.
 - ~~Two tests are `@Disabled`~~ **→ fixed and re-enabled 2026-08-02 (§60). No test is `@Disabled`;
   the suite runs 1078 with 0 skipped**, and the `skipped` count is the cheapest way to check that
   claim still holds. `#confirmed`
-- `reporting` module is still MSW-only on the frontend; no backend implementation yet.
+- `reporting` and `cases/bulk` are still MSW-only on the frontend; no backend implementation. `/reports`
+  has no SPA hook at all and `useSharedSteps` has no call site — dead contract, to delete or build.
 
 ## Session log
 
+- 2026-08-02 · EXTEND · Built the artifact register in `documentation` (§61): `Artifact` entity over
+  V1's table, `ArtifactRepository`/`Service`/`WriteService`/`Controller`, `ArtifactPeople` (the 4th
+  `*People` display-name resolver) and `PlanFacts` (the 4th `*Facts` cross-module native-SQL reader,
+  here into `execution.test_plan`). **Widened `documentation`'s allowedDependencies to include
+  `identity`** and corrected its package comment, which claimed nothing in the module renders a
+  person. **Touched the authorization core**: `V19` adds `PLAN_SCOPE` to `role_permission.qualifier`;
+  `PermissionQualifier.strongest` is no longer an ordinal comparison and THROWS on the
+  `OWN`/`PLAN_SCOPE` pair (they restrict different axes, so their union is inexpressible); new
+  `ProjectAccess.canDoOnScope` + `ProjectService.writeGrantedByRowScope` + `project.RowScopeGate`
+  mirror the authorship pair. New computed check in `SeedDataTest` keeps the throw unreachable.
+  Mutation-verified. `ModuleStructureTest`'s hard-coded rationale updated.
 - 2026-08-02 · FIX · Truncated the `Clock` bean to microseconds, closing §58's carried debt and
   re-enabling the two `@Disabled` invitation tests. Swept the class: `ExecutionService.record` and
   `SessionTokens.issue` both bypassed the bean with `Instant.now()` and now take it. Added
