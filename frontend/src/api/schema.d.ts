@@ -2018,6 +2018,113 @@ export interface paths {
         };
         trace?: never;
     };
+    "/projects/{projectId}/runs/{runId}/executions/{executionId}/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                runId: components["parameters"]["RunId"];
+                executionId: components["parameters"]["ExecutionId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Attach a screenshot or log to a result
+         * @description Needs `evidence:attach` — held by every role but Viewer (roles spec §A5).
+         *
+         *     **The upload proxies through the API** rather than going browser-direct to a signed URL:
+         *     the storage port's filesystem adapter cannot issue one (plan §8 open question #28,
+         *     resolved in §51, which stated this consequence when the option was chosen). So the
+         *     instance's `spring.servlet.multipart.max-file-size` is a real limit, and a file over it
+         *     is a **413** rather than a 400 — the request is refused before it reaches the handler,
+         *     so there is no field to hang the message on.
+         *
+         *     `stepId` attaches to one step's result instead of to the execution as a whole. The two
+         *     are different claims: a file on the execution documents the verdict, a file on a step
+         *     documents where it went wrong.
+         */
+        post: operations["attachEvidence"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/runs/{runId}/executions/{executionId}/evidence/{evidenceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                runId: components["parameters"]["RunId"];
+                executionId: components["parameters"]["ExecutionId"];
+                evidenceId: components["parameters"]["EvidenceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove evidence
+         * @description Needs `evidence:delete`, which is **`OWN`-qualified for Test Engineer** (roles spec §A5):
+         *     they may remove evidence they attached and not a colleague's.
+         *
+         *     **The two refusals carry different sentences**, because they are different facts about
+         *     the caller. "You do not have permission to remove evidence" is false for someone who
+         *     removes their own attachments all day, and false in the direction that sends them to ask
+         *     an administrator for a permission they already hold.
+         *
+         *     Evidence with **no recorded author** is not covered by an `OWN` grant — a grant over
+         *     "your own work" must not stretch to work nobody can attribute.
+         *
+         *     The delete is **hard**, unlike a case's. A screenshot removed on request has to actually
+         *     leave the disk; a soft-deleted row pointing at retained bytes is a deletion that did not
+         *     delete, which is the wrong answer for the one thing here a customer may need removed for
+         *     privacy reasons.
+         */
+        delete: operations["deleteEvidence"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/runs/{runId}/executions/{executionId}/evidence/{evidenceId}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                runId: components["parameters"]["RunId"];
+                executionId: components["parameters"]["ExecutionId"];
+                evidenceId: components["parameters"]["EvidenceId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The evidence bytes
+         * @description What `Evidence.url` points at — **without this route that field would be a lie**.
+         *
+         *     An ordinary session-authenticated API route rather than a public link, because the
+         *     filesystem adapter cannot issue an expiring signed URL and a guessable permanent one
+         *     would be an unauthenticated read of a customer's screenshots.
+         *
+         *     No separate permission: anyone who may see the execution may see its evidence, and the
+         *     catalogue has no `evidence:read`. Served `inline` with the stored content type so the SPA
+         *     can render an image in place rather than downloading it.
+         */
+        get: operations["downloadEvidence"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/doc-pages": {
         parameters: {
             query?: never;
@@ -4730,6 +4837,8 @@ export interface components {
          */
         CaseId: string;
         RunId: string;
+        ExecutionId: string;
+        EvidenceId: string;
         Page: number;
         Size: number;
         /**
@@ -4762,4 +4871,115 @@ export interface components {
     pathItems: never;
 }
 export type $defs = Record<string, never>;
-export type operations = Record<string, never>;
+export interface operations {
+    attachEvidence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                runId: components["parameters"]["RunId"];
+                executionId: components["parameters"]["ExecutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description The bytes. Filename and content type travel in the part's own headers, and
+                     *     the filename is stored in a column — it never becomes part of a storage key.
+                     */
+                    file: string;
+                    /** @description Optional one-line description shown beside the thumbnail. */
+                    caption?: string | null;
+                    /**
+                     * Format: uuid
+                     * @description A step of the **pinned** version that already has a recorded result. A step
+                     *     nobody has marked has no `step_result` row to attach to, and inventing one
+                     *     would record a verdict nobody gave — so that is a 400 on this field.
+                     */
+                    stepId?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Attached */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Evidence"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /**
+             * @description The file is larger than this instance's upload limit. Refused by the servlet
+             *     container before the handler runs.
+             */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deleteEvidence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                runId: components["parameters"]["RunId"];
+                executionId: components["parameters"]["ExecutionId"];
+                evidenceId: components["parameters"]["EvidenceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    downloadEvidence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                runId: components["parameters"]["RunId"];
+                executionId: components["parameters"]["ExecutionId"];
+                evidenceId: components["parameters"]["EvidenceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The bytes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+}

@@ -1207,6 +1207,134 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
 
+  /projects/{projectId}/runs/{runId}/executions/{executionId}/evidence:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/RunId' }
+      - { $ref: '#/components/parameters/ExecutionId' }
+    post:
+      tags: [execution]
+      operationId: attachEvidence
+      summary: Attach a screenshot or log to a result
+      description: |
+        Needs `evidence:attach` — held by every role but Viewer (roles spec §A5).
+
+        **The upload proxies through the API** rather than going browser-direct to a signed URL:
+        the storage port's filesystem adapter cannot issue one (plan §8 open question #28,
+        resolved in §51, which stated this consequence when the option was chosen). So the
+        instance's `spring.servlet.multipart.max-file-size` is a real limit, and a file over it
+        is a **413** rather than a 400 — the request is refused before it reaches the handler,
+        so there is no field to hang the message on.
+
+        `stepId` attaches to one step's result instead of to the execution as a whole. The two
+        are different claims: a file on the execution documents the verdict, a file on a step
+        documents where it went wrong.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: |
+                    The bytes. Filename and content type travel in the part's own headers, and
+                    the filename is stored in a column — it never becomes part of a storage key.
+                caption:
+                  type: string
+                  nullable: true
+                  description: Optional one-line description shown beside the thumbnail.
+                stepId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  description: |
+                    A step of the **pinned** version that already has a recorded result. A step
+                    nobody has marked has no `step_result` row to attach to, and inventing one
+                    would record a verdict nobody gave — so that is a 400 on this field.
+      responses:
+        '201':
+          description: Attached
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Evidence' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413':
+          description: |
+            The file is larger than this instance's upload limit. Refused by the servlet
+            container before the handler runs.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /projects/{projectId}/runs/{runId}/executions/{executionId}/evidence/{evidenceId}:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/RunId' }
+      - { $ref: '#/components/parameters/ExecutionId' }
+      - { $ref: '#/components/parameters/EvidenceId' }
+    delete:
+      tags: [execution]
+      operationId: deleteEvidence
+      summary: Remove evidence
+      description: |
+        Needs `evidence:delete`, which is **`OWN`-qualified for Test Engineer** (roles spec §A5):
+        they may remove evidence they attached and not a colleague's.
+
+        **The two refusals carry different sentences**, because they are different facts about
+        the caller. "You do not have permission to remove evidence" is false for someone who
+        removes their own attachments all day, and false in the direction that sends them to ask
+        an administrator for a permission they already hold.
+
+        Evidence with **no recorded author** is not covered by an `OWN` grant — a grant over
+        "your own work" must not stretch to work nobody can attribute.
+
+        The delete is **hard**, unlike a case's. A screenshot removed on request has to actually
+        leave the disk; a soft-deleted row pointing at retained bytes is a deletion that did not
+        delete, which is the wrong answer for the one thing here a customer may need removed for
+        privacy reasons.
+      responses:
+        '204':
+          description: Removed
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /projects/{projectId}/runs/{runId}/executions/{executionId}/evidence/{evidenceId}/content:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/RunId' }
+      - { $ref: '#/components/parameters/ExecutionId' }
+      - { $ref: '#/components/parameters/EvidenceId' }
+    get:
+      tags: [execution]
+      operationId: downloadEvidence
+      summary: The evidence bytes
+      description: |
+        What `Evidence.url` points at — **without this route that field would be a lie**.
+
+        An ordinary session-authenticated API route rather than a public link, because the
+        filesystem adapter cannot issue an expiring signed URL and a guessable permanent one
+        would be an unauthenticated read of a customer's screenshots.
+
+        No separate permission: anyone who may see the execution may see its evidence, and the
+        catalogue has no `evidence:read`. Served `inline` with the stored content type so the SPA
+        can render an image in place rather than downloading it.
+      responses:
+        '200':
+          description: The bytes
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        '404':
+          # Also the answer when the row exists and its blob does not — the orphan the write
+          # ordering deliberately produces instead of the reverse. See EvidenceStore.
+          $ref: '#/components/responses/NotFound'
+
   # ------------------------------------------------------- documentation ----
   /projects/{projectId}/doc-pages:
     parameters: [{ $ref: '#/components/parameters/ProjectId' }]
@@ -1929,6 +2057,16 @@ components:
       schema: { type: string, format: uuid }
     RunId:
       name: runId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ExecutionId:
+      name: executionId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    EvidenceId:
+      name: evidenceId
       in: path
       required: true
       schema: { type: string, format: uuid }
