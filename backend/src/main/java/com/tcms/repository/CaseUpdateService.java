@@ -87,6 +87,7 @@ public class CaseUpdateService {
     private final SuiteRepository suites;
     private final CaseSteps steps;
     private final TestStepRepository stepRows;
+    private final SharedStepService sharedSteps;
     private final CaseRenderer renderer;
     private final CaseVersions versions;
     private final AuditEventRepository auditEvents;
@@ -98,6 +99,7 @@ public class CaseUpdateService {
             SuiteRepository suites,
             CaseSteps steps,
             TestStepRepository stepRows,
+            SharedStepService sharedSteps,
             CaseRenderer renderer,
             CaseVersions versions,
             AuditEventRepository auditEvents,
@@ -108,6 +110,7 @@ public class CaseUpdateService {
         this.suites = suites;
         this.steps = steps;
         this.stepRows = stepRows;
+        this.sharedSteps = sharedSteps;
         this.renderer = renderer;
         this.versions = versions;
         this.auditEvents = auditEvents;
@@ -192,14 +195,28 @@ public class CaseUpdateService {
         }
 
         Set<UUID> existingStepIds = new HashSet<>();
+        Set<UUID> storedSharedStepIds = new HashSet<>();
         for (TestStep step : stepRows.findForCase(testCase.getId())) {
             existingStepIds.add(step.getId());
+            if (step.getSharedStepId() != null) {
+                storedSharedStepIds.add(step.getSharedStepId());
+            }
         }
+
+        // The library's live entries UNIONED with what this case already references — see
+        // CaseEdit#validate. The union is the whole point: the first half refuses a sibling
+        // project's entry, and without the second, retiring an entry would make every case using
+        // it unsaveable. Only the ids the payload actually names are looked up, so a case with no
+        // shared steps — most of them — costs no query.
+        Set<UUID> acceptableSharedStepIds = new HashSet<>(storedSharedStepIds);
+        acceptableSharedStepIds.addAll(sharedSteps.liveLibraryIds(
+                project.getId(), CaseEdit.referencedSharedStepIds(request.steps())));
 
         CaseEdit.Outcome validated = CaseEdit.validate(
                 request,
                 liveSuiteIds,
                 existingStepIds,
+                acceptableSharedStepIds,
                 key -> cases.existsByAutomationKeyOtherThan(key, testCase.getId()));
 
         if (validated instanceof CaseEdit.Outcome.Invalid invalid) {

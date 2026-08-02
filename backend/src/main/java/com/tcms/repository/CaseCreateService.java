@@ -92,6 +92,7 @@ public class CaseCreateService {
     private final TestCaseRepository cases;
     private final SuiteRepository suites;
     private final CaseSteps steps;
+    private final SharedStepService sharedSteps;
     private final CaseRenderer renderer;
     private final CaseVersions versions;
     private final DisplayKeys displayKeys;
@@ -104,6 +105,7 @@ public class CaseCreateService {
             TestCaseRepository cases,
             SuiteRepository suites,
             CaseSteps steps,
+            SharedStepService sharedSteps,
             CaseRenderer renderer,
             CaseVersions versions,
             DisplayKeys displayKeys,
@@ -114,6 +116,7 @@ public class CaseCreateService {
         this.cases = cases;
         this.suites = suites;
         this.steps = steps;
+        this.sharedSteps = sharedSteps;
         this.renderer = renderer;
         this.versions = versions;
         this.displayKeys = displayKeys;
@@ -211,6 +214,12 @@ public class CaseCreateService {
                 // belonging to another case. Adopting it would move that step's identity — and
                 // therefore its recorded results — onto this one.
                 Set.of(),
+                // The live library alone, with no stored half to union in — for the same reason.
+                // A new case references nothing yet, so a retired entry is correctly refused here
+                // while an existing case keeps saving with one: the concession CaseEdit#validate
+                // makes is to references already made, not to making new ones.
+                sharedSteps.liveLibraryIds(
+                        project.getId(), CaseEdit.referencedSharedStepIds(request.steps())),
                 cases::existsByAutomationKey);
 
         if (validated instanceof CaseEdit.Outcome.Invalid invalid) {

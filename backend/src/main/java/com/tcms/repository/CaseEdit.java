@@ -91,6 +91,27 @@ record CaseEdit(
      *                        than inserted — it names a step belonging to another case, and honoring
      *                        it would move that step's identity, and therefore its recorded results,
      *                        onto this one.
+     * @param acceptableSharedStepIds the shared-step ids a step on this case may reference:
+     *                        <strong>this project's live library entries, unioned with the ids this
+     *                        case's stored steps already reference.</strong> Resolved by the caller,
+     *                        which is the only party holding both halves — {@link
+     *                        SharedStepService#liveLibraryIds} answers the first and the stored
+     *                        steps answer the second.
+     *                        <p>The library half is the check that was missing entirely.
+     *                        {@code test_step.shared_step_id} carries a foreign key, so an id
+     *                        naming nothing fails at the constraint and answers 500 where a field
+     *                        error belongs — but an id naming a <em>sibling project's</em> entry
+     *                        satisfies the key and is stored, and every later read of the case then
+     *                        resolves a library entry through a project the reader was never
+     *                        granted. The same argument {@code suiteId} above makes, on a column
+     *                        nobody made it for.
+     *                        <p>The stored half is why this is not simply "live in this project".
+     *                        Retiring a library entry is a soft delete <em>because references to it
+     *                        survive</em> ({@link SharedStep#getDeletedAt}), so without it, the day
+     *                        an entry is retired every case using it becomes unsaveable — a title
+     *                        fix on an untouched step would be refused over a reference the author
+     *                        never made and cannot see. That is a worse defect than the one the
+     *                        check closes, and it is only avoided by resolving the union.
      * @param automationKeyTaken tests whether a non-null automation key is already used by a
      *                           <em>different</em> case in this company. {@code automation_key} is
      *                           unique per company via a partial index that deliberately does
@@ -103,6 +124,7 @@ record CaseEdit(
             CaseUpdateRequest request,
             Set<UUID> liveSuiteIds,
             Set<UUID> existingStepIds,
+            Set<UUID> acceptableSharedStepIds,
             java.util.function.Predicate<String> automationKeyTaken) {
 
         Map<String, List<String>> errors = new LinkedHashMap<>();
@@ -132,7 +154,8 @@ record CaseEdit(
         }
 
         String gherkin = trimToNull(request.gherkinSource());
-        List<StepEdit> steps = normalizeSteps(request.steps(), existingStepIds, errors);
+        List<StepEdit> steps =
+                normalizeSteps(request.steps(), existingStepIds, acceptableSharedStepIds, errors);
 
         if (format == StepFormat.GHERKIN && gherkin == null) {
             errors.computeIfAbsent("gherkinSource", k -> new ArrayList<>())
@@ -273,11 +296,23 @@ record CaseEdit(
                 null, null, null, null, null, null);
 
         Set<UUID> existingStepIds = new HashSet<>();
+        Set<UUID> storedSharedStepIds = new HashSet<>();
         for (TestStep step : steps) {
             existingStepIds.add(step.getId());
+            if (step.getSharedStepId() != null) {
+                storedSharedStepIds.add(step.getSharedStepId());
+            }
         }
 
-        Outcome outcome = validate(asRequest, liveSuiteIds, existingStepIds, automationKeyTaken);
+        // The stored references, and deliberately NOT the project's live library. This method
+        // reconstructs what is already on the row; it is not an authoring act, so there is nothing
+        // here for a library check to protect. Resolving the live set instead would mean a bulk
+        // MOVE_TO_SUITE over a case referencing a RETIRED entry failed to reconstruct, and the
+        // case would be skipped as "cannot validate its own content" — a case the caller can see,
+        // refused for a reason it did not cause, by a check added for a different path entirely.
+        // It also keeps this method free of a query, which is what lets it stay a pure function.
+        Outcome outcome = validate(
+                asRequest, liveSuiteIds, existingStepIds, storedSharedStepIds, automationKeyTaken);
         return outcome instanceof Outcome.Valid valid
                 ? Optional.of(valid.edit())
                 : Optional.empty();
@@ -321,6 +356,7 @@ record CaseEdit(
     private static List<StepEdit> normalizeSteps(
             List<CaseUpdateRequest.StepInput> submitted,
             Set<UUID> existingStepIds,
+            Set<UUID> acceptableSharedStepIds,
             Map<String, List<String>> errors) {
 
         if (submitted == null || submitted.isEmpty()) {
@@ -341,6 +377,13 @@ record CaseEdit(
                         .add("Step " + (i + 1) + " refers to a step that is not on this case.");
                 continue;
             }
+            if (step.sharedStepId() != null
+                    && !acceptableSharedStepIds.contains(step.sharedStepId())) {
+                errors.computeIfAbsent("steps", k -> new ArrayList<>())
+                        .add("Step " + (i + 1) + " refers to a shared step that is not in this "
+                                + "project's library.");
+                continue;
+            }
             normalized.add(new StepEdit(
                     step.id(),
                     keyword(step.keyword(), i, errors),
@@ -350,6 +393,28 @@ record CaseEdit(
                     step.sharedStepId()));
         }
         return normalized;
+    }
+
+    /**
+     * The shared-step ids a submitted payload references — what the caller resolves the library
+     * half of {@link #validate}'s {@code acceptableSharedStepIds} from.
+     *
+     * <p>Here rather than at each call site so the two write paths cannot disagree about which ids
+     * they looked up, and so the empty case — the overwhelmingly common one, since most cases
+     * reference no library entry at all — is answered once. An empty result means the caller makes
+     * no query.
+     */
+    static Set<UUID> referencedSharedStepIds(List<CaseUpdateRequest.StepInput> submitted) {
+        if (submitted == null || submitted.isEmpty()) {
+            return Set.of();
+        }
+        Set<UUID> referenced = new HashSet<>();
+        for (CaseUpdateRequest.StepInput step : submitted) {
+            if (step.sharedStepId() != null) {
+                referenced.add(step.sharedStepId());
+            }
+        }
+        return referenced;
     }
 
     /**
