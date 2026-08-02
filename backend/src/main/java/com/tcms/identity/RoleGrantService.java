@@ -385,13 +385,32 @@ public class RoleGrantService {
      * widening a PROJECT-scope role to the company hands someone every project present and future.
      * The two mean materially different access, so the caller is told rather than guessed at.
      *
-     * <p><strong>The consequence worth knowing:</strong> a company-wide grant of a PROJECT-scope
+     * <p>~~<strong>The consequence worth knowing:</strong> a company-wide grant of a PROJECT-scope
      * role is not expressible here. That arrangement exists in the codebase — the "stakeholder
      * Viewer over the whole company" persona {@code ProjectCreateEndpointTest} seeds directly
      * through the repository, noting that {@code role_assignment} does not enforce scope. It is
      * seeded, not granted, and the roles spec gives each of the six roles exactly one scope, so
      * refusing it here follows the spec. If the product wants a company-wide read-only
-     * stakeholder, that is a seventh role in the catalogue, not a relaxation of this check.
+     * stakeholder, that is a seventh role in the catalogue, not a relaxation of this check.~~
+     *
+     * <p><strong>→ Superseded: a PROJECT-scope role may now be granted with no project</strong>, and
+     * it means <em>this role, on every project in the company, unless that project says
+     * otherwise</em>. The prediction above was half right — the arrangement was indeed already in
+     * the codebase and only reachable by seeding — but the conclusion was wrong: a seventh role
+     * would have solved it for Viewer alone, and the same want exists for every working role
+     * ("she runs testing across all of our projects"). It is a property of the <em>grant</em>, not
+     * of the role, which is why it belongs here rather than in the catalogue.
+     *
+     * <p>The demotion direction is what makes this safe to allow. The old comment's fear —
+     * "widening a PROJECT-scope role to the company hands someone every project present and future"
+     * — is still exactly what this does, and it is now the stated intent rather than an accident;
+     * what makes it governable is that a project-level grant <strong>overrides</strong> the
+     * inherited one, including downward, so a company-wide Test Lead can still be reduced to Viewer
+     * on one sensitive project. {@code PermissionEvaluator#projectRoleKeys} is that rule.
+     *
+     * <p>The other two arms are unchanged, and the COMPANY one still matters for the same reason:
+     * pinning a Company Admin to one project would quietly demote them, and a COMPANY-scope role is
+     * authority over the company rather than a default for its projects.
      */
     private static Optional<String> scopeError(Role role, UUID projectId) {
         return switch (role.getScope()) {
@@ -401,10 +420,9 @@ public class RoleGrantService {
                     ? Optional.empty()
                     : Optional.of("This role applies to the whole company, so it cannot be "
                             + "granted on a single project.");
-            case PROJECT -> projectId != null
-                    ? Optional.empty()
-                    : Optional.of("This role applies to one project, so choose the project it "
-                            + "should apply to.");
+            // Both are valid now: with a project it applies there; without one it is inherited by
+            // every project that has no grant of its own.
+            case PROJECT -> Optional.empty();
         };
     }
 

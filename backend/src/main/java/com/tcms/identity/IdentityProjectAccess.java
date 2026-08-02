@@ -5,6 +5,7 @@ import com.tcms.tenancy.CompanyContext;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -188,5 +189,23 @@ public class IdentityProjectAccess implements ProjectAccess {
         Map<UUID, String> names = new HashMap<>();
         strongest.forEach((projectId, row) -> names.put(projectId, row.getRoleName()));
         return names;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Ranked by the same derived strength as {@link #projectRoleNames} — a caller can inherit
+     * two grants (directly and through a team) and the contract has room for one string.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<String> inheritedProjectRoleName(UUID userId) {
+        UUID companyId = CompanyContext.require();
+
+        return roleAssignments.findInheritedRoleNames(companyId, userId).stream()
+                .max(Comparator
+                        .comparingLong(RoleAssignmentRepository.InheritedRoleName::getPermissionCount)
+                        .thenComparing(RoleAssignmentRepository.InheritedRoleName::getRoleName))
+                .map(RoleAssignmentRepository.InheritedRoleName::getRoleName);
     }
 }

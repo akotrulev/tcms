@@ -600,17 +600,35 @@ class RoleGrantEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("a PROJECT-scope role granted company-wide is a 400 on `roleId`")
-        void aProjectRoleCannotBeWidened() throws Exception {
-            // The consequence stated in RoleGrantService#scopeError: the "stakeholder Viewer over
-            // the whole company" arrangement is NOT expressible here. It exists as a seeded fixture
-            // elsewhere in the suite; the roles spec gives each of the six roles exactly one scope,
-            // so a company-wide read-only stakeholder is a seventh role, not a relaxation of this.
-            MvcResult refused = post(ADMIN, WEST, userGrant(Role.VIEWER_ID, NEWCOMER, null));
+        @DisplayName("a PROJECT-scope role granted company-wide is ACCEPTED — it is inherited")
+        void aProjectRoleMayBeGrantedCompanyWide() throws Exception {
+            // ~~This was a 400: "the stakeholder Viewer over the whole company is NOT expressible
+            // here... a seventh role, not a relaxation of this check."~~ → SUPERSEDED. A PROJECT-scope
+            // role with no project now means "this role on every project, unless that project says
+            // otherwise", which is the inheritance rule. RoleGrantService#scopeError records the
+            // reversal and why the seventh-role answer was too narrow: the same want exists for
+            // every working role, not only Viewer.
+            //
+            // What makes widening safe to allow is the other half of the rule — a project-level
+            // grant OVERRIDES the inherited one, including downward — so this is a default rather
+            // than an irrevocable promotion. PermissionEvaluatorTest.Inheritance drives that.
+            MvcResult granted = post(ADMIN, WEST, userGrant(Role.VIEWER_ID, NEWCOMER, null));
+
+            assertThat(granted.getResponse().getStatus()).isEqualTo(201);
+        }
+
+        @Test
+        @DisplayName("a COMPANY-scope role pinned to one project is STILL a 400 — the other direction")
+        void aCompanyRoleStillCannotBeNarrowed() throws Exception {
+            // The half that did not change, and the reason the two arms are not symmetric: a
+            // COMPANY-scope role is authority over the company, not a default for its projects, so
+            // pinning a Company Admin to one project would quietly demote them everywhere else.
+            MvcResult refused = post(ADMIN, WEST, userGrant(Role.COMPANY_ADMIN_ID, NEWCOMER, ALPHA));
 
             assertThat(refused.getResponse().getStatus()).isEqualTo(400);
             assertThat(errorsOn(refused, "roleId")).containsExactly(
-                    "This role applies to one project, so choose the project it should apply to.");
+                    "This role applies to the whole company, so it cannot be granted on a single "
+                            + "project.");
         }
 
         @Test
@@ -677,7 +695,9 @@ class RoleGrantEndpointTest extends IntegrationTestBase {
         void nothingIsWrittenOnARefusal() throws Exception {
             long before = grantCount(WEST);
 
-            assertThat(statusOf(post(ADMIN, WEST, userGrant(Role.VIEWER_ID, NEWCOMER, null))))
+            // A COMPANY-scope role pinned to a project — the refusal that survived the inheritance
+            // change. The previous fixture here (a PROJECT role granted company-wide) is a 201 now.
+            assertThat(statusOf(post(ADMIN, WEST, userGrant(Role.COMPANY_ADMIN_ID, NEWCOMER, ALPHA))))
                     .isEqualTo(400);
 
             assertThat(grantCount(WEST)).isEqualTo(before);

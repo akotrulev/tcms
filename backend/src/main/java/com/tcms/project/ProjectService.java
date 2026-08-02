@@ -94,8 +94,14 @@ public class ProjectService {
         Map<UUID, Long> caseCounts =
                 caseCounts(companyId, visible.stream().map(Project::getId).toList());
         Map<UUID, String> roleNames = access.projectRoleNames(userId);
+        // The label for projects the caller holds no grant on but inherits a company-wide role into.
+        // Read second, exactly as the evaluator reads it second, so the name on the card and the
+        // permissions behind it cannot disagree.
+        String inherited = access.inheritedProjectRoleName(userId).orElse(null);
 
-        return visible.stream().map(project -> view(project, caseCounts, roleNames)).toList();
+        return visible.stream()
+                .map(project -> view(project, caseCounts, roleNames, inherited))
+                .toList();
     }
 
     /**
@@ -110,7 +116,8 @@ public class ProjectService {
         return visibleProject(userId, projectId).map(project -> view(
                 project,
                 caseCounts(companyId, List.of(project.getId())),
-                access.projectRoleNames(userId)));
+                access.projectRoleNames(userId),
+                access.inheritedProjectRoleName(userId).orElse(null)));
     }
 
     /**
@@ -331,7 +338,10 @@ public class ProjectService {
     }
 
     private ProjectView view(
-            Project project, Map<UUID, Long> caseCounts, Map<UUID, String> roleNames) {
+            Project project,
+            Map<UUID, Long> caseCounts,
+            Map<UUID, String> roleNames,
+            String inheritedRoleName) {
         return new ProjectView(
                 project.getId(),
                 project.getKey(),
@@ -343,7 +353,10 @@ public class ProjectService {
                 caseCounts.getOrDefault(project.getId(), 0L),
                 // null when the caller reaches this project through a COMPANY-scope grant —
                 // the contract's stated meaning of myRole, not a lookup that failed.
-                roleNames.get(project.getId()));
+                // A grant naming this project wins; otherwise the inherited role, which IS the
+                // caller's role here. Null only when they reach the project some other way — a
+                // Company Admin, whose role is a claim about the company rather than the project.
+                roleNames.getOrDefault(project.getId(), inheritedRoleName));
     }
 
     /**
@@ -362,7 +375,12 @@ public class ProjectService {
      * is the default.
      */
     ProjectView viewOfCreated(Project project, UUID userId) {
-        return view(project, Map.of(), access.projectRoleNames(userId));
+        // The inherited name is read here too, and it is not ceremony: the creator of a project is
+        // not automatically granted a role on it (§34), so a company-wide Test Lead creating one
+        // reaches it purely by inheritance — and would otherwise be told they have no role on the
+        // project they just made.
+        return view(project, Map.of(), access.projectRoleNames(userId),
+                access.inheritedProjectRoleName(userId).orElse(null));
     }
 
     private Map<UUID, Long> caseCounts(UUID companyId, List<UUID> projectIds) {

@@ -137,10 +137,42 @@ public class PermissionEvaluator {
         }
         Set<String> keys = systemKeys.get();
         if (companyGateOpen(companyId, userId)) {
-            keys.addAll(roleAssignments.findCompanyScopedPermissionKeys(companyId, userId));
-            keys.addAll(roleAssignments.findProjectScopedPermissionKeys(companyId, userId, projectId));
+            // Never overridden: SYSTEM (already in `keys`) and COMPANY-scope roles. Authority over
+            // the company is not a per-project matter, and making it one would let anybody holding
+            // project:members neutralise the company's administrator by granting them Viewer.
+            keys.addAll(roleAssignments.findCompanyRolePermissionKeys(companyId, userId));
+            keys.addAll(projectRoleKeys(companyId, userId, projectId));
         }
         return PermissionSet.of(catalogue, keys);
+    }
+
+    /**
+     * The working role that applies <strong>on this project</strong> — the project's own grants if
+     * it has any, otherwise the company-wide role inherited into it.
+     *
+     * <h2>Replace, not union, and that is the whole feature</h2>
+     *
+     * <p>A grant naming the project <em>replaces</em> the inherited one rather than adding to it,
+     * <strong>including when it confers less</strong>: a company-wide Test Lead granted Viewer on
+     * one project is a Viewer there. That is the only place in this evaluator where adding a row
+     * can <em>remove</em> a permission, and it is deliberate — an explicit project grant is a
+     * statement about that project, where {@link PermissionQualifier}'s "an additional grant must
+     * never take capability away" is about grants accumulating by accident (two teams, a company
+     * role and a project role) with nobody having said anything about this project at all.
+     *
+     * <p>The switch is {@link RoleAssignmentRepository#hasProjectScopedAssignment}, which asks
+     * whether an <em>assignment</em> exists and never what it grants — see its header for why
+     * "are there project keys" would silently union the two and undo every restriction.
+     *
+     * <p>Union is still the rule <em>within</em> a level: two project grants on the same project
+     * (directly and through a team) accumulate exactly as before, and so do two company-wide ones.
+     * Only the boundary between the two levels is an override.
+     */
+    private Set<String> projectRoleKeys(UUID companyId, UUID userId, UUID projectId) {
+        return new HashSet<>(
+                roleAssignments.hasProjectScopedAssignment(companyId, userId, projectId)
+                        ? roleAssignments.findProjectScopedPermissionKeys(companyId, userId, projectId)
+                        : roleAssignments.findInheritedProjectRolePermissionKeys(companyId, userId));
     }
 
     /**
@@ -189,9 +221,17 @@ public class PermissionEvaluator {
                 strongestOf(instanceRoleAssignments.findSystemQualifiers(userId, permissionKey));
         if (companyGateOpen(companyId, userId)) {
             held = held.strongest(strongestOf(
-                    roleAssignments.findCompanyScopedQualifiers(companyId, userId, permissionKey)));
-            held = held.strongest(strongestOf(roleAssignments.findProjectScopedQualifiers(
-                    companyId, userId, projectId, permissionKey)));
+                    roleAssignments.findCompanyRoleQualifiers(companyId, userId, permissionKey)));
+            // The same replace-don't-union rule as evaluate(), and it has to be the same or the two
+            // disagree about which grant is in force: a company-wide Test Engineer inherits
+            // artifact:edit as PLAN_SCOPE, and a project grant of Test Lead must make it ALL there
+            // rather than merging to the stronger of the two by accident.
+            held = held.strongest(strongestOf(
+                    roleAssignments.hasProjectScopedAssignment(companyId, userId, projectId)
+                            ? roleAssignments.findProjectScopedQualifiers(
+                                    companyId, userId, projectId, permissionKey)
+                            : roleAssignments.findInheritedProjectRoleQualifiers(
+                                    companyId, userId, permissionKey)));
         }
         return held;
     }
@@ -223,7 +263,13 @@ public class PermissionEvaluator {
         }
         Set<String> keys = systemKeys.get();
         if (companyGateOpen(companyId, userId)) {
-            keys.addAll(roleAssignments.findCompanyScopedPermissionKeys(companyId, userId));
+            // COMPANY-scope roles only — deliberately NOT the PROJECT-scope roles held company-wide.
+            //
+            // This is the same distinction the header above already draws, one case further on.
+            // Inheriting Test Lead across every project means holding project:settings on each of
+            // them; it does not mean holding company-level authority, and folding it in here would
+            // let a company-wide Test Lead create projects because they lead all the existing ones.
+            keys.addAll(roleAssignments.findCompanyRolePermissionKeys(companyId, userId));
         }
         return PermissionSet.of(catalogue, keys);
     }

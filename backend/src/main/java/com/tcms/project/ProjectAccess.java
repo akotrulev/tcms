@@ -1,6 +1,7 @@
 package com.tcms.project;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -158,4 +159,26 @@ public interface ProjectAccess {
      * role names (plan §6b).
      */
     Map<UUID, String> projectRoleNames(UUID userId);
+
+    /**
+     * The role name the caller <strong>inherits</strong> on every project they hold no grant on, or
+     * empty when they inherit none.
+     *
+     * <p>The display half of the inheritance rule. A PROJECT-scope role granted with no project
+     * applies to every project that has not said otherwise, so on those projects it <em>is</em> the
+     * caller's role and {@code Project.myRole} has to say so — a {@code null} there would report "no
+     * role on this project" to somebody who can demonstrably act on it, which is the same shape as
+     * §47's tile and §49's chip: a field that is accurate about the query behind it and false about
+     * the thing it is labelling.
+     *
+     * <p>Deliberately <strong>not</strong> merged into {@link #projectRoleNames}'s map. That map is
+     * keyed by project and only the caller knows which projects are being rendered; folding a
+     * per-project default into it would mean this method inventing entries for projects nobody
+     * asked about. The caller reads the map first and falls back to this — which is also exactly
+     * the precedence the evaluator applies, so the label and the permissions cannot disagree.
+     *
+     * <p>Company Admin is still absent from both, for {@link #projectRoleNames}'s stated reason:
+     * theirs is a claim about the company, not about any project.
+     */
+    Optional<String> inheritedProjectRoleName(UUID userId);
 }

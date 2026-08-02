@@ -71,6 +71,37 @@ class PermissionEvaluatorTest extends IntegrationTestBase {
 
     private static final UUID ACME_QA_TEAM = UUID.fromString("00000000-0000-4000-8000-0000000000b1");
 
+    /*
+     * ids `ab` and `ac`, checked against every tail already in src/test/java before writing —
+     * `c1` was taken by AppUserEmailCaseTest and reusing it cost a debugging round. The guards in
+     * this class's seed are `if (findById(...).isEmpty())`, so a colliding id does NOT fail loudly:
+     * the row already exists, creation is skipped, and this class inherits the other one's account
+     * state. That zeroes the ACCOUNT gate, so every permission reads false and the failure looks
+     * like the feature under test is broken rather than the fixture. Handoff §19, and §29 and §54
+     * each hit it again.
+     */
+
+    /**
+     * Company-wide Test Lead, plus a Viewer grant on {@link #ACME_PROJECT} — the override persona.
+     *
+     * <p>Both halves are needed to tell the two failure modes apart: without the company-wide grant
+     * a missing inheritance looks the same as a working override, and without the project grant a
+     * broken override looks the same as working inheritance.
+     */
+    private static final UUID INHERITOR = UUID.fromString("00000000-0000-4000-8000-0000000000ab");
+
+    /**
+     * Company-wide Test Engineer + Test Lead on {@link #ACME_PROJECT} — the same shape one level
+     * down, where what differs between the two roles is the {@code artifact:edit} QUALIFIER
+     * ({@code PLAN_SCOPE} vs {@code ALL}) rather than the set of keys.
+     */
+    private static final UUID QUALIFIED_INHERITOR =
+            UUID.fromString("00000000-0000-4000-8000-0000000000ac");
+
+    /** A second Acme project with no grant naming anybody here — where inheritance is observable. */
+    private static final UUID ACME_SECOND_PROJECT =
+            UUID.fromString("33330000-0000-4000-8000-000000000002");
+
     @Autowired
     private PermissionEvaluator evaluator;
 
@@ -122,6 +153,8 @@ class PermissionEvaluatorTest extends IntegrationTestBase {
             activeUser(INVITED_ONLY, "invited@example.test", now);
             activeUser(ZENITH_LEAD, "zenith@example.test", now);
             activeUser(DUAL_GRANT, "dual@example.test", now);
+            activeUser(INHERITOR, "inheritor@example.test", now);
+            activeUser(QUALIFIED_INHERITOR, "qualified@example.test", now);
 
             // Deactivated, but holding the strongest grant in the product — so the
             // account gate is proven to cover SYSTEM scope, not just company scope.
@@ -140,6 +173,11 @@ class PermissionEvaluatorTest extends IntegrationTestBase {
         // --- Acme -----------------------------------------------------------------
         inCompany(ACME, () -> tx.executeWithoutResult(status -> {
             seedProject(ACME_PROJECT, ACME, "acme-marker", now);
+            // A distinct key: uq_project_key is per company, and every other project in this class
+            // deliberately reuses "OLB" ACROSS companies to prove isolation. A second one INSIDE
+            // Acme is the one case that has to differ.
+            seedProjectWithKey(
+                    ACME_SECOND_PROJECT, ACME, "OLB2", "Online Banking II", "acme-second-marker", now);
 
             member(ACME, LEAD, "Lead", true, now);
             member(ACME, MEMBER_NO_GRANT, "No Grant", true, now);
@@ -166,6 +204,15 @@ class PermissionEvaluatorTest extends IntegrationTestBase {
             member(ACME, DUAL_GRANT, "Dual Grant", true, now);
             grantOnCompany("a9c", ACME, Role.COMPANY_ADMIN_ID, DUAL_GRANT, now);
             grantOnProject("a9p", ACME, Role.TEST_ENGINEER_ID, DUAL_GRANT, ACME_PROJECT, now);
+
+            // Inheritance: the company-wide role, and the project that overrides it downward.
+            member(ACME, INHERITOR, "Inheritor", true, now);
+            grantOnCompany("c1c", ACME, Role.TEST_LEAD_ID, INHERITOR, now);
+            grantOnProject("c1p", ACME, Role.VIEWER_ID, INHERITOR, ACME_PROJECT, now);
+
+            member(ACME, QUALIFIED_INHERITOR, "Qualified Inheritor", true, now);
+            grantOnCompany("c2c", ACME, Role.TEST_ENGINEER_ID, QUALIFIED_INHERITOR, now);
+            grantOnProject("c2p", ACME, Role.TEST_LEAD_ID, QUALIFIED_INHERITOR, ACME_PROJECT, now);
         }));
 
         // --- Globex: same project key and name as Acme's --------------------------
@@ -608,6 +655,83 @@ class PermissionEvaluatorTest extends IntegrationTestBase {
     }
 
     // =========================================================================
+    // Inheritance — a company-wide project role, and the project that overrides it
+    // =========================================================================
+
+    @Nested
+    @DisplayName("Inheritance — a company-wide role applies everywhere the project has not spoken")
+    class Inheritance {
+
+        @Test
+        @DisplayName("a company-wide Test Lead holds the role on a project with no grant of its own")
+        void theCompanyWideRoleIsInherited() {
+            // ACME_SECOND_PROJECT has no grant naming INHERITOR at all. Before inheritance existed
+            // this was zero permissions and a 404 on every project-scoped path.
+            assertThat(evaluateIn(ACME, INHERITOR, ACME_SECOND_PROJECT).has("plan:create")).isTrue();
+            assertThat(evaluateIn(ACME, INHERITOR, ACME_SECOND_PROJECT).has("project:read")).isTrue();
+        }
+
+        @Test
+        @DisplayName("a project grant REPLACES the inherited role, even when it confers less")
+        void theProjectGrantOverridesDownward() {
+            // THE assertion of this nest, and the only place in the evaluator where adding a row
+            // REMOVES a permission. INHERITOR is a company-wide Test Lead and a Viewer on
+            // ACME_PROJECT; a Viewer cannot create plans, so the inherited Test Lead must not leak
+            // through. Implement the boundary as a union — the obvious reading, and what every
+            // other term in this class does — and this is the only test that goes red.
+            assertThat(evaluateIn(ACME, INHERITOR, ACME_PROJECT).has("plan:create")).isFalse();
+
+            // Still a Viewer there, not nobody: the override replaces, it does not revoke.
+            assertThat(evaluateIn(ACME, INHERITOR, ACME_PROJECT).has("project:read")).isTrue();
+        }
+
+        @Test
+        @DisplayName("the override is per project — the inherited role still applies elsewhere")
+        void theOverrideDoesNotLeakToOtherProjects() {
+            // Guards the mirror mistake: scoping the override to the caller rather than to the
+            // project would demote them everywhere, which reads as "inheritance is broken".
+            assertThat(evaluateIn(ACME, INHERITOR, ACME_SECOND_PROJECT).has("plan:create")).isTrue();
+            assertThat(evaluateIn(ACME, INHERITOR, ACME_PROJECT).has("plan:create")).isFalse();
+        }
+
+        @Test
+        @DisplayName("a COMPANY-scope role is NEVER overridden by a project grant")
+        void companyAdminSurvivesAProjectGrant() {
+            // DUAL_GRANT is a Company Admin company-wide and a Test Engineer on ACME_PROJECT.
+            // Without the exemption, anyone holding project:members could neutralise the company's
+            // administrator on a project by granting them a weaker role — a privilege inversion,
+            // and the same shape as §43/§45 where a mis-scoped row silently decided access.
+            assertThat(evaluateIn(ACME, DUAL_GRANT, ACME_PROJECT).has("company:members")).isTrue();
+            // And the project grant still adds what it confers, because COMPANY-scope keys are
+            // unioned rather than replaced.
+            assertThat(evaluateIn(ACME, DUAL_GRANT, ACME_PROJECT).has("case:create")).isTrue();
+        }
+
+        @Test
+        @DisplayName("an inherited role confers no COMPANY-level authority")
+        void inheritingEveryProjectIsNotCompanyAuthority() {
+            // evaluateCompanyWide's own header states the rule this extends: leading every project
+            // is not the same as administering the company, so a company-wide Test Lead must not
+            // be able to create projects or change company settings.
+            assertThat(evaluateCompanyWideIn(ACME, INHERITOR).has("project:create")).isFalse();
+            assertThat(evaluateCompanyWideIn(ACME, INHERITOR).has("company:settings")).isFalse();
+        }
+
+        @Test
+        @DisplayName("the qualifier follows the same override, not the stronger of the two")
+        void theQualifierIsOverriddenToo() {
+            // The half that is easy to leave behind. QUALIFIED_INHERITOR is a company-wide Test
+            // Engineer — artifact:edit is PLAN_SCOPE for them (V19) — and a Test Lead on
+            // ACME_PROJECT, where it is ALL. Merging the terms would give ALL everywhere by
+            // strongest-wins; overriding gives ALL only where the project says so.
+            assertThat(qualifierIn(ACME, QUALIFIED_INHERITOR, ACME_PROJECT, "artifact:edit"))
+                    .isEqualTo(PermissionQualifier.ALL);
+            assertThat(qualifierIn(ACME, QUALIFIED_INHERITOR, ACME_SECOND_PROJECT, "artifact:edit"))
+                    .isEqualTo(PermissionQualifier.PLAN_SCOPE);
+        }
+    }
+
+    // =========================================================================
     // helpers
     // =========================================================================
 
@@ -668,9 +792,14 @@ class PermissionEvaluatorTest extends IntegrationTestBase {
     }
 
     private void seedProject(UUID id, UUID companyId, String marker, Instant now) {
+        // Same key and name in both companies — see the class comment.
+        seedProjectWithKey(id, companyId, "OLB", "Online Banking", marker, now);
+    }
+
+    private void seedProjectWithKey(
+            UUID id, UUID companyId, String key, String name, String marker, Instant now) {
         if (projects.findScopedById(id).isEmpty()) {
-            // Same key and name in both companies — see the class comment.
-            projects.save(Project.create(id, companyId, "OLB", "Online Banking", marker, now));
+            projects.save(Project.create(id, companyId, key, name, marker, now));
         }
     }
 

@@ -77,24 +77,101 @@ public interface RoleAssignmentRepository extends JpaRepository<RoleAssignment, 
             @Param("projectId") UUID projectId);
 
     /**
-     * COMPANY-scope permission keys — {@code project_id IS NULL}, so they apply to every
-     * project in the company, present and future. This is what makes Company Admin work
-     * without a per-project grant.
+     * Permission keys from a company-wide grant of a <strong>COMPANY-scope role</strong> —
+     * {@code Company Admin} and the {@code Company Member} baseline.
+     *
+     * <h2>Why this is split from {@link #findInheritedProjectRolePermissionKeys}</h2>
+     *
+     * <p>Both are {@code project_id IS NULL}, and until roles became inheritable that was the whole
+     * definition of "company-scope" — one query sufficed because {@code scopeError} refused to grant
+     * any other kind of role that way. It no longer does, so {@code project_id IS NULL} now covers
+     * two populations with <strong>different override semantics</strong>:
+     *
+     * <ul>
+     *   <li>a COMPANY-scope role is authority over the company itself and is <em>never</em>
+     *       overridden by a project grant — otherwise anyone holding {@code project:members} could
+     *       neutralise the company's administrator by granting them Viewer on a project;</li>
+     *   <li>a PROJECT-scope role granted company-wide is a <em>default for every project</em>, and
+     *       is exactly what a project-level grant replaces.</li>
+     * </ul>
+     *
+     * <p>Keying the split on {@code role.scope} rather than on a role id list is the same rule
+     * {@code IdentityProjectAccess#projectRoleNames} follows and V12's qualifier column states:
+     * derive it from the catalogue, never from a hard-coded ranking of names, or the first custom
+     * role is mis-answered.
      */
     @Query(nativeQuery = true, value = """
             SELECT DISTINCT rp.permission_key
               FROM role_assignment ra
+              JOIN role r ON r.id = ra.role_id
               JOIN role_permission rp ON rp.role_id = ra.role_id
              WHERE ra.company_id = :companyId
                AND ra.project_id IS NULL
+               AND r.scope = 'COMPANY'
                AND (ra.user_id = :userId
                     OR ra.team_id IN (SELECT tm.team_id
                                         FROM team_membership tm
                                        WHERE tm.user_id = :userId
                                          AND tm.company_id = :companyId))
             """)
-    List<String> findCompanyScopedPermissionKeys(
+    List<String> findCompanyRolePermissionKeys(
             @Param("companyId") UUID companyId, @Param("userId") UUID userId);
+
+    /**
+     * Permission keys <strong>inherited</strong> by every project — a PROJECT-scope role granted
+     * with no project, meaning "this role, everywhere in this company".
+     *
+     * <p>Deliberately **not** unioned with a project's own grants: see
+     * {@link #hasProjectScopedAssignment}. These apply only where the project has said nothing.
+     */
+    @Query(nativeQuery = true, value = """
+            SELECT DISTINCT rp.permission_key
+              FROM role_assignment ra
+              JOIN role r ON r.id = ra.role_id
+              JOIN role_permission rp ON rp.role_id = ra.role_id
+             WHERE ra.company_id = :companyId
+               AND ra.project_id IS NULL
+               AND r.scope = 'PROJECT'
+               AND (ra.user_id = :userId
+                    OR ra.team_id IN (SELECT tm.team_id
+                                        FROM team_membership tm
+                                       WHERE tm.user_id = :userId
+                                         AND tm.company_id = :companyId))
+            """)
+    List<String> findInheritedProjectRolePermissionKeys(
+            @Param("companyId") UUID companyId, @Param("userId") UUID userId);
+
+    /**
+     * Whether this caller has <strong>any</strong> grant naming this project — the switch that
+     * decides whether the inherited company-wide role applies here.
+     *
+     * <h2>Existence of an assignment, not "does it grant anything"</h2>
+     *
+     * <p>The override triggers on the <em>assignment</em>, never on the keys it happens to confer.
+     * A project grant of a role that grants little — Viewer over a company-wide Test Lead — is the
+     * whole point of the feature, and a check written as "are there project keys" would union the
+     * two instead of replacing, silently restoring the permissions the grant was made to remove. A
+     * role with no permissions at all would likewise fail to override, which is the same defect one
+     * degree further along.
+     *
+     * <p>Reads {@code role_assignment} alone for that reason — it never joins {@code role_permission},
+     * so nothing about the catalogue can change the answer.
+     */
+    @Query(nativeQuery = true, value = """
+            SELECT EXISTS (SELECT 1
+                             FROM role_assignment ra
+                            WHERE ra.company_id = :companyId
+                              AND ra.project_id = :projectId
+                              AND (ra.user_id = :userId
+                                   OR ra.team_id IN (SELECT tm.team_id
+                                                       FROM team_membership tm
+                                                      WHERE tm.user_id = :userId
+                                                        AND tm.company_id = :companyId)))
+            """)
+    boolean hasProjectScopedAssignment(
+            @Param("companyId") UUID companyId,
+            @Param("userId") UUID userId,
+            @Param("projectId") UUID projectId);
 
     /**
      * The qualifiers on every PROJECT-scope grant of <em>one</em> permission — {@code 'ALL'},
@@ -142,9 +219,11 @@ public interface RoleAssignmentRepository extends JpaRepository<RoleAssignment, 
     @Query(nativeQuery = true, value = """
             SELECT DISTINCT rp.qualifier
               FROM role_assignment ra
+              JOIN role r ON r.id = ra.role_id
               JOIN role_permission rp ON rp.role_id = ra.role_id
              WHERE ra.company_id = :companyId
                AND ra.project_id IS NULL
+               AND r.scope = 'COMPANY'
                AND rp.permission_key = :permissionKey
                AND (ra.user_id = :userId
                     OR ra.team_id IN (SELECT tm.team_id
@@ -152,7 +231,35 @@ public interface RoleAssignmentRepository extends JpaRepository<RoleAssignment, 
                                        WHERE tm.user_id = :userId
                                          AND tm.company_id = :companyId))
             """)
-    List<String> findCompanyScopedQualifiers(
+    List<String> findCompanyRoleQualifiers(
+            @Param("companyId") UUID companyId,
+            @Param("userId") UUID userId,
+            @Param("permissionKey") String permissionKey);
+
+    /**
+     * The qualifier on an <strong>inherited</strong> grant — a PROJECT-scope role held company-wide.
+     *
+     * <p>Split from {@link #findCompanyRoleQualifiers} for {@link #findCompanyRolePermissionKeys}'
+     * reason, and it matters here too: a company-wide Test Engineer inherits {@code artifact:edit}
+     * with its {@code PLAN_SCOPE} qualifier into every project, and a project grant of Test Lead
+     * must replace that with {@code ALL} rather than merge to it.
+     */
+    @Query(nativeQuery = true, value = """
+            SELECT DISTINCT rp.qualifier
+              FROM role_assignment ra
+              JOIN role r ON r.id = ra.role_id
+              JOIN role_permission rp ON rp.role_id = ra.role_id
+             WHERE ra.company_id = :companyId
+               AND ra.project_id IS NULL
+               AND r.scope = 'PROJECT'
+               AND rp.permission_key = :permissionKey
+               AND (ra.user_id = :userId
+                    OR ra.team_id IN (SELECT tm.team_id
+                                        FROM team_membership tm
+                                       WHERE tm.user_id = :userId
+                                         AND tm.company_id = :companyId))
+            """)
+    List<String> findInheritedProjectRoleQualifiers(
             @Param("companyId") UUID companyId,
             @Param("userId") UUID userId,
             @Param("permissionKey") String permissionKey);
@@ -201,6 +308,44 @@ public interface RoleAssignmentRepository extends JpaRepository<RoleAssignment, 
             """)
     List<ProjectRoleName> findProjectRoleNames(
             @Param("companyId") UUID companyId, @Param("userId") UUID userId);
+
+    /**
+     * The caller's <strong>inherited</strong> project-role grants — PROJECT-scope roles held with no
+     * project, so they name the role that applies on every project that has no grant of its own.
+     *
+     * <p>Ranked by the sibling query's rule and for its reason: two inherited grants (directly and
+     * through a team) can both apply, the contract has room for one string, and "which is stronger"
+     * must be derived from the catalogue rather than from a hard-coded ordering of names.
+     *
+     * <p>Without this, {@code Project.myRole} would read {@code null} on every inherited project
+     * while the caller demonstrably has a role there — the contract defines the field as "the
+     * caller's role on this project", and an inherited role is their role on it.
+     */
+    @Query(nativeQuery = true, value = """
+            SELECT r.name AS roleName,
+                   (SELECT COUNT(*) FROM role_permission rp
+                     WHERE rp.role_id = ra.role_id) AS permissionCount
+              FROM role_assignment ra
+              JOIN role r ON r.id = ra.role_id
+             WHERE ra.company_id = :companyId
+               AND ra.project_id IS NULL
+               AND r.scope = 'PROJECT'
+               AND (ra.user_id = :userId
+                    OR ra.team_id IN (SELECT tm.team_id
+                                        FROM team_membership tm
+                                       WHERE tm.user_id = :userId
+                                         AND tm.company_id = :companyId))
+            """)
+    List<InheritedRoleName> findInheritedRoleNames(
+            @Param("companyId") UUID companyId, @Param("userId") UUID userId);
+
+    /** An inherited grant, reduced to what a screen shows plus how to rank it. */
+    interface InheritedRoleName {
+
+        String getRoleName();
+
+        long getPermissionCount();
+    }
 
     /** One project-scope grant, reduced to what a screen shows plus how to rank it. */
     interface ProjectRoleName {

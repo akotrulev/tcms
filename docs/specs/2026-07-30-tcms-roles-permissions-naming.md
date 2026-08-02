@@ -33,7 +33,7 @@ Three scopes. A `RoleAssignment` grants one role to a **user or a team** on one 
 |---|---|---|---|
 | `SYSTEM` | The instance | — (bootstrapped) | Instance operator only. |
 | `COMPANY` | One company | Instance Admin | Applies to **every project in that company, present and future**. |
-| `PROJECT` | One project | Company Admin, or Test Lead of that project | The finest boundary. No per-suite or per-case ACLs. |
+| `PROJECT` | One project **or the whole company** | Company Admin, or Test Lead of that project | The finest boundary. No per-suite or per-case ACLs. Granted with **no project** it is *inherited* — see §A1.1. |
 
 Two gates, both required before any row is visible:
 
@@ -44,7 +44,52 @@ Two gates, both required before any row is visible:
 
 **Company membership grants authentication into a company and zero project visibility.** A regular user sees only the projects they hold a grant on — not the company's project list, not names in a picker, not counts on a dashboard. With projects being whole client engagements, this is a confidentiality boundary, not just tidiness.
 
-Effective permissions are a **union of allows with no explicit deny**, gated on company membership.
+Effective permissions are a **union of allows with no explicit deny**, gated on company membership —
+with exactly one exception, §A1.1.
+
+### A1.1. Inheritance — a PROJECT-scope role held company-wide
+
+**Added 2026-08-02.** A PROJECT-scope role may be granted with **no project**, and then means *this
+role, on every project in the company, unless that project says otherwise*. One grant staffs a person
+who works across the whole portfolio, instead of one grant per project and another for every project
+created afterwards.
+
+~~The four PROJECT-scope roles cannot be granted at COMPANY scope (`RoleGrantService.scopeError`
+refuses the mismatch, and it should: Viewer granted company-wide would confer `project:read` and
+`case:read` over **every project present and future**, which is exactly the boundary §A1 draws).~~
+→ **Superseded.** The consequence described is real and is now the stated intent rather than an
+accident. What makes it governable is the override below; the old reasoning assumed a company-wide
+grant would be irrevocable across the portfolio, and it is not.
+
+**The rule, and it is the one place in this model where adding a grant REMOVES a permission:**
+
+| The caller has | On a project with its own grant | On a project without one |
+|---|---|---|
+| Company-wide Test Lead only | — | **Test Lead** (inherited) |
+| Company-wide Test Lead **+ project Viewer** | **Viewer** — the project grant *replaces* it, downward | **Test Lead** |
+| Company Admin **+ project Viewer** | **Company Admin**, unchanged | Company Admin |
+
+Three properties this depends on, each with a test:
+
+1. **Replace, not union.** A project grant wins outright, including when it confers less. Union is
+   still the rule *within* a level — two project grants on one project, or two company-wide ones,
+   accumulate as before. Only the boundary between the levels is an override.
+2. **COMPANY-scope roles and SYSTEM are never overridden.** Company Admin is authority over the
+   company, not a default for its projects. Without this, anyone holding `project:members` could
+   neutralise the company's administrator by granting them Viewer on a project — a privilege
+   inversion of the §A3 shape.
+3. **Inheriting every project is not company-level authority.** `evaluateCompanyWide` reads the
+   SYSTEM and COMPANY terms only, so a company-wide Test Lead holds `project:settings` on every
+   project and still cannot create one or change company settings. This extends the rule that method
+   already stated, rather than adding an exception to it.
+
+The switch is *whether a grant naming the project exists*, never *what it confers* — a check written
+as "are there project permissions" would union the two and silently undo every restriction, and a
+role granting nothing would fail to override at all.
+
+**Company membership still grants zero project visibility.** Inheritance is something an
+administrator does deliberately; joining a company confers only the `Company Member` baseline
+(§A2).
 
 ### A2. Roles
 
@@ -69,7 +114,7 @@ Effective permissions are a **union of allows with no explicit deny**, gated on 
 
 It is not in the table above because nobody ever *chooses* it: it is granted by the act of joining, it is filtered out of `GET /roles`, `POST /role-assignments` refuses it, and `GET /role-assignments` does not list its grants — so nothing renders a Revoke whose effect would be to take away a colleague's sight of the company with no repair short of the operator CLI. `openapi.yaml`'s `Role.name` enum therefore stays at six names, and the six are still the whole of what an administrator can do.
 
-**Why it had to be a new role rather than a reuse.** The four PROJECT-scope roles cannot be granted at COMPANY scope (`RoleGrantService.scopeError` refuses the mismatch, and it should: Viewer granted company-wide would confer `project:read` and `case:read` over **every project present and future**, which is exactly the boundary §A1 draws), and Company Admin confers everything. **It is not the "company-wide read-only stakeholder"** handoff §39 anticipated as a possible seventh role — that one reads every project; this one grants nothing about any project, which is what makes it safe to hold universally. Both could exist; they are different roles.
+**Why it had to be a new role rather than a reuse.** ~~The four PROJECT-scope roles cannot be granted at COMPANY scope (`RoleGrantService.scopeError` refuses the mismatch, and it should: Viewer granted company-wide would confer `project:read` and `case:read` over **every project present and future**, which is exactly the boundary §A1 draws)~~ → **superseded 2026-08-02 by §A1.1**: they can be, and that is now the inheritance feature. The conclusion here still holds for a different reason — a company-wide Viewer *does* read every project, and `Company Member` must convey nothing about any project, so the two remain different roles rather than one. Company Admin confers everything. **It is not the "company-wide read-only stakeholder"** handoff §39 anticipated as a possible seventh role — that one reads every project; this one grants nothing about any project, which is what makes it safe to hold universally. Both could exist; they are different roles.
 
 **Viewer is the default at every entry point:** accepting a company invitation, SSO JIT provisioning, and project assignment. One rule at both levels — the cost of an unintended Viewer is nothing; the cost of an unintended contributor is edits to a client's test assets.
 
