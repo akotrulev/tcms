@@ -3,7 +3,7 @@
 # be-java — orientation cache (TCMS)
 
 **Last verified:** 2026-08-02
-**Baseline commit:** `dfd348b`
+**Baseline commit:** `52746c9`
 **Fingerprint files:** `backend/build.gradle.kts`, `backend/gradle/libs.versions.toml`, `backend/gradle/wrapper/gradle-wrapper.properties`
 
 > Authoritative docs win over this file. `CLAUDE.md`, `docs/HANDOFF.md` (an index — sections live in
@@ -110,6 +110,30 @@ provisioning · auth · shared`.
 - **`CaseRenderer`** is the one assembler of a case's shape — extracted from the byte-identical
   private copies in `CaseCreateService` and `CaseUpdateService`. A fourth writer uses it, never a
   fourth copy. `#confirmed`
+- **Evidence bytes live outside Postgres — the first product state that does.** `EvidenceStore`
+  (port, `execution`) + `FilesystemEvidenceStore` (adapter, `tcms.storage.evidence.root`), per open
+  question #28. **`EvidenceService` writes ROWS FIRST, BYTES SECOND** in both directions, because a
+  filesystem does not roll back with the transaction: the surviving inconsistency must be a row
+  whose blob is missing (a 404 an operator can find by joining), never a blob no row names
+  (unreachable, uncollectable). **No test asserts the ordering** — it is held by a comment, and the
+  mutation queue records that reversing it reddens nothing. `#confirmed`
+- **The storage key is three server-generated UUIDs** (`company/execution/random`) and never the
+  uploaded filename, which lives in `attachment.filename` — a column, not a path. The adapter
+  re-checks the resolved path against the root anyway. `#confirmed`
+- **`Attachment` and `Evidence` are mapped in `execution`, deliberately, not in a `storage`
+  module.** `ModuleStructureTest` hard-codes the module list AND the tenancy/identity/project FK
+  rule, so a new module needs plan §3 amended plus two architecture tests changed — for one caller.
+  `Attachment.forExecution`/`forStepResult` mean no call site spells an `owner_type`, so the
+  writers that must move on the day it does are the ones that file names. `#confirmed`
+- **`spring.servlet.multipart` is now set (10MB/12MB)** — uploads proxy through the API because a
+  filesystem adapter cannot sign a URL, so this is the only bound between one caller and the shared
+  disk. Boot's default (1MB) would refuse an ordinary screenshot. Over the limit is a **413** from
+  the container, before the handler — hence `EvidenceController#onTooLarge`, not an `Outcome`.
+  `#confirmed`
+- **`evidence:delete` is the second `OWN`-qualified consumer**, after `CaseDeleteService`, and the
+  same shape: authorship applied AFTER the lookup, two 403s with different sentences, and the
+  null-author arm refusing. Delete is **hard**, unlike a case's soft delete — a screenshot removed
+  on request must actually leave the disk. `#confirmed`
 - **Operator CLI**: `ApplicationRunner` beans that are inert unless their verb appears in the
   non-option args — `ProvisionCompanyCommand`, `IssueInvitationCommand`. The verb list lives in
   `OperatorCommands`, which `TcmsApplication.main` asks *before the context exists* to pick
@@ -158,6 +182,20 @@ provisioning · auth · shared`.
 
 ## Session log
 
+- 2026-08-02 · EXTEND · Evidence attach and delete (§67) — `evidence` + `attachment` get their first
+  entities and writers after being in `V1` from the beginning. New: `EvidenceStore` port,
+  `FilesystemEvidenceStore`, `StoredBlob`, `Attachment`, `Evidence`, both repositories,
+  `EvidenceUpload`, `EvidenceViews`, `EvidenceService`, `EvidenceController`; three routes under the
+  run path (attach, delete, GET content). **The download route is not optional**: `Evidence.url` is a
+  REQUIRED contract field that had no server, so attach alone would have had to invent it.
+  **Rows-then-bytes ordering** is the slice's real content — see the seam above. `V1`'s
+  "immutable once the run closes" is deliberately NOT implemented and the reason is in `Evidence`'s
+  javadoc (`ExecutionService.record` already amends on a COMPLETED run, so gating evidence alone
+  makes the screenshot stricter than the verdict). Adding `Outcome.Invalid` was a **compile error**
+  in the delete handler's switch — the sealed-type property working. **No migration.**
+  Four mutations run; the `OWN` one reddens exactly 2 while `deletesOwn` and the lead's test stay
+  green. Tests added to `ExecutionEndpointTest` as an 8th `@Nested` class rather than a new file, to
+  reuse its personas and avoid a 6th UUID-prefix collision.
 - 2026-08-02 · EXTEND · Put permission qualifiers on the wire (§65), the rung §61 deferred. New:
   `HeldPermissionRow` projection, `MeController.HeldPermission`, `PermissionSet.qualifierOf/qualifiers`.
   **Collapsed `evaluate` and `qualifierOf` into one traversal** — the replace-don't-union boundary

@@ -116,3 +116,54 @@ seeded them equal would let this mutation pass every assertion in the class.
 | **Scope** | `--tests 'com.tcms.repository.CaseListEndpointTest' --tests 'com.tcms.repository.CaseDetailEndpointTest'` |
 | **Must redden** | the two `Authorship` tests that assert a **resolved** author (`createdBy is the author…`, `the author's name comes from the ACTIVE company's membership too`) |
 | **Why it matters** | The failure mode is a `createdBy` that is silently `null` for an author nobody else on the page owns anything — so it would look exactly like the unauthored row, and the **client would disable Delete on cases the caller actually wrote**. A test asserting only "the key is present" would not see it. |
+
+---
+
+## §67 — evidence attach and delete
+
+### Run in the slice — PASSED
+
+| | |
+|---|---|
+| **File** | `execution/FilesystemEvidenceStore.java`, `resolve` |
+| **Mutation** | delete the `!resolved.startsWith(root)` guard |
+| **Scope** | `--tests 'com.tcms.execution.FilesystemEvidenceStoreTest'` |
+| **Observed** | exactly 1 red — *a key climbing out of the storage root is refused* |
+
+| | |
+|---|---|
+| **File** | `execution/EvidenceService.java`, `remove` |
+| **Mutation** | `if (!authorship.mayActOn(evidence.getCreatedBy()))` → `if (false)` |
+| **Scope** | `--tests 'com.tcms.execution.ExecutionEndpointTest'` |
+| **Observed** | **exactly 2** red — *a tester cannot remove a colleague's evidence*, *evidence with no recorded author is nobody's own work*. `deletesOwn` and `aLeadRemovesAnyones` stayed **green**, which is the proof the tests assert authorship rather than the gate. Had those reddened too, the tests would have been measuring the wrong thing. |
+
+| | |
+|---|---|
+| **File** | `execution/EvidenceViews.java`, `partition` |
+| **Mutation** | `if (row.getStepResultId() == null)` → `if (true)` (every row execution-level) |
+| **Scope** | `--tests 'com.tcms.execution.ExecutionEndpointTest'` |
+| **Observed** | exactly 1 red — *evidence on a step renders on that step and not on the execution*. That test asserts **both** lists, because either assertion alone passes against an implementation that puts every row in both. |
+
+### Still owed for §67 — NOT yet run
+
+| | |
+|---|---|
+| **File** | `execution/EvidenceService.java`, `write` |
+| **Mutation** | move `store.put(key, upload.bytes())` **above** the two `saveAndFlush` calls |
+| **Scope** | `--tests 'com.tcms.execution.ExecutionEndpointTest'` |
+| **Must redden** | **nothing — and that IS the finding.** The rows-then-bytes ordering is a *recovery* property, not a behavioural one: both orders serve an identical response on the happy path, and no test in the suite fails. It is asserted only by the comment in `EvidenceStore`. Running this mutation is how the next reader learns the ordering is unprotected, and the honest follow-up is a test that injects a store failure and asserts no orphan blob — which needs a fault-injecting `EvidenceStore`, i.e. its own slice. |
+
+| | |
+|---|---|
+| **File** | `execution/EvidenceService.java`, `storageKey` |
+| **Mutation** | append `+ "-" + upload.filename()` to the key |
+| **Scope** | `--tests 'com.tcms.execution.FilesystemEvidenceStoreTest' --tests 'com.tcms.execution.ExecutionEndpointTest'` |
+| **Must redden** | *the uploaded filename never becomes a path* — and if it does **not** redden, the traversal defence rests entirely on the adapter's `startsWith` check rather than on both layers, which is worth knowing before someone removes one of them. |
+
+| | |
+|---|---|
+| **File** | `execution/EvidenceController.java`, `attach` |
+| **Mutation** | drop `EvidenceUpload.sanitizeFilename(...)` and pass `file.getOriginalFilename()` raw |
+| **Scope** | `--tests 'com.tcms.execution.ExecutionEndpointTest'` |
+| **Must redden** | *the uploaded filename never becomes a path — a traversal name is stored as text* (expects `passwd`, would get `../../../etc/passwd`) |
+| **Why it matters** | The filename reaches a `Content-Disposition` **header**. Sanitisation and `headerSafeFilename` are two different defences against two different things (a path-looking name vs. header injection) and only one of them has a test today. |

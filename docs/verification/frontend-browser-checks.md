@@ -92,3 +92,46 @@ unit test, and the rows it governs are the ones no fixture happens to contain. #
 "disabled" observation above is also what a *broken-for-everyone* gate produces — and `useCan` is
 fail-closed while pending, which is exactly how this slice's own component test passed against a
 page with the wiring deleted.
+
+---
+
+## §67 — evidence attach and delete
+
+**What shipped unverified:** the execution screen can attach a screenshot or log to a result, render
+it inline, download it, and remove it — with the delete gated on `evidence:delete`'s `OWN`
+qualifier. `evidence` and `attachment`, both in `V1` since the beginning, have their first writer.
+
+**Fixture needed.** Mock mode already seeds three evidence rows on every FAILED execution — one
+authored by the caller, one by a colleague, one with `created_by IS NULL` — so **mock mode needs no
+setup**. Live mode does, because nothing the API offers can produce the unauthored row:
+
+```sql
+-- as tcms_owner, with app.current_company set
+UPDATE evidence SET created_by = NULL WHERE id = '<the third row on the failed execution>';
+```
+
+| # | Drive | Must observe |
+|---|---|---|
+| 1 | As a **Test Engineer**, open a failed execution, Attach a PNG | 201, the row appears with a **rendered thumbnail** (not a broken image), the correct size and your name |
+| 2 | Click the filename | The image opens **inline** in a new tab — served from `/evidence/{id}/content`, not downloaded as a file |
+| 3 | Same caller, the row **they** attached | Delete is **enabled**, and removing it takes the row away |
+| 4 | Same caller, the **colleague's** row | Delete is **disabled**, tooltip reads *"You can only remove evidence you attached."* — not "you don't have permission", which is false for this caller |
+| 5 | Same caller, the **null-author** row | Delete is **disabled**. The arm exists only in code and one unit test, and governs the oldest rows in a real installation |
+| 6 | Sign in as a **Test Lead**, same three rows | Delete is **enabled on all three**. Without this, #4 and #5 pass equally well against a panel broken for everybody |
+| 7 | Sign in as a **Viewer** | All three rows are **visible**; Attach and every Delete are disabled with the ordinary sentence. Disable-don't-hide (§31) — evidence is part of the record of what happened |
+| 8 | Attach a file **over 10 MB** | Refused **client-side** with a sentence naming the limit, before any upload happens |
+| 9 | Live mode only: temporarily set `max-file-size: 1MB`, attach a 2 MB file | **413** with readable copy (*"Evidence files are limited to…"*), never a bare 500. The container refuses this before the handler runs, so it exercises a completely different path from #8 |
+| 10 | Record a result on a step, then attach with that step selected | The file appears **on that step** and the execution-level list stays empty |
+| 11 | Network tab, on the attach | Request is `multipart/form-data` with a **boundary**; no hand-set `Content-Type`. A lost boundary is a 400 that looks correct in devtools |
+| 12 | `psql` after #3 | The `evidence` **and** `attachment` rows are gone, and the file is gone from `TCMS_EVIDENCE_ROOT`. A hard delete, not a soft one — this is the one thing a customer may need removed for privacy |
+| 13 | Attach the **same file twice in a row** | The second attach works. The file input is cleared on change precisely so re-picking an identical file re-fires — the first thing anyone tries after a failed upload |
+
+**Highest-risk rows are #5, #6 and #12.** #5 and #6 for §66's reason: every "disabled" observation is
+also what a broken-for-everyone gate produces, and `useCan` is fail-closed while pending. #12
+because the delete crosses out of Postgres into a directory, and a failure between the two leaves a
+row whose blob is gone (or worse in the other order) — the one place in the product where a partial
+write is not rolled back by anything.
+
+**Mock-vs-live divergence, stated up front:** in mock mode `url` is a `blob:`/`data:` URI, because
+there is no server to serve `/content`. Rows #2 and #11 are therefore **live-mode only** — mock mode
+cannot show them and will look fine either way.

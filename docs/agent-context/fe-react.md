@@ -3,7 +3,7 @@
 # fe-react — orientation cache (TCMS)
 
 **Last verified:** 2026-08-02
-**Baseline commit:** `dfd348b`
+**Baseline commit:** `52746c9`
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
 `frontend/vite.config.ts`
 
@@ -25,7 +25,7 @@
 - **`npm run build` is THE gate** (`tsc -b` + vite build). **Do not trust `tsc --noEmit`** — it has
   reported 0 errors while the build failed with nine (working agreement). `#confirmed`
 - `npm run lint` — oxlint, must stay at **0 warnings**; it prints nothing when clean.
-- `npm run test:run` — Vitest + RTL. **426/426** at this baseline.
+- `npm run test:run` — Vitest + RTL. **490/490** at this baseline. **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
 - `npm run gen:api` — regenerate `src/api/schema.d.ts` after **any** `openapi.yaml` change. Runs
   through `npx` on purpose (the scaffold pins TS 6, the tool peer-requires 5.x); do not "fix" it.
 - **Live mode:** `VITE_API_MODE=live` in `.env.local` proxies `/api` to `localhost:8080`.
@@ -69,6 +69,18 @@
   read `useCan(projectId)` in the component body and pass a plain `disabled` prop
   (`features/cases/BulkActionDialog.tsx` sets the pattern). Cost the whole approve feature in §62,
   with every gate green. `#confirmed`
+- **`api.upload` is the multipart seam** (`api/client.ts`), separate from `api.post` on purpose:
+  a `FormData` body must **not** carry a hand-set `Content-Type` — the browser generates the
+  boundary, and setting the header loses it, after which the server cannot parse a single part and
+  answers 400 for a request that looks correct in devtools. `request` now omits the JSON
+  content-type when `init.body instanceof FormData`. Uploads default to the **long** timeout
+  budget, not `interactive`. `#confirmed`
+- **`EvidencePanel`** (`features/runs/`) is the second author-qualified call site after
+  `CaseDetailPage`, and the pattern to copy: `authorId={item.createdBy?.id ?? null}` — **`?? null`,
+  never `?? undefined`**, since `PermissionGate` switches on `!== undefined` and `undefined` means
+  "not author-qualified", which hands every row the unqualified verdict. Its test uses a
+  `permissionsResolved()` barrier for §66's reason: `useCan` is fail-closed while pending, so
+  `waitFor(toBeDisabled)` is satisfied by the loading state and proves nothing. `#confirmed`
 - **Forms:** react-hook-form + zod via `zodResolver`; each dialog owns an `applyServerError` that maps
   the RFC-7807 `errors` map onto its fields and falls back to a root alert via `describeError`.
   `mode: 'onBlur'`; **focus on open, never `reset(defaults)`** — a reset keyed on an object literal
@@ -113,6 +125,16 @@
 
 ## Session log
 
+- 2026-08-02 · EXTEND · The evidence UI (§67). New: `features/runs/EvidencePanel.tsx` + its test,
+  `useAttachEvidence`/`useDeleteEvidence`/`MAX_EVIDENCE_BYTES` in `api/queries/runs.ts`, and
+  **`api.upload`** in `api/client.ts` (see the seam above — the Content-Type rule is the one that
+  would have failed silently). Mock: `handlers/runs.ts` gained all three evidence routes and
+  **models the `OWN` refusal**, reading `createdBy` exactly as the server does; `db/executions.ts`
+  seeds three evidence rows per FAILED execution whose authors **disagree** with `executedBy`, one
+  of them with a null author. **Contract defect found by `tsc`**: `Evidence.createdBy` was
+  non-nullable while the null author is the whole `OWN` arm — now `allOf` + `nullable`.
+  Mutation-verified: deleting `authorId` from the JSX reddens exactly the two authorship tests.
+  `testTimeout` raised to 30s — see Build, run & test.
 - 2026-08-02 · EXTEND · Consumed the §65 qualifier wire shape. `useCan` gains `canOnScope` /
   `reasonOnScope` / `pending`; `ArtifactDialogs` disables the PROJECT scope option for a
   `PLAN_SCOPE` grant (disabled on the `MenuItem`, never wrapped — §62's rule). New shared
