@@ -49,14 +49,33 @@
  * this package may name a foreign table. Concentrating it is what makes the coupling reviewable, and
  * what makes it one file to rewrite on the day these facts arrive as events instead.
  *
+ * <p><strong>And since §81 that concentration is the reason a whole feature lives here.</strong> The
+ * reviewer's inbox — who has been asked to review what — needs {@code review} and
+ * {@code review_assignment} from {@code project}, {@code team_membership} from {@code identity}, and
+ * whichever of {@code test_case} / {@code suite} / {@code test_plan} the review's opaque subject
+ * triple names. <em>No other module may write that query.</em> {@code project}, which owns the
+ * review record, may depend on {@code tenancy} alone; {@code ReviewController} says so in its own
+ * header when it refuses to serve the queue. This module may see all three, so the board is not
+ * merely a convenient place for the inbox — it is the only one that does not need a fourth port, a
+ * new read model or the domain event §76 declined to invent.
+ *
  * <h2>What is deliberately not built</h2>
  *
- * <p>§6l lists five derived-item generators. Two exist here. {@code REVIEW} needs the review
- * workflow (§6g), {@code DOC_UPDATE} needs the documentation space (§6i), and {@code DEFECT} needs
- * the local defect record — none of those modules exist. They are <em>absent</em> rather than
- * returning empty: a generator that always yields nothing is indistinguishable from a broken one,
- * and the contract's {@code kind} enum keeps all six so the SPA's labels stay complete for the day
- * they land.
+ * <p>§6l lists five derived-item generators. <strong>Three exist here since §81</strong> —
+ * {@code REVIEW} landed once §76–§80 had built the workflow and, in {@code review_assignment}, the
+ * one table that records who was <em>asked</em>. {@code DOC_UPDATE} needs §6i's stale-case flagging,
+ * which the documentation module does not compute, and {@code DEFECT} needs the local defect record,
+ * which nothing writes. They are <em>absent</em> rather than returning empty: a generator that
+ * always yields nothing is indistinguishable from a broken one, and the contract's {@code kind} enum
+ * keeps all six so the SPA's labels stay complete for the day they land — which is exactly what
+ * {@code REVIEW} then needed, no contract change at all.
+ *
+ * <p>Also not built, and named because the inbox makes it matter more: <strong>per-project
+ * generator toggles</strong>. §6l says each generator is individually toggleable and that all of
+ * them on by default would bury the board; three are on unconditionally. The review one is the first
+ * that a project can effectively turn off by other means — a project with review switched off (§77)
+ * opens no reviews and therefore has no review cards — which is the argument for leaving the toggles
+ * until a generator exists that a project cannot escape.
  *
  * <p>Also not built: WIP limits, configurable columns, swimlanes, team boards and the cross-project
  * personal board. The columns are the four §6l names as a fixed enum

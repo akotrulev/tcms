@@ -869,3 +869,81 @@ and each is only meaningful beside the other.
 | **Check** | migration-in-place, and the cascade |
 | **Mutation** | — |
 | **Must show** | **`V25` lands with this slice**, creating a table rather than altering one. `SchemaConventionTest`'s policy count moves **57 → 58** and both unique indexes plus the read index must lead with `company_id`. Separately confirm the cascade by hand on a migrated database: deleting a `team` row removes its `review_assignment` rows and **nothing else** — the decision §71's 409 is deliberately not extended to, and the one behaviour here that lives in the DDL rather than in Java. `deletingATeamCascadesOntoItsRequests` covers it, and this row is the reminder to look at the real box too. **`V26` is the next free number.** |
+
+---
+
+## §81 — the reviewer's inbox
+
+Nine rows, seven backend and two frontend. The slice added no gate and no new key — the board's
+read gate (`ProjectService.readVisible`) already covers it — so every row here is about **which rows
+become a card**, which is the whole of the feature. `BoardFacts.pendingReviews` is one SQL statement
+and six of the seven backend mutations are one predicate removed from it.
+
+| | |
+|---|---|
+| **File** | `work/BoardFacts.java`, `pendingReviews` |
+| **Mutation** | drop `AND r.state = 'IN_REVIEW'` |
+| **Scope** | `com.tcms.work.BoardEndpointTest` |
+| **Must redden** | **exactly 2** — *a review that is over leaves no card, though the request row survives it* and *the whole set: only live, unanswered requests…*. Unassigning is the only thing that deletes a `review_assignment` row (§80), so **every request ever made is still in the table**; without this predicate the board carries all of them for ever, which is the "append-only log" failure §6l names for executions arriving through a different generator. |
+
+| | |
+|---|---|
+| **File** | `work/BoardFacts.java`, `pendingReviews` |
+| **Mutation** | drop the `NOT EXISTS (SELECT 1 FROM review_participation …)` clause |
+| **Scope** | `com.tcms.work.BoardEndpointTest` |
+| **Must redden** | **exactly 2** — *a review I have already answered has left the board* and *the whole set…*. The fixture's verdict is `CHANGES_REQUESTED` on purpose: the rule is that the card leaves when the person has **spoken**, not when they agreed, and a mutation that only checked LGTM would pass against a suite whose fixture approved everything. |
+
+| | |
+|---|---|
+| **File** | `work/BoardFacts.java`, `pendingReviews` |
+| **Mutation** | delete the second arm of the `asked` CTE (the `team_membership` join), leaving only directly-named users |
+| **Scope** | `com.tcms.work.BoardEndpointTest` |
+| **Must redden** | **exactly 2** — *a review asked of a team is on every member's board, expanded at read time* and *the project board carries one card PER REVIEWER, not one per review*. This is the mirror of §80's refusal to expand at write time, so it is the row that proves the two halves are deliberate rather than inconsistent: **VIEWER is named on no assignment row anywhere**, so if this reddens nothing, a team request reaches nobody and §6g's "any member of the team can action it" is unimplemented. |
+
+| | |
+|---|---|
+| **File** | `work/BoardFacts.java`, `pendingReviews` |
+| **Mutation** | `UNION` → `UNION ALL` in the `asked` CTE |
+| **Scope** | `com.tcms.work.BoardEndpointTest` |
+| **Must redden** | **exactly 1** — *being asked twice — by name and through a team — is still one card*. Two cards would be the board telling one person they owe two verdicts on one artifact, and the duplicate ids would collide in React's keying as well. |
+
+| | |
+|---|---|
+| **File** | `work/BoardFacts.java`, `pendingReviews` |
+| **Mutation** | drop `AND COALESCE(c.id, s.id, p.id) IS NOT NULL` |
+| **Scope** | `com.tcms.work.BoardEndpointTest` |
+| **Must redden** | **exactly 1** — *the whole set: only live, unanswered requests…*, and **this row is why that test asserts a set rather than an absence.** With the guard gone, the review of the soft-deleted TC-8 joins to three NULLs and produces a card with **no key and no title** — which every `doesNotContain("TC-8")` in the class passes cleanly. A card that renders as an empty row is the failure, and only an exact set can see it. |
+
+| | |
+|---|---|
+| **File** | `work/BoardService.java`, `cardFor(PendingReview…)` |
+| **Mutation** | `review.subjectType()` / `review.subjectId()` → `"REVIEW"` / `review.reviewId()` |
+| **Scope** | `com.tcms.work.BoardEndpointTest` |
+| **Must redden** | **exactly 1** — *a review I have been asked for is a card naming the artifact, not the review*. The mutation is the **plausible** implementation — it is what the other two generators appear to do — and it compiles, renders and leaves the SPA with an id no route accepts, on the one card whose entire purpose is to be clicked. |
+
+| | |
+|---|---|
+| **File** | `work/BoardService.java`, `isDerived` |
+| **Mutation** | remove the `PREFIX_REVIEW` arm |
+| **Scope** | `com.tcms.work.BoardEndpointTest` |
+| **Must redden** | **exactly 1** — *a review card cannot be moved — the sign-off has one door and this is not it*, which flips 409 → 404. Worth running because a review card's id is the one derived id that is **not** prefix-plus-one-UUID, so the `UUID.fromString` accident that would also have caught the other two prefixes still applies here — and the resulting 404 ("that card is gone") invites a reload that brings it straight back. |
+
+| | |
+|---|---|
+| **File** | `frontend/src/mocks/db/workItems.ts`, `reviewCards` |
+| **Mutation** | drop the `review.participations.some(…)` skip |
+| **Scope** | `npx vitest run src/mocks/db/workItems.test.ts` |
+| **Must redden** | **exactly 1** — *expands a team at read time, and drops anybody who has already spoken*. The mock is the second implementation of this query and it is the one anybody actually drives; a rule enforced only on the server is a rule mock mode teaches people to disbelieve. |
+
+| | |
+|---|---|
+| **File** | `frontend/src/features/board/BoardPage.tsx`, `linkFor` |
+| **Mutation** | return the `search` fallback for every card (the pre-§81 behaviour) |
+| **Scope** | `npx vitest run src/features/board` |
+| **Must redden** | **exactly 3** — the case, plan and suite link tests. The pre-§81 code *is* this mutation, and it was correct until this slice drew the first cards about suites and plans: a review of `TP-5` sent to a case search renders "no cases match", which reads as the plan having been deleted. |
+
+| | |
+|---|---|
+| **Check** | no migration |
+| **Mutation** | — |
+| **Must show** | **`V26` is still free.** The inbox needed no schema: §80 added `ix_review_assignment_assignee_user` one slice ahead of its query, for this query. Confirm it is the index the plan actually uses on a populated database (`EXPLAIN` the generated statement), because an index added before its consumer is an index nobody has ever seen chosen. |

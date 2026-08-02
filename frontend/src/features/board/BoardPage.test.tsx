@@ -27,8 +27,19 @@ import { Board } from './BoardPage'
  *    move and then snaps back on the next refetch is the failure the pre-check exists to prevent.
  */
 
-const card = (partial: Partial<WorkItem> & Pick<WorkItem, 'id' | 'title'>): WorkItem =>
-  ({
+/**
+ * A card, defaults plus overrides — and **no `as WorkItem`**, which is §79's repair applied here.
+ *
+ * That cast turned a new required field on the contract into a runtime failure in eleven tests
+ * instead of one compile error (`ReviewPanel.test.tsx`, §79), and §80 measured what removing it was
+ * worth one slice later: adding `assignees` to `Review` became a single build error in a single
+ * place. The base object is typed `WorkItem` on its own line so the compiler checks it against the
+ * generated type; spreading the partial over it cannot remove a field.
+ */
+const card = (partial: Partial<WorkItem> & Pick<WorkItem, 'id' | 'title'>): WorkItem => {
+  const base: WorkItem = {
+    id: partial.id,
+    title: partial.title,
     derived: false,
     sourceType: null,
     sourceId: null,
@@ -42,8 +53,9 @@ const card = (partial: Partial<WorkItem> & Pick<WorkItem, 'id' | 'title'>): Work
     projectKey: 'PRJ',
     linkedKey: null,
     allowedTransitions: ['IN_PROGRESS', 'IN_REVIEW', 'DONE'],
-    ...partial,
-  }) as WorkItem
+  }
+  return { ...base, ...partial }
+}
 
 function renderBoard(items: WorkItem[]) {
   return render(
@@ -224,6 +236,125 @@ describe('Why a card is on the board', () => {
     ])
 
     expect(screen.getByTestId('Board.Card.Reason').textContent).toBe('Execute in Regression 1.0')
+  })
+})
+
+describe('Where a card’s key goes (§81)', () => {
+  /**
+   * The reviewer's inbox is the first generator that draws cards about **suites and plans**, and
+   * every card used to route to the case list. A review of `TP-5` sent to a case search finds
+   * nothing and renders "no cases match", which reads as the plan having been deleted — the failure
+   * is silent, on the one affordance the card exists to offer.
+   */
+  const linkOf = (item: WorkItem) => {
+    renderBoard([item])
+    return screen.getByTestId('Board.Card.LinkedKey').getAttribute('href')
+  }
+
+  it('sends a review of a case to the case, where §6g’s panel is', () => {
+    // Not a search for the key: the panel lives on the artifact's page, so navigating to the
+    // artifact IS navigating to the review — which is why the server puts the ARTIFACT in
+    // sourceType/sourceId rather than the review, whose URL does not exist.
+    expect(
+      linkOf(
+        card({
+          id: 'review:r1:u1',
+          title: 'Cart survives a page reload',
+          derived: true,
+          kind: 'REVIEW',
+          sourceType: 'CASE',
+          sourceId: 'case-1',
+          linkedKey: 'TC-20',
+          status: 'TODO',
+          allowedTransitions: [],
+        }),
+      ),
+    ).toBe('/projects/p1/cases/case-1')
+  })
+
+  it('sends a review of a plan to the plan', () => {
+    expect(
+      linkOf(
+        card({
+          id: 'review:r2:u1',
+          title: 'Payments hardening cycle',
+          derived: true,
+          kind: 'REVIEW',
+          sourceType: 'PLAN',
+          sourceId: 'plan-5',
+          linkedKey: 'TP-5',
+          status: 'TODO',
+          allowedTransitions: [],
+        }),
+      ),
+    ).toBe('/projects/p1/plans/plan-5')
+  })
+
+  it('sends a review of a suite to the case list filtered to it, having no page of its own', () => {
+    // The one subject type §6g can review that has no screen. The suite tree is the case list's
+    // left pane, so the filter is the closest thing to a suite page that exists.
+    expect(
+      linkOf(
+        card({
+          id: 'review:r3:u1',
+          title: 'Refunds',
+          derived: true,
+          kind: 'REVIEW',
+          sourceType: 'SUITE',
+          sourceId: 'suite-9',
+          linkedKey: 'TS-4',
+          status: 'TODO',
+          allowedTransitions: [],
+        }),
+      ),
+    ).toBe('/projects/p1/cases?suiteId=suite-9')
+  })
+
+  it('still searches for an execution card, whose route needs a run id the card lacks', () => {
+    expect(
+      linkOf(
+        card({
+          id: 'execution:e1',
+          title: 'Full refund to card',
+          derived: true,
+          kind: 'EXECUTION',
+          sourceType: 'EXECUTION',
+          sourceId: 'exec-1',
+          linkedKey: 'TC-3',
+          allowedTransitions: [],
+        }),
+      ),
+    ).toBe('/projects/p1/cases?q=TC-3')
+  })
+})
+
+describe('Refusing a review card’s move (§81)', () => {
+  it('names the review rather than an execution', async () => {
+    // The refusal called every non-execution derived card "a review", which was harmless while
+    // reviews were not a card kind and wrong in both directions the moment they were.
+    renderBoard([
+      card({
+        id: 'review:r1:u1',
+        title: 'Cart survives a page reload',
+        derived: true,
+        kind: 'REVIEW',
+        sourceType: 'CASE',
+        sourceId: 'case-1',
+        linkedKey: 'TC-20',
+        status: 'TODO',
+        allowedTransitions: [],
+      }),
+    ])
+
+    // Dragged, not clicked, for the reason the refusal test above records: the move button for a
+    // disallowed column is `disabled`, so a click passes vacuously against a control that cannot
+    // be pressed.
+    fireEvent.dragStart(screen.getByTestId('Board.Card'))
+    fireEvent.drop(screen.getByTestId('Board.Column.DONE'))
+
+    expect((await screen.findByTestId('Board.RejectedMove')).textContent).toContain(
+      'TC-20 mirrors a review',
+    )
   })
 })
 

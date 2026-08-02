@@ -32,9 +32,10 @@ import org.springframework.transaction.annotation.Transactional;
  *       expected to run it; a flagged case is {@code TODO} because nobody has started. There is no
  *       code path that writes either.</li>
  *   <li><strong>A derived card's id is synthetic</strong> and cannot collide with a task's, because
- *       it is prefixed. {@link #PREFIX_EXECUTION} and {@link #PREFIX_CASE} are also what
- *       {@link #move} uses to <em>recognise</em> a derived id and refuse it — the refusal is driven
- *       by the same constant that produced the id, so the two cannot drift apart.</li>
+ *       it is prefixed. {@link #PREFIX_EXECUTION}, {@link #PREFIX_CASE} and {@link #PREFIX_REVIEW}
+ *       are also what {@link #move} uses to <em>recognise</em> a derived id and refuse it — the
+ *       refusal is driven by the same constant that produced the id, so the two cannot drift
+ *       apart.</li>
  *   <li><strong>{@code allowedTransitions} is a property of the card, not of the column</strong>
  *       ({@link #transitionsFor}).</li>
  * </ol>
@@ -52,6 +53,19 @@ public class BoardService {
      */
     private static final String PREFIX_EXECUTION = "execution:";
     private static final String PREFIX_CASE = "case:";
+
+    /**
+     * The review prefix, and the one derived id that is <strong>not</strong> prefix-plus-one-UUID.
+     *
+     * <p>A review card is one review on one person's list, so its identity is the pair — the same
+     * review is a card for each reviewer (§6l), and a board showing three of them needs three ids.
+     * That makes {@code review:{reviewId}:{userId}}, and it costs the accidental second guard the
+     * other two prefixes get: {@code UUID.fromString} would have thrown on this either way, so
+     * nothing is lost, but the prefix check in {@link #isDerived} is now the <em>only</em> thing
+     * standing between a review card and a {@code PATCH}. Worth knowing before a fourth generator
+     * decides ids are free-form.
+     */
+    private static final String PREFIX_REVIEW = "review:";
 
     /** {@code CaseCreateService}'s cap, for its reason: the header is attacker-controlled. */
     private static final int MAX_IDEMPOTENCY_KEY = 200;
@@ -226,13 +240,20 @@ public class BoardService {
         List<WorkItem> stored = tasks.findLiveInProject(project.getId());
         List<BoardFacts.AssignedExecution> executions = facts.assignedExecutions(project.getId());
         List<BoardFacts.FlaggedCase> flagged = facts.casesNeedingAttention(project.getId());
+        List<BoardFacts.PendingReview> reviews = facts.pendingReviews(project.getId());
 
-        // One resolution for the whole board, across all three sources — see BoardPeople on why
-        // this is not done per card.
+        // One resolution for the whole board, across all four sources — see BoardPeople on why
+        // this is not done per card. A review contributes TWO ids, the reviewer and whoever asked
+        // them, and both go in the same batch: the second is only used for a sentence on the card,
+        // and a second round trip to render it would double a two-query resolution.
         Set<UUID> peopleIds = new HashSet<>();
         stored.forEach(task -> addIfPresent(peopleIds, task.getAssigneeId()));
         executions.forEach(execution -> addIfPresent(peopleIds, execution.assigneeId()));
         flagged.forEach(flag -> addIfPresent(peopleIds, flag.ownerId()));
+        reviews.forEach(review -> {
+            addIfPresent(peopleIds, review.reviewerId());
+            addIfPresent(peopleIds, review.requestedBy());
+        });
         Map<UUID, UserRefView> resolved =
                 people.resolve(CompanyContext.require(), peopleIds);
 
@@ -245,6 +266,9 @@ public class BoardService {
         }
         for (BoardFacts.FlaggedCase flag : flagged) {
             cards.add(cardFor(flag, project, resolved));
+        }
+        for (BoardFacts.PendingReview review : reviews) {
+            cards.add(cardFor(review, project, resolved));
         }
         return cards;
     }
@@ -338,6 +362,68 @@ public class BoardService {
                 project.getId(),
                 project.getKey(),
                 flagged.caseKey(),
+                List.of());
+    }
+
+    /**
+     * A card for a review request nobody has answered — §6l's <em>"Review requested → card for each
+     * reviewer"</em>, and the inbox §6g's apparatus has not had since §76.
+     *
+     * <h2>{@code sourceType} and {@code sourceId} name the ARTIFACT, not the review</h2>
+     *
+     * <p>The other two generators put the thing the card mirrors here, and this one looks like it
+     * breaks the pattern. It does not: what those two fields have always been for is <em>what the
+     * card opens</em>, and a review has no URL of its own. §6g's panel is rendered on the case's,
+     * suite's or plan's own page, so navigating to the artifact <em>is</em> navigating to the
+     * review — while a {@code sourceId} naming the review would be an id the SPA could do nothing
+     * with, on the one card whose whole purpose is to be clicked.
+     *
+     * <p>That is also why the contract needed no change for this generator. {@code sourceType} is a
+     * free-form string and {@code kind} has carried {@code REVIEW} since §53, when the enum was
+     * deliberately completed ahead of the generators — see this package's comment. Three years of
+     * that decision paying off is worth one sentence.
+     *
+     * <h2>{@code TODO}, computed, and it leaves when they answer</h2>
+     *
+     * <p>Nobody has started until they say something, so a pending request is To do. It leaves the
+     * board by a participation row appearing or the review closing, both of which are facts about
+     * the review rather than about this card — {@code BoardFacts.pendingReviews} holds the
+     * predicates. There is no code path that writes this status.
+     *
+     * <p>{@code allowedTransitions} is <strong>empty</strong>, for the execution card's reason and
+     * one of its own: §6l says dragging a review card to Done <em>requires the approval</em> and is
+     * refused with a message when the caller lacks {@code *:approve}. Approving is a real act with a
+     * real gate and an {@code If-Match} behind it (§76), so offering it as a drag would be a second,
+     * unguarded door to the sign-off — exactly what the participation endpoint refuses to be.
+     */
+    private WorkItemView cardFor(
+            BoardFacts.PendingReview review,
+            Project project,
+            Map<UUID, UserRefView> resolved) {
+
+        UserRefView asker = review.requestedBy() == null ? null : resolved.get(review.requestedBy());
+
+        return new WorkItemView(
+                PREFIX_REVIEW + review.reviewId() + ":" + review.reviewerId(),
+                true,
+                review.subjectType(),
+                review.subjectId(),
+                "REVIEW",
+                review.subjectTitle(),
+                asker == null
+                        // Not "requested by nobody": assigned_by has no FK and no cascade, so an
+                        // offboarded account leaves a live request with no named asker, and naming
+                        // one would attribute the ask to somebody.
+                        ? "Review requested"
+                        : "Review requested by " + asker.displayName(),
+                WorkItemStatus.TODO,
+                Priority.MEDIUM,
+                null,
+                false,
+                resolved.get(review.reviewerId()),
+                project.getId(),
+                project.getKey(),
+                review.subjectKey(),
                 List.of());
     }
 
@@ -442,7 +528,9 @@ public class BoardService {
     }
 
     private static boolean isDerived(String cardId) {
-        return cardId.startsWith(PREFIX_EXECUTION) || cardId.startsWith(PREFIX_CASE);
+        return cardId.startsWith(PREFIX_EXECUTION)
+                || cardId.startsWith(PREFIX_CASE)
+                || cardId.startsWith(PREFIX_REVIEW);
     }
 
     private static void addIfPresent(Set<UUID> ids, UUID id) {

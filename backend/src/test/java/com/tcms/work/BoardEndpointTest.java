@@ -107,6 +107,40 @@ class BoardEndpointTest extends IntegrationTestBase {
     /** Umbra's case, keyed identically to prove only ids scope this. */
     private static final UUID FOREIGN = UUID.fromString("b0005000-0000-4000-8000-000000000005");
 
+    // The review fixture (§81). Each case exists to make one card either appear or not appear —
+    // "asked and answered", "the review is over" and "the subject is gone" all look identical on a
+    // board that only joins review_assignment.
+
+    /** Under review, asked of LEAD directly. The one CASE review card on LEAD's board. */
+    private static final UUID UNDER_REVIEW = UUID.fromString("b0005000-0000-4000-8000-000000000006");
+    /** Under review, asked of LEAD, who has already given a verdict — the card must have left. */
+    private static final UUID ANSWERED = UUID.fromString("b0005000-0000-4000-8000-000000000007");
+    /** Asked of LEAD, but the review is APPROVED — over, so no card. */
+    private static final UUID SIGNED_OFF = UUID.fromString("b0005000-0000-4000-8000-000000000008");
+    /** Asked of LEAD, and the case has since been soft-deleted. */
+    private static final UUID GONE = UUID.fromString("b0005000-0000-4000-8000-000000000009");
+
+    private static final UUID REVIEW_OPEN = UUID.fromString("b0006000-0000-4000-8000-000000000001");
+    private static final UUID REVIEW_ANSWERED =
+            UUID.fromString("b0006000-0000-4000-8000-000000000002");
+    private static final UUID REVIEW_CLOSED =
+            UUID.fromString("b0006000-0000-4000-8000-000000000003");
+    private static final UUID REVIEW_DELETED_SUBJECT =
+            UUID.fromString("b0006000-0000-4000-8000-000000000004");
+    /** On the SUITE, asked of a team — the read-time expansion, and the non-case subject. */
+    private static final UUID REVIEW_SUITE = UUID.fromString("b0006000-0000-4000-8000-000000000005");
+    /**
+     * Umbra's own open review — and it is asked of <strong>LEAD</strong>, who is not an Umbra member
+     * at all. {@code assignee_user_id} references instance-level {@code app_user}, so that row
+     * inserts happily (§64's family, the one §80 checks at write time), and what must keep it off
+     * Acme's board is the company predicate rather than anybody's membership.
+     */
+    private static final UUID REVIEW_FOREIGN =
+            UUID.fromString("b0006000-0000-4000-8000-000000000006");
+
+    /** VIEWER and LEAD both belong to it; the suite review is asked of the team. */
+    private static final UUID TEAM = UUID.fromString("b0007000-0000-4000-8000-000000000001");
+
     @Autowired
     private MockMvc mvc;
 
@@ -177,12 +211,46 @@ class BoardEndpointTest extends IntegrationTestBase {
             execution(acme, ACME, PROJECT, CLOSED_RUN, SKIPPED, false, LEAD);
 
             health(acme, ACME, PROJECT, FLAGGED, "never_executed");
+
+            // The review fixture. VIEWER is in the team on purpose: the suite review is asked of
+            // nobody by name, so if the expansion is missing, VIEWER's board is silently empty and
+            // the only test that fails is the one written for it.
+            testCase(acme, UNDER_REVIEW, ACME, PROJECT, SUITE, "TC-5", 5, LEAD);
+            testCase(acme, ANSWERED, ACME, PROJECT, SUITE, "TC-6", 6, LEAD);
+            testCase(acme, SIGNED_OFF, ACME, PROJECT, SUITE, "TC-7", 7, LEAD);
+            testCase(acme, GONE, ACME, PROJECT, SUITE, "TC-8", 8, LEAD);
+            softDelete(acme, GONE);
+
+            team(acme, TEAM, ACME, "Board Reviewers");
+            teamMember(acme, ACME, TEAM, VIEWER);
+            teamMember(acme, ACME, TEAM, LEAD);
+
+            review(acme, REVIEW_OPEN, ACME, PROJECT, "CASE", UNDER_REVIEW, "IN_REVIEW");
+            askUser(acme, ACME, REVIEW_OPEN, LEAD, VIEWER);
+
+            review(acme, REVIEW_ANSWERED, ACME, PROJECT, "CASE", ANSWERED, "IN_REVIEW");
+            askUser(acme, ACME, REVIEW_ANSWERED, LEAD, VIEWER);
+            spoke(acme, ACME, REVIEW_ANSWERED, LEAD, "CHANGES_REQUESTED");
+
+            review(acme, REVIEW_CLOSED, ACME, PROJECT, "CASE", SIGNED_OFF, "APPROVED");
+            askUser(acme, ACME, REVIEW_CLOSED, LEAD, VIEWER);
+
+            review(acme, REVIEW_DELETED_SUBJECT, ACME, PROJECT, "CASE", GONE, "IN_REVIEW");
+            askUser(acme, ACME, REVIEW_DELETED_SUBJECT, LEAD, VIEWER);
+
+            // Asked of the team AND of LEAD by name — LEAD is owed one verdict, so one card.
+            review(acme, REVIEW_SUITE, ACME, PROJECT, "SUITE", SUITE, "IN_REVIEW");
+            askTeam(acme, ACME, REVIEW_SUITE, TEAM, VIEWER);
+            askUser(acme, ACME, REVIEW_SUITE, LEAD, VIEWER);
         }
 
         try (Connection umbra = appConnection(UMBRA)) {
             seedProjectDefaults(umbra, UMBRA, UMBRA_PROJECT);
             suite(umbra, UMBRA_SUITE, UMBRA, UMBRA_PROJECT, "TS-1", "Root");
             testCase(umbra, FOREIGN, UMBRA, UMBRA_PROJECT, UMBRA_SUITE, "TC-1", 1, null);
+
+            review(umbra, REVIEW_FOREIGN, UMBRA, UMBRA_PROJECT, "CASE", FOREIGN, "IN_REVIEW");
+            askUser(umbra, UMBRA, REVIEW_FOREIGN, LEAD, null);
         }
     }
 
@@ -290,6 +358,153 @@ class BoardEndpointTest extends IntegrationTestBase {
             JsonNode card = cardOfKind(boardAs(LEAD, PROJECT), "EXECUTION");
             assertThat(card.get("id").asText()).startsWith("execution:");
             assertThat(card.get("sourceType").asText()).isEqualTo("EXECUTION");
+        }
+    }
+
+    @Nested
+    @DisplayName("Review cards — the inbox §6g's apparatus did not have (§81)")
+    class Reviews {
+
+        @Test
+        @DisplayName("a review I have been asked for is a card naming the artifact, not the review")
+        void openRequestsAppear() throws Exception {
+            JsonNode card = cardOfKind(boardAs(LEAD, PROJECT), "REVIEW");
+
+            assertThat(card.get("linkedKey").asText()).isEqualTo("TC-5");
+            assertThat(card.get("title").asText()).isEqualTo("Case TC-5");
+            // sourceType/sourceId are what the card OPENS, and a review has no URL of its own —
+            // §6g's panel renders on the artifact's page. A sourceId naming the review would be an
+            // id the SPA can do nothing with, on the one card whose purpose is to be clicked.
+            assertThat(card.get("sourceType").asText()).isEqualTo("CASE");
+            assertThat(card.get("sourceId").asText()).isEqualTo(UNDER_REVIEW.toString());
+            assertThat(card.get("id").asText())
+                    .isEqualTo("review:" + REVIEW_OPEN + ":" + LEAD);
+            assertThat(card.get("status").asText()).isEqualTo("TODO");
+        }
+
+        @Test
+        @DisplayName("the card says who asked, because a request with no asker is not a request")
+        void theCardNamesTheAsker() throws Exception {
+            assertThat(cardOfKind(boardAs(LEAD, PROJECT), "REVIEW").get("description").asText())
+                    .isEqualTo("Review requested by V. Viewer (Acme)");
+        }
+
+        @Test
+        @DisplayName("a review asked of a team is on every member's board, expanded at read time")
+        void teamRequestsExpand() throws Exception {
+            // §80 refused to expand a team when the request is WRITTEN, because membership moves.
+            // The same fact makes expanding it on READ correct: somebody who joins tomorrow finds
+            // the request waiting, and this is the only test that can tell the two apart, because
+            // VIEWER was never named on any assignment row.
+            assertThat(keysOfKind(boardAs(VIEWER, PROJECT, true), "REVIEW"))
+                    .as("VIEWER is in the team the suite review was asked of")
+                    .containsExactly("TS-1");
+        }
+
+        @Test
+        @DisplayName("a suite review is a card, so the subject triple survives the expansion")
+        void nonCaseSubjectsExpand() throws Exception {
+            // The reason this generator lives in `work` at all: expanding (type, id) means reading
+            // repository AND execution, which the module owning the review record may not do.
+            JsonNode suiteCard = null;
+            for (JsonNode card : boardAs(LEAD, PROJECT)) {
+                if ("REVIEW".equals(card.get("kind").asText())
+                        && "SUITE".equals(card.get("sourceType").asText())) {
+                    suiteCard = card;
+                }
+            }
+
+            assertThat(suiteCard).as("the suite review must produce a card").isNotNull();
+            assertThat(suiteCard.get("title").asText()).isEqualTo("Root");
+            assertThat(suiteCard.get("sourceId").asText()).isEqualTo(SUITE.toString());
+        }
+
+        @Test
+        @DisplayName("being asked twice — by name and through a team — is still one card")
+        void oneRequestPerPerson() throws Exception {
+            // LEAD is named on the suite review AND is in the team it was asked of. Two cards would
+            // be the board saying they owe two verdicts on one artifact.
+            assertThat(keysOfKind(boardAs(LEAD, PROJECT, true), "REVIEW"))
+                    .filteredOn("TS-1"::equals)
+                    .hasSize(1);
+        }
+
+        @Test
+        @DisplayName("a review I have already answered has left the board")
+        void answeredRequestsAreGone() throws Exception {
+            // And "answered" means SPOKEN, not agreed: LEAD requested changes on TC-6, which is the
+            // whole of what was asked of them — the ball is with the author. A card that stays up
+            // until they approve makes "changes requested" read as work the reviewer still owes.
+            assertThat(keysOfKind(boardAs(LEAD, PROJECT), "REVIEW")).doesNotContain("TC-6");
+        }
+
+        @Test
+        @DisplayName("a review that is over leaves no card, though the request row survives it")
+        void closedReviewsAreGone() throws Exception {
+            // Unassigning is the only thing that deletes a review_assignment row (§80), so every
+            // request ever made is still in the table. Without the state predicate the board would
+            // carry all of them, for ever.
+            assertThat(keysOfKind(boardAs(LEAD, PROJECT), "REVIEW")).doesNotContain("TC-7");
+        }
+
+        @Test
+        @DisplayName("the whole set: only live, unanswered requests about artifacts that still exist")
+        void onlyTheOutstandingOnesAreCards() throws Exception {
+            // The exact set rather than three separate absences, and it is the only assertion that
+            // can fail on the deleted-case arm: without the COALESCE guard that review joins to
+            // three NULLs and produces a card with NO key and NO title, which every
+            // doesNotContain("TC-8") in this class passes cleanly.
+            //
+            // Asserted on the PERSONAL board, and writing it against the project board is what
+            // showed why: there, TS-1 appears TWICE and correctly — once for LEAD and once for
+            // VIEWER, who is in the team it was asked of. "One card per reviewer" (§6l) means the
+            // project board is a list of requests, not of reviews.
+            assertThat(keysOfKind(boardAs(LEAD, PROJECT, true), "REVIEW"))
+                    .as("TC-5 is open and unanswered; TS-1 is the suite asked of the team LEAD is "
+                            + "in. TC-6 was answered, TC-7 is approved, TC-8 is deleted.")
+                    .containsExactlyInAnyOrder("TC-5", "TS-1");
+        }
+
+        @Test
+        @DisplayName("the project board carries one card PER REVIEWER, not one per review")
+        void oneCardPerReviewer() throws Exception {
+            List<String> assignees = new ArrayList<>();
+            for (JsonNode card : boardAs(LEAD, PROJECT)) {
+                if ("REVIEW".equals(card.get("kind").asText())
+                        && "TS-1".equals(card.get("linkedKey").asText())) {
+                    assignees.add(card.get("assignee").get("id").asText());
+                }
+            }
+
+            // §6l's words exactly: "Review requested → card for each reviewer". One card carrying
+            // three names is not a queue entry for any of them — a personal board is filtered by
+            // assignee, so a shared card would appear on nobody's.
+            assertThat(assignees).containsExactlyInAnyOrder(LEAD.toString(), VIEWER.toString());
+        }
+
+        @Test
+        @DisplayName("another company's request never reaches this board, member or not")
+        void otherCompaniesStayOut() throws Exception {
+            // Umbra asked LEAD, who is not an Umbra member — assignee_user_id references
+            // instance-level app_user, so that row exists. What keeps it out is the company
+            // predicate, which is the only thing that can.
+            for (JsonNode card : boardAs(LEAD, PROJECT)) {
+                assertThat(card.get("projectId").asText()).isEqualTo(PROJECT.toString());
+            }
+            assertThat(keysOfKind(boardAs(LEAD, PROJECT), "REVIEW"))
+                    .as("Umbra's TC-1 is keyed identically to Acme's")
+                    .doesNotContain("TC-1");
+        }
+
+        @Test
+        @DisplayName("a review card cannot be moved — the sign-off has one door and this is not it")
+        void reviewCardsAreNotMovable() throws Exception {
+            String cardId = cardOfKind(boardAs(LEAD, PROJECT), "REVIEW").get("id").asText();
+
+            // 409, not 404: the card is real and only its storage is not. §6l's eventual behaviour
+            // is that dragging it to Done performs the approval — which is a gated act with an
+            // If-Match behind it, so a drag would be a second, unguarded door to the sign-off.
+            patchAs(LEAD, cardId, "DONE", 409);
         }
     }
 
@@ -737,9 +952,14 @@ class BoardEndpointTest extends IntegrationTestBase {
     private void clearMutableRows() throws SQLException {
         for (UUID companyId : List.of(ACME, UMBRA)) {
             try (Connection connection = appConnection(companyId)) {
+                // review_assignment and review_participation before review, and both before the
+                // subject tables: the FKs cascade from review, but nothing cascades from a case to
+                // the review of it — the subject triple has no FK at all, which is what lets one
+                // record serve three artifacts (§76).
                 for (String table : List.of("work_item_link", "work_item", "case_health",
-                        "step_result", "test_execution", "test_run", "test_case_version",
-                        "test_case", "suite")) {
+                        "step_result", "test_execution", "test_run", "review_assignment",
+                        "review_participation", "review_comment", "review", "team_membership",
+                        "team", "test_case_version", "test_case", "suite")) {
                     try (PreparedStatement statement =
                             connection.prepareStatement("DELETE FROM " + table)) {
                         statement.executeUpdate();
@@ -863,6 +1083,113 @@ class BoardEndpointTest extends IntegrationTestBase {
             statement.setString(7, projectId.toString());
             statement.setString(8, assigneeId == null ? null : assigneeId.toString());
             statement.setBoolean(9, recorded);
+            statement.executeUpdate();
+        }
+    }
+
+    private void softDelete(Connection connection, UUID caseId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "UPDATE test_case SET deleted_at = now() WHERE id = CAST(? AS uuid)")) {
+            statement.setString(1, caseId.toString());
+            statement.executeUpdate();
+        }
+    }
+
+    private void team(Connection connection, UUID id, UUID companyId, String name)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO team (id, company_id, name) VALUES (CAST(? AS uuid), CAST(? AS uuid), ?)
+                ON CONFLICT (id) DO NOTHING
+                """)) {
+            statement.setString(1, id.toString());
+            statement.setString(2, companyId.toString());
+            statement.setString(3, name);
+            statement.executeUpdate();
+        }
+    }
+
+    private void teamMember(Connection connection, UUID companyId, UUID teamId, UUID userId)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO team_membership (company_id, team_id, user_id)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid))
+                ON CONFLICT (team_id, user_id) DO NOTHING
+                """)) {
+            statement.setString(1, companyId.toString());
+            statement.setString(2, teamId.toString());
+            statement.setString(3, userId.toString());
+            statement.executeUpdate();
+        }
+    }
+
+    private void review(Connection connection, UUID id, UUID companyId, UUID projectId,
+            String subjectType, UUID subjectId, String state) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO review
+                    (id, company_id, project_id, subject_type, subject_id, subject_version_no,
+                     state, created_by, created_at)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, CAST(? AS uuid), 1,
+                        ?, CAST(? AS uuid), now())
+                ON CONFLICT (id) DO NOTHING
+                """)) {
+            statement.setString(1, id.toString());
+            statement.setString(2, companyId.toString());
+            statement.setString(3, projectId.toString());
+            statement.setString(4, subjectType);
+            statement.setString(5, subjectId.toString());
+            statement.setString(6, state);
+            statement.setString(7, VIEWER.toString());
+            statement.executeUpdate();
+        }
+    }
+
+    /** @param askedBy nullable — an offboarded asker is a real state, and the card must survive it. */
+    private void askUser(Connection connection, UUID companyId, UUID reviewId, UUID userId,
+            UUID askedBy) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO review_assignment
+                    (id, company_id, review_id, assignee_user_id, assigned_by)
+                VALUES (gen_random_uuid(), CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid),
+                        CAST(? AS uuid))
+                ON CONFLICT DO NOTHING
+                """)) {
+            statement.setString(1, companyId.toString());
+            statement.setString(2, reviewId.toString());
+            statement.setString(3, userId.toString());
+            statement.setString(4, askedBy == null ? null : askedBy.toString());
+            statement.executeUpdate();
+        }
+    }
+
+    private void askTeam(Connection connection, UUID companyId, UUID reviewId, UUID teamId,
+            UUID askedBy) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO review_assignment
+                    (id, company_id, review_id, assignee_team_id, assigned_by)
+                VALUES (gen_random_uuid(), CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid),
+                        CAST(? AS uuid))
+                ON CONFLICT DO NOTHING
+                """)) {
+            statement.setString(1, companyId.toString());
+            statement.setString(2, reviewId.toString());
+            statement.setString(3, teamId.toString());
+            statement.setString(4, askedBy == null ? null : askedBy.toString());
+            statement.executeUpdate();
+        }
+    }
+
+    private void spoke(Connection connection, UUID companyId, UUID reviewId, UUID userId,
+            String verdict) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO review_participation
+                    (id, company_id, review_id, user_id, kind, verdict, created_at)
+                VALUES (gen_random_uuid(), CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid),
+                        'PEER_REVIEW', ?, now())
+                """)) {
+            statement.setString(1, companyId.toString());
+            statement.setString(2, reviewId.toString());
+            statement.setString(3, userId.toString());
+            statement.setString(4, verdict);
             statement.executeUpdate();
         }
     }

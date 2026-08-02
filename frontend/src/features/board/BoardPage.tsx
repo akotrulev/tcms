@@ -57,6 +57,22 @@ type Column = WorkItemStatus;
 const _everyStatusHasAColumn: Record<Exclude<WorkItemStatus, (typeof COLUMNS)[number]>, never> = {};
 void _everyStatusHasAColumn;
 
+/**
+ * What a derived card mirrors, in the sentence that refuses a drop.
+ *
+ * `satisfies Record<Union, string>`'s shape one level down: a new `kind` is a compile error here
+ * rather than a card whose refusal names the wrong source, which is what §81 found — every derived
+ * card that was not an execution was called a review.
+ */
+const derivedNouns: Record<WorkItem['kind'], { indefinite: string; bare: string }> = {
+  TASK: { indefinite: 'a task', bare: 'task' },
+  EXECUTION: { indefinite: 'an execution', bare: 'execution' },
+  REVIEW: { indefinite: 'a review', bare: 'review' },
+  DOC_UPDATE: { indefinite: 'a documentation page', bare: 'page' },
+  CASE_MAINTENANCE: { indefinite: 'a test case', bare: 'case' },
+  DEFECT: { indefinite: 'a defect', bare: 'defect' },
+};
+
 const kindLabels: Record<WorkItem['kind'], string> = {
   TASK: 'Task',
   EXECUTION: 'Execution',
@@ -191,6 +207,42 @@ function describeCard(item: WorkItem): string {
     .join(' · ');
 }
 
+/**
+ * Where a card's key takes you.
+ *
+ * **Keyed on `sourceType`, not on `kind`, and that is the repair §81 owed.** Every card used to
+ * route through the case list — a search for `linkedKey` — which was right while the only linked
+ * cards were about cases. The reviewer's inbox draws cards for **suites and plans** too, and a
+ * review of `TP-5` sent to a case search finds nothing and says "no cases match", which reads as the
+ * plan having been deleted.
+ *
+ * `sourceType` is what the server puts the *artifact* in for exactly this reason (`BoardService`'s
+ * card comment): a review has no URL of its own — §6g's panel is rendered on the artifact's own page
+ * — so navigating to the artifact is navigating to the review.
+ *
+ * **A suite has no detail page**, which is why that arm is the case list filtered to it rather than
+ * a route: the suite tree is the case list's left pane, and `SUITE` is the one subject type §6g can
+ * review with no screen of its own. An unrecognised `sourceType` falls back to the search, which is
+ * where the old behaviour is still correct — a card the SPA has no route for should still land
+ * somewhere that mentions the thing. `EXECUTION` is deliberately one of those: its `sourceId` names
+ * the execution, whose route needs the run id, and a card does not carry one.
+ */
+function linkFor(item: WorkItem, projectId: string): string {
+  const search = `/projects/${projectId}/cases?q=${encodeURIComponent(item.linkedKey ?? '')}`;
+  if (!item.sourceId) return item.linkedKey ? search : `/projects/${projectId}/cases`;
+
+  switch (item.sourceType) {
+    case 'CASE':
+      return `/projects/${projectId}/cases/${item.sourceId}`;
+    case 'SUITE':
+      return `/projects/${projectId}/cases?suiteId=${item.sourceId}`;
+    case 'PLAN':
+      return `/projects/${projectId}/plans/${item.sourceId}`;
+    default:
+      return search;
+  }
+}
+
 /** Exported for its test — the columns and the refusal are the logic worth pinning. */
 export function Board({ items, projectId, mine }: { items: WorkItem[]; projectId: string; mine: boolean }) {
   const { enqueueSnackbar } = useSnackbar();
@@ -207,11 +259,12 @@ export function Board({ items, projectId, mine }: { items: WorkItem[]; projectId
     if (!item.allowedTransitions.includes(column)) {
       setRejected(
         item.derived
-          ? `${item.linkedKey ?? 'That card'} mirrors ${
-              item.kind === 'EXECUTION' ? 'an execution' : 'a review'
-            }, so it can't be moved to ${workItemStatusLabels[column]}. Update the ${
-              item.kind === 'EXECUTION' ? 'execution' : 'review'
-            } and the card follows.`
+          ? // The noun is the card's own kind. It read "an execution or a review" for every
+            // derived card until §81, which named the wrong source on maintenance cards — harmless
+            // while reviews were not a real card kind, and misleading the moment they were.
+            `${item.linkedKey ?? 'That card'} mirrors ${derivedNouns[item.kind].indefinite}, so it can't be moved to ${
+              workItemStatusLabels[column]
+            }. Update the ${derivedNouns[item.kind].bare} and the card follows.`
           : `That card can't move to ${workItemStatusLabels[column]} from ${workItemStatusLabels[item.status]}.`,
       );
       return;
@@ -420,11 +473,7 @@ function WorkCard({
 
       {item.linkedKey && (
         <RouterLink
-          to={
-            item.kind === 'EXECUTION' || item.kind === 'REVIEW' || item.kind === 'CASE_MAINTENANCE'
-              ? `/projects/${projectId}/cases?q=${encodeURIComponent(item.linkedKey)}`
-              : `/projects/${projectId}/cases`
-          }
+          to={linkFor(item, projectId)}
           data-testid="Board.Card.LinkedKey"
         >
           <Identifier variant="muted">{item.linkedKey}</Identifier>

@@ -592,11 +592,48 @@ assigned to anybody, because §6g's peer review is open to the whole tier and a 
 | 11 | Open a plan in review that nobody has been asked to look at | *"Nobody has been asked yet. Anyone with review rights can still give a verdict."* — and on a **closed** review with no requests the whole section is **absent**, not an empty heading (§6g's "no extra UI"). | mock + live |
 | 12 | The panel at 390 px with three chips and the picker | The chips wrap rather than overflow; the select and **Ask** stack rather than pushing the panel into horizontal scroll. | mock + live |
 | 13 | Live only: delete a team that has an outstanding request | The chip is gone on the next load and **the person asked individually is untouched**. This is the decision §71's 409 is deliberately not extended to — what cascades is a request, not authority — and the DDL is the only thing enforcing it. | **live only** — needs the teams screen and a migrated database |
-| 14 | Live only: ask somebody, then sign in as them | Nothing surfaces on their board or anywhere outside this panel. **That is correct today and is the next slice**: §6l's *"Review requested → card for each reviewer"* needs the queue this table now makes possible. Recorded so the absence is not read as a defect. | **live only** — needs two accounts |
+| 14 | Live only: ask somebody, then sign in as them | ~~Nothing surfaces on their board or anywhere outside this panel. **That is correct today and is the next slice**~~ → **superseded by §81, which built it.** The expectation is now the opposite: a **Review** card appears on that person's board. Run §81's rows instead of this one — a pass here would now mean the inbox is missing. | **live only** — needs two accounts |
 
 **Not exercisable here:** asking a **sibling company's** account or a sibling company's team. Both
 are refused as field errors and neither is reachable from any picker in either mode — the check is
 the backend queue's, and the rows exist there.
+
+---
+
+## §81 — the reviewer's inbox: the board is where a request surfaces
+
+**The section §80 ended by naming.** Until this slice a person asked to review found out by opening
+the artifact; now the request is a card on the board, which is §6l's *"Review requested → card for
+each reviewer"* — the third of its five derived-item generators to exist.
+
+**Run §77 row 2 first** (review switched on for the demo project) — no review exists without it, and
+therefore no card. Rows 4 and 5 are live-only for §80's reason: mock mode signs in as one persona,
+so a second person's board cannot be seen there.
+
+The mock's fixtures were rebuilt for this and the previous ones were **wrong in a way nothing could
+see**: the old generator drew a card for every case whose `lifecycleStatus` was `IN_REVIEW`, in the
+`IN_REVIEW` column, assigned to the case's **owner** — a reviewer inbox no server could produce,
+shown to the person whose work is under review. If any row below reads like the old behaviour, that
+is the regression to catch.
+
+| # | Flow | What must be true | Mode |
+|---|---|---|---|
+| 1 | Open the demo project's **Board** as the signed-in user | Two **Review** cards in **To do** — `TP-5` (Payments hardening cycle) and `TC-20` (Cart survives a page reload) — each marked `linked`, each reading *"Review requested by …"*. **Not** in the In-review column: To do is where work nobody has started belongs, and In review is for items *being* reviewed. | mock + live |
+| 2 | Click the key on the `TP-5` card | Lands on the **plan detail**, with §6g's review panel on it. This is the row the slice's link repair exists for — before it, every card routed to the case list, so a plan review searched the cases for `TP-5` and rendered "no cases match". | mock + live |
+| 3 | Click the key on the `TC-20` card | Lands on the **case detail** and its review panel. Together with row 2: one card shape, three subject types, three destinations. | mock + live |
+| 4 | Try to drag a review card, or press any of its move buttons | Refused, and the sentence names **a review** — *"TC-20 mirrors a review, so it can't be moved to Done. Update the review and the card follows."* Every derived card said "an execution or a review" until §81; more importantly, moving it must not perform the approval: §6l's eventual drag-to-Done is a gated act with an `If-Match`, and a drag would be a second door to the sign-off. | mock + live |
+| 5 | Switch the board to **Assigned to me** | The review cards stay (both are addressed to the signed-in user). This is the inbox as people will use it. | mock + live |
+| 6 | Live only: as a lead, ask a **colleague** to review something, then sign in as them and open the board | A Review card for that artifact, on **their** board, naming the lead as the asker. **This is the row the whole slice exists for** — §80's row 14 recorded its absence. | **live only** — needs two accounts |
+| 7 | Live only: ask a **team**, then sign in as any member | A card each, for every member, and none of them was named on an assignment row. Then **add somebody to that team** and reload their board: the card is waiting. Expansion happens on the read, which is why membership can move — the write-time expansion §80 refused would have frozen the list at the moment somebody clicked. | **live only** — needs the teams screen and two accounts |
+| 8 | Live only: as the person asked, leave a verdict (LGTM or Request changes), then reload the board | **The card is gone** — and gone on "changes requested" too, which is deliberate: they have done what was asked and the ball is with the author. A card that stays until they approve reads as work the reviewer still owes. | **live only** — needs the review panel and a board reload |
+| 9 | Live only: approve or reject the artifact, then reload every asked person's board | All of its cards are gone, though the `review_assignment` rows are untouched. The board reads `review.state`; unassigning is the only thing that deletes a request. | **live only** |
+| 10 | Live only: delete (soft) a case that has an open review somebody was asked for | The card disappears. "Go and review this" is not something to say about an artifact that is gone — and nothing in the schema removes the review, because the subject triple has no FK. | **live only** — needs a delete |
+| 11 | The board at 390 px with two review cards | The cards wrap with the others and the `linked` chip does not push the title into overflow. Nothing new is laid out here, which is the point of one card shape. | mock + live |
+
+**Not exercisable in mock mode:** rows 6–10, all for the same two reasons — one persona, and no
+second account to be asked. **Not exercisable anywhere yet:** a review card on a **cross-project**
+personal board, because §6l's "My Work" board does not exist; the board is per project, so the inbox
+is per project too. That bound is stated in the handoff rather than left to be discovered.
 
 ---
 

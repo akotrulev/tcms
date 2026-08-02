@@ -1,6 +1,54 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-03 (latest section: **§80, reviewer assignment** — §6g's apparatus is
+**Date:** 2026-08-03 (latest section: **§81, the reviewer's inbox** — §80 ended by naming it and
+§6l has named it since the plan was written (*"Review requested → card for each reviewer"*), while
+`ReviewController` refuses the queue from the middle because it needs the subject **expanded**.
+**The whole slice is where that expansion turned out to belong, and it was decided three slices
+before the question was asked.** The query is `review ⋈ review_assignment` (`project`) `⋈
+team_membership` (`identity`) `⋈ test_case | suite | test_plan` (`repository`, `execution`) — **four
+tables, three modules, and no module may write it**: `project` owns the record and may depend on
+`tenancy` alone, `repository` and `execution` hold one third of the expansion each and cannot see
+each other. `work` may see all three and **`BoardFacts` is the file where that permission is already
+concentrated**, so §80's three options (a fourth port, a read model elsewhere, the domain event §76
+refused) collapse to the one that needed nothing built: the board's `REVIEW` generator, absent since
+§53 *with the reason written in the package comment* — and the reverse reading is the design, since a
+queue endpoint on `ReviewController` would have had to invent one of the three **and** would then
+serve a second list answering "what is on my plate". **No contract change at all**: `kind: REVIEW`
+went into `openapi.yaml` in §53 deliberately ahead of its generator, and a decision made 28 slices
+earlier paid for itself. **A team is expanded at READ time, the mirror image of §80's refusal to
+expand at write time** — §80's reason was *"membership moves"*, which is exactly what makes the
+recomputed-every-read expansion correct, so §6g's *"any member of the team can action it"* is
+implemented rather than declared; hence `UNION` not `UNION ALL` (asked directly *and* through a team
+is asked **once**) and **one card per REVIEWER, not per review**, which is what makes a personal
+board possible at all. **Three predicates and each removes a card that would never leave**: the
+review's state (unassigning is the only delete, so **every request ever made is still in the
+table**), no participation by that person (§6l's "card leaves", said about a verdict — and it leaves
+when they have **spoken**, not when they agreed, or "changes requested" reads as work the reviewer
+still owes), and the subject still existing (three `LEFT JOIN`s, because the triple has no FK — and
+the broken version produces a card with **no key and no title**, which every `doesNotContain` passes
+cleanly, so the test asserts an **exact set**). **`sourceType`/`sourceId` name the ARTIFACT, not the
+review**, which looks like it breaks the other two generators' pattern and does not: those fields are
+*what the card opens*, and a review has no URL of its own — §6g's panel renders on the artifact's
+page. **THE FINDING IS THAT THE MOCK HAD SHIPPED THIS FEATURE, WRONG, SINCE PHASE 1**: `fromReviews`
+drew a card for every case whose `lifecycleStatus` was `IN_REVIEW`, in the `IN_REVIEW` column,
+assigned to the case's **owner** — a request **nobody had been asked to do**, on the board of the
+person whose work is under review and whom the server *refuses* as an assignee (§80), in the wrong
+column, and never for a suite or a plan because it read a *case* column. §52's "the mock agrees with
+itself" in its most expensive form — the mock was not agreeing with a server, it was agreeing with an
+**idea of the feature**, and it looked finished, which is why nobody built the real one for 28
+slices. Nothing could catch it (the contract legitimately carries `kind: REVIEW`, the page test
+supplies its own props), hence **`mocks/db/workItems.test.ts`, the first test that asserts the
+MOCK's rules**. **The second defect the slice made live**: every card's key linked to a case search,
+right while every linked card was about a case — a review of `TP-5` now renders *"no cases match"*,
+which reads as the plan having been deleted; `linkFor` keys on `sourceType`, and **a suite goes to
+the case list filtered to it because a suite has no page of its own**, the one subject type §6g can
+review with no screen anywhere. §79's cast repair carried one file further (`} as WorkItem` gone from
+a factory covering sixteen tests). **The one test that failed was the assertion, not the code** — the
+exact-set check expected one `TS-1` card and found two, LEAD's and VIEWER's, both correct. **No
+migration; `V26` is still free**, which is what §80's index-before-its-query was for. **Zero
+mutations run inline; nine queued, eleven browser rows**, and **§80's row 14 is struck through**
+because it recorded this absence as correct. Named next: **§6g's gating rules**, which now have
+everything they need. Before that: **§80, reviewer assignment** — §6g's apparatus is
 complete. `review_participation` has recorded who **spoke** since §76 and *nothing has ever recorded
 who was **asked***, so the workflow §76–§79 built had **no inbox**: a review opens and the people who
 should look at it find out through some other product. §6l names the same gap from the other end
@@ -58,10 +106,11 @@ fifth failed because MUI's default Chip delete icon carries no identifier. **A d
 when written** — it claimed the picker filtered the submitter and it did not — and was **implemented
 rather than deleted**, because a picker that can produce a 400 is the one thing it must not be.
 **Zero mutations run inline; eight queued, fourteen browser rows**, and rows 3–4 are live-only
-because mock mode signs in as one persona holding every key. **§6g's apparatus now has no INBOX, and
+because mock mode signs in as one persona holding every key. ~~**§6g's apparatus now has no INBOX, and
 that is the next slice**: nothing outside the panel surfaces a request, and the queue needs the
 subject **expanded**, which means reading `repository` and `execution` from `project` — a fourth
-port, a read model elsewhere, or the domain event §76 refused. Before that, and not summarised here
+port, a read model elsewhere, or the domain event §76 refused.~~ → **built in §81, above, as the
+second of those three, in the module that already held the edge.** Before that, and not summarised here
 because that section did not prepend to this header: **§79, review comments** — the one comment key
 where there are three review keys, and the resolution that named nobody; plus **§77, per-project
 review settings** (`V23`) and **§78, open-question decision round 2**. Before
@@ -951,3 +1000,4 @@ See [`docs/plans/2026-07-31-parallel-execution-rework.md`](plans/2026-07-31-para
 | [§78](handoff/78-open-question-decisions-round-2.md) | Open-question decision round 2 — §8 emptied, five that were answered by the product and never struck, and the chart that now depends on the S3 adapter |
 | [§79](handoff/79-review-comments.md) | Review comments — the one comment key where there are three review keys, and the resolution that named nobody |
 | [§80](handoff/80-reviewer-assignment.md) | Reviewer assignment — the request nothing recorded, and the table that is not part of the record |
+| [§81](handoff/81-the-reviewers-inbox.md) | The reviewer's inbox — the query no module could write, and the mock that invented the feature |

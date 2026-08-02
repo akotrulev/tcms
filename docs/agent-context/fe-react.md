@@ -2,8 +2,8 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-02
-**Baseline commit:** `a40f347`
+**Last verified:** 2026-08-03
+**Baseline commit:** `93444b2`
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
 `frontend/vite.config.ts`
 
@@ -164,6 +164,21 @@
 - **Mock API is stateful** — `mocks/db/` + `mocks/handlers/*.ts` read *and write* a cloned fixture
   store, so round-trips land in lists. Handlers are written from the **server's** rules, not from what
   one client sends (§52). Resets on reload.
+  **And a mock generator can invent a whole feature — §81, the most expensive instance so far.**
+  `mocks/db/workItems.ts` drew a board card for every case whose `lifecycleStatus` was `IN_REVIEW`,
+  in the `IN_REVIEW` column, assigned to the case's **owner** — while the server produced no review
+  cards at all and, once it did, refuses the artifact's own submitter as a reviewer. Mock mode
+  therefore showed a reviewer inbox no deployment could produce, to the wrong person, from Phase 1 to
+  §80, and it looked finished. Nothing could catch it: `kind: REVIEW` is legitimately in the contract
+  (put there in §53 ahead of its generator), and a page test supplies its own props. Hence
+  **`mocks/db/workItems.test.ts`, the first test asserting the MOCK's rules rather than a
+  component's** — the pattern to copy whenever a mock module holds *logic* rather than storage.
+- **`BoardPage.linkFor` is where a card's key goes, and it keys on `sourceType` (§81).** Every card
+  routed to a case search until the inbox drew the first cards about **suites and plans**; a review of
+  `TP-5` sent there renders "no cases match", which reads as the plan having been deleted. A case goes
+  to the case detail, a plan to the plan detail, a **suite to the case list filtered to it** — a suite
+  has no page of its own and is the one §6g subject type with no screen anywhere. `EXECUTION` keeps
+  the search fallback deliberately: its route needs a run id the card does not carry.
 - **Contract-hygiene tests are generated per call site** — `api/contractOperations.test.ts`,
   `contractParameters.test.ts` (drives the TS compiler, not a regex), `apiResponseTypes.test.ts`
   (refuses an inline literal at any `api.*` call site). A new endpoint is covered automatically,
@@ -200,6 +215,17 @@
   with the reasoning recorded in `vite.config.ts`.
 
 ## Session log
+
+- 2026-08-03 · EXTEND · The reviewer's inbox (§81) — §6l's review card lands on the board, so a
+  request finally surfaces outside `ReviewPanel`. Frontend work was **three repairs, not a feature**:
+  the mock's invented review generator replaced by the server's rules (see the seam above),
+  `BoardPage.linkFor` keyed on `sourceType`, and the derived-card refusal sentence keyed on `kind`
+  (it called every non-execution card "a review"). Plus §79's cast repair on
+  `BoardPage.test.tsx`'s factory, and one fixture review on `TC-20` so mock mode shows more than one
+  subject type. **No contract change and no new hook.** 9 tests written (5 board, 4 the new
+  `mocks/db/workItems.test.ts`), **649/649**. **0 mutations run inline**; 2 frontend rows queued in
+  the mutation file, 11 browser rows — and §80's browser row 14 is struck through, because it
+  recorded this absence as correct.
 
 - 2026-08-02 · EXTEND · Reviewer assignment (§80) — §6g's *"assign a user or a team"* lands in
   `ReviewPanel` as an **Asked to review** section above the verdict trail. New: `useAssignReviewer`,

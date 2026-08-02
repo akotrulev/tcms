@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
  * reads them through exactly one file — a shared row is not a shared class, and what §3 forbids is
  * two modules becoming deployable only together.
  *
- * <p>Two facts live on the other side, one per implemented generator:
+ * <p>Three facts live on the other side, one per implemented generator:
  *
  * <ol>
  *   <li><strong>Which executions are outstanding, and for whom</strong> — {@link #assignedExecutions},
@@ -26,6 +26,13 @@ import org.springframework.stereotype.Component;
  *       over {@code case_health} joined to {@code test_case}. This is the {@code CASE_MAINTENANCE}
  *       card, and it went from structurally empty to real in the same slice, because §53 also built
  *       {@code case_health}'s first writer.</li>
+ *   <li><strong>Who has been asked to review what, and has not answered yet</strong> —
+ *       {@link #pendingReviews}, over {@code review} joined to {@code review_assignment} (§80's
+ *       table) and to whichever of {@code test_case} / {@code suite} / {@code test_plan} the
+ *       review's opaque subject triple names. This is the {@code REVIEW} card, and it is the one
+ *       generator that reads tables from <em>three</em> modules at once — which is exactly why it
+ *       is here rather than in {@code project}, whose {@code allowedDependencies} is
+ *       {@code tenancy} alone.</li>
  * </ol>
  *
  * <p>Native SQL rather than entities, for {@code CaseFacts}' reason: a second JPA entity mapped over
@@ -115,6 +122,133 @@ class BoardFacts {
                         (String) row[3],
                         (String) row[4],
                         (UUID) row[5]))
+                .toList();
+    }
+
+    /**
+     * One outstanding review request — somebody was asked and has not answered.
+     *
+     * @param reviewId    the review the request belongs to. Part of the card's synthetic id, and not
+     *                    a link target: a review has no URL of its own, because §6g's panel is
+     *                    rendered on the artifact's own page.
+     * @param subjectType {@code CASE} · {@code SUITE} · {@code PLAN}, read from the review's opaque
+     *                    triple. It reaches the wire as the card's {@code sourceType}, because it is
+     *                    what tells the SPA which screen to open.
+     * @param subjectKey  {@code TC-42} / {@code TS-3} / {@code TP-7} — all three subject tables have
+     *                    a display key, which is what makes one card shape serve them.
+     * @param reviewerId  the person whose list this is on. Never null: a request always names
+     *                    somebody, and a team's request is expanded into its members here.
+     * @param requestedBy who asked, nullable — {@code assigned_by} has no FK and no cascade, so an
+     *                    offboarded account leaves a request nobody is named for.
+     */
+    record PendingReview(
+            UUID reviewId,
+            UUID projectId,
+            String subjectType,
+            UUID subjectId,
+            String subjectKey,
+            String subjectTitle,
+            UUID reviewerId,
+            UUID requestedBy) {
+    }
+
+    /**
+     * Review requests that are still outstanding in this project — §6l's third generator, and the
+     * inbox §6g's apparatus did not have.
+     *
+     * <h2>This query is the reason the inbox is here and not in {@code project}</h2>
+     *
+     * <p>It names four tables belonging to three modules: {@code review} and
+     * {@code review_assignment} ({@code project}), {@code team_membership} ({@code identity}), and
+     * {@code test_case} / {@code suite} / {@code test_plan} ({@code repository} and
+     * {@code execution}). No module may write it. {@code ReviewController}'s own header records the
+     * refusal from the other end — <em>"the pending-reviews queue §6l wants is a different question
+     * and it will need the subject expanded, which this endpoint refuses to do"</em> — because
+     * {@code project} may depend on {@code tenancy} alone and cannot see two of those three
+     * modules. {@code work} may see all of them, and this class is where that permission is spent.
+     *
+     * <h2>A team is expanded HERE, and that is the mirror image of §80's refusal</h2>
+     *
+     * <p>§80 refused to expand a team into per-member rows when the request is <em>written</em>,
+     * because membership moves and a stored expansion is a snapshot of who was on the team the day
+     * somebody clicked. The same fact makes expanding it at <em>read</em> time correct: the card set
+     * is recomputed on every board load, so a person who joins the team tomorrow finds the request
+     * waiting and a person who leaves stops seeing it — which is precisely §6g's <em>"any member of
+     * the team can action it"</em>. It is the derived-item rule doing the work it was designed for,
+     * one generator over.
+     *
+     * <p>{@code DISTINCT} in the CTE rather than {@code UNION ALL}: somebody asked directly
+     * <em>and</em> through a team they belong to has been asked once, and two cards for one request
+     * is the board saying they owe two verdicts.
+     *
+     * <h2>Three predicates, and each removes a card that would otherwise never leave</h2>
+     *
+     * <ul>
+     *   <li>{@code r.state = 'IN_REVIEW'} — an approved, rejected or withdrawn review is over.
+     *       Requests outlive it in the table (unassigning is the only thing that deletes a row,
+     *       §80), so without this the board would carry every request ever made.</li>
+     *   <li><strong>No participation row by that person</strong> — §6l's "execution completed → card
+     *       leaves", said about a verdict. Note what it does <em>not</em> say: the card leaves when
+     *       they have <em>spoken</em>, not when they agreed. Somebody who requested changes has
+     *       done what was asked of them and the ball is with the author; leaving the card up would
+     *       make "changes requested" read as work still owed by the reviewer.</li>
+     *   <li><strong>The subject still exists</strong> — the {@code COALESCE(...) IS NOT NULL} guard,
+     *       which the three {@code LEFT JOIN}s make load-bearing. "Go and review this" is not
+     *       something to say about a soft-deleted case, and an {@code INNER JOIN} per type is not
+     *       available: one query serves all three subject types precisely because the triple has no
+     *       FK.</li>
+     * </ul>
+     *
+     * <p>Ordered by the review's age, oldest first — the request that has been waiting longest is
+     * the one most worth answering, and the board's own sort (overdue, then priority, then id) has
+     * nothing to separate these cards by, since a review carries neither.
+     */
+    List<PendingReview> pendingReviews(UUID projectId) {
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = entities.createNativeQuery("""
+                WITH asked AS (
+                    SELECT DISTINCT a.review_id, a.assignee_user_id AS reviewer_id, a.assigned_by
+                      FROM review_assignment a
+                     WHERE a.assignee_user_id IS NOT NULL
+                    UNION
+                    SELECT DISTINCT a.review_id, m.user_id, a.assigned_by
+                      FROM review_assignment a
+                      JOIN team_membership m ON m.team_id = a.assignee_team_id
+                     WHERE a.assignee_team_id IS NOT NULL
+                )
+                SELECT r.id, r.project_id, r.subject_type, r.subject_id,
+                       COALESCE(c.key, s.key, p.key),
+                       COALESCE(c.title, s.name, p.name),
+                       asked.reviewer_id, asked.assigned_by
+                  FROM review r
+                  JOIN asked ON asked.review_id = r.id
+                  LEFT JOIN test_case c ON r.subject_type = 'CASE'
+                                       AND c.id = r.subject_id AND c.deleted_at IS NULL
+                  LEFT JOIN suite s     ON r.subject_type = 'SUITE'
+                                       AND s.id = r.subject_id AND s.deleted_at IS NULL
+                  LEFT JOIN test_plan p ON r.subject_type = 'PLAN'
+                                       AND p.id = r.subject_id AND p.deleted_at IS NULL
+                 WHERE r.project_id = :projectId
+                   AND r.state = 'IN_REVIEW'
+                   AND COALESCE(c.id, s.id, p.id) IS NOT NULL
+                   AND NOT EXISTS (SELECT 1 FROM review_participation v
+                                    WHERE v.review_id = r.id
+                                      AND v.user_id = asked.reviewer_id)
+                 ORDER BY r.created_at, r.id, asked.reviewer_id
+                """)
+                .setParameter("projectId", projectId)
+                .getResultList();
+
+        return rows.stream()
+                .map(row -> new PendingReview(
+                        (UUID) row[0],
+                        (UUID) row[1],
+                        (String) row[2],
+                        (UUID) row[3],
+                        (String) row[4],
+                        (String) row[5],
+                        (UUID) row[6],
+                        (UUID) row[7]))
                 .toList();
     }
 

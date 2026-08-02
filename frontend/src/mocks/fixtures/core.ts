@@ -816,6 +816,34 @@ export const reviews = [
     // state §72's rule is about — the mock never sitting where a fresh install does.
     comments: [],
   },
+  {
+    // TC-20, and it is here for the BOARD rather than for the panel (§81): the reviewer's inbox
+    // draws a card per person asked, and with only the plan review above, mock mode could show
+    // exactly one subject type — so the card's link to a *case* would have been unexercised in the
+    // one mode anybody drives. `uid(119, 'e')` is the twentieth case seed, spelled the way
+    // `fixtures/cases.ts` allocates ids rather than imported, for the reason TC-8's review gives.
+    id: uid(11, 'w'),
+    projectId: projects[0].id,
+    subjectType: 'CASE' as const,
+    subjectId: uid(119, 'e'),
+    subjectVersionNo: 1,
+    state: 'IN_REVIEW' as const,
+    submittedBy: userRefOf(2),
+    createdAt: '2026-07-30T08:15:00Z',
+    approvedBy: null,
+    approvedAt: null,
+    assignees: [
+      {
+        id: uid(12, 'w'),
+        user: userRefOf(0),
+        team: null,
+        assignedBy: userRefOf(2),
+        assignedAt: '2026-07-30T08:16:00Z',
+      },
+    ],
+    participations: [],
+    comments: [],
+  },
 ];
 
 export const runs: TestRun[] = [

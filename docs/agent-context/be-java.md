@@ -2,8 +2,8 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-02
-**Baseline commit:** `a40f347`
+**Last verified:** 2026-08-03
+**Baseline commit:** `93444b2`
 **Fingerprint files:** `backend/build.gradle.kts`, `backend/gradle/libs.versions.toml`, `backend/gradle/wrapper/gradle-wrapper.properties`
 
 > Authoritative docs win over this file. `CLAUDE.md`, `docs/HANDOFF.md` (an index — sections live in
@@ -63,7 +63,7 @@ provisioning · auth · shared`.
   return zero rows, fail-closed and silent. `RepositoryTransactionTest` derives the repository list
   from the live context, so a new repository that forgets fails the build. `#confirmed`
 - **Flyway owns all DDL**; `hibernate.ddl-auto: validate`, `baseline-on-migrate: false`. Migrations
-  at `src/main/resources/db/migration`. **Head is `V24`; `V25` is the next free number.** Booting the
+  at `src/main/resources/db/migration`. **Head is `V25`; `V26` is the next free number.** Booting the
   real context in a test is itself a schema-drift gate. `#confirmed`
   **`V23` is the first migration since `V1` to CREATE A TABLE**, which makes two things live that no
   previous migration had to think about: a new table's RLS policy must be written with **`V4`'s
@@ -234,6 +234,30 @@ provisioning · auth · shared`.
   or §64's unvalidated reference. **`refuseIfClosed` is the ONE spelling of "this review has
   ended"**, read by all FIVE write paths since §80 — the verdict endpoint's inline copy moved into it.
 
+- **The reviewer's INBOX is a board generator, and its placement is the §81 finding.**
+  `BoardFacts.pendingReviews` + `BoardService.cardFor(PendingReview…)` + `PREFIX_REVIEW`, in
+  **`work`** — §6l's third derived-item generator, absent since §53 with the reason in the package
+  comment. **No other module may write the query**: it names `review` + `review_assignment`
+  (`project`), `team_membership` (`identity`) and `test_case`/`suite`/`test_plan` (`repository`,
+  `execution`), and `project` — which owns the record — may depend on `tenancy` alone, which is why
+  `ReviewController` refuses the queue in its own header. So §80's three options (fourth port / read
+  model elsewhere / the domain event §76 refused) collapse to the module that already concentrates
+  every foreign-table statement in one file. **A queue endpoint on `ReviewController` would have had
+  to invent one of the three and would then serve a second "what is on my plate" list.**
+  **A team is expanded at READ time**, the mirror of §80's write-time refusal and for its stated
+  reason (*membership moves*): recomputed every load, so joining the team tomorrow finds the request
+  waiting. `UNION` not `UNION ALL` (asked by name **and** through a team is asked once), and **one
+  card per REVIEWER not per review** — `mine=true` filters by assignee, so a shared card would appear
+  on nobody's board. **Three predicates, each removing a card that would never leave**: `state =
+  'IN_REVIEW'` (unassigning is the only delete, so every request ever made is still in the table), no
+  participation row by that person (the card leaves when they have **spoken**, not when they agreed),
+  and `COALESCE(c.id, s.id, p.id) IS NOT NULL` — whose broken form yields a card with **no key and no
+  title**, invisible to any `doesNotContain` assertion, hence the exact-set test.
+  **`sourceType`/`sourceId` name the ARTIFACT, not the review**: those fields are *what the card
+  opens*, and a review has no URL — §6g's panel renders on the artifact's page. The card id is
+  `review:{reviewId}:{userId}`, the one derived id that is not prefix-plus-one-UUID, so `isDerived`'s
+  prefix check is the **only** guard on it. **No contract change** — `kind: REVIEW` has been in
+  `openapi.yaml` since §53, ahead of its generator, deliberately. `#confirmed`
 - **`review_assignment` is NEW in §80 (`V25`) — the first review table not already in `V1`.** That
   absence is itself the finding: `V1` designed the record of what happened and never the worklist of
   what is outstanding. `ReviewAssignment` + `ReviewAssigneeEdit` + `ReviewAssignmentRepository` +
@@ -457,15 +481,18 @@ provisioning · auth · shared`.
   the review block of the catalogue is fully consumed. ~~**Reviewer ASSIGNMENT is the only unbuilt
   half of §6g's apparatus**~~ → **built in §80**, and it needed **no new key** — one seeded to
   nobody is a 403 nobody can grant out of (§67/§79) — so asking costs the subject's `*:review`,
-  §79's argument for resolving a thread: a statement about the review's progress. What is now true
-  instead: **§6g's apparatus is complete and has no INBOX.** Nothing outside `ReviewPanel` surfaces a
-  request, so §6l's *"Review requested → card for each reviewer"* is buildable and unbuilt — and the
-  interesting part is that the queue needs the subject **expanded**, which means reading `repository`
-  and `execution` from `project`. That is a fourth port, a read model elsewhere, or the domain event
-  §76 refused. `ix_review_assignment_assignee_user` exists so that slice does not open with a
-  migration. Also still unbuilt and deliberately so: **§6g's gating rules** (require APPROVED before a
-  case joins a run or a plan starts), which §6g itself calls *"powerful and genuinely obstructive"*,
-  and **notifications** — all four of §6g's events now have a trigger and there is no channel. `#confirmed`
+  §79's argument for resolving a thread: a statement about the review's progress. ~~What is now true
+  instead: **§6g's apparatus is complete and has no INBOX.**~~ → **the inbox landed in §81**, as a
+  **board generator** rather than as anything in `project` (see the seam above), which is the second
+  of the three options and the only one that needed nothing new built; `ix_review_assignment_assignee_user`
+  was added one slice ahead for exactly this query, so `V26` is still free. What is now true instead:
+  **the last unbuilt half of §6g is the GATING RULES** — require APPROVED before a case joins a run
+  or a plan starts — which §6g itself calls *"powerful and genuinely obstructive"* and which now has
+  everything it needs. Also still unbuilt and deliberately so: **the board's other two generators**
+  (`DOC_UPDATE` needs §6i's stale-case flagging, which nothing computes; `DEFECT` needs the local
+  defect record, which nothing writes — a feature apiece, not a generator apiece), **§6l's
+  cross-project "My Work" board**, so the inbox is **per project**; **§6l's per-project generator
+  toggles**; and **notifications** — all four of §6g's events have a trigger and there is no channel. `#confirmed`
 
 - **`audit_event.target_type` is spelled two ways and nothing reads it yet.** Every service writes
   the snake_case table name (`test_run`, `test_case`, `test_plan`, `doc_page`, …) except
@@ -520,6 +547,23 @@ provisioning · auth · shared`.
   a caller may or may not see. `#confirmed`
 
 ## Session log
+
+- 2026-08-03 · EXTEND · The reviewer's inbox (§81) — §6l's `REVIEW` generator, absent since §53,
+  built in **`work`** because **no other module may write its query** (four tables, three modules).
+  New: `BoardFacts.PendingReview`/`pendingReviews`, `BoardService.PREFIX_REVIEW` + the review card,
+  `frontend/src/mocks/db/workItems.test.ts`. **No migration (`V26` free), no contract change** —
+  `kind: REVIEW` went into `openapi.yaml` in §53 ahead of its generator. **A team is expanded at
+  READ time**, the mirror of §80's write-time refusal, for the same stated reason. **The finding: the
+  MOCK had shipped this feature since Phase 1 and wrong in four ways** — a card per case in
+  `IN_REVIEW`, in the wrong column, assigned to the case's **owner** (the person the server refuses
+  as an assignee), and never for a suite or a plan. §52's class in its most expensive form: the mock
+  was agreeing with an *idea*, not with a server, and it looked finished, which is why nobody built
+  the real one for 28 slices. **Second defect made live**: every card's key linked to a case search,
+  so a plan review rendered "no cases match" — `linkFor` now keys on `sourceType`, with a suite going
+  to the case list filtered to it because a suite has no page of its own. §79's cast repair carried
+  to `BoardPage.test.tsx`. Backend 1476 → **1487**; frontend 640 → **649**. **Zero mutations run
+  inline** (policy); nine queued, eleven browser rows, and §80's browser row 14 struck through
+  because it recorded this absence as correct.
 
 - 2026-08-02 · EXTEND · Reviewer assignment (§80) — the last unbuilt half of §6g's apparatus, and
   **the first review slice that needed a new table**: `review_assignment` is not in `V1`, because
