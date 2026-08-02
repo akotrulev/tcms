@@ -3,7 +3,7 @@
 # be-java — orientation cache (TCMS)
 
 **Last verified:** 2026-08-02
-**Baseline commit:** `f02c08c`
+**Baseline commit:** `9928805`
 **Fingerprint files:** `backend/build.gradle.kts`, `backend/gradle/libs.versions.toml`, `backend/gradle/wrapper/gradle-wrapper.properties`
 
 > Authoritative docs win over this file. `CLAUDE.md`, `docs/HANDOFF.md` (an index — sections live in
@@ -130,6 +130,30 @@ provisioning · auth · shared`.
   disk. Boot's default (1MB) would refuse an ordinary screenshot. Over the limit is a **413** from
   the container, before the handler — hence `EvidenceController#onTooLarge`, not an `Outcome`.
   `#confirmed`
+- **The run has a LIFECYCLE since §72, and it is the only writer `test_run.status` has ever had.**
+  `RunLifecycle` (pure, static — the transition table, `isClosed`, and the ONE copy of the
+  frozen-run sentence) + `RunStatusService` + `PUT /runs/{runId}/status`, gated on **`run:close`**
+  at PROJECT scope. **"Closed" is a status PAIR** (`COMPLETED` ∨ `ABORTED`), never a fifth value —
+  so no migration, and every reader keeps one notion of "over". `TestRun.begin` is called on EVERY
+  result and answers whether it was the first (self-guarding, so the caller holds no second copy of
+  the test); `applyStatus` derives `completedAt` from the target **in both directions**, clearing it
+  on a reopen. Reopen normalizes both live spellings by `startedAt`, so an `IN_PROGRESS` run with a
+  null `started_at` is unreachable through the API. **No `If-Match`** — the target state is
+  absolute, so there is no stale-read-derived value to lose (`DocPageWriteService#setStatus`'s
+  call). `updated_by` is mapped for the first time. `#confirmed`
+- **The frozen-run rule is ONE rule over THREE writes** — result, evidence attach, evidence delete —
+  which is exactly the condition §67 stated when it declined to implement `V1`'s "immutable once the
+  run closes". Placement carries the reasoning and a mock or a sibling must match it: **after** the
+  permission (a Viewer on a closed run still gets 403, not 409), **before** the `If-Match` (a stale
+  header is fixable and this is not), and **before** authorship on the delete (a closed run refuses
+  everybody including the author, so "this is not yours" would name a fix that does not exist).
+  `Outcome.RunClosed` on both sealed interfaces made three switch arms a compile error. `#confirmed`
+- **`ExecutionTargets` is the ONE resolution of the run/execution path** (§72), returning
+  `(run, execution)`. It replaced byte-identical private `resolve` copies in `ExecutionService` and
+  `EvidenceService` — a hand-maintained pair under a javadoc saying they were the same, which became
+  a defect the moment both needed the run. Deliberately **not `@Transactional`**: `EvidenceService.open`
+  calls it from a method that must not be in one, because it returns an open stream the controller
+  writes to the response afterwards. `#confirmed`
 - **`evidence:delete` is the second `OWN`-qualified consumer**, after `CaseDeleteService`, and the
   same shape: authorship applied AFTER the lookup, two 403s with different sentences, and the
   null-author arm refusing. Delete is **hard**, unlike a case's soft delete — a screenshot removed
@@ -242,8 +266,30 @@ provisioning · auth · shared`.
   usage spans `case_condition` AND `suite_condition` with inheritance on the suite side, which is a
   design question rather than a join. `#confirmed`
 
+- **`audit_event.target_type` is spelled two ways and nothing reads it yet.** Every service writes
+  the snake_case table name (`test_run`, `test_case`, `test_plan`, `doc_page`, …) except
+  `ExecutionService`'s `"TEST_EXECUTION"` and `ArtifactService`'s `"ARTIFACT"`. Latent rather than
+  live — `audit:view` and `project:audit` both have **zero consumers** — and found-not-fixed in §72,
+  because changing it splits existing rows. It will present as an audit filter that silently matches
+  nothing, which is §45's absent-row family. Sweep it when the audit screen is built. `#confirmed`
+
 ## Session log
 
+- 2026-08-02 · EXTEND · The run lifecycle (§72) — `test_run.status` had been written exactly once
+  in the product's life (to `NOT_STARTED`, by the factory), so every run on every real instance read
+  "not started" for ever and `started_at`/`completed_at` were never filled. Three production
+  javadocs named the slice by name, and `RunDetailPage` carried a comment stating a rule nothing
+  implemented. New: `ExecutionTargets`, `RunLifecycle`, `RunStatusRequest`, `RunStatusService`,
+  `TestRun.begin`/`applyStatus`/`isClosed`, `PUT /runs/{runId}/status`, `Outcome.RunClosed` ×2, four
+  audit actions. **`run:close` is the fifth no-consumer permission and the FIRST that
+  discriminates** — the gate mutation reddens exactly 1, where §71's could redden nothing.
+  **Not §52's "mock agrees with itself"**: the mock had the same hole and looked right only because
+  its fixtures ship runs already `IN_PROGRESS` — the general form is that **the mock's fixtures
+  never sit in the state a fresh install produces**. Two pre-existing defects found: the run list's
+  colour map was `Record<string, string>`, carried a `PLANNED` that is not a run status and was
+  missing `NOT_STARTED` (so every real run rendered grey); and the audit `target_type` spelling
+  above. 20 endpoint tests, 4 backend mutations run inline (1/2/2/1 red), 3 queued. **No migration —
+  `V22` still free.**
 - 2026-08-02 · EXTEND · Team management (§71) — `team`'s first writer after readers on three sides
   and none at all: `provision-company` seeds no team, `Team.create` had only test callers,
   `rename`/`reparent` had none, so `GET /teams` answered `[]` on every real instance and the grant
@@ -342,6 +388,3 @@ provisioning · auth · shared`.
   `SessionTokens.issue` both bypassed the bean with `Instant.now()` and now take it. Added
   `ClockResolutionTest` and `ArchitectureRulesTest.nothingCallsNowDirectly` (verified red by
   reintroducing the defect). Wrote the missing §59 and the new §60 handoff sections.
-- 2026-08-01 · EXTEND · Added the `issue-invitation` operator CLI + `InvitationService.reissue`, so a
-  UI-raised invitation is deliverable on an instance with no SMTP relay. Created `OperatorCommands`
-  to hold the verb list once. Cache created this run.
