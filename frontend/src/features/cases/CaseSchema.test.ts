@@ -31,6 +31,10 @@ const valid = () => ({
   stepFormat: 'STRUCTURED' as const,
   gherkinSource: null,
   steps: [{ action: 'Refund the payment a second time' }],
+  // Present and empty rather than omitted, because the two mean different things all the way down:
+  // the server reads an absent field as "leave the classification alone" and an empty array as
+  // "clear it", so a form value that could be undefined would make "unclassified" unexpressible.
+  classificationValueIds: [],
   changeComment: null,
 })
 

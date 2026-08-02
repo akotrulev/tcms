@@ -58,6 +58,7 @@ function caseBody(createdBy: string | null): TestCase {
     testType: null,
     testLevel: null,
     features: [],
+    classificationValueIds: [],
     tags: [],
     healthSignals: [],
     lastResult: null,

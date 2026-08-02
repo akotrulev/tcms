@@ -26,6 +26,7 @@ import { Controller, useFieldArray, useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import { CaseSchema, type CaseInput } from './caseSchema';
+import { ClassificationPicker } from './ClassificationPicker';
 import { SharedStepPicker } from './SharedStepPicker';
 import { useCase, useClassification, useCreateCase, useSuites, useUpdateCase } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
@@ -129,6 +130,11 @@ function CaseEditorForm({
         expectedResult: step.expectedResult ?? '',
         sharedStepId: step.sharedStepId ?? null,
       })),
+      // The ids the server served, which are the case's live assignments only — a value retired
+      // since it was chosen is absent here AND absent from the payload we send back, and the server
+      // deliberately does not read that absence as an instruction to delete it. See
+      // `TestCaseInput.classificationValueIds` in the contract for the whole rule.
+      classificationValueIds: existing?.classificationValueIds ?? [],
       changeComment: '',
     },
   });
@@ -177,6 +183,11 @@ function CaseEditorForm({
               sharedStepId: step.sharedStepId ?? null,
             }))
           : [],
+      // Always sent, including as `[]`. Omitting it when empty would mean "leave it alone" to the
+      // server, so clearing a case's classification would silently do nothing — the one place
+      // where sending the field's natural empty value and omitting the field are different
+      // instructions, which is why this is not `|| undefined` like the nullable scalars above.
+      classificationValueIds: data.classificationValueIds,
       changeComment: data.changeComment || null,
     };
 
@@ -216,8 +227,6 @@ function CaseEditorForm({
       });
     }
   });
-
-  const featureDimension = dimensions.data?.find((d) => d.key === 'feature');
 
   return (
     <Box component="form" onSubmit={onSubmit} noValidate aria-busy={isSubmitting} data-testid={`${TestIdPrefix}.Form`}>
@@ -618,25 +627,42 @@ function CaseEditorForm({
                   {...register('estimatedDurationSec')}
                 />
                 {/*
-                  Features are read-only here on purpose. The feature tree is a MULTI
-                  hierarchical dimension whose assignment has its own picker; rendering it as
-                  a flat select would let someone set a parent where a leaf is required.
+                  Every dimension the project offers, editable — Test Type, Test Level, Execution
+                  Phase and the Feature tree. This was read-only for the whole life of the module,
+                  on the stated grounds that a flat select "would let someone set a parent where a
+                  leaf is required": there is no leaf-only rule anywhere in the specs, and the real
+                  reason a select is wrong is that it loses the parentage. Hence a tree.
+
+                  The control renders from `cardinality` and `hierarchical` rather than from the
+                  dimension key, so a client that adds a fifth dimension gets a usable control
+                  without this file changing.
                 */}
-                {existing && existing.features.length > 0 && (
-                  <Box>
-                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
-                      Features
-                    </Typography>
-                    <Stack direction="row" sx={{ gap: 0.5, flexWrap: 'wrap' }}>
-                      {existing.features.map((feature) => (
-                        <Chip key={feature} size="small" variant="outlined" label={feature} />
-                      ))}
-                    </Stack>
-                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.5 }}>
-                      Assigned from the {featureDimension?.name ?? 'feature'} tree.
-                    </Typography>
-                  </Box>
-                )}
+                <Controller
+                  control={control}
+                  name="classificationValueIds"
+                  render={({ field }) => (
+                    <DataRegion
+                      state={dimensions}
+                      // No `isEmpty`: a project with no dimensions is the picker's own message, not
+                      // DataRegion's empty state. The distinction matters because the empty state
+                      // offers a call to action and there is nothing here for the author to do.
+                      // The region is scoped to this panel rather than the form, so a failed
+                      // vocabulary read leaves the rest of the editor saveable — classification is
+                      // optional, and blocking the whole editor on it would turn one outage into
+                      // "you cannot edit test cases".
+                      testId={`${TestIdPrefix}.ClassificationRegion`}
+                    >
+                      {(loaded) => (
+                        <ClassificationPicker
+                          dimensions={loaded}
+                          selected={field.value}
+                          onChange={field.onChange}
+                          testIdPrefix={TestIdPrefix}
+                        />
+                      )}
+                    </DataRegion>
+                  )}
+                />
               </Stack>
             </Panel>
 

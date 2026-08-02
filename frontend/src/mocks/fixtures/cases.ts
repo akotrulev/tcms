@@ -7,7 +7,7 @@
  * pagination are exercised against something that behaves like a real repository.
  */
 import type { HealthSignal, TestCase, TestCaseSummary } from '../../api/types';
-import { conditions, currentUser, sharedSteps, suites, uid, users } from './core';
+import { conditions, currentUser, dimensions, sharedSteps, suites, uid, users } from './core';
 
 const ref = (i: number) => ({
   id: users[i].id,
@@ -165,6 +165,16 @@ export function buildCaseDetail(summary: TestCaseSummary): TestCase {
   const isGherkin = summary.stepFormat === 'GHERKIN';
   return {
     ...summary,
+    // DERIVED from the summary's names rather than authored beside them.
+    //
+    // The summary is the authority for what a case is classified as — it is what the grid renders
+    // and what every filter matches — so writing the ids independently here would let a fixture
+    // case's `features` say "Refunds" while its `classificationValueIds` pointed at Checkout. The
+    // editor round-trips the IDS, so that case would open with the wrong boxes ticked and its first
+    // save would silently reclassify it. The server cannot produce that state (one filter, one
+    // source), and a fixture that could would be testing the SPA against a shape live mode never
+    // sends — §64's "the mock agrees with itself" class of defect.
+    classificationValueIds: classificationIdsFor(summary),
     description:
       'Verifies the refund path end to end, including the effect on the original payment and the refundable balance.',
     objective: 'Prove that a merchant can recover funds for a settled payment without manual intervention.',
@@ -235,3 +245,29 @@ export const currentUserRef = {
   email: currentUser.email,
   avatarUrl: null,
 };
+
+
+/**
+ * The value ids behind a summary's classification NAMES.
+ *
+ * Resolved by name against the vocabulary, which is sound here for the reason it is unsound on the
+ * wire: this fixture has one project and no duplicate names in it, whereas the real Feature tree may
+ * hold two leaves called "Refunds" under different parents — which is precisely why the contract
+ * grew the ids rather than asking the client to do this lookup.
+ */
+function classificationIdsFor(summary: TestCaseSummary): string[] {
+  const wanted = new Map<string, string[]>([
+    ['test_type', summary.testType ? [summary.testType] : []],
+    ['test_level', summary.testLevel ? [summary.testLevel] : []],
+    ['feature', summary.features],
+  ]);
+
+  const ids: string[] = [];
+  for (const dimension of dimensions) {
+    for (const name of wanted.get(dimension.key) ?? []) {
+      const value = dimension.values.find((candidate) => candidate.name === name);
+      if (value) ids.push(value.id);
+    }
+  }
+  return ids.sort();
+}

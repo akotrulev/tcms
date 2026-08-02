@@ -41,6 +41,67 @@ import {
   userRef,
 } from './shared';
 
+// ------------------------------------------------------------ classification ----
+
+/**
+ * Applies a submitted classification to a case, or returns the message that refuses it.
+ *
+ * The mock enforces the server's rules rather than merely storing what it is given. A mock that
+ * accepted anything would let mock mode save a payload live mode answers 400 to — the divergence
+ * the refused-fields list beside it exists to prevent, and the one that let `lockVersion` sit in a
+ * PATCH body for months because no server read it either.
+ *
+ * Three rules, matching `CaseEdit.normalizeClassification`:
+ *
+ *  - every id must name a value in this project's vocabulary — the mock has one project's
+ *    dimensions, so "not in `dimensions`" stands in for retired, another project's, and
+ *    nonexistent alike, which is also exactly how the server refuses them: one message for all
+ *    three, so the response cannot be used to probe which ids exist;
+ *  - at most one value per SINGLE dimension;
+ *  - duplicates collapse rather than being refused.
+ *
+ * It also maintains the DERIVED name fields, because the fixture store is what every read comes
+ * from: a case whose `classificationValueIds` said one thing while `features` said another would
+ * be mock mode reproducing, locally, the exact inconsistency the server's one-filter rule exists
+ * to make impossible.
+ */
+function applyClassification(target: TestCase, submitted: unknown): string | null {
+  if (!Array.isArray(submitted)) {
+    return 'Send an array of classification value ids.';
+  }
+  const ids = [...new Set(submitted.filter((id): id is string => typeof id === 'string'))];
+
+  const dimensionOf = new Map<string, (typeof dimensions)[number]>();
+  for (const dimension of dimensions) {
+    for (const value of dimension.values) dimensionOf.set(value.id, dimension);
+  }
+
+  const singleTaken = new Set<string>();
+  for (const id of ids) {
+    const dimension = dimensionOf.get(id);
+    if (!dimension) return 'That value is not one this project offers.';
+    if (dimension.cardinality === 'SINGLE') {
+      if (singleTaken.has(dimension.id)) {
+        return `Choose one ${dimension.name}, not several.`;
+      }
+      singleTaken.add(dimension.id);
+    }
+  }
+
+  const nameOn = (key: string) =>
+    ids
+      .filter((id) => dimensionOf.get(id)?.key === key)
+      .map((id) => dimensionOf.get(id)?.values.find((value) => value.id === id)?.name ?? '')
+      .filter(Boolean)
+      .sort();
+
+  target.classificationValueIds = [...ids].sort();
+  target.testType = nameOn('test_type')[0] ?? null;
+  target.testLevel = nameOn('test_level')[0] ?? null;
+  target.features = nameOn('feature');
+  return null;
+}
+
 // ----------------------------------------------------------------- filtering ----
 
 /**
@@ -305,7 +366,6 @@ export const caseHandlers = [
     */
     for (const field of [
       'ownerId',
-      'classificationValueIds',
       'tags',
       'automationTags',
       'preconditions',
@@ -345,8 +405,13 @@ export const caseHandlers = [
       // qualifier reads. It follows that a case you just created is one you can always delete,
       // which is the behaviour the server has too (`TestCase.create` sets `created_by`).
       createdBy: userRef(0),
-      testType: (body.testType as string) ?? null,
-      testLevel: (body.testLevel as string) ?? null,
+      // Set below by applyClassification, from `classificationValueIds`. Left null/empty here
+      // rather than read off the body: `testType`/`testLevel`/`features` are RESPONSE fields —
+      // names the server derives from the assignments — and are not on `TestCaseInput` at all, so
+      // a create that trusted them would be inventing a shape no client can send.
+      classificationValueIds: [],
+      testType: null,
+      testLevel: null,
       features: [],
       tags: [],
       healthSignals: ['NEVER_EXECUTED'],
@@ -368,6 +433,15 @@ export const caseHandlers = [
       currentVersionNo: 1,
       lockVersion: 1,
     };
+
+    if (body.classificationValueIds !== undefined) {
+      const refusal = applyClassification(created, body.classificationValueIds);
+      if (refusal) {
+        return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+          classificationValueIds: [refusal],
+        });
+      }
+    }
 
     const saved = writeCase(created);
     /*
@@ -627,12 +701,16 @@ export const caseHandlers = [
       );
     }
 
-    // The six fields on `TestCaseInput` the real endpoint has no write path for are REFUSED, not
+    // The five fields on `TestCaseInput` the real endpoint has no write path for are REFUSED, not
     // ignored — accepting and dropping them is a save that reports success and discards what the
     // user typed. Mirrored here so mock mode cannot pass a payload live mode rejects.
+    //
+    // `classificationValueIds` LEFT this list when the server grew a write path for it. It is now
+    // applied below, with the same three rules the server enforces, because a mock that merely
+    // stopped refusing would let mock mode accept a sibling project's value that live mode rejects
+    // — the divergence this comment exists to prevent, arriving through the other door.
     const unsupported = [
       'ownerId',
-      'classificationValueIds',
       'tags',
       'automationTags',
       'preconditions',
@@ -682,8 +760,21 @@ export const caseHandlers = [
       next.suiteName = db.suites.find((s) => s.id === body.suiteId)?.name ?? next.suiteName;
     }
 
+    const classificationChanged = body.classificationValueIds !== undefined;
+    if (classificationChanged) {
+      const refusal = applyClassification(next, body.classificationValueIds);
+      if (refusal) {
+        return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+          classificationValueIds: [refusal],
+        });
+      }
+    }
+
     // A version is written on explicit save only, and skipped when nothing changed.
-    const substantive = writable.some((f) => body[f] !== undefined) || Array.isArray(body.steps);
+    const substantive =
+      writable.some((f) => body[f] !== undefined)
+      || Array.isArray(body.steps)
+      || classificationChanged;
     if (substantive) next.currentVersionNo = (next.currentVersionNo ?? 1) + 1;
     next.lockVersion = (next.lockVersion ?? 1) + 1;
 

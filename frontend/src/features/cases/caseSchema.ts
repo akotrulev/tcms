@@ -52,6 +52,18 @@ export const CaseSchema = z
     stepFormat: z.enum(['STRUCTURED', 'GHERKIN']),
     gherkinSource: z.string().nullable(),
     steps: z.array(StepSchema),
+    // Every classification value the case should carry, across all four dimensions — Test Type,
+    // Test Level, Execution Phase and the project's Feature tree — as one flat array, because that
+    // is the shape the contract takes and splitting it per dimension here would mean reassembling
+    // it at submit and disagreeing with the server about what "the classification" is.
+    //
+    // Deliberately NOT validated for cardinality. The SINGLE-dimension rule needs the project's
+    // vocabulary to know which dimensions are SINGLE, and a Zod schema that took a runtime argument
+    // would stop being a static schema. The picker makes a second value on a SINGLE axis
+    // unselectable instead — a radio group, not a checkbox list — so the rule is enforced by the
+    // control's shape rather than by refusing a submission the user could not have made. The server
+    // and V2's trigger hold the line for anything that is not the SPA.
+    classificationValueIds: z.array(z.string()),
     changeComment: z.string().nullable(),
   })
   // Cross-field rules the server also enforces. Both live in the schema rather than in the
