@@ -16,6 +16,7 @@ import type {
   HealthSignal,
   LifecycleStatus,
   Priority,
+  RunStatus,
   StatusKind,
   StepFormat,
   WorkItemStatus,
@@ -118,6 +119,33 @@ export const statusLabels = {
   RETEST: 'Retest',
   UNTESTED: 'Untested',
 } as const satisfies Record<StatusKind, string>;
+
+/**
+ * The run lifecycle, in the reader's words.
+ *
+ * Added in §72, with the slice that gave `test_run.status` a writer. Before it, both screens that
+ * render a run spelled the status with `status.replace(/_/g, ' ').toLowerCase()` — and the run
+ * list's colour map beside it was typed `Record<string, string>`, so it had drifted exactly the way
+ * this file's header predicts: it carried a `PLANNED` that is not a run status at all and was
+ * **missing `NOT_STARTED`**, which on a real instance was the status of every run in existence.
+ */
+export const runStatusLabels = {
+  NOT_STARTED: 'Not started',
+  IN_PROGRESS: 'In progress',
+  COMPLETED: 'Completed',
+  ABORTED: 'Aborted',
+} as const satisfies Record<RunStatus, string>;
+
+/** Beside the labels, so a status cannot be worded in one place and coloured in another. */
+export const runStatusColors = {
+  NOT_STARTED: 'var(--color-draft)',
+  IN_PROGRESS: 'var(--color-info)',
+  COMPLETED: 'var(--color-passed)',
+  ABORTED: 'var(--color-failed)',
+} as const satisfies Record<RunStatus, string>;
+
+/** Whether the run has ended — the server's `RunLifecycle.isClosed`, and the one copy of it here. */
+export const isRunClosed = (status: RunStatus) => status === 'COMPLETED' || status === 'ABORTED';
 
 export const stepFormatLabels = {
   STRUCTURED: 'Structured steps',

@@ -20,6 +20,7 @@ import com.tcms.tenancy.CompanyRepository;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -112,12 +113,23 @@ class ExecutionEndpointTest extends IntegrationTestBase {
     /** In ACME_MOBILE. Reached through ACME_BANKING's path it must be a 404. */
     private static final UUID MOBILE_RUN = UUID.fromString("e2006000-0000-4000-8000-000000000003");
     private static final UUID UMBRA_RUN = UUID.fromString("e2006000-0000-4000-8000-000000000004");
+    /**
+     * A run nobody has recorded anything in — {@code NOT_STARTED}, {@code started_at} null.
+     *
+     * <p>Added in §72, and its absence until then is the point: every other run in this fixture is
+     * seeded {@code IN_PROGRESS} with a timestamp, which is the state <strong>no run on a real
+     * instance was ever in</strong>, because nothing wrote the column. A lifecycle test suite whose
+     * every run has already started cannot see either the transition or the refusal.
+     */
+    private static final UUID FRESH_RUN = UUID.fromString("e2006000-0000-4000-8000-000000000005");
 
     private static final UUID EXEC_A = UUID.fromString("e2007000-0000-4000-8000-000000000001");
     private static final UUID EXEC_B = UUID.fromString("e2007000-0000-4000-8000-000000000002");
     /** Belongs to OLD_RUN. Asked for through RUN's path it must be a 404. */
     private static final UUID EXEC_OLD = UUID.fromString("e2007000-0000-4000-8000-000000000003");
     private static final UUID MOBILE_EXEC = UUID.fromString("e2007000-0000-4000-8000-000000000004");
+    /** The only execution in {@link #FRESH_RUN} — what starting that run goes through. */
+    private static final UUID FRESH_EXEC = UUID.fromString("e2007000-0000-4000-8000-000000000006");
     private static final UUID UMBRA_EXEC = UUID.fromString("e2007000-0000-4000-8000-000000000005");
 
     @Autowired
@@ -490,7 +502,9 @@ class ExecutionEndpointTest extends IntegrationTestBase {
         void thePlanFilterNarrows() throws Exception {
             assertThat(ids(body(get(LEAD, ACME,
                     "/projects/" + ACME_BANKING + "/runs?planId=" + PLAN))))
-                    .containsExactlyInAnyOrder(RUN, OLD_RUN);
+                    // FRESH_RUN joined this plan in §72 — the not-yet-started run the lifecycle
+                    // tests need, and it belongs in every enumeration of the plan's runs.
+                    .containsExactlyInAnyOrder(RUN, OLD_RUN, FRESH_RUN);
 
             // Not a 404: "which of my runs belong to that plan" honestly answers none, and a 404
             // would make the query string an oracle for plan ids in projects the caller cannot open.
@@ -512,7 +526,7 @@ class ExecutionEndpointTest extends IntegrationTestBase {
             // none — so the list would come back empty for a filter the user believes they cleared.
             assertThat(ids(body(get(LEAD, ACME,
                     "/projects/" + ACME_BANKING + "/runs?releaseVersion="))))
-                    .containsExactlyInAnyOrder(RUN, OLD_RUN);
+                    .containsExactlyInAnyOrder(RUN, OLD_RUN, FRESH_RUN);
         }
 
         @Test
@@ -1095,6 +1109,322 @@ class ExecutionEndpointTest extends IntegrationTestBase {
     }
 
     // =====================================================================
+    // The run's lifecycle — the column that had no writer, and the freeze it makes possible
+    // =====================================================================
+
+    @Nested
+    @DisplayName("The run lifecycle — starting by itself, ending deliberately, and the freeze")
+    class Lifecycle {
+
+        @Test
+        @DisplayName("a Test Lead completes a running run, and the row carries completedAt")
+        void leadCompletes() throws Exception {
+            MvcResult result = putStatus(LEAD, ACME, RUN, "COMPLETED");
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(200);
+            assertThat(body(result).get("status").asText()).isEqualTo("COMPLETED");
+
+            RunRow row = runRow(RUN);
+            assertThat(row.status()).isEqualTo("COMPLETED");
+            assertThat(row.completedAt())
+                    .as("a run that ended without an end timestamp makes every duration wrong")
+                    .isNotNull();
+            assertThat(row.startedAt()).as("ending a run does not un-start it").isNotNull();
+
+            assertThat(auditEvents(ACME))
+                    .containsKey("run.closed");
+            assertThat(auditEvents(ACME).get("run.closed"))
+                    .as("both ends of the move, or a reopen-then-abort reads as one event")
+                    .contains("\"from\": \"IN_PROGRESS\"")
+                    .contains("\"to\": \"COMPLETED\"");
+        }
+
+        /**
+         * THE gate assertion, and the reason this permission is worth more than §71's.
+         *
+         * <p>{@code V3} grants {@code run:close} to Lead and up and withholds it from Test
+         * Engineer, who holds {@code run:execute} and {@code result:submit} — so unlike
+         * {@code company:teams}, this key can be told apart from its neighbours by a persona the
+         * suite can actually build, and swapping the gate's constant reddens this test.
+         */
+        @Test
+        @DisplayName("a Test Engineer may NOT end a run, and the run is untouched")
+        void engineerCannotClose() throws Exception {
+            MvcResult refused = putStatus(ENGINEER, ACME, RUN, "COMPLETED");
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(403);
+            assertThat(body(refused).get("detail").asText())
+                    .isEqualTo("Ending or reopening a run needs a test lead.");
+            assertThat(runRow(RUN).status())
+                    .as("a 403 that wrote anyway is worse than either")
+                    .isEqualTo("IN_PROGRESS");
+        }
+
+        @Test
+        @DisplayName("the same Engineer still records results — the refusal is the act, not the run")
+        void theEngineerIsNotLockedOutOfTheirOwnWork() throws Exception {
+            assertThat(patch(ENGINEER, ACME, RUN, EXEC_A, resultPayload(passedStatus(), null), "0")
+                    .getResponse().getStatus())
+                    .isEqualTo(200);
+        }
+
+        @Test
+        @DisplayName("a company member with no grant gets 404, and the other client's run too")
+        void theUnreachableRunIsAlways404() throws Exception {
+            assertThat(putStatus(NO_GRANT, ACME, RUN, "COMPLETED").getResponse().getStatus())
+                    .isEqualTo(404);
+            assertThat(putStatus(OUTSIDER, UMBRA, RUN, "COMPLETED").getResponse().getStatus())
+                    .isEqualTo(404);
+            assertThat(putStatus(LEAD, ACME, MOBILE_RUN, "COMPLETED").getResponse().getStatus())
+                    .as("a run in a SIBLING project, through this project's path")
+                    .isEqualTo(404);
+        }
+
+        @Test
+        @DisplayName("a run nobody has recorded anything in cannot be COMPLETED — abort it instead")
+        void anEmptyRunCannotBeCompleted() throws Exception {
+            MvcResult refused = putStatus(LEAD, ACME, FRESH_RUN, "COMPLETED");
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(409);
+            assertThat(body(refused).get("detail").asText())
+                    .contains("Nothing has been recorded")
+                    .contains("Abort it instead");
+            assertThat(runRow(FRESH_RUN).status()).isEqualTo("NOT_STARTED");
+        }
+
+        @Test
+        @DisplayName("it CAN be aborted — an abandoned run is exactly what ABORTED is for")
+        void anEmptyRunCanBeAborted() throws Exception {
+            assertThat(putStatus(LEAD, ACME, FRESH_RUN, "ABORTED").getResponse().getStatus())
+                    .isEqualTo(200);
+
+            RunRow row = runRow(FRESH_RUN);
+            assertThat(row.status()).isEqualTo("ABORTED");
+            assertThat(row.completedAt()).isNotNull();
+            assertThat(row.startedAt())
+                    .as("aborting a run nobody opened must not invent a start for it")
+                    .isNull();
+        }
+
+        @Test
+        @DisplayName("a completed run cannot slide straight to ABORTED — reopen it first")
+        void oneEndingDoesNotBecomeTheOther() throws Exception {
+            putStatus(LEAD, ACME, RUN, "COMPLETED");
+
+            MvcResult refused = putStatus(LEAD, ACME, RUN, "ABORTED");
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(409);
+            assertThat(body(refused).get("detail").asText()).contains("Reopen it");
+            assertThat(runRow(RUN).status()).isEqualTo("COMPLETED");
+        }
+
+        @Test
+        @DisplayName("reopening a completed run clears completedAt and keeps startedAt")
+        void reopenClearsTheEnding() throws Exception {
+            putStatus(LEAD, ACME, RUN, "COMPLETED");
+
+            assertThat(putStatus(LEAD, ACME, RUN, "IN_PROGRESS").getResponse().getStatus())
+                    .isEqualTo(200);
+
+            RunRow row = runRow(RUN);
+            assertThat(row.status()).isEqualTo("IN_PROGRESS");
+            assertThat(row.completedAt())
+                    .as("a live run carrying an end timestamp is §42's defect from the other side")
+                    .isNull();
+            assertThat(row.startedAt())
+                    .as("reopening does not undo the fact that it ran")
+                    .isNotNull();
+            assertThat(auditEvents(ACME)).containsKey("run.reopened");
+        }
+
+        /**
+         * The derivation, and the reason the client is not trusted with it: this asks for
+         * {@code IN_PROGRESS} on a run that never started, and gets {@code NOT_STARTED}.
+         */
+        @Test
+        @DisplayName("reopening a run that never started returns it to NOT_STARTED, whatever was asked")
+        void reopenIsNormalizedByWhetherItEverRan() throws Exception {
+            putStatus(LEAD, ACME, FRESH_RUN, "ABORTED");
+
+            MvcResult reopened = putStatus(LEAD, ACME, FRESH_RUN, "IN_PROGRESS");
+
+            assertThat(reopened.getResponse().getStatus()).isEqualTo(200);
+            assertThat(body(reopened).get("status").asText()).isEqualTo("NOT_STARTED");
+            RunRow row = runRow(FRESH_RUN);
+            assertThat(row.status()).isEqualTo("NOT_STARTED");
+            assertThat(row.startedAt()).isNull();
+            assertThat(row.completedAt()).isNull();
+        }
+
+        @Test
+        @DisplayName("setting the status it already has is 200 and writes NOTHING — not even an audit row")
+        void idempotent() throws Exception {
+            putStatus(LEAD, ACME, RUN, "COMPLETED");
+            Instant firstEnding = runRow(RUN).completedAt();
+
+            assertThat(putStatus(LEAD, ACME, RUN, "COMPLETED").getResponse().getStatus())
+                    .isEqualTo(200);
+
+            assertThat(runRow(RUN).completedAt())
+                    .as("re-stamping would move the end of a run nobody re-ended")
+                    .isEqualTo(firstEnding);
+            assertThat(auditCount("run.closed"))
+                    .as("a row per repeated click buries the change that actually happened")
+                    .isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("a status this lifecycle does not have is a field error, not a 500")
+        void anUnknownStatusIsAFieldError() throws Exception {
+            MvcResult refused = putStatus(LEAD, ACME, RUN, "CLOSED");
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(body(refused).get("errors").get("status").get(0).asText())
+                    .contains("NOT_STARTED, IN_PROGRESS, COMPLETED or ABORTED");
+        }
+
+        // -----------------------------------------------------------------
+        // Starting — the transition nothing performed until §72
+        // -----------------------------------------------------------------
+
+        @Test
+        @DisplayName("recording the first result STARTS the run, stamped with the result's own instant")
+        void theFirstResultStartsTheRun() throws Exception {
+            assertThat(runRow(FRESH_RUN).status()).isEqualTo("NOT_STARTED");
+
+            MvcResult recorded = patch(ENGINEER, ACME, FRESH_RUN, FRESH_EXEC,
+                    resultPayload(passedStatus(), null), "0");
+            assertThat(recorded.getResponse().getStatus()).isEqualTo(200);
+
+            RunRow row = runRow(FRESH_RUN);
+            assertThat(row.status()).isEqualTo("IN_PROGRESS");
+            assertThat(row.startedAt())
+                    .as("the run's start is the result's instant, or a run sorts after the first "
+                            + "result recorded in it")
+                    .isEqualTo(Instant.parse(body(recorded).get("executedAt").asText()));
+            assertThat(auditCount("run.started")).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("a second result does not re-start it, and writes no second run.started")
+        void startingIsIdempotent() throws Exception {
+            patch(ENGINEER, ACME, FRESH_RUN, FRESH_EXEC, resultPayload(passedStatus(), null), "0");
+            Instant firstStart = runRow(FRESH_RUN).startedAt();
+
+            patch(LEAD, ACME, FRESH_RUN, FRESH_EXEC, resultPayload(failedStatus(), null), "1");
+
+            assertThat(runRow(FRESH_RUN).startedAt()).isEqualTo(firstStart);
+            assertThat(auditCount("run.started")).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("recording in an already-running run leaves its start alone")
+        void anAlreadyRunningRunIsNotRestarted() throws Exception {
+            Instant before = runRow(RUN).startedAt();
+
+            patch(ENGINEER, ACME, RUN, EXEC_A, resultPayload(passedStatus(), null), "0");
+
+            assertThat(runRow(RUN).startedAt()).isEqualTo(before);
+            assertThat(auditCount("run.started")).isZero();
+        }
+
+        // -----------------------------------------------------------------
+        // The freeze — V1's "immutable once the run closes", over both writes at once
+        // -----------------------------------------------------------------
+
+        @Test
+        @DisplayName("a closed run refuses a result with 409, and the stored verdict does not move")
+        void aClosedRunRefusesResults() throws Exception {
+            putStatus(LEAD, ACME, RUN, "COMPLETED");
+
+            MvcResult refused =
+                    patch(LEAD, ACME, RUN, EXEC_A, resultPayload(passedStatus(), null), "0");
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(409);
+            assertThat(body(refused).get("detail").asText()).contains("This run has ended");
+            assertThat(statusKindOf(EXEC_A))
+                    .as("EXEC_A had no verdict and must still have none")
+                    .isNull();
+        }
+
+        @Test
+        @DisplayName("it refuses the EVIDENCE too — the screenshot is not stricter than the verdict")
+        void aClosedRunRefusesEvidence() throws Exception {
+            putStatus(LEAD, ACME, RUN, "COMPLETED");
+
+            MvcResult refused = attach(ENGINEER, ACME, EXEC_A, "late.png", "image/png",
+                    new byte[] {1, 2, 3}, null);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(409);
+            assertThat(body(refused).get("detail").asText()).contains("This run has ended");
+        }
+
+        /**
+         * §67's deferral, closed from the side that made it necessary — and the ORDER matters: this
+         * caller attached the file, so an authorship-first implementation would answer "this is not
+         * yours", which is false and points at a fix that does not exist.
+         */
+        @Test
+        @DisplayName("the AUTHOR cannot delete their own evidence once the run is closed")
+        void aClosedRunRefusesTheAuthorToo() throws Exception {
+            UUID id = UUID.fromString(body(attach(ENGINEER, ACME, EXEC_A, "mine.png", "image/png",
+                    new byte[] {1, 2, 3}, null)).get("id").asText());
+            putStatus(LEAD, ACME, RUN, "COMPLETED");
+
+            MvcResult refused = deleteEvidence(ENGINEER, ACME, EXEC_A, id);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(409);
+            assertThat(body(refused).get("detail").asText())
+                    .contains("This run has ended")
+                    .doesNotContain("only remove evidence you attached");
+            assertThat(body(get(ENGINEER, ACME, executionPath(RUN, EXEC_A))).get("evidence"))
+                    .as("a 409 that deleted anyway is the worst of both")
+                    .hasSize(1);
+        }
+
+        @Test
+        @DisplayName("a Viewer on a closed run still gets 403 — the permission is asked first")
+        void thePermissionIsStillAskedBeforeTheState() throws Exception {
+            putStatus(LEAD, ACME, RUN, "COMPLETED");
+
+            MvcResult refused =
+                    patch(VIEWER, ACME, RUN, EXEC_A, resultPayload(passedStatus(), null), "0");
+
+            assertThat(refused.getResponse().getStatus())
+                    .as("409 here would tell a caller who may not write at all about the run's "
+                            + "state instead of about their own permission")
+                    .isEqualTo(403);
+        }
+
+        @Test
+        @DisplayName("reopening it lets the result through — the freeze is the state, not a broken route")
+        void reopeningRestoresTheWrite() throws Exception {
+            putStatus(LEAD, ACME, RUN, "COMPLETED");
+            assertThat(patch(LEAD, ACME, RUN, EXEC_A, resultPayload(passedStatus(), null), "0")
+                    .getResponse().getStatus())
+                    .isEqualTo(409);
+
+            putStatus(LEAD, ACME, RUN, "IN_PROGRESS");
+
+            assertThat(patch(LEAD, ACME, RUN, EXEC_A, resultPayload(passedStatus(), null), "0")
+                    .getResponse().getStatus())
+                    .isEqualTo(200);
+        }
+
+        @Test
+        @DisplayName("reading a closed run is untouched — the freeze is about writes")
+        void readsAreUnaffected() throws Exception {
+            putStatus(LEAD, ACME, RUN, "COMPLETED");
+
+            assertThat(get(VIEWER, ACME, executionPath(RUN, EXEC_A)).getResponse().getStatus())
+                    .isEqualTo(200);
+            assertThat(body(get(VIEWER, ACME, "/projects/" + ACME_BANKING + "/runs/" + RUN))
+                    .get("status").asText())
+                    .isEqualTo("COMPLETED");
+        }
+    }
+
+    // =====================================================================
     // helpers — HTTP
     // =====================================================================
 
@@ -1147,6 +1477,56 @@ class ExecutionEndpointTest extends IntegrationTestBase {
             request = request.header(HttpHeaders.IF_MATCH, ifMatch);
         }
         return mvc.perform(request).andReturn();
+    }
+
+    private MvcResult putStatus(UUID userId, UUID companyId, UUID runId, String status)
+            throws Exception {
+
+        return mvc.perform(MockMvcRequestBuilders
+                        .put("/api/v1/projects/" + ACME_BANKING + "/runs/" + runId + "/status")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, companyId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"" + status + "\"}"))
+                .andReturn();
+    }
+
+    /**
+     * The three lifecycle columns as stored — read past the API, so a green response body cannot
+     * stand in for a row that was never written.
+     */
+    private record RunRow(String status, Instant startedAt, Instant completedAt) {
+    }
+
+    private RunRow runRow(UUID runId) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+             var statement = connection.prepareStatement(
+                     "SELECT status, started_at, completed_at FROM test_run "
+                             + "WHERE id = CAST(? AS uuid)")) {
+            statement.setString(1, runId.toString());
+            try (ResultSet rows = statement.executeQuery()) {
+                assertThat(rows.next()).as("the run must exist").isTrue();
+                Timestamp started = rows.getTimestamp(2);
+                Timestamp completed = rows.getTimestamp(3);
+                return new RunRow(
+                        rows.getString(1),
+                        started == null ? null : started.toInstant(),
+                        completed == null ? null : completed.toInstant());
+            }
+        }
+    }
+
+    /** How many audit rows carry this action — the idempotence assertions turn on the count. */
+    private long auditCount(String action) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+             var statement = connection.prepareStatement(
+                     "SELECT COUNT(*) FROM audit_event WHERE action = ?")) {
+            statement.setString(1, action);
+            try (ResultSet rows = statement.executeQuery()) {
+                rows.next();
+                return rows.getLong(1);
+            }
+        }
     }
 
     private static String executionPath(UUID runId, UUID executionId) {
@@ -1479,12 +1859,15 @@ class ExecutionEndpointTest extends IntegrationTestBase {
                     "4.2.0");
             run(connection, MOBILE_RUN, ACME, ACME_MOBILE, MOBILE_PLAN, "TR-3", 3, "Mobile smoke",
                     null);
+            pendingRun(connection, FRESH_RUN, ACME, ACME_BANKING, PLAN, "TR-4", 4,
+                    "Regression 4.4.0", "4.4.0");
 
             execution(connection, EXEC_A, ACME, ACME_BANKING, RUN, caseA, null);
             execution(connection, EXEC_B, ACME, ACME_BANKING, RUN, caseB,
                     statusIdOf(ACME, ACME_BANKING, "PASSED"));
             execution(connection, EXEC_OLD, ACME, ACME_BANKING, OLD_RUN, caseA, null);
             execution(connection, MOBILE_EXEC, ACME, ACME_MOBILE, MOBILE_RUN, mobileCase, null);
+            execution(connection, FRESH_EXEC, ACME, ACME_BANKING, FRESH_RUN, caseA, null);
         }
         try (Connection connection = appConnection(UMBRA)) {
             run(connection, UMBRA_RUN, UMBRA, UMBRA_BANKING, null, "TR-1", 1, "Umbra's run", null);
@@ -1549,6 +1932,42 @@ class ExecutionEndpointTest extends IntegrationTestBase {
                         (SELECT c.id FROM configuration c
                           WHERE c.project_id = CAST(? AS uuid) AND c.is_default),
                         ?, ?, ?, 'IN_PROGRESS', ?, '4471', 'MANUAL', now())
+                ON CONFLICT (id) DO NOTHING
+                """)) {
+            statement.setString(1, id.toString());
+            statement.setString(2, companyId.toString());
+            statement.setString(3, projectId.toString());
+            statement.setString(4, planId == null ? null : planId.toString());
+            statement.setString(5, projectId.toString());
+            statement.setString(6, key);
+            statement.setLong(7, keySeq);
+            statement.setString(8, name);
+            statement.setString(9, releaseVersion);
+            statement.executeUpdate();
+        }
+    }
+
+    /**
+     * A run in the state {@link TestRun#create} actually produces — {@code NOT_STARTED} and
+     * <strong>{@code started_at} NULL</strong>.
+     *
+     * <p>Separate from {@link #run} rather than a boolean parameter on it, because the two columns
+     * must move together: a {@code NOT_STARTED} row carrying a timestamp is the row §72 exists to
+     * make impossible, and a fixture that can produce one would let a broken
+     * {@code TestRun.applyStatus} pass by matching it.
+     */
+    private void pendingRun(
+            Connection connection, UUID id, UUID companyId, UUID projectId, UUID planId, String key,
+            long keySeq, String name, String releaseVersion) throws SQLException {
+
+        try (var statement = connection.prepareStatement("""
+                INSERT INTO test_run
+                    (id, company_id, project_id, plan_id, configuration_id, key, key_seq, name,
+                     status, release_version, build_number, source, started_at)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid),
+                        (SELECT c.id FROM configuration c
+                          WHERE c.project_id = CAST(? AS uuid) AND c.is_default),
+                        ?, ?, ?, 'NOT_STARTED', ?, '4471', 'MANUAL', NULL)
                 ON CONFLICT (id) DO NOTHING
                 """)) {
             statement.setString(1, id.toString());

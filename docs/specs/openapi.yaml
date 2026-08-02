@@ -1257,6 +1257,56 @@ paths:
           # Unreachable project, run in a sibling project, soft-deleted run, absent run.
           $ref: '#/components/responses/NotFound'
 
+  /projects/{projectId}/runs/{runId}/status:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/RunId' }
+    put:
+      tags: [execution]
+      operationId: setRunStatus
+      summary: Complete, abort or reopen a run
+      description: |
+        Requires `run:close`, which is **Lead and up** — a Test Engineer holds `run:execute` and
+        `result:submit` and does *not* hold this one (roles spec §A4: a contributor is never blocked
+        from producing, only from unmaking).
+
+        **A run starts by itself and ends deliberately.** `NOT_STARTED → IN_PROGRESS` happens when
+        the first result is recorded, with no permission of its own. A run never completes itself
+        when the last result lands, because "we are done" is a judgement — and auto-completion would
+        let a Test Engineer close a run by finishing it, which is the boundary this permission draws.
+
+        **`COMPLETED` and `ABORTED` are both "closed".** There is no fifth status: `V1`'s
+        *"immutable once the run closes"* names the act, and a run that has ended refuses further
+        results and evidence with `409` until it is reopened.
+
+        Sending `NOT_STARTED` or `IN_PROGRESS` **reopens** the run, and the two spellings mean the
+        same thing: the server derives the live state from whether the run ever started, so a run
+        aborted before anybody touched its checklist cannot come back claiming to have run.
+
+        Idempotent: setting the status a run already has answers `200` with the run and writes
+        nothing — no timestamp re-stamped and no audit row, so a repeated click cannot bury the
+        change that actually happened.
+
+        `409` is the refusal of a transition this lifecycle does not have: completing a run in which
+        nothing has been recorded (abort it instead), or moving straight from one ended state to the
+        other (reopen it first).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RunStatusInput' }
+      responses:
+        '200':
+          description: The run, as the list renders it
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TestRun' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
   /projects/{projectId}/runs/{runId}/executions/{executionId}:
     parameters:
       - { $ref: '#/components/parameters/ProjectId' }
@@ -1301,6 +1351,14 @@ paths:
 
         A `statusId` naming a status outside this project's vocabulary is a **400 on the field**,
         not a 404 — the target resolved and the picker is where the message belongs.
+
+        **Recording the first result starts the run** — `NOT_STARTED → IN_PROGRESS`, stamping
+        `startedAt` from the same instant as the result. No extra permission: the caller has
+        already passed the gate above.
+
+        **`409` now has two causes.** A stale `If-Match` is one. The other is a run that has
+        ended: `V1`'s "immutable once the run closes", which freezes the verdict and its evidence
+        together. Reopening the run is the way forward and needs `run:close`.
       parameters: [{ $ref: '#/components/parameters/IfMatch' }]
       requestBody:
         required: true
@@ -1375,6 +1433,11 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          # The run has ended, so its evidence is frozen — V1's "immutable once the run closes",
+          # applied to the verdict and its proof at once (§72). Not a 403: the permission is held
+          # and the payload is fine, it is the run's state that refuses.
+          $ref: '#/components/responses/Conflict'
         '413':
           description: |
             The file is larger than this instance's upload limit. Refused by the servlet
@@ -1414,6 +1477,10 @@ paths:
           description: Removed
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          # A closed run refuses EVERYBODY, the author included — checked before authorship, so the
+          # answer is not "this is not yours", which would imply that being the author would help.
+          $ref: '#/components/responses/Conflict'
 
   /projects/{projectId}/runs/{runId}/executions/{executionId}/evidence/{evidenceId}/content:
     parameters:
@@ -4037,6 +4104,14 @@ components:
       required: [status]
       properties:
         status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
+
+    RunStatusInput:
+      type: object
+      required: [status]
+      properties:
+        # All four values, not only the two terminal ones: the live pair is how a run is reopened,
+        # and the server normalizes between them rather than trusting which one the client sent.
+        status: { type: string, enum: [NOT_STARTED, IN_PROGRESS, COMPLETED, ABORTED] }
 
     DocLink:
       type: object

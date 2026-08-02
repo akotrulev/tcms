@@ -13,6 +13,25 @@ import {
 import { currentUser } from '../fixtures/core';
 import { API, LATENCY, holdsOn, notFound, problem, qualifierOn, userRef } from './shared';
 
+/** The lifecycle's four values, for validating a status the client sent. */
+const RUN_STATUSES = ['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED', 'ABORTED'] as const satisfies
+  readonly TestRun['status'][];
+
+/**
+ * "Closed" is a status pair, not a fifth value — the server's `RunLifecycle.isClosed`. A run that
+ * has ended refuses results and evidence until somebody reopens it.
+ */
+const isClosedStatus = (status: TestRun['status']) =>
+  status === 'COMPLETED' || status === 'ABORTED';
+
+/** The refusal every frozen write gives, worded once here as it is worded once on the server. */
+const runClosed = () =>
+  problem(
+    409,
+    'This run cannot change that way',
+    'This run has ended, so its results and evidence can no longer change. Reopen the run to make changes.',
+  );
+
 export const runHandlers = [
   http.get(`${API}/projects/:projectId/runs`, async ({ request }) => {
     await delay(LATENCY);
@@ -128,6 +147,66 @@ export const runHandlers = [
     return execution ? HttpResponse.json(execution) : notFound('That execution');
   }),
 
+  /**
+   * Completing, aborting or reopening a run — and the mock had the same hole the server did.
+   *
+   * `test_run.status` had no writer on either side: the fixtures ship runs that are already
+   * `IN_PROGRESS`, so mock mode *looked* right while a run **created** in it stayed `NOT_STARTED`
+   * for ever, exactly as live mode did. Not §52's "mock agrees with itself" — here both sides were
+   * wrong the same way, which is why neither noticed.
+   *
+   * The transition table is the server's, deliberately duplicated rather than approximated: a mock
+   * that allows a move the server refuses teaches the wrong rule more convincingly than one that
+   * refuses everything.
+   */
+  http.put(`${API}/projects/:projectId/runs/:runId/status`, async ({ params, request }) => {
+    await delay(LATENCY);
+    const run = db.runs.find((r) => r.id === params.runId);
+    if (!run) return notFound('That run');
+
+    if (!holdsOn(String(params.projectId), 'run:close')) {
+      return problem(403, 'Not allowed', 'Ending or reopening a run needs a test lead.');
+    }
+
+    const body = (await request.json()) as { status?: string };
+    const requested = body.status;
+    if (!requested || !RUN_STATUSES.includes(requested as TestRun['status'])) {
+      return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+        status: ['Choose a status: NOT_STARTED, IN_PROGRESS, COMPLETED or ABORTED.'],
+      });
+    }
+
+    // Both live spellings mean "reopen", and which one arrived is not consulted — the server
+    // derives it from startedAt so a run that never began cannot come back claiming it did.
+    const target: TestRun['status'] =
+      requested === 'COMPLETED' || requested === 'ABORTED'
+        ? requested
+        : run.startedAt
+          ? 'IN_PROGRESS'
+          : 'NOT_STARTED';
+
+    if (target === run.status) return HttpResponse.json(run); // Agreement, not a conflict.
+
+    if (isClosedStatus(run.status) && isClosedStatus(target)) {
+      return problem(
+        409,
+        'This run cannot change that way',
+        'This run has already ended. Reopen it before recording a different outcome.',
+      );
+    }
+    if (target === 'COMPLETED' && run.status === 'NOT_STARTED') {
+      return problem(
+        409,
+        'This run cannot change that way',
+        'Nothing has been recorded in this run yet, so it cannot be completed. Abort it instead.',
+      );
+    }
+
+    run.status = target;
+    run.completedAt = isClosedStatus(target) ? new Date().toISOString() : null;
+    return HttpResponse.json(run);
+  }),
+
   /*
     Evidence. Both halves are modelled — the attach AND the OWN refusal on the delete — because a
     mock that disabled the button and then accepted the write would teach the wrong rule more
@@ -149,6 +228,12 @@ export const runHandlers = [
           'You do not have permission to attach evidence in this project.',
         );
       }
+
+      // AFTER the permission, matching where the server puts it (inside the gate's callback): a
+      // caller who may not attach anything is told that, not that the run is closed. The ORDER is
+      // part of the rule, and a mock that gets it backwards teaches a 409 where live gives a 403.
+      const attachRun = db.runs.find((r) => r.id === params.runId);
+      if (attachRun && isClosedStatus(attachRun.status)) return runClosed();
 
       const form = await request.formData();
       const file = form.get('file');
@@ -196,6 +281,11 @@ export const runHandlers = [
       const index = (execution.evidence ?? []).findIndex((e) => e.id === params.evidenceId);
       if (index < 0) return notFound('That evidence');
 
+      // Before authorship, as on the server, and the order is the message: a closed run refuses
+      // everybody including the author, so "this is not yours" would be the wrong answer.
+      const deleteRun = db.runs.find((r) => r.id === params.runId);
+      if (deleteRun && isClosedStatus(deleteRun.status)) return runClosed();
+
       // AFTER the lookup, mirroring the server: the answer depends on the row. Evidence with no
       // recorded author (`createdBy: null`) fails it too — an OWN grant does not reach work nobody
       // can attribute.
@@ -236,6 +326,11 @@ export const runHandlers = [
           : 'You do not have permission to record results in this project.',
       );
     }
+
+    // After the permission and before the If-Match, exactly where the server checks it: a stale
+    // header is something the caller could fix and resubmit, and this is not.
+    const run = db.runs.find((r) => r.id === runId);
+    if (run && isClosedStatus(run.status)) return runClosed();
 
     const body = (await request.json()) as {
       statusId?: string;
@@ -295,6 +390,15 @@ export const runHandlers = [
     }
 
     execution.lockVersion = (execution.lockVersion ?? 0) + 1;
+
+    // The run starts here or it never starts — the rule `TestRun.create` has asserted since §42 and
+    // which neither side implemented until §72. Same instant as the result, so a run's start cannot
+    // sort after the first result recorded in it.
+    if (run && run.status === 'NOT_STARTED') {
+      run.status = 'IN_PROGRESS';
+      run.startedAt = execution.executedAt;
+    }
+
     recountRun(runId);
     return HttpResponse.json(execution);
   }),

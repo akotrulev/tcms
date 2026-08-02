@@ -48,6 +48,14 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Neither ordering is compensated automatically, and that is stated rather than hidden: this is
  * the first thing in the product whose state is not in Postgres.
+ *
+ * <h2>A closed run freezes both writes — the deferral §67 recorded, lifted</h2>
+ *
+ * <p>{@code V1} says evidence is immutable once the run closes. §67 declined to implement it here
+ * and wrote down exactly what would have to be true first: that closing a run be a real act, and
+ * that {@link ExecutionService} refuse to amend a result on a run that has ended. Both are true as
+ * of §72, so the rule lands on all three writes at once — the verdict, the attachment and the
+ * removal — rather than making the screenshot stricter than the result it documents.
  */
 @Service
 public class EvidenceService {
@@ -62,8 +70,7 @@ public class EvidenceService {
     private static final String DELETE_EVIDENCE = "evidence:delete";
 
     private final ProjectService projects;
-    private final TestRunRepository runs;
-    private final TestExecutionRepository executions;
+    private final ExecutionTargets targets;
     private final EvidenceRepository evidenceRows;
     private final AttachmentRepository attachments;
     private final StepOutcomeRepository stepOutcomes;
@@ -73,8 +80,7 @@ public class EvidenceService {
 
     public EvidenceService(
             ProjectService projects,
-            TestRunRepository runs,
-            TestExecutionRepository executions,
+            ExecutionTargets targets,
             EvidenceRepository evidenceRows,
             AttachmentRepository attachments,
             StepOutcomeRepository stepOutcomes,
@@ -83,8 +89,7 @@ public class EvidenceService {
             Clock clock) {
 
         this.projects = projects;
-        this.runs = runs;
-        this.executions = executions;
+        this.targets = targets;
         this.evidenceRows = evidenceRows;
         this.attachments = attachments;
         this.stepOutcomes = stepOutcomes;
@@ -112,6 +117,13 @@ public class EvidenceService {
         record Invalid(java.util.Map<String, List<String>> errors) implements Outcome {
         }
 
+        /**
+         * The run has ended, so its evidence is frozen — see the class header, and
+         * {@code ExecutionService.Outcome.RunClosed} for why this is a 409 and not a 403.
+         */
+        record RunClosed() implements Outcome {
+        }
+
         /** Attached. 201, with the rendered evidence. */
         record Attached(EvidenceView view) implements Outcome {
         }
@@ -135,15 +147,16 @@ public class EvidenceService {
 
         // The read gates first, so an unreachable target is a bodiless 404 before any permission is
         // consulted — otherwise a 403 tells a caller that a run they cannot see exists.
-        Optional<TestExecution> found = resolve(userId, projectId, runId, executionId);
+        Optional<ExecutionTargets.Target> found =
+                targets.resolve(userId, projectId, runId, executionId);
         if (found.isEmpty()) {
             return new Outcome.NotFound();
         }
-        TestExecution execution = found.get();
+        ExecutionTargets.Target target = found.get();
 
         GateResult<Outcome> gate = projects.writeGranted(userId, projectId, ATTACH_EVIDENCE,
                 project -> write(
-                        companyId, projectId, runId, userId, execution, stepId, upload, now));
+                        companyId, projectId, runId, userId, target, stepId, upload, now));
 
         return switch (gate) {
             case GateResult.Allowed<Outcome> allowed -> allowed.value();
@@ -159,15 +172,16 @@ public class EvidenceService {
     public Outcome delete(
             UUID userId, UUID projectId, UUID runId, UUID executionId, UUID evidenceId) {
 
-        Optional<TestExecution> found = resolve(userId, projectId, runId, executionId);
+        Optional<ExecutionTargets.Target> found =
+                targets.resolve(userId, projectId, runId, executionId);
         if (found.isEmpty()) {
             return new Outcome.NotFound();
         }
-        TestExecution execution = found.get();
+        ExecutionTargets.Target target = found.get();
 
         GateResult<Outcome> gated = projects.writeGrantedByAuthorship(
                 userId, projectId, DELETE_EVIDENCE,
-                (project, authorship) -> remove(execution, evidenceId, authorship));
+                (project, authorship) -> remove(target, evidenceId, authorship));
 
         return switch (gated) {
             case GateResult.Unreachable<Outcome> ignored -> new Outcome.NotFound();
@@ -221,9 +235,9 @@ public class EvidenceService {
     Optional<Evidence> readEvidence(
             UUID userId, UUID projectId, UUID runId, UUID executionId, UUID evidenceId) {
 
-        return resolve(userId, projectId, runId, executionId)
-                .flatMap(execution ->
-                        evidenceRows.findByIdAndExecutionId(evidenceId, execution.getId()));
+        return targets.resolve(userId, projectId, runId, executionId)
+                .flatMap(target -> evidenceRows.findByIdAndExecutionId(
+                        evidenceId, target.execution().getId()));
     }
 
     private Outcome write(
@@ -231,10 +245,19 @@ public class EvidenceService {
             UUID projectId,
             UUID runId,
             UUID userId,
-            TestExecution execution,
+            ExecutionTargets.Target target,
             UUID stepId,
             EvidenceUpload upload,
             Instant now) {
+
+        TestExecution execution = target.execution();
+
+        // Before the step lookup, so a caller cannot learn which steps have been marked in a run
+        // whose evidence is frozen either way — and before the bytes are touched, which is the half
+        // that does not roll back.
+        if (target.run().isClosed()) {
+            return new Outcome.RunClosed();
+        }
 
         // Resolved INSIDE the gate's callback, so a caller who may not attach anything cannot use
         // this endpoint to discover which steps of a case have been marked — the same structural
@@ -280,13 +303,23 @@ public class EvidenceService {
                 views.render(companyId, projectId, runId, List.of(evidence)).getFirst());
     }
 
-    private Outcome remove(TestExecution execution, UUID evidenceId, AuthorshipGate authorship) {
+    private Outcome remove(
+            ExecutionTargets.Target target, UUID evidenceId, AuthorshipGate authorship) {
+
         Optional<Evidence> found =
-                evidenceRows.findByIdAndExecutionId(evidenceId, execution.getId());
+                evidenceRows.findByIdAndExecutionId(evidenceId, target.execution().getId());
         if (found.isEmpty()) {
             return new Outcome.NotFound();
         }
         Evidence evidence = found.get();
+
+        // Before the authorship check, and the order is the message: a closed run refuses EVERYBODY,
+        // including the person who attached the file. Answering "this is not yours" first would tell
+        // an author that being the author is what they were missing, and send them to ask a lead to
+        // delete something no lead can delete either.
+        if (target.run().isClosed()) {
+            return new Outcome.RunClosed();
+        }
 
         // AFTER the lookup, because the answer depends on the row — and a caller who fails this
         // check has already been able to read the evidence, so 403 discloses nothing a 404 would
@@ -323,16 +356,4 @@ public class EvidenceService {
         return companyId + "/" + executionId + "/" + UUID.randomUUID();
     }
 
-    /**
-     * The execution, through every gate a two-segment path needs — the same three predicates
-     * {@code ExecutionService#resolve} applies, and for the same reasons: dropping the last would
-     * serve evidence from a different run through a path naming the run the client is looking at.
-     */
-    private Optional<TestExecution> resolve(
-            UUID userId, UUID projectId, UUID runId, UUID executionId) {
-
-        return projects.readVisible(userId, projectId, project -> project)
-                .flatMap(project -> runs.findLiveInProject(project.getId(), runId))
-                .flatMap(run -> executions.findInRun(run.getProjectId(), run.getId(), executionId));
-    }
 }

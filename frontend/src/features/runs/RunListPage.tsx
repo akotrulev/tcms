@@ -23,6 +23,7 @@ import { ResultBar } from '../../components/ResultBar';
 import { RunCreateDialog } from './RunCreateDialog';
 import { executedCount, passRate } from '../../lib/results';
 import { formatAge, formatCount, formatDateTime, formatDuration, formatPercent } from '../../lib/format';
+import { runStatusColors, runStatusLabels } from '../../lib/labels';
 import { ScrollX } from '../../components/ScrollX';
 
 /**
@@ -102,13 +103,6 @@ export function RunListPage() {
   );
 }
 
-const statusColor: Record<string, string> = {
-  IN_PROGRESS: 'var(--color-info)',
-  COMPLETED: 'var(--color-passed)',
-  ABORTED: 'var(--color-failed)',
-  PLANNED: 'var(--color-draft)',
-};
-
 function RunTable({ rows, projectId }: { rows: TestRun[]; projectId: string }) {
   return (
     <ScrollX>
@@ -152,12 +146,12 @@ function RunTable({ rows, projectId }: { rows: TestRun[]; projectId: string }) {
                   <Stack sx={{ gap: 0.25 }}>
                     <Chip
                       size="small"
-                      label={run.status.replace(/_/g, ' ').toLowerCase()}
+                      label={runStatusLabels[run.status]}
                       data-testid="Runs.Row.Status"
                       sx={{
                         bgcolor: 'transparent',
-                        color: statusColor[run.status] ?? 'text.secondary',
-                        border: `1px solid color-mix(in srgb, ${statusColor[run.status] ?? 'var(--color-border)'} 45%, transparent)`,
+                        color: runStatusColors[run.status],
+                        border: `1px solid color-mix(in srgb, ${runStatusColors[run.status]} 45%, transparent)`,
                         alignSelf: 'flex-start',
                       }}
                     />

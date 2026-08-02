@@ -2092,6 +2092,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/runs/{runId}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Complete, abort or reopen a run
+         * @description Requires `run:close`, which is **Lead and up** — a Test Engineer holds `run:execute` and
+         *     `result:submit` and does *not* hold this one (roles spec §A4: a contributor is never blocked
+         *     from producing, only from unmaking).
+         *
+         *     **A run starts by itself and ends deliberately.** `NOT_STARTED → IN_PROGRESS` happens when
+         *     the first result is recorded, with no permission of its own. A run never completes itself
+         *     when the last result lands, because "we are done" is a judgement — and auto-completion would
+         *     let a Test Engineer close a run by finishing it, which is the boundary this permission draws.
+         *
+         *     **`COMPLETED` and `ABORTED` are both "closed".** There is no fifth status: `V1`'s
+         *     *"immutable once the run closes"* names the act, and a run that has ended refuses further
+         *     results and evidence with `409` until it is reopened.
+         *
+         *     Sending `NOT_STARTED` or `IN_PROGRESS` **reopens** the run, and the two spellings mean the
+         *     same thing: the server derives the live state from whether the run ever started, so a run
+         *     aborted before anybody touched its checklist cannot come back claiming to have run.
+         *
+         *     Idempotent: setting the status a run already has answers `200` with the run and writes
+         *     nothing — no timestamp re-stamped and no audit row, so a repeated click cannot bury the
+         *     change that actually happened.
+         *
+         *     `409` is the refusal of a transition this lifecycle does not have: completing a run in which
+         *     nothing has been recorded (abort it instead), or moving straight from one ended state to the
+         *     other (reopen it first).
+         */
+        put: operations["setRunStatus"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/runs/{runId}/executions/{executionId}": {
         parameters: {
             query?: never;
@@ -2156,6 +2202,14 @@ export interface paths {
          *
          *     A `statusId` naming a status outside this project's vocabulary is a **400 on the field**,
          *     not a 404 — the target resolved and the picker is where the message belongs.
+         *
+         *     **Recording the first result starts the run** — `NOT_STARTED → IN_PROGRESS`, stamping
+         *     `startedAt` from the same instant as the result. No extra permission: the caller has
+         *     already passed the gate above.
+         *
+         *     **`409` now has two causes.** A stale `If-Match` is one. The other is a run that has
+         *     ended: `V1`'s "immutable once the run closes", which freezes the verdict and its evidence
+         *     together. Reopening the run is the way forward and needs `run:close`.
          */
         patch: {
             parameters: {
@@ -4929,6 +4983,10 @@ export interface components {
             /** @enum {string} */
             status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
         };
+        RunStatusInput: {
+            /** @enum {string} */
+            status: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "ABORTED";
+        };
         DocLink: {
             /** Format: uuid */
             id: string;
@@ -5462,6 +5520,38 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    setRunStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunStatusInput"];
+            };
+        };
+        responses: {
+            /** @description The run, as the list renders it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestRun"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
     attachEvidence: {
         parameters: {
             query?: never;
@@ -5507,6 +5597,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             /**
              * @description The file is larger than this instance's upload limit. Refused by the servlet
              *     container before the handler runs.
@@ -5544,6 +5635,7 @@ export interface operations {
             };
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     downloadEvidence: {

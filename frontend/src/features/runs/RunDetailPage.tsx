@@ -1,15 +1,29 @@
-import { Box, Chip, Stack, Table, TableBody, TableCell, TableHead, TableRow, Tooltip, Typography } from '@mui/material';
+import {
+  Box,
+  Button,
+  Chip,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  Tooltip,
+  Typography,
+} from '@mui/material';
 import { useState } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
-import type { TestRunDetail } from '../../api/types';
-import { useProject, useRun } from '../../api/queries';
+import type { RunStatus, TestRunDetail } from '../../api/types';
+import { useProject, useRun, useSetRunStatus } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { PassRateSummary, ResultBar } from '../../components/ResultBar';
+import { PermissionGate } from '../../components/PermissionGate';
 import { StatusChip } from '../../components/StatusChip';
+import { describeError } from '../../lib/describeError';
 import { formatCount, formatDateTime, formatDuration } from '../../lib/format';
-import { statusLabels } from '../../lib/labels';
+import { isRunClosed, runStatusColors, runStatusLabels, statusLabels } from '../../lib/labels';
 import { ScrollX } from '../../components/ScrollX';
 
 /**
@@ -35,11 +49,20 @@ export function RunDetailPage() {
           { label: 'Test runs', to: `/projects/${projectId}/runs` },
           { label: run.data?.key ?? 'Run' },
         ]}
+        actions={
+          run.data && <RunLifecycleActions projectId={projectId} runId={runId} status={run.data.status} />
+        }
         meta={
           run.data && (
             <>
               <Identifier variant="strong">{run.data.key}</Identifier>
-              <Chip size="small" variant="outlined" label={run.data.status.replace(/_/g, ' ').toLowerCase()} />
+              <Chip
+                size="small"
+                variant="outlined"
+                data-testid="RunDetail.Status"
+                label={runStatusLabels[run.data.status]}
+                sx={{ color: runStatusColors[run.data.status] }}
+              />
               {run.data.configuration && (
                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                   {run.data.configuration.name}
@@ -70,6 +93,107 @@ export function RunDetailPage() {
         {(data) => <RunBody data={data} projectId={projectId} runId={runId} />}
       </DataRegion>
     </Box>
+  );
+}
+
+/**
+ * Complete, Abort, Reopen — the run's whole lifecycle, and the first affordance in the product for
+ * a column that had no writer at all until §72.
+ *
+ * <h3>Three decisions worth reading</h3>
+ *
+ * **The controls swap rather than accumulate.** A closed run offers Reopen and nothing else,
+ * because the server refuses completed → aborted outright: showing both endings on an ended run
+ * would offer a move that cannot succeed, which is the thing §31 exists to stop.
+ *
+ * **Complete is disabled on a run nobody has recorded anything in**, with the reason on the
+ * tooltip, rather than left enabled for the server to refuse. The rule is knowable from the status
+ * alone, so §31's disable-don't-hide applies in full — and the sentence points at Abort, which is
+ * the control beside it.
+ *
+ * **The refusal renders here, not as a toast.** `useSetRunStatus` marks its errors handled: "abort
+ * it instead" and "reopen it first" are answers about the button that was just pressed, and a
+ * corner notification detaches them from it.
+ */
+function RunLifecycleActions({
+  projectId,
+  runId,
+  status,
+}: {
+  projectId: string;
+  runId: string;
+  status: RunStatus;
+}) {
+  const setStatus = useSetRunStatus(projectId, runId);
+  const [error, setError] = useState<string | null>(null);
+  const closed = isRunClosed(status);
+
+  const move = (target: RunStatus) => {
+    setError(null);
+    setStatus.mutate(target, { onError: (failure) => setError(describeError(failure).body) });
+  };
+
+  return (
+    <Stack sx={{ gap: 0.5, alignItems: 'flex-end' }}>
+      <Stack direction="row" sx={{ gap: 1 }}>
+        <PermissionGate projectId={projectId} permission="run:close">
+          {({ allowed }) =>
+            closed ? (
+              <Button
+                size="small"
+                variant="outlined"
+                data-testid="RunDetail.Reopen"
+                disabled={!allowed || setStatus.isPending}
+                // IN_PROGRESS, always — the server derives NOT_STARTED for a run that never began,
+                // so the client holds no second copy of that rule and cannot get it wrong for a run
+                // whose startedAt it is reading from a stale cache.
+                onClick={() => move('IN_PROGRESS')}
+              >
+                Reopen run
+              </Button>
+            ) : (
+              <>
+                <Tooltip
+                  title={
+                    allowed && status === 'NOT_STARTED'
+                      ? 'Nothing has been recorded in this run yet. Abort it instead.'
+                      : ''
+                  }
+                >
+                  {/* A disabled MUI Button fires no events, so the tooltip needs the wrapper. */}
+                  <span>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      data-testid="RunDetail.Complete"
+                      disabled={!allowed || status === 'NOT_STARTED' || setStatus.isPending}
+                      onClick={() => move('COMPLETED')}
+                    >
+                      Complete run
+                    </Button>
+                  </span>
+                </Tooltip>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="error"
+                  data-testid="RunDetail.Abort"
+                  disabled={!allowed || setStatus.isPending}
+                  onClick={() => move('ABORTED')}
+                >
+                  Abort run
+                </Button>
+              </>
+            )
+          }
+        </PermissionGate>
+      </Stack>
+      {error && (
+        <Typography variant="caption" sx={{ color: 'var(--color-failed)' }} data-testid="RunDetail.StatusError">
+          {error}
+        </Typography>
+      )}
+    </Stack>
   );
 }
 

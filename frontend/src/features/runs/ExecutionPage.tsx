@@ -21,7 +21,7 @@ import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import { useUnsavedWork } from '../../auth/useSessionRecovery';
 import type { CaseStatus, StepResult, TestExecution } from '../../api/types';
-import { useExecution, useProject, useStatuses, useSubmitResult } from '../../api/queries';
+import { useExecution, useProject, useRun, useStatuses, useSubmitResult } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
@@ -29,7 +29,7 @@ import { PermissionGate } from '../../components/PermissionGate';
 import { StatusChip } from '../../components/StatusChip';
 import { EvidencePanel } from './EvidencePanel';
 import { formatDateTime } from '../../lib/format';
-import { statusLabels } from '../../lib/labels';
+import { isRunClosed, statusLabels } from '../../lib/labels';
 
 /**
  * Recording a result.
@@ -116,6 +116,19 @@ function ExecutionForm({
   const navigate = useNavigate();
   const { enqueueSnackbar } = useSnackbar();
   const submit = useSubmitResult(projectId, runId, executionId);
+
+  /*
+    The run, for one bit: has it ended. Normally free — the tester arrived from the run detail, so
+    this key is already in the cache — and correct on a deep link, where it costs one request.
+
+    `frozen` is FALSE while the query is pending, and that is the deliberate direction. §65's rule
+    is that "not yet" is not "no" for a permission, and the mirror holds here: refusing the verdict
+    buttons during a load would tell a tester on an open run that it has ended, which is a false
+    statement, where the failure in the other direction is one 409 the server raises correctly and
+    the page already renders. The server is the gate; this is the courtesy.
+  */
+  const run = useRun(projectId, runId);
+  const frozen = run.data ? isRunClosed(run.data.status) : false;
 
   const [stepResults, setStepResults] = useState<Record<string, string | null>>(() =>
     Object.fromEntries((execution.steps ?? []).map((step) => [step.stepId ?? '', step.statusId ?? null])),
@@ -364,6 +377,7 @@ function ExecutionForm({
             runId={runId}
             executionId={execution.id}
             evidence={execution.evidence}
+            frozen={frozen}
           />
         </Stack>
 
@@ -372,6 +386,15 @@ function ExecutionForm({
         <Box sx={{ width: { xs: '100%', lg: 300 }, flexShrink: 0, position: { lg: 'sticky' }, top: { lg: 68 } }}>
           <Panel title="Record the result" testId="Execution.Actions">
             <Stack sx={{ gap: 1 }}>
+              {frozen && (
+                <Alert severity="info" sx={{ mb: 0.5 }} data-testid="Execution.RunClosed">
+                  <Typography variant="body2">
+                    This run has ended, so its results can no longer change. A test lead can reopen
+                    it from the run page.
+                  </Typography>
+                </Alert>
+              )}
+
               {anyStepFailed && (
                 <Alert severity="warning" sx={{ mb: 0.5 }} data-testid="Execution.StepFailureHint">
                   <Typography variant="body2">A step is marked failed.</Typography>
@@ -405,7 +428,7 @@ function ExecutionForm({
                       <Button
                         variant={kind === 'PASSED' ? 'contained' : 'outlined'}
                         fullWidth
-                        disabled={!allowed || submit.isPending}
+                        disabled={!allowed || submit.isPending || frozen}
                         onClick={() => (isBlocked ? setBlockedDialog(true) : void record(status.id))}
                         data-testid={`Execution.Action.${kind}`}
                         sx={{

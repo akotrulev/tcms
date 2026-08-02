@@ -55,12 +55,25 @@ import org.springframework.transaction.annotation.Transactional;
  * answer "unknown status" to a caller who may not record anything — a probe for the project's
  * vocabulary handed to exactly the person just refused (§34's {@code thePermissionIsCheckedFirst}).
  * It is structural rather than remembered: validation lives in the callback {@code writeGranted}
- * invokes only when the caller is allowed.
+ * invokes only when the caller is allowed. <strong>The run-closed refusal sits in the same
+ * callback</strong>, for the same reason and not because it is secret — a caller who may read the
+ * execution can already see the run's status.
+ *
+ * <h2>This method is where a run starts</h2>
+ *
+ * <p>{@code TestRun.create} has said since §42 that a run begins when somebody records the first
+ * result rather than when it is named, and until §72 <strong>nothing implemented it</strong> — so
+ * {@code test_run.status} was written once, at creation, and every run in the product read "not
+ * started" forever. {@link TestRun#begin} is called on every result and answers whether this one was
+ * the first; it needs no permission of its own, because the caller has just passed
+ * {@code result:submit} and a second gate here would let a tester record a result the run then
+ * declines to acknowledge.
  */
 @Service
 public class ExecutionService {
 
     private final ProjectService projects;
+    private final ExecutionTargets targets;
     private final TestRunRepository runs;
     private final TestExecutionRepository executions;
     private final StepOutcomeRepository stepOutcomes;
@@ -81,6 +94,7 @@ public class ExecutionService {
 
     public ExecutionService(
             ProjectService projects,
+            ExecutionTargets targets,
             TestRunRepository runs,
             TestExecutionRepository executions,
             StepOutcomeRepository stepOutcomes,
@@ -93,6 +107,7 @@ public class ExecutionService {
             Clock clock) {
 
         this.projects = projects;
+        this.targets = targets;
         this.runs = runs;
         this.executions = executions;
         this.stepOutcomes = stepOutcomes;
@@ -129,6 +144,16 @@ public class ExecutionService {
         record Stale() implements Outcome {
         }
 
+        /**
+         * The run has ended, so its results are frozen — {@code V1}'s "immutable once the run
+         * closes", which §67 recorded as deliberately unimplemented and §72 implements over both
+         * writes at once. A <strong>409</strong>: the caller's permissions are not the problem and
+         * the payload is not the problem, the target's state is, and reopening the run is the way
+         * forward.
+         */
+        record RunClosed() implements Outcome {
+        }
+
         /** Recorded. 200, with the whole execution. */
         record Recorded(TestExecutionView view) implements Outcome {
         }
@@ -141,8 +166,8 @@ public class ExecutionService {
 
         UUID companyId = CompanyContext.require();
 
-        return resolve(userId, projectId, runId, executionId)
-                .map(execution -> detail(companyId, execution));
+        return targets.resolve(userId, projectId, runId, executionId)
+                .map(target -> detail(companyId, target.execution()));
     }
 
     /**
@@ -163,16 +188,18 @@ public class ExecutionService {
         UUID companyId = CompanyContext.require();
         Instant now = clock.instant();
 
-        Optional<TestExecution> found = resolve(userId, projectId, runId, executionId);
+        Optional<ExecutionTargets.Target> found =
+                targets.resolve(userId, projectId, runId, executionId);
         if (found.isEmpty()) {
             return new Outcome.NotFound();
         }
-        TestExecution execution = found.get();
+        ExecutionTargets.Target target = found.get();
+        TestExecution execution = target.execution();
         boolean amending = execution.hasResult();
         String permission = amending ? "result:amend" : "result:submit";
 
         GateResult<Outcome> gate = projects.writeGranted(userId, projectId, permission,
-                project -> apply(companyId, userId, execution, request, expectedVersion, now));
+                project -> apply(companyId, userId, target, request, expectedVersion, now));
 
         return switch (gate) {
             case GateResult.Allowed<Outcome> allowed -> allowed.value();
@@ -185,30 +212,23 @@ public class ExecutionService {
         };
     }
 
-    /**
-     * The row, through both read gates.
-     *
-     * <p>Three predicates, and each one closes a different path: the project gate (may they see this
-     * project), the run's project (is that run in it), and the execution's run (is that execution in
-     * <em>that</em> run). Dropping the last would serve an execution from a different run through a
-     * path naming the run the client is looking at — a result on the wrong screen, with no error.
-     */
-    private Optional<TestExecution> resolve(
-            UUID userId, UUID projectId, UUID runId, UUID executionId) {
-
-        return projects.readVisible(userId, projectId, project -> project)
-                .flatMap(project -> runs.findLiveInProject(project.getId(), runId))
-                .flatMap(run -> executions.findInRun(run.getProjectId(), run.getId(), executionId));
-    }
-
     private Outcome apply(
             UUID companyId,
             UUID userId,
-            TestExecution execution,
+            ExecutionTargets.Target target,
             ExecutionResultRequest request,
             Long expectedVersion,
             Instant now) {
 
+        TestExecution execution = target.execution();
+        TestRun run = target.run();
+
+        // Before the version check as well as before validation: a stale If-Match and a malformed
+        // step id are both things the caller could fix and resubmit, and neither is worth reporting
+        // to somebody whose save cannot succeed at all until the run is reopened.
+        if (run.isClosed()) {
+            return new Outcome.RunClosed();
+        }
         if (expectedVersion != null && expectedVersion != execution.getLockVersion()) {
             // Before validation: a caller working from a stale read may be sending step ids from a
             // version somebody has since repinned, and reporting those as field errors would send
@@ -236,6 +256,28 @@ public class ExecutionService {
         // would 409 against a change that was their own.
         executions.saveAndFlush(execution);
         recordSteps(companyId, execution, request);
+
+        // The run starts here or it never starts. Asked unconditionally — begin() answers whether
+        // this call was the first — and inside the result's own transaction, so a run cannot end up
+        // marked as started by a result that rolled back.
+        if (run.begin(userId, now)) {
+            runs.saveAndFlush(run);
+            auditEvents.save(AuditEvent.record(
+                    execution.getProjectId(),
+                    userId,
+                    "run.started",
+                    // "test_run", matching RunCreateService's constant for the same table rather
+                    // than the "TEST_EXECUTION" written three lines below: two audit rows about one
+                    // table must not spell it two ways, whatever this file already does. (That
+                    // outlier predates §72 and is left alone — see the section.)
+                    "test_run",
+                    List.of(run.getId()),
+                    // The key rather than the id, as every other audit row in this module does: a
+                    // reader reconstructing "when did TR-4 begin" should not have to join to find
+                    // out which run this was.
+                    "{\"run\":" + AuditEvent.jsonString(run.getKey()) + "}",
+                    now));
+        }
 
         auditEvents.save(AuditEvent.record(
                 execution.getProjectId(),

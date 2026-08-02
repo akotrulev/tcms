@@ -20,6 +20,12 @@ import { describeError } from '../../lib/describeError';
 import { formatBytes, formatDateTime } from '../../lib/format';
 
 /**
+ * Why both controls are disabled on a run that has ended. One sentence, two anchors — the tooltip
+ * on Attach and the tooltip on each Remove — matching the server's single `RunLifecycle` message.
+ */
+const FROZEN_REASON = 'This run has ended. Reopen it to change its evidence.';
+
+/**
  * The evidence attached to one execution.
  *
  * <p>Read-only for a Viewer, who still sees every attachment: evidence is part of the record of
@@ -31,11 +37,18 @@ export function EvidencePanel({
   runId,
   executionId,
   evidence,
+  frozen = false,
 }: {
   projectId: string;
   runId: string;
   executionId: string;
   evidence: Evidence[];
+  /**
+   * The run has ended, so both writes are refused by the server (§72). Attachments stay VISIBLE and
+   * downloadable — a closed run's evidence is the part of the record most likely to be read — and
+   * only the two controls that would 409 are disabled.
+   */
+  frozen?: boolean;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [tooLarge, setTooLarge] = useState<string | null>(null);
@@ -64,16 +77,20 @@ export function EvidencePanel({
       testId="Execution.Evidence"
       actions={
         <PermissionGate projectId={projectId} permission="evidence:attach">
-          {({ allowed }) => (
-            <Button
-              size="small"
-              startIcon={<UploadFileIcon />}
-              disabled={!allowed || attach.isPending}
-              onClick={() => input.current?.click()}
-              data-testid="Execution.Evidence.Attach"
-            >
-              {attach.isPending ? 'Uploading…' : 'Attach'}
-            </Button>
+          {({ allowed, reason }) => (
+            <Tooltip title={frozen ? FROZEN_REASON : allowed ? '' : reason}>
+              <span>
+                <Button
+                  size="small"
+                  startIcon={<UploadFileIcon />}
+                  disabled={!allowed || attach.isPending || frozen}
+                  onClick={() => input.current?.click()}
+                  data-testid="Execution.Evidence.Attach"
+                >
+                  {attach.isPending ? 'Uploading…' : 'Attach'}
+                </Button>
+              </span>
+            </Tooltip>
           )}
         </PermissionGate>
       }
@@ -116,6 +133,7 @@ export function EvidencePanel({
               item={item}
               onDelete={() => remove.mutate(item.id)}
               deleting={remove.isPending}
+              frozen={frozen}
             />
           ))}
         </Stack>
@@ -129,11 +147,14 @@ function EvidenceRow({
   item,
   onDelete,
   deleting,
+  frozen,
 }: {
   projectId: string;
   item: Evidence;
   onDelete: () => void;
   deleting: boolean;
+  /** The run has ended. Separate from `deleting` so the tooltip can say WHY — §31. */
+  frozen: boolean;
 }) {
   const isImage = item.contentType.startsWith('image/');
 
@@ -197,11 +218,11 @@ function EvidenceRow({
         authorId={item.createdBy?.id ?? null}
       >
         {({ allowed, reason }) => (
-          <Tooltip title={allowed ? 'Remove' : reason}>
+          <Tooltip title={frozen ? FROZEN_REASON : allowed ? 'Remove' : reason}>
             <span>
               <IconButton
                 size="small"
-                disabled={!allowed || deleting}
+                disabled={!allowed || deleting || frozen}
                 onClick={onDelete}
                 aria-label={`Remove ${item.filename}`}
                 data-testid="Execution.Evidence.Delete"

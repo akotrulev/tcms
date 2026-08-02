@@ -56,6 +56,12 @@ export type TestPlan = S['TestPlan'];
 export type TestPlanSummary = S['TestPlanSummary'];
 export type TestRun = S['TestRun'];
 export type TestRunDetail = S['TestRunDetail'];
+/**
+ * The run lifecycle. Read off `TestRun` rather than a named component because the contract
+ * declares it inline — and named here so `lib/labels.ts` can `satisfies Record<RunStatus, string>`
+ * over it, which is what turns a missing or invented value into a compile error.
+ */
+export type RunStatus = NonNullable<TestRun['status']>;
 export type TestExecution = S['TestExecution'];
 export type TestExecutionSummary = S['TestExecutionSummary'];
 export type StepResult = S['StepResult'];

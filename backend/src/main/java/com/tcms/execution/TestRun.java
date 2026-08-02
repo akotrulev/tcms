@@ -14,8 +14,14 @@ import org.hibernate.annotations.Filter;
 /**
  * One pass over a plan's scope, in one configuration (ERD §5).
  *
- * <p>Creatable since M2 slice 2, through {@link #create} and nothing else. Still no mutator: closing
- * a run is {@code run:close}, a Lead-only permission and a separate slice.
+ * <p>Creatable since M2 slice 2, through {@link #create} and nothing else. <strong>§72 is that
+ * separate slice</strong>: until it landed, {@code status} had been written exactly once in the
+ * product's life — to {@code NOT_STARTED}, by the factory below — so every run on every real
+ * instance stayed "not started" after every one of its results had been recorded, and
+ * {@code started_at} and {@code completed_at} were columns nothing ever filled. The two mutators
+ * here are the whole lifecycle: {@link #begin} (automatic, on the first result) and
+ * {@link #applyStatus} (deliberate, behind {@code run:close}). Which moves are legal is
+ * {@link RunLifecycle}'s, not this class's.
  *
  * <p>{@code release_sort_key} <strong>is now mapped</strong>, and §38's reason for leaving it out is
  * the reason it arrives here: it is <em>"computed on write from release_version"</em>, and this is
@@ -100,6 +106,14 @@ public class TestRun {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    /**
+     * Mapped in §72, with the first mutator that could set it. The column has been in {@code V1}
+     * from the beginning and stayed null on every row, because until then nothing ever updated a
+     * run — a create stamped {@code created_by} and left its pair empty.
+     */
+    @Column(name = "updated_by")
+    private UUID updatedBy;
+
     /** Opaque, write-once, never read as data — see {@code V14}. */
     @Column(name = "created_idempotency_key", updatable = false)
     private String createdIdempotencyKey;
@@ -152,8 +166,60 @@ public class TestRun {
         created.createdAt = now;
         created.createdBy = creatorId;
         created.updatedAt = now;
+        created.updatedBy = creatorId;
         created.createdIdempotencyKey = idempotencyKey;
         return created;
+    }
+
+    /**
+     * The run starts, because somebody recorded the first result in it.
+     *
+     * <p><strong>Idempotent and self-guarding</strong>: it returns false on a run that has already
+     * begun, so the caller — {@link ExecutionService}, on every single result — asks unconditionally
+     * and writes an audit row only when the answer is yes. A caller-side {@code if} would be the
+     * same test in a second place, and the second place is where it drifts.
+     *
+     * <p>{@code startedAt} takes the <em>result's</em> {@code now}, not a fresh read of the clock:
+     * they are the same event, and two instants a few microseconds apart would let a run's start
+     * sort after the first result recorded in it.
+     *
+     * @return true when this call is what started the run
+     */
+    boolean begin(UUID actorId, Instant now) {
+        if (status != RunStatus.NOT_STARTED) {
+            return false;
+        }
+        status = RunStatus.IN_PROGRESS;
+        startedAt = now;
+        updatedAt = now;
+        updatedBy = actorId;
+        return true;
+    }
+
+    /**
+     * Ends the run, or reopens it — the move {@link RunLifecycle} has already ruled legal.
+     *
+     * <p>This method does not re-decide anything, deliberately: a second copy of the transition
+     * table inside the entity is a second answer to "may this happen", and the pair would be
+     * consulted in different orders by the two callers that exist a year from now.
+     *
+     * <p><strong>{@code completedAt} is derived from the target, in both directions.</strong>
+     * Reopening clears it, because a live run carrying an end timestamp is the same false claim
+     * §42's live pass found on the other side of this lifecycle — a {@code NOT_STARTED} run
+     * rendering "Still running" — and every duration this product ever computes reads that column.
+     * {@code startedAt} is left alone: it records that the run <em>did</em> start, which reopening
+     * does not undo.
+     */
+    void applyStatus(RunStatus target, UUID actorId, Instant now) {
+        status = target;
+        completedAt = RunLifecycle.isClosed(target) ? now : null;
+        updatedAt = now;
+        updatedBy = actorId;
+    }
+
+    /** Whether this run is over, in {@link RunLifecycle}'s one sense of the word. */
+    boolean isClosed() {
+        return RunLifecycle.isClosed(status);
     }
 
     UUID getCompanyId() {

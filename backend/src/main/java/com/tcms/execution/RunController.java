@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -40,12 +41,18 @@ public class RunController {
     private final RunService runs;
     private final ExecutionService executions;
     private final RunCreateService creates;
+    private final RunStatusService lifecycle;
 
     public RunController(
-            RunService runs, ExecutionService executions, RunCreateService creates) {
+            RunService runs,
+            ExecutionService executions,
+            RunCreateService creates,
+            RunStatusService lifecycle) {
+
         this.runs = runs;
         this.executions = executions;
         this.creates = creates;
+        this.lifecycle = lifecycle;
     }
 
     /**
@@ -117,6 +124,71 @@ public class RunController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    /**
+     * Completes, aborts or reopens the run.
+     *
+     * <p><strong>{@code PUT}, not {@code PATCH}</strong>, and a sub-resource rather than a field on
+     * the run: the status <em>is</em> the resource being replaced, and the request names an absolute
+     * target rather than a delta. It mirrors {@code PUT /doc-pages/{pageId}/status} exactly, which is
+     * the precedent to follow rather than a second shape for the same act.
+     *
+     * <p>There is no {@code If-Match} here and that is a decision, not an omission — see
+     * {@link RunStatusService}.
+     */
+    @PutMapping("/{runId}/status")
+    public ResponseEntity<Object> status(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID runId,
+            @RequestBody RunStatusRequest request) {
+
+        RunStatusService.Outcome outcome =
+                lifecycle.setStatus(UUID.fromString(jwt.getSubject()), projectId, runId, request);
+
+        return switch (outcome) {
+            case RunStatusService.Outcome.Updated updated -> ResponseEntity.ok(updated.view());
+            case RunStatusService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
+            case RunStatusService.Outcome.Forbidden ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(closeForbiddenProblem());
+            case RunStatusService.Outcome.Invalid invalid ->
+                    ResponseEntity.badRequest().body(validationProblem(invalid.errors()));
+            case RunStatusService.Outcome.Refused refused ->
+                    ResponseEntity.status(HttpStatus.CONFLICT)
+                            .body(refusedProblem(refused.message()));
+        };
+    }
+
+    /** §32 again — worded for the act, naming no permission key. */
+    private static ProblemDetail closeForbiddenProblem() {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
+        problem.setTitle("Not allowed");
+        problem.setDetail("Ending or reopening a run needs a test lead.");
+        return problem;
+    }
+
+    /**
+     * A transition the run's state refuses, and the run-closed refusal both writes now raise.
+     *
+     * <p>The sentence comes from the domain rather than being written here, because the same 409 is
+     * raised from three call sites and one of them is in another service; a copy per controller
+     * method is how the product ends up telling a tester and a lead two different things about the
+     * same rule.
+     */
+    private static ProblemDetail refusedProblem(String message) {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        problem.setTitle("This run cannot change that way");
+        problem.setDetail(message);
+        return problem;
+    }
+
+    /**
+     * The frozen-run refusal on a write to an execution — {@code V1}'s "immutable once the run
+     * closes", which §67 deferred and §72 applies to the verdict and its evidence at once.
+     */
+    private static ProblemDetail runClosedProblem() {
+        return refusedProblem(RunLifecycle.CLOSED_MESSAGE);
+    }
+
     @GetMapping("/{runId}/executions/{executionId}")
     public ResponseEntity<TestExecutionView> execution(
             @AuthenticationPrincipal Jwt jwt,
@@ -173,6 +245,8 @@ public class RunController {
                     ResponseEntity.badRequest().body(validationProblem(invalid.errors()));
             case ExecutionService.Outcome.Stale ignored ->
                     ResponseEntity.status(HttpStatus.CONFLICT).body(staleProblem());
+            case ExecutionService.Outcome.RunClosed ignored ->
+                    ResponseEntity.status(HttpStatus.CONFLICT).body(runClosedProblem());
         };
     }
 

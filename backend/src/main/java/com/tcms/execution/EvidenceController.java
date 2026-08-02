@@ -99,6 +99,8 @@ public class EvidenceController {
             case EvidenceService.Outcome.Attached attached ->
                     ResponseEntity.created(URI.create(attached.view().url()))
                             .body(attached.view());
+            case EvidenceService.Outcome.RunClosed ignored ->
+                    ResponseEntity.status(HttpStatus.CONFLICT).body(runClosed());
             // Unreachable: attach never removes anything and never consults authorship. The arms
             // stay written because the switch is exhaustive over the sealed type, which is what
             // makes a new outcome a compile error at every consumer rather than a silently
@@ -157,6 +159,8 @@ public class EvidenceController {
                             forbidden("You can only remove evidence you attached. Ask a test lead "
                                     + "to remove this one."));
             case EvidenceService.Outcome.Deleted ignored -> ResponseEntity.noContent().build();
+            case EvidenceService.Outcome.RunClosed ignored ->
+                    ResponseEntity.status(HttpStatus.CONFLICT).body(runClosed());
             // Unreachable: a delete has no input to validate and creates nothing. Written out
             // because the switch is exhaustive over the sealed type — which is what turned adding
             // Outcome.Invalid into a compile error here rather than a silently unhandled case.
@@ -210,6 +214,14 @@ public class EvidenceController {
         } catch (org.springframework.http.InvalidMediaTypeException malformed) {
             return MediaType.APPLICATION_OCTET_STREAM;
         }
+    }
+
+    /** The frozen-run refusal. The sentence is {@link RunLifecycle#CLOSED_MESSAGE}'s, not a copy. */
+    private static ProblemDetail runClosed() {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        problem.setTitle("This run cannot change that way");
+        problem.setDetail(RunLifecycle.CLOSED_MESSAGE);
+        return problem;
     }
 
     private static ProblemDetail forbidden(String detail) {

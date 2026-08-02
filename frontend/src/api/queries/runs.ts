@@ -58,6 +58,31 @@ export function useCreateRun(projectId: string) {
   });
 }
 
+/**
+ * Completes, aborts or reopens a run — `run:close`, which a Test Engineer does not hold.
+ *
+ * The run *list* is invalidated as well as the run itself, because the status is a column on it and
+ * a "Still running" chip that survives the close is the same class of stale claim §42's live pass
+ * found on the other end of this lifecycle. Plans too: a plan's statistics read its runs.
+ *
+ * `meta: { handled: true }` because the 409 here is a decision to hand back in place — "abort it
+ * instead", "reopen it first" — and those sentences belong beside the control that raised them,
+ * not in a corner toast detached from the run they are about.
+ */
+export function useSetRunStatus(projectId: string, runId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (status: TestRun['status']) =>
+      api.put<TestRun>(`${base(projectId)}/runs/${runId}/status`, { status }),
+    meta: { handled: true },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.run(projectId, runId) });
+      void client.invalidateQueries({ queryKey: ['projects', projectId, 'runs'] });
+      void client.invalidateQueries({ queryKey: ['projects', projectId, 'plans'] });
+    },
+  });
+}
+
 export function useExecution(
   projectId: string,
   runId: string | undefined,

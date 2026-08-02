@@ -75,6 +75,7 @@ export {
   useExecution,
   useRun,
   useRuns,
+  useSetRunStatus,
   useSubmitResult,
   type EvidenceUploadInput,
   type ExecutionResultInput,
