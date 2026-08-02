@@ -883,3 +883,4 @@ See [`docs/plans/2026-07-31-parallel-execution-rework.md`](plans/2026-07-31-para
 | [§75](handoff/75-the-suite-lifecycle.md) | The suite lifecycle — the last status nothing ever wrote, and the rescind §73 left on cases |
 | [§76](handoff/76-the-review-record.md) | The review record — the tables three ladders were written for, and the tier below approval |
 | [§77](handoff/77-per-project-review-settings.md) | Per-project review settings — the row four behaviours were waiting on, and the demotion that must not cost the approve key |
+| [§78](handoff/78-open-question-decisions-round-2.md) | Open-question decision round 2 — §8 emptied, five that were answered by the product and never struck, and the chart that now depends on the S3 adapter |
