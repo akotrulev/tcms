@@ -3,7 +3,7 @@
 # fe-react — orientation cache (TCMS)
 
 **Last verified:** 2026-08-02
-**Baseline commit:** `e551487`
+**Baseline commit:** `f551971`
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
 `frontend/vite.config.ts`
 
@@ -125,6 +125,20 @@
 
 ## Session log
 
+- 2026-08-02 · EXTEND · The classification vocabulary editor (§69) — new route
+  `/projects/:projectId/settings/classification` (`features/settings/`), **Classification** in the
+  rail's Project group, three new hooks in `api/queries/projects.ts`. **Every gated control reads
+  the dimension's `locked` flag to choose WHICH permission to ask, at which scope** —
+  `company:vocabulary` via `useCanInCompany` for the company's axes, `project:settings` via
+  `useCan` for the project's Feature tree — so `PermissionGate`'s `projectId="company"` literal has
+  its second consumer after the project picker. Reuses §68's `buildValueTree`, where the
+  orphan-surfacing matters in mirror image: **a value nothing renders is one nobody can retire.**
+  The mock's `dimensions` moved from the fixture into `db` and `handlers/cases.ts` moved with it,
+  or a value added in the editor is refused by the case editor as "not in the vocabulary".
+  **The test failed for §66's reason before it failed for a real one**: rendered bare instead of
+  through a `<Route>`, `projectId` is `''`, `useCan` is disabled and permanently pending, and every
+  "disabled" assertion passes with no gate in the code at all. Render page tests through a `Route`
+  and hold a `permissionsResolved()` barrier. `#confirmed`
 - 2026-08-02 · EXTEND · The classification picker (§68) — the last of §5's three scheduled Phase-2
   gaps, and the largest. New: `features/cases/ClassificationPicker.tsx` + its test,
   `lib/classification.ts` (`buildValueTree`) + its test. `caseSchema` gained

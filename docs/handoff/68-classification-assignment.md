@@ -247,6 +247,9 @@ correct-looking response, and drops a classification with nothing on any screen 
   `preconditions`/`postconditions` are the library-versus-inline shape and are their own design
   problem. The boundary is now five fields wide, and `CaseUpdateRequest`'s header records that it
   was six.
+- ~~**Nothing manages the vocabulary itself.**~~ → **closed in §69**, which gives
+  `classification_value` its first writer and the screen that drives it. The paragraph below stands
+  as the account of why it was the next rung.
 - **Nothing manages the vocabulary itself.** A client cannot add a Feature value through the
   product — `classification_value` still has no writer, so the Feature tree of a freshly provisioned
   project is empty and stays empty. This slice makes the tree *usable* and not *fillable*, which is

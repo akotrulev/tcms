@@ -185,3 +185,56 @@ fixture is all live — so **rows 8, 9 and 10 are live-mode only** and mock mode
 either way. Mock mode also has one project's vocabulary, so the sibling-project refusal has no mock
 equivalent at all; it is covered by the backend suite and by row 5's live analogue only if a second
 project's Feature value id is pasted into the request by hand.
+
+---
+
+## §69 — the classification vocabulary editor
+
+**Route:** `/projects/:projectId/settings/classification`, reached from **Classification** in the
+nav rail's Project group.
+
+**Personas needed: two, and the whole point of the screen is the difference between them.** A Test
+Lead (holds `project:settings` on the project, not `company:vocabulary`) and a Company Admin (holds
+both). In mock mode the seeded persona is the first, so the Test Lead column is drivable without
+touching a fixture and the Company Admin column is **live-mode only**.
+
+| # | Do | Expect |
+|---|---|---|
+| 1 | Open the page as the **Test Lead** | Four panels — Feature, Test Type, Test Level, Execution Phase — each with a scope chip reading *This project* or *Company-wide* |
+| 2 | Look at the Feature panel | **Add value** enabled; every row's rename and retire enabled |
+| 3 | Look at the Test Type panel | **Add value disabled, with a tooltip explaining why.** Not hidden, not missing — §31. This is the headline and the one thing no gate can see |
+| 4 | Add a root Feature "Lending" | Appears in the panel; the case editor's Feature picker offers it on the next open |
+| 5 | Add "Mortgages" under it via the row's **+** | Renders indented under Lending. `psql`: its `path` is the parent's path plus a `v…` label, and the label is **not** derived from the name |
+| 6 | Add a Feature named **支付** (or any name with no ASCII letters) | Accepted, and the row reads 支付. A name-derived path fails this insert outright |
+| 7 | Add a second "Mortgages" under Lending | Refused with *"Another value here already has that name"* **on the name field**, not a toast |
+| 8 | Add "Mortgages" under a **different** parent | Accepted — two leaves under different parents may share a name (§68) |
+| 9 | Rename "Lending" to "Lending & Cards" | Saved. `psql`: `path` is **byte-identical** to before. This is the payoff of the id-derived label and it is invisible in the UI |
+| 10 | Retire "Lending & Cards" while Mortgages is under it | **409**, dialog stays open, reads *"2 values sit under this one"* (or 1) — not a toast over a closed dialog |
+| 11 | Retire the children, then the parent | 204 each; the rows leave the panel |
+| 12 | Reload | The retired values are gone and stay gone; the renamed one keeps its new name |
+| 13 | Open a case classified with a value you just retired | The value is **not** in the picker, and the case's stored classification is **still there** in `psql` — §68's bound, from the retiring end |
+| 14 | Sign in as the **Company Admin** (live only) | Every panel's controls are enabled, including Test Type's |
+| 15 | Add a Test Type value as the admin, then check a **second project** in the same company | The new value is offered there too — that is what "company-wide" means, and it is the reason the permission is separate |
+| 16 | As the Test Lead again, POST to `/classification/values` by hand with the **sibling project's** Feature dimension id | **404**, not 403 — the caller must not learn which permission would have applied |
+| 17 | A colour: add a value with `#b7791f`, then one with `red` | The first shows a colour dot; the second is refused on the **colour** field |
+| 18 | Console throughout | 0 client errors |
+
+**Highest-risk rows are #3, #9 and #13.**
+
+#3 because a page that asked `project:settings` for every dimension renders *identically* for a
+Company Admin, passes every Feature assertion, and hands a Test Lead a button the server answers
+403 to. The component test pins it, and the component test mocks both permission endpoints — the
+live pass is what proves the real `/me/permissions` answers the company question at all on this
+screen, which no other screen asks except the project picker.
+
+#9 because nothing in the UI shows a path. If a rename rewrote it, the only symptom would appear
+later, in §6q's descendant matching, which is not built yet — so the check has to be made in `psql`
+now or not at all.
+
+#13 because it is the same silent-loss shape §68's queue names, approached from the other side: the
+retire is what *creates* the state whose reconcile bound §68 built.
+
+**Mock-vs-live divergence, stated up front.** Mock mode has one project and one persona, so rows
+14, 15 and 16 have no mock equivalent. Row 5's `psql` half and row 9's are live-only by nature. The
+mock does enforce every field rule, the 409 and both gates, so rows 1–4, 6–8, 10–12 and 17 are
+drivable against `npm run dev` with no backend.

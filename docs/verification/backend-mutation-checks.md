@@ -220,3 +220,61 @@ seeded them equal would let this mutation pass every assertion in the class.
 | **Mutation** | pass `Set.of()` instead of `storedClassificationValueIds` |
 | **Scope** | `--tests 'com.tcms.repository.CaseBulkEndpointTest'` |
 | **Must redden** | **unknown, and that is the point of running it.** The expectation is that the existing round-trip hash test catches it; if nothing reddens, then a bulk `MOVE_TO_SUITE` over a classified case writes a version hashing as though the case were unclassified, and the *next* ordinary save is credited with restoring a classification nobody touched — §62's mis-attribution defect, on a new field, with no test behind it. |
+
+---
+
+## §69 — the classification vocabulary editor
+
+### Run in this slice
+
+| | |
+|---|---|
+| **File** | `project/ClassificationValueWriteService.java`, `permissionFor` |
+| **Mutation** | return `RequiredPermission.onProject("project:settings")` unconditionally — one gate for both kinds of dimension |
+| **Scope** | `--tests 'com.tcms.project.ClassificationValueWriteEndpointTest'` |
+| **Observed** | exactly **3** red — the create, the edit and the retire refusals on a company-level dimension. 24 green. **The first run of this mutation reddened 4**, and the fourth was the fixture's fault rather than the code's: a broken gate let the Test Lead's create *succeed*, so the Company Admin's create of the same name then failed the duplicate check. The two tests now use different names. A mutation count that measures the fixture is worse than no mutation, because it reads as extra confidence. |
+
+| | |
+|---|---|
+| **File** | `project/ClassificationValue.java`, `create` |
+| **Mutation** | derive the `ltree` label from the name (`lower` + non-alphanumerics to `_` + trim), i.e. what `tcms_ltree_label` does and what the seed uses |
+| **Scope** | `--tests 'com.tcms.project.ClassificationValueWriteEndpointTest'` |
+| **Observed** | exactly **1** red — *a name with no ASCII letters in it is created, and its path is valid*. The sanitizer answers the empty string for `支付`, and an empty label is not a valid `ltree` label, so the insert fails with a message about the path. |
+
+| | |
+|---|---|
+| **File** | `project/ClassificationValueEdit.java`, `validParent` |
+| **Mutation** | drop `&& candidate.getDimensionId().equals(dimensionId)` — accept any live value as a parent |
+| **Scope** | `--tests 'com.tcms.project.ClassificationValueWriteEndpointTest'` |
+| **Observed** | exactly **1** red — the wrong-axis parent. The sibling-project parent stayed green **and that is correct**: it is refused by the *scoping of the list* rather than by this predicate, so the two refusals are independent mechanisms with a test each. |
+
+| | |
+|---|---|
+| **File** | `project/ClassificationValueEdit.java`, `refuseDuplicate` |
+| **Mutation** | drop the `Objects.equals(candidate.getParentId(), parentId)` clause — uniqueness per dimension instead of per parent |
+| **Scope** | `--tests 'com.tcms.project.ClassificationValueWriteEndpointTest'` |
+| **Observed** | exactly **1** red — *the SAME name under a different parent is allowed*, which is the property §68 turned on when it had to start serving classification value ids. |
+
+### Still owed for §69 — NOT yet run
+
+| | |
+|---|---|
+| **File** | `db/migration/V20__classification_value_sibling_name_unique.sql` |
+| **Mutation** | none — this is the **migration-against-an-already-migrated-database** check Testcontainers structurally cannot make, since it migrates a fresh container every time. Apply `V20` to the Hetzner box (at `V19`) and confirm `installed_by = tcms_owner`. |
+| **Must show** | v19 → v20 in place, and the index present with `indpred` non-null (partial) and `company_id` leading. |
+| **Why it matters** | A unique index applied to existing data fails the migration outright if any duplicate exists. The seed's `NOT EXISTS` guard should make that impossible — *should*. §57 and §61 each ran this check and each learned something. |
+
+| | |
+|---|---|
+| **File** | `project/ClassificationValueWriteService.java`, `dimensionOf` |
+| **Mutation** | resolve the dimension with `dimensions.findById(dimensionId)` instead of through `findForProject` |
+| **Scope** | `--tests 'com.tcms.project.ClassificationValueWriteEndpointTest'` |
+| **Must redden** | **exactly 1** — *a dimension of a project the caller cannot see is 404, not 403*. |
+| **Why it matters** | `findById` is scoped by RLS to the company and **not** to the project, so it accepts a sibling project's Feature dimension: the caller would extend a taxonomy belonging to a project they may hold no grant on, gated on `project:settings` for the project in the path. Every cross-company test in the suite still passes, because the row is in the caller's own company — persona 3's shape again. |
+
+| | |
+|---|---|
+| **File** | `project/ProjectService.java`, `writeGrantedOnTarget` |
+| **Mutation** | move the `resolve` call **after** the permission check, asking a fixed permission first |
+| **Scope** | `--tests 'com.tcms.project.ClassificationValueWriteEndpointTest'` |
+| **Must redden** | at least the two 404-not-403 tests. It cannot even be written without inventing a permission to ask, which is the argument the method's javadoc makes — running it is how that argument gets checked rather than asserted. |

@@ -3,7 +3,7 @@
 # be-java — orientation cache (TCMS)
 
 **Last verified:** 2026-08-02
-**Baseline commit:** `e551487`
+**Baseline commit:** `f551971`
 **Fingerprint files:** `backend/build.gradle.kts`, `backend/gradle/libs.versions.toml`, `backend/gradle/wrapper/gradle-wrapper.properties`
 
 > Authoritative docs win over this file. `CLAUDE.md`, `docs/HANDOFF.md` (an index — sections live in
@@ -63,7 +63,7 @@ provisioning · auth · shared`.
   return zero rows, fail-closed and silent. `RepositoryTransactionTest` derives the repository list
   from the live context, so a new repository that forgets fails the build. `#confirmed`
 - **Flyway owns all DDL**; `hibernate.ddl-auto: validate`, `baseline-on-migrate: false`. Migrations
-  at `src/main/resources/db/migration`. **Head is `V19`; `V20` is the next free number.** Booting the
+  at `src/main/resources/db/migration`. **Head is `V20`; `V21` is the next free number.** Booting the
   real context in a test is itself a schema-drift gate. `#confirmed`
 - **Privilege split** — Flyway migrates as `tcms_owner`, the pool connects as `tcms_app`, neither is
   a superuser and neither holds `BYPASSRLS`. Mirrored in three places that must agree:
@@ -139,6 +139,19 @@ provisioning · auth · shared`.
   (`CaseDetailService.detail`) was a fourth byte-identical copy that had never been moved onto it —
   invisible while the copies agreed, visible the moment a field was added to the view. A fifth
   writer delegates, never copies. `#confirmed`
+- **The classification VOCABULARY has a writer since §69** — `ClassificationValueWriteService` +
+  `ClassificationValueEdit` (`project`), and `V20`'s partial per-parent unique index behind it.
+  **The gate is decided by the dimension row, in KEY and in SCOPE**: `project_id IS NULL` ⇒
+  `company:vocabulary` at COMPANY scope, otherwise `project:settings` on the project. Hence
+  `ProjectService.RequiredPermission` (key + scope) and **`ProjectService.writeGrantedOnTarget`**,
+  the third write gate on that class — it resolves the target BEFORE asking any permission, because
+  the permission to ask is a property of the target. The dimension resolves through
+  `findForProject`, **never `findById`** (RLS scopes the latter to the company, not the project, so
+  it accepts a sibling project's Feature dimension and every cross-company test still passes).
+  `locked` is **not** read-only — it says whose the dimension is; three documents disagreed and the
+  view's javadoc was the outlier. `ClassificationValue.create` derives the `ltree` label from the
+  **id** (`v` + uuid hex), like `Suite.create` and for one more reason: `tcms_ltree_label` answers
+  the empty string for a name with no ASCII alphanumerics, which an `ltree` refuses. `#confirmed`
 - **Classification writes** — `case_classification` got its first writer in §68.
   `ClassificationVocabulary` (built from the same `CaseRenderer#vocabularies` read the response
   needs, so validating costs no query) + `CaseClassifications` (the reconciler, `CaseSteps`'
@@ -207,6 +220,14 @@ provisioning · auth · shared`.
 
 ## Session log
 
+- 2026-08-02 · EXTEND · The classification vocabulary editor (§69) — `classification_value`'s first
+  Java writer; the gate that depends on the dimension row; `V20`. New seams above. **Two orientation
+  findings before any code**: `locked` meant three different things and one of them made
+  `company:vocabulary` cover nothing; and `@ColumnTransformer` was missing on
+  `ClassificationValue.path` exactly as `Suite.path`'s javadoc predicted by name. **First mutation
+  reported 4 where the honest answer is 3** — a broken gate let one create succeed, so a second test
+  failed on the duplicate check rather than the gate. Rename the fixtures apart before trusting a
+  count.
 - 2026-08-02 · EXTEND · Classification assignment (§68) — `case_classification`'s first writer after
   three readers and no writer since `V1`; the last of §5's three scheduled Phase-2 gaps and one of
   `CaseUpdateRequest`'s refused six. New: `ClassificationVocabulary`, `CaseClassifications`,

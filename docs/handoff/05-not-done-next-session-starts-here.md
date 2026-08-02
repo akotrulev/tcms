@@ -83,6 +83,9 @@ Modified: `Providers.tsx` (nesting order is load-bearing — see its header comm
 ### Known gaps deliberately left in Phase 2 scope
 
 - **Evidence upload** is modelled in the contract and rendered where present, but there is no upload control on the execution screen. ~~Needs the signed-URL path, not a form POST.~~ **→ unblocked and scheduled 2026-08-01 (§51).** Open question #28 resolved as **a storage port with a filesystem adapter**, S3 later — which means there is **no signed URL**, so the upload *does* proxy through the API and needs a request-size limit. The blocker as written was the wrong shape: it assumed the signed-URL path was required, when what was actually missing was a decision about where bytes land.
+- ~~**Case create/edit does not assign features**~~ → **closed in §68**, and the vocabulary those
+  features come from got its own editor in **§69** — the seeded-empty Feature tree is fillable
+  through the product now, rather than through psql.
 - **Case create/edit does not assign features** — the feature dimension is MULTI + hierarchical and needs its own tree picker; the editor shows existing assignments read-only rather than offering a flat select that could set a parent where a leaf is required. **→ scheduled 2026-08-01 (§51).** The largest of the three scheduled gaps, and the one with a real design question inside it: the picker must make a leaf selectable and a parent not, which is why the flat select was rejected rather than merely unbuilt.
 - **Suite create/rename UI** — the handler and mutation hook exist, the tree has no affordance yet.
 - **Review/approve actions** are deliberately absent from the editor (status is not an editable dropdown, per §3); the actions themselves are not built.
