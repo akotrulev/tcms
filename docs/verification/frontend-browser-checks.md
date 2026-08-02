@@ -135,3 +135,53 @@ write is not rolled back by anything.
 **Mock-vs-live divergence, stated up front:** in mock mode `url` is a `blob:`/`data:` URI, because
 there is no server to serve `/content`. Rows #2 and #11 are therefore **live-mode only** — mock mode
 cannot show them and will look fine either way.
+
+---
+
+## §68 — the classification picker
+
+**Setup (live mode).** The seeded Feature tree is **empty** — `tcms_seed_project_defaults` creates
+the dimension and no values — so rows 5–9 need a tree first:
+
+```sql
+-- as tcms_owner, with app.current_company set to the company under test
+INSERT INTO classification_value (id, company_id, dimension_id, parent_id, path, name, position)
+SELECT gen_random_uuid(), :company, d.id, NULL, 'payments'::ltree, 'Payments', 0
+  FROM classification_dimension d
+ WHERE d.project_id = :project AND d.key = 'feature';
+-- then a child of it, and a THIRD value which is then retired:
+UPDATE classification_value SET deleted_at = now() WHERE name = 'Cheques';
+```
+
+| # | Drive | Must observe |
+|---|---|---|
+| 1 | Open any case in the editor | The Classification panel shows **four** controls — Test Type, Test Level, Feature, Execution Phase — with the case's current values already selected |
+| 2 | Change Test Type, save | Toast, and the case detail shows the **new** Test Type. The version list gains **one** entry |
+| 3 | Save again without touching anything | **No new version.** Reorder-churn is the specific risk: the ids go over the wire as an array |
+| 4 | Set Test Type to **None**, save | The detail shows no Test Type, and `psql` shows the `case_classification` row **gone** |
+| 5 | Tick a **parent** Feature (Payments), save | Accepted. Two milestones of editor comments claimed a parent could not be assigned |
+| 6 | Tick a **child** as well, save | Both are stored; `features` on the grid shows both names |
+| 7 | Untick one, save | Only that one goes; the other survives |
+| 8 | On a case carrying the **retired** value (assign it *before* retiring), open the editor and save any other change | The retired value has **no checkbox** — and `psql` shows its `case_classification` row **still there** afterwards |
+| 9 | Reload that case's editor and save again | Still there. The bound is not a one-shot |
+| 10 | A project whose Feature dimension has **no values** | Reads *"Nothing to choose from yet — this vocabulary is empty"*, not an empty box or a spinner |
+| 11 | Create a **new** case with a Test Type and two Features | Both land on the created case; its v1 snapshot carries them |
+| 12 | Sign in as a **Viewer**, open a case | The editor is unreachable as before — this is only to confirm nothing about the panel bypasses the existing gate |
+| 13 | Network tab on any save | `classificationValueIds` is present on **every** save, including when empty |
+
+**Highest-risk rows are #8, #9 and #3.**
+
+#8/#9 are the slice's central decision and the only failure that is **silent**: if the bound is
+wrong, the save succeeds, the response looks correct, and a classification is gone with nothing on
+any screen having mentioned it. Neither the API nor the UI can produce the state they test — a
+retired value must be assigned before it is retired — so this is the arm most likely to be wrong,
+for §67's null-author reason.
+
+#3 because the reorder property is invisible: a spurious version looks exactly like a real one, and
+the version list only becomes obviously useless after it has accumulated a few dozen.
+
+**Mock-vs-live divergence, stated up front:** the mock has **no retired values** — its `dimensions`
+fixture is all live — so **rows 8, 9 and 10 are live-mode only** and mock mode will look correct
+either way. Mock mode also has one project's vocabulary, so the sibling-project refusal has no mock
+equivalent at all; it is covered by the backend suite and by row 5's live analogue only if a second
+project's Feature value id is pasted into the request by hand.

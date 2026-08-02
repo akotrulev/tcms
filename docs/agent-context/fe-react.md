@@ -3,7 +3,7 @@
 # fe-react — orientation cache (TCMS)
 
 **Last verified:** 2026-08-02
-**Baseline commit:** `52746c9`
+**Baseline commit:** `e551487`
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
 `frontend/vite.config.ts`
 
@@ -125,6 +125,23 @@
 
 ## Session log
 
+- 2026-08-02 · EXTEND · The classification picker (§68) — the last of §5's three scheduled Phase-2
+  gaps, and the largest. New: `features/cases/ClassificationPicker.tsx` + its test,
+  `lib/classification.ts` (`buildValueTree`) + its test. `caseSchema` gained
+  `classificationValueIds`; `CaseEditorPage`'s Classification panel replaces read-only feature chips
+  with a control per dimension, inside its own `DataRegion` so a failed vocabulary read leaves the
+  rest of the editor saveable. **The control shape is derived from `cardinality` + `hierarchical`,
+  never from the dimension key**, so a fifth dimension needs no code. **The read-only comment's
+  justification was false**: no leaf-only rule exists in any spec, and a parent IS assignable.
+  `buildValueTree` lives in `lib/` because exporting a function beside a component defeats Fast
+  Refresh (the `caseSchema.ts` trade) and it **surfaces orphans AND cycle members at the root**
+  where `SuiteTree` drops cycle members — in a picker, a value with no control on screen is silently
+  deselected by the next save. Mock now **enforces** the server's three rules rather than storing
+  what it is given, and `buildCaseDetail` DERIVES its ids from the summary's names so no fixture can
+  carry ids and names that disagree. §62's lesson again in the test: a bare `data-testid` on a MUI
+  `Checkbox` lands on the wrapper span where `toBeChecked` cannot see it — testids moved to the
+  `input` slot. Two mutations run, 3 red each. **Browser pass DEFERRED**; rows 8–10 are live-only
+  (the mock has no retired values). 506/506.
 - 2026-08-02 · EXTEND · The evidence UI (§67). New: `features/runs/EvidencePanel.tsx` + its test,
   `useAttachEvidence`/`useDeleteEvidence`/`MAX_EVIDENCE_BYTES` in `api/queries/runs.ts`, and
   **`api.upload`** in `api/client.ts` (see the seam above — the Content-Type rule is the one that

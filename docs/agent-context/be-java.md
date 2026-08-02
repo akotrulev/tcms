@@ -3,7 +3,7 @@
 # be-java — orientation cache (TCMS)
 
 **Last verified:** 2026-08-02
-**Baseline commit:** `52746c9`
+**Baseline commit:** `e551487`
 **Fingerprint files:** `backend/build.gradle.kts`, `backend/gradle/libs.versions.toml`, `backend/gradle/wrapper/gradle-wrapper.properties`
 
 > Authoritative docs win over this file. `CLAUDE.md`, `docs/HANDOFF.md` (an index — sections live in
@@ -134,6 +134,31 @@ provisioning · auth · shared`.
   same shape: authorship applied AFTER the lookup, two 403s with different sentences, and the
   null-author arm refusing. Delete is **hard**, unlike a case's soft delete — a screenshot removed
   on request must actually leave the disk. `#confirmed`
+- **`CaseRenderer` is the ONE assembler of a case's shape and now every path uses it.** It was
+  extracted from the two write paths in §62; §68 found the **read** path
+  (`CaseDetailService.detail`) was a fourth byte-identical copy that had never been moved onto it —
+  invisible while the copies agreed, visible the moment a field was added to the view. A fifth
+  writer delegates, never copies. `#confirmed`
+- **Classification writes** — `case_classification` got its first writer in §68.
+  `ClassificationVocabulary` (built from the same `CaseRenderer#vocabularies` read the response
+  needs, so validating costs no query) + `CaseClassifications` (the reconciler, `CaseSteps`'
+  sibling). **The reconcile is BOUNDED by the vocabulary the caller was served**: a retired value's
+  assignment is never returned by `GET` and is therefore never removed by a save that omits it,
+  because a client cannot resubmit what it was never shown. Consequence, stated: a retired
+  assignment is immutable through the API. `liveValueIdsOf` is the ONE implementation of "drop what
+  the project no longer offers" and both the renderer and the validator's fallback read it — two
+  copies would let the served ids differ from the preserved ids. **Delete is flushed BEFORE insert**
+  or replacing a SINGLE axis's value hits V2's `23505` (Hibernate orders inserts first within a
+  flush). `#confirmed`
+- **`CaseEdit`'s `classificationValueIds` is SORTED and de-duplicated**, and that is a `CaseVersions#hash`
+  requirement: the hash's determinism argument rests on there being no *set* in the record's shape.
+  `CaseEdit.of` takes the case's stored ids so a bulk action's version row does not hash as though
+  the case were unclassified. **`CaseUpdateRequest`'s refused six is now a refused FIVE.** `#confirmed`
+- **`ContractConventionTest.requiredPropertiesHaveAComponent`** resolves a schema's `required`
+  through `allOf` and checks the serving record has a component for each. Added in §68 after
+  `TestCaseDetailView` was found to have omitted `createdBy` since §66 — which made the case
+  detail's `OWN`-qualified Delete refuse every caller their own case. `RESPONSE_RECORDS` is a short
+  explicit map; add a pair when a new view backs a contract schema. `#confirmed`
 - **Operator CLI**: `ApplicationRunner` beans that are inert unless their verb appears in the
   non-option args — `ProvisionCompanyCommand`, `IssueInvitationCommand`. The verb list lives in
   `OperatorCommands`, which `TcmsApplication.main` asks *before the context exists* to pick
@@ -182,6 +207,19 @@ provisioning · auth · shared`.
 
 ## Session log
 
+- 2026-08-02 · EXTEND · Classification assignment (§68) — `case_classification`'s first writer after
+  three readers and no writer since `V1`; the last of §5's three scheduled Phase-2 gaps and one of
+  `CaseUpdateRequest`'s refused six. New: `ClassificationVocabulary`, `CaseClassifications`,
+  `CaseClassification.of`, `CaseClassificationRepository.findForCase`,
+  `TestCase.classificationValueIds` on the contract (detail only), `OpenApiContract.requiredOf`.
+  **The orientation pass changed the shape twice**: the case served NAMES with no id anywhere, so
+  the editor could not round-trip (hierarchical Feature ⇒ names are not unique); and the "leaf-only"
+  rule the editor's comment used to justify keeping the field read-only **does not exist anywhere in
+  the specs** — a parent is assignable. The real content is the reconcile's BOUND — see the seam
+  above. **Two pre-existing defects found**: `TestCaseDetailView` never served `createdBy` (required
+  via `allOf`), which inverted §66's `OWN` delete gate on the only screen that has one, now caught by
+  a computed check; and `CaseDetailService` was a fourth copy of `CaseRenderer`. 18 endpoint tests,
+  2 mutations run (4 red / 1 red), 4 queued. **No migration.**
 - 2026-08-02 · EXTEND · Evidence attach and delete (§67) — `evidence` + `attachment` get their first
   entities and writers after being in `V1` from the beginning. New: `EvidenceStore` port,
   `FilesystemEvidenceStore`, `StoredBlob`, `Attachment`, `Evidence`, both repositories,

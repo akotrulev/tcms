@@ -167,3 +167,56 @@ seeded them equal would let this mutation pass every assertion in the class.
 | **Scope** | `--tests 'com.tcms.execution.ExecutionEndpointTest'` |
 | **Must redden** | *the uploaded filename never becomes a path — a traversal name is stored as text* (expects `passwd`, would get `../../../etc/passwd`) |
 | **Why it matters** | The filename reaches a `Content-Disposition` **header**. Sanitisation and `headerSafeFilename` are two different defences against two different things (a path-looking name vs. header injection) and only one of them has a test today. |
+
+---
+
+## §68 — classification assignment
+
+### Run in the slice
+
+| | |
+|---|---|
+| **File** | `repository/CaseEdit.java`, `normalizeClassification` |
+| **Mutation** | drop the `vocabulary.dimensionOf(valueId) == null` refusal — accept any id |
+| **Scope** | `--tests 'com.tcms.repository.CaseUpdateEndpointTest'` |
+| **Observed** | exactly 4 red — the sibling-project value, the retired value, the unknown value, and the indistinguishable-refusal test. Nothing else moved, which is what says these measure the *vocabulary* check rather than the write path generally. |
+
+| | |
+|---|---|
+| **File** | `contract/ContractConventionTest.java` (the new check itself, verified against the defect it was written for) |
+| **Mutation** | delete the `createdBy` component from `TestCaseDetailView` — i.e. restore the state master shipped in §66 and §67 |
+| **Scope** | `--tests 'com.tcms.contract.ContractConventionTest'` |
+| **Observed** | exactly 1 red — `a response record has a component for every property its schema requires`. The other four contract checks stayed green, so the new one is not merely re-testing what was already covered. |
+
+### Still owed for §68 — NOT yet run
+
+| | |
+|---|---|
+| **File** | `repository/CaseClassifications.java`, `reconcile` |
+| **Mutation** | delete the `if (!offered.contains(row.getValueId())) continue;` guard, so a retired assignment becomes a removal candidate |
+| **Scope** | `--tests 'com.tcms.repository.CaseUpdateEndpointTest'` |
+| **Must redden** | **exactly 1** — *a RETIRED value already on the case survives a save that cannot mention it*. If `a retired value is not SERVED` reddens too, the two tests are entangled and the survival test is reading the filter rather than the bound. |
+| **Why it matters** | This is the slice's central decision and the only one whose failure is *silent in production*: the case saves, the response looks right, and a classification is gone with nothing on any screen having mentioned it. |
+
+| | |
+|---|---|
+| **File** | `repository/CaseClassifications.java`, `reconcile` |
+| **Mutation** | remove the `assignments.flush()` between the delete and the insert |
+| **Scope** | `--tests 'com.tcms.repository.CaseUpdateEndpointTest'` |
+| **Must redden** | **exactly 1** — *replacing the value on a SINGLE dimension works*, and it must fail with a **500** from V2's `23505`, not an assertion mismatch. Hibernate orders inserts before deletes within a flush, so without the explicit flush the trigger counts the outgoing value and refuses the incoming one. |
+| **Why it matters** | Changing a case's Test Type is the single most ordinary thing this feature does, and the failure is a 500 rather than a wrong value. |
+
+| | |
+|---|---|
+| **File** | `repository/CaseEdit.java`, the `classificationValueIds` component |
+| **Mutation** | return `distinct.stream().toList()` instead of `.sorted().toList()` |
+| **Scope** | `--tests 'com.tcms.repository.CaseUpdateEndpointTest'` |
+| **Must redden** | **exactly 1** — *the same values in a different order write NO second version*. |
+| **Why it matters** | `CaseVersions#hash` rests its whole determinism argument on there being no set in the hashed shape. If this does **not** redden, the version list is not actually protected from reorder churn and the sort is load-bearing only by accident. |
+
+| | |
+|---|---|
+| **File** | `repository/CaseEdit.java`, `of` |
+| **Mutation** | pass `Set.of()` instead of `storedClassificationValueIds` |
+| **Scope** | `--tests 'com.tcms.repository.CaseBulkEndpointTest'` |
+| **Must redden** | **unknown, and that is the point of running it.** The expectation is that the existing round-trip hash test catches it; if nothing reddens, then a bulk `MOVE_TO_SUITE` over a classified case writes a version hashing as though the case were unclassified, and the *next* ordinary save is credited with restoring a classification nobody touched — §62's mis-attribution defect, on a new field, with no test behind it. |
