@@ -278,3 +278,63 @@ seeded them equal would let this mutation pass every assertion in the class.
 | **Mutation** | move the `resolve` call **after** the permission check, asking a fixed permission first |
 | **Scope** | `--tests 'com.tcms.project.ClassificationValueWriteEndpointTest'` |
 | **Must redden** | at least the two 404-not-403 tests. It cannot even be written without inventing a permission to ask, which is the argument the method's javadoc makes — running it is how that argument gets checked rather than asserted. |
+
+---
+
+## §71 — team management, the org chart's first writer
+
+Two mutations were **run inline** rather than queued, because the slice's whole claim is a gate and
+a validation and there is nothing else to observe. Three are owed.
+
+### Run during §71
+
+| | |
+|---|---|
+| **File** | `identity/TeamWriteService.java`, all four gate sites |
+| **Mutation** | replace `!reach.manageTeams()` with `false` — no gate at all |
+| **Scope** | `--tests 'com.tcms.identity.TeamEndpointTest'` |
+| **Observed** | exactly **6** red, and every one of them a gate test: the Test Lead refused a create, a delete and a member write; the plain member refused a create; the gate-runs-before-the-payload test; and the other company's admin. The other 29 stayed green. |
+
+| | |
+|---|---|
+| **File** | `identity/TeamWriteService.java`, `putMember` |
+| **Mutation** | replace `if (!isStaffable(companyId, userId))` with `if (userId == null)` — accept any account the FK accepts |
+| **Scope** | `--tests 'com.tcms.identity.TeamEndpointTest'` |
+| **Observed** | exactly **2** red — the sibling company's user and the REMOVED member. Nothing else moved, so the check discriminates on precisely the population it claims to. |
+
+### Still owed for §71 — NOT yet run
+
+| | |
+|---|---|
+| **File** | `db/migration/V21__team_name_case_insensitive_unique.sql` |
+| **Mutation** | none — the **migration-against-an-already-migrated-database** check Testcontainers structurally cannot make. Apply `V21` to the Hetzner box (at `V20`) and confirm `installed_by = tcms_owner`. |
+| **Must show** | v20 → v21 in place; `uq_team_name` present as a unique **index** over `(company_id, lower(name))` and no longer as a table constraint. |
+| **Why it matters** | This one **drops a constraint and creates an index in its place**, which every earlier migration-in-place check did not do — and it fails outright if the existing data holds two teams whose names differ only in case. On a real box `team` is empty (nothing could ever write it), so the expected result is a clean no-op — which is exactly the kind of expectation worth confirming rather than assuming. |
+
+| | |
+|---|---|
+| **File** | `identity/TeamEdit.java`, `descends` |
+| **Mutation** | compare against direct children only — replace the upward walk with `parent.getParentTeamId().equals(team.getId())` |
+| **Scope** | `--tests 'com.tcms.identity.TeamEndpointTest'` |
+| **Must redden** | **exactly 1** — *a team cannot be moved under its own descendant*, which is deliberately written two levels deep. A one-level check passes the obvious test and severs a branch from the root on the real case. |
+
+| | |
+|---|---|
+| **File** | `identity/TeamWriteService.java`, `delete` |
+| **Mutation** | drop the `grants > 0` arm, keeping only `children > 0` |
+| **Scope** | `--tests 'com.tcms.identity.TeamEndpointTest'` |
+| **Must redden** | **exactly 2** — the 409-with-count test and the *"the grant is still there afterwards"* test. The second is the one that matters: without it a mutation that returned 409 and deleted anyway would still pass. |
+
+### The mutation that CANNOT be written, and why it is recorded here
+
+Swapping the gate's key from `company:teams` to `company:members` reddens **nothing**. `V3` grants
+both to exactly the same roles, so every persona the suite can build holds both or neither: the
+distinction is real in the code and unobservable in the seeded data.
+
+That is not repaired by inventing a fixture role — it is recorded by
+`SeedDataTest.teamManagementAndMemberManagementAreStillHeldTogether`, which fails the day a role
+holds one without the other. **When it fails, that is the good case**: the discrimination has become
+observable and the repair is to add that persona to `TeamEndpointTest.Gate`, not to re-align the
+seed. The frontend carries the only test that can tell the two keys apart today
+(`TeamsPage.test.tsx`, "refuses all four to a caller who administers members but not teams"),
+because a test can mock a permission set the seed cannot produce.

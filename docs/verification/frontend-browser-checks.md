@@ -264,3 +264,47 @@ cd frontend && grep -rn "api\.delete" src/     # must return NOTHING — the cli
 npx vitest run src/api/contractOperations.test.ts src/api/apiResponseTypes.test.ts
                                                # must report 8 DELETE call sites and 1 upload among them
 ```
+
+---
+
+## §71 — the org chart becomes editable
+
+**The live-mode-only rows come first, because this slice's whole point is a live-mode gap.** Mock
+mode has shown three teams since Phase 1 and live mode has shown **none, ever** — `team` had no
+writer, so `GET /teams` answered `[]` on every real instance. So the rows that matter most are the
+ones mock mode structurally cannot show, and rows 1–3 must be driven with `VITE_API_MODE=live`
+against a provisioned company or they prove nothing.
+
+**The mock persona cannot drive the happy path at all.** `companyScopePermissions` is
+`['company:read']`, so every org-chart control renders *disabled with its reason* in mock mode —
+which is row 4, and is worth driving as-is. To reach rows 5–11 in mock mode, add `'company:teams'`
+to that array in `src/mocks/fixtures/core.ts` (the file says so at the point of the decision).
+
+| # | Flow | What must be true | Mode |
+|---|---|---|---|
+| 1 | Sign in as a Company Admin on a **freshly provisioned** company → Teams & roles | "Team structure" is **empty**, with the no-records copy. This is the state every real company has always been in. | **live only** |
+| 2 | New team → "Platform" → Create | The team appears in the tree. Then `psql`: `SELECT id, name, parent_team_id FROM team` shows **exactly one row**, `company_id` the caller's. | **live only** |
+| 3 | Grant a role → subject **Platform (team)** → Test Engineer on a project → then Members → tick a colleague | The colleague's own session (second browser / private window) now lists that project on `/projects`, **without signing out and in**. Then untick → the project disappears from their rail on the next navigation. **This is the slice**: the team-grant path has existed since M0 and could never be exercised, because no team could be created for a grant to name. | **live only** |
+| 4 | Sign in as the mock persona (or any caller without `company:teams`) → Teams & roles | "New team" and all three row actions are **disabled with a tooltip giving the reason** — not hidden, not absent (§31). "Invite a person" beside them stays **enabled**, which is what shows the two permissions are asked apart. | mock + live |
+| 5 | New team → leave the name blank → Create | Field error on the name input, dialog stays open. | mock + live |
+| 6 | Create "QA", then create "qa" | Refused with a field error naming **the stored spelling** — `already has a team called "QA"`. The case-folding is the point; an exact-match check accepts this. | mock + live |
+| 7 | Create A, create B under A, then Edit A → "Sits under" | B is **not offered** in the select. Then edit A and pick a legal parent → saves. | mock + live |
+| 8 | Edit a nested team → "Sits under" → "No parent — a top-level team" → Save | The team moves to the root of the tree. **The PUT-not-PATCH decision is this row**: under PATCH this operation is unreachable. | mock + live |
+| 9 | Grant a role to a team, then Delete that team | **409**, and the dialog lists *"1 role grant is made through this team…"*. Cancel, and the grant is still in the Role assignments table. | mock + live |
+| 10 | Delete a team that has children | 409 naming the child count. Delete the child first, then the parent → 204 and both are gone from the tree. | mock + live |
+| 11 | Members dialog on a team that holds a grant | The **warning banner** names the projects and says anyone added gets them immediately. Tick a person → the row's checkbox stays ticked after the dialog is closed and reopened (the list refetches from the mutation's invalidation, not from a snapshot). | mock + live |
+| 12 | Members dialog → tick "Leads" for somebody **not** in the team | The Leads checkbox is **disabled** with a tooltip until they are a member. Ticking "In team" enables it. | mock + live |
+| 13 | Members dialog → tick a person, close, reopen, untick them | 204 both times; no duplicate row, and `psql` shows `team_membership` gained one row and lost it. | **live only** |
+
+**The two rows no browser can produce, recorded so nobody goes looking for them:**
+
+- **An orphaned team** (`parent_team_id` naming a team that is not in the list) and **a cycle**.
+  The API refuses both, twice over, so they can only be made in `psql` — and the tree now surfaces
+  them at the root rather than dropping them, which is `TeamsPage.test.tsx`'s job instead. It
+  matters because the tree is the **only** place a team can be edited or deleted, so a row it drops
+  is a row nobody can fix. Driving it needs
+  `UPDATE team SET parent_team_id = gen_random_uuid() WHERE name = 'Platform';` and is worth doing
+  once on the box if the §71 live pass happens at all.
+- **A sibling company's account offered as a team member.** The picker only lists this company's
+  people, so the refusal it exists for is unreachable from the UI. That one is asserted at the
+  server (`TeamEndpointTest`, "a SIBLING COMPANY'S user is refused — 404, and no row is written").
