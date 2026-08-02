@@ -113,6 +113,67 @@ parallelism as *"every lane re-derives the same premises"*. A shared, frozen, pr
 direct antidote — it is the one mechanism that makes N lanes cost meaningfully less than N times one
 lane. Serialising the *writes* keeps all of that and gives up nothing the lanes needed.
 
+### 0.6 Branch per lane, and what merging does and does not protect
+
+**Yes — one branch per lane, integrated by merge. It is already half-mandated:** gate row 5 requires
+a worktree for every backend lane, and `git worktree add` *is* a branch with a working directory.
+What the plan was missing is that it framed this as **build isolation** only. It is also **merge
+isolation**, and that is the more valuable half.
+
+> **This section was written after the hazard bit.** On 2026-08-02 two strands worked this repo on
+> one branch. One rebased, and **two of the other's commits stopped being reachable from `HEAD`** —
+> including the §0.5 that sits directly above this line. Nothing conflicted, nothing errored, and
+> `git status` was clean the whole time. They were recovered by `git cherry-pick` because the objects
+> survived. On separate branches this could not have happened.
+
+**What branching genuinely buys**
+
+- No lane ever compiles against another lane's half-finished tree — the failure mode §6 describes as
+  producing "failures that look like real defects".
+- Conflicts surface **at a controlled moment**, on one person's screen, instead of as a mysterious
+  red build mid-run.
+- **Blast radius is a branch.** A lane that goes wrong is deleted, not unpicked.
+- **One strand cannot drop another's commits**, which is the incident above.
+- `--no-ff` merges keep lane identity in the history, so a bisect lands on a lane rather than on an
+  interleaved mess.
+
+**What it does not buy, and this is the part that matters**
+
+> **Git merges text. Nearly every conflict this project has actually paid for merges clean.**
+
+| Hazard | Why the merge is clean | What catches it |
+|---|---|---|
+| Two lanes both write `V20__*.sql` | Different *filenames*, so no textual conflict — and Flyway then has two V20s, or a `V21` that landed before a `V20` and is refused on any already-migrated database | Gate row 4: pre-assign, and **renumber at integration in landing order** |
+| Two test classes take the same fixture UUID prefix | Different files entirely | Gate row 6, and nothing else — it has fired five times |
+| Both lanes regenerate `schema.d.ts` | The generated file *does* conflict, and **hand-resolving it is still wrong** | Never resolve it: merge `openapi.yaml`, then re-run `npm run gen:api` |
+| Lane A adds `repository → X`, lane B adds `X → repository` | Two unrelated `package-info.java` edits | ArchUnit, at the first build **after** the merge |
+| A adds an enum member, B adds its label | Two unrelated files | `satisfies Record<Union, string>` — a compile error, the one hazard the toolchain already catches |
+
+So branching **relocates** the risk to a moment when someone is looking, which is a real gain, and
+**removes none of §0.2's rows**. Every gate row survives the adoption of branches unchanged.
+
+**The integration protocol**
+
+1. Every lane branches from **the same recorded base commit**. Lane branches **never merge each
+   other** — a lane that needs another lane's work is a sequencing error, not a merge.
+2. Merge **serially into one integration branch, in a declared landing order**, decided before the
+   lanes start (gate row 4's renumbering depends on it).
+3. **Re-run the full gate after every merge, not once at the end.** Merge 2 can invalidate merge 1's
+   verification, and a single run at the end cannot tell you which merge broke it.
+4. **The last merge is where the cache holder runs Phase 3** (§0.5), stamping the integration commit.
+
+**The four conflict classes and their standing resolutions**
+
+| Class | Resolution |
+|---|---|
+| **Generated** (`schema.d.ts`) | Never hand-resolve, never pick a side. Take the merged `openapi.yaml`, run `npm run gen:api`, commit the result. |
+| **Numbered** (Flyway `V*.sql`) | Never resolve by content. Renumber to landing order, then verify against an **already-migrated** database — Testcontainers migrates a fresh container and structurally cannot see the defect. |
+| **Append-only indexes** (`docs/HANDOFF.md` rows) | Take both sides. The trivial class, and the one-file-per-section split (§2) exists to keep it trivial. |
+| **Stamped** (`docs/agent-context/*.md`) | Do not merge. The holder rewrites the file; a "resolved" baseline stamp is meaningless, because the correct value is the merge commit, which does not exist until the resolution is finished. |
+
+There is no `.gitattributes` in this repo. Adding one marking `schema.d.ts` as generated would make
+the first row louder, but it cannot make hand-resolution correct — the rule has to be known anyway.
+
 ---
 
 ## 1. Why the vertical slice cannot be parallelised as-is
@@ -286,3 +347,6 @@ Two smaller residuals, both stated rather than solved:
 - [ ] Each lane writes **its own** `docs/handoff/NN-*.md`; the index row is merged last.
 - [ ] **`docs/agent-context/*.md` refreshed serially BEFORE the fan-out**, read-only during it, and
       **one lane per agent type** named to run the update-after at integration (§0.5).
+- [ ] **One branch per lane, all from the same recorded base commit**, and a **landing order declared
+      before the lanes start** (§0.6). Lane branches never merge each other.
+- [ ] The **full gate re-run after every merge**, not once at the end (§0.6).
