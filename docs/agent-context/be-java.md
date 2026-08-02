@@ -3,7 +3,7 @@
 # be-java — orientation cache (TCMS)
 
 **Last verified:** 2026-08-02
-**Baseline commit:** `34aa2a6`
+**Baseline commit:** `dfd348b`
 **Fingerprint files:** `backend/build.gradle.kts`, `backend/gradle/libs.versions.toml`, `backend/gradle/wrapper/gradle-wrapper.properties`
 
 > Authoritative docs win over this file. `CLAUDE.md`, `docs/HANDOFF.md` (an index — sections live in
@@ -82,7 +82,17 @@ provisioning · auth · shared`.
   `ALL` · `OWN` (V12, by `created_by`) · `PLAN_SCOPE` (V19, by the row's scope). The evaluator answers
   the qualifier; the **gate** applies it to the row, through `project.AuthorshipGate` /
   `project.RowScopeGate` — the row's fact crosses into `identity` and a verdict comes back, so no
-  module holds a second reading of what a qualifier means. `PermissionQualifier.strongest` throws on
+  module holds a second reading of what a qualifier means.
+  **Since §65 `PermissionSet` IS a `key → qualifier` map and `PermissionEvaluator.qualifierOf` is a
+  one-line delegation to `evaluate(...).qualifierOf(key)`** — one traversal, so the strongest-wins
+  merge and the replace-don't-union boundary exist in exactly one place (`PermissionEvaluator.merge`).
+  The three grant projections return `HeldPermissionRow` (key + qualifier) with `DISTINCT` over
+  **both** columns; the four per-key qualifier queries were deleted and must not come back, since a
+  second resolution of "which grant wins" is the defect that removed them. `PermissionSet.of` THROWS
+  on a key qualified `NONE` — absent, never present-and-covering-nothing. `#confirmed`
+- **`/me/permissions` is `[{key, qualifier}]`, not `[key]`** (§65), sorted by key. That is what lets
+  the SPA disable a control a qualified grant cannot use, instead of letting the submit 403 —
+  `useCan.canOnScope` mirrors `IdentityProjectAccess.canDoOnScope` arm for arm. `#confirmed` `PermissionQualifier.strongest` throws on
   `OWN`+`PLAN_SCOPE` (incomparable axes); `SeedDataTest` keeps that unreachable by asserting no key
   carries two different restrictive qualifiers. **A new qualifier value is a compile error at every
   consumer** — the switches are exhaustive under `-Werror`, deliberately. `#confirmed`
@@ -148,6 +158,17 @@ provisioning · auth · shared`.
 
 ## Session log
 
+- 2026-08-02 · EXTEND · Put permission qualifiers on the wire (§65), the rung §61 deferred. New:
+  `HeldPermissionRow` projection, `MeController.HeldPermission`, `PermissionSet.qualifierOf/qualifiers`.
+  **Collapsed `evaluate` and `qualifierOf` into one traversal** — the replace-don't-union boundary
+  was written out twice and nothing failed if one copy was edited. **Deleted four repository
+  queries** (`find*Qualifiers`); none had a direct test, which is why the duplication survived.
+  `PermissionSet` is now a map and refuses a `NONE`-qualified key. Contract: `EffectivePermissions.
+  permissions` items are `HeldPermission`, plus a `PermissionQualifier` enum with **no `NONE`**.
+  New: `SeedDataTest`-style catalogue-derived agreement test over five personas × every key.
+  **No migration.** Mutation-verified once (hard-coding `ALL` reddens exactly 8); two further
+  mutations are QUEUED, not run — see `docs/verification/backend-mutation-checks.md`, the new
+  standing policy that batches mutation checks instead of paying them per slice.
 - 2026-08-02 · EXTEND · Built the shared-step library (§64), M1.5's other half. New: `SharedStep`
   entity over V1's table (`usage_count` deliberately NOT mapped), `SharedStepRepository`/`Service`/
   `Controller`/`View`/`Edit`/`Query`/`WriteRequest`/`Usage`, `GET` + `POST

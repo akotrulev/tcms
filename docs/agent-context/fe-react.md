@@ -3,7 +3,7 @@
 # fe-react — orientation cache (TCMS)
 
 **Last verified:** 2026-08-02
-**Baseline commit:** `34aa2a6`
+**Baseline commit:** `dfd348b`
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
 `frontend/vite.config.ts`
 
@@ -51,8 +51,18 @@
 - **`components/PermissionGate.tsx`** is the one place a lacked permission becomes a **disabled
   control with a why-tooltip** (§31, disable-don't-hide). Render prop, not `cloneElement`; the denied
   branch wraps in a span because MUI kills pointer events on a disabled control. **It gates on a
-  permission KEY only** — `/me/permissions` carries no qualifiers, so a scope- or author-restricted
-  grant reads as fully held (see §61). **It must NOT be used inside a MUI `Select`** — `Select`
+  permission KEY only.** ~~`/me/permissions` carries no qualifiers, so a scope- or author-restricted
+  grant reads as fully held (§61)~~ → **superseded in §65: the response is now `[{key, qualifier}]`.**
+  `PermissionGate` still asks the key alone, which is right for it — a *qualified* affordance asks
+  `useCan(projectId).canOnScope(key, rowIsPlanScoped)` in the component body, mirroring the server's
+  `canDoOnScope` arm for arm rather than reinterpreting the qualifier. `Gate.pending` is exposed for
+  the one thing the fail-closed verdicts cannot express: **"not yet" is not "no"**, and using a
+  pending verdict to *act* (rather than to disable) demotes every caller during the load — which is
+  exactly what shipped into §65's first draft and what two unrelated tests caught.
+  **Mocking `/me/permissions` in a test: use `src/test/permissions.ts`'s `heldPermissions()`.**
+  The spies cast through `as never`, so a response-shape change breaks them with **zero type
+  errors**, surfacing as `pointer-events: none` three assertions later. `#confirmed`
+- **It must NOT be used inside a MUI `Select`** — `Select`
   clones its *direct* children to inject `role="option"`, `data-value` and the selection handler, so
   a wrapped `MenuItem` renders as an inert `role="menuitem"` that cannot be chosen at all, and
   carries no `aria-disabled` either, so a testid-based test reads it as "enabled". Inside a `Select`,
@@ -102,6 +112,14 @@
   with the reasoning recorded in `vite.config.ts`.
 
 ## Session log
+
+- 2026-08-02 · EXTEND · Consumed the §65 qualifier wire shape. `useCan` gains `canOnScope` /
+  `reasonOnScope` / `pending`; `ArtifactDialogs` disables the PROJECT scope option for a
+  `PLAN_SCOPE` grant (disabled on the `MenuItem`, never wrapped — §62's rule). New shared
+  `src/test/permissions.ts`. Mock handlers gained `holdsOn` / `qualifierOn` and the fixture carries
+  the *qualified* grants, so mock mode cannot show a control live mode disables. **Browser pass
+  DEFERRED** under the new standing policy — queued in `docs/verification/frontend-browser-checks.md`;
+  §65 is built and not browser-verified. 470/470.
 
 - 2026-08-02 · EXTEND · Built `SharedStepPicker` (§64) — the first consumer `useSharedSteps` has ever
   had, reached from the case editor's step list, plus `useCreateSharedStep`. Inserting sets the

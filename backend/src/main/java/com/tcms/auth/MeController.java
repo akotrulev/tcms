@@ -1,9 +1,11 @@
 package com.tcms.auth;
 
 import com.tcms.identity.PermissionEvaluator;
+import com.tcms.identity.PermissionQualifier;
 import com.tcms.identity.PermissionSet;
 import com.tcms.tenancy.CompanyContext;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -33,7 +35,24 @@ public class MeController {
         this.permissions = permissions;
     }
 
-    public record PermissionsResponse(UUID projectId, List<String> permissions) {
+    public record PermissionsResponse(UUID projectId, List<HeldPermission> permissions) {
+    }
+
+    /**
+     * One held permission and <strong>which rows it covers</strong>.
+     *
+     * <p>The qualifier is on the wire since §65 because without it this endpoint cannot express the
+     * answer the SPA needs. A Test Engineer holds {@code artifact:edit} at
+     * {@link PermissionQualifier#PLAN_SCOPE}: a keys-only response says "held", the project-scope
+     * control enables, and the server refuses the submit — so handoff §31's disable-don't-hide
+     * became unfollowable on exactly the control where it mattered, and §61 shipped a refusal
+     * message in the response body as the interim.
+     *
+     * <p>{@link PermissionQualifier#NONE} is never serialized: a permission the caller does not hold
+     * is an <em>absent</em> entry, never a present one qualified to nothing.
+     * {@link com.tcms.identity.PermissionSet} refuses to hold such an entry, so this cannot emit one.
+     */
+    public record HeldPermission(String key, PermissionQualifier qualifier) {
     }
 
     @GetMapping
@@ -73,6 +92,13 @@ public class MeController {
         } else {
             resolved = permissions.evaluate(userId, projectId);
         }
-        return new PermissionsResponse(projectId, resolved.keys().stream().sorted().toList());
+        // Sorted by key, as the contract states. Not for the server's benefit — a stable order makes
+        // two responses diffable when somebody is working out why a control is disabled.
+        return new PermissionsResponse(
+                projectId,
+                resolved.qualifiers().entrySet().stream()
+                        .sorted(Map.Entry.comparingByKey())
+                        .map(e -> new HeldPermission(e.getKey(), e.getValue()))
+                        .toList());
     }
 }

@@ -5,6 +5,7 @@ import { ApiError, api } from '../../api/client'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { GrantRoleDialog } from './GrantRoleDialog'
+import { heldPermissions } from '../../test/permissions'
 
 /**
  * The one dialog whose gate is chosen by its own form state.
@@ -71,8 +72,8 @@ function mockReads({ company, project }: { company: string[]; project: string[] 
   const read = async (path: string) => {
     if (path.startsWith('/me/permissions')) {
       return path.includes('projectId')
-        ? { projectId: PROJECT, permissions: project }
-        : { projectId: null, permissions: company }
+        ? heldPermissions(project, {}, PROJECT)
+        : heldPermissions(company, {}, null)
     }
     if (path === '/roles') return roles
     if (path === '/users') return users

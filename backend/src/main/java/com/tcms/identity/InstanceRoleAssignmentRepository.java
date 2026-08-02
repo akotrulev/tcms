@@ -22,39 +22,27 @@ import org.springframework.transaction.annotation.Transactional;
 public interface InstanceRoleAssignmentRepository extends JpaRepository<InstanceRoleAssignment, UUID> {
 
     /**
-     * Permission keys held instance-wide by {@code userId}.
+     * Permission keys held instance-wide by {@code userId}, <strong>each with its qualifier</strong>.
      *
      * <p>Users only — {@code instance_role_assignment} has no {@code team_id} by design,
      * so there is deliberately no team branch here to mirror
      * {@link RoleAssignmentRepository}. A team is company-owned, and letting a
      * client-administered entity confer operator rights is an escalation path.
-     */
-    @Query(nativeQuery = true, value = """
-            SELECT DISTINCT rp.permission_key
-              FROM instance_role_assignment ira
-              JOIN role_permission rp ON rp.role_id = ira.role_id
-             WHERE ira.user_id = :userId
-            """)
-    List<String> findSystemPermissionKeys(@Param("userId") UUID userId);
-
-    /**
-     * The qualifiers on a SYSTEM-scope grant of one permission.
      *
      * <p>Instance Admin's grant is derived from the whole catalogue and therefore carries V12's
-     * {@code 'ALL'} default on every key — so in practice this returns {@code ALL} or nothing. It is
-     * still asked rather than assumed: "the operator role is unqualified" is a fact about seed data,
-     * and a check that hard-codes it stops being true the day a SYSTEM role is defined with a
-     * qualified grant, silently and in the direction that grants more.
+     * {@code 'ALL'} default on every key — so in practice every qualifier here is {@code ALL}. It is
+     * still <em>read</em> rather than assumed: "the operator role is unqualified" is a fact about
+     * seed data, and code that hard-codes it stops being true the day a SYSTEM role is defined with
+     * a qualified grant, silently and in the direction that grants more.
      */
     @Query(nativeQuery = true, value = """
-            SELECT DISTINCT rp.qualifier
+            SELECT DISTINCT rp.permission_key AS permissionKey,
+                            rp.qualifier      AS qualifier
               FROM instance_role_assignment ira
               JOIN role_permission rp ON rp.role_id = ira.role_id
              WHERE ira.user_id = :userId
-               AND rp.permission_key = :permissionKey
             """)
-    List<String> findSystemQualifiers(
-            @Param("userId") UUID userId, @Param("permissionKey") String permissionKey);
+    List<HeldPermissionRow> findSystemHeldPermissions(@Param("userId") UUID userId);
 
     List<InstanceRoleAssignment> findByUserId(UUID userId);
 }

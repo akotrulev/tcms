@@ -22,7 +22,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -258,12 +260,51 @@ class ArtifactEndpointTest extends IntegrationTestBase {
             assertThat(result.getResponse().getStatus()).isEqualTo(403);
             assertThat(countArtifacts(ACME)).isZero();
 
-            // The refusal names the field, unlike the bodiless 403 a Viewer gets. §31's rule is
-            // that an action the server will refuse renders disabled with a reason — and the SPA
-            // structurally cannot honour it here, because its permission model is keys-only and
-            // this caller DOES hold artifact:edit. So the next best thing is a refusal the form can
-            // put on the scope selector, one radio button away from succeeding.
+            // The refusal names the field, unlike the bodiless 403 a Viewer gets, so the form can
+            // put the sentence on the scope selector rather than nowhere.
+            //
+            // This used to be the whole story, and the comment here said the SPA "structurally
+            // cannot honour §31's disable-don't-hide" because its permission model was keys-only
+            // while this caller DOES hold artifact:edit. §65 put the qualifier on the wire, so the
+            // control can now be disabled BEFORE the submit — see the sibling test below. The
+            // refusal stays regardless: the client is an affordance layer and this is the gate.
             assertThat(errorFields(result)).containsExactly("scope");
+        }
+
+        @Test
+        @DisplayName("/me/permissions tells the SPA the grant is PLAN_SCOPE, so it can disable "
+                + "the control instead of letting the submit fail")
+        void theQualifierIsOnTheWire() throws Exception {
+            // §65's reason for existing, asserted at the surface the SPA actually reads. The test
+            // above proves the server refuses; this proves the client could have KNOWN, which is
+            // the difference between a disabled radio button with a reason and a 403 after a
+            // filled-in form.
+            Map<String, String> engineer = heldPermissions(ENGINEER, ACME_BANKING);
+
+            assertThat(engineer.get("artifact:edit"))
+                    .as("the one grant the roles spec qualifies for this persona")
+                    .isEqualTo("PLAN_SCOPE");
+
+            // The control assertion, and the one that makes this test mean anything. A server that
+            // simply stamped every entry with the same value would satisfy the line above; only a
+            // second key with a DIFFERENT qualifier can tell "resolved" from "hard-coded".
+            assertThat(engineer.get("artifact:read"))
+                    .as("an unqualified grant of the same persona, on the same response")
+                    .isEqualTo("ALL");
+
+            // And the same key resolves differently for a caller whose grant is unqualified, which
+            // is what rules out a per-KEY constant as the implementation.
+            assertThat(heldPermissions(LEAD, ACME_BANKING).get("artifact:edit"))
+                    .as("a Test Lead holds it outright — same key, same project, different answer")
+                    .isEqualTo("ALL");
+
+            // NONE is never serialized: a permission nobody holds is an absent entry, not a
+            // present one qualified to nothing. A Viewer holding no artifact:edit must be silent
+            // about it rather than sending a value the client would have to interpret.
+            assertThat(heldPermissions(VIEWER, ACME_BANKING))
+                    .as("a Viewer holds artifact:read and not artifact:edit")
+                    .containsEntry("artifact:read", "ALL")
+                    .doesNotContainKey("artifact:edit");
         }
 
         @Test
@@ -652,6 +693,30 @@ class ArtifactEndpointTest extends IntegrationTestBase {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andReturn();
+    }
+
+    /**
+     * {@code GET /me/permissions} for one caller on one project, reduced to key → qualifier.
+     *
+     * <p>Reads the wire rather than the evaluator on purpose: {@code PermissionEvaluatorTest}
+     * already pins what the qualifier resolves to, and the thing this class cares about is whether
+     * it survives serialization to the client that has to act on it.
+     */
+    private Map<String, String> heldPermissions(UUID userId, UUID projectId) throws Exception {
+        MvcResult result = mvc.perform(MockMvcRequestBuilders
+                        .get("/api/v1/me/permissions")
+                        .param("projectId", projectId.toString())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(userId)))
+                .andReturn();
+
+        assertThat(result.getResponse().getStatus()).isEqualTo(200);
+
+        Map<String, String> held = new LinkedHashMap<>();
+        json.readTree(result.getResponse().getContentAsString())
+                .get("permissions")
+                .forEach(entry -> held.put(
+                        entry.get("key").asText(), entry.get("qualifier").asText()));
+        return held;
     }
 
     private List<JsonNode> list(UUID userId, UUID projectId, String scope, UUID planId)

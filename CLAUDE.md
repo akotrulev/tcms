@@ -248,8 +248,9 @@ a hundred slightly different ones.
   `git rev-parse --abbrev-ref HEAD` rather than assuming; a concurrent session may have merged and
   switched branches since the last handoff was written.
 - **Commit at the end of each phase**, not once at the end of the whole slice. A phase's commit lands
-  after its gate passes (`./gradlew build` / `npm run build` + `npm run lint` + the browser pass where
-  the phase's work is visual), so each commit is a state that was actually verified.
+  after its gate passes (`./gradlew build` / `npm run build` + `npm run lint`; ~~+ the browser pass
+  where the phase's work is visual~~ → **deferred to the verification queues since §65**, see the
+  working agreement), so each commit is a state whose automated gates were actually run.
 - **Concurrent sessions happen here** — `docs/HANDOFF.md` §10 records a second strand editing
   `docs/plans/` mid-session. Stage only the files your phase touched (`git add <paths>`, never
   `git add -A`), so another author's in-flight edits don't get interleaved into your diff. Re-read a
@@ -294,9 +295,18 @@ A second stack for a concurrent browser pass is `cp .env.lane-b.example .env.lan
   `required` array**, including on inline nested objects: `required` does not descend, and without it
   every generated property is optional and no consumer can use it.
 - **Verify with `npm run build`, not `tsc --noEmit`** — the latter has reported 0 errors while the
-  build failed with nine. Then **run the app.** The gates prove it compiles, not that it works: a
-  no-op theme toggle, two contradictory percentages on one screen, and a provider-ordering bug that
-  rendered nothing but the error page all typechecked and linted clean.
+  build failed with nine. ~~Then **run the app.**~~ **→ deferred and batched since §65** (see below).
+  The gates prove it compiles, not that it works: a no-op theme toggle, two contradictory
+  percentages on one screen, and a provider-ordering bug that rendered nothing but the error page
+  all typechecked and linted clean.
+- **Browser passes and backend mutation checks are DEFERRED AND BATCHED — §65, standing policy.**
+  Set 2026-08-02 at the user's direction: ship the remaining functionality first while requirements
+  are still moving, then verify in one concentrated pass. **A slice still records what it would have
+  driven and what it would have mutated**, appended to the matching queue —
+  `docs/verification/frontend-browser-checks.md` and `docs/verification/backend-mutation-checks.md`
+  — in a form that can be executed later. Landing without adding those rows skips the check
+  outright, which is what batching exists to avoid. **A slice in an unrun queue is *built and
+  unverified*, and must be described that way rather than as done.**
 - **A schema-wide or catalogue-wide invariant needs a computed check, not a careful reading.**
   Reading V1 top to bottom missed five join tables without `company_id`; scripting the comparison
   found them. Same family: derive "holds every permission" from the catalogue rather than storing a

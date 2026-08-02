@@ -10,7 +10,7 @@ import {
   recountRun,
   runExecutions,
 } from '../db';
-import { API, LATENCY, notFound, permissionsOn, problem, userRef } from './shared';
+import { API, LATENCY, holdsOn, notFound, problem, userRef } from './shared';
 
 export const runHandlers = [
   http.get(`${API}/projects/:projectId/runs`, async ({ request }) => {
@@ -42,7 +42,7 @@ export const runHandlers = [
     await delay(LATENCY);
     const projectId = String(params.projectId);
 
-    if (!permissionsOn(projectId).includes('run:create')) {
+    if (!holdsOn(projectId, 'run:create')) {
       return problem(403, 'Not allowed', 'You do not have permission to create runs in this project.');
     }
 
@@ -138,8 +138,7 @@ export const runHandlers = [
     // from the same `permissionsOn` the gate reads, so the disabled button and the refused write
     // cannot disagree — the divergence class the If-Match-in-the-body finding belongs to.
     const amending = execution.status != null;
-    const held = permissionsOn(String(params.projectId));
-    if (!held.includes(amending ? 'result:amend' : 'result:submit')) {
+    if (!holdsOn(String(params.projectId), amending ? 'result:amend' : 'result:submit')) {
       return problem(
         403,
         'Not allowed',

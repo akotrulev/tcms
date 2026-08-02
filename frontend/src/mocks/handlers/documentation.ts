@@ -2,7 +2,7 @@
 import { HttpResponse, delay, http } from 'msw';
 import type { Artifact, DocBlock, DocPage, DocPageStatus, DocPageSummary } from '../../api/types';
 import { allocateDocPageKey, db, newId } from '../db';
-import { API, LATENCY, notFound, permissionsOn, problem, userRef } from './shared';
+import { API, LATENCY, holdsOn, notFound, problem, userRef } from './shared';
 
 /** Mirrors the server's own cap, so the message lands on the field without a round trip. */
 const MAX_TITLE = 200;
@@ -158,7 +158,7 @@ function validateArtifact(input: ArtifactRegistration) {
 
 /** `doc:edit` / `doc:publish` on the project in the path — the gate the SPA's buttons mirror. */
 function gate(projectId: string, permission: string) {
-  return permissionsOn(projectId).includes(permission)
+  return holdsOn(projectId, permission)
     ? null
     : problem(
         403,
@@ -434,7 +434,7 @@ export const documentationHandlers = [
       403 WITH a body, matching the server: the caller holds the permission and is one radio button
       away from succeeding, so the refusal names the field rather than being bare.
     */
-    if (body.scope === 'PROJECT' && !permissionsOn(projectId).includes('artifact:delete')) {
+    if (body.scope === 'PROJECT' && !holdsOn(projectId, 'artifact:delete')) {
       // `artifact:delete` stands in for "unqualified artifact:edit" here, because the mock's
       // permission list has no qualifiers to read. The roles spec grants delete to exactly the
       // three roles that hold artifact:edit unqualified (Instance Admin, Company Admin, Test Lead)

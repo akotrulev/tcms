@@ -111,7 +111,13 @@ export const authHandlers = [
 
     const projectId = new URL(request.url).searchParams.get('projectId');
     if (!projectId) {
-      return HttpResponse.json({ projectId: null, permissions: companyScopePermissions });
+      // Company-scope grants carry no restrictive qualifier in the seeded catalogue — every
+      // qualified grant in the roles spec is on a PROJECT-scope role — so ALL is the derived
+      // answer here rather than a shortcut. See `permissionsOn` for the project-scope table.
+      return HttpResponse.json({
+        projectId: null,
+        permissions: companyScopePermissions.map((key) => ({ key, qualifier: 'ALL' })),
+      });
     }
 
     // An unknown project answers with the empty set rather than a 404, matching the real

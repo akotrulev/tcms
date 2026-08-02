@@ -5,6 +5,7 @@ import { api } from '../../api/client'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { SharedStepPicker } from './SharedStepPicker'
+import { heldPermissions } from '../../test/permissions'
 
 /**
  * The step-library picker — the first consumer `useSharedSteps` has ever had.
@@ -38,7 +39,7 @@ const entries = [
 /** `library` is what the shared-steps endpoint answers; permissions drive the create gate. */
 function mockReads(permissions: string[], library = entries) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
-    if (path.startsWith('/me/permissions')) return { projectId: 'p1', permissions }
+    if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
     if (path.includes('/shared-steps')) return library
     return []
   }) as never)

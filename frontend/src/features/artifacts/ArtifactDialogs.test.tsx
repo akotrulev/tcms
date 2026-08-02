@@ -5,6 +5,7 @@ import { ApiError, api } from '../../api/client'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { RegisterArtifactDialog } from './ArtifactDialogs'
+import { heldPermissions } from '../../test/permissions'
 
 /**
  * Registering an artifact — the form whose fields decide what its other fields mean.
@@ -53,10 +54,18 @@ const registered = {
   updatedAt: '2026-08-02T00:00:00Z',
 }
 
-/** The gate reads `artifact:edit`; nothing else in this dialog reads anything. */
-function mockPermissions(permissions: string[]) {
+/**
+ * The gate reads `artifact:edit`; nothing else in this dialog reads anything.
+ *
+ * Keys are `ALL` unless named in `qualified` — the shape `/me/permissions` has carried since §65,
+ * and the reason this dialog can disable a control instead of waiting for the server to refuse it.
+ */
+function mockPermissions(
+  permissions: string[],
+  qualified: Record<string, 'OWN' | 'PLAN_SCOPE'> = {},
+) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
-    if (path.startsWith('/me/permissions')) return { projectId: 'p1', permissions }
+    if (path.startsWith('/me/permissions')) return heldPermissions(permissions, qualified)
     throw new Error(`unmocked read: ${path}`)
   }) as never)
 }
@@ -93,6 +102,75 @@ describe('RegisterArtifactDialog', () => {
     onClose = vi.fn()
     onRegistered = vi.fn()
     mockPermissions(['artifact:edit'])
+  })
+
+  /*
+    §65 — the qualifier reaches the control. These assert through `role="option"`, never through a
+    testid, because §62 cost a live pass to learn that a MUI `Select` item its parent never
+    processed carries no `aria-disabled` either: "not disabled" and "not an option at all" read
+    identically to a query that looks the element up by testid and asks whether it is disabled.
+  */
+  describe('the PLAN_SCOPE qualifier disables the project scope before the submit', () => {
+    /** Every option in the "Belongs to" select, by accessible name and disabled state. */
+    async function scopeOptions() {
+      const select = screen.getByTestId('Artifacts.Dialog.Scope').closest('.MuiInputBase-root')!
+      await userEvent.click(within(select as HTMLElement).getByRole('combobox'))
+      const listbox = await screen.findByRole('listbox')
+      return within(listbox)
+        .getAllByRole('option')
+        .map((option) => ({
+          name: option.textContent ?? '',
+          disabled: option.getAttribute('aria-disabled') === 'true',
+        }))
+    }
+
+    it('offers a Test Engineer the plan and refuses them the project', async () => {
+      mockPermissions(['artifact:edit'], { 'artifact:edit': 'PLAN_SCOPE' })
+      renderDialog()
+
+      // The caller HOLDS artifact:edit, so the dialog opens and its Register button is enabled.
+      // Only the one choice their grant does not cover is closed off.
+      const options = await scopeOptions()
+      expect(options).toHaveLength(2)
+      expect(options.find((o) => /project/i.test(o.name))?.disabled).toBe(true)
+      expect(options.find((o) => /one plan/i.test(o.name))?.disabled).toBe(false)
+    })
+
+    it('leaves both open for a Test Lead, so the test above is about the qualifier', async () => {
+      // Without this, the assertion above passes just as well against a dialog whose project
+      // option is disabled for everybody — which would lock out the role the feature is for.
+      mockPermissions(['artifact:edit'])
+      renderDialog()
+
+      const options = await scopeOptions()
+      expect(options.every((o) => !o.disabled)).toBe(true)
+    })
+
+    it('moves the form off PROJECT scope rather than opening on a disabled choice', async () => {
+      // The default is computed at mount, when the permission query is still in flight and the
+      // gate is fail-closed. Landing on a value the user cannot submit — and cannot see why — is
+      // worse than the 403 this replaces.
+      mockPermissions(['artifact:edit'], { 'artifact:edit': 'PLAN_SCOPE' })
+      renderDialog()
+
+      await waitFor(() => {
+        expect(screen.getByTestId('Artifacts.Dialog.Scope')).toHaveValue('PLAN')
+      })
+      // And the plan picker is showing, because that is what PLAN scope requires.
+      expect(screen.getByTestId('Artifacts.Dialog.Plan')).toBeInTheDocument()
+    })
+
+    it('explains the restriction instead of claiming they lack the permission', async () => {
+      mockPermissions(['artifact:edit'], { 'artifact:edit': 'PLAN_SCOPE' })
+      renderDialog()
+
+      await waitFor(() => {
+        expect(screen.getByText(/covers a single plan, not the whole project/i)).toBeInTheDocument()
+      })
+      // The sentence for a permission nobody holds would be false here and would send them to ask
+      // an administrator for a grant they already have.
+      expect(screen.queryByText(/don't have permission/i)).not.toBeInTheDocument()
+    })
   })
 
   it('puts the scope-qualified 403 on the scope selector rather than in a banner', async () => {

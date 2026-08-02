@@ -16,6 +16,7 @@ import { z } from 'zod';
 import type { Artifact, DocPageSummary, TestPlanSummary } from '../../api/types';
 import { ApiError } from '../../api/client';
 import { useCreateArtifact } from '../../api/queries';
+import { useCan } from '../../auth/useCan';
 import { describeError } from '../../lib/describeError';
 
 /**
@@ -123,11 +124,16 @@ const TestIdPrefix = 'Artifacts.Dialog';
  * every message lands on the control it is about.
  *
  * **The 403 is the interesting one and it is deliberately treated like a 400.** A Test Engineer
- * holds `artifact:edit` — just not at project scope — so `PermissionGate` cannot disable the
- * button, and §31's disable-don't-hide rule is structurally unavailable here: the SPA's permission
- * model is keys-only and has no qualifier to read. The server therefore answers that one refusal
- * with a *body* naming `scope`, which puts the sentence on the scope selector the user is one
- * choice away from getting right, instead of a bare "forbidden" on a form that is otherwise valid.
+ * holds `artifact:edit` — just not at project scope — so `PermissionGate` cannot disable the button
+ * on the strength of the key alone. §61 shipped that as the *only* protection and recorded why:
+ * the permission model was keys-only, so §31's disable-don't-hide was structurally unavailable and
+ * the server answered that one refusal with a *body* naming `scope`.
+ *
+ * **§65 put the qualifier on the wire, so the scope choice is now disabled before the submit** —
+ * see the `Belongs to` select below. This handler stays exactly as it was, and that is the point:
+ * the client is an affordance layer, the gate is the server, and a form that can no longer produce
+ * the refusal must still render it correctly if it arrives. It still can — a grant revoked between
+ * opening the dialog and pressing Register lands here.
  */
 function applyServerError(
   error: unknown,
@@ -175,12 +181,24 @@ export function RegisterArtifactDialog({
   onRegistered: (artifact: Artifact) => void;
 }) {
   const create = useCreateArtifact(projectId);
+  const gate = useCan(projectId);
+
+  /**
+   * May this caller register at PROJECT scope?
+   *
+   * A Test Engineer's `artifact:edit` is `PLAN_SCOPE` (roles spec's Artifacts table, V19): they
+   * curate their own cycle and may not rewrite the document every cycle inherits read-only. Asked
+   * of the gate rather than decided here — what the qualifier means belongs on one side of the wire.
+   */
+  const canProjectScope = gate.canOnScope('artifact:edit', false);
+  const projectScopeReason = gate.reasonOnScope('artifact:edit', false);
 
   const {
     register,
     handleSubmit,
     setError,
     setFocus,
+    setValue,
     watch,
     formState: { errors, isSubmitting },
   } = useForm<ArtifactFormInput>({
@@ -209,6 +227,21 @@ export function RegisterArtifactDialog({
   useEffect(() => {
     if (open) setFocus('title');
   }, [open, setFocus]);
+
+  /*
+    Move off a scope this caller cannot use.
+
+    The default is computed at mount, when the permission query may still be in flight — and the
+    gate is fail-closed while pending, so a Test Lead would otherwise be pinned to PLAN by a
+    verdict that had not arrived yet. Guarded on the current value, so it corrects the disabled
+    selection once and never fights a choice the user made: PLAN is always available to anybody
+    holding artifact:edit at all, so there is no mirror case to handle.
+  */
+  useEffect(() => {
+    if (open && scope === 'PROJECT' && !gate.pending && !canProjectScope) {
+      setValue('scope', 'PLAN');
+    }
+  }, [open, scope, gate.pending, canProjectScope, setValue]);
 
   const submit = handleSubmit(async (values) => {
     try {
@@ -251,11 +284,21 @@ export function RegisterArtifactDialog({
               error={!!errors.scope}
               helperText={
                 errors.scope?.message ??
+                projectScopeReason ??
                 'A project artifact is inherited by every plan. A plan artifact belongs to that cycle only.'
               }
               slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Scope` } }}
             >
-              <MenuItem value="PROJECT">The project — every plan inherits it</MenuItem>
+              {/*
+                Disabled on the item, NOT wrapped in a PermissionGate. §62 cost a whole live pass to
+                learn this: `Select` clones its DIRECT children to inject `role="option"` and
+                `data-value`, so a wrapped item renders as an inert `role="menuitem"` that is
+                impossible to choose AND carries no `aria-disabled` — indistinguishable, to a test,
+                from an item that is merely not disabled.
+              */}
+              <MenuItem value="PROJECT" disabled={!canProjectScope}>
+                The project — every plan inherits it
+              </MenuItem>
               <MenuItem value="PLAN">One plan</MenuItem>
             </TextField>
 

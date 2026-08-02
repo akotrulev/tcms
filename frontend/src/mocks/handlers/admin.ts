@@ -2,7 +2,7 @@
 import { HttpResponse, delay, http } from 'msw';
 import { db, newId, users } from '../db';
 import { companyScopePermissions, currentUser, roles, teams } from '../fixtures/core';
-import { API, LATENCY, notFound, permissionsOn, problem, requireAuth } from './shared';
+import { API, LATENCY, holdsOn, notFound, problem, requireAuth } from './shared';
 
 /**
  * The scope-dependent gate, mirrored from `RoleGrantService` — `project:members` on the named
@@ -15,7 +15,7 @@ import { API, LATENCY, notFound, permissionsOn, problem, requireAuth } from './s
  */
 function mayStaff(projectId: string | null | undefined): boolean {
   return projectId
-    ? permissionsOn(projectId).includes('project:members')
+    ? holdsOn(projectId, 'project:members')
     : companyScopePermissions.includes('company:members');
 }
 

@@ -6,6 +6,7 @@ import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { BulkActionDialog } from './BulkActionDialog'
 import { lifecycleLabels } from '../../lib/labels'
+import { heldPermissions } from '../../test/permissions'
 
 /**
  * Bulk edits — preview-then-commit, and the one option in the dialog that is a permission gate.
@@ -43,7 +44,7 @@ const committedResult = { ...previewResult, dryRun: false, auditEventId: 'audit-
 /** The dialog reads `case:approve`; the lists it fetches are mocked empty. */
 function mockReads(permissions: string[]) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
-    if (path.startsWith('/me/permissions')) return { projectId: 'p1', permissions }
+    if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
     // Conditions, suites and members — all pickers this test does not drive.
     return []
   }) as never)

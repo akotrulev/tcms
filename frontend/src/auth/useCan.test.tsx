@@ -32,9 +32,17 @@ function wrapper(children: ReactNode) {
   return <TestProviders client={client}>{children}</TestProviders>
 }
 
-const answer = (permissions: PermissionKey[]): EffectivePermissions => ({
+/**
+ * A `/me/permissions` body. Keys are `ALL` unless named in `qualified` — the same "list only the
+ * exceptions" rule the seeded catalogue follows, so a test that does not care about qualifiers
+ * reads exactly as it did before §65 put them on the wire.
+ */
+const answer = (
+  permissions: PermissionKey[],
+  qualified: Partial<Record<PermissionKey, 'OWN' | 'PLAN_SCOPE'>> = {},
+): EffectivePermissions => ({
   projectId: PROJECT,
-  permissions,
+  permissions: permissions.map((key) => ({ key, qualifier: qualified[key] ?? 'ALL' })),
 })
 
 /** Resolves only when the test says so, so the pending state can be observed rather than raced. */
@@ -208,6 +216,88 @@ describe('useCan', () => {
       await waitFor(() => expect(result.current.can('case:read')).toBe(true))
 
       expect(get).toHaveBeenCalledWith(`/me/permissions?projectId=${PROJECT}`, expect.anything())
+    })
+  })
+
+  /*
+    The qualifier (§65). `can` answers "is it held" and a qualified grant IS held — so these two
+    questions must not collapse into one, and every test below turns on the difference.
+  */
+  describe('canOnScope — held, but not here', () => {
+    const engineer = () =>
+      vi.spyOn(api, 'get').mockResolvedValue(
+        answer(['artifact:read', 'artifact:edit'], { 'artifact:edit': 'PLAN_SCOPE' }),
+      )
+
+    it('lets a PLAN_SCOPE grant act on a plan row and refuses the project row', async () => {
+      engineer()
+      const { result } = renderHook(() => useCan(PROJECT), { wrapper: ({ children }) => wrapper(children) })
+      await waitFor(() => expect(result.current.can('artifact:edit')).toBe(true))
+
+      // THE assertion. `can` says true — they hold artifact:edit — while the project-scope write
+      // is refused. A gate that only had `can` could not express this, which is why §61 shipped
+      // the refusal in a response body instead of a disabled control.
+      expect(result.current.can('artifact:edit')).toBe(true)
+      expect(result.current.canOnScope('artifact:edit', true)).toBe(true)
+      expect(result.current.canOnScope('artifact:edit', false)).toBe(false)
+    })
+
+    it('says WHY, and not the sentence for a permission they simply lack', async () => {
+      engineer()
+      const { result } = renderHook(() => useCan(PROJECT), { wrapper: ({ children }) => wrapper(children) })
+      await waitFor(() => expect(result.current.can('artifact:edit')).toBe(true))
+
+      const reason = result.current.reasonOnScope('artifact:edit', false)
+      // "You don't have permission to manage artifacts" is FALSE for this caller — they manage
+      // them every cycle — and it sends them to ask for a grant they already hold.
+      expect(reason).not.toMatch(/don't have permission/)
+      expect(reason).toMatch(/single plan/)
+      expect(result.current.reasonOnScope('artifact:edit', true)).toBeUndefined()
+    })
+
+    it('an unqualified grant of the same key is allowed at both scopes', async () => {
+      // Without this, the test above passes equally well against a gate that refuses PROJECT
+      // scope for everybody — which would lock out the Test Lead the feature is for.
+      vi.spyOn(api, 'get').mockResolvedValue(answer(['artifact:edit']))
+      const { result } = renderHook(() => useCan(PROJECT), { wrapper: ({ children }) => wrapper(children) })
+      await waitFor(() => expect(result.current.can('artifact:edit')).toBe(true))
+
+      expect(result.current.canOnScope('artifact:edit', false)).toBe(true)
+      expect(result.current.canOnScope('artifact:edit', true)).toBe(true)
+      expect(result.current.reasonOnScope('artifact:edit', false)).toBeUndefined()
+    })
+
+    it('a key not held at all is refused at both scopes, with the ordinary sentence', async () => {
+      vi.spyOn(api, 'get').mockResolvedValue(answer(['artifact:read']))
+      const { result } = renderHook(() => useCan(PROJECT), { wrapper: ({ children }) => wrapper(children) })
+      await waitFor(() => expect(result.current.can('artifact:read')).toBe(true))
+
+      expect(result.current.canOnScope('artifact:edit', true)).toBe(false)
+      // The scope is not the reason here, and saying it was would send a Viewer to change a
+      // control that cannot help them.
+      expect(result.current.reasonOnScope('artifact:edit', true)).toMatch(/don't have permission/)
+    })
+
+    it('follows the same three states as `can` — closed while pending, open on failure', async () => {
+      const pending = deferred<EffectivePermissions>()
+      const get = vi.spyOn(api, 'get').mockReturnValue(pending.promise as Promise<never>)
+
+      const { result } = renderHook(() => useCan(PROJECT), { wrapper: ({ children }) => wrapper(children) })
+      expect(result.current.canOnScope('artifact:edit', false)).toBe(false)
+
+      pending.resolve(answer(['artifact:edit'], { 'artifact:edit': 'PLAN_SCOPE' }))
+      await waitFor(() => expect(result.current.can('artifact:edit')).toBe(true))
+      expect(result.current.canOnScope('artifact:edit', false)).toBe(false)
+
+      // And on failure it falls OPEN, like every other verdict here: a wrong enable costs one 403
+      // in the dialog the user is looking at, a wrong disable tells someone they cannot do their
+      // job and offers no retry.
+      get.mockRejectedValue(new Error('network'))
+      const failed = renderHook(() => useCan(PROJECT), {
+        wrapper: ({ children }) => wrapper(children),
+      })
+      await waitFor(() => expect(failed.result.current.can('artifact:edit')).toBe(true))
+      expect(failed.result.current.canOnScope('artifact:edit', false)).toBe(true)
     })
   })
 })

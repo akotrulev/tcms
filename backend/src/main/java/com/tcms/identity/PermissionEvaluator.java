@@ -4,10 +4,10 @@ import com.tcms.project.ProjectRepository;
 import com.tcms.tenancy.CompanyContext;
 import com.tcms.tenancy.CompanyRepository;
 import com.tcms.tenancy.CompanyStatus;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -131,19 +131,19 @@ public class PermissionEvaluator {
             return PermissionSet.empty(catalogue);
         }
 
-        Optional<Set<String>> systemKeys = systemKeysIfAccountActive(userId);
-        if (systemKeys.isEmpty()) {
+        Optional<Map<String, PermissionQualifier>> systemTerm = systemTermIfAccountActive(userId);
+        if (systemTerm.isEmpty()) {
             return PermissionSet.empty(catalogue);
         }
-        Set<String> keys = systemKeys.get();
+        Map<String, PermissionQualifier> held = systemTerm.get();
         if (companyGateOpen(companyId, userId)) {
-            // Never overridden: SYSTEM (already in `keys`) and COMPANY-scope roles. Authority over
+            // Never overridden: SYSTEM (already in `held`) and COMPANY-scope roles. Authority over
             // the company is not a per-project matter, and making it one would let anybody holding
             // project:members neutralise the company's administrator by granting them Viewer.
-            keys.addAll(roleAssignments.findCompanyRolePermissionKeys(companyId, userId));
-            keys.addAll(projectRoleKeys(companyId, userId, projectId));
+            merge(held, roleAssignments.findCompanyRoleHeldPermissions(companyId, userId));
+            merge(held, projectTerm(companyId, userId, projectId));
         }
-        return PermissionSet.of(catalogue, keys);
+        return PermissionSet.of(catalogue, held);
     }
 
     /**
@@ -168,29 +168,65 @@ public class PermissionEvaluator {
      * (directly and through a team) accumulate exactly as before, and so do two company-wide ones.
      * Only the boundary between the two levels is an override.
      */
-    private Set<String> projectRoleKeys(UUID companyId, UUID userId, UUID projectId) {
-        return new HashSet<>(
-                roleAssignments.hasProjectScopedAssignment(companyId, userId, projectId)
-                        ? roleAssignments.findProjectScopedPermissionKeys(companyId, userId, projectId)
-                        : roleAssignments.findInheritedProjectRolePermissionKeys(companyId, userId));
+    private List<HeldPermissionRow> projectTerm(UUID companyId, UUID userId, UUID projectId) {
+        return roleAssignments.hasProjectScopedAssignment(companyId, userId, projectId)
+                ? roleAssignments.findProjectScopedHeldPermissions(companyId, userId, projectId)
+                : roleAssignments.findInheritedProjectRoleHeldPermissions(companyId, userId);
+    }
+
+    /**
+     * Folds one term's rows into the accumulating answer, <strong>strongest qualifier winning per
+     * key</strong>.
+     *
+     * <p>This is the union step, and since §65 it is the <em>only</em> one — the qualifier merge and
+     * the key union are the same operation over the same rows, where they used to be two traversals
+     * of the same three terms in two methods that had to agree.
+     *
+     * <p>Note that a single term can itself contain one key twice: two grants (directly and through
+     * a team, or through two teams) conferring it with different qualifiers. That is why the merge
+     * is per row rather than per term, and why the projection's {@code DISTINCT} covers both columns
+     * — collapsing to one row per key would decide it by row order.
+     *
+     * @throws IllegalStateException via {@link PermissionQualifier#strongest} if one key arrives
+     *                               with two <em>different restrictive</em> qualifiers. Since §65
+     *                               that surfaces here — on any permission resolution — rather than
+     *                               only at the gate for that one key, and it should: the answer
+     *                               now carries a qualifier per key over the wire, so a key whose
+     *                               qualifier is inexpressible has nothing honest to serialize.
+     *                               {@code SeedDataTest} keeps it unreachable against seeded data.
+     */
+    private static void merge(Map<String, PermissionQualifier> held, List<HeldPermissionRow> rows) {
+        for (HeldPermissionRow row : rows) {
+            held.merge(
+                    row.getPermissionKey(),
+                    PermissionQualifier.ofStored(row.getQualifier()),
+                    PermissionQualifier::strongest);
+        }
     }
 
     /**
      * <strong>Which rows</strong> the caller's grant of one permission covers on one project —
      * {@link PermissionQualifier#NONE} when they do not hold it at all.
      *
-     * <h2>Why this is a second method and not a field on {@link PermissionSet}</h2>
+     * <h2>Why this is still its own method after §65 collapsed the computation</h2>
      *
-     * <p>{@link #evaluate} answers "is it held", which is what every consumer but one asks. This
-     * answers "over what", which only a gate standing in front of a specific row can use — and that
-     * gate knows which permission it is enforcing, so it asks about one key rather than being handed
-     * a map of qualifiers it would discard.
+     * <p>It used to resolve the three terms itself, per key. It no longer does — it reads
+     * {@link #evaluate}'s answer — but the <em>signature</em> is the point and is unchanged: a gate
+     * standing in front of a row knows which permission it is enforcing, and handing it a whole
+     * {@link PermissionSet} to interrogate would put the choice of what to ask at the call site.
+     * {@code ProjectAccess.canDoOnAuthored} and {@code canDoOnScope} are the only callers and both
+     * want exactly this shape.
      *
-     * <p>The gates are the same three, in the same order, and re-checking them here is not
-     * belt-and-braces: this is reachable independently of {@link #evaluate}, and a deactivated
-     * account or a foreign project must answer {@code NONE} on this path too. Answering "ALL"
-     * because "the caller must already have passed the coarse gate" is an assumption about a caller
-     * this class cannot see.
+     * <p>What the collapse bought: the replace-don't-union boundary and the strongest-wins merge are
+     * now decided <strong>once</strong>. The old duplicate had to stay in step with {@link #evaluate}
+     * by hand — a company-wide Test Engineer inherits {@code artifact:edit} as {@code PLAN_SCOPE} and
+     * a project grant of Test Lead must replace it with {@code ALL}, a rule that was written out
+     * twice — and nothing failed if one copy was edited.
+     *
+     * <p>The account gate, the company gate and the foreign-project check are all still applied,
+     * because {@link #evaluate} applies them: a deactivated account or a project in another company
+     * resolves to the empty set, and {@link PermissionSet#qualifierOf} answers {@code NONE} for
+     * every key of it.
      *
      * <p>{@code NONE} is also what a caller who holds the permission through no grant at all gets,
      * so a gate that consults only this method — without {@link PermissionSet#has} first — is still
@@ -204,45 +240,7 @@ public class PermissionEvaluator {
                     "projectId must not be null. A qualifier is asked about a row, and every "
                             + "OWN-qualified permission is project-scoped.");
         }
-        // Validates the key against the catalogue, so a typo throws here rather than resolving to
-        // NONE — which would read as "this user is not allowed" and be investigated against the
-        // grants, where nothing is wrong. Same reason PermissionSet#has validates.
-        catalogue.requireKnown(permissionKey);
-
-        UUID companyId = CompanyContext.require();
-        if (projects.findScopedById(projectId).isEmpty()) {
-            return PermissionQualifier.NONE;
-        }
-        if (!users.existsByIdAndStatus(userId, UserStatus.ACTIVE)) {
-            return PermissionQualifier.NONE;
-        }
-
-        PermissionQualifier held =
-                strongestOf(instanceRoleAssignments.findSystemQualifiers(userId, permissionKey));
-        if (companyGateOpen(companyId, userId)) {
-            held = held.strongest(strongestOf(
-                    roleAssignments.findCompanyRoleQualifiers(companyId, userId, permissionKey)));
-            // The same replace-don't-union rule as evaluate(), and it has to be the same or the two
-            // disagree about which grant is in force: a company-wide Test Engineer inherits
-            // artifact:edit as PLAN_SCOPE, and a project grant of Test Lead must make it ALL there
-            // rather than merging to the stronger of the two by accident.
-            held = held.strongest(strongestOf(
-                    roleAssignments.hasProjectScopedAssignment(companyId, userId, projectId)
-                            ? roleAssignments.findProjectScopedQualifiers(
-                                    companyId, userId, projectId, permissionKey)
-                            : roleAssignments.findInheritedProjectRoleQualifiers(
-                                    companyId, userId, permissionKey)));
-        }
-        return held;
-    }
-
-    /** No rows means the term grants nothing; otherwise the strongest qualifier in it. */
-    private static PermissionQualifier strongestOf(List<String> stored) {
-        PermissionQualifier strongest = PermissionQualifier.NONE;
-        for (String value : stored) {
-            strongest = strongest.strongest(PermissionQualifier.ofStored(value));
-        }
-        return strongest;
+        return evaluate(userId, projectId).qualifierOf(permissionKey);
     }
 
     /**
@@ -257,11 +255,11 @@ public class PermissionEvaluator {
     @Transactional(readOnly = true)
     public PermissionSet evaluateCompanyWide(UUID userId) {
         UUID companyId = CompanyContext.require();
-        Optional<Set<String>> systemKeys = systemKeysIfAccountActive(userId);
-        if (systemKeys.isEmpty()) {
+        Optional<Map<String, PermissionQualifier>> systemTerm = systemTermIfAccountActive(userId);
+        if (systemTerm.isEmpty()) {
             return PermissionSet.empty(catalogue);
         }
-        Set<String> keys = systemKeys.get();
+        Map<String, PermissionQualifier> held = systemTerm.get();
         if (companyGateOpen(companyId, userId)) {
             // COMPANY-scope roles only — deliberately NOT the PROJECT-scope roles held company-wide.
             //
@@ -269,9 +267,9 @@ public class PermissionEvaluator {
             // Inheriting Test Lead across every project means holding project:settings on each of
             // them; it does not mean holding company-level authority, and folding it in here would
             // let a company-wide Test Lead create projects because they lead all the existing ones.
-            keys.addAll(roleAssignments.findCompanyRolePermissionKeys(companyId, userId));
+            merge(held, roleAssignments.findCompanyRoleHeldPermissions(companyId, userId));
         }
-        return PermissionSet.of(catalogue, keys);
+        return PermissionSet.of(catalogue, held);
     }
 
     /**
@@ -281,8 +279,8 @@ public class PermissionEvaluator {
      */
     @Transactional(readOnly = true)
     public PermissionSet evaluateInstanceWide(UUID userId) {
-        return systemKeysIfAccountActive(userId)
-                .map(keys -> PermissionSet.of(catalogue, keys))
+        return systemTermIfAccountActive(userId)
+                .map(held -> PermissionSet.of(catalogue, held))
                 .orElseGet(() -> PermissionSet.empty(catalogue));
     }
 
@@ -290,16 +288,20 @@ public class PermissionEvaluator {
      * The SYSTEM term, or {@link Optional#empty()} when the account gate is shut.
      *
      * <p>The two outcomes are genuinely different answers and must not collapse into one
-     * empty set: an empty <em>set</em> means "active, holds nothing yet" and the caller
+     * empty map: an empty <em>map</em> means "active, holds nothing yet" and the caller
      * goes on to read the company terms, while an empty <em>Optional</em> means "this
      * account holds nothing anywhere" and the caller must stop. Collapsing them would let
      * a DEACTIVATED user pick up company grants.
+     *
+     * <p>Mutable on purpose — the caller folds the two company terms into it.
      */
-    private Optional<Set<String>> systemKeysIfAccountActive(UUID userId) {
+    private Optional<Map<String, PermissionQualifier>> systemTermIfAccountActive(UUID userId) {
         if (!users.existsByIdAndStatus(userId, UserStatus.ACTIVE)) {
             return Optional.empty();
         }
-        return Optional.of(new HashSet<>(instanceRoleAssignments.findSystemPermissionKeys(userId)));
+        Map<String, PermissionQualifier> held = new HashMap<>();
+        merge(held, instanceRoleAssignments.findSystemHeldPermissions(userId));
+        return Optional.of(held);
     }
 
     /**

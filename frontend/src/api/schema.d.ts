@@ -4482,11 +4482,37 @@ export interface components {
              */
             projectId: string | null;
             /**
-             * @description Sorted, and possibly empty — an empty set is a real answer (a company member
-             *     with no grant on this project), not a missing one.
+             * @description Sorted by `key`, and possibly empty — an empty array is a real answer (a company
+             *     member with no grant on this project), not a missing one.
+             *
+             *     Entries carry a `qualifier` as well as a key. Until §65 this was an array of bare
+             *     keys, and the omission had a cost the SPA could not work around: a Test Engineer
+             *     holds `artifact:edit` at `PLAN_SCOPE`, so a keys-only answer says "held", the
+             *     project-scope control enables, and the server refuses the submit. Disable-don't-hide
+             *     (handoff §31) is not expressible against an answer that cannot say "held, but not
+             *     here".
              */
-            permissions: components["schemas"]["PermissionKey"][];
+            permissions: components["schemas"]["HeldPermission"][];
         };
+        HeldPermission: {
+            key: components["schemas"]["PermissionKey"];
+            qualifier: components["schemas"]["PermissionQualifier"];
+        };
+        /**
+         * @description WHICH ROWS a held permission covers — roles spec §A5. The key says what the caller may
+         *     do; this says what they may do it to.
+         *
+         *     `NONE` is deliberately absent from this enum. A permission the caller does not hold is
+         *     an absent entry in `permissions`, never a present one qualified to nothing — the same
+         *     rule the database follows, where a grant of nothing is an absent row.
+         *
+         *     The two restrictive values are NOT comparable: `OWN` restricts by who wrote the row,
+         *     `PLAN_SCOPE` by what scope the row sits at, and neither contains the other. A caller
+         *     cannot receive both for one key — no permission is granted with two different
+         *     restrictive qualifiers, which the server asserts over its own catalogue.
+         * @enum {string}
+         */
+        PermissionQualifier: "ALL" | "OWN" | "PLAN_SCOPE";
         /**
          * @description The full v1 catalogue. Grouped by area, in the order the spec lists them.
          *     Six of these are newer than the first UI pass — suite:delete, project:audit,

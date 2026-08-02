@@ -2,7 +2,7 @@
 import { HttpResponse, delay, http } from 'msw';
 import type { TestPlan } from '../../api/types';
 import { allocatePlanKey, db, newId, planScopeCaseIds, reporting } from '../db';
-import { API, LATENCY, notFound, permissionsOn, problem } from './shared';
+import { API, LATENCY, holdsOn, notFound, problem } from './shared';
 
 export const planHandlers = [
   http.get(`${API}/projects/:projectId/plans`, async () => {
@@ -25,7 +25,7 @@ export const planHandlers = [
     await delay(LATENCY);
     const projectId = String(params.projectId);
 
-    if (!permissionsOn(projectId).includes('plan:create')) {
+    if (!holdsOn(projectId, 'plan:create')) {
       return problem(
         403,
         'Not allowed',

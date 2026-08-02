@@ -10,6 +10,8 @@ import com.tcms.tenancy.Company;
 import com.tcms.tenancy.CompanyContext;
 import com.tcms.tenancy.CompanyRepository;
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.BeforeEach;
@@ -651,6 +653,63 @@ class PermissionEvaluatorTest extends IntegrationTestBase {
             assertThatThrownBy(() -> inCompany(ACME, () ->
                     evaluator.qualifierOf(LEAD, null, "case:delete")))
                     .isInstanceOf(IllegalArgumentException.class);
+        }
+    }
+
+    // =========================================================================
+    // The collapse (§65) — one computation, two questions
+    // =========================================================================
+
+    @Nested
+    @DisplayName("evaluate and qualifierOf are one traversal, and cannot answer differently")
+    class OneComputation {
+
+        /**
+         * The property the collapse exists for, over every persona and every key at once.
+         *
+         * <p>Before §65 these were two methods resolving the same three terms, each with its own
+         * copy of the replace-don't-union boundary, and <strong>nothing failed if one copy was
+         * edited</strong>. It is true by construction now — {@code qualifierOf} reads
+         * {@code evaluate}'s map — which is exactly why it is worth pinning: the day somebody
+         * re-splits them for a performance argument, this is what says the two halves drifted.
+         *
+         * <p>Derived from the catalogue rather than from a list of keys, per the working
+         * agreement's rule about catalogue-wide invariants: a key added next year is covered
+         * without this test being edited.
+         */
+        @Test
+        @DisplayName("every key a caller holds reports a qualifier, and every key they don't reports NONE")
+        void theTwoQuestionsAgreeOnEveryKeyInTheCatalogue() {
+            for (UUID persona : List.of(LEAD, TEAM_ENGINEER, DUAL_GRANT, INHERITOR, MEMBER_NO_GRANT)) {
+                PermissionSet held = evaluateIn(ACME, persona, ACME_PROJECT);
+
+                for (String key : catalogue.keys()) {
+                    PermissionQualifier viaGate = qualifierIn(ACME, persona, ACME_PROJECT, key);
+
+                    if (held.has(key)) {
+                        assertThat(viaGate)
+                                .as("%s holds %s, so the gate must name the rows it covers", persona, key)
+                                .isNotEqualTo(PermissionQualifier.NONE);
+                    } else {
+                        assertThat(viaGate)
+                                .as("%s does not hold %s, so the gate must refuse", persona, key)
+                                .isEqualTo(PermissionQualifier.NONE);
+                    }
+                }
+            }
+        }
+
+        @Test
+        @DisplayName("a held permission is never qualified to NONE — that state cannot be built")
+        void nothingIsHeldOverNoRows() {
+            // The invariant the wire depends on: `permissions` carries one entry per held key with
+            // a qualifier that means something, so "held, covering nothing" must be unrepresentable
+            // rather than merely unproduced. A consumer reading presence as capability — which is
+            // every consumer — would be wrong about exactly that entry.
+            assertThatThrownBy(() -> PermissionSet.of(
+                    catalogue, Map.of("case:delete", PermissionQualifier.NONE)))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("ABSENT");
         }
     }
 

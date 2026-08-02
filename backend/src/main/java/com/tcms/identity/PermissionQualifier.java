@@ -1,13 +1,18 @@
 package com.tcms.identity;
 
 /**
- * <strong>Which rows</strong> a grant of a permission covers — roles spec §A5, and the thing
- * {@link PermissionSet} deliberately cannot express.
+ * <strong>Which rows</strong> a grant of a permission covers — roles spec §A5.
  *
  * <p>A {@link PermissionSet} answers "does this caller hold {@code case:delete} here?". For a Test
  * Engineer the honest answer is "yes, for cases they wrote" — a qualification that needs the
  * <em>row</em>, which the evaluator never sees. So the evaluator answers with this, and the row-level
  * comparison happens at the gate that does have the row.
+ *
+ * <p><strong>This header used to say {@code PermissionSet} "deliberately cannot express" the
+ * qualifier. Since §65 it carries one per held key</strong> — see that class for the consumer the
+ * old split did not survive. Nothing about the <em>meaning</em> below changed: the set still says
+ * which rows, never which row, and the comparison still happens at the gate holding the row. What
+ * changed is that the two are resolved in one traversal instead of two that had to agree.
  *
  * <h2>Why this is not three permission keys</h2>
  *

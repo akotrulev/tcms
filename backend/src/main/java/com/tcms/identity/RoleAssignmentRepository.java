@@ -9,15 +9,15 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Grants in the active company, plus the two projections {@link PermissionEvaluator}
+ * Grants in the active company, plus the three projections {@link PermissionEvaluator}
  * builds its union from.
  *
  * <h2>Why the permission lookups are native queries</h2>
  *
  * <p>{@code role_permission} has no entity — it is a pure join table over reference data
  * and modelling it as a {@code @ManyToMany} would buy a collection nobody navigates.
- * These queries also want <em>only</em> the permission key, so a projection is cheaper
- * than loading grant rows and walking them in Java.
+ * These queries also want <em>only</em> the permission key and its qualifier, so a projection is
+ * cheaper than loading grant rows and walking them in Java.
  *
  * <p><strong>A Hibernate filter does not apply to a native query — RLS does.</strong>
  * That is why both queries also carry an explicit {@code company_id = :companyId}
@@ -53,14 +53,15 @@ import org.springframework.transaction.annotation.Transactional;
 public interface RoleAssignmentRepository extends JpaRepository<RoleAssignment, UUID> {
 
     /**
-     * PROJECT-scope permission keys held on {@code projectId}, whether granted directly
-     * to the user or to any team they belong to.
+     * PROJECT-scope permissions held on {@code projectId}, whether granted directly
+     * to the user or to any team they belong to — <strong>each with its qualifier</strong>.
      *
      * <p>The team subquery is itself constrained to {@code companyId} — without it, it
      * would be the one unfiltered step in the union.
      */
     @Query(nativeQuery = true, value = """
-            SELECT DISTINCT rp.permission_key
+            SELECT DISTINCT rp.permission_key AS permissionKey,
+                            rp.qualifier      AS qualifier
               FROM role_assignment ra
               JOIN role_permission rp ON rp.role_id = ra.role_id
              WHERE ra.company_id = :companyId
@@ -71,16 +72,16 @@ public interface RoleAssignmentRepository extends JpaRepository<RoleAssignment, 
                                        WHERE tm.user_id = :userId
                                          AND tm.company_id = :companyId))
             """)
-    List<String> findProjectScopedPermissionKeys(
+    List<HeldPermissionRow> findProjectScopedHeldPermissions(
             @Param("companyId") UUID companyId,
             @Param("userId") UUID userId,
             @Param("projectId") UUID projectId);
 
     /**
-     * Permission keys from a company-wide grant of a <strong>COMPANY-scope role</strong> —
+     * Permissions from a company-wide grant of a <strong>COMPANY-scope role</strong> —
      * {@code Company Admin} and the {@code Company Member} baseline.
      *
-     * <h2>Why this is split from {@link #findInheritedProjectRolePermissionKeys}</h2>
+     * <h2>Why this is split from {@link #findInheritedProjectRoleHeldPermissions}</h2>
      *
      * <p>Both are {@code project_id IS NULL}, and until roles became inheritable that was the whole
      * definition of "company-scope" — one query sufficed because {@code scopeError} refused to grant
@@ -101,7 +102,8 @@ public interface RoleAssignmentRepository extends JpaRepository<RoleAssignment, 
      * role is mis-answered.
      */
     @Query(nativeQuery = true, value = """
-            SELECT DISTINCT rp.permission_key
+            SELECT DISTINCT rp.permission_key AS permissionKey,
+                            rp.qualifier      AS qualifier
               FROM role_assignment ra
               JOIN role r ON r.id = ra.role_id
               JOIN role_permission rp ON rp.role_id = ra.role_id
@@ -114,18 +116,23 @@ public interface RoleAssignmentRepository extends JpaRepository<RoleAssignment, 
                                        WHERE tm.user_id = :userId
                                          AND tm.company_id = :companyId))
             """)
-    List<String> findCompanyRolePermissionKeys(
+    List<HeldPermissionRow> findCompanyRoleHeldPermissions(
             @Param("companyId") UUID companyId, @Param("userId") UUID userId);
 
     /**
-     * Permission keys <strong>inherited</strong> by every project — a PROJECT-scope role granted
+     * Permissions <strong>inherited</strong> by every project — a PROJECT-scope role granted
      * with no project, meaning "this role, everywhere in this company".
      *
      * <p>Deliberately **not** unioned with a project's own grants: see
      * {@link #hasProjectScopedAssignment}. These apply only where the project has said nothing.
+     *
+     * <p>The qualifier matters here specifically: a company-wide Test Engineer inherits
+     * {@code artifact:edit} with its {@code PLAN_SCOPE} qualifier into every project, and a project
+     * grant of Test Lead must <em>replace</em> that with {@code ALL} rather than merge to it.
      */
     @Query(nativeQuery = true, value = """
-            SELECT DISTINCT rp.permission_key
+            SELECT DISTINCT rp.permission_key AS permissionKey,
+                            rp.qualifier      AS qualifier
               FROM role_assignment ra
               JOIN role r ON r.id = ra.role_id
               JOIN role_permission rp ON rp.role_id = ra.role_id
@@ -138,7 +145,7 @@ public interface RoleAssignmentRepository extends JpaRepository<RoleAssignment, 
                                        WHERE tm.user_id = :userId
                                          AND tm.company_id = :companyId))
             """)
-    List<String> findInheritedProjectRolePermissionKeys(
+    List<HeldPermissionRow> findInheritedProjectRoleHeldPermissions(
             @Param("companyId") UUID companyId, @Param("userId") UUID userId);
 
     /**
@@ -173,96 +180,14 @@ public interface RoleAssignmentRepository extends JpaRepository<RoleAssignment, 
             @Param("userId") UUID userId,
             @Param("projectId") UUID projectId);
 
-    /**
-     * The qualifiers on every PROJECT-scope grant of <em>one</em> permission — {@code 'ALL'},
-     * {@code 'OWN'}, or no rows at all when the caller does not hold it here.
-     *
-     * <h2>Why the qualifier is not folded into the two key projections above</h2>
-     *
-     * <p>{@link #findProjectScopedPermissionKeys} feeds a {@link PermissionSet}, which is a set of
-     * keys and must stay one: every consumer — the {@code /me/permissions} response, the visibility
-     * gate, every {@code has(…)} call — asks "is it held", and a key that arrived qualified is still
-     * held. Returning pairs there would push the qualifier into all of them, where all but one would
-     * discard it.
-     *
-     * <p>So the qualifier is asked for separately, by the one gate that acts on a row, and about the
-     * one permission it is gating. That also keeps this query cheap: it is the same index-covered
-     * join with one more predicate, run once per authorship-gated write rather than on every check.
-     *
-     * <p>The company predicate and the team branch are the sibling queries' — see the class header
-     * for why the explicit {@code company_id} stays even though RLS also enforces it.
-     */
-    @Query(nativeQuery = true, value = """
-            SELECT DISTINCT rp.qualifier
-              FROM role_assignment ra
-              JOIN role_permission rp ON rp.role_id = ra.role_id
-             WHERE ra.company_id = :companyId
-               AND ra.project_id = :projectId
-               AND rp.permission_key = :permissionKey
-               AND (ra.user_id = :userId
-                    OR ra.team_id IN (SELECT tm.team_id
-                                        FROM team_membership tm
-                                       WHERE tm.user_id = :userId
-                                         AND tm.company_id = :companyId))
-            """)
-    List<String> findProjectScopedQualifiers(
-            @Param("companyId") UUID companyId,
-            @Param("userId") UUID userId,
-            @Param("projectId") UUID projectId,
-            @Param("permissionKey") String permissionKey);
-
-    /**
-     * The same, for COMPANY-scope grants — {@code project_id IS NULL}, applying to every project in
-     * the company. This is the term that makes a Company Admin's {@code case:delete} unqualified on
-     * a project where they also hold a Test Engineer grant.
-     */
-    @Query(nativeQuery = true, value = """
-            SELECT DISTINCT rp.qualifier
-              FROM role_assignment ra
-              JOIN role r ON r.id = ra.role_id
-              JOIN role_permission rp ON rp.role_id = ra.role_id
-             WHERE ra.company_id = :companyId
-               AND ra.project_id IS NULL
-               AND r.scope = 'COMPANY'
-               AND rp.permission_key = :permissionKey
-               AND (ra.user_id = :userId
-                    OR ra.team_id IN (SELECT tm.team_id
-                                        FROM team_membership tm
-                                       WHERE tm.user_id = :userId
-                                         AND tm.company_id = :companyId))
-            """)
-    List<String> findCompanyRoleQualifiers(
-            @Param("companyId") UUID companyId,
-            @Param("userId") UUID userId,
-            @Param("permissionKey") String permissionKey);
-
-    /**
-     * The qualifier on an <strong>inherited</strong> grant — a PROJECT-scope role held company-wide.
-     *
-     * <p>Split from {@link #findCompanyRoleQualifiers} for {@link #findCompanyRolePermissionKeys}'
-     * reason, and it matters here too: a company-wide Test Engineer inherits {@code artifact:edit}
-     * with its {@code PLAN_SCOPE} qualifier into every project, and a project grant of Test Lead
-     * must replace that with {@code ALL} rather than merge to it.
-     */
-    @Query(nativeQuery = true, value = """
-            SELECT DISTINCT rp.qualifier
-              FROM role_assignment ra
-              JOIN role r ON r.id = ra.role_id
-              JOIN role_permission rp ON rp.role_id = ra.role_id
-             WHERE ra.company_id = :companyId
-               AND ra.project_id IS NULL
-               AND r.scope = 'PROJECT'
-               AND rp.permission_key = :permissionKey
-               AND (ra.user_id = :userId
-                    OR ra.team_id IN (SELECT tm.team_id
-                                        FROM team_membership tm
-                                       WHERE tm.user_id = :userId
-                                         AND tm.company_id = :companyId))
-            """)
-    List<String> findInheritedProjectRoleQualifiers(
-            @Param("companyId") UUID companyId,
-            @Param("userId") UUID userId,
-            @Param("permissionKey") String permissionKey);
+    // The three per-key qualifier queries that used to sit here — findProjectScopedQualifiers,
+    // findCompanyRoleQualifiers, findInheritedProjectRoleQualifiers — were DELETED in §65, together
+    // with the SYSTEM one on InstanceRoleAssignmentRepository. They asked the same three terms as
+    // the projections above, for one key, so the evaluator resolved the replace-don't-union rule
+    // TWICE and the two copies had to agree forever. Folding the qualifier into the projections
+    // (see HeldPermissionRow) made them dead. Do not reintroduce one to make a gate "cheaper": a
+    // second reading of which grant wins is the defect this deletion closes, and the projections
+    // are the same index-covered joins with one more column.
 
     /**
      * The caller's <strong>PROJECT-scope</strong> role names across the whole company, in one

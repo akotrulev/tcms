@@ -25,9 +25,17 @@ import { PermissionGate } from './PermissionGate'
 
 const PROJECT = '11111111-1111-1111-1111-111111111111'
 
-const answer = (permissions: PermissionKey[]): EffectivePermissions => ({
+/**
+ * A `/me/permissions` body. Keys are `ALL` unless named in `qualified` — the same "list only the
+ * exceptions" rule the seeded catalogue follows, so a test that does not care about qualifiers
+ * reads exactly as it did before §65 put them on the wire.
+ */
+const answer = (
+  permissions: PermissionKey[],
+  qualified: Partial<Record<PermissionKey, 'OWN' | 'PLAN_SCOPE'>> = {},
+): EffectivePermissions => ({
   projectId: PROJECT,
-  permissions,
+  permissions: permissions.map((key) => ({ key, qualifier: qualified[key] ?? 'ALL' })),
 })
 
 function renderGated(ui: ReactNode) {

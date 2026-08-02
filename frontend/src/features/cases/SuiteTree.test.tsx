@@ -1,10 +1,11 @@
 import { render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
-import type { EffectivePermissions, Suite } from '../../api/types'
+import type { Suite } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { SuiteTree } from './SuiteTree'
+import { heldPermissions } from '../../test/permissions'
 
 /**
  * The suite tree's descendant-inclusive counts — the exact site of §32's defect.
@@ -85,10 +86,9 @@ describe('SuiteTree — the descendant-inclusive count', () => {
   beforeEach(() => {
     // The tree gates its write affordances on `useCan`; a Viewer answer keeps them disabled and
     // out of the way of the arithmetic under test.
-    vi.spyOn(api, 'get').mockResolvedValue({
-      projectId: PROJECT,
-      permissions: ['case:read'],
-    } satisfies EffectivePermissions as never)
+    vi.spyOn(api, 'get').mockResolvedValue(
+      heldPermissions(['case:read'], {}, PROJECT) as never,
+    )
   })
 
   it('shows a leaf its own count', () => {

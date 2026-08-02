@@ -39,6 +39,36 @@ export interface Gate {
   can: (permission: PermissionKey) => boolean;
   /** The tooltip for a denied action. `undefined` when it is allowed and needs no explanation. */
   reason: (permission: PermissionKey) => string | undefined;
+  /**
+   * The same question asked **about a row at a given scope** — the client half of the server's
+   * `canDoOnScope`.
+   *
+   * A qualified grant is held *and* restricted: a Test Engineer's `artifact:edit` is `PLAN_SCOPE`,
+   * so {@link can} says true (it is held) while a project-scope write is refused. Until §65 the
+   * response could not say so and this method could not exist — the control enabled and the submit
+   * failed, which is the one place §31's disable-don't-hide was knowingly unfollowable.
+   *
+   * **Mirrors the server rather than reinterpreting it.** What `PLAN_SCOPE` *means* is decided in
+   * `IdentityProjectAccess.canDoOnScope`; this is the same three arms in the same order, so a screen
+   * asks a question rather than owning an authorization rule. A second reading of a qualifier is the
+   * bug class plan §6b names, and it is no less one for living on the client.
+   */
+  canOnScope: (permission: PermissionKey, rowIsPlanScoped: boolean) => boolean;
+  /** The tooltip for a scope-denied action, distinguishing "not held" from "not here". */
+  reasonOnScope: (permission: PermissionKey, rowIsPlanScoped: boolean) => string | undefined;
+  /**
+   * Whether the answer has not arrived yet — **"not yet", which is not "no"**.
+   *
+   * Every verdict above is fail-closed while pending, which is right for *disabling a control* and
+   * wrong for anything that acts on the verdict once. A dialog that moves the user off a scope
+   * they may not use must not move everybody off it during the load; that defect shipped into this
+   * file's first draft and two unrelated tests caught it, because the form silently submitted at
+   * the wrong scope rather than showing anything.
+   *
+   * So this is exposed rather than inferred. Use it only to *defer* a decision — never to grant
+   * one, or the enabled-then-disabled flash this hook's header rules out comes back.
+   */
+  pending: boolean;
 }
 
 export function useCan(projectId: string | undefined): Gate {
@@ -68,15 +98,62 @@ function useGate(query: UseQueryResult<EffectivePermissions>, where: string): Ga
   const pending = query.isPending && !query.isError;
   const held = query.data?.permissions;
 
-  return useMemo<Gate>(
-    () => ({
-      can: (permission) => (pending ? false : !held || held.includes(permission)),
+  return useMemo<Gate>(() => {
+    /**
+     * The caller's qualifier for one key, or `undefined` for "no answer" — which covers both
+     * *pending* and *failed*, the two states with no verdict to give. Not held is `null`.
+     *
+     * Three-valued on purpose: collapsing "no answer" into "not held" would make every gate below
+     * fail closed while the query is in flight *and* when it errors, and the failure policy above
+     * is deliberately the opposite.
+     */
+    const qualifierOf = (permission: PermissionKey) => {
+      if (pending || !held) return undefined;
+      return held.find((entry) => entry.key === permission)?.qualifier ?? null;
+    };
+
+    return {
+      pending,
+      can: (permission) => {
+        const qualifier = qualifierOf(permission);
+        if (pending) return false;
+        return qualifier === undefined || qualifier !== null;
+      },
       reason: (permission) => {
         if (pending) return 'Checking your permissions…';
-        if (!held || held.includes(permission)) return undefined;
+        const qualifier = qualifierOf(permission);
+        if (qualifier === undefined || qualifier !== null) return undefined;
         return `You don't have permission to ${permissionLabels[permission]} ${where}.`;
       },
-    }),
-    [pending, held, where],
-  );
+
+      // The same three arms as the server's canDoOnScope, in the same order. OWN is not among
+      // them: it restricts by who wrote the row, which a scope question has nothing to compare
+      // against, and no key is granted with two different restrictive qualifiers. Reaching it
+      // would mean the catalogue changed, so it falls open — a wrong enable costs one 403 in the
+      // dialog the user is looking at, and this whole hook is an affordance layer.
+      canOnScope: (permission, rowIsPlanScoped) => {
+        if (pending) return false;
+        const qualifier = qualifierOf(permission);
+        if (qualifier === undefined) return true;
+        if (qualifier === null) return false;
+        return qualifier === 'PLAN_SCOPE' ? rowIsPlanScoped : true;
+      },
+      reasonOnScope: (permission, rowIsPlanScoped) => {
+        if (pending) return 'Checking your permissions…';
+        const qualifier = qualifierOf(permission);
+        if (qualifier === null) {
+          return `You don't have permission to ${permissionLabels[permission]} ${where}.`;
+        }
+        if (qualifier === 'PLAN_SCOPE' && !rowIsPlanScoped) {
+          // Deliberately a different sentence from the one above. "You don't have permission to
+          // manage artifacts" is false for this caller — they manage them every cycle — and
+          // sending them to ask an administrator for a grant they already hold is worse than
+          // saying nothing. This names the restriction instead, because the fix is one control
+          // away and it is theirs to make.
+          return `Your ${permissionLabels[permission]} permission covers a single plan, not the whole project.`;
+        }
+        return undefined;
+      },
+    };
+  }, [pending, held, where]);
 }

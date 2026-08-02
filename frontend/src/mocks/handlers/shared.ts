@@ -47,10 +47,66 @@ export const MAX_SUITE_NAME = 150;
  * answerable here too, or the screens of a just-created project would all report "that project
  * does not exist" through a permission set nobody could explain.
  */
-export function permissionsOn(projectId: string): string[] {
+export function permissionsOn(projectId: string): HeldPermission[] {
   const project = db.projects.find((p) => p.id === projectId);
   const role = roles.find((r) => r.name === project?.myRole);
-  return [...(role?.permissions ?? [])].sort();
+  return [...(role?.permissions ?? [])]
+    .sort()
+    .map((key) => ({ key, qualifier: qualifierFor(role?.name, key) }));
+}
+
+/** One held key and which rows it covers — the contract's `HeldPermission`. */
+export interface HeldPermission {
+  key: string;
+  qualifier: 'ALL' | 'OWN' | 'PLAN_SCOPE';
+}
+
+/**
+ * The qualified grants in the seeded catalogue — `role_permission.qualifier`, mirrored.
+ *
+ * **Everything absent from this table is `ALL`**, which is both the column's default and the truth
+ * for the overwhelming majority of grants. Listing only the exceptions is what keeps this in step
+ * with the roles spec by inspection rather than by a table nobody re-reads.
+ *
+ * It has to exist at all for the reason §64 recorded twice: **a mock that agrees with itself is the
+ * worst kind.** Answer `ALL` everywhere and mock mode shows a Test Engineer a project-scope option
+ * that live mode disables — a difference nobody sees until the deployed box behaves differently
+ * from the one the feature was built against.
+ */
+const QUALIFIED_GRANTS: Record<string, Record<string, 'OWN' | 'PLAN_SCOPE'>> = {
+  // Roles spec §A5 (V12) and the Artifacts table (V19). A Test Engineer unmakes only their own
+  // work, and curates their own cycle rather than the document every cycle inherits.
+  'Test Engineer': {
+    'case:delete': 'OWN',
+    'evidence:delete': 'OWN',
+    'artifact:edit': 'PLAN_SCOPE',
+  },
+};
+
+function qualifierFor(roleName: string | undefined, key: string): HeldPermission['qualifier'] {
+  return QUALIFIED_GRANTS[roleName ?? '']?.[key] ?? 'ALL';
+}
+
+/**
+ * Does the caller hold this permission on this project **at all** — the gate every write handler
+ * asks, and the mock's half of "the answer that enables a control also decides the write".
+ *
+ * Its own function since §65 rather than `permissionsOn(id).includes(key)`, because that array now
+ * holds objects and `.includes` on it would compile against a widened type and silently answer
+ * false for everything. Deliberately ignores the qualifier: this is "is it held", exactly as
+ * `PermissionSet.has` is. A handler refusing on a qualifier asks {@link qualifierOn}, so the two
+ * questions cannot be confused at a call site.
+ */
+export function holdsOn(projectId: string, permission: string): boolean {
+  return permissionsOn(projectId).some((entry) => entry.key === permission);
+}
+
+/** Which rows the caller's grant covers, or `null` when they do not hold it here. */
+export function qualifierOn(
+  projectId: string,
+  permission: string,
+): HeldPermission['qualifier'] | null {
+  return permissionsOn(projectId).find((entry) => entry.key === permission)?.qualifier ?? null;
 }
 
 export function requireAuth(request: Request) {

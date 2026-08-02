@@ -32,6 +32,7 @@ import {
   LATENCY,
   notFound,
   paging,
+  holdsOn,
   permissionsOn,
   problem,
   projectMembers,
@@ -438,7 +439,10 @@ export const caseHandlers = [
         ? ('IN_REVIEW' as LifecycleStatus)
         : (payload.lifecycleStatus as LifecycleStatus | undefined);
 
-    const held = permissionsOn(projectId);
+    // Keys only — this gate is "is it held", and `missingPermission` compares against a list of
+    // keys. The qualifier is not consulted because no bulk action is qualified; the day one is,
+    // that function needs the pair rather than a set membership test.
+    const held = permissionsOn(projectId).map((entry) => entry.key);
     const missing = missingPermission(action, target, held);
     if (missing) {
       return problem(403, 'Not allowed', missing);
@@ -720,7 +724,7 @@ export const caseHandlers = [
     if (denied) return denied;
     await delay(LATENCY);
 
-    if (!permissionsOn(String(params.projectId)).includes('case:delete')) {
+    if (!holdsOn(String(params.projectId), 'case:delete')) {
       return problem(
         403,
         'Forbidden',
