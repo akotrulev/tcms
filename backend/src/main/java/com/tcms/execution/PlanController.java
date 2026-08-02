@@ -8,13 +8,17 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -43,6 +47,7 @@ public class PlanController {
 
     private final PlanService plans;
     private final PlanCreateService creates;
+    private final PlanUpdateService updates;
     private final PlanStatisticsService statistics;
     private final PlanStatusService lifecycle;
     private final PlanDeleteService deletes;
@@ -50,12 +55,14 @@ public class PlanController {
     public PlanController(
             PlanService plans,
             PlanCreateService creates,
+            PlanUpdateService updates,
             PlanStatisticsService statistics,
             PlanStatusService lifecycle,
             PlanDeleteService deletes) {
 
         this.plans = plans;
         this.creates = creates;
+        this.updates = updates;
         this.statistics = statistics;
         this.lifecycle = lifecycle;
         this.deletes = deletes;
@@ -155,6 +162,53 @@ public class PlanController {
     }
 
     /**
+     * Edits the plan's content — name, description, milestone, scope and the two criteria lists.
+     *
+     * <p><strong>{@code PATCH}, where the status beside it is a {@code PUT}</strong>, and the two are
+     * different acts rather than an inconsistency: a status request names an absolute target state
+     * the server can reach from anywhere, while this one is a delta against a plan the client read.
+     * Which is also why this one takes {@code If-Match} and that one does not.
+     *
+     * <p>{@code If-Match} carries the {@code lockVersion} the client read.
+     * {@code CaseController}'s decision, unchanged: a body field would put a concurrency token
+     * inside the document being edited, where a form that round-trips its own payload would keep
+     * sending a stale one for ever.
+     */
+    @PatchMapping("/{planId}")
+    public ResponseEntity<Object> update(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID planId,
+            @RequestHeader(name = HttpHeaders.IF_MATCH, required = false) String ifMatch,
+            @RequestBody PlanUpdateRequest request) {
+
+        Long expected;
+        try {
+            expected = parseIfMatch(ifMatch);
+        } catch (NumberFormatException notANumber) {
+            return ResponseEntity.badRequest().body(validationProblem(Map.of("If-Match",
+                    List.of("Send the plan's lockVersion as the If-Match header, or omit it."))));
+        }
+
+        PlanUpdateService.Outcome outcome = updates.update(
+                UUID.fromString(jwt.getSubject()), projectId, planId, request, expected);
+
+        return switch (outcome) {
+            case PlanUpdateService.Outcome.Updated updated -> ResponseEntity.ok(updated.view());
+            case PlanUpdateService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
+            case PlanUpdateService.Outcome.Forbidden ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(editForbiddenProblem());
+            case PlanUpdateService.Outcome.Invalid invalid ->
+                    ResponseEntity.badRequest().body(validationProblem(invalid.errors()));
+            case PlanUpdateService.Outcome.Stale ignored ->
+                    ResponseEntity.status(HttpStatus.CONFLICT).body(staleProblem());
+            case PlanUpdateService.Outcome.Refused refused ->
+                    ResponseEntity.status(HttpStatus.CONFLICT)
+                            .body(refusedProblem(refused.message()));
+        };
+    }
+
+    /**
      * Submits, approves, starts, closes or reopens the plan.
      *
      * <p><strong>{@code PUT}, not {@code PATCH}</strong>, and a sub-resource rather than a field on
@@ -214,6 +268,25 @@ public class PlanController {
     }
 
     /**
+     * The true race, as opposed to the stale editor {@code If-Match} catches.
+     *
+     * <p>{@code TestPlan.lockVersion} became a real {@code @Version} in this slice, so two saves
+     * that both passed the header check and then interleaved now raise this rather than silently
+     * last-write-winning. It has to be a handler rather than a {@code catch} inside the service,
+     * for {@code CaseController#onWriteRace}'s reason: the transaction is rollback-only by the time
+     * the exception exists, so returning a tidy outcome from inside it would fail again at commit.
+     *
+     * <p>It covers the status endpoint too, and that is the right answer there as well: two leads
+     * approving at the same instant now get one 200 and one 409, and the second one's retry reads
+     * {@code APPROVED} and answers 200 unchanged — which is the outcome §73 said they both want,
+     * reached in two steps instead of one.
+     */
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity<Object> onWriteRace(OptimisticLockingFailureException race) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(staleProblem());
+    }
+
+    /**
      * Names the five, unlike the permission refusal below.
      *
      * <p>The two are not in tension: §32's rule is that a <em>permission key</em> must not be named
@@ -269,6 +342,30 @@ public class PlanController {
         return problem;
     }
 
+    /** §32 again, worded for the act. Separate from the status refusal because the acts differ. */
+    private static ProblemDetail editForbiddenProblem() {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
+        problem.setTitle("Not allowed");
+        problem.setDetail("You do not have permission to edit test plans in this project.");
+        return problem;
+    }
+
+    /**
+     * A lost update — the {@code If-Match} the client sent is not the stored version.
+     *
+     * <p>Deliberately worded apart from {@link #refusedProblem}, which is also a 409:
+     * {@code repository.ApiProblem} draws the same distinction and says why. "Reload and reapply"
+     * is exactly the right advice here and exactly the wrong advice for a plan refused because it
+     * is closed — reloading that one changes nothing.
+     */
+    private static ProblemDetail staleProblem() {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        problem.setTitle("Someone else saved first");
+        problem.setDetail(
+                "Reload the plan to see the newer version, then reapply your change.");
+        return problem;
+    }
+
     private static ProblemDetail deleteForbiddenProblem() {
         ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
         problem.setTitle("Not allowed");
@@ -288,5 +385,22 @@ public class PlanController {
         problem.setTitle("Not possible right now");
         problem.setDetail(message);
         return problem;
+    }
+
+    /**
+     * Reads {@code If-Match}, tolerating the quoted form — {@code CaseController}'s reader, and its
+     * reasoning: HTTP defines the header as carrying entity tags, which are quoted, so a client
+     * library that formats it correctly is not wrong. A weak tag ({@code W/"7"}) is still refused,
+     * because weak comparison is explicitly the wrong semantics for a lost-update check.
+     */
+    private static Long parseIfMatch(String header) {
+        if (header == null || header.isBlank()) {
+            return null;
+        }
+        String value = header.trim();
+        if (value.length() > 1 && value.startsWith("\"") && value.endsWith("\"")) {
+            value = value.substring(1, value.length() - 1);
+        }
+        return Long.valueOf(value);
     }
 }

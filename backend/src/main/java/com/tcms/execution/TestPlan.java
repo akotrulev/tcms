@@ -106,6 +106,30 @@ public class TestPlan {
     @Column(name = "deleted_at")
     private java.time.Instant deletedAt;
 
+    /**
+     * Optimistic lock — <strong>{@code @Version} was missing until the edit endpoint needed it, and
+     * that is a defect this slice found rather than a field it added</strong>.
+     *
+     * <p>The column has been mapped since M2 slice 2 and {@code lockVersion} has been a
+     * <em>required</em> property of the contract's {@code TestPlan} for just as long, so every plan
+     * this API has ever served carried one — and without this annotation Hibernate never incremented
+     * it, so the value was {@code 0} on every plan for ever. An {@code If-Match} check against it
+     * could not fail: the client would send 0, the row would hold 0, and the precondition would pass
+     * over any number of intervening saves. The endpoint would have shipped with a concurrency
+     * guard that was structurally incapable of firing, and no test asserting "a stale header is
+     * refused" would have gone red, because there is no such thing as a stale 0.
+     *
+     * <p>{@code TestCase}, {@code Suite}, {@code DocPage}, {@code Artifact}, {@code Project},
+     * {@code Team}, {@code Company}, {@code AppUser}, {@code CompanyMembership},
+     * {@code MembershipInvitation} and {@code TestExecution} all had it. <strong>{@code TestRun} and
+     * {@code work.WorkItem} still do not</strong> — found by the same sweep, deliberately left, and
+     * recorded in the handoff: neither serves {@code lockVersion} on the wire and nothing sends an
+     * {@code If-Match} for either, so both are latent rather than live. Adding it to {@code TestRun}
+     * is specifically <em>not</em> a free repair: {@code TestRun.begin} touches the run on every
+     * result recorded, so two testers working through the same run concurrently would start
+     * colliding on the product's most-used write.
+     */
+    @jakarta.persistence.Version
     @Column(name = "lock_version", nullable = false)
     private long lockVersion;
 
@@ -196,6 +220,64 @@ public class TestPlan {
         closedAt = target == PlanStatus.CLOSED ? now : null;
         updatedAt = now;
         updatedBy = actorId;
+    }
+
+    /**
+     * Applies an authored edit — <strong>the first writer {@code entry_criteria} and
+     * {@code exit_criteria} have ever had</strong>.
+     *
+     * <p>Both columns have been in {@code V1} from the beginning, both were set to null by
+     * {@link #create} and nothing else ever touched them, so {@code PlanCriteria.evaluate} and the
+     * exit-criteria panel §46 built on top of it have rendered an empty list on every real instance
+     * for their whole lives. The javadoc above said this was coming; this is it.
+     *
+     * <p><strong>A null criteria list means "leave the column alone", not "clear it"</strong> — the
+     * three-way reading {@link PlanUpdateRequest} sets out, and the reason {@link #create}'s comment
+     * insisted on storing null rather than {@code "[]"}: it is what keeps <em>nobody has decided</em>
+     * distinguishable from <em>there are deliberately none</em>, in a column whose two states
+     * otherwise look identical on the wire.
+     *
+     * <p>{@code status} is not here. It has its own writer, its own two permissions and its own
+     * ladder ({@link PlanLifecycle}), and a status an ordinary save could set is an approval anybody
+     * grants themselves — {@code repository.TestCase.applyEdit}'s call, one aggregate over.
+     *
+     * <p>The version counter is stamped separately by {@link #stampVersion}, because whether this
+     * edit <em>is</em> a new version is {@link PlanVersions}' question and not the entity's: a
+     * rename changes these fields and changes no version.
+     *
+     * @param entryCriteriaJson the serialized column value, or null to leave the stored one
+     * @param exitCriteriaJson  likewise
+     */
+    void applyEdit(
+            PlanEdit edit,
+            String entryCriteriaJson,
+            String exitCriteriaJson,
+            UUID actorId,
+            java.time.Instant now) {
+
+        name = edit.name();
+        description = edit.description();
+        milestoneName = edit.milestoneName();
+        milestoneDate = edit.milestoneDate();
+        if (edit.entryCriteria() != null) {
+            entryCriteria = entryCriteriaJson;
+        }
+        if (edit.exitCriteria() != null) {
+            exitCriteria = exitCriteriaJson;
+        }
+        updatedAt = now;
+        updatedBy = actorId;
+    }
+
+    /**
+     * Advances the version counter, once {@link PlanVersions} has decided the edit changed the scope.
+     *
+     * <p>Separate from {@link #applyEdit} so the entity holds no opinion about what counts as a new
+     * version, and called <em>before</em> the snapshot is taken so the row and the version row agree
+     * about which number this is.
+     */
+    void stampVersion(int versionNo) {
+        currentVersionNo = versionNo;
     }
 
     /**

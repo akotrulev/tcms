@@ -72,6 +72,70 @@ export function useCreatePlan(projectId: string) {
 }
 
 /**
+ * The body of `PATCH /plans/{planId}` — `TestPlanUpdateInput`.
+ *
+ * **Every list is optional and that is load-bearing, not convenience.** The server reads an
+ * omitted list as *leave it alone* and `[]` as *clear it* (a scalar `null` still means clear), so
+ * a dialog that edits only the name must send only the name — spreading a partially-filled object
+ * with `suiteIds: []` in it would empty the plan's scope on a rename. Spelled out here rather than
+ * taken from the generated schema so the shape a caller builds is readable at the call site.
+ */
+export interface TestPlanUpdateInput {
+  name: string;
+  description?: string | null;
+  milestoneName?: string | null;
+  milestoneDate?: string | null;
+  suiteIds?: string[];
+  caseIds?: string[];
+  entryCriteria?: CriterionInput[];
+  exitCriteria?: CriterionInput[];
+}
+
+/**
+ * One authored gate. `Criterion` minus `met` and `actual`, which the server computes and would
+ * overwrite — so they are not on the way in, and a form must not round-trip them.
+ */
+export interface CriterionInput {
+  metric: string;
+  op: string;
+  value: number;
+  label?: string | null;
+}
+
+/**
+ * Edits a plan's content — name, description, milestone, scope and criteria.
+ *
+ * `lockVersion` travels as `If-Match`, never in the body, and is required rather than optional for
+ * `useUpdateCase`'s reason: omitting the header is last-write-wins, which is right for an importer
+ * with no prior read and never right for an editor, so a screen cannot opt out of conflict
+ * detection by forgetting.
+ *
+ * `handled` because two of this endpoint's refusals are sentences about the button just pressed —
+ * a closed plan says "reopen it" and a stale save says "reload it", and a corner notification
+ * detaches both from the dialog that caused them.
+ */
+export function useUpdatePlan(projectId: string, planId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      lockVersion,
+      ...input
+    }: TestPlanUpdateInput & { lockVersion: number }) =>
+      api.patch<TestPlan>(`${base(projectId)}/plans/${planId}`, input, {
+        headers: { 'If-Match': String(lockVersion) },
+      }),
+    meta: { handled: true },
+    onSuccess: (updated) => {
+      client.setQueryData(keys.plan(projectId, planId), updated);
+      // `keys.plans` is a PREFIX of `keys.plan` and of `keys.planStats`, so this one call also
+      // refetches the statistics — which matters here more than on the status endpoint, because
+      // that screen evaluates the exit criteria and counts the scope, and this is what edits both.
+      void client.invalidateQueries({ queryKey: keys.plans(projectId) });
+    },
+  });
+}
+
+/**
  * Submits, approves, starts, closes or reopens a plan.
  *
  * `meta: { handled: true }` for `useSetRunStatus`' reason: "submit it for review first" and

@@ -1119,6 +1119,60 @@ paths:
           # soft-deleted plan and an absent one. Telling them apart makes the path an oracle
           # for plan ids in projects the caller cannot open (§6t).
           $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [execution]
+      operationId: updatePlan
+      summary: Edit a test plan's content
+      description: |
+        `plan:edit` — Instance Admin, Company Admin, Test Lead and Test Engineer (roles spec
+        §A4), the same key that carries a plan forward through its ladder.
+
+        Edits what the plan *is*: name, description, milestone, **scope** and the two
+        **criteria** lists. `entry_criteria` and `exit_criteria` had no writer at all before
+        this operation existed, so `PlanCriteria`'s evaluator and the plan page's exit-criteria
+        panel have had nothing to evaluate on any real instance.
+
+        **Not `status`** — that is `PUT .../status`, with its own two gates. A status an
+        ordinary save could set is an approval anybody grants themselves.
+
+        **A closed plan is refused with `409`.** `CLOSED` says a release was executed and is
+        over, and its scope and criteria are the record of what that release was tested
+        against — editing them afterwards would show it passing gates nobody applied to it.
+        The way out is to reopen the plan (`PUT .../status` with `ACTIVE`, which needs
+        `plan:approve`), so unfreezing a signed-off release is a lead's act.
+
+        **Absent, null and empty are three different instructions**, and the split is by kind
+        rather than by field. A **scalar** sent as `null` is cleared. A **list** sent as `null`
+        or omitted is *left alone*, and `[]` clears it — a list has an empty spelling of its
+        own, so `null` does not have to carry two meanings. That is what keeps a plan whose
+        criteria nobody has ever written distinguishable from one whose author deliberately
+        removed them all.
+
+        **A version row is written only when the SCOPE moves.** Plan §6j defines a plan version
+        as its scope — suites, cases, milestone, criteria — so renaming a plan, rewriting its
+        description, or saving it unchanged writes no `test_plan_version` row and leaves
+        `currentVersionNo` alone.
+      parameters: [{ $ref: '#/components/parameters/IfMatch' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TestPlanUpdateInput' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TestPlan' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          # Two different 409s with deliberately different advice: a stale If-Match says
+          # "reload and reapply", and a closed plan says "reopen it" — reloading that one
+          # changes nothing.
+          $ref: '#/components/responses/Conflict'
     delete:
       tags: [execution]
       operationId: deletePlan
@@ -3497,7 +3551,7 @@ components:
         - type: object
           # `required` does not descend through allOf, so the second member declares its own —
           # without it every property here is optional and no consumer can use one.
-          required: [description, entryCriteria, exitCriteria, configurations, currentVersionNo, lockVersion]
+          required: [description, entryCriteria, exitCriteria, configurations, suiteIds, caseIds, currentVersionNo, lockVersion]
           properties:
             description: { type: string, nullable: true }
             entryCriteria:
@@ -3509,6 +3563,18 @@ components:
             configurations:
               type: array
               items: { $ref: '#/components/schemas/Configuration' }
+            # The plan's scope as STORED, which nothing served before the editor existed:
+            # caseCount is an expansion of these ids and cannot be edited, so a client had no
+            # way to write back the scope it was shown. §68 found the identical gap on a
+            # case's classification — the detail served names, the writer took ids — and the
+            # rule it produced is that a field a PATCH accepts must be readable from the GET
+            # that precedes it. Sorted, because plan_scope_item has no ordinal column.
+            suiteIds:
+              type: array
+              items: { type: string, format: uuid }
+            caseIds:
+              type: array
+              items: { type: string, format: uuid }
             currentVersionNo: { type: integer }
             lockVersion: { type: integer }
 
@@ -3526,6 +3592,66 @@ components:
         caseIds:
           type: array
           items: { type: string, format: uuid }
+
+    TestPlanUpdateInput:
+      type: object
+      # Only the name. Every other field is optional because a list left out means "leave it
+      # alone" — see the operation's description for the absent/null/empty split.
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string, nullable: true }
+        milestoneName: { type: string, nullable: true }
+        milestoneDate: { type: string, format: date, nullable: true }
+        suiteIds:
+          type: array
+          items: { type: string, format: uuid }
+        caseIds:
+          type: array
+          items: { type: string, format: uuid }
+        # The two fields TestPlanInput deliberately does not have. A plan is named before
+        # anybody knows what would make it releasable, so criteria arrive on the edit and
+        # nowhere else.
+        entryCriteria:
+          type: array
+          items: { $ref: '#/components/schemas/CriterionInput' }
+        exitCriteria:
+          type: array
+          items: { $ref: '#/components/schemas/CriterionInput' }
+
+    CriterionInput:
+      type: object
+      description: |
+        One authored gate. `Criterion` minus `met` and `actual`, and dropping those two is the
+        point: both are **derived** — computed from the statistics endpoint's own numbers on
+        every response — so accepting them would let a client assert that a release gate was
+        met, which is the one claim on this object nobody should be able to make by typing it.
+
+        A client that echoes back the `Criterion` it was served is fine; the two extra fields
+        are ignored rather than refused, because they are this server's own computed answer
+        and discarding them loses nobody's work.
+
+        `metric` and `op` are **closed vocabularies**, validated on the way in. Unchecked, a
+        plan gated on `pass_rte` renders exactly like one gated on `open_critical`: a criterion
+        with no verdict. One of those means "we cannot check this yet" and the other is a typo
+        that will never be checked at all, and a release meeting cannot tell them apart.
+      required: [metric, op, value]
+      properties:
+        metric:
+          type: string
+          enum: [pass_rate, coverage, open_critical, cases_approved, build_available]
+          example: pass_rate
+        # Six canonical spellings. The server also tolerates `==` and `<>` because its
+        # evaluator has always applied them and rows seeded by hand carry them — stated here
+        # rather than left for somebody to discover, since a client has no reason to send one.
+        op:
+          type: string
+          enum: ['>=', '>', '<=', '<', '=', '!=']
+          example: '>='
+        value: { type: number }
+        # Optional: the server derives "pass_rate >= 95" when it is absent. It exists for the
+        # gates whose name the predicate does not carry — "Sign-off from Support".
+        label: { type: string, nullable: true }
 
     PlanStatusInput:
       type: object

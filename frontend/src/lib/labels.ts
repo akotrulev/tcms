@@ -11,6 +11,7 @@
 import type {
   AggregationPolicy,
   AutomationStatus,
+  CriterionMetric,
   DocBlockType,
   DocPageStatus,
   HealthSignal,
@@ -178,6 +179,36 @@ export const planStatusColors = {
 
 /** Whether the plan is over — the server's `PlanLifecycle.isClosed`, and the one copy of it here. */
 export const isPlanClosed = (status: PlanStatus) => status === 'CLOSED';
+
+/**
+ * The metrics a plan's entry and exit criteria may be gated on, in the reader's words.
+ *
+ * `satisfies Record<CriterionMetric, string>` against the contract's own enum, so a metric added
+ * server-side is a compile error here rather than an option the editor silently cannot offer.
+ *
+ * **Two of the five are evaluated today** — pass rate and coverage, from the statistics endpoint's
+ * own numbers. The other three need machinery the product does not have (an issue tracker, the
+ * review workflow, a build feed) and render as "not evaluated", which is the honest answer and the
+ * reason `Criterion.met` is nullable. They are offered anyway: a release gate somebody has agreed
+ * to is worth recording before it can be checked automatically, and the plan page shows it as
+ * unevaluated rather than as passing.
+ */
+export const criterionMetricLabels = {
+  pass_rate: 'Pass rate (%)',
+  coverage: 'Coverage (%)',
+  open_critical: 'Open critical defects',
+  cases_approved: 'Cases approved (%)',
+  build_available: 'Build available',
+} as const satisfies Record<CriterionMetric, string>;
+
+/**
+ * The comparisons a criterion may make, in the contract's order.
+ *
+ * The server tolerates `==` and `<>` as well, because rows seeded by hand carry them — this list is
+ * what a client should *send*, which is why it is the six canonical spellings and not the eight the
+ * evaluator accepts.
+ */
+export const criterionOperators = ['>=', '>', '<=', '<', '=', '!='] as const;
 
 export const stepFormatLabels = {
   STRUCTURED: 'Structured steps',

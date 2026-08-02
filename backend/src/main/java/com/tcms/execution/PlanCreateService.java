@@ -64,6 +64,8 @@ public class PlanCreateService {
     private final TestPlanRepository plans;
     private final PlanScopeItemRepository scopeItems;
     private final PlanService views;
+    private final PlanVersions versions;
+    private final PlanCriteria criteria;
     private final CaseFacts cases;
     private final DisplayKeys displayKeys;
     private final AuditEventRepository auditEvents;
@@ -75,6 +77,8 @@ public class PlanCreateService {
             TestPlanRepository plans,
             PlanScopeItemRepository scopeItems,
             PlanService views,
+            PlanVersions versions,
+            PlanCriteria criteria,
             CaseFacts cases,
             DisplayKeys displayKeys,
             AuditEventRepository auditEvents,
@@ -84,6 +88,8 @@ public class PlanCreateService {
         this.plans = plans;
         this.scopeItems = scopeItems;
         this.views = views;
+        this.versions = versions;
+        this.criteria = criteria;
         this.cases = cases;
         this.displayKeys = displayKeys;
         this.auditEvents = auditEvents;
@@ -181,13 +187,20 @@ public class PlanCreateService {
         plans.saveAndFlush(created);
 
         List<PlanScopeItem> items = new ArrayList<>();
-        for (UUID suiteId : edit.suiteIds()) {
+        for (UUID suiteId : edit.scope().suiteIds()) {
             items.add(PlanScopeItem.ofSuite(created.getId(), suiteId));
         }
-        for (UUID caseId : edit.caseIds()) {
+        for (UUID caseId : edit.scope().caseIds()) {
             items.add(PlanScopeItem.ofCase(created.getId(), caseId));
         }
         scopeItems.saveAll(items);
+
+        // v1, in the same transaction as the row it describes — §29's rule, and SuiteVersions makes
+        // the sharper form of it: a plan created after the version writer exists must not be born
+        // with the same history gap as the plans that predate it. Every plan in the database today
+        // has current_version_no = 1 and no version row, so the two populations stay distinguishable
+        // by the fact that matters rather than by a flag somebody maintains.
+        versions.writeInitial(created, PlanSnapshot.of(created, edit.scope(), criteria), userId, now);
 
         auditEvents.save(AuditEvent.record(
                 project.getId(),

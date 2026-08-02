@@ -454,3 +454,62 @@ values were unreachable and `closed_at` was a column nothing filled. `plan:edit`
 | **Check** | migration-in-place |
 | **Mutation** | — |
 | **Must show** | **Nothing is owed. §73 adds no migration** — `status`, `closed_at`, `updated_by` and `deleted_at` have all been in `V1` from the beginning; `closed_at` and `updated_by` are merely *mapped* for the first time. **`V22` is still free.** |
+
+---
+
+## §74 — the plan editor
+
+**Slice:** `PATCH /projects/{projectId}/plans/{planId}` — the first writer `entry_criteria`,
+`exit_criteria` and `test_plan_version` have ever had, plus the scope on the detail response.
+
+### Run in the slice — PASSED
+
+| | |
+|---|---|
+| **File** | `execution/PlanVersions.java`, `decide` |
+| **Mutation** | disable the unchanged-hash arm, so every save writes a version row |
+| **Result** | ✅ **RUN — reddens exactly 3**: *renaming a plan writes NO version*, *saving the same scope twice writes nothing the second time*, and *the audit row says whether the SCOPE moved*. **This is the slice's central claim.** Every scope test and every criteria test stays green, so the cheaper "bump on save" implementation would have shipped with the rest of the class passing — and the damage is invisible for months, surfacing as a version history whose entries all have identical snapshots. |
+
+| | |
+|---|---|
+| **File** | `execution/PlanUpdateService.java`, `apply` |
+| **Mutation** | drop the `PlanLifecycle.isClosed` refusal |
+| **Result** | ✅ **RUN — reddens exactly 2**: *editing a CLOSED plan is refused with 409* and *a closed plan refuses BEFORE If-Match*. The second is the placement, not the rule — it goes red only because the freeze sits above the precondition check. |
+
+| | |
+|---|---|
+| **File** | `execution/PlanEdit.java`, `validateUpdate` |
+| **Mutation** | read an absent list as *clear it* rather than *leave it alone* (both the scope and the criteria arms) |
+| **Result** | ✅ **RUN — reddens exactly 4**, and the two unexpected ones are the finding: besides the two tests that name the rule, *renaming a plan writes NO version* and *the audit row says whether the SCOPE moved* also go red — because under this defect a rename **empties the scope**, which is a real change, which writes a version. The version tests are a second, independent detector of the same defect. |
+
+| | |
+|---|---|
+| **File** | `execution/TestPlan.java` |
+| **Mutation** | remove `@Version` from `lockVersion` — i.e. **re-introduce the defect this slice found** |
+| **Result** | ✅ **RUN — reddens exactly 1**: *a matching If-Match saves; a stale one is 409*. Verified the repair rather than assumed it: before this slice the column was mapped without `@Version`, so `lockVersion` was `0` on every plan for ever and no `If-Match` could fail. |
+
+### Queued — not yet run
+
+| | |
+|---|---|
+| **File** | `execution/PlanUpdateService.java`, `apply` |
+| **Mutation** | drop the `scopeItems.flush()` between the delete and the inserts |
+| **Must redden** | **unknown, and that is why it is queued.** Hibernate orders inserts before deletes within a flush, so re-adding a scope item that is still present should collide on nothing (`plan_scope_item` has no unique constraint on `(plan_id, suite_id)` — which is itself worth checking). If **nothing** reddens, the flush is a comment rather than a mechanism, and the honest outcome is to say so. |
+
+| | |
+|---|---|
+| **File** | `execution/PlanUpdateService.java`, `apply` |
+| **Mutation** | resolve the live-id sets from the **submitted** ids only, dropping the union with the stored scope |
+| **Must redden** | **0 with the current fixture, and the point is to add the test that makes it 1.** A suite deleted *after* it was added to a plan is carried forward unchecked by this defect; no test yet deletes a suite out from under a live plan. Write that test first, then run the mutation. |
+
+| | |
+|---|---|
+| **File** | `execution/PlanCriteria.java`, `isKnownOperator` |
+| **Mutation** | replace the `satisfies(0d, op, 0d) != null` delegation with a hard-coded `Set.of(">=", ">", "<=", "<")` — i.e. a second copy of the operator list, already missing two |
+| **Must redden** | **exactly 1** — the `=`/`!=` arm of *an unusable operator and a criterion with no threshold are both 400* is not currently covered, so this may redden **0**. If it does, that is §70's finding again in a new place and the fix is a test that authors a `=` criterion, not a wider set. |
+
+| | |
+|---|---|
+| **Check** | migration-in-place |
+| **Mutation** | — |
+| **Must show** | **Nothing is owed. §74 adds no migration** — `entry_criteria`, `exit_criteria` and the whole `test_plan_version` table have been in `V1` from the beginning; the table gets its first entity and its first row, and `@Version` on `lock_version` changes no DDL. **`V22` is still free.** |

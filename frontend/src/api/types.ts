@@ -75,6 +75,16 @@ export type StepResult = S['StepResult'];
 export type Evidence = S['Evidence'];
 export type Configuration = S['Configuration'];
 export type Criterion = S['Criterion'];
+/**
+ * The metrics a criterion may be gated on, read off `CriterionInput` — the *input* schema and not
+ * `Criterion`, because only the input declares the enum. The response side has to keep accepting
+ * whatever is already stored, including rows seeded before the vocabulary was closed.
+ *
+ * Named here so `lib/labels.ts` can `satisfies Record<CriterionMetric, string>` over it: a metric
+ * added server-side then fails the frontend build until the editor offers it, instead of becoming
+ * an option nobody can choose.
+ */
+export type CriterionMetric = NonNullable<S['CriterionInput']['metric']>;
 export type ResultCounts = S['ResultCounts'];
 export type DefectLink = S['DefectLink'];
 

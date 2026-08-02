@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.stereotype.Component;
 
 /**
@@ -30,10 +31,46 @@ import org.springframework.stereotype.Component;
 @Component
 class PlanCriteria {
 
+    /**
+     * The metrics a plan may be gated on — <strong>a closed set, checked on the way in since the
+     * editor exists</strong>.
+     *
+     * <p>Two of the five are answerable from {@link PlanStatisticsService}'s own numbers today
+     * ({@code pass_rate}, {@code coverage}); the other three need machinery the product does not
+     * have — {@code open_critical} the M4 issue tracker, {@code cases_approved} the review workflow,
+     * {@code build_available} nothing at all — and {@link #evaluate} leaves them "not evaluated" on
+     * purpose.
+     *
+     * <p><strong>Which is exactly why the input is validated against this list.</strong> Unchecked,
+     * a plan gated on {@code pass_rte} renders identically to one gated on {@code open_critical}:
+     * both show a criterion with no verdict. One of those is "we cannot check this yet" and the
+     * other is a typo that will never be checked at all, and a release meeting cannot tell them
+     * apart by looking. A field error at authoring time is the only moment the difference is visible.
+     *
+     * <p>Adding a metric here is a deliberate act with a consequence — it becomes authorable
+     * immediately and evaluable only when {@link PlanStatisticsService} supplies an actual for it.
+     */
+    static final Set<String> METRICS = Set.of(
+            "pass_rate", "coverage", "open_critical", "cases_approved", "build_available");
+
     private final ObjectMapper json;
 
     PlanCriteria(ObjectMapper json) {
         this.json = json;
+    }
+
+    /**
+     * Whether {@link #satisfies} can apply this operator — asked by the validator, answered by the
+     * evaluator itself.
+     *
+     * <p>Deliberately implemented by <em>calling</em> {@code satisfies} rather than by listing the
+     * six operators a second time. A set beside the switch is the hand-maintained copy §58's E1 and
+     * §70's verb list are both about: it would be correct on the day it was written and silently
+     * wrong the first time somebody adds an operator to one of the two. The arguments are zeros
+     * because only the operator is under test; every arm is total over the reals.
+     */
+    static boolean isKnownOperator(String op) {
+        return op != null && satisfies(0d, op, 0d) != null;
     }
 
     /**
@@ -132,6 +169,33 @@ class PlanCriteria {
             case "!=", "<>" -> Math.abs(actual - target) >= 1e-9;
             default -> null;
         };
+    }
+
+    /**
+     * A validated criteria list as the column stores it — <strong>the first writer either JSONB
+     * column has ever had</strong>.
+     *
+     * <p>Written by the same class that reads them, so the shape {@link #parse} expects and the
+     * shape stored cannot drift: they are one file, and a change to either is a change to a
+     * neighbour twenty lines away rather than to a module somebody has to remember.
+     *
+     * <p>{@code null} for a list that was never given rather than {@code "[]"}, keeping the
+     * distinction {@code TestPlan.create} deliberately preserved — <em>nobody has decided</em>
+     * versus <em>there are deliberately none</em>. Both render as {@code []} on the wire, which is
+     * correct: the difference is authoring history and not something a plan page can act on.
+     */
+    String serialize(List<CriterionInput> criteria) {
+        if (criteria == null) {
+            return null;
+        }
+        try {
+            return json.writeValueAsString(criteria);
+        } catch (JsonProcessingException cannotSerialize) {
+            // Unreachable: a validated CriterionInput is four scalars. Thrown rather than swallowed
+            // for CaseVersions' reason — a write that silently stored nothing is worse than a 500,
+            // because the author watched the save succeed.
+            throw new IllegalStateException("A CriterionInput must be serializable", cannotSerialize);
+        }
     }
 
     /** A configuration's attribute map. Values are coerced to text: the contract declares strings. */

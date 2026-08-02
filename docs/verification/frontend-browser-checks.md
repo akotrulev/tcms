@@ -376,3 +376,41 @@ without one of them: remove `'plan:approve'` from `src/mocks/fixtures/core.ts`.
 the same instant. There is no `If-Match` on this endpoint by design (the target state is absolute),
 so the race resolves to whichever lands second, and both orders are legal moves. Recorded so its
 absence does not read as an oversight.
+
+---
+
+## §74 — the plan editor: the criteria that had no writer, and the scope that could not round-trip
+
+**Built and NOT browser-verified.** The ninth slice in the deferred queue.
+
+**Row 1 is live-only and it is the row that matters**, for a reason this queue has now recorded
+three slices running: `entry_criteria` and `exit_criteria` have **never been written by anything**,
+so on every real instance both are `NULL` and the plan page's exit-criteria panel — built in §46,
+with `PlanCriteria.evaluate` behind it — has rendered an empty list for its entire life. The mock's
+fixtures, by contrast, have carried hand-written criteria on `TP-1` since Phase 1. **Mock mode has
+been showing a feature the product did not have.** That is §52's "mock agrees with itself" from the
+opposite direction, and it is why the panel has to be seen against a real row before this is called
+done.
+
+**§73 row 9 becomes runnable here** — it needed a plan with real exit criteria and there was no way
+to make one without psql. Run the two together.
+
+| # | Flow | What must be true | Mode |
+|---|---|---|---|
+| 1 | Live: open a plan → **Edit** → add exit criteria *pass_rate ≥ 95* and *coverage ≥ 100* → Save → look at the statistics page | The exit-criteria panel **renders two gates with verdicts**, evaluated against the plan's real numbers — a green tick and a red cross, not two "not evaluated" dashes. `psql`: `exit_criteria` is a JSONB array, and it was `NULL` before the save. **This is the first time this panel has ever had anything to show on a real instance.** | **live only** |
+| 2 | Same plan → Edit → add *open_critical = 0* → Save | That gate renders as **not evaluated** — no tick, no cross — while the two above keep their verdicts. Null means *not evaluated*, which is not *unmet*: the product has no issue tracker, and a red cross here would tell a release meeting a gate had been checked and failed. | mock + live |
+| 3 | Edit → set a threshold, clear the number box entirely, Save | The row is **dropped**, not sent as `0`. A `pass_rate >= 0` gate is met by every release that ever runs and reads on screen exactly like one somebody meant. | mock + live |
+| 4 | Edit a plan that has folders in scope → **do not touch the scope** → change only the name → Save | The scope checkboxes are **pre-ticked on open** (the field the detail endpoint did not serve before this slice), and after the save `psql` shows `plan_scope_item` **unchanged** and `caseCount` the same. The failure this catches is silent: an editor that sent `[]` for what it did not render would empty the plan. | mock + live |
+| 5 | Edit → tick a second folder → Save → reopen the editor | The new folder is ticked, `caseCount` has grown by that folder's subtree, and **`test_plan_version` has a second row** whose `snapshot` names both suites. `psql`: `current_version_no` is 2. | **live only** |
+| 6 | Edit → change **only** the name → Save → `psql` | **No new `test_plan_version` row** and `current_version_no` unchanged. A plan version is its *scope* (§6j); a name is content. This is the assertion an implementation that bumps on every save fails, and the screen looks identical either way. | **live only** |
+| 7 | Open a plan, and in a second tab edit and save it. Return to the first tab and save. | **409 "Someone else saved first"** in the dialog's own alert, with *"Reload the plan…"*. Before this slice `lock_version` had no `@Version`, so it was `0` for ever and this check could not fire — **the whole point of the row is that it now can**. | mock + live |
+| 8 | Close a plan (Start → Close), then look at the header | **Edit is disabled**, with the title *"Reopen the plan to edit its scope and criteria."* Then Reopen → Edit is enabled again. | mock + live |
+| 9 | On the closed plan from row 8, force the save through devtools/curl | **409** *"This plan is closed… Reopen the plan to change them."* The disabled button is a courtesy; the server refusing is the rule. | **live only** |
+| 10 | Sign in as a caller **without** `plan:edit` (Viewer) → open a plan | **Edit is disabled**, and a `plan:approve`-less Test Engineer still sees it **enabled** — the two keys gate different controls on the same header. | mock + live |
+| 11 | Edit → open the metric dropdown | **Five options with readable labels** ("Pass rate (%)", "Open critical defects"), not raw enum spellings. The closed vocabulary is the reason a typo cannot become a gate that is silently never evaluated. | mock + live |
+
+**The row no browser can produce:** two editors saving in the same instant *after both passing the
+`If-Match` check*. That is the true race `@Version` catches at flush, mapped to the same 409 by
+`PlanController#onWriteRace`, and it needs two interleaved transactions — which this suite has no
+mechanism for either, so the handler is reachable in principle and unverified in practice. Recorded
+so its absence does not read as an oversight.

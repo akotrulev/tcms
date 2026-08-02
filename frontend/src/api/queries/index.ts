@@ -73,6 +73,9 @@ export {
   usePlanStatistics,
   usePlans,
   useSetPlanStatus,
+  useUpdatePlan,
+  type CriterionInput,
+  type TestPlanUpdateInput,
 } from './plans';
 export {
   MAX_EVIDENCE_BYTES,

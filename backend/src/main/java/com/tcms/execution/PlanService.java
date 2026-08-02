@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,6 +42,7 @@ public class PlanService {
 
     private final ProjectService projects;
     private final TestPlanRepository plans;
+    private final PlanScopeItemRepository scopeItems;
     private final ConfigurationRepository configurations;
     private final CaseFacts cases;
     private final PlanCriteria criteria;
@@ -48,12 +50,14 @@ public class PlanService {
     public PlanService(
             ProjectService projects,
             TestPlanRepository plans,
+            PlanScopeItemRepository scopeItems,
             ConfigurationRepository configurations,
             CaseFacts cases,
             PlanCriteria criteria) {
 
         this.projects = projects;
         this.plans = plans;
+        this.scopeItems = scopeItems;
         this.configurations = configurations;
         this.cases = cases;
         this.criteria = criteria;
@@ -70,12 +74,13 @@ public class PlanService {
     public Optional<List<TestPlanView>> list(UUID userId, UUID projectId) {
         return projects.readVisible(userId, projectId, project -> {
             List<TestPlan> rows = plans.findLiveInProject(project.getId());
-            Map<UUID, Long> caseCounts = cases.caseCountsByPlan(
-                    project.getId(), rows.stream().map(TestPlan::getId).toList());
+            List<UUID> planIds = rows.stream().map(TestPlan::getId).toList();
+            Map<UUID, Long> caseCounts = cases.caseCountsByPlan(project.getId(), planIds);
+            Map<UUID, PlanScope> scopes = scopesOf(planIds);
             List<ConfigurationView> projectConfigurations = configurationsOf(project.getId());
 
             return rows.stream()
-                    .map(plan -> view(plan, caseCounts, projectConfigurations))
+                    .map(plan -> view(plan, caseCounts, scopes, projectConfigurations))
                     .toList();
         });
     }
@@ -85,10 +90,7 @@ public class PlanService {
     public Optional<TestPlanView> findOne(UUID userId, UUID projectId, UUID planId) {
         return projects.readVisible(userId, projectId, project -> project)
                 .flatMap(project -> plans.findLiveInProject(project.getId(), planId))
-                .map(plan -> view(
-                        plan,
-                        cases.caseCountsByPlan(plan.getProjectId(), List.of(plan.getId())),
-                        configurationsOf(plan.getProjectId())));
+                .map(this::viewOf);
     }
 
     /**
@@ -107,6 +109,7 @@ public class PlanService {
         return view(
                 plan,
                 cases.caseCountsByPlan(plan.getProjectId(), List.of(plan.getId())),
+                scopesOf(List.of(plan.getId())),
                 configurationsOf(plan.getProjectId()));
     }
 
@@ -120,8 +123,12 @@ public class PlanService {
      * the field is read to answer.
      */
     private TestPlanView view(
-            TestPlan plan, Map<UUID, Long> caseCounts, List<ConfigurationView> configurations) {
+            TestPlan plan,
+            Map<UUID, Long> caseCounts,
+            Map<UUID, PlanScope> scopes,
+            List<ConfigurationView> configurations) {
 
+        PlanScope scope = scopes.getOrDefault(plan.getId(), PlanScope.empty());
         return new TestPlanView(
                 plan.getId(),
                 plan.getKey(),
@@ -139,8 +146,26 @@ public class PlanService {
                 criteria.parse(plan.getEntryCriteria()),
                 criteria.parse(plan.getExitCriteria()),
                 configurations,
+                scope.suiteIds(),
+                scope.caseIds(),
                 plan.getCurrentVersionNo(),
                 plan.getLockVersion());
+    }
+
+    /**
+     * The scope of each of several plans, in one query.
+     *
+     * <p>Empty for a plan with no scope items, which is why the caller reads it through
+     * {@code getOrDefault}: a plan somebody has only just named has no rows here at all, and that is
+     * the normal path rather than a missing join.
+     */
+    private Map<UUID, PlanScope> scopesOf(List<UUID> planIds) {
+        if (planIds.isEmpty()) {
+            return Map.of();
+        }
+        return scopeItems.findForPlans(planIds).stream()
+                .collect(Collectors.groupingBy(PlanScopeItem::getPlanId)).entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> PlanScope.ofItems(e.getValue())));
     }
 
     private List<ConfigurationView> configurationsOf(UUID projectId) {

@@ -605,6 +605,14 @@ export const plans: TestPlan[] = [
       { metric: 'coverage', op: '>=', value: 100, label: 'Every in-scope case executed', met: false, actual: 97.4 },
     ],
     configurations,
+    /*
+      Added in §74 with the endpoint that made the scope editable. Real suite ids, not an empty
+      array: the plan editor seeds its folder checkboxes from this field, so fixtures carrying `[]`
+      would render every plan as unscoped and the one screen this slice adds would look broken in
+      the only mode it can be driven in without a backend.
+    */
+    suiteIds: [uid(1, 'q')],
+    caseIds: [],
     currentVersionNo: 2,
     lockVersion: 2,
   },
@@ -617,6 +625,7 @@ export const plans: TestPlan[] = [
       { metric: 'pass_rate', op: '>=', value: 95, label: 'Pass rate at least 95%', met: true, actual: 100 },
     ],
     configurations: [configurations[0]],
+    suiteIds: [uid(1, 'q')], caseIds: [],
     currentVersionNo: 1, lockVersion: 1,
   },
   {
@@ -626,6 +635,7 @@ export const plans: TestPlan[] = [
     description: 'Runs nightly from CI.',
     entryCriteria: [], exitCriteria: [],
     configurations: [configurations[0]],
+    suiteIds: [uid(2, 'q')], caseIds: [],
     currentVersionNo: 1, lockVersion: 1,
   },
   /*
@@ -643,6 +653,9 @@ export const plans: TestPlan[] = [
     description: 'Being scoped. Nothing has been executed against it.',
     entryCriteria: [], exitCriteria: [],
     configurations: [configurations[0]],
+    // Genuinely empty, and it agrees with `caseCount: 0` — a plan somebody has named and not yet
+    // filled is the state a fresh install produces, and the editor must open cleanly on it.
+    suiteIds: [], caseIds: [],
     currentVersionNo: 1, lockVersion: 1,
   },
   {
@@ -652,6 +665,7 @@ export const plans: TestPlan[] = [
     description: 'Scope submitted for review.',
     entryCriteria: [], exitCriteria: [],
     configurations: [configurations[0]],
+    suiteIds: [uid(3, 'q')], caseIds: [],
     currentVersionNo: 1, lockVersion: 1,
   },
 ];

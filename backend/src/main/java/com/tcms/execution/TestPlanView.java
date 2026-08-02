@@ -29,6 +29,16 @@ import java.util.UUID;
  * @param caseCount <strong>not</strong> null, and not the number of scope items: a scope item that
  *                 names a folder means the folder and everything beneath it. See
  *                 {@link CaseFacts#caseCountsByPlan}.
+ * @param suiteIds the plan's scope, as stored — <strong>added so the editor can write back what it
+ *                 was served</strong>. {@code caseCount} is an expansion and a derived number: it
+ *                 cannot be edited, and nothing else on this response said which folders a plan
+ *                 covers. §68 found the identical gap on a case's classification, where the detail
+ *                 served names and the writer took ids, and the rule it produced is that a field a
+ *                 {@code PATCH} accepts must be readable from the {@code GET} that precedes it.
+ *                 Sorted, for {@link PlanVersions}' hash.
+ * @param caseIds  likewise, for the scope items that name a single case. Empty on every plan the
+ *                 SPA creates — its dialog offers folders only, deliberately — and not empty in
+ *                 general, because the API has always accepted both.
  */
 public record TestPlanView(
         UUID id,
@@ -45,6 +55,8 @@ public record TestPlanView(
         List<CriterionView> entryCriteria,
         List<CriterionView> exitCriteria,
         List<ConfigurationView> configurations,
+        List<UUID> suiteIds,
+        List<UUID> caseIds,
         int currentVersionNo,
         long lockVersion) {
 }

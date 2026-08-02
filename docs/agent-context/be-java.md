@@ -3,7 +3,7 @@
 # be-java — orientation cache (TCMS)
 
 **Last verified:** 2026-08-02
-**Baseline commit:** `6be77bd`
+**Baseline commit:** `37dc3a6`
 **Fingerprint files:** `backend/build.gradle.kts`, `backend/gradle/libs.versions.toml`, `backend/gradle/wrapper/gradle-wrapper.properties`
 
 > Authoritative docs win over this file. `CLAUDE.md`, `docs/HANDOFF.md` (an index — sections live in
@@ -158,6 +158,35 @@ provisioning · auth · shared`.
   both directions and deliberately does **not** bump `currentVersionNo`. `plan:review` stays
   unconsumed on purpose — §6g puts peer review inside `IN_REVIEW` without moving the item, like
   `case:review` and `suite:review`. `#confirmed`
+- **The plan has an EDITOR since §74, and it is the first writer of `entry_criteria`,
+  `exit_criteria` and `test_plan_version` alike.** `PlanUpdateService` + `PlanUpdateRequest` +
+  `CriterionInput` + `PlanEdit.validateUpdate` + `PATCH /plans/{planId}`, gated on **`plan:edit`** at
+  PROJECT scope with `If-Match` on `lockVersion`. Four seams to reuse rather than re-derive:
+  **`PlanScope`** is the ONE normalizer of "the same scope" (sorted, deduped — `plan_scope_item` has
+  no ordinal column, so any hash over insertion order can move without the plan changing);
+  **`PlanSnapshot`** is what a version records, and it is *scope* per `V1`'s column comment and §6j —
+  milestone, both criteria lists, both id sets, and deliberately **not** name/description (content),
+  status (§73 already declined), `caseCount` (derived) or `configurations` (a *project's* list);
+  **`PlanVersions`** is `CaseVersions`' shape with a real `decide` (a suite's could never take its
+  other branch), so **a rename writes no version**; and **one value serves as both snapshot and
+  hash**, unlike `CaseVersions`, because nothing reachable from `PlanSnapshot` is derived. **Absent /
+  null / empty are three instructions split by KIND** — a scalar `null` clears, a list `null` leaves
+  alone and `[]` clears (§68's `normalizeClassification` rule, now stated generally) — which is what
+  keeps `TestPlan.create`'s *nobody has decided* apart from *deliberately none*. `PlanCriteria` owns
+  the closed `METRICS` set and `isKnownOperator`, the latter **calling** `satisfies` rather than
+  listing the operators twice. **A CLOSED plan refuses the edit (409) and that is
+  `PlanLifecycle.isClosed`'s first consumer** — §73 wrote it and `TestPlan.applyStatus` compares the
+  enum inline — placed after the permission, before the `If-Match`, before validation (§72's order).
+  `#confirmed`
+- **`lock_version` is mapped WITHOUT `@Version` on `TestRun` and `work.WorkItem`, and that is a live
+  trap for the next writer.** §74 found it on `TestPlan`, where the column had read `0` on every plan
+  since M2 slice 2 while the contract declared `lockVersion` *required* — so an `If-Match` check
+  against it **could not fail**, there being no such thing as a stale 0. Ten other entities have the
+  annotation. The two remaining are **latent** (neither serves `lockVersion`, nothing sends an
+  `If-Match` for either) and the run one is **not a free repair**: `TestRun.begin` touches the run on
+  every result recorded, so adding it would make two testers working one run collide on the product's
+  most-used write. Sweep with: for each file mapping `lock_version`, check the 3 lines above it.
+  `#confirmed`
 - **The frozen-run rule is ONE rule over THREE writes** — result, evidence attach, evidence delete —
   which is exactly the condition §67 stated when it declined to implement `V1`'s "immutable once the
   run closes". Placement carries the reasoning and a mock or a sibling must match it: **after** the
@@ -283,12 +312,21 @@ provisioning · auth · shared`.
   usage spans `case_condition` AND `suite_condition` with inheritance on the suite side, which is a
   design question rather than a join. `#confirmed`
 
-- **`test_plan_version` is the only one of §6j's four versioned aggregates with no writer.** Case,
-  suite and doc page each have one; a plan version is defined as its SCOPE (suites, cases, milestone,
-  criteria), so §73's status moves correctly write none — and `entry_criteria`/`exit_criteria` still
-  have **no writer at all**, which means `PlanStatisticsPage`'s exit-criteria panel and
-  `PlanCriteria.evaluate` behind it have rendered nothing on every real instance since §46. Both
-  belong to the plan EDITOR, the named next slice. `#confirmed`
+- ~~**`test_plan_version` is the only one of §6j's four versioned aggregates with no writer**, and
+  `entry_criteria`/`exit_criteria` have no writer at all~~ → **all three closed in §74** (see the
+  plan-editor seam above). What is now true instead: **`test_plan_version` has a writer and no
+  reader** — nothing serves a plan's scope history, so the rows accumulate unread, which is the state
+  `suite_version` was in for a long time. A plan timeline is the natural consumer and it is §6p's.
+  `#confirmed`
+
+- **Four review-workflow permission keys still have no consumer in Java** — `case:review`,
+  `suite:review`, `plan:review`, `case:comment` — and §73 recorded that this is **correct rather than
+  an omission**: §6g puts peer review *inside* `IN_REVIEW`, accumulating on the item without moving
+  it, so those keys belong to comments/LGTM/request-changes, which do not exist. `review_comment` and
+  `review_participation` are two of the eleven tables with schema and no code. The per-project
+  review opt-in setting §6g requires does not exist either, and `PlanLifecycle`'s header leans on its
+  absence to justify `DRAFT → ACTIVE`. **This is the largest coherent gap left in this module family**
+  and the "permission with no consumer" search will keep pointing at it. `#confirmed`
 
 - **`audit_event.target_type` is spelled two ways and nothing reads it yet.** Every service writes
   the snake_case table name (`test_run`, `test_case`, `test_plan`, `doc_page`, …) except
@@ -299,6 +337,20 @@ provisioning · auth · shared`.
 
 ## Session log
 
+- 2026-08-02 · EXTEND · The plan editor (§74) — `entry_criteria`, `exit_criteria` and
+  `test_plan_version` get their first writers at once, and a plan's scope becomes editable at all.
+  New: `PlanUpdateService`, `PlanUpdateRequest`, `CriterionInput`, `PlanScope`, `PlanSnapshot`,
+  `PlanVersions`, `TestPlanVersion` + repository, `PlanEdit.validateUpdate`,
+  `PlanCriteria.METRICS`/`isKnownOperator`/`serialize`, `TestPlan.applyEdit`/`stampVersion`,
+  `PlanScopeItemRepository.findForPlans`/`deleteForPlan`, `PATCH /plans/{planId}`,
+  `PlanController#onWriteRace`, `suiteIds`/`caseIds` on the detail. **The orientation finding changed
+  the shape before any Java**: the detail served `caseCount` — an expansion — and no scope ids, so
+  the editor could not write back what it was served (§68's finding one aggregate over). **The defect
+  found: `TestPlan` mapped `lock_version` with no `@Version`**, so it was `0` for ever and an
+  `If-Match` could not fail; the sweep found `TestRun` and `work.WorkItem` the same, both left with a
+  reason. 30 endpoint tests, 4 backend mutations run inline (**3 / 2 / 4 / 1** red) and 2 frontend
+  (1 each) — the version mutation is the one to read, since bump-on-every-save leaves every scope and
+  criteria test green. **No migration — `V22` still free.**
 - 2026-08-02 · EXTEND · The plan lifecycle (§73) — `test_plan.status` had exactly one writer (the
   create factory, writing `DRAFT`), so four of five values were unreachable and `closed_at` was a
   `V1` column the entity did not map; `TestPlan`'s javadoc named the slice twice. New:

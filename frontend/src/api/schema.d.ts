@@ -1870,7 +1870,38 @@ export interface paths {
         delete: operations["deletePlan"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Edit a test plan's content
+         * @description `plan:edit` — Instance Admin, Company Admin, Test Lead and Test Engineer (roles spec
+         *     §A4), the same key that carries a plan forward through its ladder.
+         *
+         *     Edits what the plan *is*: name, description, milestone, **scope** and the two
+         *     **criteria** lists. `entry_criteria` and `exit_criteria` had no writer at all before
+         *     this operation existed, so `PlanCriteria`'s evaluator and the plan page's exit-criteria
+         *     panel have had nothing to evaluate on any real instance.
+         *
+         *     **Not `status`** — that is `PUT .../status`, with its own two gates. A status an
+         *     ordinary save could set is an approval anybody grants themselves.
+         *
+         *     **A closed plan is refused with `409`.** `CLOSED` says a release was executed and is
+         *     over, and its scope and criteria are the record of what that release was tested
+         *     against — editing them afterwards would show it passing gates nobody applied to it.
+         *     The way out is to reopen the plan (`PUT .../status` with `ACTIVE`, which needs
+         *     `plan:approve`), so unfreezing a signed-off release is a lead's act.
+         *
+         *     **Absent, null and empty are three different instructions**, and the split is by kind
+         *     rather than by field. A **scalar** sent as `null` is cleared. A **list** sent as `null`
+         *     or omitted is *left alone*, and `[]` clears it — a list has an empty spelling of its
+         *     own, so `null` does not have to carry two meanings. That is what keeps a plan whose
+         *     criteria nobody has ever written distinguishable from one whose author deliberately
+         *     removed them all.
+         *
+         *     **A version row is written only when the SCOPE moves.** Plan §6j defines a plan version
+         *     as its scope — suites, cases, milestone, criteria — so renaming a plan, rewriting its
+         *     description, or saving it unchanged writes no `test_plan_version` row and leaves
+         *     `currentVersionNo` alone.
+         */
+        patch: operations["updatePlan"];
         trace?: never;
     };
     "/projects/{projectId}/plans/{planId}/status": {
@@ -4524,6 +4555,8 @@ export interface components {
             entryCriteria: components["schemas"]["Criterion"][];
             exitCriteria: components["schemas"]["Criterion"][];
             configurations: components["schemas"]["Configuration"][];
+            suiteIds: string[];
+            caseIds: string[];
             currentVersionNo: number;
             lockVersion: number;
         };
@@ -4535,6 +4568,46 @@ export interface components {
             milestoneDate?: string | null;
             suiteIds?: string[];
             caseIds?: string[];
+        };
+        TestPlanUpdateInput: {
+            name: string;
+            description?: string | null;
+            milestoneName?: string | null;
+            /** Format: date */
+            milestoneDate?: string | null;
+            suiteIds?: string[];
+            caseIds?: string[];
+            entryCriteria?: components["schemas"]["CriterionInput"][];
+            exitCriteria?: components["schemas"]["CriterionInput"][];
+        };
+        /**
+         * @description One authored gate. `Criterion` minus `met` and `actual`, and dropping those two is the
+         *     point: both are **derived** — computed from the statistics endpoint's own numbers on
+         *     every response — so accepting them would let a client assert that a release gate was
+         *     met, which is the one claim on this object nobody should be able to make by typing it.
+         *
+         *     A client that echoes back the `Criterion` it was served is fine; the two extra fields
+         *     are ignored rather than refused, because they are this server's own computed answer
+         *     and discarding them loses nobody's work.
+         *
+         *     `metric` and `op` are **closed vocabularies**, validated on the way in. Unchecked, a
+         *     plan gated on `pass_rte` renders exactly like one gated on `open_critical`: a criterion
+         *     with no verdict. One of those means "we cannot check this yet" and the other is a typo
+         *     that will never be checked at all, and a release meeting cannot tell them apart.
+         */
+        CriterionInput: {
+            /**
+             * @example pass_rate
+             * @enum {string}
+             */
+            metric: "pass_rate" | "coverage" | "open_critical" | "cases_approved" | "build_available";
+            /**
+             * @example >=
+             * @enum {string}
+             */
+            op: ">=" | ">" | "<=" | "<" | "=" | "!=";
+            value: number;
+            label?: string | null;
         };
         PlanStatusInput: {
             /** @enum {string} */
@@ -5606,6 +5679,50 @@ export interface operations {
                 };
                 content?: never;
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updatePlan: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description The `lockVersion` the client read, as a decimal string. Mismatch yields 409.
+                 *
+                 *     **The precondition travels in the header, never in the body.** A PATCH body states the
+                 *     desired state; the version the client happened to read is an assertion about the state it
+                 *     started from, and mixing the two means a field on the input schema that must never be
+                 *     persisted. Omitting the header skips the check — a last-write-wins save, which is correct
+                 *     for a caller that genuinely has no prior read (an importer) and wrong for an editor, so
+                 *     the SPA always sends it.
+                 */
+                "If-Match"?: components["parameters"]["IfMatch"];
+            };
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                planId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TestPlanUpdateInput"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestPlan"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];

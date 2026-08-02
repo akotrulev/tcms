@@ -119,6 +119,9 @@ export const planHandlers = [
       entryCriteria: [],
       exitCriteria: [],
       configurations: db.configurations.filter((c) => c.isDefault),
+      suiteIds,
+      // The API accepts individually-named cases and no dialog offers them, exactly as live.
+      caseIds: [],
       currentVersionNo: 1,
       lockVersion: 1,
     };
@@ -134,6 +137,119 @@ export const planHandlers = [
     await delay(LATENCY);
     const plan = db.plans.find((p) => p.id === params.planId);
     return plan ? HttpResponse.json(plan) : notFound('That test plan');
+  }),
+
+  /**
+   * Editing a plan. Four properties shared with the server, and the last two are the interesting
+   * ones — each is a rule that looks like an implementation detail and is really the endpoint:
+   *
+   *  1. **The permission first**, from the same `permissionsOn` the affordance reads.
+   *  2. **A closed plan is refused with 409**, and the refusal comes *after* the permission and
+   *     *before* the `If-Match`, which is the order the server checks them in. A mock that put the
+   *     freeze first would hand a Viewer a sentence about the plan's state.
+   *  3. **An omitted list means "leave it alone"; `[]` clears it.** Read the other way, renaming a
+   *     plan through this handler would empty its scope — and mock mode would then teach a
+   *     behaviour live mode does not have, which is §52's "mock agrees with itself" class.
+   *  4. **A version is written only when the SCOPE moves.** `currentVersionNo` is on the wire, so a
+   *     mock that bumped it on every save would show a number the server would not.
+   */
+  http.patch(`${API}/projects/:projectId/plans/:planId`, async ({ params, request }) => {
+    await delay(LATENCY);
+    const projectId = String(params.projectId);
+    const plan = db.plans.find((p) => p.id === params.planId);
+    if (!plan) return notFound('That test plan');
+
+    if (!holdsOn(projectId, 'plan:edit')) {
+      return problem(
+        403,
+        'Not allowed',
+        'You do not have permission to edit test plans in this project.',
+      );
+    }
+
+    if (plan.status === 'CLOSED') {
+      return problem(
+        409,
+        'Not possible right now',
+        'This plan is closed, and its scope and criteria are the record of what the release was '
+          + 'tested against. Reopen the plan to change them.',
+      );
+    }
+
+    const ifMatch = request.headers.get('If-Match');
+    if (ifMatch !== null && Number(ifMatch.replace(/"/g, '')) !== plan.lockVersion) {
+      return problem(
+        409,
+        'Someone else saved first',
+        'Reload the plan to see the newer version, then reapply your change.',
+      );
+    }
+
+    const body = (await request.json()) as Record<string, unknown>;
+    const name = String(body.name ?? '').trim();
+    if (!name) {
+      return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+        name: ['Enter a plan name.'],
+      });
+    }
+
+    const submittedSuites = body.suiteIds as string[] | undefined;
+    if (submittedSuites?.some((id) => !db.suites.some((suite) => suite.id === id))) {
+      return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+        suiteIds: ['One of the selected suites is not in this project any more.'],
+      });
+    }
+
+    // The same closed vocabulary the server validates against, so a metric the editor could not
+    // offer is refused in both modes rather than only in one.
+    const metrics = ['pass_rate', 'coverage', 'open_critical', 'cases_approved', 'build_available'];
+    for (const field of ['entryCriteria', 'exitCriteria'] as const) {
+      const submitted = body[field] as { metric?: string; value?: number }[] | undefined;
+      const bad = submitted?.find((c) => !c.metric || !metrics.includes(c.metric));
+      if (bad) {
+        return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+          [field]: [
+            `'${bad.metric}' is not a metric a plan can be gated on. Valid metrics: `
+              + `${[...metrics].sort().join(', ')}.`,
+          ],
+        });
+      }
+    }
+
+    // The server hashes a PlanSnapshot; this is the same five fields compared by value. Comparing
+    // by *presence* instead — "did the request mention a milestone" — would bump the version on a
+    // save that resubmitted the milestone unchanged, which is what the SPA's own dialog does every
+    // time, so mock mode would count versions live mode does not.
+    const snapshot = () =>
+      JSON.stringify([
+        plan.milestoneName,
+        plan.milestoneDate,
+        plan.entryCriteria,
+        plan.exitCriteria,
+        [...(plan.suiteIds ?? [])].sort(),
+        [...(plan.caseIds ?? [])].sort(),
+      ]);
+    const before = snapshot();
+
+    plan.name = name;
+    if ('description' in body) plan.description = (body.description as string) ?? null;
+    if ('milestoneName' in body) plan.milestoneName = (body.milestoneName as string) ?? null;
+    if ('milestoneDate' in body) plan.milestoneDate = (body.milestoneDate as string) ?? null;
+    if (submittedSuites) {
+      plan.suiteIds = [...new Set(submittedSuites)].sort();
+      db.planScope.set(plan.id, plan.suiteIds);
+      plan.caseCount = planScopeCaseIds(plan.id).length;
+    }
+    if (body.caseIds) plan.caseIds = [...new Set(body.caseIds as string[])].sort();
+    if (body.entryCriteria) plan.entryCriteria = body.entryCriteria as TestPlan['entryCriteria'];
+    if (body.exitCriteria) plan.exitCriteria = body.exitCriteria as TestPlan['exitCriteria'];
+
+    // A name and a description are content, not scope, so they are outside the snapshot above and
+    // renaming a plan writes no version — the call `suite_version`'s schema comment makes.
+    if (snapshot() !== before) plan.currentVersionNo += 1;
+    plan.lockVersion += 1;
+
+    return HttpResponse.json(plan);
   }),
 
   /**

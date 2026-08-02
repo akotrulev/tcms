@@ -19,7 +19,7 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlineOutlined';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutlineOutlined';
 import { useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import type { AggregationPolicy, Criterion, PlanStatistics, PlanStatus } from '../../api/types';
+import type { AggregationPolicy, Criterion, PlanStatistics, PlanStatus, TestPlan } from '../../api/types';
 import { usePlan, usePlanStatistics, useProject, useSetPlanStatus } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
@@ -30,8 +30,15 @@ import { criterionState, type Denominator } from '../../lib/results';
 import { StatusChip } from '../../components/StatusChip';
 import { describeError } from '../../lib/describeError';
 import { formatCount, formatDateTime, formatPercent } from '../../lib/format';
-import { aggregationHelp, aggregationLabels, planStatusColors, planStatusLabels } from '../../lib/labels';
+import {
+  aggregationHelp,
+  aggregationLabels,
+  isPlanClosed,
+  planStatusColors,
+  planStatusLabels,
+} from '../../lib/labels';
 import { PlanDeleteDialog } from './PlanDeleteDialog';
+import { PlanEditDialog } from './PlanEditDialog';
 import { ScrollX } from '../../components/ScrollX';
 
 /**
@@ -95,7 +102,7 @@ export function PlanStatisticsPage() {
         actions={
           <Stack sx={{ gap: 1, alignItems: 'flex-end' }}>
             {plan.data && (
-              <PlanLifecycleActions projectId={projectId} planId={planId} status={plan.data.status} />
+              <PlanLifecycleActions projectId={projectId} plan={plan.data} />
             )}
             <Box sx={{ minWidth: 260 }}>
               <Select
@@ -180,18 +187,13 @@ const planMoves = {
  * **The refusal renders here, not as a toast.** `useSetPlanStatus` marks its errors handled: "submit
  * it for review first" is an answer about the button that was just pressed.
  */
-function PlanLifecycleActions({
-  projectId,
-  planId,
-  status,
-}: {
-  projectId: string;
-  planId: string;
-  status: PlanStatus;
-}) {
+function PlanLifecycleActions({ projectId, plan }: { projectId: string; plan: TestPlan }) {
+  const planId = plan.id;
+  const status = plan.status;
   const setStatus = useSetPlanStatus(projectId, planId);
   const [error, setError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [editing, setEditing] = useState(false);
   const navigate = useNavigate();
 
   const move = (target: PlanStatus) => {
@@ -202,6 +204,26 @@ function PlanLifecycleActions({
   return (
     <Stack sx={{ gap: 0.5, alignItems: 'flex-end' }}>
       <Stack direction="row" sx={{ gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        {/*
+          Disabled on a CLOSED plan, with the reason on the control rather than as a 409 after the
+          user has retyped the whole form. The server refuses it either way — a closed plan's scope
+          and criteria are the record of what the release was tested against — and Reopen is the
+          affordance beside this one, which is the answer the refusal would have named.
+        */}
+        <PermissionGate projectId={projectId} permission="plan:edit">
+          {({ allowed }) => (
+            <Button
+              size="small"
+              variant="outlined"
+              data-testid="PlanStats.Edit"
+              disabled={!allowed || isPlanClosed(status)}
+              title={isPlanClosed(status) ? 'Reopen the plan to edit its scope and criteria.' : undefined}
+              onClick={() => setEditing(true)}
+            >
+              Edit
+            </Button>
+          )}
+        </PermissionGate>
         {planMoves[status].map((option) => (
           <PermissionGate key={option.target} projectId={projectId} permission={option.permission}>
             {({ allowed }) => (
@@ -236,6 +258,15 @@ function PlanLifecycleActions({
         <Typography variant="caption" sx={{ color: 'var(--color-failed)' }} data-testid="PlanStats.StatusError">
           {error}
         </Typography>
+      )}
+      {/* Mounted only while open, so every control is seeded from the plan as it stands now. */}
+      {editing && (
+        <PlanEditDialog
+          open
+          projectId={projectId}
+          plan={plan}
+          onClose={() => setEditing(false)}
+        />
       )}
       {/* Mounted only while confirming, so its reset-on-open effect starts from a clean state. */}
       {confirmingDelete && (
