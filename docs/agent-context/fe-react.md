@@ -3,7 +3,7 @@
 # fe-react — orientation cache (TCMS)
 
 **Last verified:** 2026-08-02
-**Baseline commit:** `30155fc`
+**Baseline commit:** `cb3216a`
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
 `frontend/vite.config.ts`
 
@@ -52,7 +52,13 @@
   control with a why-tooltip** (§31, disable-don't-hide). Render prop, not `cloneElement`; the denied
   branch wraps in a span because MUI kills pointer events on a disabled control. **It gates on a
   permission KEY only** — `/me/permissions` carries no qualifiers, so a scope- or author-restricted
-  grant reads as fully held (see §61). `#confirmed`
+  grant reads as fully held (see §61). **It must NOT be used inside a MUI `Select`** — `Select`
+  clones its *direct* children to inject `role="option"`, `data-value` and the selection handler, so
+  a wrapped `MenuItem` renders as an inert `role="menuitem"` that cannot be chosen at all, and
+  carries no `aria-disabled` either, so a testid-based test reads it as "enabled". Inside a `Select`,
+  read `useCan(projectId)` in the component body and pass a plain `disabled` prop
+  (`features/cases/BulkActionDialog.tsx` sets the pattern). Cost the whole approve feature in §62,
+  with every gate green. `#confirmed`
 - **Forms:** react-hook-form + zod via `zodResolver`; each dialog owns an `applyServerError` that maps
   the RFC-7807 `errors` map onto its fields and falls back to a root alert via `describeError`.
   `mode: 'onBlur'`; **focus on open, never `reset(defaults)`** — a reset keyed on an object literal
@@ -89,13 +95,20 @@
 ## Known unknowns
 
 - E2E / page objects are the `qa-ui-typescript` peer's; none exist here.
-- `cases/bulk` is the last MSW-only surface with a live consumer (`BulkActionDialog`). `/reports` has
-  no hook and `useSharedSteps` has no call site — dead contract.
+- **`reporting` is the last MSW-only surface** (§62 landed `cases/bulk`), and it is dead contract:
+  `/reports` has no hook and `useSharedSteps` has no call site — delete or build.
 - Lighthouse / Core-Web-Vitals never measured (handoff §5); `CaseListPage` is over its route budget
   with the reasoning recorded in `vite.config.ts`.
 
 ## Session log
 
+- 2026-08-02 · EXTEND · Extended `BulkActionDialog` to all eight bulk actions (§62), typed
+  `BulkInput`/`payload` from the contract (both were `string`/`Record<string,unknown>`), and brought
+  the MSW handler into agreement with the new server — it had **dropped unresolvable ids** so the
+  three buckets did not add up to `total`, and answered "not supported yet" for six actions. Added
+  `BulkActionDialog.test.tsx` (13 tests). **The live pass found the approve option was unselectable**
+  because `PermissionGate` wrapped a `Select` child — see the seam note; tests now assert through
+  `role="option"` and count options against `lifecycleLabels` rather than reading a testid.
 - 2026-08-02 · EXTEND · Added the artifact register's write half (§61): `useCreateArtifact`,
   `features/artifacts/ArtifactDialogs.tsx` (scope × kind cross-field form) + its 6 tests, the MSW
   `POST /artifacts` handler mirroring the PLAN_SCOPE qualifier, and the `docPageId` link that makes a

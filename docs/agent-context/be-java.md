@@ -3,7 +3,7 @@
 # be-java — orientation cache (TCMS)
 
 **Last verified:** 2026-08-02
-**Baseline commit:** `30155fc`
+**Baseline commit:** `cb3216a`
 **Fingerprint files:** `backend/build.gradle.kts`, `backend/gradle/libs.versions.toml`, `backend/gradle/wrapper/gradle-wrapper.properties`
 
 > Authoritative docs win over this file. `CLAUDE.md`, `docs/HANDOFF.md` (an index — sections live in
@@ -86,6 +86,20 @@ provisioning · auth · shared`.
   `OWN`+`PLAN_SCOPE` (incomparable axes); `SeedDataTest` keeps that unreachable by asserting no key
   carries two different restrictive qualifiers. **A new qualifier value is a compile error at every
   consumer** — the switches are exhaustive under `-Werror`, deliberately. `#confirmed`
+- **The bulk gate is the one permission resolved from the REQUEST, not fixed at the class.**
+  `BulkOperations.permission` returns `case:approve` when `SET_STATUS` targets `APPROVED` and
+  `case:edit` otherwise (roles spec's Review table; plan §6g's single gate). Sound only while
+  approvers are a subset of editors, which `SeedDataTest.everyApproverIsAlsoAnEditor` derives from
+  the catalogue rather than assuming. **`lifecycle_status` has exactly one writer**, `CaseBulkService`
+  — `CaseUpdateRequest` omits it deliberately. `#confirmed`
+- **`CaseEdit.of` reconstructs a stored case's authored content by round-tripping through
+  `CaseEdit.validate`**, never by reading getters: a second normalizer makes every `CaseVersions`
+  hash disagree and fills the version list with empty diffs. Used only by the two bulk actions whose
+  fields the hash digests (`MOVE_TO_SUITE`, `SET_AUTOMATION_STATUS`), and pinned by a round-trip test
+  in `CaseBulkEndpointTest`. `#confirmed`
+- **`CaseRenderer`** is the one assembler of a case's shape — extracted from the byte-identical
+  private copies in `CaseCreateService` and `CaseUpdateService`. A fourth writer uses it, never a
+  fourth copy. `#confirmed`
 - **Operator CLI**: `ApplicationRunner` beans that are inert unless their verb appears in the
   non-option args — `ProvisionCompanyCommand`, `IssueInvitationCommand`. The verb list lives in
   `OperatorCommands`, which `TcmsApplication.main` asks *before the context exists* to pick
@@ -122,11 +136,20 @@ provisioning · auth · shared`.
 - ~~Two tests are `@Disabled`~~ **→ fixed and re-enabled 2026-08-02 (§60). No test is `@Disabled`;
   the suite runs 1078 with 0 skipped**, and the `skipped` count is the cheapest way to check that
   claim still holds. `#confirmed`
-- `reporting` and `cases/bulk` are still MSW-only on the frontend; no backend implementation. `/reports`
-  has no SPA hook at all and `useSharedSteps` has no call site — dead contract, to delete or build.
+- **`reporting` is the last MSW-only surface** (§62 landed `cases/bulk`). `/reports` has no SPA hook
+  at all and `useSharedSteps` has no call site — dead contract, to delete or build.
 
 ## Session log
 
+- 2026-08-02 · EXTEND · Built `POST /cases/bulk` (§62), all eight declared actions — the last
+  MSW-only surface with a live consumer. New: `BulkAction`/`BulkCommand` (sealed)/`BulkOperations`
+  (pure parse + permission)/`BulkVerdict`/`BulkResultView`/`CaseBulkService`, `CaseRenderer`
+  (extracted from two byte-identical private copies), `CaseEdit.of`, `TestCase` mutators for
+  lifecycle/automation/owner/suite, `CaseTag.of` + `CaseCondition.of` (first writers of both tables),
+  batch queries on `TestCaseRepository`/`CaseConditionRepository`, `ConditionRepository.findLiveInProject`.
+  **`case:approve` got its first consumer in Java** and the gate is resolved from the parsed command;
+  `SeedDataTest` gains the computed check behind that. **No migration.** Mutation-verified twice.
+  §19's fixture-collision defect hit a fifth time (the `b0` prefix space was the board tests').
 - 2026-08-02 · EXTEND · Built the artifact register in `documentation` (§61): `Artifact` entity over
   V1's table, `ArtifactRepository`/`Service`/`WriteService`/`Controller`, `ArtifactPeople` (the 4th
   `*People` display-name resolver) and `PlanFacts` (the 4th `*Facts` cross-module native-SQL reader,
