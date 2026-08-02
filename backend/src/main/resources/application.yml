@@ -49,6 +49,25 @@ spring:
     user: ${DB_MIGRATION_USER:tcms_owner}
     password: ${DB_MIGRATION_PASSWORD:tcms}
 
+  servlet:
+    multipart:
+      # Evidence uploads PROXY THROUGH THE API, because the storage port's filesystem adapter
+      # cannot sign a URL (open question #28, §51 — the consequence was stated when the option
+      # was chosen). So these two numbers are the only thing standing between one caller and the
+      # disk the whole instance shares, and Boot's defaults (1MB file / 10MB request) would
+      # refuse an ordinary full-page screenshot — an unset limit here is not "no limit", it is
+      # the wrong limit.
+      #
+      # 10MB holds a screenshot or a log excerpt and refuses a screen recording, which is the
+      # line the product wants until per-project quota exists (#28's other half, still open and
+      # made MORE pressing by the filesystem adapter, not less: the bound is one disk).
+      #
+      # max-request-size is deliberately larger than max-file-size rather than equal: the
+      # multipart envelope carries the caption and stepId parts and their headers too, so an
+      # exactly-10MB file with a caption would otherwise be refused for a reason naming the file.
+      max-file-size: 10MB
+      max-request-size: 12MB
+
   threads:
     virtual:
       enabled: true
@@ -63,6 +82,23 @@ tcms:
       issuer: ${TCMS_JWT_ISSUER:tcms}
       ttl: PT8H
       remember-me-ttl: P30D
+
+  storage:
+    evidence:
+      # Where evidence bytes land — the filesystem adapter behind the storage port (open
+      # question #28, resolved in §51: filesystem now, S3 later, and the port is what makes the
+      # second one additive).
+      #
+      # STATEFUL AND BACKUP-CRITICAL. Losing this directory loses every screenshot behind every
+      # failed result; the evidence rows survive and their bytes do not, so the product renders
+      # attachments that all 404 and no migration repairs it. It needs the same treatment in the
+      # deployment runbook that the database gets — this is the first thing in the product whose
+      # state is not in Postgres.
+      #
+      # Defaulted rather than required, unlike the JWT secret: a wrong path here fails loudly on
+      # the first upload and harms nothing before then, whereas a defaulted signing key is a
+      # forged session nothing ever fails on.
+      root: ${TCMS_EVIDENCE_ROOT:/var/lib/tcms/evidence}
 
   invitation:
     # The SPA's public origin — what an invitee's browser can reach, NOT what the container

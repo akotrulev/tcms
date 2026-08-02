@@ -120,6 +120,18 @@ public abstract class IntegrationTestBase {
         // back on for its own context and otherwise drives the service directly.
         registry.add("tcms.case-health.enabled", () -> false);
 
+        // Evidence bytes land in a directory, not in Postgres — the one piece of product state
+        // Testcontainers does not throw away for us. The production default is /var/lib/tcms,
+        // which is not writable on a developer's machine, so the suite gets its own path under
+        // the JVM's temp directory.
+        //
+        // NOT cleaned between classes, on purpose: keys are three server-generated UUIDs, so two
+        // tests cannot collide, and a leftover file is the evidence you want when a download
+        // assertion fails. The OS clears the directory; §19's fixture-collision defect is about
+        // hand-managed prefixes and does not apply to a key space that is entirely random.
+        registry.add("tcms.storage.evidence.root",
+                () -> System.getProperty("java.io.tmpdir") + "/tcms-evidence-test");
+
         // Production sizes this at 20. The suite must not.
         //
         // Spring caches one context per distinct configuration, and this suite now has
