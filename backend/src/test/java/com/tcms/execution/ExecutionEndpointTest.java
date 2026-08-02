@@ -914,6 +914,115 @@ class ExecutionEndpointTest extends IntegrationTestBase {
             assertThat(get(LEAD, ACME, attached.get("url").asText().replace("/api/v1", ""))
                     .getResponse().getStatus()).isEqualTo(200);
         }
+
+        @Test
+        @DisplayName("a tester removes evidence they attached themselves")
+        void deletesOwn() throws Exception {
+            UUID id = attachedId(ENGINEER, EXEC_A, "mine.png");
+
+            MvcResult removed = deleteEvidence(ENGINEER, ACME, EXEC_A, id);
+
+            assertThat(removed.getResponse().getStatus()).isEqualTo(204);
+            assertThat(body(get(ENGINEER, ACME, executionPath(RUN, EXEC_A))).get("evidence"))
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("a tester cannot remove a colleague's evidence, and is told the right reason")
+        void refusesSomeoneElses() throws Exception {
+            UUID id = attachedId(LEAD, EXEC_A, "the-leads.png");
+
+            MvcResult refused = deleteEvidence(ENGINEER, ACME, EXEC_A, id);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(403);
+            // The sentence matters as much as the status. "You do not have permission to remove
+            // evidence" is FALSE for this caller — they remove their own all day — and false in
+            // the direction that sends them to ask an administrator for something they hold.
+            assertThat(body(refused).get("detail").asText())
+                    .contains("only remove evidence you attached");
+
+            // And the row survives. A refusal that answered 403 and deleted anyway is the failure
+            // this test exists for, and the status alone cannot tell the two apart.
+            assertThat(body(get(LEAD, ACME, executionPath(RUN, EXEC_A))).get("evidence"))
+                    .hasSize(1);
+        }
+
+        @Test
+        @DisplayName("a test lead removes anyone's evidence — the grant is unqualified above ENGINEER")
+        void aLeadRemovesAnyones() throws Exception {
+            UUID id = attachedId(ENGINEER, EXEC_A, "the-engineers.png");
+
+            assertThat(deleteEvidence(LEAD, ACME, EXEC_A, id).getResponse().getStatus())
+                    .isEqualTo(204);
+
+            // Without this test, the two above pass equally well against a page that refuses
+            // EVERYBODY — which would lock every lead in the product out of their own runs, and
+            // look exactly like a working OWN gate from the refused side.
+        }
+
+        @Test
+        @DisplayName("evidence with no recorded author is nobody's own work, and OWN does not cover it")
+        void refusesUnattributedForAnOwnGrant() throws Exception {
+            UUID id = attachedId(ENGINEER, EXEC_A, "orphan.png");
+            // Nothing the API offers can produce this row — created_by is always the caller. Which
+            // is precisely why it is the arm no fixture contains and the one most likely to be
+            // wrong: in a real installation these are the OLDEST rows, written before authorship
+            // was recorded, so getting it wrong reads as a defect in the import rather than in the
+            // gate.
+            try (Connection connection = appConnection(ACME)) {
+                execute(connection,
+                        "UPDATE evidence SET created_by = NULL WHERE id = '" + id + "'");
+            }
+
+            MvcResult refused = deleteEvidence(ENGINEER, ACME, EXEC_A, id);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(403);
+            assertThat(body(refused).get("detail").asText())
+                    .contains("only remove evidence you attached");
+
+            // The lead is still not blocked by it: an unqualified grant does not consult
+            // authorship at all, so a null author is irrelevant rather than disqualifying.
+            assertThat(deleteEvidence(LEAD, ACME, EXEC_A, id).getResponse().getStatus())
+                    .isEqualTo(204);
+        }
+
+        @Test
+        @DisplayName("a Viewer's refusal is the ORDINARY one — authorship never replaces the plain gate")
+        void aViewerGetsThePlainRefusal() throws Exception {
+            UUID id = attachedId(ENGINEER, EXEC_A, "mine.png");
+
+            MvcResult refused = deleteEvidence(VIEWER, ACME, EXEC_A, id);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(403);
+            assertThat(body(refused).get("detail").asText())
+                    .contains("do not have permission")
+                    .doesNotContain("only remove evidence you attached");
+        }
+
+        @Test
+        @DisplayName("removing evidence takes its bytes with it — a hard delete, not a soft one")
+        void deleteRemovesTheBytes() throws Exception {
+            JsonNode attached = body(attach(ENGINEER, ACME, EXEC_A, "gone.txt", "text/plain",
+                    new byte[] {7, 7, 7}, null));
+            String url = attached.get("url").asText().replace("/api/v1", "");
+            assertThat(get(ENGINEER, ACME, url).getResponse().getStatus()).isEqualTo(200);
+
+            deleteEvidence(ENGINEER, ACME, EXEC_A, UUID.fromString(attached.get("id").asText()));
+
+            // A soft-deleted row pointing at retained bytes is a deletion that did not delete —
+            // the wrong answer for the one thing here a customer may need removed for privacy.
+            assertThat(get(ENGINEER, ACME, url).getResponse().getStatus()).isEqualTo(404);
+        }
+
+        /** Attaches as {@code userId} and returns the new evidence's id. */
+        private UUID attachedId(UUID userId, UUID executionId, String filename) throws Exception {
+            MvcResult result = attach(userId, ACME, executionId, filename, "image/png",
+                    new byte[] {1, 2, 3}, null);
+            assertThat(result.getResponse().getStatus())
+                    .as("fixture setup must not be the thing that fails")
+                    .isEqualTo(201);
+            return UUID.fromString(body(result).get("id").asText());
+        }
     }
 
     // =====================================================================
@@ -934,6 +1043,17 @@ class ExecutionEndpointTest extends IntegrationTestBase {
             request = request.param("caption", caption);
         }
         return mvc.perform(request).andReturn();
+    }
+
+    private MvcResult deleteEvidence(
+            UUID userId, UUID companyId, UUID executionId, UUID evidenceId) throws Exception {
+
+        return mvc.perform(MockMvcRequestBuilders
+                        .delete("/api/v1" + executionPath(RUN, executionId) + "/evidence/"
+                                + evidenceId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, companyId))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andReturn();
     }
 
     private MvcResult get(UUID userId, UUID companyId, String path) throws Exception {
@@ -1179,6 +1299,12 @@ class ExecutionEndpointTest extends IntegrationTestBase {
             try (Connection connection = appConnection(companyId)) {
                 execute(connection, "DELETE FROM audit_event");
                 execute(connection, "DELETE FROM defect_link");
+                // evidence would cascade from test_execution below, but attachment would NOT —
+                // it is polymorphic and holds no foreign key to anything, so its rows would
+                // accumulate across every test in the class and a count assertion would drift.
+                // Both are cleared explicitly, evidence first because it references attachment.
+                execute(connection, "DELETE FROM evidence");
+                execute(connection, "DELETE FROM attachment");
                 execute(connection, "DELETE FROM step_result");
                 execute(connection, "DELETE FROM test_execution");
                 execute(connection, "DELETE FROM test_run");
