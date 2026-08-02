@@ -44,6 +44,28 @@ function excludeMockServiceWorker(): Plugin {
 const buildId = process.env.VITE_BUILD_ID ?? `local-${Date.now().toString(36)}`
 
 /**
+ * `__APP_VERSION__` is the release the user is looking at — what the footer renders.
+ *
+ * It exists because the footer used to carry the string `0.1.0` as a literal in `AppShell.tsx`,
+ * which meant the number on screen was not a fact about the running build at all: it survived
+ * every release unchanged, and a deploy of 0.1.2 still read 0.1.0 with no cache anywhere at
+ * fault. Three unmanaged copies of the version existed (that literal, `package.json`'s 0.0.0,
+ * and Gradle's 0.1.0-SNAPSHOT) and none of them was the one `deploy.yml` was dispatched with.
+ *
+ * So this is deliberately fed from the workflow's `version` input (`VITE_APP_VERSION`) — the
+ * same value that tags the image and names the artifact — and not from `package.json`. The
+ * dispatch input is the only thing that knows what is being released.
+ *
+ * Distinct from `__BUILD_ID__` on purpose: that is the commit SHA, for telling one build from
+ * another during skew detection; this is the human-facing release name. A SHA in the footer
+ * would be unreadable, and a version tag cannot identify a build (two dispatches can share one).
+ *
+ * `dev` rather than a fake number for local builds: a developer's `npm run build` has no release
+ * name, and inventing a plausible one is how the literal got there in the first place.
+ */
+const appVersion = process.env.VITE_APP_VERSION ?? 'dev'
+
+/**
  * Where `VITE_API_MODE=live` sends `/api/v1`.
  *
  * A **proxy**, not a CORS grant: the browser keeps talking to its own origin, so no preflight,
@@ -59,6 +81,7 @@ export default defineConfig({
   plugins: [react(), excludeMockServiceWorker()],
   define: {
     __BUILD_ID__: JSON.stringify(buildId),
+    __APP_VERSION__: JSON.stringify(appVersion),
   },
   server: {
     port: Number(process.env.VITE_DEV_PORT ?? 5173),

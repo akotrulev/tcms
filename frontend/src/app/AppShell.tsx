@@ -473,7 +473,7 @@ function AppFooter() {
       }}
     >
       <Typography variant="caption">
-        TCMS <Identifier variant="muted">0.1.0</Identifier>
+        TCMS <Identifier variant="muted">{__APP_VERSION__}</Identifier>
       </Typography>
     </Box>
   );

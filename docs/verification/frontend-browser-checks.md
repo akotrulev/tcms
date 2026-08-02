@@ -597,3 +597,25 @@ assigned to anybody, because §6g's peer review is open to the whole tier and a 
 **Not exercisable here:** asking a **sibling company's** account or a sibling company's team. Both
 are refused as field errors and neither is reachable from any picker in either mode — the check is
 the backend queue's, and the rows exist there.
+
+---
+
+## Release version in the footer (2026-08-03)
+
+The footer used to render the string `0.1.0` as a **literal** in `AppShell.tsx`, so the number on
+screen was not a fact about the running build: it survived every release unchanged. It is now
+`__APP_VERSION__`, a Vite `define` fed from `deploy.yml`'s `version` input.
+
+**This is the one row that cannot be fully checked in mock mode**, and that is inherent rather than
+an oversight: `npm run dev` and a local `npm run build` both leave `VITE_APP_VERSION` unset, so the
+footer correctly reads `dev`. Only a build produced by the workflow carries a release name. The
+`web` job now greps `dist/assets/` for the dispatched version and fails the release if it is
+absent — measured against a real build, the string appears exactly once, in the footer node — so
+the automated half of this is genuinely covered and row 3 is the part a human must see.
+
+| # | Flow | What must be true | Mode |
+|---|---|---|---|
+| 1 | `npm run dev`, scroll to the footer | Reads **`TCMS dev`** — not a version number. A plausible-looking number here means someone has re-introduced a hardcoded literal, which is the exact defect this replaced. | mock |
+| 2 | `VITE_APP_VERSION=9.9.9 npm run build && npm run preview` | Footer reads **`TCMS 9.9.9`**. Proves the `define` reaches the emitted bundle and not just the dev server. | mock |
+| 3 | After a real `gh workflow run deploy.yml -f version=<v>`, hard-reload the deployed site | Footer reads **`TCMS <v>`**, matching the dispatched input and the GHCR image tag. **This is the check the whole change exists for** — the previous release passed every gate and still showed the wrong number. | **live only** — needs a real dispatch |
+| 4 | Deploy a second version, then reload | The number **changes**. One correct reading is consistent with a literal that happens to match; two are not. | **live only** — needs two dispatches |
