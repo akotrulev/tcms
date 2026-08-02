@@ -3,7 +3,7 @@
 # be-java — orientation cache (TCMS)
 
 **Last verified:** 2026-08-02
-**Baseline commit:** `9928805`
+**Baseline commit:** `6be77bd`
 **Fingerprint files:** `backend/build.gradle.kts`, `backend/gradle/libs.versions.toml`, `backend/gradle/wrapper/gradle-wrapper.properties`
 
 > Authoritative docs win over this file. `CLAUDE.md`, `docs/HANDOFF.md` (an index — sections live in
@@ -141,6 +141,23 @@ provisioning · auth · shared`.
   null `started_at` is unreachable through the API. **No `If-Match`** — the target state is
   absolute, so there is no stale-read-derived value to lose (`DocPageWriteService#setStatus`'s
   call). `updated_by` is mapped for the first time. `#confirmed`
+- **The PLAN has a LIFECYCLE since §73, and it is the only writer `test_plan.status` has ever had
+  besides the factory.** `PlanLifecycle` (pure, static — the transition table, `permissionFor`,
+  `isClosed`) + `PlanStatusService` + `PlanDeleteService` + `PUT /plans/{planId}/status` +
+  `DELETE /plans/{planId}`. **The gate is decided by the EDGE, not the target**: `plan:approve`
+  grants the sign-off, ends the plan and **takes either back**, `plan:edit` carries it forward
+  through the states nobody signed off — a target-keyed rule lets a Test Engineer rescind a lead's
+  approval by asking for `DRAFT`, and reddens nothing else in the suite. Hence
+  `ProjectService.writeGrantedOnTarget` (§69's seam, second consumer): the deciding fact is the
+  STORED status. **The ladder does not require approval** — §6g says review is optional and off by
+  default and that setting does not exist, so `DRAFT → ACTIVE` is legal; `APPROVED` is reachable only
+  from `IN_REVIEW` and `CLOSED` only from `ACTIVE`. **Delete and close partition the space**: the
+  delete refuses 409 + count while a live run names the plan (`findPlanKeys` is not filtered on
+  `deleted_at`, so nothing breaks loudly), and `CLOSED` is the answer for a plan that WAS executed.
+  `closed_at` and `updated_by` are mapped for the first time; `applyStatus` derives `closed_at` in
+  both directions and deliberately does **not** bump `currentVersionNo`. `plan:review` stays
+  unconsumed on purpose — §6g puts peer review inside `IN_REVIEW` without moving the item, like
+  `case:review` and `suite:review`. `#confirmed`
 - **The frozen-run rule is ONE rule over THREE writes** — result, evidence attach, evidence delete —
   which is exactly the condition §67 stated when it declined to implement `V1`'s "immutable once the
   run closes". Placement carries the reasoning and a mock or a sibling must match it: **after** the
@@ -266,6 +283,13 @@ provisioning · auth · shared`.
   usage spans `case_condition` AND `suite_condition` with inheritance on the suite side, which is a
   design question rather than a join. `#confirmed`
 
+- **`test_plan_version` is the only one of §6j's four versioned aggregates with no writer.** Case,
+  suite and doc page each have one; a plan version is defined as its SCOPE (suites, cases, milestone,
+  criteria), so §73's status moves correctly write none — and `entry_criteria`/`exit_criteria` still
+  have **no writer at all**, which means `PlanStatisticsPage`'s exit-criteria panel and
+  `PlanCriteria.evaluate` behind it have rendered nothing on every real instance since §46. Both
+  belong to the plan EDITOR, the named next slice. `#confirmed`
+
 - **`audit_event.target_type` is spelled two ways and nothing reads it yet.** Every service writes
   the snake_case table name (`test_run`, `test_case`, `test_plan`, `doc_page`, …) except
   `ExecutionService`'s `"TEST_EXECUTION"` and `ArtifactService`'s `"ARTIFACT"`. Latent rather than
@@ -275,6 +299,19 @@ provisioning · auth · shared`.
 
 ## Session log
 
+- 2026-08-02 · EXTEND · The plan lifecycle (§73) — `test_plan.status` had exactly one writer (the
+  create factory, writing `DRAFT`), so four of five values were unreachable and `closed_at` was a
+  `V1` column the entity did not map; `TestPlan`'s javadoc named the slice twice. New:
+  `PlanLifecycle`, `PlanStatusRequest`, `PlanStatusService`, `PlanDeleteService`, two routes,
+  `TestPlan.applyStatus`/`softDelete`, `TestRunRepository.countLiveByPlan`, seven audit actions.
+  **Three permissions get their first Java consumer at once**; `plan:review` deliberately stays
+  unconsumed. **The finding is the gate on the EDGE** — the obvious target-keyed reading passes an
+  "an engineer cannot approve" test and still lets that engineer rescind a lead's approval; the
+  mutation reddens **exactly 2** and nothing else notices. Two pre-existing frontend defects, both
+  in `PlanListPage`: the colour map is the **sibling** of the one §72 fixed on the run list and
+  §72's sweep never ran the grep, and the exit-criteria column read `!c.met` where null means *not
+  evaluated*. 23 endpoint tests, 4 backend mutations run inline (2/3/1/1 red), 4 queued.
+  **No migration — `V22` still free.**
 - 2026-08-02 · EXTEND · The run lifecycle (§72) — `test_run.status` had been written exactly once
   in the product's life (to `NOT_STARTED`, by the factory), so every run on every real instance read
   "not started" for ever and `started_at`/`completed_at` were never filled. Three production
