@@ -92,12 +92,17 @@ export {
 export { useDashboard } from './reporting';
 export {
   useGrantRole,
+  useCreateTeam,
+  useDeleteTeam,
   useInviteUser,
+  usePutTeamMember,
+  useRemoveTeamMember,
   useRemoveUser,
   useRevokeRole,
   useRoleAssignments,
   useRoles,
   useTeams,
+  useUpdateTeam,
   useUsers,
 } from './admin';
 export { useCreateWorkItem, useMoveWorkItem, useWorkItems } from './workItems';

@@ -349,4 +349,14 @@ public interface RoleAssignmentRepository extends JpaRepository<RoleAssignment, 
 
     Optional<RoleAssignment> findByCompanyIdAndRoleIdAndTeamIdAndProjectIdIsNull(
             UUID companyId, UUID roleId, UUID teamId);
+
+    /**
+     * How many grants name this team as their subject — the count
+     * {@code DELETE /teams/{teamId}} refuses on.
+     *
+     * <p>The column is {@code ON DELETE CASCADE}, so without this the delete would succeed and take
+     * every one of these grants with it, silently. {@link TeamWriteService#delete} says why that is
+     * a refusal rather than a cascade the product performs.
+     */
+    long countByTeamId(UUID teamId);
 }

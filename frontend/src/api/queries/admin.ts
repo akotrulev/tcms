@@ -12,6 +12,8 @@ import type {
   RoleAssignment,
   RoleAssignmentInput,
   Team,
+  TeamInput,
+  TeamMemberInput,
   User,
   UserInvitation,
   UserInvitationInput,
@@ -30,6 +32,130 @@ export function useTeams(): UseQueryResult<Team[]> {
   return useQuery({
     queryKey: keys.teams,
     queryFn: ({ signal }) => api.get<Team[]>('/teams', { signal }),
+  });
+}
+
+/**
+ * Creates a team — **the org chart's first writer**, and the first time `useTeams` has had
+ * anything to show on a real instance.
+ *
+ * `team` has had readers since the schema's first migration and no writer anywhere, so in live
+ * mode `GET /teams` returned `[]` for every company that has ever existed and `GrantRoleDialog`'s
+ * "grant to a team" group was permanently empty. **Mock mode has always looked correct**, because
+ * the fixtures carry teams — the "mock agrees with itself" class, and the reason this was invisible
+ * for the whole life of the screen.
+ *
+ * Only the team list is invalidated. A new team holds nothing and reaches nobody until a grant
+ * names it, so neither `role-assignments` nor `projects` can have changed — the same reasoning
+ * `useInviteUser` applies to an invitation, and the opposite of what `useGrantRole` must do.
+ */
+export function useCreateTeam(): UseMutationResult<Team, Error, TeamInput> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: TeamInput) => api.post<Team>('/teams', input),
+    meta: { handled: true },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.teams });
+    },
+  });
+}
+
+/**
+ * Renames, re-describes or moves a team.
+ *
+ * **A `PUT` carrying every editable field**, because `parentTeamId: null` — "move this to the
+ * root" — is indistinguishable from an absent key once a body is deserialized. The contract
+ * records the same reasoning, and it is why the classification-value editor is a PUT too.
+ *
+ * Still only the team list: moving a team changes the picture and not anybody's access, since
+ * grants never cascade through the parent edge.
+ */
+export function useUpdateTeam(): UseMutationResult<
+  Team,
+  Error,
+  { teamId: string; input: TeamInput }
+> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ teamId, input }) =>
+      api.put<Team>(`/teams/${encodeURIComponent(teamId)}`, input),
+    meta: { handled: true },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.teams });
+    },
+  });
+}
+
+/**
+ * Deletes a team.
+ *
+ * **The 409 is the interesting answer**, not the 204: a team holding grants is refused with the
+ * count, because the row's cascade would revoke every one of them silently. The dialog renders that
+ * refusal itself — hence `handled` — since "3 role grants are made through this team" is only
+ * useful beside the team it names.
+ *
+ * `role-assignments` is invalidated on success even though a *successful* delete had no grants to
+ * take with it: the list carries a team name per row, and leaving it cached would render a revoke
+ * button beside a team that no longer exists.
+ */
+export function useDeleteTeam(): UseMutationResult<void, Error, string> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (teamId: string) => api.del<void>(`/teams/${encodeURIComponent(teamId)}`),
+    meta: { handled: true },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.teams });
+      void client.invalidateQueries({ queryKey: keys.roleAssignments });
+    },
+  });
+}
+
+/**
+ * Puts somebody in a team, or changes whether they lead it.
+ *
+ * **This one invalidates `projects`, and that is the difference from every other write here.** A
+ * team can hold grants, so joining one is an authorization change for that person — the same
+ * reasoning `useGrantRole` gives, arriving by a different route. It is easy to read this as an
+ * org-chart edit and invalidate only the chart, which would leave the newly-staffed colleague's own
+ * rail showing the world as it was before they joined.
+ */
+export function usePutTeamMember(): UseMutationResult<
+  Team,
+  Error,
+  { teamId: string; userId: string; input: TeamMemberInput }
+> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ teamId, userId, input }) =>
+      api.put<Team>(
+        `/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(userId)}`,
+        input,
+      ),
+    meta: { handled: true },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.teams });
+      void client.invalidateQueries({ queryKey: keys.projects });
+    },
+  });
+}
+
+/** Takes somebody out of a team — an authorization change too, so the same three keys. */
+export function useRemoveTeamMember(): UseMutationResult<
+  void,
+  Error,
+  { teamId: string; userId: string }
+> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ teamId, userId }) =>
+      api.del<void>(
+        `/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(userId)}`,
+      ),
+    meta: { handled: true },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.teams });
+      void client.invalidateQueries({ queryKey: keys.projects });
+    },
   });
 }
 

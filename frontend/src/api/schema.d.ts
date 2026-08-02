@@ -3101,8 +3101,276 @@ export interface paths {
             };
         };
         put?: never;
-        post?: never;
+        /**
+         * Create a team
+         * @description **The org chart's first writer.** `team` has been in the schema from the beginning with
+         *     readers (`GET /teams`, the org chart, a grant's subject column) and no writer anywhere:
+         *     `provision-company` seeds no team, so every real company's org chart was empty and stayed
+         *     empty, and `POST /role-assignments`' team branch — validated, tested, documented — could
+         *     never be reached with a real `teamId`.
+         *
+         *     Gated on **`company:teams`** at COMPANY scope (roles spec §A3: "teams, nesting, leads,
+         *     org-chart structure"), so Company Admin and Instance Admin only. This is that permission's
+         *     first consumer: it has been seeded and correctly granted since M0 and never once asked.
+         *
+         *     **A team confers nothing until it is granted something.** Creating one is org-chart
+         *     structure, not access — it is `POST /role-assignments` naming the team that gives it reach.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["TeamInput"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        /** @description The new team's URL. */
+                        Location?: string;
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Team"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+            };
+        };
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{teamId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                teamId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Rename, re-describe or move a team
+         * @description **PUT rather than PATCH, for `parentTeamId` — the same reason
+         *     `PUT /projects/{projectId}/classification/values/{valueId}` gives.** A record deserialized
+         *     from JSON reads an absent field and an explicit `null` identically, so under PATCH one of
+         *     "leave the parent alone" and "make this a root team" would be unreachable. A body carrying
+         *     every editable field has no such ambiguity.
+         *
+         *     **Unlike a classification value, a team may actually be moved, and the difference is the
+         *     point.** Reparenting a classification value rewrites the subtree that authored cases are
+         *     classified by, so it is refused; a team's parent edge is **org-chart structure and never a
+         *     permission edge** — grants do not cascade through it (plan §6k) — so moving a team changes
+         *     a picture and confers nothing on anybody. The field that had to be refused there is the
+         *     field this endpoint exists for.
+         *
+         *     A `parentTeamId` that would create a **cycle**, that names the team itself, or that names
+         *     no team in this company is a field error on `parentTeamId`. A database trigger enforces the
+         *     same three rules as a backstop; it raises SQL states, which are not a product answer.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    teamId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["TeamInput"];
+                };
+            };
+            responses: {
+                /** @description Updated */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Team"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        post?: never;
+        /**
+         * Delete a team
+         * @description A **hard** delete — a team carries no authored content of its own, so there is nothing for a
+         *     soft delete to preserve. Its memberships go with it.
+         *
+         *     **A team that holds grants is refused, 409**, naming the count. `role_assignment.team_id`
+         *     is `ON DELETE CASCADE`, so deleting the team would silently revoke every grant made through
+         *     it — and those grants are the entire reason a team is a grant subject. Mass-revoking access
+         *     as a side effect of tidying the org chart is precisely the write an administrator must make
+         *     deliberately: revoke the grants, then delete the team. Same shape as the refusal of a
+         *     classification value with live children.
+         *
+         *     **A team with child teams is refused, 409** for the same reason in the other direction:
+         *     `parent_team_id` has no cascade, so the alternative to refusing is either a foreign-key
+         *     error or silently promoting somebody else's sub-teams to the root.
+         *
+         *     **A team with members is not refused.** Membership confers nothing on its own — see
+         *     `POST /teams` — so there is nothing to revoke and nothing to warn about.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    teamId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Deleted */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                /**
+                 * @description The team still holds grants, or still has child teams. `Problem.errors` carries
+                 *     `grants` and/or `children` with the counts, so the SPA can say what to clear first
+                 *     rather than "it is in use".
+                 */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{teamId}/members/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                teamId: string;
+                userId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put a person in a team, or change whether they lead it
+         * @description Idempotent by construction, which is why it is a PUT on the membership's own URL rather
+         *     than a POST to a collection: "this person is in this team, leading it or not" is a state,
+         *     and repeating the request is the same state.
+         *
+         *     **The person must be a member of this company**, `ACTIVE` or `INVITED`. That check is the
+         *     substance of this endpoint. `team_membership.user_id` references `app_user`, which is
+         *     **instance-level with no RLS**, while `company_id` is taken from the session — so a *sibling
+         *     company's* user id satisfies the foreign key, the company column, the RLS policy and every
+         *     constraint on the table, and the row is stored. After that the permission evaluator, which
+         *     resolves a user's teams through `team_membership` alone and never joins
+         *     `company_membership`, hands them this team's grants — while the org chart renders them
+         *     **nowhere**, because the directory resolves names through company membership and drops an
+         *     id it cannot place. An invisible grant is worse than a leaked name. A `userId` who is not a
+         *     member here is therefore a **404**, not a field error: the caller may not use this endpoint
+         *     to learn who exists on the instance.
+         *
+         *     A `REMOVED` membership is refused the same way — re-inviting them is what makes them
+         *     staffable again, and it deliberately restores the access they had.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    teamId: string;
+                    userId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["TeamMemberInput"];
+                };
+            };
+            responses: {
+                /** @description The team, with its membership as it now stands */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Team"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        post?: never;
+        /**
+         * Take a person out of a team
+         * @description `204` whether they were in it or not, for the reason `DELETE /role-assignments/{id}` gives:
+         *     a repeated request, a double-click and an id that names nobody here all end in the state
+         *     the caller asked for.
+         *
+         *     **This revokes whatever the team conferred on them**, immediately — the evaluator reads
+         *     team membership on every request and no token carries grant claims. Unlike removing a
+         *     person from the company, their session is *not* revoked: their permissions are re-resolved
+         *     from the database on their next request anyway, and signing somebody out for an org-chart
+         *     change they may not even be affected by is a cost with nothing behind it.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    teamId: string;
+                    userId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Removed, or was not in this team */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+            };
+        };
         options?: never;
         head?: never;
         patch?: never;
@@ -4845,6 +5113,39 @@ export interface components {
                 projectName: string;
                 roleName: string;
             }[];
+        };
+        /**
+         * @description The editable half of a `Team` — everything `POST /teams` and `PUT /teams/{teamId}` decide.
+         *
+         *     **The people are deliberately not in here.** Membership has its own URL per person
+         *     (`PUT /teams/{teamId}/members/{userId}`), because the two writes answer to different
+         *     failures: a name clash is about the team, and "that person is not in this company" is about
+         *     one member. Folding a member list in would make a create partially succeed — the team
+         *     exists, one of the five people named did not — with one status code to report it.
+         */
+        TeamInput: {
+            /**
+             * @description Unique within the company, **compared case-insensitively** — "QA" and "qa" are the same
+             *     team to everyone who reads the org chart. A clash is a field error on `name`.
+             */
+            name: string;
+            description: string | null;
+            /**
+             * Format: uuid
+             * @description `null` makes this a root team. Org-chart structure only — permissions never cascade
+             *     through it (plan §6k), so this decides where the team is drawn and nothing about what
+             *     anyone can do.
+             */
+            parentTeamId: string | null;
+        };
+        /** @description The membership state being asserted for one person in one team. */
+        TeamMemberInput: {
+            /**
+             * @description Whether they lead the team. A lead is a member with a flag, not a separate role — it is
+             *     org-chart information, and it grants nothing. Somebody's capability in this product
+             *     comes from a role assignment, never from leading a team.
+             */
+            lead: boolean;
         };
         /**
          * @description One of exactly six built-in roles. There are no custom roles in v1 — not even

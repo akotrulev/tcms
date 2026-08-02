@@ -191,7 +191,7 @@ class PermissionEvaluatorTest extends IntegrationTestBase {
             // OPERATOR is deliberately NOT a member of any company.
 
             if (teams.findById(ACME_QA_TEAM).isEmpty()) {
-                teams.save(Team.create(ACME_QA_TEAM, ACME, "QA", null, now));
+                teams.save(Team.create(ACME_QA_TEAM, ACME, "QA", null, null, now));
             }
             joinTeam(ACME, ACME_QA_TEAM, TEAM_ENGINEER, now);
 

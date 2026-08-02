@@ -23,6 +23,7 @@ import type {
   Project,
   RoleAssignment,
   Suite,
+  Team,
   TestCase,
   TestCaseSummary,
   TestExecution,
@@ -38,6 +39,7 @@ import {
   conditions,
   configurations,
   dimensions,
+  teams,
   docPageDetail,
   docPages,
   plans,
@@ -115,6 +117,18 @@ interface Store {
    * `GET /classification` or the picker it exists to fill would never show it.
    */
   dimensions: ClassificationDimension[];
+  /**
+   * The org chart — in the STORE since §71, not read from the fixture.
+   *
+   * Same move `dimensions` made and for the same reason: it was imported directly by its handler
+   * because nothing could change it. A team created in the editor has to survive to the next
+   * `GET /teams`, or the grant dialog's team picker would still be offering the fixture's three.
+   *
+   * It is also the store entry that makes mock mode stop agreeing with itself. `team` had no writer
+   * on the server for the whole life of this screen, so live mode served `[]` while these fixtures
+   * made the mock look finished.
+   */
+  teams: Team[];
   statuses: CaseStatus[];
   configurations: Configuration[];
   workItems: WorkItem[];
@@ -182,6 +196,7 @@ export const db: Store = {
   docPageDetails: clone(docPageDetail),
   artifacts: clone(artifacts),
   dimensions: clone(dimensions),
+  teams: clone(teams),
   statuses: clone(caseStatuses),
   configurations: clone(configurations),
   workItems: [],

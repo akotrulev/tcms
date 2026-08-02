@@ -1,6 +1,7 @@
 package com.tcms.identity;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,4 +25,13 @@ public interface TeamMembershipRepository extends JpaRepository<TeamMembership, 
     List<TeamMembership> findByUserId(UUID userId);
 
     List<TeamMembership> findByTeamId(UUID teamId);
+
+    /**
+     * One membership, for the write that asserts it.
+     *
+     * <p>Resolved rather than blind-saved so a promotion keeps the row's {@code joinedAt} — see
+     * {@link TeamMembership#setLead}. Both ids are company-filtered by the same policy as every
+     * other read here, so a team or a person from another company resolves to empty.
+     */
+    Optional<TeamMembership> findByTeamIdAndUserId(UUID teamId, UUID userId);
 }

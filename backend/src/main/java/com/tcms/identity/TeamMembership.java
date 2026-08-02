@@ -61,6 +61,20 @@ public class TeamMembership {
         return membership;
     }
 
+    /**
+     * Promotes or demotes an existing member.
+     *
+     * <p>Separate from {@link #join} because the two are different writes on the same URL:
+     * {@code joinedAt} records when this person joined the team and must survive a promotion, so
+     * re-creating the row would quietly reset it and lose the one fact the row carries beyond its
+     * own key.
+     *
+     * <p>Confers nothing either way — see {@link #lead}'s comment.
+     */
+    public void setLead(boolean nowLeads) {
+        this.lead = nowLeads;
+    }
+
     public UUID getTeamId() {
         return teamId;
     }

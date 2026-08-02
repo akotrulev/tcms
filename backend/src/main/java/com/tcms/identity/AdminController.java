@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
  * The company's administration surface — its people, its org chart, the role catalogue, and the
  * grants that decide who can see which project.
  *
- * <p>Eight endpoints under one contract tag ({@code admin}) and therefore one controller, the same
+ * <p>Seven endpoints under one contract tag ({@code admin}) and therefore one controller, the same
  * arrangement {@code ProjectController} explains. They are not one <em>gate</em>: the reads answer
  * to {@code company:read}, the two grant writes answer to a permission chosen by the scope of the
  * grant being made, and the invite and the removal answer to {@code company:members}. Every one of
@@ -32,6 +32,10 @@ import org.springframework.web.bind.annotation.RestController;
  * {@link MembershipInviteService} / {@link MembershipRemovalService} and merely <em>rendered</em>
  * here — an endpoint that decides "may they?" for itself is how two implementations diverge
  * (plan §6b).
+ *
+ * <p>{@code /teams} used to be the eighth and now lives on {@link TeamController}: once the org
+ * chart gained five writes, keeping the read here would have split one path family across two
+ * classes. The company directory — people, roles, grants — stays.
  *
  * <h2>The caller comes from the token and the company from the context</h2>
  *
@@ -131,12 +135,6 @@ public class AdminController {
             case MembershipRemovalService.Removal.Forbidden ignored ->
                     ResponseEntity.status(HttpStatus.FORBIDDEN).body(forbiddenProblem());
         };
-    }
-
-    /** The org chart, with each team's people and the projects its grants reach. */
-    @GetMapping("/teams")
-    public List<TeamView> teams(@AuthenticationPrincipal Jwt jwt) {
-        return directory.listTeams(caller(jwt));
     }
 
     /** The six built-in roles, with their permissions expanded. */

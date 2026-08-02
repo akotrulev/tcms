@@ -1,7 +1,8 @@
 /** The company's admin surface — its people, its org chart, the roles, and who holds them. */
 import { HttpResponse, delay, http } from 'msw';
 import { db, newId, users } from '../db';
-import { companyScopePermissions, currentUser, roles, teams } from '../fixtures/core';
+import { companyScopePermissions, currentUser, roles } from '../fixtures/core';
+import type { Team, TeamInput, TeamMemberInput } from '../../api/types';
 import { API, LATENCY, holdsOn, notFound, problem, requireAuth } from './shared';
 
 /**
@@ -17,6 +18,70 @@ function mayStaff(projectId: string | null | undefined): boolean {
   return projectId
     ? holdsOn(projectId, 'project:members')
     : companyScopePermissions.includes('company:members');
+}
+
+/**
+ * The org-chart gate — `company:teams` at company scope, mirroring `TeamWriteService`.
+ *
+ * A separate check from `mayStaff` deliberately, because they are two permissions: the seeded
+ * catalogue happens to grant both to the same roles, and writing one function for both would make
+ * the distinction unreachable here exactly as it is unreachable in the server's own tests.
+ */
+function requireTeamAdmin(): ReturnType<typeof problem> | null {
+  return companyScopePermissions.includes('company:teams')
+    ? null
+    : problem(403, 'Not allowed', "You do not have permission to manage this company's teams.");
+}
+
+/**
+ * Everything about a team payload that can be wrong, as field errors — mirroring `TeamEdit`.
+ *
+ * The case-insensitive duplicate check is the one worth having here rather than only on the
+ * server: it is the refusal an administrator hits by accident, and a mock that allowed "qa" beside
+ * "QA" would make the form's error path unbuildable.
+ */
+function validateTeam(body: TeamInput, selfId: string | null): Record<string, string[]> | null {
+  const errors: Record<string, string[]> = {};
+  const name = body?.name?.trim() ?? '';
+
+  if (!name) {
+    errors.name = ['Enter a name for the team.'];
+  } else if (name.length > 200) {
+    errors.name = ['Keep the name to 200 characters or fewer.'];
+  } else {
+    const clash = db.teams.find(
+      (t) => t.id !== selfId && t.name.toLowerCase() === name.toLowerCase(),
+    );
+    if (clash) errors.name = [`This company already has a team called "${clash.name}".`];
+  }
+
+  const parentId = body?.parentTeamId ?? null;
+  if (parentId) {
+    if (parentId === selfId) {
+      errors.parentTeamId = ['A team cannot be its own parent.'];
+    } else if (!db.teams.some((t) => t.id === parentId)) {
+      errors.parentTeamId = ['That parent team is not in this company.'];
+    } else if (selfId && descendsFrom(parentId, selfId)) {
+      const parent = db.teams.find((t) => t.id === parentId);
+      errors.parentTeamId = [
+        `"${parent?.name ?? 'That team'}" is below this team in the org chart, so moving it there would leave the branch pointing at itself.`,
+      ];
+    }
+  }
+
+  return Object.keys(errors).length > 0 ? errors : null;
+}
+
+/** Whether `candidateId` is `ancestorId` or sits anywhere beneath it — the cycle refusal. */
+function descendsFrom(candidateId: string, ancestorId: string): boolean {
+  const seen = new Set<string>();
+  let current: string | null = candidateId;
+  while (current && !seen.has(current)) {
+    if (current === ancestorId) return true;
+    seen.add(current);
+    current = db.teams.find((t) => t.id === current)?.parentTeamId ?? null;
+  }
+  return false;
 }
 
 /** `InvitationProperties.validity`'s default, so the dialog renders a realistic expiry. */
@@ -158,7 +223,145 @@ export const adminHandlers = [
 
   http.get(`${API}/teams`, async () => {
     await delay(LATENCY);
-    return HttpResponse.json(teams);
+    return HttpResponse.json(db.teams);
+  }),
+
+  /*
+    The five org-chart writes.
+
+    Until §71 `team` had readers and no writer on the server, so the fixtures below were the ONLY
+    teams that had ever existed anywhere — mock mode looked finished while live mode served `[]`
+    to every company. These handlers exist so the screen can be built against something, and they
+    mirror `TeamWriteService`'s refusals rather than only its successes: a mock that accepts what
+    the server refuses is how a form ships with no error path, which this file already keeps a
+    list of.
+  */
+
+  http.post(`${API}/teams`, async ({ request }) => {
+    await delay(LATENCY);
+    const denied = requireTeamAdmin();
+    if (denied) return denied;
+
+    const body = (await request.json()) as TeamInput;
+    const errors = validateTeam(body, null);
+    if (errors) return problem(400, 'Validation failed', 'Check the highlighted fields.', errors);
+
+    const created: Team = {
+      id: newId(),
+      name: body.name.trim(),
+      description: body.description?.trim() || null,
+      parentTeamId: body.parentTeamId ?? null,
+      leads: [],
+      members: [],
+      projects: [],
+    };
+    db.teams.push(created);
+    return HttpResponse.json(created, { status: 201 });
+  }),
+
+  http.put(`${API}/teams/:teamId`, async ({ params, request }) => {
+    await delay(LATENCY);
+    const denied = requireTeamAdmin();
+    if (denied) return denied;
+
+    const team = db.teams.find((t) => t.id === params.teamId);
+    if (!team) return notFound('That team');
+
+    const body = (await request.json()) as TeamInput;
+    const errors = validateTeam(body, team.id);
+    if (errors) return problem(400, 'Validation failed', 'Check the highlighted fields.', errors);
+
+    team.name = body.name.trim();
+    team.description = body.description?.trim() || null;
+    team.parentTeamId = body.parentTeamId ?? null;
+    return HttpResponse.json(team);
+  }),
+
+  http.delete(`${API}/teams/:teamId`, async ({ params }) => {
+    await delay(LATENCY);
+    const denied = requireTeamAdmin();
+    if (denied) return denied;
+
+    const at = db.teams.findIndex((t) => t.id === params.teamId);
+    if (at < 0) return notFound('That team');
+
+    // The 409 is the answer worth mocking. `role_assignment.team_id` cascades, so a delete that
+    // went through would revoke every grant made through this team silently — and a mock that
+    // always answered 204 would leave the dialog's refusal path unbuildable.
+    const grants = db.roleAssignments.filter((a) => a.team?.id === params.teamId).length;
+    const children = db.teams.filter((t) => t.parentTeamId === params.teamId).length;
+    if (grants > 0 || children > 0) {
+      const errors: Record<string, string[]> = {};
+      if (grants > 0) {
+        errors.grants = [
+          grants === 1
+            ? '1 role grant is made through this team. Revoke it first — deleting the team would revoke it silently.'
+            : `${grants} role grants are made through this team. Revoke them first — deleting the team would revoke them silently.`,
+        ];
+      }
+      if (children > 0) {
+        errors.children = [
+          children === 1
+            ? '1 team sits below this one. Move or delete it first.'
+            : `${children} teams sit below this one. Move or delete them first.`,
+        ];
+      }
+      return problem(
+        409,
+        'Team is still in use',
+        'Clear what still points at this team before deleting it.',
+        errors,
+      );
+    }
+
+    db.teams.splice(at, 1);
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  http.put(`${API}/teams/:teamId/members/:userId`, async ({ params, request }) => {
+    await delay(LATENCY);
+    const denied = requireTeamAdmin();
+    if (denied) return denied;
+
+    const team = db.teams.find((t) => t.id === params.teamId);
+    if (!team) return notFound('That team');
+
+    const body = (await request.json()) as TeamMemberInput;
+    if (typeof body?.lead !== 'boolean') {
+      return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+        lead: ['Say whether this person leads the team.'],
+      });
+    }
+
+    // The substance of the endpoint, mirrored: a person who is not a member of this company is a
+    // 404, never a stored row. The server's version of this refusal is what stops a sibling
+    // company's account being handed the team's grants while rendering nowhere.
+    const person = users.find((u) => u.id === params.userId);
+    if (!person) return notFound('That person');
+
+    const ref = { id: person.id, displayName: person.displayName, email: person.email, avatarUrl: null };
+    if (!team.members.some((m) => m.id === person.id)) team.members.push(ref);
+    team.leads = body.lead
+      ? team.leads.some((l) => l.id === person.id)
+        ? team.leads
+        : [...team.leads, ref]
+      : team.leads.filter((l) => l.id !== person.id);
+
+    return HttpResponse.json(team);
+  }),
+
+  http.delete(`${API}/teams/:teamId/members/:userId`, async ({ params }) => {
+    await delay(LATENCY);
+    const denied = requireTeamAdmin();
+    if (denied) return denied;
+
+    const team = db.teams.find((t) => t.id === params.teamId);
+    if (!team) return notFound('That team');
+
+    // 204 whether they were in it or not.
+    team.members = team.members.filter((m) => m.id !== params.userId);
+    team.leads = team.leads.filter((l) => l.id !== params.userId);
+    return new HttpResponse(null, { status: 204 });
   }),
 
   http.get(`${API}/roles`, async () => {
@@ -266,7 +469,7 @@ export const adminHandlers = [
     if (hasUser && !hasTeam && !users.some((u) => u.id === body.userId)) {
       errors.userId = ['That person is not a member of this company.'];
     }
-    if (hasTeam && !hasUser && !teams.some((t) => t.id === body.teamId)) {
+    if (hasTeam && !hasUser && !db.teams.some((t) => t.id === body.teamId)) {
       errors.teamId = ['That team does not exist in this company.'];
     }
     if (Object.keys(errors).length > 0 || !role) {
@@ -282,7 +485,7 @@ export const adminHandlers = [
     if (existing) return HttpResponse.json(existing);
 
     const person = users.find((u) => u.id === body.userId);
-    const team = teams.find((t) => t.id === body.teamId);
+    const team = db.teams.find((t) => t.id === body.teamId);
     const project = db.projects.find((p) => p.id === projectId);
     const created: (typeof db.roleAssignments)[number] = {
       id: newId(),

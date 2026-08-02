@@ -20,11 +20,14 @@ import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
 import { formatAge, formatCount, formatDateTime } from '../../lib/format';
+import { DeleteTeamDialog } from './DeleteTeamDialog';
 import { GrantRoleDialog } from './GrantRoleDialog';
 import { InviteUserDialog } from './InviteUserDialog';
 import { RemoveUserDialog } from './RemoveUserDialog';
 import { RoleAssignmentTable } from './RoleAssignmentTable';
 import { RoleReference } from './RoleReference';
+import { TeamDialog } from './TeamDialog';
+import { TeamMembersDialog } from './TeamMembersDialog';
 import { ScrollX } from '../../components/ScrollX';
 
 /**
@@ -63,6 +66,15 @@ export function TeamsPage() {
     one mounts fresh (§54's dialog-state lesson, same reason `inviting` mounts conditionally).
   */
   const [removing, setRemoving] = useState<User | null>(null);
+  /*
+    Four org-chart dialogs, each holding the TEAM rather than a boolean, for the reason `removing`
+    gives: they name the team, so they need the row. `editing` holds `null` for "create", which is
+    distinct from `undefined` for "closed" — one dialog serves both writes (see `TeamDialog`), and
+    collapsing the two would make New team un-openable once a team had been edited.
+  */
+  const [editing, setEditing] = useState<Team | null | undefined>(undefined);
+  const [managing, setManaging] = useState<Team | null>(null);
+  const [deleting, setDeleting] = useState<Team | null>(null);
   const { user: signedIn } = useAuth();
 
   return (
@@ -106,15 +118,72 @@ export function TeamsPage() {
         <RemoveUserDialog open user={removing} onClose={() => setRemoving(null)} />
       )}
 
+      {editing !== undefined && (
+        <TeamDialog
+          open
+          team={editing ?? undefined}
+          teams={teams.data ?? []}
+          onClose={() => setEditing(undefined)}
+        />
+      )}
+
+      {managing && (
+        <TeamMembersDialog
+          open
+          /* Re-read from the list each render, so the checkboxes follow the mutation's own
+             invalidation rather than a snapshot taken when the dialog opened. */
+          team={teams.data?.find((t) => t.id === managing.id) ?? managing}
+          onClose={() => setManaging(null)}
+        />
+      )}
+
+      {deleting && (
+        <DeleteTeamDialog open team={deleting} onClose={() => setDeleting(null)} />
+      )}
+
       <Stack sx={{ gap: 3 }}>
-        <Panel title="Team structure" testId="Admin.Teams">
+        <Panel
+          title="Team structure"
+          testId="Admin.Teams"
+          actions={
+            /*
+              GATED like "Invite a person" and unlike "Grant a role": the permission is known
+              before anything renders — `company:teams`, company scope, always — so §31's
+              disable-don't-hide applies in its ordinary form.
+            */
+            <PermissionGate projectId="company" permission="company:teams">
+              {({ allowed }) => (
+                <Button
+                  size="small"
+                  variant="contained"
+                  disabled={!allowed}
+                  onClick={() => setEditing(null)}
+                  data-testid="Admin.Teams.New"
+                >
+                  New team
+                </Button>
+              )}
+            </PermissionGate>
+          }
+        >
           <DataRegion
             testId="Admin.Teams.List"
             state={{ ...teams, refetch: () => void teams.refetch() }}
             isEmpty={(rows) => rows.length === 0}
-            empty={{ kind: 'no-records', title: 'No teams', body: 'Create a team to group people and grant roles by team.' }}
+            empty={{
+              kind: 'no-records',
+              title: 'No teams',
+              body: 'Create a team to group people and grant roles by team.',
+            }}
           >
-            {(rows) => <TeamTree teams={rows} />}
+            {(rows) => (
+              <TeamTree
+                teams={rows}
+                onEdit={setEditing}
+                onManage={setManaging}
+                onDelete={setDeleting}
+              />
+            )}
           </DataRegion>
         </Panel>
 
@@ -281,15 +350,55 @@ export function TeamsPage() {
 }
 
 /** The org chart, flattened into an indented list — depth reads as hierarchy without a diagram. */
-function TeamTree({ teams }: { teams: Team[] }) {
+function TeamTree({
+  teams,
+  onEdit,
+  onManage,
+  onDelete,
+}: {
+  teams: Team[];
+  onEdit: (team: Team) => void;
+  onManage: (team: Team) => void;
+  onDelete: (team: Team) => void;
+}) {
+  /*
+    The chart, with **orphans and cycle members surfaced at the root** — §68's `buildValueTree`
+    rule, and it matters more here than it did there.
+
+    A plain descent from the roots reaches only teams whose whole ancestor chain is present, so a
+    team pointing at a parent that is missing, or two teams pointing at each other, are silently
+    dropped. That was cosmetic while this list was read-only. It is not now: the tree is the ONLY
+    place a team can be edited or deleted, so a team the tree does not draw is a team nobody can
+    fix — and the state that most needs fixing is exactly the one that hides.
+
+    The API cannot produce either (the parent is validated in-company and cycles are refused twice
+    over), which is the point: what gets here has come from somewhere else, and dropping it is how
+    it stays.
+  */
   const tree = useMemo(() => {
+    const byId = new Map(teams.map((team) => [team.id, team]));
     const byParent = new Map<string | null, Team[]>();
+
+    /** Whether this team's ancestors terminate at a root that exists. */
+    const reachesARoot = (team: Team): boolean => {
+      const seen = new Set<string>();
+      let current: Team | undefined = team;
+      while (current) {
+        if (seen.has(current.id)) return false; // a cycle
+        seen.add(current.id);
+        if (!current.parentTeamId) return true;
+        current = byId.get(current.parentTeamId);
+      }
+      return false; // a parent that is not in the list
+    };
+
     for (const team of teams) {
-      const key = team.parentTeamId ?? null;
+      const key = team.parentTeamId && reachesARoot(team) ? team.parentTeamId : null;
       const bucket = byParent.get(key);
       if (bucket) bucket.push(team);
       else byParent.set(key, [team]);
     }
+
     const build = (parentId: string | null, depth: number): { team: Team; depth: number }[] =>
       [...(byParent.get(parentId) ?? [])]
         .sort((a, b) => a.name.localeCompare(b.name))
@@ -321,6 +430,55 @@ function TeamTree({ teams }: { teams: Team[] }) {
             {team.leads.map((lead) => (
               <Chip key={lead.id} size="small" variant="outlined" label={`lead: ${lead.displayName}`} />
             ))}
+
+            {/*
+              One gate wrapping all three, rather than three: they answer to the same permission at
+              the same scope, and a per-button copy is three places for the key to be mistyped.
+              Pushed right so the tree still reads as a tree.
+            */}
+            <PermissionGate projectId="company" permission="company:teams">
+              {({ allowed, reason }) => (
+                <Stack direction="row" sx={{ gap: 0.5, ml: 'auto' }}>
+                  <Tooltip title={allowed ? '' : reason}>
+                    <span>
+                      <Button
+                        size="small"
+                        disabled={!allowed}
+                        onClick={() => onManage(team)}
+                        data-testid="Admin.Teams.Item.Members"
+                      >
+                        Members
+                      </Button>
+                    </span>
+                  </Tooltip>
+                  <Tooltip title={allowed ? '' : reason}>
+                    <span>
+                      <Button
+                        size="small"
+                        disabled={!allowed}
+                        onClick={() => onEdit(team)}
+                        data-testid="Admin.Teams.Item.Edit"
+                      >
+                        Edit
+                      </Button>
+                    </span>
+                  </Tooltip>
+                  <Tooltip title={allowed ? '' : reason}>
+                    <span>
+                      <Button
+                        size="small"
+                        color="error"
+                        disabled={!allowed}
+                        onClick={() => onDelete(team)}
+                        data-testid="Admin.Teams.Item.Delete"
+                      >
+                        Delete
+                      </Button>
+                    </span>
+                  </Tooltip>
+                </Stack>
+              )}
+            </PermissionGate>
           </Stack>
 
           {team.description && (

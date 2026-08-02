@@ -321,6 +321,47 @@ class SeedDataTest extends IntegrationTestBase {
     }
 
     @Test
+    @DisplayName("company:teams and company:members still coincide — so the org-chart gate is untested")
+    void teamManagementAndMemberManagementAreStillHeldTogether() throws SQLException {
+        // THIS CHECK IS NOT AN INVARIANT. It records a coincidence, so that the day it stops being
+        // true somebody is told.
+        //
+        // TeamWriteService gates on company:teams. TeamEndpointTest proves the gate is a real
+        // permission check — reverting it to a constant reddens exactly six tests — but it CANNOT
+        // prove the gate asks the right KEY, because V3 grants company:teams and company:members to
+        // exactly the same roles. Every persona the suite can build holds both or neither, so a
+        // mutation swapping one key for the other reddens NOTHING. The distinction the gate makes
+        // is real in the code and unobservable in the seeded data.
+        //
+        // That is §61's "vacuously true" shape: a property that holds by accident, where the
+        // accident is invisible at the place the rule is written. It is recorded here rather than
+        // papered over, because the failure mode is silent — a future role granted company:members
+        // alone would silently gain, or be silently refused, the whole org chart depending on which
+        // key the gate names, and no existing test would move.
+        //
+        // WHEN THIS FAILS: that is the good case. A role now holds one without the other, the
+        // discrimination has become observable, and the repair is to add the persona to
+        // TeamEndpointTest.Gate and assert the two keys apart — NOT to re-align the seed so this
+        // check passes again.
+        assertThat(queryStrings("""
+                SELECT r.name
+                  FROM role r
+                 WHERE EXISTS (SELECT 1 FROM role_permission rp
+                                WHERE rp.role_id = r.id AND rp.permission_key = 'company:teams')
+                    <> EXISTS (SELECT 1 FROM role_permission rp
+                                WHERE rp.role_id = r.id AND rp.permission_key = 'company:members')
+                 ORDER BY r.name
+                """))
+                .as("""
+                        Roles holding exactly one of company:teams and company:members. This is \
+                        not a defect — it means the org-chart gate can finally be tested apart \
+                        from the membership gate. Add this role as a persona in \
+                        TeamEndpointTest.Gate and assert that it may do one and not the other, \
+                        then update this check to expect it.""")
+                .isEmpty();
+    }
+
+    @Test
     @DisplayName("no permission is granted with two different restrictive qualifiers")
     void noPermissionCarriesTwoDifferentRestrictiveQualifiers() throws SQLException {
         // THE COMPUTED CHECK that keeps PermissionQualifier#strongest total, and the reason that

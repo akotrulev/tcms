@@ -127,6 +127,9 @@ public class AdminDirectoryService {
     public AdminReach reachOf(UUID userId) {
         PermissionSet companyTerm = permissions.evaluateCompanyWide(userId);
         boolean companyWide = companyTerm.has(MANAGE_COMPANY_MEMBERS);
+        // Asked of the same already-resolved term, so the org-chart gate costs no extra query —
+        // and is asked as its own key rather than folded into companyWide. See AdminReach.
+        boolean manageTeams = companyTerm.has(TeamWriteService.MANAGE_TEAMS);
         boolean readsCompany = companyTerm.has(READ_COMPANY);
 
         Set<UUID> visible = new LinkedHashSet<>();
@@ -141,7 +144,7 @@ public class AdminDirectoryService {
             }
         }
         return new AdminReach(
-                Set.copyOf(visible), Set.copyOf(staffable), companyWide, readsCompany);
+                Set.copyOf(visible), Set.copyOf(staffable), companyWide, manageTeams, readsCompany);
     }
 
     /**
@@ -242,7 +245,26 @@ public class AdminDirectoryService {
         if (!reach.readsCompany()) {
             return List.of();
         }
+        return renderTeams(reach, teams.findAllByOrderByNameAsc());
+    }
 
+    /**
+     * One team, rendered exactly as the list renders it — what the write endpoints answer with.
+     *
+     * <p>Through the same {@link #renderTeams} rather than a second assembler, which is the decision
+     * {@code CaseRenderer} exists to enforce one module over: a create that answered with a
+     * hand-built view would drift from the list the client refetches, and the divergence shows up as
+     * a row that changes when the page reloads.
+     *
+     * @param reach the caller's reach, already computed by the write's own gate — passed in rather
+     *              than re-derived, because {@link #reachOf} evaluates every project
+     */
+    @Transactional(readOnly = true)
+    public TeamView teamViewOf(AdminReach reach, Team team) {
+        return renderTeams(reach, List.of(team)).get(0);
+    }
+
+    private List<TeamView> renderTeams(AdminReach reach, List<Team> subjects) {
         Map<UUID, String> projectNames = projectNames();
         Map<UUID, String> roleNames = new HashMap<>();
         roles.findAll().forEach(role -> roleNames.put(role.getId(), role.getName()));
@@ -261,7 +283,7 @@ public class AdminDirectoryService {
             }
         }
 
-        return teams.findAllByOrderByNameAsc().stream()
+        return subjects.stream()
                 .map(team -> new TeamView(
                         team.getId(),
                         team.getParentTeamId(),

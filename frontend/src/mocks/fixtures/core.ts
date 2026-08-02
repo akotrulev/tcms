@@ -375,6 +375,12 @@ export const roleAssignments: RoleAssignment[] = [
  * mode this slice unblocks is where the happy path is actually exercised, against a real Company
  * Admin. A mock that granted it unconditionally would be §31's defect in reverse — a fixture that
  * can only ever render one branch of a two-branch affordance.
+ *
+ * **The same is now true of `company:teams` (§71).** This persona cannot create, edit, delete or
+ * staff a team in mock mode; every org-chart affordance renders disabled with its reason, and the
+ * handlers behind them answer 403. Add `'company:teams'` here to drive the editable branch — and
+ * note that the *interesting* refusals (a case-insensitive name clash, a cycle, a delete refused
+ * because grants hang off the team) are only reachable once you do.
  */
 export const companyScopePermissions: PermissionKey[] = ['company:read'];
 

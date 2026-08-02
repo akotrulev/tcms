@@ -548,7 +548,7 @@ class ProjectEndpointTest extends IntegrationTestBase {
 
     private void team(UUID teamId, UUID companyId, String name, Instant now) {
         if (teams.findById(teamId).isEmpty()) {
-            teams.save(Team.create(teamId, companyId, name, null, now));
+            teams.save(Team.create(teamId, companyId, name, null, null, now));
         }
     }
 

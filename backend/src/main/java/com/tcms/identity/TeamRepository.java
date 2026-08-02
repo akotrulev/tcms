@@ -29,4 +29,13 @@ public interface TeamRepository extends JpaRepository<Team, UUID> {
      * both layers rather than by RLS alone.
      */
     Optional<Team> findScopedById(UUID id);
+
+    /**
+     * How many teams sit directly beneath this one — the count {@code DELETE /teams/{teamId}}
+     * refuses on.
+     *
+     * <p>Direct children only, not the whole subtree. The refusal is "clear this level first", and a
+     * subtree count would report a number the administrator cannot act on in one step.
+     */
+    long countByParentTeamId(UUID parentTeamId);
 }

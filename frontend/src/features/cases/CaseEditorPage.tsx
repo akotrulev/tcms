@@ -34,6 +34,7 @@ import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
 import { automationLabels, priorityLabels, stepFormatLabels } from '../../lib/labels';
+import { selectTestId } from '../../lib/muiTestIds';
 import type { TestCase } from '../../api/types';
 
 /**
@@ -48,12 +49,6 @@ import type { TestCase } from '../../api/types';
 
 const TestIdPrefix = 'CaseEditor';
 
-/**
- * MUI types `SelectDisplayProps` as plain HTML attributes, which excludes `data-*`. The
- * attribute reaches the DOM correctly; only the type is too narrow, so it's asserted in one
- * helper rather than at every select.
- */
-const selectTestId = (id: string) => ({ 'data-testid': id }) as React.HTMLAttributes<HTMLDivElement>;
 
 const GHERKIN_TEMPLATE = `Feature:
 

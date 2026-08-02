@@ -166,7 +166,7 @@ class RoleGrantEndpointTest extends IntegrationTestBase {
             member(WEST, TEAM_MEMBER, "T. Member", now);
 
             if (teams.findScopedById(QA_TEAM).isEmpty()) {
-                teams.save(Team.create(QA_TEAM, WEST, "QA Chapter", null, now));
+                teams.save(Team.create(QA_TEAM, WEST, "QA Chapter", null, null, now));
                 teamMemberships.save(TeamMembership.join(WEST, QA_TEAM, TEAM_MEMBER, true, now));
             }
 

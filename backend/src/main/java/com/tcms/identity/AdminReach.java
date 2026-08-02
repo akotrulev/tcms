@@ -30,6 +30,15 @@ import java.util.UUID;
  * @param companyWide       the caller holds {@code company:members}: they may grant and revoke
  *                          across the whole company, including the company-wide grants that name no
  *                          project. Company Admin and Instance Admin, per roles spec §A3.
+ * @param manageTeams       the caller holds {@code company:teams}: they may create, edit, delete and
+ *                          staff the org chart. Company Admin and Instance Admin, per roles spec
+ *                          §A3. <strong>Deliberately a separate term from {@link #companyWide}</strong>
+ *                          even though the two are held by the same two roles today — they are two
+ *                          permissions in the catalogue, and folding them together would make
+ *                          {@code company:teams} unaskable and silently grant org-chart editing to a
+ *                          future role that holds {@code company:members} alone. That the seeded
+ *                          data makes them coincide is an accident of the seed, not a rule; the
+ *                          {@code case:approve} gate §62 built states the same distinction.
  * @param readsCompany      the caller holds {@code company:read} <strong>at company scope</strong>.
  *                          This read "or on any project they hold" until handoff §43, because five
  *                          of the six built-in roles carry {@code company:read} on a PROJECT-scope
@@ -43,6 +52,7 @@ public record AdminReach(
         Set<UUID> visibleProjects,
         Set<UUID> staffableProjects,
         boolean companyWide,
+        boolean manageTeams,
         boolean readsCompany) {
 
     /**

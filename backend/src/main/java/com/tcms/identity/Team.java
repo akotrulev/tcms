@@ -66,27 +66,44 @@ public class Team {
      * @param companyId taken from {@link com.tcms.tenancy.CompanyContext}, never from a
      *                  request body
      */
-    public static Team create(UUID id, UUID companyId, String name, UUID parentTeamId, Instant now) {
+    public static Team create(
+            UUID id,
+            UUID companyId,
+            String name,
+            String description,
+            UUID parentTeamId,
+            Instant now) {
+
         Team team = new Team();
         team.id = id;
         team.companyId = companyId;
         team.name = name;
+        team.description = description;
         team.parentTeamId = parentTeamId;
         team.createdAt = now;
         team.updatedAt = now;
         return team;
     }
 
-    public void rename(String newName, Instant now) {
+    /**
+     * Applies a whole validated edit — <strong>one mutator, because the write is one PUT.</strong>
+     *
+     * <p>This replaced a {@code rename} and a {@code reparent} that had stood here with no callers
+     * at all until {@link TeamWriteService} existed. Two mutators would each stamp
+     * {@link #updatedAt}, so an edit changing both fields would touch the row twice for one request
+     * and — if a caller ever forgot the second — leave a team renamed and not moved, with a 200
+     * saying otherwise. The contract's body carries every editable field for the same reason.
+     *
+     * <p>Validation is {@link TeamEdit}'s and is not repeated here. The V2 trigger refuses a cycle
+     * and a cross-company parent underneath both, as a backstop rather than as the answer.
+     */
+    public void applyEdit(String newName, String newDescription, UUID newParentTeamId, Instant now) {
         this.name = newName;
-        this.updatedAt = now;
-    }
-
-    /** The trigger refuses a cycle and a cross-company parent; this does not duplicate it. */
-    public void reparent(UUID newParentTeamId, Instant now) {
+        this.description = newDescription;
         this.parentTeamId = newParentTeamId;
         this.updatedAt = now;
     }
+
 
     public UUID getId() {
         return id;

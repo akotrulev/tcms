@@ -15,19 +15,8 @@ import { useMemo } from 'react';
 
 import type { ClassificationDimension } from '../../api/types';
 import { buildValueTree, type ClassificationValueNode } from '../../lib/classification';
+import { inputTestId } from '../../lib/muiTestIds';
 
-/**
- * MUI types a slot's props as that element's known props, which excludes `data-*`. The attribute
- * reaches the DOM correctly; only the type is too narrow, so it is asserted in one helper — the
- * same shape and the same reason as `CaseEditorPage.selectTestId`.
- *
- * It targets the INPUT slot rather than the root, deliberately. A bare `data-testid` on a MUI
- * Checkbox lands on the wrapper span, where the checked state is not readable: a test could click
- * it successfully and assert nothing at all about selection, which is precisely how §62's option
- * test passed while measuring the wrong thing.
- */
-const inputTestId = (id: string) =>
-  ({ input: { 'data-testid': id } }) as never;
 
 /**
  * Choosing a case's classification — all four dimensions, one control shape per dimension.
