@@ -82,6 +82,21 @@ function projectNav(projectId: string): { heading: string; items: NavItem[] }[] 
       heading: 'Project',
       items: [
         { label: 'Artifacts', to: `${p}/artifacts`, icon: <InventoryOutlinedIcon fontSize="small" /> },
+      ],
+    },
+    /*
+      Company, not Project — and the grouping was a real misstatement rather than a tidy-up.
+
+      Every other item in this rail is `${p}/…`: it is about the project in the picker, and switching
+      projects changes what it shows. `Teams & roles` is `/admin/teams`, which is company-wide and
+      does not change when you switch projects. Listing it under "Project" told the reader that roles
+      are granted per project — which is the opposite of the model (a role is held across the whole
+      company), so the one place a person goes to understand permissions was mis-teaching them before
+      they arrived.
+    */
+    {
+      heading: 'Company',
+      items: [
         { label: 'Teams & roles', to: '/admin/teams', icon: <GroupsOutlinedIcon fontSize="small" /> },
       ],
     },

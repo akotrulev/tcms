@@ -160,10 +160,25 @@ exercised §59's `issue-invitation`, §18's accept flow and §39's grants on the
    Pre-existing (Phase 1/2 code), not introduced here, and the consequence is real: **you cannot
    send anyone a link to a plan's register**, and a reload loses it. Every other filtered screen in
    the app is shareable. One-file fix; left out because it changes behaviour beyond this slice.
-2. **`issue-invitation` will re-invite an ACTIVE user.** Run against an already-active account it
-   prints a fresh link and the account can set a new password — an effective administrator password
-   reset with nothing marking it as one. It may be intended (§59 built `reissue` for the operator who
-   *explicitly asked*), but the ACTIVE case is not what that section describes. `identity`'s call.
+2. ~~**`issue-invitation` will re-invite an ACTIVE user**, which is an administrator password reset
+   with nothing marking it as one.~~ **→ WRONG, retracted the same session. There is no defect here.**
+   Both paths already refuse it, explicitly and with a sentence: `InvitationService.reissue` returns
+   `IssueOutcome.none()` for an active membership, `IssueInvitationCommand` has an `ALREADY_ACTIVE`
+   outcome, and `MembershipInviteService.invite` returns `Unchanged` — *"nothing to do and nothing to
+   send"*.
+
+   **The mistake is worth keeping, because it is a trap the schema sets.** `app_user.status` is
+   **instance-level** and `company_membership.status` is **per company**, and they are routinely
+   different: one person legitimately belongs to several client companies (plan §6s), so being ACTIVE
+   in the instance says nothing about whether they have accepted *here*. Ivy's account had been ACTIVE
+   since §54's fixture while her Board-Product membership was still `INVITED` — which is precisely the
+   case `issue-invitation` exists for. The Teams screen's "invited" chip was showing the **membership**
+   status and was right all along.
+
+   The check that would have caught it is one query, and it is the one to run before reporting
+   anything about who has joined what:
+   `SELECT u.status, m.status, m.accepted_at FROM company_membership m JOIN app_user u ON u.id = m.user_id`.
+   A single-table read of `app_user.status` cannot answer a question about a company.
 3. **The dialog defaults `kind` to `EXTERNAL_URL`** while the option order and copy claim to steer
    toward documentation. Defaulting to the doc-page kind on a project with no pages would open onto
    an empty required picker, so the default is defensible — but the two intentions disagree and the
