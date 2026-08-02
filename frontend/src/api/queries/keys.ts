@@ -46,7 +46,16 @@ export const keys = {
   users: ['users'] as const,
   teams: ['teams'] as const,
   roles: ['roles'] as const,
-  roleAssignments: (p?: string) => ['role-assignments', p ?? 'ALL'] as const,
+  /**
+   * One key, no project segment — and it was a function taking an optional project until §63.
+   *
+   * `GET /role-assignments` still declares a `projectId` filter and the handler still binds it; the
+   * SPA no longer asks. The filter returns only the grants *naming* that project, and there is no
+   * filter for the ones naming none — so it cannot assemble `ProjectAccessPage`, which needs both
+   * populations to compute §A1.1's override across them. Every consumer therefore reads the whole
+   * list and partitions it, which also means every consumer shares this cache entry.
+   */
+  roleAssignments: ['role-assignments'] as const,
   workItems: (p: string, mine: boolean) => ['work-items', p, mine] as const,
   /**
    * The caller's permissions with **no project in the question** — a different answer from

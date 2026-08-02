@@ -174,10 +174,8 @@ collapsed.
 
 ## Left for later, deliberately
 
-- **`useRoleAssignments(projectId)` still has no caller with an argument.** The parameter is bound by
-  the handler and declared in the contract, so this is dead *client* code, not §50's defect. Decide
-  it rather than inherit it (§28's rule): either a screen needs the narrowed list or the parameter
-  should go.
+- ~~**`useRoleAssignments(projectId)` still has no caller with an argument.** Decide it rather than
+  inherit it (§28's rule).~~ → **decided the same day, see below.** It is gone from the hook.
 - **The inherited region cannot be seen in mock mode with the default persona**, who holds no
   `company:members` — correctly, now that the mock mirrors `mayStaff`. The documented toggle is to
   add `'company:members'` to `companyScopePermissions` in `fixtures/core.ts`, the same pattern that
@@ -185,3 +183,44 @@ collapsed.
 - A **team** row's "replaced here" is answered only by that team's own project grant. "Some of this
   team is overridden and some is not" is true and the row has no honest way to render it, so it is
   not claimed — the panel copy carries the caveat instead.
+
+---
+
+## Addendum — the dead parameter, decided
+
+`useRoleAssignments` no longer takes a `projectId`, and `keys.roleAssignments` is a constant rather
+than a function. The contract still declares the filter and `AdminController` still binds it; only
+the client stopped asking, so §50's check — which is one-directional, *SPA sends ⊆ contract
+declares* — is unaffected.
+
+**It was not an unfinished feature, and that is the point of writing it down.** §35 and §61 each
+found a hook with no call sites and the reflex both times was *find it a consumer*. Here the
+consumer cannot exist: the server's filter returns only the grants **naming** the project, and
+**there is no filter for the ones naming none.** Since §A1.1 those are two populations with opposite
+override semantics, so `ProjectAccessPage` needs both — and `?projectId=` cannot express the second.
+Pairing the two calls is strictly worse than one: the unfiltered list is a **superset**, so it
+fetches everything anyway plus a redundant round trip, and an override computed across two snapshots
+can render "replaced here" against a grant a revoke has already removed.
+
+**The payload argument is real and this was the wrong lever.** Measured against the live endpoint:
+**~1.1 KB per grant row**, dominated by the whole `Role` — `description` and `permissions` — repeated
+on every row for the same six roles. Extrapolated, a Company Admin over 40 projects would pull
+roughly a megabyte onto a screen about *one* project. The lever that actually moves that is
+**dropping `RoleView` from `RoleAssignmentView`** in favour of `roleId`, letting the client join
+against `/roles`, which both consumers already fetch and cache for five minutes. That cuts *both*
+screens and raises no scoping question. It is a contract change, so it belongs to whoever holds
+`openapi.yaml` next. **`TeamsPage` has paid this cost since §39** — the access page did not introduce
+it and would not have been the place to fix it.
+
+### It broke a check, and the check was right to break
+
+`contractParameters.test.ts` asserts a **floor** on how many `qs()` call sites its traversal finds,
+so the file cannot pass vacuously if the compiler stops resolving them. Removing one call site took
+it 10 → 9 and went red. That is the guard doing its job: *"the analyser broke"* and *"there is
+genuinely one fewer call site"* are indistinguishable to it by design. Resolved by **counting `qs(`
+in `api/queries/` before and after** — exactly 10 → 9, matching the single removal — and only then
+moving the floor, with that verification recorded beside it. **Lowering such a floor without
+measuring first is how a check gets quietly accommodated into uselessness.**
+
+Gates after the change: build clean, lint 0 warnings, **452/452** — one lower than the 453 above,
+which is the removed call site's own parameterised case.

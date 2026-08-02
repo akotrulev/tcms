@@ -222,8 +222,16 @@ describe('contract parameters — every key the SPA sends is one the server bind
    * declining to resolve a spread — ends in an empty iteration and a green test. A check whose
    * failure mode is silence is the defect it was written about.
    */
+  /*
+    The floor is hand-maintained on purpose and moving it DOWN deserves a moment's suspicion, since
+    "the analyser stopped finding things" and "there is genuinely one fewer call site" fail
+    identically here. It went 10 → 9 in §63, when `useRoleAssignments` stopped sending `?projectId=`
+    — verified as exactly that by counting `qs(` in `api/queries/` before and after the change, not
+    by assuming. Deriving this number from the same traversal it guards would make it agree with a
+    broken analyser, which is the whole failure this assertion exists to catch.
+  */
   it('found the SPA query strings it is written to inspect', () => {
-    expect(callSites.length, 'no qs() call sites found — has the helper been renamed?').toBeGreaterThanOrEqual(10);
+    expect(callSites.length, 'no qs() call sites found — has the helper been renamed?').toBeGreaterThanOrEqual(9);
     expect(
       callSites.flatMap((site) => site.emptySpreads),
       'a spread contributed no properties: the checker did not resolve its type, so the keys it '
