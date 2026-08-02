@@ -1,7 +1,7 @@
 # Reworking the plan so work can run in parallel
 
-**Date:** 2026-07-31 · **Amended 2026-08-02** with §0, the operative gate and the 4-agent cap.
-**Status:** implemented, except where a row below says otherwise. **Start at §0.**
+**Date:** 2026-07-31 · **Amended 2026-08-02**: parallel was re-authorised and reversed the same day.
+**Status:** the reworks shipped; **the recommendation did not survive — work is sequential. Read §0.**
 **Question this answers:** *can the delivery plan be reworked so more than one lane of work runs
 at once, safely?*
 
@@ -13,168 +13,53 @@ improvements on their own terms.
 
 ---
 
-## 0. The gate and the cap — read this before starting any run
+## 0. Attempted, and reversed the same day — work is SEQUENTIAL
 
-> **Added 2026-08-02.** The rest of this document explains *why* each rule exists; this section is
-> the operative form. It supersedes the blanket "work is sequential from here" that handoff §45 and
-> `docs/HANDOFF.md` have carried since 2026-08-01 — see §0.4 for what did and did not survive.
+> **2026-08-02.** Parallel lanes were re-authorised with a cap of 4 agents and a seven-row safety
+> gate, and **reversed within hours**. The standing rule is what §45 set on 2026-08-01: **work is
+> sequential.** §1–§8 below are the original analysis and remain accurate — they are kept because
+> they are the reason, not because the recommendation stands.
 
-### 0.1 The cap
+### Why it was reversed
 
-**At most 4 agents at once. Fewer whenever any rule in §0.2 or §0.3 says so.**
+Not on the cost argument. §45 had already measured that (*"they take 2x the time and tokens"*), and
+a cap with preconditions was a reasonable answer to a cost problem.
 
-Four is a ceiling, not a target. Every sub-cap below bites *before* it, and three of them bite at 2.
-A run of two module-disjoint lanes is a normal parallel run; a run of four is only reachable for the
-fan-out shape in §5, where four lanes write four files behind one frozen port.
+It was reversed on a **correctness** incident, observed directly while the rules were being written:
 
-### 0.2 The safety gate — parallel is safe only when EVERY row holds
+> Two agents worked this repo concurrently on one branch. In the space of one session, **three
+> separate silent losses**: a rebase made two commits unreachable from `HEAD`; a commit whose stated
+> purpose was unrelated (`queries: drop the role-assignment filter`) reverted a doc section as
+> collateral; and a duplicate re-application of an earlier commit, generated from a stale base, wiped
+> a later one. **Nothing conflicted. Nothing errored. `git status` was clean throughout.** The losses
+> were noticed only because an edit failed on an anchor that should have existed.
 
-| # | Condition | Why, and where it is explained |
-|---|---|---|
-| 1 | **The premise is frozen, not being discovered.** A port, an interface or a written spec exists before the lanes start. | §6. Lanes re-derive premises from a handoff one slice stale, and redo the work. This is the rule that disqualifies most vertical slices. |
-| 2 | **Lanes are disjoint by Modulith module**, or are N implementations behind one port. | §5. ArchUnit machine-checks the boundary, so the seam is real rather than hoped for. |
-| 3 | **Exactly one contract holder — or zero.** Every other lane is forbidden `openapi.yaml` and `npm run gen:api`. | §3. `schema.d.ts` is generated; two regenerations do not merge. |
-| 4 | **Flyway versions pre-assigned**, and preferably **at most one lane writes DDL**. | §4. `out-of-order` is unset, so a `V13` landing after a `V14` is refused on any already-migrated database. Testcontainers cannot see this. |
-| 5 | **Each backend-touching lane has its own git worktree.** | §6. One `backend/build/` and one Gradle daemon cannot serve two lanes. This is the one sanctioned exception to `CLAUDE.md`'s "do not branch per task". |
-| 6 | **Fixture UUID prefix space pre-assigned per lane**, in writing, before any lane writes a test. | §19's collision has now fired **five times** (most recently §62, where `b0` was already the board tests' and `project_pkey` is global). The prefix space is hand-managed and has no check behind it — it is the single most reliable way a parallel run goes red for a reason that looks like a real defect. |
-| 7 | **Each lane writes its own `docs/handoff/NN-*.md`**; the index row is merged last. | §2. This is why the handoff was split in the first place (§10). |
-| 8 | **One cache holder per agent type.** `docs/agent-context/*.md` is refreshed serially *before* the fan-out, read-only during it, and updated by exactly one lane at integration. | §0.5. Two lanes of the same agent type write the same file, and the protocol's own justification assumes they cannot. |
+The rules being drafted at the time — branch per lane, single-writer files, declared landing order —
+would each have prevented part of it. That is not the point. The point is that **the failure mode is
+silent**, so the cost of getting the coordination slightly wrong is not a visible conflict to resolve
+but work that quietly disappears, discovered later or never. For a two-person-equivalent workload on
+a project this size, that trade is not worth taking.
 
-If a row cannot be satisfied, the honest move is **fewer lanes**, not a waiver.
+### What is kept
 
-### 0.3 Sub-caps that bite before 4
+- **§1–§8 stand as analysis.** The chokepoint table, the Flyway numbering rule, the module-lane rule
+  and the fan-out seams are all still true, and reworks 1, 2, 5 and 6 shipped and are improvements on
+  their own terms regardless of lane count.
+- **The concurrency worktree exception** in `CLAUDE.md` stays, for the rare case of genuinely
+  needing a second checkout.
+- **`.gitattributes`** was added in the same session. It is not parallel-specific — the clobbering
+  above happened without a parallel *run*, just two agents in one tree — and its line-ending rules
+  matter for a macOS-developed, Linux-deployed product either way.
 
-| Resource | Cap | Reason |
-|---|---:|---|
-| Lanes running the **backend suite** | **2** | Each runs Testcontainers Postgres; §6 already records that "two lanes is comfortable on a laptop; four is not". |
-| Lanes needing a **browser pass** | **2** | Only two stacks exist — the default and `.env.lane-b` (6432 / 9080 / 6173). A third needs a third set of ports invented first. |
-| Lanes editing the **contract** | **1** | Gate row 3. |
-| Lanes writing a **migration** | **1** preferred, 2 with pre-assigned versions | Gate row 4. |
-| Lanes that are **pure functions over fixtures** (parsers, adapters, renderers) | **4** | No schema, no contract, no UI, no shared build state. This is the only shape that actually reaches the cap. |
+### If this is ever revisited
 
-**So the practical reading:** 4 agents is reachable for §5's fan-outs — four result parsers (M3), four
-`IssueTracker` adapters (M4), three report renderers (§6e). For anything touching the backend it is
-2. For a vertical slice it is 1.
+The bar is no longer "can the files be de-conflicted". It is **"can a silent loss be detected"** —
+some mechanism that makes work disappearing *loud*. Branch-per-lane with a declared landing order is
+necessary and was not sufficient here. Start from the incident above, not from §1.
 
-### 0.4 What this supersedes, and what it does not
-
-~~**Work is sequential from here unless the user asks otherwise** (§45, 2026-08-01).~~
-→ **Superseded 2026-08-02**: parallel is allowed again, bounded by §0.1–§0.3. The user's instruction
-was *"unless the user asks otherwise"*, and this is that.
-
-**§45's finding is not superseded and is the reason the cap exists.** Three lanes were run and the
-verdict was *"they take 2x the time and tokens"*: wall clock is bounded by the longest lane, and
-every lane re-derives the same premises. That is a **cost** finding, not a correctness one — which is
-exactly why the answer is a ceiling with sub-caps rather than a ban. Gate row 1 is §45's finding
-turned into a precondition: freeze the premise and the re-derivation stops being paid for N times.
-
-**Still true, still binding:** everything in §1–§6. The reworks that made parallelism possible at all
-(the file splits, the numbering rule, the second stack, the lane-selection rule) are unchanged.
-
-### 0.5 The orientation cache — an asset, and a single-writer resource
-
-`docs/agent-context/be-java.md` and `fe-react.md` are the per-agent orientation caches
-(`ep-agent-orientation-cache`). **They are the best thing that has happened to the economics of a
-parallel run and they need the same single-writer discipline as `openapi.yaml`.**
-
-**The assumption they were built on does not survive fan-out.** The protocol justifies one file per
-agent *type* with: *"Different agent types never write the same file, so there is no cross-agent
-write contention."* True for one instance per type. Four lanes are not — two backend lanes are both
-`be-java` and both write `be-java.md`.
-
-Three distinct failures, in increasing order of nastiness:
-
-1. **Guaranteed merge conflict.** The file stamps a `Baseline commit` and *prepends* a session-log
-   line. Two lanes touch both structures, so every concurrent run conflicts in the same two places.
-   Annoying, visible, cheap.
-2. **Lost seams.** Phase 3's highest-value step is *"add the seams the run created"*. Last-writer-wins
-   on a merge resolution silently drops the other lane's — and a cache that is confidently
-   *incomplete* is worse than one that is missing, because the next run's gate will TRUST it.
-3. **A poisoned baseline stamp.** This is the real one. Each lane stamps the `HEAD` *it* finished at.
-   Whichever survives describes neither lane's actual state, so the next run's delta gate computes
-   `git diff <wrong baseline>..HEAD`, under-reports what moved, and returns **TRUST for sections that
-   are stale**. The failure is silent and it lands on the *following* session, not on the run that
-   caused it.
-
-Worktrees (gate row 5) do not fix this — they defer it. Each worktree has its own copy, so the lanes
-do not contend *during* the run; they contend at merge, plus lane B spends the whole run reading a
-map that is missing whatever lane A just built.
-
-**The rule, which is `openapi.yaml`'s rule in a different costume:**
-
-- **Refresh the cache serially, before the fan-out.** This is part of gate row 1 — the cache *is* a
-  large share of "the frozen premise".
-- **Read-only during the run.** Every lane reads it; no lane runs Phase 3 against it.
-- **One lane per agent type runs the update-after at integration**, folding in the seams every lane
-  created. If two backend lanes ran, one of them writes `be-java.md` and names the other's seams too.
-
-**Why this is worth the ceremony rather than just disabling the cache:** §45 measured the cost of
-parallelism as *"every lane re-derives the same premises"*. A shared, frozen, pre-warmed cache is the
-direct antidote — it is the one mechanism that makes N lanes cost meaningfully less than N times one
-lane. Serialising the *writes* keeps all of that and gives up nothing the lanes needed.
-
-### 0.6 Branch per lane, and what merging does and does not protect
-
-**Yes — one branch per lane, integrated by merge. It is already half-mandated:** gate row 5 requires
-a worktree for every backend lane, and `git worktree add` *is* a branch with a working directory.
-What the plan was missing is that it framed this as **build isolation** only. It is also **merge
-isolation**, and that is the more valuable half.
-
-> **This section was written after the hazard bit.** On 2026-08-02 two strands worked this repo on
-> one branch. One rebased, and **two of the other's commits stopped being reachable from `HEAD`** —
-> including the §0.5 that sits directly above this line. Nothing conflicted, nothing errored, and
-> `git status` was clean the whole time. They were recovered by `git cherry-pick` because the objects
-> survived. On separate branches this could not have happened.
-
-**What branching genuinely buys**
-
-- No lane ever compiles against another lane's half-finished tree — the failure mode §6 describes as
-  producing "failures that look like real defects".
-- Conflicts surface **at a controlled moment**, on one person's screen, instead of as a mysterious
-  red build mid-run.
-- **Blast radius is a branch.** A lane that goes wrong is deleted, not unpicked.
-- **One strand cannot drop another's commits**, which is the incident above.
-- `--no-ff` merges keep lane identity in the history, so a bisect lands on a lane rather than on an
-  interleaved mess.
-
-**What it does not buy, and this is the part that matters**
-
-> **Git merges text. Nearly every conflict this project has actually paid for merges clean.**
-
-| Hazard | Why the merge is clean | What catches it |
-|---|---|---|
-| Two lanes both write `V20__*.sql` | Different *filenames*, so no textual conflict — and Flyway then has two V20s, or a `V21` that landed before a `V20` and is refused on any already-migrated database | Gate row 4: pre-assign, and **renumber at integration in landing order** |
-| Two test classes take the same fixture UUID prefix | Different files entirely | Gate row 6, and nothing else — it has fired five times |
-| Both lanes regenerate `schema.d.ts` | The generated file *does* conflict, and **hand-resolving it is still wrong** | Never resolve it: merge `openapi.yaml`, then re-run `npm run gen:api` |
-| Lane A adds `repository → X`, lane B adds `X → repository` | Two unrelated `package-info.java` edits | ArchUnit, at the first build **after** the merge |
-| A adds an enum member, B adds its label | Two unrelated files | `satisfies Record<Union, string>` — a compile error, the one hazard the toolchain already catches |
-
-So branching **relocates** the risk to a moment when someone is looking, which is a real gain, and
-**removes none of §0.2's rows**. Every gate row survives the adoption of branches unchanged.
-
-**The integration protocol**
-
-1. Every lane branches from **the same recorded base commit**. Lane branches **never merge each
-   other** — a lane that needs another lane's work is a sequencing error, not a merge.
-2. Merge **serially into one integration branch, in a declared landing order**, decided before the
-   lanes start (gate row 4's renumbering depends on it).
-3. **Re-run the full gate after every merge, not once at the end.** Merge 2 can invalidate merge 1's
-   verification, and a single run at the end cannot tell you which merge broke it.
-4. **The last merge is where the cache holder runs Phase 3** (§0.5), stamping the integration commit.
-
-**The four conflict classes and their standing resolutions**
-
-| Class | Resolution |
-|---|---|
-| **Generated** (`schema.d.ts`) | Never hand-resolve, never pick a side. Take the merged `openapi.yaml`, run `npm run gen:api`, commit the result. |
-| **Numbered** (Flyway `V*.sql`) | Never resolve by content. Renumber to landing order, then verify against an **already-migrated** database — Testcontainers migrates a fresh container and structurally cannot see the defect. |
-| **Append-only indexes** (`docs/HANDOFF.md` rows) | Take both sides. The trivial class, and the one-file-per-section split (§2) exists to keep it trivial. |
-| **Stamped** (`docs/agent-context/*.md`) | Do not merge. The holder rewrites the file; a "resolved" baseline stamp is meaningless, because the correct value is the merge commit, which does not exist until the resolution is finished. |
-
-There is no `.gitattributes` in this repo. Adding one marking `schema.d.ts` as generated would make
-the first row louder, but it cannot make hand-resolution correct — the rule has to be known anyway.
-
----
+**The M3/M4 fan-outs in §5** (four result parsers, four `IssueTracker` adapters, three report
+renderers) remain the only shape that would justify reopening the question — pure functions over
+fixtures, behind a port frozen before any lane starts.
 
 ## 1. Why the vertical slice cannot be parallelised as-is
 
@@ -331,10 +216,11 @@ Two smaller residuals, both stated rather than solved:
 
 ## 8. Checklist before starting any parallel run
 
-- [ ] **Lane count is within §0.1 (max 4) and every sub-cap in §0.3** — backend lanes ≤ 2, browser
-      passes ≤ 2, contract lanes ≤ 1, migration lanes ≤ 1.
-- [ ] **The premise is frozen** — a port, interface or spec exists — not still being discovered
-      (§0.2 row 1). If it is not, run serially.
+> **Not operative — work is sequential (§0).** Kept as the precondition list any future attempt
+> would start from, and it is *known incomplete*: nothing in it detects the silent-loss failure §0
+> describes.
+
+- [ ] **The premise is frozen** — a port, interface or spec exists — not still being discovered.
 - [ ] One lane named as the **contract holder**; every other lane is forbidden `openapi.yaml` and
       `npm run gen:api`.
 - [ ] Flyway versions **pre-assigned**, with renumber-at-integration understood (§4).
@@ -345,8 +231,7 @@ Two smaller residuals, both stated rather than solved:
       has now collided five times (§0.2 row 6). Check the census first:
       `grep -rhoE 'UUID\.fromString\("[0-9a-f]{2}' backend/src/test/java | grep -oE '[0-9a-f]{2}$' | sort -u`
 - [ ] Each lane writes **its own** `docs/handoff/NN-*.md`; the index row is merged last.
-- [ ] **`docs/agent-context/*.md` refreshed serially BEFORE the fan-out**, read-only during it, and
-      **one lane per agent type** named to run the update-after at integration (§0.5).
-- [ ] **One branch per lane, all from the same recorded base commit**, and a **landing order declared
-      before the lanes start** (§0.6). Lane branches never merge each other.
-- [ ] The **full gate re-run after every merge**, not once at the end (§0.6).
+- [ ] **`docs/agent-context/*.md`** — one writer. Two agents of the same type write the same file,
+      and its baseline stamp and prepended session log make every concurrent write a conflict.
+- [ ] **One branch per lane** from a recorded base commit, a **declared landing order**, and the
+      **full gate re-run after every merge** — necessary, and demonstrably not sufficient (§0).

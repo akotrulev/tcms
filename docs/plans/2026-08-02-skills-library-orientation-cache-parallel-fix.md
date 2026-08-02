@@ -4,6 +4,11 @@
 `devops` / `qa-java` / `data` plugins). You do not need any context from the repo this file was
 written in.
 
+> **Status note (2026-08-02, from the requesting project):** the project that raised this reverted
+> to **sequential** agent execution the same day, so it has no immediate need for the fix. The defect
+> below is real and independent of that decision — the plugin serves other projects, and any of them
+> running two agents of one type hits it. Apply or shelve on that basis, not on ours.
+
 **Type:** documentation-only change to skill and agent definitions. No code, no tests, no build
 logic. Three files change materially; a vendoring step may multiply that.
 

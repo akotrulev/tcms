@@ -258,43 +258,31 @@ a hundred slightly different ones.
   about not branching per *task*. A second lane that touches the backend needs its own worktree,
   because one `backend/build/` and one Gradle daemon cannot serve two lanes. Say so before using it.
 
-## Running work in parallel
+## Running work in parallel — don't
 
-**Cap: 4 agents at once, and fewer whenever the gate says so.** Read
-`docs/plans/2026-07-31-parallel-execution-rework.md` **§0** before starting a second lane — it is the
-operative gate and sub-caps; the rest of that document explains why each rule exists.
+**Work is sequential.** Parallel lanes were tried three times (handoff §37, §41, §45) and
+re-authorised once more on 2026-08-02 with a 4-agent cap, then reversed the same day. See
+`docs/plans/2026-07-31-parallel-execution-rework.md` §0 for the incident that ended it: two agents in
+one tree produced **three silent losses of committed work** — a rebase, an unrelated commit reverting
+a doc as collateral, and a stale re-application wiping a later change — with no conflict, no error
+and a clean `git status` throughout.
 
-Four is a ceiling, not a target, and it is only reachable for the fan-out shape (N implementations
-behind one frozen port — the M3 result parsers, the M4 tracker adapters, the report renderers).
-**Backend lanes cap at 2** (each runs Testcontainers Postgres), **browser passes at 2** (only two
-stacks exist), **contract and migration lanes at 1**. A vertical slice is 1.
+The reworks that came out of those attempts shipped and are worth having on their own terms: the
+per-section handoff, the split `api/queries/` and `mocks/` directories, and the second stack.
 
-The rules that bite hardest:
+**If a second checkout is ever genuinely needed** — the concurrency-worktree exception to "do not
+branch per task" — these still bind, and are still not sufficient:
 
-- **Freeze the premise first.** If the orientation pass is still discovering what the slice is, run
-  serially — lanes re-derive premises from a handoff one slice stale and redo the work. This is §45's
-  cost finding ("2x the time and tokens") turned into a precondition rather than a ban.
-- **One contract holder.** `openapi.yaml` and `npm run gen:api` belong to exactly one lane per run;
-  `schema.d.ts` is generated and two regenerations do not merge. A lane needing a contract change
-  hands over rather than editing in parallel.
+- **One contract holder.** `openapi.yaml` and `npm run gen:api` belong to exactly one lane;
+  `schema.d.ts` is generated and two regenerations do not merge. Resolve the *contract*, then
+  regenerate — never hand-merge the output.
 - **Pre-assign Flyway versions, renumber at integration in landing order.** `out-of-order` is unset,
-  so it defaults to `false`: a `V13` landing after a `V14` is **refused on any already-migrated
-  database**. Testcontainers cannot see this — it migrates a fresh container every time.
-- **Choose lanes by Modulith module, not by a "Next"-list order.** The boundaries are already
-  enforced by ArchUnit, so the seam is machine-checked rather than hoped for.
-- **One branch per lane, merged serially in a declared landing order**, with the full gate re-run
-  after *each* merge. A worktree already implies a branch; the point is that integration happens at
-  a moment someone is watching. It protects against textual conflicts and against one strand
-  dropping another's commits — it does **not** protect against two lanes taking the same Flyway
-  number or the same fixture prefix, which merge clean. See the parallel plan §0.6 for the four
-  conflict classes and how each is resolved (`schema.d.ts` is regenerated, never hand-merged).
-- **One cache holder per agent type.** `docs/agent-context/*.md` is refreshed serially *before* a
-  fan-out, read-only during it, and updated by one lane at integration. Two lanes of the same agent
-  type write the same file, and its baseline stamp and prepended session log conflict every time —
-  worse, a last-writer-wins stamp makes the *next* session's delta gate TRUST stale sections.
-- **Pre-assign the fixture UUID prefix space per lane, in writing.** It is hand-managed with no check
-  behind it and has collided **five times** (§19, most recently §62). Two lanes writing tests will
-  take the same prefix, and the failure reads as a real defect in whichever lane runs second.
+  so a `V13` landing after a `V14` is **refused on any already-migrated database**. Testcontainers
+  cannot see this — it migrates a fresh container every time. Two lanes each adding a `V20__*.sql`
+  produce two *filenames* and no conflict at all.
+- **Pre-assign the fixture UUID prefix space.** Hand-managed, no check behind it, collided five
+  times (§19 … §62). Two lanes take the same prefix and merge clean; `project_pkey` fails at runtime.
+- **One writer for `docs/agent-context/*.md`.** Two agents of the same type write the same file.
 
 A second stack for a concurrent browser pass is `cp .env.lane-b.example .env.lane-b`,
 `docker compose --env-file .env.lane-b up`, and `npm run dev:lane-b` (6432 / 9080 / 6173).
