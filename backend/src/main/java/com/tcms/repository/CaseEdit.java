@@ -161,7 +161,16 @@ record CaseEdit(
             errors.computeIfAbsent("gherkinSource", k -> new ArrayList<>())
                     .add("Write the scenario, or switch to structured steps.");
         }
-        if (format == StepFormat.STRUCTURED && steps.isEmpty()) {
+        // "Nothing was SENT", not "nothing survived validation" — and the difference is a message
+        // that contradicts the one beside it. `normalizeSteps` drops a step it has already
+        // complained about, so a payload whose only step was rejected arrives here with an empty
+        // list, and the reader is told to add a step they demonstrably just added, underneath the
+        // sentence explaining why the one they added was refused. Found by driving a refused
+        // sharedStepId against the real server; the same pair was already reachable through a
+        // blank action and an unknown step id, so this predates the reference check and is fixed
+        // for all three.
+        boolean noStepsSubmitted = request.steps() == null || request.steps().isEmpty();
+        if (format == StepFormat.STRUCTURED && noStepsSubmitted) {
             errors.computeIfAbsent("steps", k -> new ArrayList<>())
                     .add("Add at least one step, or switch to Gherkin.");
         }

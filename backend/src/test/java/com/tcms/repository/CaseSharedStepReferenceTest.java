@@ -106,6 +106,45 @@ class CaseSharedStepReferenceTest {
         }
 
         @Test
+        @DisplayName("a refused step is not ALSO reported as 'add at least one step'")
+        void theRefusalDoesNotContradictItself() {
+            // Found by driving the real server. A rejected step is dropped from the normalized
+            // list, so the structured-format emptiness check used to fire on the emptied list and
+            // tell the author to add a step they had just added — directly under the sentence
+            // explaining why the one they added was refused. Two messages on one field that argue
+            // with each other, and the wrong one is the actionable-looking one.
+            assertThat(refusals(validate(newStep("Do the thing", SIBLING_PROJECT), Set.of(IN_LIBRARY)))
+                    .get("steps"))
+                    .singleElement()
+                    .asString()
+                    .contains("library");
+        }
+
+        @Test
+        @DisplayName("but a payload that really sent no steps still says so")
+        void anEmptyStructuredCaseIsStillRefused() {
+            // The other half, and the reason the fix is "nothing was SENT" rather than deleting
+            // the check: a structured case with no steps at all has to be refused, and that
+            // refusal has no per-step message to carry it.
+            assertThat(refusals(validate(List.of(), Set.of())).get("steps"))
+                    .singleElement()
+                    .asString()
+                    .contains("at least one step");
+        }
+
+        @Test
+        @DisplayName("a blank action is refused without the contradictory second message too")
+        void theSameFixCoversTheOlderRefusals() {
+            // This pair predates the shared-step check — a blank action has always been dropped
+            // the same way — so the fix is swept across the class rather than applied to the one
+            // refusal that exposed it.
+            assertThat(refusals(validate(newStep("   ", null), Set.of())).get("steps"))
+                    .singleElement()
+                    .asString()
+                    .contains("Describe the action");
+        }
+
+        @Test
         @DisplayName("a null sharedStepId is the ordinary case and is never checked")
         void anUnreferencedStepIsFine() {
             // Most steps reference nothing. If the check treated null as "not in the set" every
