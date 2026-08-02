@@ -628,6 +628,32 @@ export const plans: TestPlan[] = [
     configurations: [configurations[0]],
     currentVersionNo: 1, lockVersion: 1,
   },
+  /*
+    The two states the fixtures did not have, added in §73 — and the reason is §72's lesson applied
+    rather than restated. Every plan here was ACTIVE or CLOSED, while **every plan on every real
+    instance was DRAFT**, because nothing could write the column. So the state a fresh install
+    actually produces was the one state mock mode never rendered, and the ladder's first two rungs
+    had no fixture to exercise them. TP-4 has no runs, so it is the one plan here that can be
+    deleted; TP-5 sits mid-review, which is the only state APPROVED is reachable from.
+  */
+  {
+    id: uid(4, 'l'), key: 'TP-4', name: 'Release 4.4 regression',
+    status: 'DRAFT', milestoneName: 'Release 4.4', milestoneDate: '2026-09-30',
+    caseCount: 0, passRate: null, coverage: null,
+    description: 'Being scoped. Nothing has been executed against it.',
+    entryCriteria: [], exitCriteria: [],
+    configurations: [configurations[0]],
+    currentVersionNo: 1, lockVersion: 1,
+  },
+  {
+    id: uid(5, 'l'), key: 'TP-5', name: 'Payments hardening cycle',
+    status: 'IN_REVIEW', milestoneName: null, milestoneDate: null,
+    caseCount: 5, passRate: null, coverage: null,
+    description: 'Scope submitted for review.',
+    entryCriteria: [], exitCriteria: [],
+    configurations: [configurations[0]],
+    currentVersionNo: 1, lockVersion: 1,
+  },
 ];
 
 export const runs: TestRun[] = [

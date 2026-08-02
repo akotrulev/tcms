@@ -1,6 +1,7 @@
 import {
   Alert,
   Box,
+  Button,
   Chip,
   MenuItem,
   Select,
@@ -17,17 +18,20 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlineOutlin
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlineOutlined';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutlineOutlined';
 import { useState } from 'react';
-import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
-import type { AggregationPolicy, Criterion, PlanStatistics } from '../../api/types';
-import { usePlan, usePlanStatistics, useProject } from '../../api/queries';
+import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import type { AggregationPolicy, Criterion, PlanStatistics, PlanStatus } from '../../api/types';
+import { usePlan, usePlanStatistics, useProject, useSetPlanStatus } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
+import { PermissionGate } from '../../components/PermissionGate';
 import { DenominatorToggle, PassRateSummary, ResultBar, ResultCountsCell } from '../../components/ResultBar';
 import { criterionState, type Denominator } from '../../lib/results';
 import { StatusChip } from '../../components/StatusChip';
+import { describeError } from '../../lib/describeError';
 import { formatCount, formatDateTime, formatPercent } from '../../lib/format';
-import { aggregationHelp, aggregationLabels } from '../../lib/labels';
+import { aggregationHelp, aggregationLabels, planStatusColors, planStatusLabels } from '../../lib/labels';
+import { PlanDeleteDialog } from './PlanDeleteDialog';
 import { ScrollX } from '../../components/ScrollX';
 
 /**
@@ -71,7 +75,13 @@ export function PlanStatisticsPage() {
           plan.data && (
             <>
               <Identifier variant="strong">{plan.data.key}</Identifier>
-              <Chip size="small" variant="outlined" label={plan.data.status.toLowerCase()} />
+              <Chip
+                size="small"
+                variant="outlined"
+                data-testid="PlanStats.Status"
+                label={planStatusLabels[plan.data.status]}
+                sx={{ color: planStatusColors[plan.data.status] }}
+              />
               {plan.data.milestoneName && (
                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                   {plan.data.milestoneName}
@@ -83,26 +93,31 @@ export function PlanStatisticsPage() {
         }
         subtitle={plan.data?.description}
         actions={
-          <Box sx={{ minWidth: 260 }}>
-            <Select
-              size="small"
-              fullWidth
-              value={aggregation}
-              onChange={(event) => {
-                const next = new URLSearchParams(params);
-                next.set('aggregation', event.target.value);
-                setParams(next, { replace: true });
-              }}
-              data-testid="PlanStats.AggregationSelect"
-              inputProps={{ 'aria-label': 'How results are aggregated' }}
-            >
-              {Object.entries(aggregationLabels).map(([value, label]) => (
-                <MenuItem key={value} value={value}>
-                  {label}
-                </MenuItem>
-              ))}
-            </Select>
-          </Box>
+          <Stack sx={{ gap: 1, alignItems: 'flex-end' }}>
+            {plan.data && (
+              <PlanLifecycleActions projectId={projectId} planId={planId} status={plan.data.status} />
+            )}
+            <Box sx={{ minWidth: 260 }}>
+              <Select
+                size="small"
+                fullWidth
+                value={aggregation}
+                onChange={(event) => {
+                  const next = new URLSearchParams(params);
+                  next.set('aggregation', event.target.value);
+                  setParams(next, { replace: true });
+                }}
+                data-testid="PlanStats.AggregationSelect"
+                inputProps={{ 'aria-label': 'How results are aggregated' }}
+              >
+                {Object.entries(aggregationLabels).map(([value, label]) => (
+                  <MenuItem key={value} value={value}>
+                    {label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </Box>
+          </Stack>
         }
       />
 
@@ -110,6 +125,129 @@ export function PlanStatisticsPage() {
         {(data) => <StatisticsBody data={data} projectId={projectId} aggregation={aggregation} />}
       </DataRegion>
     </Box>
+  );
+}
+
+/**
+ * The moves this screen offers from each status, and **the permission each one needs**.
+ *
+ * `satisfies Record<PlanStatus, …>` for `lib/labels`' reason: a sixth status is a compile error
+ * here rather than a plan that silently offers nothing.
+ *
+ * ## This is a second copy of `PlanLifecycle.permissionFor`, deliberately, and bounded
+ *
+ * The server is the gate; this table exists so §31's disable-don't-hide can be followed at all — a
+ * control cannot be disabled with a reason unless the client knows which permission it needs. What
+ * keeps the copy honest is that it is *only* the affordance layer and never the verdict: every
+ * button below is still refused server-side by the same rule, and the two disagreeing produces a
+ * 403 with a sentence rather than an unauthorized write.
+ *
+ * The interesting rows are the two that ask for `plan:approve` on a move *down* the ladder —
+ * rescinding an approval and un-starting a plan. A table keyed only by the target would spell those
+ * `plan:edit` and put an enabled "Return to draft" in front of every Test Engineer, who would then
+ * be refused by the server. That is exactly the gap the server-side rule closes, mirrored.
+ */
+const planMoves = {
+  DRAFT: [
+    { target: 'IN_REVIEW', label: 'Submit for review', permission: 'plan:edit' },
+    { target: 'ACTIVE', label: 'Start plan', permission: 'plan:edit' },
+  ],
+  IN_REVIEW: [
+    { target: 'APPROVED', label: 'Approve plan', permission: 'plan:approve' },
+    { target: 'DRAFT', label: 'Return to draft', permission: 'plan:edit' },
+  ],
+  APPROVED: [
+    { target: 'ACTIVE', label: 'Start plan', permission: 'plan:edit' },
+    { target: 'DRAFT', label: 'Return to draft', permission: 'plan:approve' },
+  ],
+  ACTIVE: [
+    { target: 'CLOSED', label: 'Close plan', permission: 'plan:approve' },
+    { target: 'DRAFT', label: 'Return to draft', permission: 'plan:approve' },
+  ],
+  // Reopening lands on ACTIVE and never on DRAFT: a closed release that turns out to need more
+  // testing is still the release it was. The server refuses the other spelling.
+  CLOSED: [{ target: 'ACTIVE', label: 'Reopen plan', permission: 'plan:approve' }],
+} as const satisfies Record<PlanStatus, readonly { target: PlanStatus; label: string; permission: string }[]>;
+
+/**
+ * The plan's ladder and its delete — the first affordances in the product for a column that had no
+ * writer at all until §73, and for `plan:delete`.
+ *
+ * **The controls swap rather than accumulate**, as on the run detail: a closed plan offers Reopen
+ * and nothing else, because the server refuses everything else outright and offering a move that
+ * cannot succeed is what §31 exists to stop.
+ *
+ * **The refusal renders here, not as a toast.** `useSetPlanStatus` marks its errors handled: "submit
+ * it for review first" is an answer about the button that was just pressed.
+ */
+function PlanLifecycleActions({
+  projectId,
+  planId,
+  status,
+}: {
+  projectId: string;
+  planId: string;
+  status: PlanStatus;
+}) {
+  const setStatus = useSetPlanStatus(projectId, planId);
+  const [error, setError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const navigate = useNavigate();
+
+  const move = (target: PlanStatus) => {
+    setError(null);
+    setStatus.mutate(target, { onError: (failure) => setError(describeError(failure).body) });
+  };
+
+  return (
+    <Stack sx={{ gap: 0.5, alignItems: 'flex-end' }}>
+      <Stack direction="row" sx={{ gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        {planMoves[status].map((option) => (
+          <PermissionGate key={option.target} projectId={projectId} permission={option.permission}>
+            {({ allowed }) => (
+              <Button
+                size="small"
+                variant="outlined"
+                data-testid={`PlanStats.Move.${option.target}`}
+                disabled={!allowed || setStatus.isPending}
+                onClick={() => move(option.target)}
+              >
+                {option.label}
+              </Button>
+            )}
+          </PermissionGate>
+        ))}
+        <PermissionGate projectId={projectId} permission="plan:delete">
+          {({ allowed }) => (
+            <Button
+              size="small"
+              variant="outlined"
+              color="error"
+              data-testid="PlanStats.Delete"
+              disabled={!allowed}
+              onClick={() => setConfirmingDelete(true)}
+            >
+              Delete
+            </Button>
+          )}
+        </PermissionGate>
+      </Stack>
+      {error && (
+        <Typography variant="caption" sx={{ color: 'var(--color-failed)' }} data-testid="PlanStats.StatusError">
+          {error}
+        </Typography>
+      )}
+      {/* Mounted only while confirming, so its reset-on-open effect starts from a clean state. */}
+      {confirmingDelete && (
+        <PlanDeleteDialog
+          open
+          projectId={projectId}
+          planId={planId}
+          onClose={() => setConfirmingDelete(false)}
+          onDeleted={() => navigate(`/projects/${projectId}/plans`)}
+        />
+      )}
+    </Stack>
   );
 }
 

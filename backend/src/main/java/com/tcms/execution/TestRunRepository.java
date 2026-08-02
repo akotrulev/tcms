@@ -54,4 +54,17 @@ public interface TestRunRepository extends JpaRepository<TestRun, UUID> {
     /** The plan keys a set of runs point at, so a run list resolves them in one query, not N. */
     @Query("SELECT p.id, p.key FROM TestPlan p WHERE p.id IN :planIds")
     List<Object[]> findPlanKeys(@Param("planIds") Collection<UUID> planIds);
+
+    /**
+     * How many live runs were created from this plan — what {@link PlanDeleteService} refuses on.
+     *
+     * <p>{@code deletedAt IS NULL} on the run, so a plan whose only runs were themselves deleted can
+     * be deleted too: the refusal exists to protect runs somebody can still open, and a soft-deleted
+     * run is not one of those. The {@code projectId} predicate is the same second gate every query
+     * in this repository carries — the plan has already been resolved through it, and a count that
+     * did not repeat it would be the one query in the path that could see another project's rows.
+     */
+    @Query("SELECT COUNT(r) FROM TestRun r WHERE r.projectId = :projectId "
+            + "AND r.planId = :planId AND r.deletedAt IS NULL")
+    long countLiveByPlan(@Param("projectId") UUID projectId, @Param("planId") UUID planId);
 }

@@ -13,9 +13,11 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -42,13 +44,21 @@ public class PlanController {
     private final PlanService plans;
     private final PlanCreateService creates;
     private final PlanStatisticsService statistics;
+    private final PlanStatusService lifecycle;
+    private final PlanDeleteService deletes;
 
     public PlanController(
-            PlanService plans, PlanCreateService creates, PlanStatisticsService statistics) {
+            PlanService plans,
+            PlanCreateService creates,
+            PlanStatisticsService statistics,
+            PlanStatusService lifecycle,
+            PlanDeleteService deletes) {
 
         this.plans = plans;
         this.creates = creates;
         this.statistics = statistics;
+        this.lifecycle = lifecycle;
+        this.deletes = deletes;
     }
 
     /**
@@ -145,6 +155,65 @@ public class PlanController {
     }
 
     /**
+     * Submits, approves, starts, closes or reopens the plan.
+     *
+     * <p><strong>{@code PUT}, not {@code PATCH}</strong>, and a sub-resource rather than a field on
+     * the plan: the status <em>is</em> the resource being replaced and the request names an absolute
+     * target. It mirrors {@code PUT /runs/{runId}/status} and {@code PUT /doc-pages/{pageId}/status}
+     * exactly, which is the precedent to follow rather than a third shape for one act.
+     *
+     * <p>There is no {@code If-Match}, and that is a decision — see {@link PlanStatusService}.
+     */
+    @PutMapping("/{planId}/status")
+    public ResponseEntity<Object> status(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID planId,
+            @RequestBody PlanStatusRequest request) {
+
+        PlanStatusService.Outcome outcome =
+                lifecycle.setStatus(UUID.fromString(jwt.getSubject()), projectId, planId, request);
+
+        return switch (outcome) {
+            case PlanStatusService.Outcome.Updated updated -> ResponseEntity.ok(updated.view());
+            case PlanStatusService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
+            case PlanStatusService.Outcome.Forbidden ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(statusForbiddenProblem());
+            case PlanStatusService.Outcome.Invalid invalid ->
+                    ResponseEntity.badRequest().body(validationProblem(invalid.errors()));
+            case PlanStatusService.Outcome.Refused refused ->
+                    ResponseEntity.status(HttpStatus.CONFLICT)
+                            .body(refusedProblem(refused.message()));
+        };
+    }
+
+    /**
+     * Deletes the plan, unless runs have been executed against it.
+     *
+     * <p>204 with no body on success, and the 409 carries its count — see {@link PlanDeleteService}
+     * for why the refusal is the interesting half.
+     */
+    @DeleteMapping("/{planId}")
+    public ResponseEntity<Object> delete(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID planId) {
+
+        PlanDeleteService.Outcome outcome =
+                deletes.delete(UUID.fromString(jwt.getSubject()), projectId, planId);
+
+        return switch (outcome) {
+            case PlanDeleteService.Outcome.Deleted ignored -> ResponseEntity.noContent().build();
+            case PlanDeleteService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
+            case PlanDeleteService.Outcome.Forbidden ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(deleteForbiddenProblem());
+            case PlanDeleteService.Outcome.Refused refused ->
+                    ResponseEntity.status(HttpStatus.CONFLICT)
+                            .body(refusedProblem(refused.message()));
+        };
+    }
+
+    /**
      * Names the five, unlike the permission refusal below.
      *
      * <p>The two are not in tension: §32's rule is that a <em>permission key</em> must not be named
@@ -182,6 +251,42 @@ public class PlanController {
         ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
         problem.setTitle("Not allowed");
         problem.setDetail("You do not have permission to create test plans in this project.");
+        return problem;
+    }
+
+    /**
+     * §32 again — worded for the act and naming no key.
+     *
+     * <p>One sentence for both keys, and that is deliberate: the gate a caller failed depends on
+     * which move they asked for, so a message that named it would have to say either "editing plans"
+     * or "approving plans" — and telling a Test Engineer which of the two they are missing is how a
+     * refusal becomes a map of the catalogue. The sentence names the act instead.
+     */
+    private static ProblemDetail statusForbiddenProblem() {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
+        problem.setTitle("Not allowed");
+        problem.setDetail("You do not have permission to make this change to the plan's status.");
+        return problem;
+    }
+
+    private static ProblemDetail deleteForbiddenProblem() {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
+        problem.setTitle("Not allowed");
+        problem.setDetail("Deleting a test plan needs a test lead.");
+        return problem;
+    }
+
+    /**
+     * A move the plan's own state refuses, and the delete a live run refuses.
+     *
+     * <p>The sentence comes from the domain rather than being written here, for the reason
+     * {@code RunController} gives: it is raised from two methods and computed in two classes, and a
+     * copy per controller method is how one rule ends up explained two ways.
+     */
+    private static ProblemDetail refusedProblem(String message) {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        problem.setTitle("Not possible right now");
+        problem.setDetail(message);
         return problem;
     }
 }

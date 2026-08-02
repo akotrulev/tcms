@@ -15,6 +15,7 @@ import type {
   DocPageStatus,
   HealthSignal,
   LifecycleStatus,
+  PlanStatus,
   Priority,
   RunStatus,
   StatusKind,
@@ -146,6 +147,37 @@ export const runStatusColors = {
 
 /** Whether the run has ended — the server's `RunLifecycle.isClosed`, and the one copy of it here. */
 export const isRunClosed = (status: RunStatus) => status === 'COMPLETED' || status === 'ABORTED';
+
+/**
+ * The plan ladder, in the reader's words.
+ *
+ * Added in §73 with the slice that gave `test_plan.status` a writer — and the sweep §72 owed: the
+ * run list's colour map was fixed there and **the plan list's, three files away, had drifted in
+ * exactly the same way**. It was typed `Record<string, string>`, carried an `ARCHIVED` that is not a
+ * plan status, and was missing `IN_REVIEW` and `APPROVED` — invisible while `DRAFT` was the only
+ * value any plan could hold, and a grey unlabelled chip the moment this slice made the other four
+ * reachable. Both plan screens also spelled the status `status.toLowerCase()`, which renders
+ * `IN_REVIEW` as "in_review".
+ */
+export const planStatusLabels = {
+  DRAFT: 'Draft',
+  IN_REVIEW: 'In review',
+  APPROVED: 'Approved',
+  ACTIVE: 'Active',
+  CLOSED: 'Closed',
+} as const satisfies Record<PlanStatus, string>;
+
+/** Beside the labels, so a status cannot be worded in one place and coloured in another. */
+export const planStatusColors = {
+  DRAFT: 'var(--color-draft)',
+  IN_REVIEW: 'var(--color-info)',
+  APPROVED: 'var(--color-passed)',
+  ACTIVE: 'var(--color-passed)',
+  CLOSED: 'var(--color-skipped)',
+} as const satisfies Record<PlanStatus, string>;
+
+/** Whether the plan is over — the server's `PlanLifecycle.isClosed`, and the one copy of it here. */
+export const isPlanClosed = (status: PlanStatus) => status === 'CLOSED';
 
 export const stepFormatLabels = {
   STRUCTURED: 'Structured steps',

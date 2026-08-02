@@ -66,7 +66,14 @@ export {
   type CaseVersion,
 } from './cases';
 export { useConditions, useCreateSharedStep, useSharedSteps } from './library';
-export { useCreatePlan, usePlan, usePlanStatistics, usePlans } from './plans';
+export {
+  useCreatePlan,
+  useDeletePlan,
+  usePlan,
+  usePlanStatistics,
+  usePlans,
+  useSetPlanStatus,
+} from './plans';
 export {
   MAX_EVIDENCE_BYTES,
   useAttachEvidence,

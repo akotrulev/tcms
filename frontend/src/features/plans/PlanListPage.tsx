@@ -19,6 +19,7 @@ import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
 import { formatCount, formatRatio } from '../../lib/format';
+import { planStatusColors, planStatusLabels } from '../../lib/labels';
 import { PlanCreateDialog } from './PlanCreateDialog';
 import { ScrollX } from '../../components/ScrollX';
 
@@ -107,13 +108,6 @@ export function PlanListPage() {
   );
 }
 
-const statusColor: Record<string, string> = {
-  ACTIVE: 'var(--color-passed)',
-  DRAFT: 'var(--color-draft)',
-  CLOSED: 'var(--color-skipped)',
-  ARCHIVED: 'var(--color-deprecated)',
-};
-
 function PlanTable({ rows, projectId }: { rows: TestPlan[]; projectId: string }) {
   // Deterministic order with a unique tiebreaker: active plans first, then by milestone
   // date, then by key — so the list never reshuffles between loads.
@@ -150,9 +144,20 @@ function PlanTable({ rows, projectId }: { rows: TestPlan[]; projectId: string })
         </TableHead>
         <TableBody>
           {sorted.map((plan) => {
-            const unmet = (plan.exitCriteria ?? []).filter((c) => !c.met).length;
+            /*
+              `met === false`, not `!met`. Null means "not evaluated", which is not "unmet"
+              (`Criterion.met`'s own contract) — and this endpoint never evaluates anything, because
+              a plan list resolving every plan's results would be the statistics endpoint run once
+              per row. So `!c.met` counted every criterion as unmet and this column would have read
+              "3 unmet" for a plan whose gates were all green.
+
+              Invisible until §73: `exit_criteria` had no writer, so the array was empty on every
+              real instance and this branch never ran. Recorded rather than left, because the
+              editor that fills the column is the next slice and would have shipped on top of it.
+            */
+            const unmet = (plan.exitCriteria ?? []).filter((c) => c.met === false).length;
             const criteriaCount = (plan.exitCriteria ?? []).length;
-  
+
             return (
               <TableRow key={plan.id} data-testid="Plans.Row" hover>
                 <TableCell>
@@ -173,12 +178,12 @@ function PlanTable({ rows, projectId }: { rows: TestPlan[]; projectId: string })
                 <TableCell>
                   <Chip
                     size="small"
-                    label={plan.status.toLowerCase()}
+                    label={planStatusLabels[plan.status]}
                     data-testid="Plans.Row.Status"
                     sx={{
                       bgcolor: 'transparent',
-                      color: statusColor[plan.status] ?? 'text.secondary',
-                      border: `1px solid color-mix(in srgb, ${statusColor[plan.status] ?? 'var(--color-border)'} 45%, transparent)`,
+                      color: planStatusColors[plan.status],
+                      border: `1px solid color-mix(in srgb, ${planStatusColors[plan.status]} 45%, transparent)`,
                     }}
                   />
                 </TableCell>

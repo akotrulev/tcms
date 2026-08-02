@@ -1852,6 +1852,69 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        /**
+         * Delete a test plan
+         * @description `plan:delete` — Instance Admin, Company Admin and Test Lead (roles spec §A4). A Test
+         *     Engineer holds `plan:create` and `plan:edit` and **not** this one: a contributor is never
+         *     blocked from producing, only from unmaking.
+         *
+         *     **Refused with `409` while any live run was created from the plan**, naming how many.
+         *     `test_run.plan_id` references the plan and the run list keeps rendering its key, so
+         *     deleting it would leave those runs pointing at a plan the API answers 404 for. The way out
+         *     is not force — it is `PUT .../status` with `CLOSED`, which is the state that exists for a
+         *     plan that *was* executed. **Delete a plan nobody executed; close one somebody did.**
+         *
+         *     Soft: the row stays, every read drops it, and the scope items and the suites and cases they
+         *     name are untouched.
+         */
+        delete: operations["deletePlan"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/plans/{planId}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                planId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Submit, approve, start, close or reopen a plan
+         * @description The plan's ladder is DRAFT → IN_REVIEW → APPROVED → ACTIVE → CLOSED, and **which permission
+         *     a move needs is decided by the edge, not by the target**:
+         *
+         *     - `plan:edit` (Test Engineer and up) carries a plan *forward* through the states nobody has
+         *       signed off — submitting it for review, starting it, returning it from review to draft.
+         *     - `plan:approve` (Lead and up) is needed to **grant** the sign-off, to **close** the plan,
+         *       and to **take either back** — because rescinding a lead's approval or un-starting a plan
+         *       somebody is executing against is an approval act, and a target-only rule would let a Test
+         *       Engineer do it by asking for `DRAFT`.
+         *
+         *     **Review is optional** (plan §6g), so `DRAFT → ACTIVE` is legal: a project that never turns
+         *     review on must still be able to start a plan.
+         *
+         *     Two moves are refused with `409` because the ladder does not have them: `APPROVED` is
+         *     reachable only from `IN_REVIEW` (approval must not be reachable without review), and
+         *     `CLOSED` only from `ACTIVE` (a plan nobody executed is deleted, not closed — closing it
+         *     would put a 0%-executed plan into every report beside plans that were really run).
+         *     Reopening a closed plan sends `ACTIVE`.
+         *
+         *     Idempotent: setting the status a plan already has answers `200` with the plan and writes
+         *     nothing — no timestamp re-stamped and no audit row, so a repeated click cannot bury the
+         *     change that actually happened.
+         *
+         *     No `If-Match`: the request names an absolute target state rather than a delta against
+         *     something the client read, so there is no lost update to protect (`PUT /runs/{runId}/status`
+         *     makes the same call).
+         */
+        put: operations["setPlanStatus"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4473,6 +4536,10 @@ export interface components {
             suiteIds?: string[];
             caseIds?: string[];
         };
+        PlanStatusInput: {
+            /** @enum {string} */
+            status: "DRAFT" | "IN_REVIEW" | "APPROVED" | "ACTIVE" | "CLOSED";
+        };
         /** @description Machine-evaluable so the plan page is a gate, not prose (plan §6p). */
         Criterion: {
             /** @example pass_rate */
@@ -5520,6 +5587,63 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    deletePlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                planId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    setPlanStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                planId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanStatusInput"];
+            };
+        };
+        responses: {
+            /** @description The plan, as the list renders it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestPlan"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
     setRunStatus: {
         parameters: {
             query?: never;

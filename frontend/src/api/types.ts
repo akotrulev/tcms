@@ -62,6 +62,13 @@ export type TestRunDetail = S['TestRunDetail'];
  * over it, which is what turns a missing or invented value into a compile error.
  */
 export type RunStatus = NonNullable<TestRun['status']>;
+/**
+ * The plan lifecycle, read off `TestPlanSummary` for `RunStatus`' reason — and named in §73 after
+ * finding `PlanListPage`'s colour map had drifted the same way the run list's had: typed
+ * `Record<string, string>`, carrying an `ARCHIVED` that is not a plan status and missing both
+ * `IN_REVIEW` and `APPROVED`, which that slice made reachable for the first time.
+ */
+export type PlanStatus = NonNullable<TestPlanSummary['status']>;
 export type TestExecution = S['TestExecution'];
 export type TestExecutionSummary = S['TestExecutionSummary'];
 export type StepResult = S['StepResult'];
