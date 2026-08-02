@@ -27,6 +27,8 @@ import {
   writeCase,
 } from '../db';
 import { currentUser } from '../fixtures/core';
+import { lifecycleLabels } from '../../lib/labels';
+import { decide, needsApproval } from '../lifecycleLadder';
 import {
   API,
   LATENCY,
@@ -234,12 +236,21 @@ function facetsFor(rows: TestCaseSummary[]): Facet[] {
 /**
  * Which permission a bulk action needs, and the sentence to refuse it with.
  *
- * Mirrors `BulkOperations.permission` and `BulkOperations.refusal`: only the *target status* can
- * raise the requirement above `case:edit`, and the two refusals give opposite advice because a Test
- * Engineer lacks only approval while a Viewer lacks everything.
+ * Mirrors `BulkOperations.permission` and `BulkOperations.refusal` — the REQUEST-level floor only.
+ * The target status is all this half can see, so it raises the requirement above `case:edit` for a
+ * move into `APPROVED` and no further; the per-row edge rule is applied inside the loop, from
+ * `mocks/lifecycleLadder.ts`, exactly as `CaseBulkService.evaluateStatus` does it. The two refusals
+ * give opposite advice because a Test Engineer lacks only approval while a Viewer lacks everything.
  *
  * @returns the refusal sentence, or null when the caller may proceed
  */
+function leadOnly(current: LifecycleStatus, target: LifecycleStatus): string {
+  if (target === 'APPROVED') return 'Only a test lead can approve cases. Submit them for review instead.';
+  if (target === 'DEPRECATED') return 'Only a test lead can deprecate cases.';
+  // The unmaking arm: `current` is APPROVED or DEPRECATED, or `needsApproval` would be false.
+  return `Only a test lead can change a case that is already ${lifecycleLabels[current].toLowerCase()}.`;
+}
+
 function missingPermission(
   action: string | undefined,
   target: LifecycleStatus | undefined,
@@ -546,12 +557,20 @@ export const caseHandlers = [
       const detail = db.caseDetails.get(id);
 
       if (action === 'SET_STATUS' || action === 'SUBMIT_FOR_REVIEW') {
-        if (row.lifecycleStatus === target) {
+        // The ladder is `mocks/lifecycleLadder.ts`, mirroring the server's one class — including
+        // the PER-ROW permission half. Before §75 the gate here read the target only, exactly as
+        // the server's did, so mock mode would have let a Test Engineer pull approved cases back
+        // to draft and the screen offering it would only have failed against a real backend.
+        const decision = decide(row.lifecycleStatus, target as LifecycleStatus, 'case');
+        if (decision.kind === 'unchanged') {
           unchanged.push(row.key);
-        } else if (target === 'APPROVED' && row.lifecycleStatus !== 'IN_REVIEW') {
-          // §6g: APPROVED is reachable only from IN_REVIEW. The wording is the server's, word for
-          // word — the same failure must not read as two different problems in the two modes.
-          skipped.push({ key: row.key, reason: 'A draft must be reviewed before it can be approved.' });
+        } else if (
+          !held.includes('case:approve')
+          && needsApproval(row.lifecycleStatus, target as LifecycleStatus)
+        ) {
+          skipped.push({ key: row.key, reason: leadOnly(row.lifecycleStatus, target as LifecycleStatus) });
+        } else if (decision.kind === 'refused') {
+          skipped.push({ key: row.key, reason: decision.message });
         } else {
           if (!dryRun) {
             row.lifecycleStatus = target as LifecycleStatus;

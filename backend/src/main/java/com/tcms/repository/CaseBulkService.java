@@ -15,6 +15,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -43,18 +44,25 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>{@code case:approve} had <strong>no consumer in Java at all</strong> before this class. It has
  * been seeded by {@code V3} and granted correctly per role since M0, and nothing ever asked it.
  *
- * <h2>The state machine, in two sentences</h2>
+ * <h2>The state machine lives in {@link LifecycleLadder}, and the gate is per row</h2>
  *
- * <ol>
- *   <li>{@code APPROVED} is reachable <strong>only from {@code IN_REVIEW}</strong>.</li>
- *   <li>Every other transition among the four states is allowed.</li>
- * </ol>
+ * <p>This class used to carry §6g's table itself, in one rule — {@code APPROVED} only from
+ * {@code IN_REVIEW} — and to read the permission off the <strong>target</strong> alone. §75 moved
+ * the table out, because {@link LifecycleStatus} is the status of a suite <em>or</em> a case and a
+ * suite's ladder had to be the same one, and corrected the gate in the same move.
  *
- * <p>That is §6g's diagram exactly, and the first sentence is what makes the one gate meaningful: if
- * {@code DRAFT → APPROVED} were legal, approval could be reached without ever passing review, and
- * the gate would guard a door beside an open one. A case in the wrong start state is
- * {@link BulkVerdict.Skipped} with the reason, not a refusal of the whole operation — over a
- * selection of 44, three ineligible drafts must not stop the other 41.
+ * <p><strong>The target was not enough, and the gap was live.</strong> Asking {@code case:approve}
+ * only for a move <em>into</em> {@code APPROVED} left every move back <em>out</em> of it at
+ * {@code case:edit} — so a Test Engineer could select two hundred approved cases, ask for
+ * {@code DRAFT}, and rescind a lead's sign-off with the permission they use every day. The edge's
+ * real key is {@link LifecycleLadder#permissionFor}, one end of the edge is the row's stored status,
+ * and so the check is per row rather than at the gate. {@code PlanLifecycle} derived exactly this
+ * rule for a plan in §73 and named this class as the weaker shape without coming back for it.
+ *
+ * <p>A row the ladder refuses, and a row whose edge costs more than the caller holds, are both
+ * {@link BulkVerdict.Skipped} with a reason rather than a refusal of the whole operation — over a
+ * selection of 44, three ineligible drafts must not stop the other 41, and a selection built by a
+ * filter routinely mixes statuses.
  *
  * <h2>Preview and commit are the same code path</h2>
  *
@@ -173,13 +181,21 @@ public class CaseBulkService {
         }
         BulkOperations.Outcome.Valid valid = (BulkOperations.Outcome.Valid) parsed;
 
+        // The second half of §6g's edge rule. The request-level gate below is the floor — it sees
+        // only the target — so the key each row's actual edge costs is applied per row, and that
+        // needs one more fact: may this caller approve at all. Resolved once, here, and only for
+        // the command whose rows have edges; every other action's verdict does not read it.
+        // Costs one evaluator call on a status change and nothing on the other seven actions.
+        boolean approver = valid.command() instanceof BulkCommand.SetStatus
+                && holds(userId, projectId, BulkOperations.APPROVE_CASE);
+
         GateResult<Outcome> gated = projects.writeGranted(
                 userId,
                 projectId,
                 BulkOperations.permission(valid.command()),
                 project -> apply(
                         companyId, userId, project, valid.command(), valid.caseIds(),
-                        request.isPreview()));
+                        request.isPreview(), approver));
 
         return switch (gated) {
             case GateResult.Unreachable<Outcome> ignored -> new Outcome.NotFound();
@@ -195,7 +211,18 @@ public class CaseBulkService {
 
     /** Whether this caller may edit cases here at all — see {@link BulkOperations#refusal}. */
     private boolean holdsEdit(UUID userId, UUID projectId) {
-        return projects.writeGranted(userId, projectId, "case:edit", project -> true)
+        return holds(userId, projectId, BulkOperations.EDIT_CASE);
+    }
+
+    /**
+     * One project-scope permission question, answered without writing anything.
+     *
+     * <p>{@code false} for an unreachable project as well as for a held-nothing caller, which is
+     * correct at both call sites: the refusal wording and the per-row edge rule are each choosing
+     * how much a caller may do, and "the project does not resolve" is not more than nothing.
+     */
+    private boolean holds(UUID userId, UUID projectId, String permission) {
+        return projects.writeGranted(userId, projectId, permission, project -> true)
                 instanceof GateResult.Allowed<Boolean> allowed && allowed.value();
     }
 
@@ -205,7 +232,8 @@ public class CaseBulkService {
             Project project,
             BulkCommand command,
             List<UUID> caseIds,
-            boolean dryRun) {
+            boolean dryRun,
+            boolean approver) {
 
         // Argument validity is a property of the project, not of any one case, so it is checked once
         // rather than 500 times — and a bad argument is a 400 on the field, not 500 identical skips.
@@ -243,7 +271,7 @@ public class CaseBulkService {
                 continue;
             }
 
-            BulkVerdict verdict = evaluate(row, command, context);
+            BulkVerdict verdict = evaluate(row, command, context, approver);
             switch (verdict) {
                 case BulkVerdict.Skipped skip ->
                         skipped.add(new BulkResultView.SkippedCase(row.getKey(), skip.reason()));
@@ -337,9 +365,11 @@ public class CaseBulkService {
      * <p>Reads only — nothing here writes, so the preview and the commit reach the identical verdict
      * for the identical state.
      */
-    private BulkVerdict evaluate(TestCase row, BulkCommand command, Context context) {
+    private BulkVerdict evaluate(
+            TestCase row, BulkCommand command, Context context, boolean approver) {
         return switch (command) {
-            case BulkCommand.SetStatus status -> evaluateStatus(row, status.target());
+            case BulkCommand.SetStatus status ->
+                    evaluateStatus(row, status.target(), approver);
 
             case BulkCommand.SetAutomationStatus automation -> {
                 if (row.getAutomationStatus() == automation.target()
@@ -388,24 +418,78 @@ public class CaseBulkService {
     }
 
     /**
-     * Plan §6g's state machine, and the reason the {@code case:approve} gate is not decorative.
+     * Plan §6g's state machine, per row — <strong>both halves of it, since §75.</strong>
      *
-     * <p>{@code APPROVED} is reachable only from {@code IN_REVIEW}. Without that, approval could be
-     * reached from {@code DRAFT} directly and the gate would gate a door standing beside an open
-     * one — review would be advisory in a workflow whose whole purpose is that it is not.
+     * <p>The table itself moved to {@link LifecycleLadder}, which a suite now reads from the same
+     * class: {@link LifecycleStatus} is the status of a suite <em>or</em> a case and §6g draws one
+     * diagram, so two tables would be a hand-maintained copy of a neighbour (§58's E1). Every wording
+     * here is the ladder's for the same reason the old one was pinned to the mock's — the same
+     * failure must not read as two different problems depending on which screen reached it (§52).
+     *
+     * <h2>The permission half, and why it is per row</h2>
+     *
+     * <p>{@code BulkOperations.permission} gated the request on the <em>target</em>, so
+     * {@code case:approve} was asked only for a move <em>into</em> {@code APPROVED}. Moves back
+     * <em>out</em> of it cost {@code case:edit}, which every Test Engineer holds — so selecting two
+     * hundred approved cases and asking for {@code DRAFT} rescinded a lead's sign-off silently. The
+     * edge's real key is {@link LifecycleLadder#permissionFor}, and one end of the edge is this
+     * row's stored status, so the check belongs here and not at the gate.
+     *
+     * <p>A row whose edge costs more than the caller holds is <strong>skipped with a reason</strong>,
+     * not answered 403: the selection is a filter's output and may hold rows of several statuses, so
+     * refusing the whole operation would refuse the rows the caller may in fact move. That is this
+     * class's standing choice for every other partial failure.
+     *
+     * @param approver whether the caller holds {@code case:approve} on this project — resolved once
+     *                 per operation rather than per row, and only for the command that has edges
      */
-    private BulkVerdict evaluateStatus(TestCase row, LifecycleStatus target) {
+    private BulkVerdict evaluateStatus(TestCase row, LifecycleStatus target, boolean approver) {
         LifecycleStatus current = row.getLifecycleStatus();
-        if (current == target) {
+        LifecycleLadder.Decision decision = LifecycleLadder.decide(current, target, "case");
+
+        // Before the permission half, unlike a status endpoint, and the difference is what the
+        // caller is asking for: a row already in the requested state is not a move, so refusing it
+        // would report a permission problem about a change nobody is making — and a selection of
+        // four hundred cases routinely contains some that are already there.
+        if (decision instanceof LifecycleLadder.Decision.Unchanged) {
             return new BulkVerdict.Unchanged();
         }
-        if (target == LifecycleStatus.APPROVED && current != LifecycleStatus.IN_REVIEW) {
-            // The mock's wording, kept word for word: the same failure must not read as two
-            // different problems depending on whether the SPA is in mock or live mode (§52).
-            return new BulkVerdict.Skipped(
-                    "A draft must be reviewed before it can be approved.");
+
+        if (!approver && BulkOperations.APPROVE_CASE.equals(
+                LifecycleLadder.permissionFor(current, target, BulkOperations.CASE_KEYS))) {
+            return new BulkVerdict.Skipped(leadOnly(current, target));
         }
-        return new BulkVerdict.Changed();
+
+        return switch (decision) {
+            // Answered above. Written out because the switch is exhaustive over a sealed type, so
+            // this arm is what makes a new Decision a compile error here rather than a silent one.
+            case LifecycleLadder.Decision.Unchanged ignored -> new BulkVerdict.Unchanged();
+            case LifecycleLadder.Decision.Refused refused ->
+                    new BulkVerdict.Skipped(refused.message());
+            case LifecycleLadder.Decision.Move ignored -> new BulkVerdict.Changed();
+        };
+    }
+
+    /**
+     * Said to a caller holding {@code case:edit} about a row whose edge costs {@code case:approve}.
+     *
+     * <p>Worded by the <em>act</em> rather than by the key, for {@link BulkOperations#refusal}'s
+     * reason: a Test Engineer changes cases every day, so "you cannot change cases" is simply false
+     * and sends them to ask for a permission they already hold. The approve arm repeats that
+     * method's sentence exactly — one refusal, one wording, whether it arrives as a 403 over the
+     * whole request or as a skip on one row.
+     */
+    private static String leadOnly(LifecycleStatus current, LifecycleStatus target) {
+        return switch (target) {
+            case APPROVED -> "Only a test lead can approve cases. Submit them for review instead.";
+            case DEPRECATED -> "Only a test lead can deprecate cases.";
+            // The unmaking arm. `current` is APPROVED or DEPRECATED here, or permissionFor would
+            // not have asked for the approve key — so the sentence names the state the row is in
+            // rather than the one it was asked to reach, which is the fact the caller cannot see
+            // from a selection of four hundred.
+            case DRAFT, IN_REVIEW -> "Only a test lead can change a case that is already "
+                    + current.label().toLowerCase(Locale.ROOT) + ".";
+        };
     }
 
     /** Said to a case whose own stored content will not validate — see {@link CaseEdit#of}. */

@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -51,10 +52,14 @@ public class SuiteController {
 
     private final SuiteService suites;
     private final SuiteWriteService writes;
+    private final SuiteStatusService statuses;
 
-    public SuiteController(SuiteService suites, SuiteWriteService writes) {
+    public SuiteController(
+            SuiteService suites, SuiteWriteService writes, SuiteStatusService statuses) {
+
         this.suites = suites;
         this.writes = writes;
+        this.statuses = statuses;
     }
 
     /**
@@ -169,6 +174,51 @@ public class SuiteController {
         return switch (outcome) {
             case SuiteWriteService.Outcome.Deleted ignored -> ResponseEntity.noContent().build();
             default -> problem(outcome, "delete suites in this project");
+        };
+    }
+
+    /**
+     * Moves the suite along §6g's ladder — submit for review, approve, withdraw, deprecate, revive.
+     *
+     * <p>A separate endpoint from the {@code PATCH} beside it, and not a field on
+     * {@code SuiteInput}, because {@link Suite#applyEdit} refuses to carry it: a status an ordinary
+     * edit can set is an approval anyone can grant themselves by saving. Same shape as
+     * {@code PUT /plans/&#123;planId&#125;/status} and {@code PUT /runs/&#123;runId&#125;/status}.
+     *
+     * <p><strong>{@code PUT}, not {@code PATCH}</strong>: the body names an absolute target state,
+     * so a repeated call is the same call. That is also why there is no {@code If-Match} — see
+     * {@link SuiteStatusService}.
+     *
+     * <p>403 here can be either of two keys, decided by the <em>edge</em> the request asks for
+     * ({@link LifecycleLadder#permissionFor}): a Test Engineer holding {@code suite:manage} may
+     * submit a draft for review and be refused the approval beside it, and may equally be refused
+     * the move that would take a lead's approval back. 409 is the ladder refusing a move the
+     * caller is otherwise permitted to make.
+     */
+    @PutMapping("/{suiteId}/status")
+    public ResponseEntity<Object> setStatus(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID suiteId,
+            @RequestBody SuiteStatusRequest request) {
+
+        SuiteStatusService.Outcome outcome = statuses.setStatus(
+                UUID.fromString(jwt.getSubject()), projectId, suiteId, request);
+
+        return switch (outcome) {
+            case SuiteStatusService.Outcome.Updated updated -> ResponseEntity.ok(updated.view());
+            case SuiteStatusService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
+            case SuiteStatusService.Outcome.Forbidden ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiProblem.forbidden(
+                            "You do not have permission to make this change to suites in this "
+                                    + "project."));
+            case SuiteStatusService.Outcome.Invalid invalid ->
+                    ResponseEntity.badRequest().body(ApiProblem.validation(invalid.errors()));
+            // 409 rather than 400: the payload is well-formed and the permission is held — it is
+            // the suite's current state that refuses, which is a different thing to fix.
+            case SuiteStatusService.Outcome.Refused refused ->
+                    ResponseEntity.status(HttpStatus.CONFLICT).body(ApiProblem.conflict(
+                            "Status change refused", refused.message()));
         };
     }
 

@@ -3,7 +3,7 @@
 # be-java — orientation cache (TCMS)
 
 **Last verified:** 2026-08-02
-**Baseline commit:** `37dc3a6`
+**Baseline commit:** `dc5a7db`
 **Fingerprint files:** `backend/build.gradle.kts`, `backend/gradle/libs.versions.toml`, `backend/gradle/wrapper/gradle-wrapper.properties`
 
 > Authoritative docs win over this file. `CLAUDE.md`, `docs/HANDOFF.md` (an index — sections live in
@@ -178,6 +178,39 @@ provisioning · auth · shared`.
   `PlanLifecycle.isClosed`'s first consumer** — §73 wrote it and `TestPlan.applyStatus` compares the
   enum inline — placed after the permission, before the `If-Match`, before validation (§72's order).
   `#confirmed`
+- **§6g's authoring ladder is ONE class since §75 — `repository.LifecycleLadder`** — read by
+  `SuiteStatusService` *and* `CaseBulkService`, because `LifecycleStatus` is the status of a suite
+  **or** a case (`V1` spells the identical four-value constraint on both tables) and §6g draws one
+  diagram. Pure static: `decide(current, requested, noun)` → sealed `Decision`,
+  `permissionFor(current, requested, Keys)` where `Keys` is a record so two adjacent key strings
+  cannot be swapped unnoticed, and a written-out `rank`. **The plan's ladder is deliberately NOT
+  folded in** — `PlanStatus` has `ACTIVE`/`CLOSED`, an execution phase these four lack. Table:
+  `IN_REVIEW` only from `DRAFT`; `APPROVED` only from `IN_REVIEW`; `DRAFT` and `DEPRECATED` from
+  anywhere (a folder that cannot be deleted must still be retirable, or ordinary use reaches a dead
+  end); a `DEPRECATED` artifact returns only via `DRAFT`. **`permissionFor` is decided by the EDGE**:
+  the approve key covers granting the sign-off, retiring, and *taking either back*. `#confirmed`
+- **`suite.lifecycle_status` has a writer since §75, and `suite:approve` its first Java consumer.**
+  `SuiteStatusService` + `SuiteStatusRequest` + `Suite.applyStatus` + `PUT /suites/{suiteId}/status`,
+  gated through `ProjectService.writeGrantedOnTarget` (§69's seam, 4th consumer) on
+  `Keys("suite:manage", "suite:approve")` — and that pair **discriminates**, unlike §71's, because
+  `V3` withholds approve from Test Engineer while granting manage. No `If-Match` (absolute target),
+  parse before the gate with an unreadable status falling back to the LOWER key, already-there is a
+  200 writing nothing, and **a status change writes no `suite_version` row and no bump** (a suite
+  version is composition — §73's identical call on the plan). Six distinct audit verbs, because
+  `DRAFT` is reached by three different acts. `SuiteWriteService`'s private `view` moved to
+  **`SuiteService.viewOf`** so this service reuses it instead of becoming `CaseRenderer`'s fourth
+  copy. `#confirmed`
+- **`BulkOperations.permission` is the FLOOR, not the rule — the per-row edge check lives in
+  `CaseBulkService.evaluateStatus`.** Until §75 the case gate was keyed on the *target*, so
+  `case:approve` was asked only for a move INTO `APPROVED` and a Test Engineer could bulk-move two
+  hundred approved cases to `DRAFT`, rescinding a lead's sign-off. `PlanLifecycle`'s §73 header named
+  this class as the weaker shape and did not come back for it. Per-row rather than a higher floor,
+  because one end of every edge is the row's stored status and a filtered selection mixes them;
+  refused rows are `BulkVerdict.Skipped` with `leadOnly(...)`, never a 403 over the whole request.
+  `holdsEdit` generalised to `holds(userId, projectId, key)`. **Three case transitions changed**:
+  `APPROVED → IN_REVIEW` no longer exists, `DEPRECATED` returns only to `DRAFT`, and deprecating now
+  costs `case:approve`. The **`OWN`-qualified deprecate** (an author retiring their own draft, via
+  `AuthorshipGate`'s term) is named and not built. `#confirmed`
 - **`lock_version` is mapped WITHOUT `@Version` on `TestRun` and `work.WorkItem`, and that is a live
   trap for the next writer.** §74 found it on `TestPlan`, where the column had read `0` on every plan
   since M2 slice 2 while the contract declared `lockVersion` *required* — so an `If-Match` check
@@ -322,11 +355,13 @@ provisioning · auth · shared`.
 - **Four review-workflow permission keys still have no consumer in Java** — `case:review`,
   `suite:review`, `plan:review`, `case:comment` — and §73 recorded that this is **correct rather than
   an omission**: §6g puts peer review *inside* `IN_REVIEW`, accumulating on the item without moving
-  it, so those keys belong to comments/LGTM/request-changes, which do not exist. `review_comment` and
-  `review_participation` are two of the eleven tables with schema and no code. The per-project
-  review opt-in setting §6g requires does not exist either, and `PlanLifecycle`'s header leans on its
-  absence to justify `DRAFT → ACTIVE`. **This is the largest coherent gap left in this module family**
-  and the "permission with no consumer" search will keep pointing at it. `#confirmed`
+  it, so those keys belong to comments/LGTM/request-changes, which do not exist. Since §75 the
+  reviewer half is the **only** unbuilt part of §6g: every item-side ladder now exists (case §62,
+  plan §73, suite §75). It needs **three** tables (`review`, `review_participation`,
+  `review_comment` — all schema-and-no-code) **and a `V22`**, because §6g's per-project opt-in
+  setting has nowhere to live: `project` has NO `settings` column, only `company` does. Both
+  `PlanLifecycle`'s and `LifecycleLadder`'s headers lean on that setting's absence to justify a
+  ladder that does not require approval, so building it changes two ladders as well. `#confirmed`
 
 - **`audit_event.target_type` is spelled two ways and nothing reads it yet.** Every service writes
   the snake_case table name (`test_run`, `test_case`, `test_plan`, `doc_page`, …) except
@@ -337,6 +372,21 @@ provisioning · auth · shared`.
 
 ## Session log
 
+- 2026-08-02 · EXTEND · The suite lifecycle (§75) — `suite.lifecycle_status` had exactly one writer
+  (`Suite.create`, writing `DRAFT`), so three of four values were unreachable and every suite on
+  every real instance has been a draft for ever; `Suite.applyEdit`'s javadoc named the slice. New:
+  `LifecycleLadder` (shared by suite AND case), `SuiteStatusService`, `SuiteStatusRequest`,
+  `Suite.applyStatus`, `SuiteService.viewOf`, `PUT /suites/{suiteId}/status`, six audit verbs,
+  `BulkOperations.CASE_KEYS`, `CaseBulkService.leadOnly`/`holds`. **§74 named the reviewer apparatus
+  as next and this deliberately is not it** — §28's re-derive rule found §6g's ladder has three
+  subject types and the suite's was unbuilt. **The defect: `BulkOperations.permission` was keyed on
+  the TARGET**, which §73 named as the weaker shape and left, so a Test Engineer could bulk-rescind a
+  lead's approval on cases; fixed per row. **The mutation is the proof — dropping the unmaking arm
+  reddens exactly 2 out of 112, one per aggregate.** Fixture finding in both directions: the backend
+  fixture seeded every suite `APPROVED` while no real suite ever was, and the mock's fixtures have
+  shown approved folders since Phase 1. 19 tests, 4 backend mutations run inline (**2 / 3 / 1 / 2**)
+  and 2 frontend (1 each), 3 queued. **No migration — `V22` still free**, and the reviewer slice
+  needs it (`project` has no `settings` column).
 - 2026-08-02 · EXTEND · The plan editor (§74) — `entry_criteria`, `exit_criteria` and
   `test_plan_version` get their first writers at once, and a plan's scope becomes editable at all.
   New: `PlanUpdateService`, `PlanUpdateRequest`, `CriterionInput`, `PlanScope`, `PlanSnapshot`,

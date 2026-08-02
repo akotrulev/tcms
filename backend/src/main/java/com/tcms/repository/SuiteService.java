@@ -95,6 +95,31 @@ public class SuiteService {
      * suite's wire shape, and the field that diverges shows one value on create and another on the
      * reload after it.
      */
+    /**
+     * One written suite, as the API serves it — the single-row form of {@link #render}.
+     *
+     * <p>Lives here rather than in each writer, and that placement is the lesson {@code CaseRenderer}
+     * paid for twice: a private copy of "read the write back" in every write service is invisible
+     * while the copies agree and visible the moment a field is added to one of them. §68 found the
+     * <em>read</em> path was a fourth such copy on a case, which is the wrong way round, since it is
+     * the render the writers exist to agree with. {@link SuiteWriteService} and
+     * {@link SuiteStatusService} both call this.
+     *
+     * <p>The cost is re-reading the tree, which is one query over a table with as many rows as the
+     * project has folders. Callers must already be inside a gate — see {@link #render}.
+     */
+    SuiteView viewOf(UUID companyId, UUID projectId, Suite suite) {
+        return render(companyId, projectId).stream()
+                .filter(rendered -> rendered.id().equals(suite.getId()))
+                .findFirst()
+                // Unreachable: the row was written and flushed in this transaction, so the read that
+                // follows sees it. Thrown rather than defaulted because a suite that vanished
+                // between its own write and the next SELECT is a broken invariant, not a case to
+                // render around.
+                .orElseThrow(() -> new IllegalStateException(
+                        "Suite " + suite.getId() + " was written and did not read back"));
+    }
+
     List<SuiteView> render(UUID companyId, UUID projectId) {
         List<Suite> live = suites.findLiveForProject(projectId);
         if (live.isEmpty()) {

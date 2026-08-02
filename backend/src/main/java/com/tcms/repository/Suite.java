@@ -227,6 +227,27 @@ public class Suite {
     }
 
     /**
+     * Moves this suite along §6g's ladder — <strong>the only writer {@code lifecycle_status} has
+     * ever had besides {@link #create}.</strong>
+     *
+     * <p>Separate from {@link #applyEdit} and that separation is the point: the comment above says a
+     * status an ordinary edit can set is an approval anyone can grant themselves by saving. This one
+     * is reached only through {@link SuiteStatusService}, which has already asked
+     * {@link LifecycleLadder#permissionFor} which key the <em>edge</em> costs.
+     *
+     * <p>No version row and no {@code currentVersionNo} bump. {@code SuiteVersions} defines a suite
+     * version as its <em>composition</em>, and approving a folder does not change what is in it —
+     * {@code TestPlan.applyStatus} declined the same bump in §73 for the same reason. A history whose
+     * entries all carry byte-identical snapshots is the every-edit-bumps-every-ancestor spiral
+     * {@code V1}'s own schema comment refuses.
+     */
+    void applyStatus(LifecycleStatus target, UUID actorId, Instant now) {
+        this.lifecycleStatus = target;
+        this.updatedAt = now;
+        this.updatedBy = actorId;
+    }
+
+    /**
      * Soft-deletes this suite.
      *
      * <p>Soft, because past runs reference the cases beneath it and {@code suite_run_summary} keys

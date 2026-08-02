@@ -197,16 +197,51 @@ class CaseBulkEndpointTest extends IntegrationTestBase {
     class TheApproveGate {
 
         @Test
-        @DisplayName("a Test Engineer may move cases to In review — that needs only case:edit")
+        @DisplayName("a Test Engineer may submit their drafts for review — that needs only case:edit")
         void engineerMaySubmitForReview() throws Exception {
-            // Both change: §6g's one gate stands between IN_REVIEW and APPROVED, so sending an
-            // APPROVED case BACK to review is an edit and not an un-approval a lead must sign off.
-            MvcResult result = commit(ENGINEER, setStatus("IN_REVIEW", draft(), approved()));
+            MvcResult result = commit(ENGINEER, setStatus("IN_REVIEW", draft(), secondDraft()));
 
             assertThat(result.getResponse().getStatus()).isEqualTo(200);
-            assertThat(changed(result)).containsExactly("TC-1", "TC-3");
+            assertThat(changed(result)).containsExactly("TC-1", "TC-5");
             assertThat(statusOf(draft())).isEqualTo("IN_REVIEW");
-            assertThat(statusOf(approved())).isEqualTo("IN_REVIEW");
+            assertThat(statusOf(secondDraft())).isEqualTo("IN_REVIEW");
+        }
+
+        /**
+         * §75 reversed this test's original assertion, and the reversal is the finding.
+         *
+         * <p>It used to assert that the same request moved an <strong>approved</strong> case back to
+         * review as well, on the recorded grounds that <em>"sending an APPROVED case BACK to review
+         * is an edit and not an un-approval a lead must sign off"</em>. Both halves of that were
+         * wrong: §6g draws no {@code APPROVED → IN_REVIEW} edge at all, and leaving an approval is
+         * an approval act whatever the target happens to be called. The old rule read the target
+         * only, so it answered {@code case:edit} — and a Test Engineer could unmake a lead's
+         * sign-off in one click over a filtered selection.
+         */
+        @Test
+        @DisplayName("an engineer cannot pull an APPROVED case back — the row is skipped, not moved")
+        void engineerCannotUnapproveThroughABulkStatusChange() throws Exception {
+            MvcResult result = commit(ENGINEER, setStatus("IN_REVIEW", draft(), approved()));
+
+            // 200, not 403: the selection is a filter's output and mixes statuses, so the rows the
+            // caller MAY move still move. The refused one comes back named.
+            assertThat(result.getResponse().getStatus()).isEqualTo(200);
+            assertThat(changed(result)).containsExactly("TC-1");
+            assertThat(skippedKeys(result)).containsExactly("TC-3");
+            assertThat(skippedReasons(result).getFirst())
+                    .isEqualTo("Only a test lead can change a case that is already approved.");
+            assertThat(statusOf(approved())).isEqualTo("APPROVED");
+        }
+
+        @Test
+        @DisplayName("an engineer cannot deprecate — retiring is the soft form of a delete")
+        void engineerCannotDeprecate() throws Exception {
+            MvcResult result = commit(ENGINEER, setStatus("DEPRECATED", draft()));
+
+            assertThat(skippedKeys(result)).containsExactly("TC-1");
+            assertThat(skippedReasons(result).getFirst())
+                    .isEqualTo("Only a test lead can deprecate cases.");
+            assertThat(statusOf(draft())).isEqualTo("DRAFT");
         }
 
         @Test
@@ -301,8 +336,11 @@ class CaseBulkEndpointTest extends IntegrationTestBase {
 
             assertThat(changed(result)).containsExactly("TC-2");
             assertThat(skippedKeys(result)).containsExactly("TC-1");
+            // LifecycleLadder's wording since §75 — one sentence for a suite and a case alike, and
+            // the mock copies this one rather than keeping a second of its own (§52).
             assertThat(skippedReasons(result).getFirst())
-                    .isEqualTo("A draft must be reviewed before it can be approved.");
+                    .isEqualTo("A case is approved after it has been reviewed. Submit it for "
+                            + "review first.");
             assertThat(statusOf(draft())).isEqualTo("DRAFT");
         }
 
@@ -437,7 +475,10 @@ class CaseBulkEndpointTest extends IntegrationTestBase {
         @Test
         @DisplayName("one audit event names every changed case, not one row per case")
         void oneAuditEventForTheWholeOperation() throws Exception {
-            MvcResult result = commit(LEAD, setStatus("IN_REVIEW", draft(), approved()));
+            // Two DRAFTS, not a draft and an approved one: since §75 the ladder has no
+            // APPROVED → IN_REVIEW edge, so the second row would be skipped and this would be
+            // asserting one target id while claiming to assert two.
+            MvcResult result = commit(LEAD, setStatus("IN_REVIEW", draft(), secondDraft()));
 
             List<AuditRow> rows = auditRows();
             assertThat(rows).hasSize(1);
@@ -1027,6 +1068,20 @@ class CaseBulkEndpointTest extends IntegrationTestBase {
         return caseId("approved");
     }
 
+    /**
+     * A second DRAFT in the same project as {@link #draft()}.
+     *
+     * <p>Added in §75 for the tests that need <em>two rows that both legitimately move</em>. Before
+     * the ladder was shared there was exactly one such pair — a draft and an approved case, both
+     * moved to {@code IN_REVIEW} — and that pair stopped existing when the {@code APPROVED →
+     * IN_REVIEW} edge was removed. Reaching for {@link #mobileCase()} instead would have looked
+     * right and silently asserted nothing: it is in another project, so the endpoint reports it as
+     * an id that resolved to no case.
+     */
+    private static UUID secondDraft() {
+        return caseId("second-draft");
+    }
+
     private static UUID mobileCase() {
         return caseId("mobile");
     }
@@ -1055,6 +1110,8 @@ class CaseBulkEndpointTest extends IntegrationTestBase {
                     "Refund to wallet", "APPROVED");
             testCase(connection, mobileCase(), ACME, MOBILE, MOBILE_SUITE, "TC-4", 4,
                     "Sign in", "DRAFT");
+            testCase(connection, secondDraft(), ACME, BANKING, PAYMENTS, "TC-5", 5,
+                    "Refund a cancelled order", "DRAFT");
 
             // Every case gets one step: CaseEdit.validate refuses a STRUCTURED case with none, so a
             // stepless fixture would make every version-writing action skip instead of change — and
@@ -1063,6 +1120,8 @@ class CaseBulkEndpointTest extends IntegrationTestBase {
             step(connection, stepId("in-review"), ACME, inReview(), 0, "Open the payments screen");
             step(connection, stepId("approved"), ACME, approved(), 0, "Open the payments screen");
             step(connection, stepId("mobile"), ACME, mobileCase(), 0, "Open the app");
+            step(connection, stepId("second-draft"), ACME, secondDraft(), 0,
+                    "Open the payments screen");
         }
     }
 

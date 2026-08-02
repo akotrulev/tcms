@@ -29,7 +29,7 @@ final class BulkOperations {
      * granted project visible — so a write gated on it is a write a Viewer may perform
      * ({@link com.tcms.project.ProjectAccess#canDo}).
      */
-    private static final String EDIT_CASE = "case:edit";
+    static final String EDIT_CASE = "case:edit";
 
     /**
      * The single gate on the review state machine (plan §6g), and the reason this endpoint could not
@@ -41,7 +41,17 @@ final class BulkOperations {
      * Engineer approve two hundred cases at once — silently, because they hold the permission the
      * gate names and the widening is invisible at the gate.
      */
-    private static final String APPROVE_CASE = "case:approve";
+    static final String APPROVE_CASE = "case:approve";
+
+    /**
+     * The two keys a case's ladder is gated on, for {@link LifecycleLadder#permissionFor}.
+     *
+     * <p>The request-level gate below cannot use it — see {@link #permission} — because the edge a
+     * bulk row travels is not known until the row is read. {@code CaseBulkService} applies it per
+     * row, which is the half that was missing.
+     */
+    static final LifecycleLadder.Keys CASE_KEYS =
+            new LifecycleLadder.Keys(EDIT_CASE, APPROVE_CASE);
 
     /** Matches {@code BulkOperation.caseIds.maxItems}. See the contract for why there is a cap. */
     static final int MAX_SELECTION = 500;
@@ -61,11 +71,31 @@ final class BulkOperations {
     }
 
     /**
-     * Which permission this command needs on the project.
+     * The permission this command needs before a transaction opens — <strong>the floor, not the
+     * whole rule.</strong>
      *
-     * <p><strong>Only the target status can raise it.</strong> Everything else — attaching a
-     * condition, moving a suite, assigning an owner — is editing, and editing is producing, which
-     * roles spec §A3 deliberately does not restrict for a Test Engineer.
+     * <p>Everything except a status change is editing, and editing is producing, which roles spec
+     * §A3 deliberately does not restrict for a Test Engineer. A status change is different, and this
+     * method can only see half of what decides it: §6g's gate is a property of the <em>edge</em>, and
+     * one end of every edge is the row's stored status, which nothing has read yet. So this answers
+     * the key that <em>every</em> row in the selection needs at minimum, and
+     * {@code CaseBulkService.evaluateStatus} applies {@link LifecycleLadder#permissionFor} to each
+     * row's actual edge afterwards.
+     *
+     * <p><strong>That second half was missing until §75 and the gap was live.</strong> Under the
+     * old rule — {@code case:approve} when the target is {@code APPROVED}, {@code case:edit}
+     * otherwise — a Test Engineer could select two hundred approved cases, ask for {@code DRAFT},
+     * and rescind a lead's sign-off with the permission they use every day. {@code PlanLifecycle}'s
+     * header named this class as the weaker shape when it derived the edge rule for plans in §73,
+     * and did not come back for it; a fix applied to one instance of a class needs the grep that
+     * finds the others.
+     *
+     * <p>Raising the floor instead — asking {@code case:approve} for every status change — was
+     * rejected: it would refuse a Test Engineer submitting their own drafts for review, which §6g
+     * says <em>"needs only edit rights"</em>, and it would refuse the whole operation over rows the
+     * caller may in fact move. Per-row is also what this endpoint already does with every other
+     * partial failure: one wrong row is a skip with a reason, never a 403 over four hundred right
+     * ones.
      *
      * <p>The gate asks for one key rather than both {@code case:edit} and {@code case:approve},
      * because every role holding approve also holds edit. That is a property of the seeded

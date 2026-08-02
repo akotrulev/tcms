@@ -1,8 +1,10 @@
 import AddIcon from '@mui/icons-material/Add';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import {
+  Alert,
   Box,
   Button,
+  Divider,
   IconButton,
   ListItemText,
   Menu,
@@ -14,10 +16,13 @@ import { SimpleTreeView } from '@mui/x-tree-view/SimpleTreeView';
 import { TreeItem } from '@mui/x-tree-view/TreeItem';
 import { useMemo, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
-import type { Suite } from '../../api/types';
+import { useSetSuiteStatus } from '../../api/queries';
+import type { LifecycleStatus, Suite } from '../../api/types';
 import { useCan } from '../../auth/useCan';
 import { PermissionGate } from '../../components/PermissionGate';
+import { describeError } from '../../lib/describeError';
 import { formatCount } from '../../lib/format';
+import { lifecycleLabels } from '../../lib/labels';
 import { CreateSuiteDialog, DeleteSuiteDialog, RenameSuiteDialog } from './SuiteDialogs';
 
 /**
@@ -94,6 +99,44 @@ function buildTree(suites: Suite[]): TreeNode[] {
   return build(null);
 }
 
+/**
+ * §6g's ladder, from each status, with the key each edge costs.
+ *
+ * **The permission column mirrors the server's `LifecycleLadder.permissionFor` and is a disabling
+ * hint, never the gate** — the same relationship `planMoves` has to `PlanLifecycle`. Getting it
+ * wrong here shows a control that 403s, which is §31's failure and not a security one; the server
+ * decides, from a status only it holds.
+ *
+ * The three approve-keyed rows are the ones a target-decides reading gets wrong: returning an
+ * approved folder to draft costs `suite:approve`, because leaving an approval is an approval act,
+ * and deprecating costs it because retiring is the soft form of a delete that Test Engineer is
+ * withheld from outright.
+ *
+ * `satisfies Record<LifecycleStatus, …>` so a fifth status is a compile error here rather than a
+ * folder with no moves at all.
+ */
+const suiteMoves = {
+  DRAFT: [
+    { target: 'IN_REVIEW', label: 'Submit for review', permission: 'suite:manage' },
+    { target: 'DEPRECATED', label: 'Deprecate…', permission: 'suite:approve' },
+  ],
+  IN_REVIEW: [
+    { target: 'APPROVED', label: 'Approve', permission: 'suite:approve' },
+    { target: 'DRAFT', label: 'Return to draft', permission: 'suite:manage' },
+    { target: 'DEPRECATED', label: 'Deprecate…', permission: 'suite:approve' },
+  ],
+  APPROVED: [
+    { target: 'DRAFT', label: 'Return to draft', permission: 'suite:approve' },
+    { target: 'DEPRECATED', label: 'Deprecate…', permission: 'suite:approve' },
+  ],
+  // Only one way back, and it lands on DRAFT: approval attaches to reviewed content by a named
+  // person, so a retired folder returning straight to APPROVED would be a sign-off nobody gave.
+  DEPRECATED: [{ target: 'DRAFT', label: 'Restore to draft', permission: 'suite:approve' }],
+} as const satisfies Record<
+  LifecycleStatus,
+  readonly { target: LifecycleStatus; label: string; permission: string }[]
+>;
+
 /** Which dialog is open, and on which folder. One value, so two cannot be open at once. */
 type Editing =
   | { kind: 'create'; parent: Suite | null }
@@ -116,6 +159,27 @@ export function SuiteTree({
   const gate = useCan(projectId);
   const [editing, setEditing] = useState<Editing>(null);
   const [menuFor, setMenuFor] = useState<{ anchor: HTMLElement; suite: Suite } | null>(null);
+  const setStatus = useSetSuiteStatus(projectId);
+  const [statusError, setStatusError] = useState<string | null>(null);
+
+  /**
+   * Moves one folder along the ladder.
+   *
+   * The refusal renders **in the rail**, not as a toast: both sentences the server can answer are
+   * about the folder the menu was just open on — "only a test lead can approve" and "return this
+   * suite to draft first" — and a notification detached from the tree names neither. Hence
+   * `handled` on the hook.
+   */
+  const move = (suite: Suite, target: LifecycleStatus) => {
+    setStatusError(null);
+    setStatus.mutate(
+      { suiteId: suite.id, status: target },
+      {
+        onError: (failure: unknown) =>
+          setStatusError(`${suite.name}: ${describeError(failure).body}`),
+      },
+    );
+  };
 
   // Ancestors of the selection start expanded, so a deep-linked filter shows its context
   // rather than a collapsed tree with an invisible selection.
@@ -174,6 +238,32 @@ export function SuiteTree({
             {node.suite.name}
           </Box>
           <Stack direction="row" sx={{ alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+            {/*
+              Rendered only when the folder is NOT a draft, and that is a deliberate asymmetry
+              rather than a hidden state: DRAFT is where every folder starts and where most stay,
+              so a badge on all of them costs the width the name needs in a narrow rail and says
+              nothing. The three that mean something — under review, signed off, retired — are
+              exactly the ones worth the space, and the menu shows the status either way.
+            */}
+            {node.suite.lifecycleStatus !== 'DRAFT' && (
+              <Box
+                component="span"
+                data-testid="SuiteTree.Item.Status"
+                title={lifecycleLabels[node.suite.lifecycleStatus]}
+                sx={{
+                  fontSize: '0.625rem',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                  color: node.suite.lifecycleStatus === 'DEPRECATED' ? 'text.disabled' : 'text.secondary',
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: 0.5,
+                  px: 0.5,
+                }}
+              >
+                {lifecycleLabels[node.suite.lifecycleStatus]}
+              </Box>
+            )}
             <Box
               component="span"
               className="identifier"
@@ -211,6 +301,21 @@ export function SuiteTree({
 
   return (
     <Box>
+      {/*
+        Dismissible, and above the tree rather than inside the menu, which is closed by the time the
+        server answers. Both sentences name a folder, so the folder's name is prefixed — a bare
+        "return this suite to draft first" in a rail of thirty folders names none of them.
+      */}
+      {statusError && (
+        <Alert
+          severity="warning"
+          onClose={() => setStatusError(null)}
+          data-testid="SuiteTree.StatusError"
+          sx={{ mx: 1.5, mb: 1, py: 0, fontSize: '0.75rem' }}
+        >
+          {statusError}
+        </Alert>
+      )}
       {/*
         No heading here. The panel this tree lives in is already titled "Suites", and an overline
         repeating the word directly beneath it was the app's clearest case of an accessory that
@@ -365,6 +470,36 @@ export function SuiteTree({
             </MenuItem>
           )}
         </PermissionGate>
+        <Divider />
+        {/*
+          The ladder. The moves SWAP rather than accumulate, as on the plan: a folder offers only
+          the edges it actually has, because offering one the server refuses with a 409 is what
+          §31 exists to stop. Each is gated on its own key, so a Test Engineer sees "Submit for
+          review" live beside a greyed "Deprecate…" — which is the shape of the rule, visible.
+        */}
+        {menuFor
+          && suiteMoves[menuFor.suite.lifecycleStatus].map((option) => (
+            <PermissionGate
+              key={option.target}
+              projectId={projectId}
+              permission={option.permission}
+              wrapper="block"
+            >
+              {({ allowed }) => (
+                <MenuItem
+                  disabled={!allowed || setStatus.isPending}
+                  data-testid={`SuiteTree.Menu.Move.${option.target}`}
+                  onClick={() => {
+                    if (menuFor) move(menuFor.suite, option.target);
+                    setMenuFor(null);
+                  }}
+                >
+                  <ListItemText>{option.label}</ListItemText>
+                </MenuItem>
+              )}
+            </PermissionGate>
+          ))}
+        <Divider />
         <PermissionGate projectId={projectId} permission="suite:delete" wrapper="block">
           {({ allowed }) => (
             <MenuItem

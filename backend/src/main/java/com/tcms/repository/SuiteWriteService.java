@@ -316,19 +316,13 @@ public class SuiteWriteService {
      * <p>Not a second implementation of a suite's shape, for {@link CaseCreateService#render}'s
      * reason: this response is the first thing anyone sees of a folder, so a field rendered
      * differently would show one value on create and another on the reload that follows, with neither
-     * screen revealing which is stored. The cost is re-reading the tree, which is one query over a
-     * table with as many rows as the project has folders.
+     * screen revealing which is stored.
+     *
+     * <p>The body moved onto {@link SuiteService#viewOf} when {@link SuiteStatusService} needed the
+     * same read: a second private copy is how {@code CaseRenderer}'s fourth copy happened.
      */
     private SuiteView view(UUID companyId, UUID projectId, Suite suite) {
-        return tree.render(companyId, projectId).stream()
-                .filter(rendered -> rendered.id().equals(suite.getId()))
-                .findFirst()
-                // Unreachable: the row was written and flushed in this transaction, so the read that
-                // follows sees it. Thrown rather than defaulted because a suite that vanished between
-                // its own INSERT and the next SELECT is a broken invariant, not a case to render
-                // around.
-                .orElseThrow(() -> new IllegalStateException(
-                        "Suite " + suite.getId() + " was written and did not read back"));
+        return tree.viewOf(companyId, projectId, suite);
     }
 
     private void audit(UUID projectId, UUID userId, String action, Suite suite, Instant now) {

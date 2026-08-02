@@ -1,6 +1,7 @@
 /** The suite tree, its three writes, and its history. */
 import { HttpResponse, delay, http } from 'msw';
-import type { Suite } from '../../api/types';
+import type { LifecycleStatus, Suite } from '../../api/types';
+import { lifecycleLabels } from '../../lib/labels';
 import {
   allocateSuiteKey,
   db,
@@ -10,7 +11,8 @@ import {
   suiteOwnCaseCount,
   suiteTree,
 } from '../db';
-import { API, LATENCY, MAX_SUITE_NAME, notFound, problem } from './shared';
+import { decide, needsApproval } from '../lifecycleLadder';
+import { API, LATENCY, MAX_SUITE_NAME, notFound, permissionsOn, problem } from './shared';
 
 export const suiteHandlers = [
   http.get(`${API}/projects/:projectId/suites`, async () => {
@@ -118,6 +120,49 @@ export const suiteHandlers = [
     // `lifecycleStatus` is NOT applied any more: it is not on SuiteInput, and a status an
     // ordinary edit can set is an approval its author granted themselves (§6g).
     suite.lockVersion = (suite.lockVersion ?? 0) + 1;
+    return HttpResponse.json({ ...suite, caseCount: suiteOwnCaseCount(suite.id) });
+  }),
+
+  /*
+    The ladder. Ordered EXACTLY as the server orders it — resolve, then permission, then the
+    transition — because a mock that checks them the other way round teaches a 409 where live gives
+    a 403, and the screen is built against whichever one it saw first (§74's mirroring rule).
+
+    The permission half is not optional here. `suite:approve` is withheld from Test Engineer, and
+    the tree's menu enables its items from `permissionsOn`; a mock that accepted every move would
+    make the one screen this slice adds look correct in the only mode it can be driven in without a
+    backend.
+  */
+  http.put(`${API}/projects/:projectId/suites/:suiteId/status`, async ({ params, request }) => {
+    await delay(LATENCY);
+    const suite = db.suites.find((s) => s.id === params.suiteId);
+    if (!suite) return notFound('That suite');
+
+    const body = (await request.json()) as { status?: string };
+    const target = body.status as LifecycleStatus | undefined;
+    if (!target || !(target in lifecycleLabels)) {
+      return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+        status: ['Choose a status: DRAFT, IN_REVIEW, APPROVED or DEPRECATED.'],
+      });
+    }
+
+    const held = permissionsOn(String(params.projectId)).map((entry) => entry.key);
+    const required = needsApproval(suite.lifecycleStatus, target) ? 'suite:approve' : 'suite:manage';
+    if (!held.includes(required)) {
+      return problem(
+        403,
+        'Forbidden',
+        'You do not have permission to make this change to suites in this project.',
+      );
+    }
+
+    const decision = decide(suite.lifecycleStatus, target, 'suite');
+    if (decision.kind === 'refused') {
+      return problem(409, 'Status change refused', decision.message);
+    }
+    // `unchanged` is a 200 with the suite and nothing written — no version, no bump, no audit —
+    // so a repeated click cannot bury the change that actually happened.
+    if (decision.kind === 'move') suite.lifecycleStatus = decision.target;
     return HttpResponse.json({ ...suite, caseCount: suiteOwnCaseCount(suite.id) });
   }),
 

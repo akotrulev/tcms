@@ -1,7 +1,7 @@
 /** The suite tree and its three writes. */
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { api } from '../client';
-import type { Suite, SuiteHistoryResponse } from '../types';
+import type { LifecycleStatus, Suite, SuiteHistoryResponse } from '../types';
 import { base, keys } from './keys';
 
 export function useSuites(projectId: string): UseQueryResult<Suite[]> {
@@ -58,6 +58,35 @@ export function useDeleteSuite(projectId: string) {
       void client.invalidateQueries({ queryKey: keys.suites(projectId) });
       // The case list is scoped by suite, so a deleted folder must not stay selectable in a
       // filter chip that now matches nothing.
+      void client.invalidateQueries({ queryKey: ['projects', projectId, 'cases'] });
+    },
+  });
+}
+
+/**
+ * Moves a suite along §6g's ladder.
+ *
+ * `PUT`, not `PATCH`, and no `If-Match`: the body names an absolute target state rather than a
+ * delta against something this client read, so there is nothing to lose to a concurrent save —
+ * `useSetPlanStatus` and `useSetRunStatus` make the same call. The rename beside it keeps its
+ * header, because a name typed over a stale copy really does lose the other author's words.
+ *
+ * `handled`, because both refusals are sentences the caller has to read next to the folder they are
+ * about: a 403 (this edge is a lead's) and a 409 (the ladder does not have this move).
+ */
+export function useSetSuiteStatus(projectId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    // The suite is a MUTATION VARIABLE, not a hook argument, because the one caller is the tree's
+    // kebab menu — which acts on whichever folder it was opened on. `useRenameSuite` takes its id
+    // up front for the opposite reason: its caller is a dialog mounted per suite.
+    mutationFn: ({ suiteId, status }: { suiteId: string; status: LifecycleStatus }) =>
+      api.put<Suite>(`${base(projectId)}/suites/${suiteId}/status`, { status }),
+    meta: { handled: true },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.suites(projectId) });
+      // A case's own screen renders the folder it sits in, and the case list's suite filter reads
+      // the tree — both show a status that has just moved.
       void client.invalidateQueries({ queryKey: ['projects', projectId, 'cases'] });
     },
   });

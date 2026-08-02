@@ -48,6 +48,7 @@ export {
   useCreateSuite,
   useDeleteSuite,
   useRenameSuite,
+  useSetSuiteStatus,
   useSuiteHistory,
   useSuites,
   type SuiteInput,

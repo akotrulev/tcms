@@ -1000,6 +1000,58 @@ export interface paths {
         };
         trace?: never;
     };
+    "/projects/{projectId}/suites/{suiteId}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                suiteId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Submit, approve, withdraw, deprecate or revive a suite
+         * @description A suite's ladder is plan §6g's, over the same four `LifecycleStatus` values a case uses —
+         *     and it is the **same ladder**, evaluated by one class server-side, because §6g draws one
+         *     diagram and then lists what review *means* per artifact rather than a different set of
+         *     moves.
+         *
+         *     **Which permission a move needs is decided by the edge, not by the target:**
+         *
+         *     - `suite:manage` (Test Engineer and up) carries a suite *forward* through the states nobody
+         *       has signed off — submitting a draft for review, and withdrawing that submission again.
+         *       §6g: submitting for review "needs only edit rights".
+         *     - `suite:approve` (Lead and up) is needed to **grant** the sign-off, to **deprecate** the
+         *       suite, and to **take either back**. Rescinding a lead's approval is an approval act, and a
+         *       target-only rule would let a Test Engineer do it by asking for `DRAFT`; deprecating is the
+         *       soft form of a delete, and `suite:delete` is withheld from Test Engineer outright.
+         *
+         *     Two moves are refused with `409` because the ladder does not have them: `IN_REVIEW` is
+         *     reachable only from `DRAFT` (an approved suite that needs another look must lose its
+         *     approval first, or the trail shows it under review while also signed off), and `APPROVED`
+         *     only from `IN_REVIEW` (§6g: "the state machine has exactly one gate"). A **deprecated** suite
+         *     returns as a `DRAFT` and cannot go straight back to review or approval — the same argument
+         *     §6g makes for a clone of an approved case.
+         *
+         *     Idempotent: setting the status a suite already has answers `200` with the suite and writes
+         *     nothing — no timestamp re-stamped and no audit row, so a repeated click cannot bury the
+         *     change that actually happened.
+         *
+         *     No `If-Match`: the request names an absolute target state rather than a delta against
+         *     something the client read, so there is no lost update to protect (`PUT /plans/{planId}/status`
+         *     and `PUT /runs/{runId}/status` make the same call). The `PATCH` beside it *does* take one,
+         *     because a name typed over a stale copy really does lose the other author's words.
+         */
+        put: operations["setSuiteStatus"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/suites/{suiteId}/history": {
         parameters: {
             query?: never;
@@ -4164,6 +4216,9 @@ export interface components {
             parentId?: string | null;
             description?: string | null;
         };
+        SuiteStatusInput: {
+            status: components["schemas"]["LifecycleStatus"];
+        };
         TestCaseSummary: {
             /** Format: uuid */
             id: string;
@@ -5660,6 +5715,38 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    setSuiteStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                suiteId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SuiteStatusInput"];
+            };
+        };
+        responses: {
+            /** @description The suite, as the tree renders it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Suite"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
     deletePlan: {
         parameters: {
             query?: never;

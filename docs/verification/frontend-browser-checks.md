@@ -414,3 +414,37 @@ to make one without psql. Run the two together.
 `PlanController#onWriteRace`, and it needs two interleaved transactions — which this suite has no
 mechanism for either, so the handler is reachable in principle and unverified in practice. Recorded
 so its absence does not read as an oversight.
+
+---
+
+## §75 — the suite lifecycle: the status nothing ever wrote, and the rescind on cases
+
+**Built and NOT browser-verified.** The tenth slice in the deferred queue.
+
+**The live-only rows lead, and it is §72's inversion exactly.** On every real instance every suite
+is `DRAFT` and has been for the product's whole life, because `Suite.create` was the only writer
+`lifecycle_status` ever had. The mock's fixtures, meanwhile, have carried `APPROVED` and `IN_REVIEW`
+folders since Phase 1 — so **mock mode has been showing a signed-off suite tree the product could
+not produce**, and mock mode will look unchanged by this slice while live mode changes completely.
+
+Rows 3 and 4 are the ones that matter most: they are the client half of the defect this slice
+found, and both would have looked correct before it.
+
+| # | Flow | What must be true | Mode |
+|---|---|---|---|
+| 1 | Live: sign in as a lead, open a project's case list, and read the suite rail | **Every folder is unbadged**, because every folder is a draft — the state this slice's first save changes. `psql`: `SELECT DISTINCT lifecycle_status FROM suite` returns one row, `DRAFT`. Take the screenshot before doing anything else; it cannot be reproduced afterwards. | **live only** |
+| 2 | Kebab on a draft folder → **Submit for review** → **Approve** | The badge appears and then changes ("IN REVIEW" → "APPROVED"), the tree does not reshuffle, and `psql` shows two `audit_event` rows — `suite.submitted` then `suite.approved` — each carrying `from` and `to`. | mock + live |
+| 3 | Sign in as a **Test Engineer**, open the kebab on the folder approved in row 2 | **"Return to draft" and "Deprecate…" are greyed**, and "Execution history" is live beside them. This is the client half of the slice's defect: before §75 the same caller could take that approval back through the bulk case dialog, and nothing on screen said otherwise. | mock + live |
+| 4 | Same caller: case list → select two cases, one `DRAFT` and one `APPROVED` → bulk **Set status → Draft** → commit | The draft is reported **changed** and the approved one **skipped**, with *"Only a test lead can change a case that is already approved."* — and `changed + unchanged + skipped == total`. Before §75 both moved. | mock + live |
+| 5 | As a Test Engineer, kebab on a **draft** folder | **"Submit for review" is live** and "Deprecate…" is greyed. §6g: submitting needs only edit rights; retiring is the soft form of a delete. | mock + live |
+| 6 | As a lead: approve a folder, then open its kebab | **"Submit for review" is not offered at all** — the moves swap rather than accumulate. Offering it would be a control the server answers 409 to. | mock + live |
+| 7 | As a lead: deprecate a folder, then open its kebab | **"Restore to draft" is the only move**, and the badge is muted rather than coloured. A retired folder cannot go straight back to approved. | mock + live |
+| 8 | Force the refused move through devtools/curl: `PUT …/status` with `IN_REVIEW` on an APPROVED suite | **409**, *"Only a draft suite can be submitted for review. Return this suite to draft first."* — and the same sentence must appear in the rail's own alert, prefixed with the folder's name, if it is reached through the UI at all. | **live only** |
+| 9 | Press the same move twice quickly (Approve → Approve) | The second is a **200 with no second audit row**. `psql`: exactly one `suite.approved` row, and `updated_at` unchanged by the second press. | **live only** |
+| 10 | Approve a folder, then `psql` `suite_version` | **No new row and `current_version_no` unchanged.** A suite version is its composition; approving does not change what is in the folder. The screen looks identical either way, which is why this row is here. | **live only** |
+| 11 | Rail with ~10 folders at three depths, one badged | The badge does **not** crowd the name out — the name still ellipsizes rather than the count or badge wrapping — at the narrowest rail width and at 390 px. This is the reason drafts are unbadged at all. | mock + live |
+| 12 | Deprecate a folder that holds cases, then open the case list scoped to it | The cases are **still there and still editable**. Deprecating a folder is a label on the folder, not a soft delete of its contents — nothing in this slice cascades. | mock + live |
+
+**The row no browser can produce:** two leads moving one suite in the same instant. There is no
+`If-Match` on this endpoint by design (the target is absolute), so the race resolves to whichever
+lands second and both orders are legal moves. Recorded so its absence does not read as an oversight.

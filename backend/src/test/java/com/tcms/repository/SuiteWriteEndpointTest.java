@@ -115,6 +115,12 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
     /** Empty child of {@link #NEST_PARENT} — no cases anywhere beneath it. */
     private static final UUID NEST_CHILD = UUID.fromString("f1004000-0000-4000-8000-000000000008");
     /** Root in the sibling project, granted to nobody. */
+    /** One suite per {@link LifecycleStatus}, for the ladder tests. TS-94 … TS-97. */
+    private static final UUID DRAFTED = UUID.fromString("f1004000-0000-4000-8000-000000000010");
+    private static final UUID REVIEWING = UUID.fromString("f1004000-0000-4000-8000-000000000011");
+    private static final UUID SIGNED_OFF = UUID.fromString("f1004000-0000-4000-8000-000000000012");
+    private static final UUID RETIRED = UUID.fromString("f1004000-0000-4000-8000-000000000013");
+
     private static final UUID LOCKED_SUITE = UUID.fromString("f1004000-0000-4000-8000-000000000004");
     /** Root in the other client, deliberately keyed TS-1 like Acme's. */
     private static final UUID UMBRA_SUITE = UUID.fromString("f1004000-0000-4000-8000-000000000005");
@@ -940,8 +946,209 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
     }
 
     // =====================================================================
+    // The ladder — PUT /suites/{suiteId}/status
+    //
+    // Suites have had exactly one writer of lifecycle_status since V1 (Suite.create, writing
+    // DRAFT), so three of the four values were unreachable and every suite on every real instance
+    // has been a draft for its entire life. These tests are the first thing that moves one.
+    // =====================================================================
+
+    @Nested
+    @DisplayName("The ladder — the gate is decided by the edge, not by the target")
+    class Ladder {
+
+        @Test
+        @DisplayName("an engineer submits a draft for review — §6g: submitting needs only edit rights")
+        void engineerSubmitsForReview() throws Exception {
+            MvcResult result = putStatus(ENGINEER, ACME, ACME_BANKING, DRAFTED, "IN_REVIEW");
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(200);
+            assertThat(body(result).get("lifecycleStatus").asText()).isEqualTo("IN_REVIEW");
+            assertThat(storedStatus(ACME, DRAFTED)).isEqualTo("IN_REVIEW");
+            assertThat(auditEvents(ACME)).containsKey("suite.submitted");
+        }
+
+        @Test
+        @DisplayName("an engineer withdraws their own submission — nobody had signed anything off")
+        void engineerWithdrawsFromReview() throws Exception {
+            assertThat(putStatus(ENGINEER, ACME, ACME_BANKING, REVIEWING, "DRAFT")
+                    .getResponse().getStatus()).isEqualTo(200);
+            assertThat(storedStatus(ACME, REVIEWING)).isEqualTo("DRAFT");
+            assertThat(auditEvents(ACME)).containsKey("suite.withdrawn");
+        }
+
+        @Test
+        @DisplayName("an engineer cannot approve — suite:approve is the lead's, and it is 403")
+        void engineerCannotApprove() throws Exception {
+            assertThat(putStatus(ENGINEER, ACME, ACME_BANKING, REVIEWING, "APPROVED")
+                    .getResponse().getStatus()).isEqualTo(403);
+            assertThat(storedStatus(ACME, REVIEWING)).isEqualTo("IN_REVIEW");
+        }
+
+        @Test
+        @DisplayName("a lead approves a reviewed suite")
+        void leadApproves() throws Exception {
+            MvcResult result = putStatus(LEAD, ACME, ACME_BANKING, REVIEWING, "APPROVED");
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(200);
+            assertThat(storedStatus(ACME, REVIEWING)).isEqualTo("APPROVED");
+            assertThat(auditEvents(ACME).get("suite.approved"))
+                    .contains("TS-95", "IN_REVIEW", "APPROVED");
+        }
+
+        /**
+         * The arm a target-decides gate misses, and the whole reason
+         * {@link LifecycleLadder#permissionFor} takes both ends.
+         *
+         * <p>{@code DRAFT} is not an approval-shaped target, so a rule reading the target alone
+         * answers {@code suite:manage} — which this caller holds. The move is nonetheless the
+         * unmaking of a lead's sign-off.
+         */
+        @Test
+        @DisplayName("an engineer cannot take a lead's approval back by asking for DRAFT")
+        void engineerCannotRescindAnApproval() throws Exception {
+            assertThat(putStatus(ENGINEER, ACME, ACME_BANKING, SIGNED_OFF, "DRAFT")
+                    .getResponse().getStatus()).isEqualTo(403);
+            assertThat(storedStatus(ACME, SIGNED_OFF)).isEqualTo("APPROVED");
+        }
+
+        @Test
+        @DisplayName("a lead takes an approval back, and the trail says so was not a withdrawal")
+        void leadRescindsAnApproval() throws Exception {
+            assertThat(putStatus(LEAD, ACME, ACME_BANKING, SIGNED_OFF, "DRAFT")
+                    .getResponse().getStatus()).isEqualTo(200);
+            assertThat(auditEvents(ACME))
+                    .containsKey("suite.unapproved")
+                    .doesNotContainKey("suite.withdrawn");
+        }
+
+        @Test
+        @DisplayName("an engineer cannot deprecate — retiring is the soft form of a delete")
+        void engineerCannotDeprecate() throws Exception {
+            // suite:delete is withheld from Test Engineer outright, so leaving the retire at the
+            // edit key would route around it with a status change.
+            assertThat(putStatus(ENGINEER, ACME, ACME_BANKING, DRAFTED, "DEPRECATED")
+                    .getResponse().getStatus()).isEqualTo(403);
+            assertThat(storedStatus(ACME, DRAFTED)).isEqualTo("DRAFT");
+        }
+
+        @Test
+        @DisplayName("a lead deprecates a suite that was never approved — the alternative is a dead end")
+        void leadDeprecatesADraft() throws Exception {
+            // A folder holding cases cannot be deleted (the delete refuses a non-empty suite), so
+            // if retiring needed an approval first there would be no way out of it at all.
+            assertThat(putStatus(LEAD, ACME, ACME_BANKING, DRAFTED, "DEPRECATED")
+                    .getResponse().getStatus()).isEqualTo(200);
+            assertThat(storedStatus(ACME, DRAFTED)).isEqualTo("DEPRECATED");
+        }
+
+        @Test
+        @DisplayName("approval is reachable only from review — the one gate guards the only door")
+        void approvalOnlyFromReview() throws Exception {
+            MvcResult result = putStatus(LEAD, ACME, ACME_BANKING, DRAFTED, "APPROVED");
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(409);
+            assertThat(body(result).get("detail").asText())
+                    .contains("reviewed")
+                    .contains("suite");
+            assertThat(storedStatus(ACME, DRAFTED)).isEqualTo("DRAFT");
+        }
+
+        @Test
+        @DisplayName("review is reachable only from draft — an approved suite loses its approval first")
+        void reviewOnlyFromDraft() throws Exception {
+            MvcResult result = putStatus(LEAD, ACME, ACME_BANKING, SIGNED_OFF, "IN_REVIEW");
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(409);
+            assertThat(body(result).get("detail").asText()).contains("draft");
+            assertThat(storedStatus(ACME, SIGNED_OFF)).isEqualTo("APPROVED");
+        }
+
+        @Test
+        @DisplayName("a deprecated suite comes back as a draft, never straight to approval")
+        void aRetiredSuiteReturnsAsADraft() throws Exception {
+            MvcResult refused = putStatus(LEAD, ACME, ACME_BANKING, RETIRED, "APPROVED");
+            assertThat(refused.getResponse().getStatus()).isEqualTo(409);
+            assertThat(body(refused).get("detail").asText()).contains("deprecated");
+
+            assertThat(putStatus(LEAD, ACME, ACME_BANKING, RETIRED, "DRAFT")
+                    .getResponse().getStatus()).isEqualTo(200);
+            assertThat(auditEvents(ACME)).containsKey("suite.revived");
+        }
+
+        @Test
+        @DisplayName("setting the status a suite already has writes nothing at all")
+        void alreadyThereIsA200AndNoRow() throws Exception {
+            MvcResult result = putStatus(LEAD, ACME, ACME_BANKING, SIGNED_OFF, "APPROVED");
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(200);
+            assertThat(body(result).get("lifecycleStatus").asText()).isEqualTo("APPROVED");
+            // No audit row: a repeated click must not bury the change that actually happened.
+            assertThat(auditEvents(ACME)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a status change writes no version row — a version is composition, not a verdict")
+        void approvingWritesNoVersion() throws Exception {
+            assertThat(putStatus(LEAD, ACME, ACME_BANKING, REVIEWING, "APPROVED")
+                    .getResponse().getStatus()).isEqualTo(200);
+            assertThat(versionRowsFor(ACME, REVIEWING)).isZero();
+        }
+
+        @Test
+        @DisplayName("a status that is not a status is a field error, not a 500 from Jackson")
+        void anUnknownStatusIsAFieldError() throws Exception {
+            MvcResult result = putStatus(LEAD, ACME, ACME_BANKING, DRAFTED, "SIGNED");
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(body(result).get("errors").has("status")).isTrue();
+        }
+
+        @Test
+        @DisplayName("a viewer is refused before learning the vocabulary an unknown status would name")
+        void aViewerGetsA403NotAFieldError() throws Exception {
+            // The parse must happen before the gate (the permission is a function of the edge), so
+            // an unparseable status falls back to the LOWER of the two keys — otherwise this
+            // caller would be told what the ladder accepts.
+            assertThat(putStatus(VIEWER, ACME, ACME_BANKING, DRAFTED, "SIGNED")
+                    .getResponse().getStatus()).isEqualTo(403);
+        }
+
+        @Test
+        @DisplayName("a sibling company's member gets 404, not 403 — the id is not theirs to confirm")
+        void anOutsiderGets404() throws Exception {
+            assertThat(putStatus(OUTSIDER, UMBRA, ACME_BANKING, DRAFTED, "IN_REVIEW")
+                    .getResponse().getStatus()).isEqualTo(404);
+            assertThat(storedStatus(ACME, DRAFTED)).isEqualTo("DRAFT");
+        }
+
+        @Test
+        @DisplayName("a suite in another project of the same company is 404, not moved")
+        void aSiblingProjectsSuiteIsNotReachable() throws Exception {
+            // findLiveInProject, not findById: the latter is scoped by RLS to the COMPANY and would
+            // accept this id while every cross-company test in the suite still passed (§69).
+            assertThat(putStatus(LEAD, ACME, ACME_BANKING, LOCKED_SUITE, "IN_REVIEW")
+                    .getResponse().getStatus()).isEqualTo(404);
+            assertThat(storedStatus(ACME, LOCKED_SUITE)).isEqualTo("DRAFT");
+        }
+    }
+
+    // =====================================================================
     // helpers — HTTP
     // =====================================================================
+
+    private MvcResult putStatus(
+            UUID userId, UUID companyId, UUID projectId, UUID suiteId, String status)
+            throws Exception {
+
+        return mvc.perform(MockMvcRequestBuilders
+                        .put("/api/v1/projects/" + projectId + "/suites/" + suiteId + "/status")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, companyId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"" + status + "\"}"))
+                .andReturn();
+    }
 
     private String tokenFor(UUID userId, UUID companyId) {
         return tx.execute(status -> tokens.issue(userId, companyId, 1, false).token());
@@ -1090,6 +1297,38 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         }
     }
 
+    /**
+     * The stored status, read back rather than taken from the response.
+     *
+     * <p>A response echoing what it was sent proves the controller can serialize, not that anything
+     * was written; and the refusal assertions need the row to be <em>unchanged</em>, which no
+     * response body can show.
+     */
+    private String storedStatus(UUID companyId, UUID suiteId) throws SQLException {
+        try (Connection connection = appConnection(companyId);
+             var statement = connection.prepareStatement(
+                     "SELECT lifecycle_status FROM suite WHERE id = CAST(? AS uuid)")) {
+            statement.setString(1, suiteId.toString());
+            try (ResultSet rows = statement.executeQuery()) {
+                assertThat(rows.next()).as("suite %s is not readable in %s", suiteId, companyId)
+                        .isTrue();
+                return rows.getString(1);
+            }
+        }
+    }
+
+    private long versionRowsFor(UUID companyId, UUID suiteId) throws SQLException {
+        try (Connection connection = appConnection(companyId);
+             var statement = connection.prepareStatement(
+                     "SELECT count(*) FROM suite_version WHERE suite_id = CAST(? AS uuid)")) {
+            statement.setString(1, suiteId.toString());
+            try (ResultSet rows = statement.executeQuery()) {
+                rows.next();
+                return rows.getLong(1);
+            }
+        }
+    }
+
     private Map<String, String> auditEvents(UUID companyId) throws SQLException {
         Map<String, String> events = new LinkedHashMap<>();
         try (Connection connection = appConnection(companyId);
@@ -1198,17 +1437,32 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
             seedProjectDefaults(connection, ACME, ACME_MOBILE);
             seedProjectDefaults(connection, ACME, ACME_LOCKED);
 
-            suite(connection, PAYMENTS, ACME, ACME_BANKING, null, "TS-1", 1, "Payments", "s1");
-            suite(connection, REFUNDS, ACME, ACME_BANKING, PAYMENTS, "TS-2", 2, "Refunds", "s1.s2");
-            suite(connection, SPARE, ACME, ACME_BANKING, null, "TS-3", 3, "Spare", "s3");
-            suite(connection, NEST_PARENT, ACME, ACME_BANKING, null, "TS-92", 92, "Nest", "s92");
+            suite(connection, PAYMENTS, ACME, ACME_BANKING, null, "TS-1", 1, "Payments", "s1",
+                    "DRAFT");
+            suite(connection, REFUNDS, ACME, ACME_BANKING, PAYMENTS, "TS-2", 2, "Refunds", "s1.s2",
+                    "DRAFT");
+            suite(connection, SPARE, ACME, ACME_BANKING, null, "TS-3", 3, "Spare", "s3", "DRAFT");
+            suite(connection, NEST_PARENT, ACME, ACME_BANKING, null, "TS-92", 92, "Nest", "s92",
+                    "DRAFT");
             suite(connection, NEST_CHILD, ACME, ACME_BANKING, NEST_PARENT, "TS-93", 93,
-                    "Nest child", "s92.s93");
+                    "Nest child", "s92.s93", "DRAFT");
+
+            // One suite per status, so every edge of the ladder has a start row and no test has to
+            // move a suite twice to reach the state it is about to assert on.
+            suite(connection, DRAFTED, ACME, ACME_BANKING, null, "TS-94", 94, "Drafted", "s94",
+                    "DRAFT");
+            suite(connection, REVIEWING, ACME, ACME_BANKING, null, "TS-95", 95, "Reviewing", "s95",
+                    "IN_REVIEW");
+            suite(connection, SIGNED_OFF, ACME, ACME_BANKING, null, "TS-96", 96, "Signed off",
+                    "s96", "APPROVED");
+            suite(connection, RETIRED, ACME, ACME_BANKING, null, "TS-97", 97, "Retired", "s97",
+                    "DEPRECATED");
 
             // Same path as ACME_BANKING's PAYMENTS, in the same company — see the header.
             suite(connection, mobileSpare(), ACME, ACME_MOBILE, null, "TS-90", 90, "Mobile spare",
-                    "s1");
-            suite(connection, LOCKED_SUITE, ACME, ACME_LOCKED, null, "TS-91", 91, "Internal", "s91");
+                    "s1", "DRAFT");
+            suite(connection, LOCKED_SUITE, ACME, ACME_LOCKED, null, "TS-91", 91, "Internal", "s91",
+                    "DRAFT");
 
             // Two live cases under Refunds — at path `s1.s2`, which is INSIDE the subtree of
             // ACME_BANKING's `s1`. The sibling project's spare folder is also at `s1` and is
@@ -1230,7 +1484,8 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         try (Connection connection = appConnection(UMBRA)) {
             seedProjectDefaults(connection, UMBRA, UMBRA_BANKING);
             // TS-1 again: keys are numbered per COMPANY, so the collision is the design working.
-            suite(connection, UMBRA_SUITE, UMBRA, UMBRA_BANKING, null, "TS-1", 1, "Payments", "s1");
+            suite(connection, UMBRA_SUITE, UMBRA, UMBRA_BANKING, null, "TS-1", 1, "Payments", "s1",
+                    "DRAFT");
             try (var statement = connection.prepareStatement(
                     "UPDATE key_sequence SET next_value = 2 WHERE entity_type = 'SUITE'")) {
                 statement.executeUpdate();
@@ -1248,16 +1503,26 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         }
     }
 
+    /**
+     * Seeds a suite in a named status.
+     *
+     * <p>The status used to be hard-coded {@code 'APPROVED'} here, and that was §72's fixture
+     * defect one aggregate over: <strong>no suite on any real instance has ever been anything but
+     * {@code DRAFT}</strong>, because until §75 nothing but {@code Suite.create} wrote the column.
+     * A fixture that never sits in the state a fresh install produces hides exactly the gap the
+     * product has — so the main tree is drafted below, and the statuses a ladder test needs are
+     * asked for explicitly by the four suites that need them.
+     */
     private void suite(
             Connection connection, UUID id, UUID companyId, UUID projectId, UUID parentId,
-            String key, long keySeq, String name, String path) throws SQLException {
+            String key, long keySeq, String name, String path, String status) throws SQLException {
 
         try (var statement = connection.prepareStatement("""
                 INSERT INTO suite
                     (id, company_id, project_id, parent_id, key, key_seq, path, name,
                      position, lifecycle_status)
                 VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?,
-                        CAST(? AS ltree), ?, 0, 'APPROVED')
+                        CAST(? AS ltree), ?, 0, ?)
                 ON CONFLICT (id) DO NOTHING
                 """)) {
             statement.setString(1, id.toString());
@@ -1268,6 +1533,7 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
             statement.setLong(6, keySeq);
             statement.setString(7, path);
             statement.setString(8, name);
+            statement.setString(9, status);
             statement.executeUpdate();
         }
     }

@@ -513,3 +513,73 @@ values were unreachable and `closed_at` was a column nothing filled. `plan:edit`
 | **Check** | migration-in-place |
 | **Mutation** | — |
 | **Must show** | **Nothing is owed. §74 adds no migration** — `entry_criteria`, `exit_criteria` and the whole `test_plan_version` table have been in `V1` from the beginning; the table gets its first entity and its first row, and `@Version` on `lock_version` changes no DDL. **`V22` is still free.** |
+
+---
+
+## §75 — the suite lifecycle, and the case gate that was keyed on the target
+
+**Six mutations run (four backend, two frontend), three queued.**
+
+### Run inline
+
+| | |
+|---|---|
+| **File** | `repository/LifecycleLadder.java`, `permissionFor` |
+| **Mutation** | drop the `unmaking` arm — i.e. **restore the target-keyed rule this slice exists to correct** |
+| **Result** | ✅ **RUN — reddens exactly 2 out of 112**, and the pair is the whole point: *an engineer cannot take a lead's approval back by asking for DRAFT* (suite) and *an engineer cannot pull an APPROVED case back — the row is skipped, not moved* (case). **The case one is the pre-existing defect, reproduced.** Everything else in both files stays green, which is why the weaker rule shipped in §62 and survived §73 naming it. |
+
+| | |
+|---|---|
+| **File** | `repository/SuiteStatusService.java`, the `writeGrantedOnTarget` permission lambda |
+| **Mutation** | replace `LifecycleLadder.permissionFor(...)` with the constant `suite:manage` |
+| **Result** | ✅ **RUN — reddens exactly 3**: *an engineer cannot approve*, *…cannot take a lead's approval back*, *…cannot deprecate*. The gate **discriminates**, unlike §71's: `V3` withholds `suite:approve` from Test Engineer while granting `suite:manage`, so the persona that tells the two keys apart exists. |
+
+| | |
+|---|---|
+| **File** | `repository/LifecycleLadder.java`, `decide` |
+| **Mutation** | make `IN_REVIEW` reachable from every state |
+| **Result** | ✅ **RUN — reddens exactly 1**: *review is reachable only from draft — an approved suite loses its approval first*. Low, and correctly so: this rule is new to the *case* side as well, but no case test authors an `APPROVED → IN_REVIEW` bulk move any more (the test that did was rewritten, since its own recorded reasoning was the thing §75 reversed). |
+
+| | |
+|---|---|
+| **File** | `repository/CaseBulkService.java`, `evaluateStatus` |
+| **Mutation** | delete the per-row `!approver && APPROVE_CASE.equals(permissionFor(...))` skip |
+| **Result** | ✅ **RUN — reddens exactly 2**: *an engineer cannot pull an APPROVED case back* and *an engineer cannot deprecate*. The request-level gate stays green throughout, which is the evidence that the floor genuinely could not see these edges. |
+
+| | |
+|---|---|
+| **File** | `frontend/src/features/cases/SuiteTree.tsx`, `suiteMoves` |
+| **Mutation** | put `APPROVED → DRAFT` on `suite:manage` — the client's copy of the same defect |
+| **Result** | ✅ **RUN — reddens exactly 1**. Worth having because the client's copy is a *disabling hint* the compiler cannot check: both keys are strings, so a wrong row is a control that enables and then 403s. |
+
+| | |
+|---|---|
+| **File** | `frontend/src/features/cases/SuiteTree.tsx`, the node badge |
+| **Mutation** | render the status badge unconditionally |
+| **Result** | ✅ **RUN — reddens exactly 1**. Run because all 17 of that file's tests passed on the first attempt, which §66 established is the moment to distrust them. |
+
+### Queued — not yet run
+
+| | |
+|---|---|
+| **File** | `repository/LifecycleLadder.java`, `decide` |
+| **Mutation** | let `DEPRECATED → APPROVED` through instead of refusing it |
+| **Must redden** | **exactly 1** — *a deprecated suite comes back as a draft, never straight to approval*. On the **case** side this should redden **0**, because no bulk test moves a deprecated case at all. If it does redden 0 there, the honest fix is a case-side test, not a wider rule: the mock's `lifecycleLadder.ts` carries the same arm and nothing on that side would catch a divergence either. |
+
+| | |
+|---|---|
+| **File** | `repository/CaseBulkService.java`, `run` |
+| **Mutation** | resolve `approver` as `true` unconditionally rather than asking `holds(...)` |
+| **Must redden** | **the same 2 as the fourth mutation above** — and the reason to run it separately is that it tests a *different* line. The fourth proves the check is consulted; this proves the fact it is consulted with is actually resolved from the caller, rather than from a constant that happens to be right for the lead persona. |
+
+| | |
+|---|---|
+| **File** | `repository/SuiteStatusService.java`, `move` |
+| **Mutation** | make the `Decision.Unchanged` arm fall through to `move(...)` |
+| **Must redden** | **exactly 1** — *setting the status a suite already has writes nothing at all*, on the audit assertion rather than on the response, since the body is identical either way. That is the shape of the whole row: the screen cannot tell these two implementations apart. |
+
+| | |
+|---|---|
+| **Check** | migration-in-place |
+| **Mutation** | — |
+| **Must show** | **Nothing is owed. §75 adds no migration** — `suite.lifecycle_status` and its four-value check constraint have been in `V1` from the beginning; this slice is the first thing to write to the column. **`V22` is still free**, and the reviewer-apparatus slice that follows will need it (`project` has no `settings` column for §6g's per-project opt-in). |

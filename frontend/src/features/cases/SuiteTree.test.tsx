@@ -1,4 +1,5 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
 import type { Suite } from '../../api/types'
@@ -183,5 +184,179 @@ describe('SuiteTree — sibling order', () => {
     expect(names[0]).toMatch(/^Alpha/)
     expect(names[1]).toMatch(/^Mango/)
     expect(names[2]).toMatch(/^Zebra/)
+  })
+})
+
+/**
+ * The ladder in the rail — §6g's moves, and the three that a target-decides reading gets wrong.
+ *
+ * The value of these tests is not that the menu renders. It is that **the approve-keyed edges are
+ * approve-keyed**: `suiteMoves` is the client's copy of `LifecycleLadder.permissionFor`, so a
+ * wrong row here is a control that enables for a Test Engineer and 403s when pressed — §31's
+ * failure, and invisible to `tsc` because both keys are strings.
+ */
+describe('SuiteTree — the status ladder', () => {
+  const withPermissions = (keys: string[]) => {
+    vi.spyOn(api, 'get').mockResolvedValue(heldPermissions(keys, {}, PROJECT) as never)
+  }
+
+  /**
+   * Wait until the permission answer has landed — §66's barrier, and it is not optional here.
+   *
+   * `useCan` is fail-closed while pending, so EVERY move item is disabled on the first render.
+   * `expect(...).toBeDisabled()` is satisfied immediately by that pending state, and the
+   * assertion would then hold against a component with no gate in it at all. "Execution history"
+   * is the barrier because it is the one item this file's fixtures always allow — it is ungated.
+   */
+  const menuFor = async (name: string) => {
+    const user = userEvent.setup()
+    const item = screen.getByRole('treeitem', { name: new RegExp(`^${name}\\b`) })
+    await user.click(within(item).getAllByTestId('SuiteTree.ItemMenu')[0]!)
+    await waitFor(() => expect(screen.getByTestId('SuiteTree.Menu.History')).toBeInTheDocument())
+    return user
+  }
+
+  const at = (status: Suite['lifecycleStatus'], name = 'Payments'): Suite[] => [
+    { ...suite('1', name, null, 2), lifecycleStatus: status },
+  ]
+
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('offers a draft exactly the two edges it has, and no others', async () => {
+    withPermissions(['case:read', 'suite:manage', 'suite:approve'])
+    renderTree(at('DRAFT'))
+    await menuFor('Payments')
+
+    expect(screen.getByTestId('SuiteTree.Menu.Move.IN_REVIEW')).toBeInTheDocument()
+    expect(screen.getByTestId('SuiteTree.Menu.Move.DEPRECATED')).toBeInTheDocument()
+    // The moves SWAP rather than accumulate: approving a draft is a 409, so it is not offered.
+    expect(screen.queryByTestId('SuiteTree.Menu.Move.APPROVED')).not.toBeInTheDocument()
+  })
+
+  it('offers a deprecated suite only the way back to draft', async () => {
+    withPermissions(['case:read', 'suite:manage', 'suite:approve'])
+    renderTree(at('DEPRECATED'))
+    await menuFor('Payments')
+
+    expect(screen.getByTestId('SuiteTree.Menu.Move.DRAFT')).toBeInTheDocument()
+    expect(screen.queryByTestId('SuiteTree.Menu.Move.APPROVED')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('SuiteTree.Menu.Move.IN_REVIEW')).not.toBeInTheDocument()
+  })
+
+  it('lets an engineer submit a draft for review — that edge needs only suite:manage', async () => {
+    withPermissions(['case:read', 'suite:manage'])
+    renderTree(at('DRAFT'))
+    await menuFor('Payments')
+
+    await waitFor(() =>
+      expect(screen.getByTestId('SuiteTree.Menu.Move.IN_REVIEW')).not.toHaveAttribute(
+        'aria-disabled',
+        'true',
+      ),
+    )
+  })
+
+  /**
+   * THE assertion of this slice on the client, and the one the old target-decides rule fails.
+   *
+   * `DRAFT` is not an approval-shaped target, so a rule reading the target alone leaves this at
+   * `suite:manage` — which this caller holds. The move is the unmaking of a lead's sign-off, and
+   * the item must be dead in this caller's hands.
+   */
+  it('greys "Return to draft" on an APPROVED suite for an engineer who cannot approve', async () => {
+    withPermissions(['case:read', 'suite:manage'])
+    renderTree(at('APPROVED'))
+    await menuFor('Payments')
+
+    // The barrier first: without it this passes against a component that never gates anything,
+    // because every item is disabled while the permission answer is still in flight.
+    await waitFor(() =>
+      expect(screen.getByTestId('SuiteTree.Menu.Move.DRAFT')).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      ),
+    )
+    expect(screen.getByTestId('SuiteTree.Menu.Move.DEPRECATED')).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+  })
+
+  it('lets a lead take an approval back', async () => {
+    withPermissions(['case:read', 'suite:manage', 'suite:approve'])
+    renderTree(at('APPROVED'))
+    await menuFor('Payments')
+
+    await waitFor(() =>
+      expect(screen.getByTestId('SuiteTree.Menu.Move.DRAFT')).not.toHaveAttribute(
+        'aria-disabled',
+        'true',
+      ),
+    )
+  })
+
+  it('sends the target status as an absolute PUT, with no If-Match', async () => {
+    withPermissions(['case:read', 'suite:manage'])
+    const put = vi.spyOn(api, 'put').mockResolvedValue({} as never)
+    renderTree(at('DRAFT'))
+    const user = await menuFor('Payments')
+
+    await waitFor(() =>
+      expect(screen.getByTestId('SuiteTree.Menu.Move.IN_REVIEW')).not.toHaveAttribute(
+        'aria-disabled',
+        'true',
+      ),
+    )
+    await user.click(screen.getByTestId('SuiteTree.Menu.Move.IN_REVIEW'))
+
+    await waitFor(() => expect(put).toHaveBeenCalled())
+    const [path, body] = put.mock.calls[0]!
+    expect(path).toBe(`/projects/${PROJECT}/suites/1/status`)
+    expect(body).toEqual({ status: 'IN_REVIEW' })
+    // A third argument would be headers — and `If-Match` here would be the divergence §74 found
+    // on the plan editor, in reverse: an absolute target has no stale read to protect.
+    expect(put.mock.calls[0]![2]).toBeUndefined()
+  })
+
+  it('renders the refusal in the rail, naming the folder it is about', async () => {
+    withPermissions(['case:read', 'suite:manage'])
+    vi.spyOn(api, 'put').mockRejectedValue(
+      Object.assign(new Error('conflict'), {
+        status: 409,
+        problem: {
+          title: 'Status change refused',
+          detail: 'Only a draft suite can be submitted for review. Return this suite to draft first.',
+        },
+      }),
+    )
+    renderTree(at('DRAFT'))
+    const user = await menuFor('Payments')
+
+    await waitFor(() =>
+      expect(screen.getByTestId('SuiteTree.Menu.Move.IN_REVIEW')).not.toHaveAttribute(
+        'aria-disabled',
+        'true',
+      ),
+    )
+    await user.click(screen.getByTestId('SuiteTree.Menu.Move.IN_REVIEW'))
+
+    // The menu is closed by the time the server answers, so the sentence has to land somewhere
+    // that survives it — and it names the folder, because a rail of thirty shows no other clue.
+    const alert = await screen.findByTestId('SuiteTree.StatusError')
+    expect(alert).toHaveTextContent(/Payments:/)
+  })
+
+  it('badges a folder that is not a draft, and leaves a draft unbadged', async () => {
+    withPermissions(['case:read'])
+    const { unmount } = renderTree(at('APPROVED'))
+    expect(screen.getByTestId('SuiteTree.Item.Status')).toHaveTextContent('Approved')
+    unmount()
+
+    // DRAFT is where every folder starts and where most stay; a badge on all of them costs the
+    // width the name needs and says nothing.
+    renderTree(at('DRAFT'))
+    expect(screen.queryByTestId('SuiteTree.Item.Status')).not.toBeInTheDocument()
   })
 })

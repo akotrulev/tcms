@@ -517,6 +517,15 @@ export const suites: Suite[] = [
   { id: uid(6, 'q'), key: 'TS-6', parentId: uid(5, 'q'), name: 'Cart', description: null, path: 'Checkout.Cart', caseCount: 9, lifecycleStatus: 'DRAFT', conditions: [], lockVersion: 1 },
   { id: uid(7, 'q'), key: 'TS-7', parentId: null, name: 'Settlement', description: 'Nightly settlement and reconciliation', path: 'Settlement', caseCount: 7, lifecycleStatus: 'APPROVED', conditions: [], lockVersion: 1 },
   { id: uid(8, 'q'), key: 'TS-8', parentId: null, name: 'Unmatched automation', description: 'Quarantine for CI results with no matching case', path: 'Quarantine', caseCount: 3, lifecycleStatus: 'DRAFT', conditions: [], lockVersion: 1 },
+  // The only DEPRECATED folder, and it is here so the one edge that leaves that state — "Restore
+  // to draft" — can be driven in mock mode at all. §68's retired-classification-value argument:
+  // a state no fixture sits in is a state whose only transition is untestable without a backend.
+  //
+  // The mix above is worth reading in the other direction too. These fixtures have carried
+  // APPROVED and IN_REVIEW folders since Phase 1, while `Suite.create` was the only writer
+  // `lifecycle_status` had — so mock mode has been showing a signed-off suite tree that the
+  // product could not produce on any real instance. §74's exit criteria, one aggregate over.
+  { id: uid(9, 'q'), key: 'TS-9', parentId: null, name: 'Legacy card flows', description: 'Superseded by Payments; kept for the audit trail', path: 'Legacy', caseCount: 0, lifecycleStatus: 'DEPRECATED', conditions: [], lockVersion: 2 },
 ];
 
 // ---------------------------------------------------------------- conditions ----

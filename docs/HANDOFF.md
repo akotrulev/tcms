@@ -1,6 +1,42 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-02 (latest section: **§74, the plan editor** — **three things had never been
+**Date:** 2026-08-02 (latest section: **§75, the suite lifecycle** — `suite.lifecycle_status` had
+**exactly one writer**, `Suite.create` writing `DRAFT`, so three of four values were unreachable and
+**every suite on every real instance has been a draft for its entire life**; `Suite.applyEdit`'s own
+javadoc named the reason its mutator was absent and, by naming it, named this slice. §72's and §73's
+finding one aggregate over. **§74 named the reviewer apparatus as next and this is deliberately not
+that** — §28's rule applied, re-deriving from the code found §6g's ladder has *three* subject types
+and the suite's had never been built, which is a better place to start the reviewer half from than
+a `V22` and three tables. **The ladder is ONE ladder**: `LifecycleStatus` is the status of a suite
+*or* a case, `V1` spells the identical constraint on both tables, so `LifecycleLadder` is read by
+both writers rather than maintained twice (§58 E1); the *plan's* is deliberately not folded in,
+because `ACTIVE`/`CLOSED` are an execution phase these four do not have. **And writing the second
+consumer is what exposed the first one's defect.** `PlanLifecycle`'s header named
+`BulkOperations.permission` as the weaker target-keyed shape when §73 derived the edge rule — and
+then §73 fixed only plans. On a case it was **live**: `case:approve` was asked only for a move
+*into* `APPROVED`, so a Test Engineer could select two hundred approved cases, ask for `DRAFT`, and
+**rescind a lead's sign-off with the permission they use every day**, silently, through a dialog
+built for that volume. **Leaving an approval is an approval act too** — three acts cost the approve
+key (granting the sign-off, retiring, and taking either back), and the fix is **per row**, because
+one end of every edge is the row's stored status and a filtered selection mixes statuses; raising
+the floor instead would refuse an engineer submitting their own drafts, which §6g says needs only
+edit rights. **The mutation is the proof**: dropping the unmaking arm reddens **exactly 2 out of
+112**, one per aggregate — which is both the evidence that the two ladders are genuinely one and
+the evidence that the case half was not hypothetical. **Three case transitions changed and each
+reversed something recorded**: `APPROVED → IN_REVIEW` no longer exists (the test asserting it
+justified itself in a comment that was wrong twice over), `DEPRECATED` returns only to `DRAFT`
+(§6g's clone rule — approval attaches to reviewed content by a named person), and deprecating now
+costs the approve key because retiring is the soft form of a delete that Test Engineer is withheld
+from outright; the `OWN`-qualified refinement is named and not built. **The fixture finding runs
+both ways at once**: the backend fixture hard-coded every seeded suite `APPROVED` while no real
+suite has ever been anything but `DRAFT` (§72's rule, applied to a test fixture), *and* the mock's
+fixtures have carried approved folders since Phase 1 — so **mock mode has been showing a signed-off
+tree the product could not produce**, which is §74's exit criteria one aggregate over. A status
+change writes **no** `suite_version` row (composition, not a verdict — §73's call); the read-back
+helper moved to `SuiteService.viewOf` before a fourth `CaseRenderer`-style copy could exist. **Six
+mutations run, three queued** — four backend (**2 / 3 / 1 / 2**) and two frontend, the latter not
+optional because all 17 of that file's tests passed first time. **No migration; `V22` is still
+free**, and the reviewer slice will need it. Before that: **§74, the plan editor** — **three things had never been
 written by anything and all three are in one aggregate**: `entry_criteria` and `exit_criteria`, so
 `PlanCriteria.evaluate` and the exit-criteria panel §46 built above it have **had nothing to evaluate
 on any real instance for their entire lives**; `test_plan_version`, the last of §6j's four versioned
@@ -603,8 +639,11 @@ de-conflicted".)
 > §52's clipped tables, §64's contradictory messages. Deferring does not make those less likely; it
 > makes them arrive **later and in a batch**. **Until a queue is run, the slices in it are built and
 > unverified** — say so, rather than calling them done. §65 is the first, §66 the second,
-> §67 the third, §68 the fourth, §69 the fifth, §71 the sixth, §72 the seventh, §73 the eighth;
-> **§74 is the ninth, and its live-only rows lead for a NEW reason** — the mock's fixtures have
+> §67 the third, §68 the fourth, §69 the fifth, §71 the sixth, §72 the seventh, §73 the eighth,
+> §74 the ninth; **§75 is the tenth, and its live-only rows lead for §72's reason exactly** — every
+> suite on a real instance is a draft and always has been, while the mock's fixtures have shipped
+> approved folders since Phase 1, so mock mode will look unchanged by the slice and live mode
+> changes completely. **§74's live-only rows lead for a NEW reason** — the mock's fixtures have
 > carried hand-written exit criteria since Phase 1 while the columns had no writer at all, so **mock
 > mode has been showing a feature the product did not have**. That is §52's "mock agrees with
 > itself" from the opposite direction. §72's rows lead because its
@@ -796,3 +835,4 @@ See [`docs/plans/2026-07-31-parallel-execution-rework.md`](plans/2026-07-31-para
 | [§72](handoff/72-the-run-lifecycle.md) | The run lifecycle — the status nothing ever wrote, and the freeze §67 deferred |
 | [§73](handoff/73-the-plan-lifecycle.md) | The plan lifecycle — the ladder nothing could climb, and the gate decided by the edge |
 | [§74](handoff/74-the-plan-editor.md) | The plan editor — the gates nothing could author, and the optimistic lock that could not fail |
+| [§75](handoff/75-the-suite-lifecycle.md) | The suite lifecycle — the last status nothing ever wrote, and the rescind §73 left on cases |
