@@ -308,3 +308,38 @@ to that array in `src/mocks/fixtures/core.ts` (the file says so at the point of 
 - **A sibling company's account offered as a team member.** The picker only lists this company's
   people, so the refusal it exists for is unreachable from the UI. That one is asserted at the
   server (`TeamEndpointTest`, "a SIBLING COMPANY'S user is refused — 404, and no row is written").
+
+---
+
+## §72 — the run lifecycle: starting, ending, reopening, and the freeze
+
+**Built and NOT browser-verified.** The seventh slice in the deferred queue.
+
+**The live-only rows come first, and for a sharper reason than §71's.** `test_run.status` had no
+writer at all, so on every real instance **every run has always been `NOT_STARTED`** with a null
+`started_at` — the state mock mode almost never shows, because its fixtures ship runs that are
+already `IN_PROGRESS`. Row 1 is therefore about a state live mode has *only* ever been in and mock
+mode has *never* been in, which is the exact inverse of §71's asymmetry and just as invisible.
+
+**The mock persona can drive most of this.** `run:close` is in the mock's granted set, so rows 4–11
+work in mock mode as written; row 3 needs a caller *without* it, which the frontend test covers and
+a browser pass can reach by removing `'run:close'` from `src/mocks/fixtures/core.ts`.
+
+| # | Flow | What must be true | Mode |
+|---|---|---|---|
+| 1 | Live: create a run → open it | Header chip reads **"Not started"** and the summary "Not started yet". Then record one result → the chip becomes **"In progress"** *without a reload of the run list*, and `psql` shows `status='IN_PROGRESS'` with `started_at` **equal to that execution's `executed_at`**. **This is the slice** — before it, that chip never changed for the life of the run. | **live only** |
+| 2 | Live: the run list after row 1 | The row's status chip is coloured, not the grey fall-through. `NOT_STARTED` was **missing from the colour map** and `PLANNED` — not a run status — was in it, so every real run rendered grey. | **live only** |
+| 3 | Sign in as a caller without `run:close` (a Test Engineer) → open a run | Complete and Abort are **disabled with a tooltip**, and recording a result on the same screen still works. Not hidden (§31). | mock + live |
+| 4 | Open a run with no results → Complete run | The button is **disabled**, tooltip: *"Nothing has been recorded in this run yet. Abort it instead."* Abort beside it is enabled. | mock + live |
+| 5 | Record one result, then Complete run | 200; chip → "Completed"; the Complete/Abort pair is **replaced by Reopen**, not joined by it. | mock + live |
+| 6 | On the completed run, open an execution | The four verdict buttons are **disabled**, and the panel shows *"This run has ended, so its results can no longer change."* The Attach button and every Remove are disabled with the same reason; **the attachments themselves are still listed and still open**. | mock + live |
+| 7 | Live: try the write anyway (devtools, or a second tab opened before the close) | **409** with *"This run has ended…"* — not 403, not 500. The point is that the freeze is the server's, and the disabled controls are a courtesy. | **live only** |
+| 8 | Reopen run → record a result | The chip returns to "In progress", `completed_at` is **null** again in `psql`, `started_at` is **unchanged**, and the result saves. | mock + live |
+| 9 | Abort a run that was never started, then Reopen it | It returns to **"Not started"**, not "In progress" — the client asked for `IN_PROGRESS` and the server normalized. `started_at` still null. | mock + live |
+| 10 | Complete a run, then Complete it again | 200, no error, and `psql` shows `completed_at` **unchanged** and **one** `run.closed` audit row. | **live only** (the audit half) |
+| 11 | Complete a run, then try Abort via a stale tab | 409 *"Reopen it before recording a different outcome."* | mock + live |
+
+**The row no browser can produce:** two testers recording the last result and closing the run in the
+same instant. There is no `If-Match` on the status endpoint by design (the target state is absolute),
+so the race resolves to "the close wins and the result 409s" or the reverse, and both are correct.
+Recorded so nobody reads its absence as an oversight.

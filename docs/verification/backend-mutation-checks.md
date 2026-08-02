@@ -338,3 +338,58 @@ observable and the repair is to add that persona to `TeamEndpointTest.Gate`, not
 seed. The frontend carries the only test that can tell the two keys apart today
 (`TeamsPage.test.tsx`, "refuses all four to a caller who administers members but not teams"),
 because a test can mock a permission set the seed cannot produce.
+
+---
+
+## §72 — the run lifecycle
+
+**Four mutations were run inline** and are recorded here as results rather than as work owed —
+the slice's central claims are all gate-or-state claims, and a test suite that passes first time
+over them is §66's warning, not evidence.
+
+| | |
+|---|---|
+| **File** | `execution/RunStatusService.java` |
+| **Mutation** | `CLOSE_RUN = "run:close"` → `"result:submit"` |
+| **Result** | **RUN — reddens exactly 1**: *a Test Engineer may NOT end a run, and the run is untouched*. |
+| **Why it is worth more than §71's** | This is the mutation §71 **could not write**. `V3` grants `run:close` to Lead and up and withholds it from Test Engineer while granting them `run:execute` and `result:submit`, so the key really is distinguishable by a persona the suite can build — where `company:teams` and `company:members` go to exactly the same roles and the equivalent swap reddens nothing. |
+
+| | |
+|---|---|
+| **File** | `execution/ExecutionService.java`, `apply` |
+| **Mutation** | delete the `run.isClosed()` arm |
+| **Result** | **RUN — reddens exactly 2**: the closed-run refusal, and *reopening it lets the result through*. The second is the one that matters: it is what separates "the freeze works" from "this route is broken". |
+
+| | |
+|---|---|
+| **File** | `execution/ExecutionService.java`, `apply` |
+| **Mutation** | never call `run.begin(...)` |
+| **Result** | **RUN — reddens exactly 2**: the first result starting the run, and the second result not re-starting it. |
+
+| | |
+|---|---|
+| **File** | `execution/EvidenceService.java`, `remove` |
+| **Mutation** | drop the freeze from the **delete** path only, keeping it on attach |
+| **Result** | **RUN — reddens exactly 1**: *the AUTHOR cannot delete their own evidence once the run is closed*. The half-applied fix is the realistic mistake here — §67's whole argument was that a rule enforced on one of two paths reads as a bug on the other — so this is the mutation that proves both halves are held. |
+
+### Queued — not yet run
+
+| | |
+|---|---|
+| **File** | `execution/TestRun.java`, `applyStatus` |
+| **Mutation** | keep `completedAt` on a reopen (`if (RunLifecycle.isClosed(target)) completedAt = now;` — set, never clear) |
+| **Scope** | `--tests 'com.tcms.execution.ExecutionEndpointTest'` |
+| **Must redden** | **exactly 1** — *reopening a completed run clears completedAt and keeps startedAt*. A live run carrying an end timestamp is §42's defect from the other side, and every duration the product ever computes reads that column. |
+
+| | |
+|---|---|
+| **File** | `execution/RunLifecycle.java`, `decide` |
+| **Mutation** | return `new Decision.Move(requested)` without normalizing the two live spellings |
+| **Scope** | `--tests 'com.tcms.execution.ExecutionEndpointTest'` |
+| **Must redden** | **exactly 1** — *reopening a run that never started returns it to NOT_STARTED, whatever was asked*. The row it produces (`IN_PROGRESS` with a null `started_at`) is one no other check in the suite forbids. |
+
+| | |
+|---|---|
+| **Check** | migration-in-place |
+| **Mutation** | — |
+| **Must show** | **Nothing is owed. §72 adds no migration** — `test_run.status`, `started_at`, `completed_at` and `updated_by` have all been in `V1` from the beginning; `updated_by` is merely *mapped* for the first time. **`V22` is still free.** Recorded rather than omitted, because an absent row in this file reads as a check nobody thought about. |
