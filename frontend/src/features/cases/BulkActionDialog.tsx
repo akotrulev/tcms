@@ -23,8 +23,8 @@ import type {
   LifecycleStatus,
 } from '../../api/types';
 import { ApiError } from '../../api/client';
+import { useCan } from '../../auth/useCan';
 import { Identifier } from '../../components/Identifier';
-import { PermissionGate } from '../../components/PermissionGate';
 import { automationLabels, lifecycleLabels } from '../../lib/labels';
 import {
   useBulkCases,
@@ -139,6 +139,28 @@ export function BulkActionDialog({
   const suites = useSuites(projectId);
   const members = useProjectMembers(projectId, action === 'SET_OWNER');
   const bulk = useBulkCases(projectId);
+
+  /**
+   * The approve verdict, read here rather than through `PermissionGate`.
+   *
+   * **`PermissionGate` cannot be used inside a `Select`, and the way it fails is silent.** MUI's
+   * `Select` clones its *direct* children to inject `role="option"`, `data-value`, `aria-selected`
+   * and the handler that actually selects the value. A `MenuItem` wrapped in anything — the gate's
+   * render prop, its denied-branch tooltip span — is invisible to that pass, so it renders as an
+   * inert `role="menuitem"` with no `data-value`: present, clickable-looking, and **impossible to
+   * choose**. A live pass found exactly that, with the option unselectable for a Company Admin who
+   * holds the permission, while the component test went green because it looked the item up by
+   * `data-testid` and asked whether it was disabled — and an element MUI never processed carries no
+   * `aria-disabled` either, so "not disabled" and "not an option at all" read identically.
+   *
+   * So the verdict is computed in the body and passed as a plain `disabled` prop, and the reason is
+   * rendered *inside* the item rather than in a tooltip wrapper around it. `PermissionGate` remains
+   * right everywhere it wraps a button or a bare `Menu` item; a `Select`'s children are the one
+   * place a wrapper changes what the child *is*.
+   */
+  const gate = useCan(projectId);
+  const mayApprove = gate.can('case:approve');
+  const approveReason = gate.reason('case:approve');
 
   // Changing the action or its argument invalidates any preview taken against the previous
   // one — committing a preview that describes a different operation is the bug this prevents.
@@ -301,32 +323,23 @@ export function BulkActionDialog({
                 data-testid={`${TestIdPrefix}.Field.LifecycleStatus`}
               >
                 {(Object.entries(lifecycleLabels) as [LifecycleStatus, string][]).map(
-                  ([key, label]) =>
-                    // Only APPROVED is gated. Wrapping every option would put a permission check
-                    // around seven values the server never refuses, and the tooltip wrapper inside
-                    // a MenuList needs the `block` anchor — see PermissionGate.
-                    key === 'APPROVED' ? (
-                      <PermissionGate
-                        key={key}
-                        projectId={projectId}
-                        permission="case:approve"
-                        wrapper="block"
-                      >
-                        {({ allowed }) => (
-                          <MenuItem
-                            value={key}
-                            disabled={!allowed}
-                            data-testid={`${TestIdPrefix}.Status.APPROVED`}
-                          >
-                            {label}
-                          </MenuItem>
-                        )}
-                      </PermissionGate>
-                    ) : (
-                      <MenuItem key={key} value={key}>
-                        {label}
-                      </MenuItem>
-                    ),
+                  ([key, label]) => (
+                    <MenuItem
+                      key={key}
+                      value={key}
+                      // Only APPROVED is gated: the server refuses that one value and accepts the
+                      // other three from anyone holding `case:edit`.
+                      disabled={key === 'APPROVED' && !mayApprove}
+                      data-testid={`${TestIdPrefix}.Status.${key}`}
+                    >
+                      {label}
+                      {key === 'APPROVED' && !mayApprove && (
+                        <Typography variant="caption" sx={{ ml: 1, color: 'text.secondary' }}>
+                          — {approveReason ?? 'not yours to grant'}
+                        </Typography>
+                      )}
+                    </MenuItem>
+                  ),
                 )}
               </Select>
             </Field>

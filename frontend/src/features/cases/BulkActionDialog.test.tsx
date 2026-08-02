@@ -5,6 +5,7 @@ import { ApiError, api } from '../../api/client'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { BulkActionDialog } from './BulkActionDialog'
+import { lifecycleLabels } from '../../lib/labels'
 
 /**
  * Bulk edits — preview-then-commit, and the one option in the dialog that is a permission gate.
@@ -83,26 +84,58 @@ describe('BulkActionDialog', () => {
     it('disables "Approved" for a caller holding case:edit but not case:approve', async () => {
       // THE test of this file. A Test Engineer holds case:edit and every other status is theirs to
       // set; approval is the one the server refuses, so it is the one option that greys out.
+      //
+      // Asserted through `role="option"`, NOT through the testid, and that is the whole lesson of
+      // this file's first live pass. MUI's Select clones its DIRECT children to inject the option
+      // role and the handler that selects the value, so a MenuItem wrapped in anything renders as
+      // an inert `role="menuitem"` that cannot be chosen at all. Looked up by testid, that broken
+      // item is findable and carries no `aria-disabled` — so the disabled assertion below passed
+      // and the enabled one below it passed too, on an option nobody could select.
       renderDialog()
       await waitFor(() => expect(api.get).toHaveBeenCalled())
 
       await openSelect('Cases.BulkDialog.Field.LifecycleStatus')
 
-      const approved = await screen.findByTestId('Cases.BulkDialog.Status.APPROVED')
+      const approved = await screen.findByRole('option', { name: /^Approved/ })
       expect(approved).toHaveAttribute('aria-disabled', 'true')
     })
 
-    it('enables "Approved" for a caller holding case:approve', async () => {
-      // The other direction, and it is not ceremony: a gate that disables the option for EVERYBODY
-      // passes the test above, and would make approval unreachable in the product entirely.
+    it('offers "Approved" as a SELECTABLE option to a caller holding case:approve', async () => {
+      // The other direction, and it is not ceremony twice over: a gate that disables the option for
+      // everybody passes the test above, and an option MUI never processed is unselectable for
+      // everybody while looking present. So this asserts the value actually lands in the payload.
+      mockReads(['case:edit', 'case:approve'])
+      const post = vi.spyOn(api, 'post').mockResolvedValue(previewResult as never)
+      renderDialog()
+      await waitFor(() => expect(api.get).toHaveBeenCalled())
+
+      await openSelect('Cases.BulkDialog.Field.LifecycleStatus')
+      const approved = await screen.findByRole('option', { name: /^Approved/ })
+      expect(approved).not.toHaveAttribute('aria-disabled', 'true')
+
+      await userEvent.click(approved)
+      await userEvent.click(screen.getByTestId('Cases.BulkDialog.Preview'))
+
+      await waitFor(() => expect(post).toHaveBeenCalled())
+      expect(post.mock.calls[0][1]).toMatchObject({
+        payload: { lifecycleStatus: 'APPROVED' },
+      })
+    })
+
+    it('renders all four statuses as options — none is lost to a wrapper', async () => {
+      // The structural check, derived from the label catalogue rather than a hand-written list, so
+      // a fifth lifecycle status is covered without anyone remembering this test exists.
       mockReads(['case:edit', 'case:approve'])
       renderDialog()
       await waitFor(() => expect(api.get).toHaveBeenCalled())
 
       await openSelect('Cases.BulkDialog.Field.LifecycleStatus')
 
-      const approved = await screen.findByTestId('Cases.BulkDialog.Status.APPROVED')
-      expect(approved).not.toHaveAttribute('aria-disabled', 'true')
+      await waitFor(() =>
+        expect(screen.getAllByRole('option')).toHaveLength(
+          Object.keys(lifecycleLabels).length,
+        ),
+      )
     })
 
     it('leaves the other three statuses enabled for an engineer', async () => {
