@@ -282,6 +282,10 @@ The rules that bite hardest:
   database**. Testcontainers cannot see this — it migrates a fresh container every time.
 - **Choose lanes by Modulith module, not by a "Next"-list order.** The boundaries are already
   enforced by ArchUnit, so the seam is machine-checked rather than hoped for.
+- **One cache holder per agent type.** `docs/agent-context/*.md` is refreshed serially *before* a
+  fan-out, read-only during it, and updated by one lane at integration. Two lanes of the same agent
+  type write the same file, and its baseline stamp and prepended session log conflict every time —
+  worse, a last-writer-wins stamp makes the *next* session's delta gate TRUST stale sections.
 - **Pre-assign the fixture UUID prefix space per lane, in writing.** It is hand-managed with no check
   behind it and has collided **five times** (§19, most recently §62). Two lanes writing tests will
   take the same prefix, and the failure reads as a real defect in whichever lane runs second.

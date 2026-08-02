@@ -38,6 +38,7 @@ fan-out shape in §5, where four lanes write four files behind one frozen port.
 | 5 | **Each backend-touching lane has its own git worktree.** | §6. One `backend/build/` and one Gradle daemon cannot serve two lanes. This is the one sanctioned exception to `CLAUDE.md`'s "do not branch per task". |
 | 6 | **Fixture UUID prefix space pre-assigned per lane**, in writing, before any lane writes a test. | §19's collision has now fired **five times** (most recently §62, where `b0` was already the board tests' and `project_pkey` is global). The prefix space is hand-managed and has no check behind it — it is the single most reliable way a parallel run goes red for a reason that looks like a real defect. |
 | 7 | **Each lane writes its own `docs/handoff/NN-*.md`**; the index row is merged last. | §2. This is why the handoff was split in the first place (§10). |
+| 8 | **One cache holder per agent type.** `docs/agent-context/*.md` is refreshed serially *before* the fan-out, read-only during it, and updated by exactly one lane at integration. | §0.5. Two lanes of the same agent type write the same file, and the protocol's own justification assumes they cannot. |
 
 If a row cannot be satisfied, the honest move is **fewer lanes**, not a waiver.
 
@@ -69,6 +70,48 @@ turned into a precondition: freeze the premise and the re-derivation stops being
 
 **Still true, still binding:** everything in §1–§6. The reworks that made parallelism possible at all
 (the file splits, the numbering rule, the second stack, the lane-selection rule) are unchanged.
+
+### 0.5 The orientation cache — an asset, and a single-writer resource
+
+`docs/agent-context/be-java.md` and `fe-react.md` are the per-agent orientation caches
+(`ep-agent-orientation-cache`). **They are the best thing that has happened to the economics of a
+parallel run and they need the same single-writer discipline as `openapi.yaml`.**
+
+**The assumption they were built on does not survive fan-out.** The protocol justifies one file per
+agent *type* with: *"Different agent types never write the same file, so there is no cross-agent
+write contention."* True for one instance per type. Four lanes are not — two backend lanes are both
+`be-java` and both write `be-java.md`.
+
+Three distinct failures, in increasing order of nastiness:
+
+1. **Guaranteed merge conflict.** The file stamps a `Baseline commit` and *prepends* a session-log
+   line. Two lanes touch both structures, so every concurrent run conflicts in the same two places.
+   Annoying, visible, cheap.
+2. **Lost seams.** Phase 3's highest-value step is *"add the seams the run created"*. Last-writer-wins
+   on a merge resolution silently drops the other lane's — and a cache that is confidently
+   *incomplete* is worse than one that is missing, because the next run's gate will TRUST it.
+3. **A poisoned baseline stamp.** This is the real one. Each lane stamps the `HEAD` *it* finished at.
+   Whichever survives describes neither lane's actual state, so the next run's delta gate computes
+   `git diff <wrong baseline>..HEAD`, under-reports what moved, and returns **TRUST for sections that
+   are stale**. The failure is silent and it lands on the *following* session, not on the run that
+   caused it.
+
+Worktrees (gate row 5) do not fix this — they defer it. Each worktree has its own copy, so the lanes
+do not contend *during* the run; they contend at merge, plus lane B spends the whole run reading a
+map that is missing whatever lane A just built.
+
+**The rule, which is `openapi.yaml`'s rule in a different costume:**
+
+- **Refresh the cache serially, before the fan-out.** This is part of gate row 1 — the cache *is* a
+  large share of "the frozen premise".
+- **Read-only during the run.** Every lane reads it; no lane runs Phase 3 against it.
+- **One lane per agent type runs the update-after at integration**, folding in the seams every lane
+  created. If two backend lanes ran, one of them writes `be-java.md` and names the other's seams too.
+
+**Why this is worth the ceremony rather than just disabling the cache:** §45 measured the cost of
+parallelism as *"every lane re-derives the same premises"*. A shared, frozen, pre-warmed cache is the
+direct antidote — it is the one mechanism that makes N lanes cost meaningfully less than N times one
+lane. Serialising the *writes* keeps all of that and gives up nothing the lanes needed.
 
 ---
 
@@ -241,3 +284,5 @@ Two smaller residuals, both stated rather than solved:
       has now collided five times (§0.2 row 6). Check the census first:
       `grep -rhoE 'UUID\.fromString\("[0-9a-f]{2}' backend/src/test/java | grep -oE '[0-9a-f]{2}$' | sort -u`
 - [ ] Each lane writes **its own** `docs/handoff/NN-*.md`; the index row is merged last.
+- [ ] **`docs/agent-context/*.md` refreshed serially BEFORE the fan-out**, read-only during it, and
+      **one lane per agent type** named to run the update-after at integration (§0.5).
