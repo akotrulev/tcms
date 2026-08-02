@@ -314,6 +314,103 @@ public class ProjectService {
     }
 
     /**
+     * A permission and <strong>the scope it has to be held at</strong> — the two gate shapes this
+     * class already implements separately, as one value a caller can compute.
+     *
+     * <p>{@link #writeGranted} asks {@link ProjectAccess#canDo}, which answers about one project;
+     * {@link #createGranted} asks {@link ProjectAccess#canDoInCompany}, which answers from the
+     * SYSTEM and COMPANY terms only. They are not interchangeable and the difference is not a
+     * detail: asking a company-scope key at project scope is the "held anywhere in this company"
+     * shortcut the roles spec §A3 records rejecting, and it would make a permission granted on one
+     * project read true for the whole company.
+     *
+     * @param key   a permission key, a constant at the call site as everywhere else
+     * @param scope where it must be held — {@link Scope#PROJECT} for a key granted per project,
+     *              {@link Scope#COMPANY} for one the catalogue lists under Company
+     */
+    public record RequiredPermission(String key, Scope scope) {
+
+        /** Which of the two questions to ask. Exhaustive at every consumer, under {@code -Werror}. */
+        public enum Scope {
+            PROJECT,
+            COMPANY
+        }
+
+        public static RequiredPermission onProject(String key) {
+            return new RequiredPermission(key, Scope.PROJECT);
+        }
+
+        public static RequiredPermission inCompany(String key) {
+            return new RequiredPermission(key, Scope.COMPANY);
+        }
+    }
+
+    /**
+     * <strong>The gate for a write whose permission is decided by the row it names.</strong>
+     * Resolves the target first, asks whatever permission that target requires, then writes.
+     *
+     * <h2>Why the permission cannot be a constant here, and why that is not a loophole</h2>
+     *
+     * <p>Every other write in this application names its permission at the call site, and the
+     * javadoc on {@link #writeGranted} says why: letting a caller nominate the permission it is
+     * checked against is the company-from-a-header defect one layer up. That rule is kept. What
+     * varies here is not chosen by the request — it is read from the <em>stored row</em> the
+     * request addressed. A classification dimension the company owns needs
+     * {@code company:vocabulary}; the project's own Feature tree needs {@code project:settings};
+     * which of the two applies is a property of the dimension row, not a field anyone can send.
+     * {@code BulkOperations.permission} is the same shape one module over (handoff §62) — there
+     * the deciding fact comes from the payload, here from the database, and here is the stricter
+     * of the two.
+     *
+     * <h2>An unresolvable target is 404, decided before any permission is asked</h2>
+     *
+     * <p>{@code resolve} returning empty means the id names nothing this project has — another
+     * project's Feature dimension, a value that was hard-deleted, a typo. That answers
+     * {@link GateResult.Unreachable} and it has to be decided <em>first</em>, because the
+     * alternative is incoherent: the permission to ask is a property of the row, so a caller whose
+     * row does not exist cannot be told 403 without the server inventing which permission they
+     * failed. Answering "not found" is both the honest answer and the one that conceals nothing
+     * they could have learned anyway.
+     *
+     * @param resolve    the target the request names, inside the transaction and after the project's
+     *                   read gates. Empty ⇒ 404
+     * @param permission what that target requires — see {@link RequiredPermission}
+     * @param write      applied to the gated project and the resolved target, so nothing downstream
+     *                   accepts an id that has not been through both gates
+     * @param <R>        the resolved target, passed through rather than looked up twice
+     */
+    @Transactional
+    public <R, T> GateResult<T> writeGrantedOnTarget(
+            UUID userId,
+            UUID projectId,
+            Function<Project, Optional<R>> resolve,
+            Function<R, RequiredPermission> permission,
+            BiFunction<Project, R, T> write) {
+
+        Optional<Project> project = projects.findScopedById(projectId);
+        if (project.isEmpty() || !access.canView(userId, project.get().getId())) {
+            // The read gates first and in this order, for the reason writeGranted gives.
+            return new GateResult.Unreachable<>();
+        }
+        Project gated = project.get();
+
+        Optional<R> target = resolve.apply(gated);
+        if (target.isEmpty()) {
+            return new GateResult.Unreachable<>();
+        }
+
+        RequiredPermission required = permission.apply(target.get());
+        boolean held = switch (required.scope()) {
+            case PROJECT -> access.canDo(userId, gated.getId(), required.key());
+            case COMPANY -> access.canDoInCompany(userId, required.key());
+        };
+        if (!held) {
+            return new GateResult.Denied<>();
+        }
+        return new GateResult.Allowed<>(write.apply(gated, target.get()));
+    }
+
+    /**
      * The gate itself — <strong>the one implementation of "may this caller see this project".</strong>
      *
      * <p>Private and unannotated on purpose. Every caller ({@link #findVisible} in this class,

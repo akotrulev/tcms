@@ -19,6 +19,7 @@ import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
 import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
+import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import InventoryOutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
@@ -90,6 +91,16 @@ function projectNav(projectId: string): { heading: string; items: NavItem[] }[] 
           two scopes, one implementation underneath.
         */
         { label: 'Access & roles', to: `${p}/access`, icon: <GroupsOutlinedIcon fontSize="small" /> },
+        /*
+          The project's classification vocabulary. Project-headed on the same test: Feature belongs
+          to this project and switching projects changes the tree — even though three of the four
+          axes on that screen are the company's, which is what the page itself says.
+        */
+        {
+          label: 'Classification',
+          to: `${p}/settings/classification`,
+          icon: <LocalOfferOutlinedIcon fontSize="small" />,
+        },
       ],
     },
     /*

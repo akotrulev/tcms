@@ -16,6 +16,7 @@
 import type {
   Artifact,
   CaseStatus,
+  ClassificationDimension,
   Condition,
   Configuration,
   DocPage,
@@ -36,6 +37,7 @@ import {
   caseStatuses,
   conditions,
   configurations,
+  dimensions,
   docPageDetail,
   docPages,
   plans,
@@ -105,6 +107,14 @@ interface Store {
   docPages: typeof docPages;
   docPageDetails: Record<string, DocPage>;
   artifacts: Artifact[];
+  /**
+   * The classification vocabulary — in the STORE since it got a writer, not read from the fixture.
+   *
+   * Every other vocabulary here was already cloned; this one was imported directly by its handler
+   * because nothing could change it. A value added through the editor has to survive to the next
+   * `GET /classification` or the picker it exists to fill would never show it.
+   */
+  dimensions: ClassificationDimension[];
   statuses: CaseStatus[];
   configurations: Configuration[];
   workItems: WorkItem[];
@@ -171,6 +181,7 @@ export const db: Store = {
   docPages: clone(docPages),
   docPageDetails: clone(docPageDetail),
   artifacts: clone(artifacts),
+  dimensions: clone(dimensions),
   statuses: clone(caseStatuses),
   configurations: clone(configurations),
   workItems: [],

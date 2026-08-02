@@ -477,6 +477,191 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/classification/values": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add a value to one of this project's classification dimensions
+         * @description The vocabulary's first writer. `tcms_seed_project_defaults` seeds the Feature dimension
+         *     **empty on purpose** — inventing a client's feature taxonomy for them is how a controlled
+         *     vocabulary gets worked around — so until this endpoint existed a freshly provisioned
+         *     project had a Feature tree that was empty and stayed empty, and the case editor's picker
+         *     had nothing to pick.
+         *
+         *     **The permission depends on the dimension, and so does the scope it is held at.** A
+         *     project-level dimension (`locked: false` — Feature) needs `project:settings` on this
+         *     project; a company-level one (`locked: true` — Test Type, Test Level, Execution Phase)
+         *     needs `company:vocabulary`, which is a COMPANY-scope permission held by Company Admin and
+         *     above. A Test Lead may therefore extend their own project's Feature tree and not the
+         *     company's shared axes, which is exactly what the two permissions were separated for.
+         *
+         *     A `dimensionId` this project does not have — including another project's Feature
+         *     dimension — is a **404**, not a field error: the caller may not be told which permission
+         *     would have applied to a dimension they cannot address.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ClassificationValueInput"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ClassificationValue"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/classification/values/{valueId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                valueId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Rename or recolour a classification value
+         * @description **PUT rather than PATCH, and the reason is `parentId`.** A partial update cannot express
+         *     "make this a root": a record deserialized from JSON reads an absent `parentId` and an
+         *     explicit `null` identically, so a PATCH would have to choose one meaning for both and the
+         *     other would be unreachable. It does not arise here because **this endpoint refuses to
+         *     reparent at all** (below) — but a body that carries every editable field is what keeps it
+         *     from arising later, and it is the same reason `TestCaseInput.classificationValueIds` is a
+         *     complete set rather than a delta.
+         *
+         *     **Moving a value is refused, not ignored.** `parentId` must equal the stored one, or the
+         *     request is a field error. Reparenting rewrites the subtree the descendants' `path` column
+         *     records, and — unlike a suite — the values below this one are what authored cases are
+         *     classified by. `SuiteWriteService` refuses a move for the first of those reasons already;
+         *     this endpoint has both. Silently dropping the field is the third answer, the one where the
+         *     client shows the value in its new place, reloads, and finds it back.
+         *
+         *     Gated exactly as the create above: `project:settings` on this project for a project-level
+         *     dimension, `company:vocabulary` at company scope for a company-level one.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                    valueId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ClassificationValueInput"];
+                };
+            };
+            responses: {
+                /** @description Updated */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ClassificationValue"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        post?: never;
+        /**
+         * Retire a classification value
+         * @description A **soft delete**. The value may already be attached to authored cases and to executions
+         *     that ran under it, so the row survives and every read excludes it — which is what lets a
+         *     past run still resolve what it was classified as. The consequence is stated rather than
+         *     discovered: a retired assignment is **immutable through the API**, because a client is
+         *     never served the value and therefore cannot resubmit it (see
+         *     `TestCaseInput.classificationValueIds`).
+         *
+         *     **A value with live children is refused, 409**, naming the count. The cascade is
+         *     deliberately not built: retiring a subtree unclassifies every case beneath it at once,
+         *     with no preview of what it is about to touch — `SuiteWriteService`'s refusal of a
+         *     non-empty folder, one vocabulary over. A value that is **in use by cases** is *not*
+         *     refused; being in use is what the soft delete exists for.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                    valueId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Retired */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                /**
+                 * @description The value still has live children. `Problem.errors` carries `children`, so the SPA can
+                 *     say how many rather than "it is in use".
+                 */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/statuses": {
         parameters: {
             query?: never;
@@ -3469,6 +3654,16 @@ export interface components {
             /** @enum {string} */
             cardinality: "SINGLE" | "MULTI";
             hierarchical: boolean;
+            /**
+             * @description The dimension belongs to the **company** rather than to this project and cannot be
+             *     overridden per project — true for Test Type, Test Level and Execution Phase, false for
+             *     the project's own Feature tree.
+             *
+             *     It is **not** "read-only". It decides *which* permission may edit the dimension's
+             *     values and at which scope: `company:vocabulary` (COMPANY scope, Company Admin and
+             *     above) when true, `project:settings` on this project when false. A client rendering a
+             *     vocabulary editor gates on this flag; a client rendering a picker ignores it.
+             */
             locked: boolean;
             values: components["schemas"]["ClassificationValue"][];
         };
@@ -3476,11 +3671,46 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** Format: uuid */
-            parentId?: string | null;
+            parentId: string | null;
             name: string;
             /** @example Payments.Refunds */
             path: string;
-            color?: string | null;
+            color: string | null;
+        };
+        /**
+         * @description The body of both writes. `dimensionId` is read only on the create — on the PUT the value
+         *     already knows its dimension and a differing one is a field error rather than a move, for
+         *     the same reason `parentId` is.
+         *
+         *     **Every member is required, including the two nullable ones.** A write that carries the
+         *     complete editable shape is what makes "make this a root" and "clear the colour"
+         *     expressible; an optional `parentId` would have exactly one meaning for absent and null and
+         *     the other would be unreachable. `required` here is about the key being *present*, not
+         *     about the value being non-null.
+         */
+        ClassificationValueInput: {
+            /**
+             * Format: uuid
+             * @description Which axis this value belongs to. Must be a dimension that applies to this project —
+             *     one of the company's own plus this project's Feature. Anything else is a 404.
+             */
+            dimensionId: string;
+            /**
+             * @description What a human reads. **Not** the `path`: `ltree` labels admit only `[A-Za-z0-9_]`, so
+             *     the stored path never spells a name like "UI / E2E" and does not try to.
+             */
+            name: string;
+            /**
+             * Format: uuid
+             * @description Null for a root value — every value of a flat dimension, and a Feature tree's top
+             *     level. Must name a **live value of the same dimension**: the foreign key alone is
+             *     satisfied by a value of another axis, and by one belonging to another project's
+             *     Feature tree, both of which store cleanly and resolve a taxonomy through a project the
+             *     reader holds no grant on.
+             */
+            parentId: string | null;
+            /** @description Null for everything the seed creates. `#rrggbb`, six digits, or null. */
+            color: string | null;
         };
         CaseStatus: {
             /** Format: uuid */

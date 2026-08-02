@@ -35,11 +35,14 @@ export {
 } from './identity';
 export {
   useClassification,
+  useCreateClassificationValue,
   useCreateProject,
   useProject,
   useProjectMembers,
   useProjects,
+  useRetireClassificationValue,
   useStatuses,
+  useUpdateClassificationValue,
 } from './projects';
 export {
   useCreateSuite,

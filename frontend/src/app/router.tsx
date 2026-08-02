@@ -78,6 +78,11 @@ const TeamsPage = lazy(() => import('../features/admin/TeamsPage').then((m) => (
 const ProjectAccessPage = lazy(() =>
   import('../features/admin/ProjectAccessPage').then((m) => ({ default: m.ProjectAccessPage })),
 );
+const ClassificationSettingsPage = lazy(() =>
+  import('../features/settings/ClassificationSettingsPage').then((m) => ({
+    default: m.ClassificationSettingsPage,
+  })),
+);
 
 /** Route-level fallback, shaped like a page so the shell doesn't jump while a chunk loads. */
 function RouteFallback() {
@@ -279,6 +284,21 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <ProjectAccessPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            The project's own vocabulary. Under `/settings/` rather than beside `/access`, because
+            it is the first of several — statuses and configurations are the same kind of screen and
+            have no writer yet — and a flat `/classification` would have to be renamed the day the
+            second one lands, breaking every link anyone had saved to the first.
+          */}
+          <Route
+            path="/projects/:projectId/settings/classification"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <ClassificationSettingsPage />
               </Suspense>
             }
           />

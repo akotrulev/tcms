@@ -10,10 +10,12 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -26,10 +28,14 @@ import org.springframework.web.bind.annotation.RestController;
  * {@code GET /projects}, and every other route is scoped under a project id it chose from
  * that response.
  *
- * <p>All four are one controller because all four are one contract tag and one gate. The gate
- * itself lives in {@link ProjectService#readVisible} and is <em>called</em>, never restated — a
- * project-scoped endpoint that answers "may they?" for itself is how the two implementations
- * diverge (plan §6b).
+ * <p>They are one controller because they are one contract tag and one gate. The gate itself lives
+ * in {@link ProjectService#readVisible} and its write siblings, and is <em>called</em>, never
+ * restated — a project-scoped endpoint that answers "may they?" for itself is how the two
+ * implementations diverge (plan §6b).
+ *
+ * <p>The three classification-value writes are the exception that proves it: their permission is
+ * not a constant here either, but resolved from the dimension row by
+ * {@link ClassificationValueWriteService}, through {@link ProjectService#writeGrantedOnTarget}.
  *
  * <h2>The caller comes from the token, and the company from the context</h2>
  *
@@ -56,15 +62,18 @@ public class ProjectController {
     private final ProjectService projects;
     private final ProjectConfigurationService configuration;
     private final ProjectCreateService creates;
+    private final ClassificationValueWriteService classificationValues;
 
     public ProjectController(
             ProjectService projects,
             ProjectConfigurationService configuration,
-            ProjectCreateService creates) {
+            ProjectCreateService creates,
+            ClassificationValueWriteService classificationValues) {
 
         this.projects = projects;
         this.configuration = configuration;
         this.creates = creates;
+        this.classificationValues = classificationValues;
     }
 
     /**
@@ -150,6 +159,73 @@ public class ProjectController {
     }
 
     /**
+     * Adds a value to one of this project's classification dimensions.
+     *
+     * <p>The gate is {@link ClassificationValueWriteService}'s and depends on the dimension: the
+     * project's own Feature tree needs {@code project:settings}, the company's three shared axes
+     * need {@code company:vocabulary} at company scope. A dimension this project does not have is a
+     * 404 rather than a 403 — see that class, and {@link ProjectService#writeGrantedOnTarget}.
+     */
+    @PostMapping("/{projectId}/classification/values")
+    public ResponseEntity<Object> createClassificationValue(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @RequestBody ClassificationValueInput request) {
+
+        return classificationValue(
+                classificationValues.create(UUID.fromString(jwt.getSubject()), projectId, request));
+    }
+
+    /** Renames or recolours a value. A differing parent or dimension is refused, not ignored. */
+    @PutMapping("/{projectId}/classification/values/{valueId}")
+    public ResponseEntity<Object> updateClassificationValue(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID valueId,
+            @RequestBody ClassificationValueInput request) {
+
+        return classificationValue(classificationValues.update(
+                UUID.fromString(jwt.getSubject()), projectId, valueId, request));
+    }
+
+    /** Retires a value. Soft, and refused while the value still has live children. */
+    @DeleteMapping("/{projectId}/classification/values/{valueId}")
+    public ResponseEntity<Object> retireClassificationValue(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID valueId) {
+
+        return classificationValue(
+                classificationValues.retire(UUID.fromString(jwt.getSubject()), projectId, valueId));
+    }
+
+    /**
+     * One mapping for all three vocabulary writes, so a state cannot be handled in two of them and
+     * defaulted in the third — {@code SuiteWriteService.gated}'s reason, at the HTTP layer.
+     */
+    private static ResponseEntity<Object> classificationValue(
+            ClassificationValueWriteService.Outcome outcome) {
+
+        return switch (outcome) {
+            case ClassificationValueWriteService.Outcome.Created created -> ResponseEntity
+                    .status(HttpStatus.CREATED)
+                    .body(created.view());
+            case ClassificationValueWriteService.Outcome.Updated updated ->
+                    ResponseEntity.ok(updated.view());
+            case ClassificationValueWriteService.Outcome.Retired ignored ->
+                    ResponseEntity.noContent().build();
+            case ClassificationValueWriteService.Outcome.Invalid invalid ->
+                    ResponseEntity.badRequest().body(validationProblem(invalid.errors()));
+            case ClassificationValueWriteService.Outcome.HasChildren blocked ->
+                    ResponseEntity.status(HttpStatus.CONFLICT).body(childrenProblem(blocked));
+            case ClassificationValueWriteService.Outcome.Forbidden ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(vocabularyForbiddenProblem());
+            case ClassificationValueWriteService.Outcome.NotFound ignored ->
+                    ResponseEntity.notFound().build();
+        };
+    }
+
+    /**
      * This project's configurable execution statuses — the six defaults, plus whatever it added.
      *
      * <p>Project-scoped, unlike the classification vocabularies above: two client products
@@ -215,6 +291,40 @@ public class ProjectController {
         // by someone who cannot grant it to themselves, and naming it publishes the catalogue to
         // exactly the caller who is not entitled to it.
         problem.setDetail("You do not have permission to create projects in this company.");
+        return problem;
+    }
+
+    /**
+     * One sentence for both vocabulary gates, deliberately.
+     *
+     * <p>Naming which of the two the caller failed — "this is a company vocabulary" versus "this is
+     * the project's" — would be more helpful and would also tell a Test Lead exactly which axis
+     * belongs to whom, which is a fact about the company's configuration reached through a refusal.
+     * The actionable half is the same either way: ask an administrator.
+     */
+    private static ProblemDetail vocabularyForbiddenProblem() {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
+        problem.setTitle("Not allowed");
+        problem.setDetail("You do not have permission to edit this classification vocabulary.");
+        return problem;
+    }
+
+    /**
+     * The refusal to retire a value that still has children, with the count on {@code errors}.
+     *
+     * <p>The count is on the problem rather than in the sentence because the SPA renders it — "3
+     * values sit under this one" beside a tree it can expand — and a number embedded in prose is
+     * one a client has to parse back out. {@code SuiteWriteService}'s {@code NotEmpty} does the
+     * same for a folder.
+     */
+    private static ProblemDetail childrenProblem(
+            ClassificationValueWriteService.Outcome.HasChildren blocked) {
+
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        problem.setTitle("Still in use");
+        problem.setDetail("Retire the values underneath this one first.");
+        problem.setProperty("errors", Map.of(
+                "children", List.of(Long.toString(blocked.children()))));
         return problem;
     }
 }

@@ -7,7 +7,15 @@ import {
   type UseQueryResult,
 } from '@tanstack/react-query';
 import { api } from '../client';
-import type { CaseStatus, ClassificationDimension, Project, ProjectInput, UserRef } from '../types';
+import type {
+  CaseStatus,
+  ClassificationDimension,
+  ClassificationValue,
+  ClassificationValueInput,
+  Project,
+  ProjectInput,
+  UserRef,
+} from '../types';
 import { base, keys } from './keys';
 
 export function useProjects(): UseQueryResult<Project[]> {
@@ -88,6 +96,59 @@ export function useClassification(projectId: string): UseQueryResult<Classificat
     queryKey: keys.classification(projectId),
     queryFn: ({ signal }) => api.get<ClassificationDimension[]>(`${base(projectId)}/classification`, { signal }),
     staleTime: 5 * 60_000,
+  });
+}
+
+/**
+ * The vocabulary's three writes — add a value, rename or recolour one, retire one.
+ *
+ * All three invalidate the same key and nothing else, because `GET /classification` is the *only*
+ * reader of these rows in the app: the case editor's picker, the case list's facets and the
+ * dashboard's by-feature breakdown all render from it. Assembling the new value into the cache by
+ * hand would be the client's guess at `path`, which the server derives — and a picker built on a
+ * guessed path is one that disagrees with the next reload.
+ *
+ * **`meta: { handled: true }`** on all three: the editor puts field errors on its own inputs and
+ * the 403 in its own alert, so a global toast would be a second, vaguer copy of a message already
+ * on screen. Same decision, same reason, as `useCreateProject` above.
+ *
+ * **No optimistic update on the retire**, deliberately. It is refused when the value still has
+ * live children, and an optimistic removal would take the row off screen and then put it back with
+ * an error beside it — for the one action whose failure the user most needs to read.
+ */
+export function useCreateClassificationValue(
+  projectId: string,
+): UseMutationResult<ClassificationValue, Error, ClassificationValueInput> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ClassificationValueInput) =>
+      api.post<ClassificationValue>(`${base(projectId)}/classification/values`, input),
+    meta: { handled: true },
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.classification(projectId) }),
+  });
+}
+
+export function useUpdateClassificationValue(
+  projectId: string,
+): UseMutationResult<ClassificationValue, Error, { valueId: string; input: ClassificationValueInput }> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ valueId, input }) =>
+      api.put<ClassificationValue>(`${base(projectId)}/classification/values/${valueId}`, input),
+    meta: { handled: true },
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.classification(projectId) }),
+  });
+}
+
+export function useRetireClassificationValue(
+  projectId: string,
+): UseMutationResult<void, Error, string> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (valueId: string) =>
+      api.del<void>(`${base(projectId)}/classification/values/${valueId}`),
+    meta: { handled: true },
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.classification(projectId) }),
   });
 }
 

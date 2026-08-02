@@ -26,7 +26,7 @@ import {
   reporting,
   writeCase,
 } from '../db';
-import { currentUser, dimensions } from '../fixtures/core';
+import { currentUser } from '../fixtures/core';
 import {
   API,
   LATENCY,
@@ -71,8 +71,8 @@ function applyClassification(target: TestCase, submitted: unknown): string | nul
   }
   const ids = [...new Set(submitted.filter((id): id is string => typeof id === 'string'))];
 
-  const dimensionOf = new Map<string, (typeof dimensions)[number]>();
-  for (const dimension of dimensions) {
+  const dimensionOf = new Map<string, (typeof db.dimensions)[number]>();
+  for (const dimension of db.dimensions) {
     for (const value of dimension.values) dimensionOf.set(value.id, dimension);
   }
 
@@ -169,7 +169,7 @@ function filterCases(url: URL): TestCaseSummary[] {
 
   const featureId = p.get('featureId');
   if (featureId) {
-    const value = dimensions
+    const value = db.dimensions
       .find((d) => d.key === 'feature')
       ?.values.find((v) => v.id === featureId);
     if (value) rows = rows.filter((c) => c.features.includes(value.name));
@@ -177,13 +177,13 @@ function filterCases(url: URL): TestCaseSummary[] {
 
   const typeId = p.get('testTypeId');
   if (typeId) {
-    const value = dimensions.find((d) => d.key === 'test_type')?.values.find((v) => v.id === typeId);
+    const value = db.dimensions.find((d) => d.key === 'test_type')?.values.find((v) => v.id === typeId);
     if (value) rows = rows.filter((c) => c.testType === value.name);
   }
 
   const levelId = p.get('testLevelId');
   if (levelId) {
-    const value = dimensions.find((d) => d.key === 'test_level')?.values.find((v) => v.id === levelId);
+    const value = db.dimensions.find((d) => d.key === 'test_level')?.values.find((v) => v.id === levelId);
     if (value) rows = rows.filter((c) => c.testLevel === value.name);
   }
 
