@@ -49,6 +49,7 @@ public record TestExecutionView(
             List<ConditionRefView> preconditions,
             List<ConditionRefView> postconditions,
             List<StepResultView> steps,
+            List<EvidenceView> evidence,
             long lockVersion) {
 
         return new TestExecutionView(
@@ -69,9 +70,7 @@ public record TestExecutionView(
                 preconditions,
                 postconditions,
                 steps,
-                // Nothing uploads evidence yet — see EvidenceView. An empty list is the true
-                // answer, not a placeholder: no attachment exists to be listed.
-                List.of(),
+                evidence,
                 lockVersion);
     }
 }

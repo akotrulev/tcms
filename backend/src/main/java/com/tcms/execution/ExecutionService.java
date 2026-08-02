@@ -66,6 +66,8 @@ public class ExecutionService {
     private final StepOutcomeRepository stepOutcomes;
     private final ResultStatuses statuses;
     private final ExecutionViews views;
+    private final EvidenceViews evidenceViews;
+    private final EvidenceRepository evidenceRows;
     private final CaseFacts cases;
     private final AuditEventRepository auditEvents;
 
@@ -84,6 +86,8 @@ public class ExecutionService {
             StepOutcomeRepository stepOutcomes,
             ResultStatuses statuses,
             ExecutionViews views,
+            EvidenceViews evidenceViews,
+            EvidenceRepository evidenceRows,
             CaseFacts cases,
             AuditEventRepository auditEvents,
             Clock clock) {
@@ -94,6 +98,8 @@ public class ExecutionService {
         this.stepOutcomes = stepOutcomes;
         this.statuses = statuses;
         this.views = views;
+        this.evidenceViews = evidenceViews;
+        this.evidenceRows = evidenceRows;
         this.cases = cases;
         this.auditEvents = auditEvents;
         this.clock = clock;
@@ -379,6 +385,11 @@ public class ExecutionService {
                 pin == null ? List.of() : pin.preconditions(),
                 pin == null ? List.of() : pin.postconditions(),
                 views.steps(pin, existingSteps(execution.getId())),
+                evidenceViews.render(
+                        companyId,
+                        execution.getProjectId(),
+                        execution.getRunId(),
+                        evidenceRows.findByExecutionIdOrderByCreatedAtAsc(execution.getId())),
                 execution.getLockVersion());
     }
 }

@@ -6,11 +6,16 @@ import java.util.UUID;
 /**
  * {@code Evidence} in {@code docs/specs/openapi.yaml} — a screenshot or log attached to a result.
  *
- * <p><strong>Always an empty list in this slice.</strong> {@code evidence} rows reference
- * {@code attachment}, and nothing uploads one: {@code evidence:attach} has no endpoint. The shape is
- * declared so the response's required {@code evidence} array has a type rather than being
- * {@code List<Object>} — a list whose element type is unknown is a list nothing can ever be added
- * to correctly.
+ * <p>{@code url} is a <strong>relative</strong> API route, built in one place
+ * ({@code EvidenceViews#contentUrl}) and served by {@code EvidenceController#content}. Relative
+ * because the server does not know its own public origin: behind a reverse proxy it only ever sees
+ * {@code localhost:8080}, and a browser resolves a relative url against the page it is already on.
+ *
+ * <p>{@code thumbnailUrl} is null for every row today — there is no image processing. Null rather
+ * than a guessed route, which would 404 on every image.
+ *
+ * @param createdBy nullable, and that is the arm {@code evidence:delete}'s {@code OWN} qualifier
+ *                  turns on: evidence nobody can attribute is not anybody's own work
  */
 public record EvidenceView(
         UUID id,

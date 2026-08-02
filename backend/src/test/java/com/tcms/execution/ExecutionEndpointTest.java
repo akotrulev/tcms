@@ -830,9 +830,111 @@ class ExecutionEndpointTest extends IntegrationTestBase {
         }
     }
 
+    @Nested
+    @DisplayName("Evidence — attaching the proof, and removing only your own")
+    class EvidenceAttachment {
+
+        @Test
+        @DisplayName("a tester attaches a screenshot and it comes back on the execution")
+        void attaches() throws Exception {
+            byte[] bytes = "PNG-ish bytes".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+            JsonNode attached = body(attach(ENGINEER, ACME, EXEC_A, "shot.png", "image/png", bytes,
+                    "Balance read 45.00"));
+
+            assertThat(attached.get("filename").asText()).isEqualTo("shot.png");
+            assertThat(attached.get("contentType").asText()).isEqualTo("image/png");
+            assertThat(attached.get("sizeBytes").asLong()).isEqualTo(bytes.length);
+            assertThat(attached.get("caption").asText()).isEqualTo("Balance read 45.00");
+            assertThat(attached.get("createdBy").get("id").asText())
+                    .isEqualTo(ENGINEER.toString());
+            // thumbnailUrl is null rather than absent or guessed — no image processing in this
+            // slice, and null is the honest answer for a field the contract declares nullable.
+            assertThat(attached.get("thumbnailUrl").isNull()).isTrue();
+
+            JsonNode execution = body(get(ENGINEER, ACME, executionPath(RUN, EXEC_A)));
+            assertThat(execution.get("evidence")).hasSize(1);
+            assertThat(execution.get("evidence").get(0).get("id").asText())
+                    .isEqualTo(attached.get("id").asText());
+        }
+
+        @Test
+        @DisplayName("the bytes come back through the url the execution advertises")
+        void downloadsThroughTheAdvertisedUrl() throws Exception {
+            byte[] bytes = "the actual screenshot".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            JsonNode attached = body(attach(LEAD, ACME, EXEC_B, "log.txt", "text/plain", bytes, null));
+
+            // Read the url OFF THE RESPONSE rather than composing it here. A url this test builds
+            // and the server also builds would agree with itself while pointing nowhere real —
+            // which is precisely the class of defect §52 found by having two hand-made shapes.
+            String url = attached.get("url").asText();
+            MvcResult download = get(LEAD, ACME, url.replace("/api/v1", ""));
+
+            assertThat(download.getResponse().getStatus()).isEqualTo(200);
+            assertThat(download.getResponse().getContentAsByteArray()).isEqualTo(bytes);
+            assertThat(download.getResponse().getContentType()).startsWith("text/plain");
+            assertThat(download.getResponse().getHeader("Content-Disposition"))
+                    .contains("inline").contains("log.txt");
+        }
+
+        @Test
+        @DisplayName("a Viewer cannot attach evidence, and nothing is written when refused")
+        void refusesWithoutThePermission() throws Exception {
+            MvcResult refused = attach(VIEWER, ACME, EXEC_B, "shot.png", "image/png",
+                    new byte[] {1, 2, 3}, null);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(403);
+            // Asserted through a second read, because a refusal that answered 403 AND stored the
+            // row is the failure this test exists for — the status alone cannot tell them apart.
+            assertThat(body(get(LEAD, ACME, executionPath(RUN, EXEC_B))).get("evidence"))
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("a company member with no project grant gets 404, never 403")
+        void unreachableProjectIs404() throws Exception {
+            MvcResult refused = attach(NO_GRANT, ACME, EXEC_B, "shot.png", "image/png",
+                    new byte[] {1}, null);
+
+            // §6t: an unreachable resource answers 404 identically to an absent one, so the
+            // response cannot be used as an oracle for what exists.
+            assertThat(refused.getResponse().getStatus()).isEqualTo(404);
+        }
+
+        @Test
+        @DisplayName("the uploaded filename never becomes a path — a traversal name is stored as text")
+        void filenameIsDataNotAPath() throws Exception {
+            JsonNode attached = body(attach(LEAD, ACME, EXEC_B, "../../../etc/passwd", "text/plain",
+                    new byte[] {9}, null));
+
+            // Reduced to its last segment and kept in a column. The storage key is three
+            // server-generated UUIDs, so this string never reaches the filesystem at all; the
+            // assertion pins that the product does not simply echo it back as a path either.
+            assertThat(attached.get("filename").asText()).isEqualTo("passwd");
+            assertThat(get(LEAD, ACME, attached.get("url").asText().replace("/api/v1", ""))
+                    .getResponse().getStatus()).isEqualTo(200);
+        }
+    }
+
     // =====================================================================
     // helpers — HTTP
     // =====================================================================
+
+    private MvcResult attach(
+            UUID userId, UUID companyId, UUID executionId, String filename, String contentType,
+            byte[] bytes, String caption) throws Exception {
+
+        var request = MockMvcRequestBuilders
+                .multipart("/api/v1" + executionPath(RUN, executionId) + "/evidence")
+                .file(new org.springframework.mock.web.MockMultipartFile(
+                        "file", filename, contentType, bytes))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, companyId))
+                .accept(MediaType.APPLICATION_JSON);
+        if (caption != null) {
+            request = request.param("caption", caption);
+        }
+        return mvc.perform(request).andReturn();
+    }
 
     private MvcResult get(UUID userId, UUID companyId, String path) throws Exception {
         return mvc.perform(MockMvcRequestBuilders
