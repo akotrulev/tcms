@@ -238,3 +238,29 @@ retire is what *creates* the state whose reconcile bound §68 built.
 14, 15 and 16 have no mock equivalent. Row 5's `psql` half and row 9's are live-only by nature. The
 mock does enforce every field rule, the 409 and both gates, so rows 1–4, 6–8, 10–12 and 17 are
 drivable against `npm run dev` with no backend.
+
+---
+
+## §70 — the verb the contract checks could not see
+
+**Nothing to drive, and the row exists to say so rather than to leave the slice absent.**
+
+§70 changed `src/api/contractIntrospection.ts`, `contractOperations.test.ts` and
+`apiResponseTypes.test.ts` and nothing else. The first is imported **only by the two test files**
+(`grep -rln contractIntrospection src/` returns exactly those two), so it is not in any bundle: the
+`npm run build` output is byte-for-byte the app §69 shipped. There is no screen, no request and no
+rendered string that differs, so any browser row here would be a check of §69's screens wearing
+§70's number.
+
+**What stands in for it** is the pair of mutations, and because this slice *is* a check they were
+run inline rather than queued — see §70's table: the unmapped client spelling reddens exactly 8, and
+an unreadable verb reddens exactly 2 (one guard per file).
+
+**The one thing a later reader might want to re-derive** — cheaper as a command than as a browser
+pass, and it is the whole slice in one line:
+
+```bash
+cd frontend && grep -rn "api\.delete" src/     # must return NOTHING — the client's verb is `del`
+npx vitest run src/api/contractOperations.test.ts src/api/apiResponseTypes.test.ts
+                                               # must report 8 DELETE call sites and 1 upload among them
+```

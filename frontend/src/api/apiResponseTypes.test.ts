@@ -24,30 +24,20 @@
  * generated name is the version of the rule a machine can enforce, and it costs one line in
  * `types.ts` per response shape.
  */
-import { readdirSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
+import { apiMethods, program, sources, unresolvedApiVerbs } from './contractIntrospection.js';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const QUERIES_DIR = resolve(HERE, 'queries');
-
-/** The client's verbs. Each takes the response type as its single type argument. */
-const VERBS = new Set(['get', 'post', 'patch', 'put', 'delete']);
-
-const sources = readdirSync(QUERIES_DIR)
-  .filter((file) => file.endsWith('.ts') && !file.endsWith('.test.ts'))
-  .map((file) => join(QUERIES_DIR, file));
-
-const program = ts.createProgram(sources, {
-  target: ts.ScriptTarget.ESNext,
-  module: ts.ModuleKind.ESNext,
-  moduleResolution: ts.ModuleResolutionKind.Bundler,
-  strict: true,
-  skipLibCheck: true,
-  noEmit: true,
-});
+/**
+ * The client's verbs, **derived from `client.ts`** rather than listed here. Each takes the response
+ * type as its single type argument.
+ *
+ * The list this replaces spelled the client's `del` as `delete` and had no `upload` at all, so
+ * eight call sites — every delete in the app, and the evidence upload — were never asked whether
+ * they name a generated type. The guard below could not see it: the count threshold is met several
+ * times over by the four verbs that did match. See `contractIntrospection.apiMethods`.
+ */
+const VERBS = new Set(apiMethods.keys());
 
 interface TypeArgument {
   where: string;
@@ -122,6 +112,12 @@ describe('api response types — the shape comes from the contract, not from the
       'no api.get/post/patch/delete type arguments found — has the client been renamed, or did '
         + 'the program fail to load src/api/queries?',
     ).toBeGreaterThanOrEqual(25);
+
+    expect(
+      unresolvedApiVerbs,
+      'a member of the `api` object in client.ts has an HTTP method contractIntrospection could '
+        + 'not read, so its call sites are absent from the verb set and go unchecked here.',
+    ).toEqual([]);
   });
 
   it.each(typeArguments.map((argument) => [argument.where, argument] as const))(

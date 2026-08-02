@@ -22,6 +22,7 @@ import { parse } from 'yaml';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const QUERIES_DIR = resolve(HERE, 'queries');
+const CLIENT = resolve(HERE, 'client.ts');
 const SPEC = resolve(HERE, '../../../docs/specs/openapi.yaml');
 
 /** As spelled in an OpenAPI path item; anything else under a path is metadata. */
@@ -79,6 +80,113 @@ export const program = ts.createProgram(sources, {
 });
 
 export const checker = program.getTypeChecker();
+
+/**
+ * Every verb `api` exposes, mapped to the HTTP method it actually sends — **read out of
+ * `client.ts`**, not listed here.
+ *
+ * ## Why this is derived rather than written down
+ *
+ * Both checks that consume it used to carry their own `new Set(['get', 'post', 'patch', 'put',
+ * 'delete'])`, one of them under the comment *"the HTTP verbs `api` exposes, **as spelled on the
+ * client**"*. The client does not spell them that way. Its delete is `del` and it has an `upload`,
+ * so `'delete'` matched **nothing** from the day it was written and `api.upload` was never in the
+ * set at all: seven `api.del` call sites and one `api.upload` were invisible to *both* checks —
+ * never compared against a declared operation, never refused an inline response type.
+ *
+ * Nothing could see it. Both files guard against vacuity by *count* (`>= 40`, `>= 25`) and by
+ * distinct-verb count (`>= 3`), and every one of those thresholds is comfortably met by the four
+ * verbs that do match. A hard-coded list of what another module exports is a second definition of
+ * it, and this one had been wrong since §53 while reading as exhaustive — §48's rule, inside the
+ * §48 family of checks: a catalogue-wide invariant needs a computed check, not a careful reading.
+ *
+ * The mapping matters as much as the membership. `contractOperations` asks whether the contract
+ * declares this method for this path, and the key there is the OpenAPI spelling — so `del` has to
+ * arrive as `delete` and `upload` as `post`, or teaching the check about them would only replace
+ * "unchecked" with "compared against a method no path item can declare".
+ *
+ * The HTTP method comes from the `RequestInit` each verb hands `request`; a verb that passes no
+ * `method` is a GET, which is exactly how `api.get` is written.
+ */
+function collectApiMethods(): { methods: Map<string, string>; unresolved: string[] } {
+  const source = program.getSourceFile(CLIENT);
+  if (!source) {
+    throw new Error(
+      `TypeScript did not load ${CLIENT} — the client is reached through the queries module's `
+        + 'imports, so this means the program root set changed.',
+    );
+  }
+
+  const methods = new Map<string, string>();
+  const unresolved: string[] = [];
+
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isVariableDeclaration(node)
+      && ts.isIdentifier(node.name)
+      && node.name.text === 'api'
+      && node.initializer
+      && ts.isObjectLiteralExpression(node.initializer)
+    ) {
+      for (const property of node.initializer.properties) {
+        // Anything that is not a plain `name: (…) => …` is recorded as unresolved rather than
+        // skipped. Skipping is the failure this whole function exists to end.
+        if (!ts.isPropertyAssignment(property) || !ts.isIdentifier(property.name)) {
+          unresolved.push(property.name?.getText(source) ?? '(unnamed member)');
+          continue;
+        }
+        const method = httpMethodOf(property.initializer);
+        if (method) methods.set(property.name.text, method);
+        else unresolved.push(property.name.text);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+
+  visit(source);
+
+  return { methods, unresolved };
+}
+
+/** The HTTP method a `<T>(path, …) => request<T>(path, { method: 'X' }, …)` verb sends. */
+function httpMethodOf(initializer: ts.Expression): string | undefined {
+  if (!ts.isArrowFunction(initializer) || ts.isBlock(initializer.body)) return undefined;
+  const call = initializer.body;
+  if (!ts.isCallExpression(call) || !ts.isIdentifier(call.expression)) return undefined;
+  if (call.expression.text !== 'request') return undefined;
+
+  const init = call.arguments[1];
+  if (!init || !ts.isObjectLiteralExpression(init)) return undefined;
+
+  for (const property of init.properties) {
+    if (
+      ts.isPropertyAssignment(property)
+      && ts.isIdentifier(property.name)
+      && property.name.text === 'method'
+    ) {
+      return ts.isStringLiteral(property.initializer)
+        ? property.initializer.text.toLowerCase()
+        : undefined;
+    }
+  }
+
+  // `request(path, {}, options)` — no method, so `fetch`'s default. `api.get` is the only one.
+  return 'get';
+}
+
+const collected = collectApiMethods();
+
+/** Client verb → the OpenAPI operation key it sends. `del` → `delete`, `upload` → `post`. */
+export const apiMethods: ReadonlyMap<string, string> = collected.methods;
+
+/**
+ * Members of the `api` object whose HTTP method could not be read.
+ *
+ * Exported so each consuming check can **fail** on a non-empty list rather than quietly covering a
+ * smaller client than the one that ships. A new verb written in an unfamiliar shape must make a
+ * test red; being dropped is precisely how `del` and `upload` went eight slices unchecked.
+ */
+export const unresolvedApiVerbs: readonly string[] = collected.unresolved;
 
 /**
  * Renders a template literal as a path shape, substituting `{}` for each interpolation.

@@ -3,7 +3,7 @@
 # fe-react — orientation cache (TCMS)
 
 **Last verified:** 2026-08-02
-**Baseline commit:** `f551971`
+**Baseline commit:** `68c3cd5`
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
 `frontend/vite.config.ts`
 
@@ -25,7 +25,7 @@
 - **`npm run build` is THE gate** (`tsc -b` + vite build). **Do not trust `tsc --noEmit`** — it has
   reported 0 errors while the build failed with nine (working agreement). `#confirmed`
 - `npm run lint` — oxlint, must stay at **0 warnings**; it prints nothing when clean.
-- `npm run test:run` — Vitest + RTL. **490/490** at this baseline. **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
+- `npm run test:run` — Vitest + RTL. **534/534** at this baseline. **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
 - `npm run gen:api` — regenerate `src/api/schema.d.ts` after **any** `openapi.yaml` change. Runs
   through `npx` on purpose (the scaffold pins TS 6, the tool peer-requires 5.x); do not "fix" it.
 - **Live mode:** `VITE_API_MODE=live` in `.env.local` proxies `/api` to `localhost:8080`.
@@ -99,9 +99,20 @@
 - **Mock API is stateful** — `mocks/db/` + `mocks/handlers/*.ts` read *and write* a cloned fixture
   store, so round-trips land in lists. Handlers are written from the **server's** rules, not from what
   one client sends (§52). Resets on reload.
-- **Contract-hygiene tests are generated per operation** — `api/contractOperations.test.ts`,
+- **Contract-hygiene tests are generated per call site** — `api/contractOperations.test.ts`,
   `contractParameters.test.ts` (drives the TS compiler, not a regex), `apiResponseTypes.test.ts`
-  (refuses an inline literal at any `api.*` call site). A new endpoint is covered automatically.
+  (refuses an inline literal at any `api.*` call site). A new endpoint is covered automatically,
+  **which means the suite's test count moves when you add one** — an unexplained change in the total
+  is a report about these checks, and chasing one in §70 is how the next note was found. ~~A new
+  endpoint is covered automatically~~ was true only of the verbs the checks knew: both hard-coded
+  `['get','post','patch','put','delete']` *"as spelled on the client"*, and the client spells it
+  **`del`**, with an `upload` that was absent entirely — so every delete in the app and the evidence
+  upload, **eight call sites, were never checked** from §53 to §70. The verb set is now derived from
+  `client.ts` by `api/contractIntrospection.ts` (`apiMethods`, mapping `del`→`delete` and
+  `upload`→`post` because path items are keyed by the OpenAPI spelling), and `unresolvedApiVerbs`
+  makes an unreadable verb **fail** rather than narrow the check. **Do not re-introduce a literal
+  verb list**, and note that the vacuity guards in both files are by *count* — they cannot see a
+  whole category going missing, which is exactly what happened. `#confirmed`
 - **Fault injection** (dev only, browser console): `tcmsFaults.status/hang/expire/drift/only/off`.
   Faults live in module state, so arm them *after* load.
 
@@ -125,6 +136,15 @@
 
 ## Session log
 
+- 2026-08-02 · FIX · The verb the contract checks could not see (§70). Chasing §69's four
+  unaccounted-for tests found that `contractOperations.test.ts` and `apiResponseTypes.test.ts` each
+  hard-coded the client's verbs and spelled its `del` as `delete`, omitting `upload` — so **eight
+  call sites had never been checked by either**. The set is derived from `client.ts` now
+  (`contractIntrospection.apiMethods`); `apiResponseTypes` also stopped building a second
+  `ts.createProgram` over the same sources. Both mutations run inline: unmapped spelling → exactly 8
+  red, an unreadable verb → exactly 2 (both vacuity guards, which previously stayed silent).
+  All 16 newly generated cases pass — the blind spot was empty this time. **No runtime code
+  changed**, so no browser row is owed; the queue records that. 534/534. `#confirmed`
 - 2026-08-02 · EXTEND · The classification vocabulary editor (§69) — new route
   `/projects/:projectId/settings/classification` (`features/settings/`), **Classification** in the
   rail's Project group, three new hooks in `api/queries/projects.ts`. **Every gated control reads

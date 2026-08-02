@@ -33,18 +33,20 @@ import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 import {
   OPERATION_KEYS,
+  apiMethods,
   contractPathByShape,
   program,
   sources,
   spec,
+  unresolvedApiVerbs,
   urlShapeOfArgument,
 } from './contractIntrospection.js';
 
-/** The HTTP verbs `api` exposes, as spelled on the client. */
-const API_METHODS = new Set(['get', 'post', 'patch', 'put', 'delete']);
-
 interface CallSite {
   where: string;
+  /** As spelled on the client — `del`, not `delete`. What the reader has to go and find. */
+  verb: string;
+  /** As spelled in the contract, which is what a path item can be asked about. */
   method: string;
   urlShape: string;
 }
@@ -62,15 +64,17 @@ function collectCallSites(): CallSite[] {
         && ts.isPropertyAccessExpression(node.expression)
         && ts.isIdentifier(node.expression.expression)
         && node.expression.expression.text === 'api'
-        && API_METHODS.has(node.expression.name.text)
+        && apiMethods.has(node.expression.name.text)
       ) {
         const argument = node.arguments[0];
         const urlShape = argument ? urlShapeOfArgument(argument) : undefined;
         const line = source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+        const verb = node.expression.name.text;
 
         sites.push({
           where: `${file.slice(file.lastIndexOf('/') + 1)}:${line}`,
-          method: node.expression.name.text,
+          verb,
+          method: apiMethods.get(verb) as string,
           // An unrecognisable first argument is recorded rather than skipped. Skipping is how a
           // checker quietly stops covering a call site — the vacuity guard below turns it into a
           // failure instead.
@@ -110,6 +114,20 @@ describe('contract operations — every call the SPA makes is an operation the c
       'no api.* call sites found — has the client been renamed or destructured?',
     ).toBeGreaterThanOrEqual(40);
 
+    /**
+     * The guard the count could not be: this file used to hard-code the verb list, spelling the
+     * client's `del` as `delete` and omitting `upload` entirely, so eight call sites were never
+     * compared against the contract while every threshold below stayed comfortably green. The verb
+     * set is derived from `client.ts` now, and a verb it cannot read is a failure rather than a
+     * silently narrower check.
+     */
+    expect(
+      unresolvedApiVerbs,
+      'a member of the `api` object in client.ts has an HTTP method this check could not read, so '
+        + 'every call site using it goes unchecked. Teach contractIntrospection.httpMethodOf about '
+        + 'its shape rather than leaving it out.',
+    ).toEqual([]);
+
     expect(
       callSites.filter((site) => site.urlShape === '(unrecognised URL expression)'),
       'an api.* call was found whose URL could not be reconstructed, so it was never compared '
@@ -131,7 +149,8 @@ describe('contract operations — every call the SPA makes is an operation the c
 
       expect(
         contractPath,
-        `${site.where} calls ${site.method.toUpperCase()} ${site.urlShape}, which matches no path `
+        `${site.where} (api.${site.verb}) calls ${site.method.toUpperCase()} ${site.urlShape}, `
+          + 'which matches no path '
           + 'in openapi.yaml at all. Either the SPA is calling an endpoint the contract does not '
           + 'describe, or the path was renamed on one side only.',
       ).toBeDefined();
@@ -140,7 +159,8 @@ describe('contract operations — every call the SPA makes is an operation the c
 
       expect(
         methods.has(site.method),
-        `${site.where} calls ${site.method.toUpperCase()} ${contractPath}, and the contract `
+        `${site.where} (api.${site.verb}) calls ${site.method.toUpperCase()} ${contractPath}, `
+          + 'and the contract '
           + `declares only ${[...methods].map((m) => m.toUpperCase()).join(', ')} for that path.\n\n`
           + 'An undeclared operation is invisible to every other contract check, because they all '
           + 'start from the spec. `npm run gen:api` emits no types for it, so the request body and '
