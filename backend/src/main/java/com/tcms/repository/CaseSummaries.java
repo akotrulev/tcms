@@ -89,7 +89,12 @@ public class CaseSummaries {
 
         Map<UUID, List<String>> tagsByCase = tagsByCase(caseIds);
         Map<UUID, List<HealthSignal>> healthByCase = healthByCase(caseIds);
-        Map<UUID, UserRefView> ownersById = owners.resolve(companyId, ownerIds(cases));
+        // Owners and authors resolve through ONE call, not two. They are the same kind of lookup
+        // over the same two tables, they overlap heavily in practice (most cases are still owned by
+        // whoever wrote them), and `CaseOwners.resolve` is two queries regardless of how many ids
+        // it is given. Two calls would double that for a column, and the duplicate ids would be
+        // fetched twice — which is the shape of N+1 that looks fine because each query is fast.
+        Map<UUID, UserRefView> peopleById = owners.resolve(companyId, peopleIds(cases));
         ClassifiedCases classified = classify(caseIds, vocabularies);
 
         return cases.stream()
@@ -113,7 +118,13 @@ public class CaseSummaries {
                         row.getStepFormat(),
                         // Null for an unowned case, and null for one whose owner account no longer
                         // resolves. Both are honest; see TestCaseSummaryView.
-                        row.getOwnerId() == null ? null : ownersById.get(row.getOwnerId()),
+                        row.getOwnerId() == null ? null : peopleById.get(row.getOwnerId()),
+                        // Null for a case written before authorship was recorded, and null for one
+                        // whose author's account no longer resolves. The first is the arm the
+                        // delete gate turns on: canDoOnAuthored answers a null author `false` for
+                        // an OWN grant, so the SPA must be able to see the absence rather than
+                        // infer it from a missing key.
+                        row.getCreatedBy() == null ? null : peopleById.get(row.getCreatedBy()),
                         classified.single(row.getId(), DimensionKeys.TEST_TYPE),
                         classified.single(row.getId(), DimensionKeys.TEST_LEVEL),
                         classified.all(row.getId(), DimensionKeys.FEATURE),
@@ -123,12 +134,21 @@ public class CaseSummaries {
                 .toList();
     }
 
-    /** Distinct, non-null owner ids — the input to one membership query and one account query. */
-    private static Set<UUID> ownerIds(List<TestCase> cases) {
+    /**
+     * Every distinct, non-null person id the batch names — owners and authors together, the input
+     * to one membership query and one account query.
+     *
+     * <p>A set, so a case owned by the person who wrote it contributes one id rather than two, and
+     * so two cases by the same author do not widen the {@code IN ()} list.
+     */
+    private static Set<UUID> peopleIds(List<TestCase> cases) {
         Set<UUID> ids = new LinkedHashSet<>();
         for (TestCase row : cases) {
             if (row.getOwnerId() != null) {
                 ids.add(row.getOwnerId());
+            }
+            if (row.getCreatedBy() != null) {
+                ids.add(row.getCreatedBy());
             }
         }
         return ids;

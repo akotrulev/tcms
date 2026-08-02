@@ -242,4 +242,69 @@ describe('PermissionGate', () => {
     expect(control).not.toHaveAttribute('href')
     expect(control).toBeDisabled()
   })
+
+  /**
+   * `authorId` — the gate asking about the ROW, not only about the caller.
+   *
+   * Asserted through the rendered button rather than through `useCan`, because §62's lesson is
+   * exactly that a component test can pass for the wrong reason: an element the framework never
+   * processed is neither enabled nor disabled, and "not disabled" read identically to "not there".
+   */
+  describe('authorId — case:delete OWN', () => {
+    const CALLER = '99999999-9999-4999-8999-999999999999'
+    const COLLEAGUE = '88888888-8888-4888-8888-888888888888'
+
+    const renderDelete = (authorId: string | null) =>
+      render(
+        <TestProviders client={createTestQueryClient()} userId={CALLER}>
+          <PermissionGate projectId={PROJECT} permission="case:delete" authorId={authorId}>
+            {({ allowed }) => (
+              <Button disabled={!allowed} data-testid="Delete">
+                Delete
+              </Button>
+            )}
+          </PermissionGate>
+        </TestProviders>,
+      )
+
+    it('enables Delete on the callers own case and disables it on a colleagues', async () => {
+      vi.spyOn(api, 'get').mockResolvedValue(answer(['case:delete'], { 'case:delete': 'OWN' }))
+
+      const mine = renderDelete(CALLER)
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled())
+      mine.unmount()
+
+      renderDelete(COLLEAGUE)
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled())
+    })
+
+    it('explains it with the restriction, and the tooltip is reachable', async () => {
+      vi.spyOn(api, 'get').mockResolvedValue(answer(['case:delete'], { 'case:delete': 'OWN' }))
+      renderDelete(COLLEAGUE)
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled())
+
+      // Hovering the WRAPPER, not the button: MUI puts `pointer-events: none` on a disabled
+      // control, which is the defect this component exists to prevent and would leave the
+      // greyed-out button explaining nothing.
+      await userEvent.hover(screen.getByTestId('Delete').parentElement as HTMLElement)
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(/you created/)
+    })
+
+    it('disables Delete on an UNAUTHORED case rather than treating null as a match', async () => {
+      vi.spyOn(api, 'get').mockResolvedValue(answer(['case:delete'], { 'case:delete': 'OWN' }))
+      renderDelete(null)
+
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled())
+    })
+
+    it('leaves an unqualified grant enabled on every row, author or not', async () => {
+      // The guard that keeps the three tests above from passing against a gate that disables
+      // Delete for everybody — which is what a wrong `authorId` comparison would produce, and
+      // which would look like a working feature to anyone who only tested the Test Engineer.
+      vi.spyOn(api, 'get').mockResolvedValue(answer(['case:delete']))
+      renderDelete(COLLEAGUE)
+
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled())
+    })
+  })
 })

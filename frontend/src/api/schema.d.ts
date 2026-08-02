@@ -3427,6 +3427,7 @@ export interface components {
             automationStatus: components["schemas"]["AutomationStatus"];
             stepFormat: components["schemas"]["StepFormat"];
             owner: components["schemas"]["UserRef"] | null;
+            createdBy: components["schemas"]["UserRef"] | null;
             testType?: string | null;
             testLevel?: string | null;
             features: string[];

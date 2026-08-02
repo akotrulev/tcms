@@ -56,3 +56,39 @@ fall-open policy means a consumer left on the old shape looks **normal** rather 
 **Also still owed from §61, found and not fixed:** the artifact register's plan filter is `useState`
 rather than the URL, so a plan's register **cannot be linked to** while every other filtered screen
 can. Not a §65 regression — an older gap that this queue is now the place to track.
+
+---
+
+## §66 — the `OWN` qualifier reaches the row
+
+**What shipped unverified:** `TestCaseSummary.createdBy` is on the wire, and the case detail's
+Delete button is gated on it — a Test Engineer sees Delete enabled on cases they wrote and disabled,
+with the reason on it, on everyone else's.
+
+**Fixture needed:** at least two live cases in one project with **different** `created_by` values,
+one of them the signed-in Test Engineer, plus one row with `created_by IS NULL`. The seeded data has
+no such split, so set it directly:
+
+```sql
+-- as tcms_owner, with app.current_company set
+UPDATE test_case SET created_by = '<engineer-uuid>' WHERE key = 'TC-1';
+UPDATE test_case SET created_by = '<lead-uuid>'     WHERE key = 'TC-2';
+UPDATE test_case SET created_by = NULL              WHERE key = 'TC-3';
+```
+
+| # | Drive | Must observe |
+|---|---|---|
+| 1 | Sign in as a **Test Engineer**, open TC-1 (theirs) | Delete is **enabled**, and deleting it works — 204, the case leaves the list |
+| 2 | Same caller, open TC-2 (the lead's) | Delete is **disabled**, and hovering it shows *"You can only delete test cases you created."* — not "you don't have permission", which is false for this caller |
+| 3 | Same caller, open TC-3 (`created_by IS NULL`) | Delete is **disabled**. This is the arm most likely to be wrong and it is invisible in the seeded data — an installation's oldest cases all look like this |
+| 4 | Sign in as a **Test Lead**, open TC-2 and TC-3 | Delete is **enabled on both**. Without this, #2 and #3 pass equally well against a page that disables Delete for everybody, which would lock out every lead in the product |
+| 5 | Sign in as a **Viewer**, open any case | Delete is disabled with the *ordinary* sentence (*"You don't have permission to delete test cases in this project."*) — the authorship path must not have replaced the plain permission gate |
+| 6 | As the Test Engineer, **create** a case, then open it | Delete is **enabled** — `created_by` is set to the creator on the server, so a case you just wrote is always one you can remove |
+| 7 | The case list and the case detail, network tab | `createdBy` is present on every row, `null` where the column is, and **is not the same person as `owner`** on the rows seeded above. If the two always agree, the fixture did not take and rows #1–#4 prove nothing |
+| 8 | `psql` after #1 | `SELECT deleted_at FROM test_case WHERE key='TC-1'` is set — the delete is soft, as `CaseDeleteDialog`'s copy claims |
+
+**Highest-risk rows are #3 and #4.** #3 because the null-author arm exists only in code and in one
+unit test, and the rows it governs are the ones no fixture happens to contain. #4 because every
+"disabled" observation above is also what a *broken-for-everyone* gate produces — and `useCan` is
+fail-closed while pending, which is exactly how this slice's own component test passed against a
+page with the wiring deleted.

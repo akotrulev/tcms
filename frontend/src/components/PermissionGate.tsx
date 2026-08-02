@@ -29,6 +29,7 @@ import { useCan, useCanInCompany } from '../auth/useCan';
 export function PermissionGate({
   projectId,
   permission,
+  authorId,
   wrapper = 'inline',
   children,
 }: {
@@ -45,6 +46,22 @@ export function PermissionGate({
   projectId: string | undefined | 'company';
   permission: PermissionKey;
   /**
+   * **The row's author**, for a permission whose grant may be `OWN`-qualified — today `case:delete`
+   * and only it (roles spec §A5). Supplying it switches the verdict from "do they hold this" to
+   * `Gate.canOnAuthored`, the client half of the server's `canDoOnAuthored`.
+   *
+   * Pass it through from the row **including when it is null** — an unauthored case is one an `OWN`
+   * grant does not reach, and defaulting the absence away would enable Delete on exactly the rows
+   * the server refuses. Omitting the prop entirely is the unqualified question, which is right for
+   * every other permission.
+   *
+   * Meaningless with `projectId="company"`: authorship is a question about a row in a project, and
+   * a company-scope grant has no row. That combination throws rather than quietly ignoring one of
+   * the two arguments — the same call this codebase's server makes when a qualifier and a question
+   * do not meet, and unreachable for the same reason.
+   */
+  authorId?: string | null;
+  /**
    * How the denied branch's tooltip anchor lays out. `inline` suits a flex row of buttons;
    * **`block` is required inside a `Menu`**, whose `MenuList` is a plain `<ul>` — an inline
    * anchor there makes the items flow along one line instead of stacking, which is what the
@@ -60,8 +77,25 @@ export function PermissionGate({
   const inProject = useCan(projectId === 'company' ? undefined : projectId);
   const inCompany = useCanInCompany(projectId === 'company');
   const gate = projectId === 'company' ? inCompany : inProject;
-  const allowed = gate.can(permission);
-  const reason = gate.reason(permission);
+
+  // `authorId !== undefined` rather than a truthiness check: null is a *supplied* author — the
+  // unauthored row — and it must reach canOnAuthored, which is the arm that refuses it. Reading
+  // `authorId ? … : …` here would silently give every unauthored case the unqualified verdict,
+  // which is the exact defect this prop exists to close.
+  const asksAuthorship = authorId !== undefined;
+  if (asksAuthorship && projectId === 'company') {
+    throw new Error(
+      'PermissionGate: authorId is a question about a row in a project, and projectId="company" ' +
+        'has no row. One of the two arguments would have to be ignored, so neither is.',
+    );
+  }
+
+  const allowed = asksAuthorship
+    ? gate.canOnAuthored(permission, authorId)
+    : gate.can(permission);
+  const reason = asksAuthorship
+    ? gate.reasonOnAuthored(permission, authorId)
+    : gate.reason(permission);
 
   const control = children({ allowed, reason });
   if (allowed || !reason) return <>{control}</>;

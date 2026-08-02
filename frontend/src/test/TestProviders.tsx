@@ -3,6 +3,8 @@ import { QueryClientProvider, type QueryClient } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { theme } from '../app/theme'
+import { AuthContext, type AuthValue } from '../auth/authContextValue'
+import type { CurrentUser } from '../api/types'
 
 /**
  * The smallest provider tree a component under test can need — and no more.
@@ -21,18 +23,43 @@ import { theme } from '../app/theme'
 export function TestProviders({
   client,
   route = '/',
+  userId,
   children,
 }: {
   client: QueryClient
   /** Initial URL. Only matters for components that read the router — `useCaseFilters`, links. */
   route?: string
+  /**
+   * The signed-in user's id, for the one gate that compares it: `case:delete`'s `OWN` qualifier
+   * asks whether the caller wrote the row.
+   *
+   * **Omitted is the default and answers "no session"**, which is why the other 470 tests needed no
+   * change when authorship landed — `useCan` reads this through the non-throwing
+   * `useCurrentUserId`, so a component that has nothing to do with authorship does not have to
+   * mount an auth provider to render. A test that asserts an author-gated affordance must pass it,
+   * or it is asserting the fail-closed arm by accident.
+   */
+  userId?: string
   children: ReactNode
 }) {
-  return (
+  const tree = (
     <MemoryRouter initialEntries={[route]}>
       <ThemeProvider theme={theme}>
         <QueryClientProvider client={client}>{children}</QueryClientProvider>
       </ThemeProvider>
     </MemoryRouter>
   )
+
+  if (userId === undefined) return tree
+
+  // Only the `user.id` is populated: nothing under test reads the rest, and filling in a plausible
+  // display name and team list would invite a test to assert against a fixture that no screen
+  // actually receives this way.
+  const session: AuthValue = {
+    user: { id: userId } as CurrentUser,
+    status: 'ready',
+    login: async () => {},
+    logout: () => {},
+  }
+  return <AuthContext value={session}>{tree}</AuthContext>
 }

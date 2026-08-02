@@ -26,7 +26,7 @@ import {
   reporting,
   writeCase,
 } from '../db';
-import { dimensions } from '../fixtures/core';
+import { currentUser, dimensions } from '../fixtures/core';
 import {
   API,
   LATENCY,
@@ -36,6 +36,7 @@ import {
   permissionsOn,
   problem,
   projectMembers,
+  qualifierOn,
   requireAuth,
   userRef,
 } from './shared';
@@ -340,6 +341,10 @@ export const caseHandlers = [
       // The creator owns what they wrote — `ownerId` is refused above, so there is nothing to
       // resolve. `userRef(0)` is this mock's stand-in for the signed-in user throughout.
       owner: userRef(0),
+      // And they wrote it, which is a distinct claim from owning it — the one `case:delete`'s OWN
+      // qualifier reads. It follows that a case you just created is one you can always delete,
+      // which is the behaviour the server has too (`TestCase.create` sets `created_by`).
+      createdBy: userRef(0),
       testType: (body.testType as string) ?? null,
       testLevel: (body.testLevel as string) ?? null,
       features: [],
@@ -713,11 +718,15 @@ export const caseHandlers = [
     the SPA's gate reads the SAME source (`permissionsOn`), so a mock that accepted the write would
     let a disabled button and a successful request coexist.
 
-    NOT modelled: the `OWN` refusal. `case:delete` is OWN-qualified for a Test Engineer, and the
-    server resolves that against the case's `created_by` — which the contract does not serve and
-    the fixtures therefore do not carry. Faking it against `owner` would refuse on a different fact
-    than the server uses and teach the wrong rule. Named here rather than half-implemented; the
-    live pass is where that branch is proved.
+    ~~NOT modelled: the `OWN` refusal.~~ → modelled now. It was deferred because the qualifier was
+    not on the wire (§65) and the case's author was not either, so the only fact available here was
+    `owner` — and refusing on `owner` would refuse on a DIFFERENT fact than the server uses, which
+    teaches the wrong rule more convincingly than not modelling it at all. Both halves landed, so
+    the refusal below reads `createdBy` exactly as `CaseDeleteService` reads `created_by`.
+
+    This is the half that keeps the mock from agreeing with itself: the SPA's Delete button asks
+    `Gate.canOnAuthored` and this handler asks `qualifierOn`, both over the same seeded catalogue,
+    so a disabled button and an accepted write cannot coexist in mock mode.
   */
   http.delete(`${API}/projects/:projectId/cases/:caseId`, async ({ params, request }) => {
     const denied = requireAuth(request);
@@ -735,6 +744,21 @@ export const caseHandlers = [
     const id = String(params.caseId);
     const index = db.cases.findIndex((c) => c.id === id);
     if (index < 0) return notFound('That test case');
+
+    // AFTER the lookup and in this order, mirroring CaseDeleteService: the answer depends on the
+    // row, and a caller who fails this check has already read the case, so 403 conceals nothing a
+    // 404 would. An unauthored case (`createdBy: null`) fails it too — an OWN grant does not reach
+    // work nobody can attribute.
+    const author = db.cases[index].createdBy?.id ?? null;
+    if (qualifierOn(String(params.projectId), 'case:delete') === 'OWN'
+        && author !== currentUser.id) {
+      return problem(
+        403,
+        'Forbidden',
+        'You can only delete test cases you created. Ask a test lead to delete this one.',
+      );
+    }
+
     // Removed from the store rather than flagged: the mock has no soft-delete column, and every
     // read here already goes through `db.cases`. What the server keeps — the row, for the runs
     // that pinned a version — has no reader in mock mode.

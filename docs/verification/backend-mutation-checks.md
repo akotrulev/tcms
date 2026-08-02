@@ -72,3 +72,47 @@ one axis would have looked equally green here.
 | **Scope** | `--tests 'com.tcms.identity.PermissionEvaluatorTest'` |
 | **Must redden** | *strongest wins — a Company Admin who is also a project's Test Engineer keeps ALL* |
 | **Why it matters** | This is the failure that decides authorization by row order, and it is invisible in a green suite unless a persona genuinely holds one key through two grants of different strength. If **nothing** reddens, the fixture no longer has such a persona and the strongest-wins merge is untested. |
+
+---
+
+## §66 — the `OWN` qualifier reaches the row
+
+### Run in the slice — the worked example
+
+| | |
+|---|---|
+| **File** | `repository/CaseSummaries.java`, the `render` mapping |
+| **Mutation** | `row.getCreatedBy()` → `row.getOwnerId()` for the `createdBy` field (serve the owner as the author) |
+| **Scope** | `--tests 'com.tcms.repository.CaseListEndpointTest'` |
+
+**Must redden — exactly these 4, and nothing else:**
+
+- `Authorship` › createdBy is the author, not the owner, when the two differ
+- `Authorship` › the author's name comes from the ACTIVE company's membership too
+- `Authorship` › an unauthored case is listed with a null createdBy, not hidden
+- `Authorship` › an owned-and-unauthored row proves the two columns are read separately
+
+**Observed:** exactly those 4 of 58, no others.
+
+**What makes it possible is the fixture, not the assertions.** `seedCases` now seeds `created_by`
+disagreeing with `owner_id` on almost every row, plus one owned-and-unauthored row (TC-4) and one
+authored-and-unowned row (TC-3). The two columns are equal on most *real* rows, so a fixture that
+seeded them equal would let this mutation pass every assertion in the class.
+
+### Still owed for §66 — NOT yet run
+
+| | |
+|---|---|
+| **File** | `identity/IdentityProjectAccess.java`, `canDoOnAuthored` |
+| **Mutation** | `case OWN -> userId.equals(authorId)` → `case OWN -> true` |
+| **Scope** | `--tests 'com.tcms.repository.CaseDeleteEndpointTest'` |
+| **Must redden** | *a Test Engineer may NOT delete a colleague's*, *a case with no recorded author is NOT the engineer's own*, *the two refusals carry different messages*, *a refused delete writes no audit row* |
+| **Why it matters** | This is the server half of what §66 wired to the client. The client gate is an affordance layer and falls **open** on a failed permissions query, so this switch is the only thing actually refusing the write. If it stops refusing, every SPA-side test in this slice still passes. |
+
+| | |
+|---|---|
+| **File** | `repository/CaseSummaries.java`, `peopleIds` |
+| **Mutation** | drop the `row.getCreatedBy()` branch (resolve owners only) |
+| **Scope** | `--tests 'com.tcms.repository.CaseListEndpointTest' --tests 'com.tcms.repository.CaseDetailEndpointTest'` |
+| **Must redden** | the two `Authorship` tests that assert a **resolved** author (`createdBy is the author…`, `the author's name comes from the ACTIVE company's membership too`) |
+| **Why it matters** | The failure mode is a `createdBy` that is silently `null` for an author nobody else on the page owns anything — so it would look exactly like the unauthored row, and the **client would disable Delete on cases the caller actually wrote**. A test asserting only "the key is present" would not see it. |

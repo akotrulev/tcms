@@ -114,7 +114,19 @@ export function CaseDetailPage() {
                       )
                     }
                   </PermissionGate>
-                  <PermissionGate projectId={projectId} permission="case:delete">
+                  {/*
+                    The one gate in the app that asks about the ROW, not just the caller.
+                    `case:delete` is OWN-qualified for a Test Engineer (roles spec §A5), so holding
+                    it is not the same as holding it *here* — and `data.createdBy` is passed through
+                    including when it is null, because an unauthored case is one the OWN grant does
+                    not reach. Before `createdBy` was on the wire this button enabled on every case
+                    and the caller discovered whose was whose by being refused.
+                  */}
+                  <PermissionGate
+                    projectId={projectId}
+                    permission="case:delete"
+                    authorId={data.createdBy?.id ?? null}
+                  >
                     {({ allowed }) => (
                       <Button
                         color="error"

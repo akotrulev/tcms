@@ -2310,7 +2310,7 @@ components:
 
     TestCaseSummary:
       type: object
-      required: [id, key, keySeq, title, suiteId, suiteName, priority, lifecycleStatus, automationStatus, stepFormat, owner, features, tags, healthSignals, updatedAt]
+      required: [id, key, keySeq, title, suiteId, suiteName, priority, lifecycleStatus, automationStatus, stepFormat, owner, createdBy, features, tags, healthSignals, updatedAt]
       properties:
         id: { type: string, format: uuid }
         key: { type: string, example: TC-1 }
@@ -2327,6 +2327,21 @@ components:
           # import, or an owner offboarded from the company), and the three ways to answer
           # that are: omit the row from the list, invent an owner, or say so. Only the last
           # is true — and the first loses a case from its own project's list.
+          allOf: [{ $ref: '#/components/schemas/UserRef' }]
+          nullable: true
+        createdBy:
+          # WHO WROTE THE CASE — and it is NOT `owner`, which is who is responsible for it now.
+          # The two diverge routinely (a case is authored once and reassigned), and only this one
+          # decides authorization: `case:delete` is OWN-qualified for a Test Engineer (roles spec
+          # §A5), and the server compares `test_case.created_by`. Until this field existed the
+          # client had no way to ask the same question, so the Delete button enabled for every
+          # case and a Test Engineer learned which ones were theirs by being refused.
+          #
+          # Nullable because `test_case.created_by` is: rows written before authorship was
+          # recorded have none. That is the arm that matters — the server answers a null author
+          # with `false` for an OWN grant ("your own work" must not stretch to work nobody can
+          # attribute), so the client must render those disabled rather than treating an absent
+          # author as a match.
           allOf: [{ $ref: '#/components/schemas/UserRef' }]
           nullable: true
         testType: { type: string, nullable: true }

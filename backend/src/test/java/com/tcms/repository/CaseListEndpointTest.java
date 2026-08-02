@@ -216,8 +216,8 @@ class CaseListEndpointTest extends IntegrationTestBase {
             JsonNode row = byKey(itemsAs(LEAD, ACME, ACME_BANKING, ""), "TC-1");
 
             assertThat(List.of("id", "key", "keySeq", "title", "suiteId", "suiteName", "priority",
-                    "lifecycleStatus", "automationStatus", "stepFormat", "owner", "features",
-                    "tags", "healthSignals", "updatedAt"))
+                    "lifecycleStatus", "automationStatus", "stepFormat", "owner", "createdBy",
+                    "features", "tags", "healthSignals", "updatedAt"))
                     .allSatisfy(field -> assertThat(row.has(field))
                             .as("TestCaseSummary.%s is required by openapi.yaml", field)
                             .isTrue());
@@ -756,6 +756,75 @@ class CaseListEndpointTest extends IntegrationTestBase {
     }
 
     // =====================================================================
+    // Authorship
+    // =====================================================================
+
+    /**
+     * {@code createdBy} — the field {@code case:delete}'s {@code OWN} qualifier is decided by.
+     *
+     * <p>Every assertion here would pass against {@code createdBy = owner} if the fixture seeded the
+     * two columns equal, which is what they are on most real rows. {@link #seedCases} deliberately
+     * disagrees them.
+     */
+    @Nested
+    @DisplayName("Authorship — who WROTE the case, which is not who owns it")
+    class Authorship {
+
+        @Test
+        @DisplayName("createdBy is the author, not the owner, when the two differ")
+        void authorIsNotTheOwner() throws Exception {
+            JsonNode row = byKey(itemsAs(LEAD, ACME, ACME_BANKING, ""), "TC-1");
+
+            assertThat(row.get("createdBy").get("id").asText())
+                    .as("test_case.created_by — the column CaseDeleteService compares")
+                    .isEqualTo(ADMIN.toString());
+            assertThat(row.get("owner").get("id").asText())
+                    .as("and the owner is somebody else, or this test proves nothing")
+                    .isEqualTo(LEAD.toString());
+        }
+
+        @Test
+        @DisplayName("the author's name comes from the ACTIVE company's membership too")
+        void authorNameIsPerMembership() throws Exception {
+            // Resolved through the same CaseOwners batch as the owner, so plan §6u's per-company
+            // display name holds for both columns rather than for whichever one was written first.
+            JsonNode author = byKey(itemsAs(LEAD, ACME, ACME_BANKING, ""), "TC-3").get("createdBy");
+
+            assertThat(author.get("displayName").asText()).isEqualTo("L. Lead (Acme)");
+            assertThat(author.get("id").asText()).isEqualTo(LEAD.toString());
+        }
+
+        @Test
+        @DisplayName("an unauthored case is listed with a null createdBy, not hidden")
+        void unauthoredCasesAreListed() throws Exception {
+            // created_by is nullable — a row written before authorship was recorded has none. The
+            // SPA renders those with Delete DISABLED for an OWN-qualified caller, mirroring
+            // canDoOnAuthored's `userId.equals(null)` → false: a grant covering "your own work"
+            // must not stretch to work nobody can attribute.
+            JsonNode row = byKey(itemsAs(LEAD, ACME, ACME_BANKING, ""), "TC-4");
+
+            assertThat(row.has("createdBy"))
+                    .as("present and null, so the SPA reads one shape either way")
+                    .isTrue();
+            assertThat(row.get("createdBy").isNull()).isTrue();
+        }
+
+        @Test
+        @DisplayName("an owned-and-unauthored row proves the two columns are read separately")
+        void ownerAndAuthorAreIndependent() throws Exception {
+            // TC-4 has an owner and no author; TC-3 has an author and no owner. Together they
+            // refuse both directions of the swap — a mapping that read one column for both fields
+            // fails on one of these two rows whichever column it picked.
+            List<JsonNode> items = itemsAs(LEAD, ACME, ACME_BANKING, "");
+
+            assertThat(byKey(items, "TC-4").get("owner").isNull()).isFalse();
+            assertThat(byKey(items, "TC-4").get("createdBy").isNull()).isTrue();
+            assertThat(byKey(items, "TC-3").get("owner").isNull()).isTrue();
+            assertThat(byKey(items, "TC-3").get("createdBy").isNull()).isFalse();
+        }
+    }
+
+    // =====================================================================
     // Classification and tags
     // =====================================================================
 
@@ -1166,46 +1235,56 @@ class CaseListEndpointTest extends IntegrationTestBase {
      */
     private void seedCases() throws SQLException {
         try (Connection connection = appConnection(ACME)) {
+            // `createdBy` DISAGREES with `owner_id` on almost every row, and that is the fixture's
+            // job rather than an accident. The two columns answer different questions — who wrote
+            // it, who is responsible for it now — and they are equal on most real rows, which is
+            // precisely why seeding them equal would let `createdBy: owner` pass every assertion
+            // below. §64's rule: seed the fixture so the wrong implementation is distinguishable.
             testCase(connection, caseId("tc1"), ACME_BANKING, REFUNDS, "TC-1", 1,
                     "Full refund to card", null, "CRITICAL", "APPROVED", "AUTOMATED",
-                    "STRUCTURED", LEAD, false);
+                    "STRUCTURED", LEAD, ADMIN, false);
             // A literal percent sign in the title, and key 10.
             testCase(connection, caseId("tc10"), ACME_BANKING, REFUNDS, "TC-10", 10,
                     "100% discount path", null, "LOW", "DEPRECATED", "NOT_AUTOMATABLE",
-                    "STRUCTURED", LEAD, false);
+                    "STRUCTURED", LEAD, ADMIN, false);
 
             testCase(connection, caseId("tc2"), ACME_BANKING, REFUNDS, "TC-2", 2,
                     "Partial refund rounding", null, "LOW", "DRAFT", "MANUAL",
-                    "GHERKIN", LEAD, false);
+                    "GHERKIN", LEAD, ADMIN, false);
             // Title says nothing about refunds; the DESCRIPTION does. That is what makes the
             // free-text assertion cover both columns rather than only the indexed one.
             testCase(connection, caseId("tc5"), ACME_BANKING, CHECKOUT, "TC-5", 5,
                     "Guest checkout", "Issue a refund at the till", "MEDIUM", "DRAFT", "MANUAL",
-                    "STRUCTURED", LEAD, false);
+                    "STRUCTURED", LEAD, ADMIN, false);
             // Unowned: owner_id is nullable in the schema and this is the row that proves the
-            // response says so rather than hiding the case or inventing a person.
+            // response says so rather than hiding the case or inventing a person. Its AUTHOR is
+            // set, so it also separates the two nullabilities — a mapping that returned the owner
+            // for both would answer null here and pass the unowned assertion.
             testCase(connection, caseId("tc3"), ACME_BANKING, REFUNDS, "TC-3", 3,
                     "Refund an expired card", null, "MEDIUM", "IN_REVIEW", "TO_BE_AUTOMATED",
-                    "STRUCTURED", null, false);
-            // Owned by an account with no Acme membership — offboarded.
+                    "STRUCTURED", null, LEAD, false);
+            // Owned by an account with no Acme membership — offboarded. UNAUTHORED: created_by is
+            // nullable and this is the row the OWN grant's "must not stretch to work nobody can
+            // attribute" arm is asserted against.
             testCase(connection, caseId("tc4"), ACME_BANKING, PARTIAL, "TC-4", 4,
                     "Split refund across two cards", null, "HIGH", "APPROVED", "MANUAL",
-                    "STRUCTURED", FORMER, false);
+                    "STRUCTURED", FORMER, null, false);
             testCase(connection, caseId("tc6"), ACME_BANKING, CHECKOUT, "TC-6", 6,
-                    "Deleted case", null, "LOW", "DRAFT", "MANUAL", "STRUCTURED", LEAD, true);
+                    "Deleted case", null, "LOW", "DRAFT", "MANUAL", "STRUCTURED", LEAD, LEAD, true);
             // LIVE, inside a soft-deleted suite. The row the live-tree bound exists for.
             testCase(connection, caseId("tc7"), ACME_BANKING, RETIRED_SUITE, "TC-7", 7,
                     "Case in a retired folder", null, "HIGH", "APPROVED", "MANUAL",
-                    "STRUCTURED", LEAD, false);
+                    "STRUCTURED", LEAD, LEAD, false);
             testCase(connection, caseId("mob1"), ACME_MOBILE, mobileSuite(), "TC-20", 20,
-                    "Mobile login", null, "HIGH", "APPROVED", "MANUAL", "STRUCTURED", LEAD, false);
+                    "Mobile login", null, "HIGH", "APPROVED", "MANUAL", "STRUCTURED", LEAD,
+                    LEAD, false);
         }
         try (Connection connection = appConnection(UMBRA)) {
             // TC-1 again: keys are numbered per COMPANY, so the collision is the product working
             // as designed and not a fixture cheat.
             testCase(connection, caseId("umb1"), UMBRA_BANKING, umbraSuite(), "TC-1", 1,
                     "Full refund to card", null, "CRITICAL", "APPROVED", "AUTOMATED",
-                    "STRUCTURED", null, false);
+                    "STRUCTURED", null, null, false);
         }
     }
 
@@ -1324,7 +1403,7 @@ class CaseListEndpointTest extends IntegrationTestBase {
     private void testCase(
             Connection connection, UUID id, UUID projectId, UUID suiteId, String key, long keySeq,
             String title, String description, String priority, String lifecycle,
-            String automation, String stepFormat, UUID ownerId, boolean deleted)
+            String automation, String stepFormat, UUID ownerId, UUID createdBy, boolean deleted)
             throws SQLException {
 
         UUID companyId = projectId.equals(UMBRA_BANKING) ? UMBRA : ACME;
@@ -1332,10 +1411,10 @@ class CaseListEndpointTest extends IntegrationTestBase {
                 INSERT INTO test_case
                     (id, company_id, project_id, suite_id, key, key_seq, title, description,
                      step_format, priority, lifecycle_status, automation_status,
-                     not_automatable_reason, owner_id, updated_at, deleted_at)
+                     not_automatable_reason, owner_id, created_by, updated_at, deleted_at)
                 VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?,
                         ?, CAST(? AS text), ?, ?, ?, ?, CAST(? AS text), CAST(? AS uuid),
-                        CAST(? AS timestamptz), CAST(? AS timestamptz))
+                        CAST(? AS uuid), CAST(? AS timestamptz), CAST(? AS timestamptz))
                 ON CONFLICT (id) DO NOTHING
                 """)) {
             statement.setString(1, id.toString());
@@ -1354,10 +1433,11 @@ class CaseListEndpointTest extends IntegrationTestBase {
             // automation coverage honestly denominated.
             statement.setString(13, "NOT_AUTOMATABLE".equals(automation) ? "Third-party captcha" : null);
             statement.setString(14, ownerId == null ? null : ownerId.toString());
+            statement.setString(15, createdBy == null ? null : createdBy.toString());
             // A fixed instant rather than now(): deterministic, and updatedAt is asserted only for
             // presence.
-            statement.setString(15, "2026-01-01T00:00:00Z");
-            statement.setString(16, deleted ? "2026-01-01T00:00:00Z" : null);
+            statement.setString(16, "2026-01-01T00:00:00Z");
+            statement.setString(17, deleted ? "2026-01-01T00:00:00Z" : null);
             statement.executeUpdate();
         }
     }

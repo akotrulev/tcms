@@ -56,9 +56,15 @@ import { formatCount } from '../../lib/format';
  * on hover, instead of a form that submits and comes back 403.
  *
  * That is possible here and was not in §61's artifact register, and the difference is worth
- * knowing: `case:approve` is a real permission key, so `GET /me/permissions` carries it. §61's
+ * knowing: `case:approve` is a real permission key, so `GET /me/permissions` carries it. ~~§61's
  * refusal turned on a *qualifier*, which is not on the wire at all — there the button had to enable
- * and the server had to answer with a field error.
+ * and the server had to answer with a field error.~~ → superseded in §65: qualifiers are on the
+ * wire, so that gap is closed and `Gate.canOnScope` / `canOnAuthored` ask those questions directly.
+ *
+ * **No action offered here is qualified**, which is why this dialog reads none of them: there is no
+ * bulk delete, and `case:delete` is the only `OWN`-qualified key in the catalogue. An action added
+ * later that *is* qualified needs the row's author per selected case — which this dialog does not
+ * hold, since it works from a list of ids — so it would be a design question, not a prop.
  */
 
 /** The contract's `BulkOperation.action` values, in the order the picker offers them. */

@@ -26,6 +26,19 @@ import java.util.UUID;
  *               inventing an owner ("Unassigned" as a fake user) puts a person on the wire who does
  *               not exist and whose id nothing can resolve. Same rule as §24's title-less inline
  *               condition — the response does not make a claim the data never made.
+ * @param createdBy <strong>who wrote the case, which is not {@link #owner}</strong> — that is who
+ *               is responsible for it now, and the two diverge the moment a case is reassigned.
+ *               This one is the field authorization turns on: {@code case:delete} is
+ *               {@code OWN}-qualified for a Test Engineer (roles spec §A5) and
+ *               {@code CaseDeleteService} compares {@code test_case.created_by}, so without this on
+ *               the wire the SPA had no way to ask the question the server answers — the Delete
+ *               button enabled on every case and the caller found out which were theirs by being
+ *               refused. Nullable for the same reason the column is: a row written before
+ *               authorship was recorded has no author, and
+ *               {@code IdentityProjectAccess.canDoOnAuthored} answers such a row {@code false} for
+ *               an {@code OWN} grant. Resolved through the <em>same</em> batch as {@link #owner} —
+ *               see {@link CaseSummaries}, where a second lookup would be the N+1 that this class
+ *               spends four bulk queries avoiding.
  * @param testType nullable — a case need not be classified, and nothing forces it to be
  * @param features every Feature value on the case, by name. A list because Feature is the one
  *               MULTI-cardinality dimension (plan §6d).
@@ -53,6 +66,7 @@ public record TestCaseSummaryView(
         AutomationStatus automationStatus,
         StepFormat stepFormat,
         UserRefView owner,
+        UserRefView createdBy,
         String testType,
         String testLevel,
         List<String> features,

@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useMyCompanyPermissions, useMyPermissions } from '../api/queries';
 import type { EffectivePermissions, PermissionKey } from '../api/types';
 import { permissionLabels } from '../lib/permissions';
+import { useCurrentUserId } from './useAuth';
 import type { UseQueryResult } from '@tanstack/react-query';
 
 /**
@@ -57,6 +58,26 @@ export interface Gate {
   /** The tooltip for a scope-denied action, distinguishing "not held" from "not here". */
   reasonOnScope: (permission: PermissionKey, rowIsPlanScoped: boolean) => string | undefined;
   /**
+   * The same question asked **about a row's author** — the client half of the server's
+   * `canDoOnAuthored`, and {@link canOnScope}'s twin over the other restrictive axis.
+   *
+   * A Test Engineer's `case:delete` is `OWN` (roles spec §A5), so {@link can} says true — they do
+   * delete cases — while deleting a *colleague's* case is refused. Until `createdBy` reached the
+   * wire the client could not tell those apart, so Delete enabled on every row and the caller
+   * learned which were theirs by being refused.
+   *
+   * **`authorId` may be null and that arm is the interesting one.** `test_case.created_by` is
+   * nullable, and the server answers a null author `false` for an `OWN` grant — a grant covering
+   * "your own work" must not stretch to work nobody can attribute. Passing the author through
+   * unchanged, rather than defaulting it, is what keeps the two sides agreeing on that row.
+   */
+  canOnAuthored: (permission: PermissionKey, authorId: string | null | undefined) => boolean;
+  /** The tooltip for an authorship-denied action, distinguishing "not held" from "not yours". */
+  reasonOnAuthored: (
+    permission: PermissionKey,
+    authorId: string | null | undefined,
+  ) => string | undefined;
+  /**
    * Whether the answer has not arrived yet — **"not yet", which is not "no"**.
    *
    * Every verdict above is fail-closed while pending, which is right for *disabling a control* and
@@ -93,10 +114,29 @@ export function useCanInCompany(enabled = true): Gate {
   return useGate(useMyCompanyPermissions(enabled), 'in this company');
 }
 
+/**
+ * `userId.equals(authorId)` — the server's `OWN` arm, with its null behaviour written out.
+ *
+ * **Both absences answer false, and neither is an oversight.** A case with no recorded author
+ * (`test_case.created_by` is nullable) belongs to nobody, so an `OWN` grant does not reach it; a
+ * caller with no id has no session and is about to be sent to sign in. `==`-style coercion would
+ * make those two absences equal each other and hand an unauthenticated render a Delete button on
+ * every unauthored case.
+ */
+function isTheAuthor(callerId: string | undefined, authorId: string | null | undefined): boolean {
+  return callerId != null && authorId != null && callerId === authorId;
+}
+
 /** The one implementation of the three states, so the two scopes cannot drift apart. */
 function useGate(query: UseQueryResult<EffectivePermissions>, where: string): Gate {
   const pending = query.isPending && !query.isError;
   const held = query.data?.permissions;
+  // The `OWN` arm compares the row's author against the caller, so the caller's id has to be in
+  // scope. Read here rather than passed in by each screen: an id supplied at the call site is one
+  // a call site could supply the *wrong* one of, and "which user is this" already has exactly one
+  // answer in the app. The non-throwing reader, deliberately — see its own header for why making
+  // every gated component require <AuthProvider> is the wrong price for one arm of one grant.
+  const callerId = useCurrentUserId();
 
   return useMemo<Gate>(() => {
     /**
@@ -154,6 +194,35 @@ function useGate(query: UseQueryResult<EffectivePermissions>, where: string): Ga
         }
         return undefined;
       },
+
+      // The same three arms as the server's canDoOnAuthored, in the same order. PLAN_SCOPE is not
+      // among them, for canOnScope's mirror-image reason: it restricts by where the row sits, which
+      // an authorship question has nothing to compare against. It falls open rather than throwing —
+      // the server throws there because it is deciding, and this is only deciding whether to grey
+      // out a button.
+      canOnAuthored: (permission, authorId) => {
+        if (pending) return false;
+        const qualifier = qualifierOf(permission);
+        if (qualifier === undefined) return true;
+        if (qualifier === null) return false;
+        return qualifier === 'OWN' ? isTheAuthor(callerId, authorId) : true;
+      },
+      reasonOnAuthored: (permission, authorId) => {
+        if (pending) return 'Checking your permissions…';
+        const qualifier = qualifierOf(permission);
+        if (qualifier === null) {
+          return `You don't have permission to ${permissionLabels[permission]} ${where}.`;
+        }
+        if (qualifier === 'OWN' && !isTheAuthor(callerId, authorId)) {
+          // Names the restriction rather than denying the permission, for reasonOnScope's reason:
+          // "you don't have permission to delete test cases" is false for this caller — they delete
+          // their own every day — and would send them to ask for a grant they already hold. This
+          // says which cases theirs covers, which is the fact they are missing. Deliberately close
+          // to the server's own 403 copy, so the disabled tooltip and the refusal agree.
+          return `You can only ${permissionLabels[permission]} you created.`;
+        }
+        return undefined;
+      },
     };
-  }, [pending, held, where]);
+  }, [pending, held, where, callerId]);
 }

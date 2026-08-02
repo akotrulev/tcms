@@ -30,6 +30,9 @@ export function writeCase(detail: TestCase): TestCase {
     automationStatus: detail.automationStatus,
     stepFormat: detail.stepFormat,
     owner: detail.owner,
+    // Copied from the detail, never re-derived: an edit must not silently re-author the case to
+    // whoever saved it. That would hand a Test Engineer delete rights over any case they edited.
+    createdBy: detail.createdBy,
     testType: detail.testType,
     testLevel: detail.testLevel,
     features: detail.features,

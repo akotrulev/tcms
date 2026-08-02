@@ -300,4 +300,118 @@ describe('useCan', () => {
       expect(failed.result.current.canOnScope('artifact:edit', false)).toBe(true)
     })
   })
+
+  describe('canOnAuthored — held, but not on this row', () => {
+    const CALLER = '99999999-9999-4999-8999-999999999999'
+    const COLLEAGUE = '88888888-8888-4888-8888-888888888888'
+
+    const asCaller = (children: ReactNode) => {
+      const client = createTestQueryClient()
+      return (
+        <TestProviders client={client} userId={CALLER}>
+          {children}
+        </TestProviders>
+      )
+    }
+
+    const engineer = () =>
+      vi.spyOn(api, 'get').mockResolvedValue(
+        answer(['case:read', 'case:delete'], { 'case:delete': 'OWN' }),
+      )
+
+    const gate = () =>
+      renderHook(() => useCan(PROJECT), { wrapper: ({ children }) => asCaller(children) })
+
+    it('lets an OWN grant delete the callers own row and refuses a colleagues', async () => {
+      engineer()
+      const { result } = gate()
+      await waitFor(() => expect(result.current.can('case:delete')).toBe(true))
+
+      // THE assertion, and the mirror of the canOnScope one above: `can` says true — they do
+      // delete cases — while this particular case is somebody else's. Before `createdBy` was on
+      // the wire the client could not tell these two rows apart, so Delete enabled on both.
+      expect(result.current.canOnAuthored('case:delete', CALLER)).toBe(true)
+      expect(result.current.canOnAuthored('case:delete', COLLEAGUE)).toBe(false)
+    })
+
+    it('refuses an UNAUTHORED row — an OWN grant does not reach work nobody wrote', async () => {
+      engineer()
+      const { result } = gate()
+      await waitFor(() => expect(result.current.can('case:delete')).toBe(true))
+
+      // `test_case.created_by` is nullable, and the server answers `userId.equals(null)` → false.
+      // A client that treated the absence as a match would enable Delete on exactly the rows the
+      // server refuses — and those are the OLDEST cases in an installation, so it would look like
+      // a bug in the import rather than in the gate.
+      expect(result.current.canOnAuthored('case:delete', null)).toBe(false)
+      expect(result.current.canOnAuthored('case:delete', undefined)).toBe(false)
+    })
+
+    it('says WHY, without claiming they lack a permission they hold', async () => {
+      engineer()
+      const { result } = gate()
+      await waitFor(() => expect(result.current.can('case:delete')).toBe(true))
+
+      const reason = result.current.reasonOnAuthored('case:delete', COLLEAGUE)
+      expect(reason).not.toMatch(/don't have permission/)
+      expect(reason).toMatch(/you created/)
+      expect(result.current.reasonOnAuthored('case:delete', CALLER)).toBeUndefined()
+    })
+
+    it('an unqualified grant of the same key deletes anybodys row', async () => {
+      // Without this, the test above passes equally well against a gate that refuses every row
+      // whose author is not the caller — which would stop a Test Lead deleting anything at all.
+      vi.spyOn(api, 'get').mockResolvedValue(answer(['case:delete']))
+      const { result } = gate()
+      await waitFor(() => expect(result.current.can('case:delete')).toBe(true))
+
+      expect(result.current.canOnAuthored('case:delete', COLLEAGUE)).toBe(true)
+      expect(result.current.canOnAuthored('case:delete', null)).toBe(true)
+      expect(result.current.reasonOnAuthored('case:delete', COLLEAGUE)).toBeUndefined()
+    })
+
+    it('a key not held at all is refused on every row, with the ordinary sentence', async () => {
+      vi.spyOn(api, 'get').mockResolvedValue(answer(['case:read']))
+      const { result } = gate()
+      await waitFor(() => expect(result.current.can('case:read')).toBe(true))
+
+      expect(result.current.canOnAuthored('case:delete', CALLER)).toBe(false)
+      // Not "you can only delete cases you created" — that would tell a Viewer to go and write
+      // one, which would not help.
+      expect(result.current.reasonOnAuthored('case:delete', CALLER)).toMatch(/don't have permission/)
+    })
+
+    it('with no session, an OWN grant matches nothing', async () => {
+      // The non-throwing `useCurrentUserId` answers undefined outside a provider. That must not
+      // collide with an unauthored row: two absences are not a match, or an unauthenticated render
+      // would offer Delete on every case nobody wrote.
+      engineer()
+      const { result } = renderHook(() => useCan(PROJECT), {
+        wrapper: ({ children }) => wrapper(children),
+      })
+      await waitFor(() => expect(result.current.can('case:delete')).toBe(true))
+
+      expect(result.current.canOnAuthored('case:delete', null)).toBe(false)
+      expect(result.current.canOnAuthored('case:delete', CALLER)).toBe(false)
+    })
+
+    it('follows the same three states — closed while pending, open on failure', async () => {
+      const pending = deferred<EffectivePermissions>()
+      const get = vi.spyOn(api, 'get').mockReturnValue(pending.promise as Promise<never>)
+
+      const { result } = gate()
+      expect(result.current.canOnAuthored('case:delete', CALLER)).toBe(false)
+
+      pending.resolve(answer(['case:delete'], { 'case:delete': 'OWN' }))
+      await waitFor(() => expect(result.current.can('case:delete')).toBe(true))
+      expect(result.current.canOnAuthored('case:delete', COLLEAGUE)).toBe(false)
+
+      get.mockRejectedValue(new Error('network'))
+      const failed = renderHook(() => useCan(PROJECT), {
+        wrapper: ({ children }) => asCaller(children),
+      })
+      await waitFor(() => expect(failed.result.current.can('case:delete')).toBe(true))
+      expect(failed.result.current.canOnAuthored('case:delete', COLLEAGUE)).toBe(true)
+    })
+  })
 })

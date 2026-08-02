@@ -34,6 +34,11 @@ interface Seed {
   automation: TestCase['automationStatus'];
   format: TestCase['stepFormat'];
   owner: number;
+  /**
+   * Who WROTE the case — `users` index, or `null` for a case written before authorship was
+   * recorded. **Omitted means "not the owner"**, see {@link authorOf}.
+   */
+  author?: number | null;
   type: string;
   level: string;
   features: string[];
@@ -43,17 +48,19 @@ interface Seed {
 }
 
 const seeds: Seed[] = [
-  { key: 'TC-1', title: 'Full refund of a settled card payment succeeds', suiteId: SUITE_REFUNDS, priority: 'CRITICAL', lifecycle: 'APPROVED', automation: 'AUTOMATED', format: 'GHERKIN', owner: 0, type: 'Functional', level: 'API', features: ['Payments', 'Refunds'], health: [], last: { statusKind: 'PASSED', executedAt: '2026-07-30T02:11:00Z', releaseVersion: '4.3.0' }, tags: ['smoke'] },
+  // author: 0 is `currentUser` — the rows an OWN-qualified caller may delete in mock mode. TC-3 is
+  // the unauthored one. Everything else falls to authorOf's not-the-owner default.
+  { key: 'TC-1', title: 'Full refund of a settled card payment succeeds', suiteId: SUITE_REFUNDS, priority: 'CRITICAL', lifecycle: 'APPROVED', automation: 'AUTOMATED', format: 'GHERKIN', owner: 0, author: 0, type: 'Functional', level: 'API', features: ['Payments', 'Refunds'], health: [], last: { statusKind: 'PASSED', executedAt: '2026-07-30T02:11:00Z', releaseVersion: '4.3.0' }, tags: ['smoke'] },
   { key: 'TC-2', title: 'Full refund moves the original payment to REFUNDED', suiteId: SUITE_REFUNDS, priority: 'HIGH', lifecycle: 'APPROVED', automation: 'AUTOMATED', format: 'GHERKIN', owner: 0, type: 'Functional', level: 'API', features: ['Refunds'], health: [], last: { statusKind: 'PASSED', executedAt: '2026-07-30T02:12:00Z', releaseVersion: '4.3.0' } },
-  { key: 'TC-3', title: 'A payment cannot be refunded twice', suiteId: SUITE_REFUNDS, priority: 'HIGH', lifecycle: 'APPROVED', automation: 'AUTOMATED', format: 'STRUCTURED', owner: 1, type: 'Functional', level: 'API', features: ['Refunds'], health: ['OUTDATED_SPEC_CHANGED'], last: { statusKind: 'PASSED', executedAt: '2026-07-30T02:13:00Z', releaseVersion: '4.3.0' } },
+  { key: 'TC-3', title: 'A payment cannot be refunded twice', suiteId: SUITE_REFUNDS, priority: 'HIGH', lifecycle: 'APPROVED', automation: 'AUTOMATED', format: 'STRUCTURED', owner: 1, author: null, type: 'Functional', level: 'API', features: ['Refunds'], health: ['OUTDATED_SPEC_CHANGED'], last: { statusKind: 'PASSED', executedAt: '2026-07-30T02:13:00Z', releaseVersion: '4.3.0' } },
   { key: 'TC-4', title: 'Refund appears in the merchant statement within one banking day', suiteId: SUITE_REFUNDS, priority: 'MEDIUM', lifecycle: 'APPROVED', automation: 'MANUAL', format: 'STRUCTURED', owner: 1, type: 'Functional', level: 'UI / E2E', features: ['Refunds', 'Settlement'], health: ['LONG_UNEXECUTED'], last: { statusKind: 'PASSED', executedAt: '2026-05-02T13:00:00Z', releaseVersion: '4.1.0' } },
-  { key: 'TC-5', title: 'Partial refund reduces the refundable balance', suiteId: SUITE_PARTIAL, priority: 'CRITICAL', lifecycle: 'APPROVED', automation: 'AUTOMATED', format: 'GHERKIN', owner: 0, type: 'Functional', level: 'API', features: ['Refunds', 'Partial refund'], health: ['STALE_APPROVAL'], last: { statusKind: 'FAILED', executedAt: '2026-07-30T02:14:00Z', releaseVersion: '4.3.0' } },
+  { key: 'TC-5', title: 'Partial refund reduces the refundable balance', suiteId: SUITE_PARTIAL, priority: 'CRITICAL', lifecycle: 'APPROVED', automation: 'AUTOMATED', format: 'GHERKIN', owner: 0, author: 0, type: 'Functional', level: 'API', features: ['Refunds', 'Partial refund'], health: ['STALE_APPROVAL'], last: { statusKind: 'FAILED', executedAt: '2026-07-30T02:14:00Z', releaseVersion: '4.3.0' } },
   { key: 'TC-6', title: 'Several partial refunds may not exceed the captured amount', suiteId: SUITE_PARTIAL, priority: 'CRITICAL', lifecycle: 'APPROVED', automation: 'AUTOMATED', format: 'GHERKIN', owner: 0, type: 'Functional', level: 'API', features: ['Partial refund'], health: [], last: { statusKind: 'FAILED', executedAt: '2026-07-30T02:15:00Z', releaseVersion: '4.3.0' } },
   { key: 'TC-7', title: 'Refund reason is recorded in the audit log', suiteId: SUITE_REFUNDS, priority: 'LOW', lifecycle: 'APPROVED', automation: 'MANUAL', format: 'STRUCTURED', owner: 2, type: 'Functional', level: 'UI / E2E', features: ['Refunds'], health: [], last: { statusKind: 'PASSED', executedAt: '2026-07-29T14:00:00Z', releaseVersion: '4.3.0' } },
   { key: 'TC-8', title: 'Partial refund above the remaining balance is rejected', suiteId: SUITE_PARTIAL, priority: 'HIGH', lifecycle: 'IN_REVIEW', automation: 'TO_BE_AUTOMATED', format: 'GHERKIN', owner: 1, type: 'Functional', level: 'API', features: ['Partial refund'], health: ['NEVER_EXECUTED'] },
   { key: 'TC-9', title: 'Refund is rejected after the 180-day window', suiteId: SUITE_REFUNDS, priority: 'MEDIUM', lifecycle: 'APPROVED', automation: 'AUTOMATED', format: 'STRUCTURED', owner: 1, type: 'Functional', level: 'API', features: ['Refunds'], health: [], last: { statusKind: 'PASSED', executedAt: '2026-07-30T02:16:00Z', releaseVersion: '4.3.0' } },
   { key: 'TC-10', title: 'Refund exactly on day 180 is accepted', suiteId: SUITE_REFUNDS, priority: 'MEDIUM', lifecycle: 'APPROVED', automation: 'AUTOMATED', format: 'STRUCTURED', owner: 1, type: 'Functional', level: 'API', features: ['Refunds'], health: [], last: { statusKind: 'PASSED', executedAt: '2026-07-30T02:17:00Z', releaseVersion: '4.3.0' } },
-  { key: 'TC-11', title: 'Refunding a disputed payment is blocked', suiteId: SUITE_REFUNDS, priority: 'HIGH', lifecycle: 'APPROVED', automation: 'AUTOMATED', format: 'STRUCTURED', owner: 0, type: 'Functional', level: 'API', features: ['Refunds'], health: ['STALE_AUTOMATION'], last: { statusKind: 'PASSED', executedAt: '2026-06-14T02:10:00Z', releaseVersion: '4.2.0' } },
+  { key: 'TC-11', title: 'Refunding a disputed payment is blocked', suiteId: SUITE_REFUNDS, priority: 'HIGH', lifecycle: 'APPROVED', automation: 'AUTOMATED', format: 'STRUCTURED', owner: 0, author: 0, type: 'Functional', level: 'API', features: ['Refunds'], health: ['STALE_AUTOMATION'], last: { statusKind: 'PASSED', executedAt: '2026-06-14T02:10:00Z', releaseVersion: '4.2.0' } },
   { key: 'TC-12', title: 'Partial refund of a multi-currency payment uses the capture rate', suiteId: SUITE_PARTIAL, priority: 'HIGH', lifecycle: 'DRAFT', automation: 'TO_BE_AUTOMATED', format: 'STRUCTURED', owner: 2, type: 'Functional', level: 'API', features: ['Partial refund'], health: ['NEVER_EXECUTED', 'INCOMPLETE'] },
   { key: 'TC-13', title: 'Card capture with a valid PAN succeeds', suiteId: SUITE_CAPTURE, priority: 'CRITICAL', lifecycle: 'APPROVED', automation: 'AUTOMATED', format: 'GHERKIN', owner: 1, type: 'Functional', level: 'API', features: ['Card capture'], health: [], last: { statusKind: 'PASSED', executedAt: '2026-07-30T02:02:00Z', releaseVersion: '4.3.0' }, tags: ['smoke'] },
   { key: 'TC-14', title: 'Capture is declined for an expired card', suiteId: SUITE_CAPTURE, priority: 'HIGH', lifecycle: 'APPROVED', automation: 'AUTOMATED', format: 'GHERKIN', owner: 1, type: 'Functional', level: 'API', features: ['Card capture'], health: [], last: { statusKind: 'PASSED', executedAt: '2026-07-30T02:03:00Z', releaseVersion: '4.3.0' } },
@@ -72,6 +79,24 @@ const seeds: Seed[] = [
   { key: 'TC-27', title: 'Refund webhook is delivered within 30 seconds', suiteId: SUITE_REFUNDS, priority: 'MEDIUM', lifecycle: 'DEPRECATED', automation: 'MANUAL', format: 'STRUCTURED', owner: 4, type: 'Functional', level: 'Integration', features: ['Refunds'], health: ['ORPHANED'], last: { statusKind: 'PASSED', executedAt: '2026-03-11T10:00:00Z', releaseVersion: '4.0.0' } },
 ];
 
+/**
+ * A seed's author — **defaulting to somebody who is not its owner**.
+ *
+ * The default is the interesting decision. `createdBy` and `owner` are equal on most real rows,
+ * which is exactly why a fixture that defaults them equal proves nothing: a client reading `owner`
+ * where it means `createdBy` would render every screen correctly and refuse nothing, and the
+ * `case:delete` `OWN` gate this field exists for would be wrong in the one direction nobody looks.
+ * Defaulting to the *next* user makes the two visibly different everywhere, so the mistake shows up
+ * on the first screen rather than on the first 403. §64's rule, applied to a mock.
+ *
+ * The seeds that matter override it: some are authored by {@link currentUser}, so mock mode shows a
+ * Test Engineer a Delete button that is enabled on their own cases and disabled on the rest, and
+ * one is `null`, the unauthored row an `OWN` grant does not reach.
+ */
+function authorOf(s: Seed): number | null {
+  return s.author === undefined ? (s.owner + 1) % users.length : s.author;
+}
+
 function toSummary(s: Seed, index: number): TestCaseSummary {
   return {
     id: uid(100 + index, 'e'),
@@ -85,6 +110,7 @@ function toSummary(s: Seed, index: number): TestCaseSummary {
     automationStatus: s.automation,
     stepFormat: s.format,
     owner: ref(s.owner),
+    createdBy: authorOf(s) === null ? null : ref(authorOf(s) as number),
     testType: s.type,
     testLevel: s.level,
     features: s.features,
