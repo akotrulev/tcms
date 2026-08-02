@@ -2,7 +2,7 @@
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { useRef } from 'react';
 import { api, newIntentKey, qs } from '../client';
-import type { TestExecution, TestRun, TestRunDetail } from '../types';
+import type { Evidence, TestExecution, TestRun, TestRunDetail } from '../types';
 import { base, keys } from './keys';
 
 export function useRuns(projectId: string, planId?: string): UseQueryResult<TestRun[]> {
@@ -75,6 +75,58 @@ export interface ExecutionResultInput {
   statusId?: string;
   comment?: string | null;
   stepResults?: { stepId?: string; statusId?: string; comment?: string | null }[];
+}
+
+/**
+ * The instance's upload ceiling, mirroring `spring.servlet.multipart.max-file-size`.
+ *
+ * <p>Checked client-side as **copy, not as security** — the server is the gate and answers 413.
+ * This exists so the user learns before a 10 MB upload finishes, rather than after.
+ */
+export const MAX_EVIDENCE_BYTES = 10 * 1024 * 1024;
+
+export interface EvidenceUploadInput {
+  file: File;
+  caption?: string;
+  /** Attaches to one step's result rather than to the execution as a whole. */
+  stepId?: string;
+}
+
+export function useAttachEvidence(projectId: string, runId: string, executionId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ file, caption, stepId }: EvidenceUploadInput) => {
+      // FormData, never a JSON body — `api.upload` is the one call that leaves Content-Type to the
+      // browser so the multipart boundary survives.
+      const form = new FormData();
+      form.append('file', file);
+      if (caption) form.append('caption', caption);
+      if (stepId) form.append('stepId', stepId);
+      return api.upload<Evidence>(
+        `${base(projectId)}/runs/${runId}/executions/${executionId}/evidence`,
+        form,
+      );
+    },
+    onSuccess: () => {
+      // Refetch rather than setQueryData: evidence lands either on the execution or on one step,
+      // and the server decides which. Patching the cache here would need a second copy of that
+      // rule, which is how the mock and the client came to disagree in §52.
+      void client.invalidateQueries({ queryKey: keys.execution(projectId, runId, executionId) });
+    },
+  });
+}
+
+export function useDeleteEvidence(projectId: string, runId: string, executionId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (evidenceId: string) =>
+      api.del<void>(
+        `${base(projectId)}/runs/${runId}/executions/${executionId}/evidence/${evidenceId}`,
+      ),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.execution(projectId, runId, executionId) });
+    },
+  });
 }
 
 export function useSubmitResult(projectId: string, runId: string, executionId: string) {

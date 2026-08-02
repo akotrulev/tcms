@@ -27,6 +27,7 @@ import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
 import { StatusChip } from '../../components/StatusChip';
+import { EvidencePanel } from './EvidencePanel';
 import { formatDateTime } from '../../lib/format';
 import { statusLabels } from '../../lib/labels';
 
@@ -355,6 +356,15 @@ function ExecutionForm({
               slotProps={{ htmlInput: { 'data-testid': 'Execution.CommentField' } }}
             />
           </Panel>
+
+          {/* Below Notes rather than beside the result buttons: attaching a screenshot is part of
+              describing what happened, not part of choosing the verdict. */}
+          <EvidencePanel
+            projectId={projectId}
+            runId={runId}
+            executionId={execution.id}
+            evidence={execution.evidence}
+          />
         </Stack>
 
         {/* The result actions. Sticky, because on a long case the tester is at the bottom of

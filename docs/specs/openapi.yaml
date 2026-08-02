@@ -3148,7 +3148,19 @@ components:
         url: { type: string }
         thumbnailUrl: { type: string, nullable: true }
         caption: { type: string, nullable: true }
-        createdBy: { $ref: '#/components/schemas/UserRef' }
+        createdBy:
+          allOf: [{ $ref: '#/components/schemas/UserRef' }]
+          nullable: true
+          description: |
+            **Nullable, and that is load-bearing.** `evidence.created_by` has no `NOT NULL` and no
+            foreign key, so a row written before authorship was recorded has no author — and
+            `evidence:delete`'s `OWN` qualifier answers such a row **false**: a grant covering
+            "your own work" must not stretch to work nobody can attribute.
+
+            The client must therefore be able to see the *absence* rather than infer it. A
+            non-nullable declaration here would make the SPA collapse "no author" into "some
+            author", which is the arm the whole qualifier turns on. Same shape as
+            `TestCaseSummary.createdBy` (§66).
         createdAt: { type: string, format: date-time }
 
     ExecutionResultInput:

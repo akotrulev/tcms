@@ -10,7 +10,8 @@ import {
   recountRun,
   runExecutions,
 } from '../db';
-import { API, LATENCY, holdsOn, notFound, problem, userRef } from './shared';
+import { currentUser } from '../fixtures/core';
+import { API, LATENCY, holdsOn, notFound, problem, qualifierOn, userRef } from './shared';
 
 export const runHandlers = [
   http.get(`${API}/projects/:projectId/runs`, async ({ request }) => {
@@ -126,6 +127,94 @@ export const runHandlers = [
     const execution = runExecutions(String(params.runId)).find((e) => e.id === params.executionId);
     return execution ? HttpResponse.json(execution) : notFound('That execution');
   }),
+
+  /*
+    Evidence. Both halves are modelled — the attach AND the OWN refusal on the delete — because a
+    mock that disabled the button and then accepted the write would teach the wrong rule more
+    convincingly than not modelling it at all (§66's argument, which is why the case handler stopped
+    deferring it). The refusal below reads `createdBy` exactly as `EvidenceService` reads
+    `created_by`, after the lookup and in the same order.
+  */
+  http.post(
+    `${API}/projects/:projectId/runs/:runId/executions/:executionId/evidence`,
+    async ({ params, request }) => {
+      await delay(LATENCY);
+      const execution = runExecutions(String(params.runId)).find((e) => e.id === params.executionId);
+      if (!execution) return notFound('That execution');
+
+      if (!holdsOn(String(params.projectId), 'evidence:attach')) {
+        return problem(
+          403,
+          'Not allowed',
+          'You do not have permission to attach evidence in this project.',
+        );
+      }
+
+      const form = await request.formData();
+      const file = form.get('file');
+      if (!(file instanceof File)) {
+        return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+          file: ['Choose a file to attach.'],
+        });
+      }
+
+      const caption = form.get('caption');
+      const attached = {
+        id: newId(),
+        filename: file.name,
+        contentType: file.type || 'application/octet-stream',
+        sizeBytes: file.size,
+        // A blob: URL rather than the server's /content route — in mock mode there is no server to
+        // serve the bytes, and this makes the thumbnail actually render what was just chosen. It is
+        // the one place the mock cannot mirror the real shape, so it is said out loud here.
+        url: URL.createObjectURL(file),
+        thumbnailUrl: null,
+        caption: typeof caption === 'string' && caption ? caption : null,
+        createdBy: userRef(0),
+        createdAt: new Date().toISOString(),
+      };
+      execution.evidence = [...(execution.evidence ?? []), attached];
+      return HttpResponse.json(attached, { status: 201 });
+    },
+  ),
+
+  http.delete(
+    `${API}/projects/:projectId/runs/:runId/executions/:executionId/evidence/:evidenceId`,
+    async ({ params }) => {
+      await delay(LATENCY);
+      const execution = runExecutions(String(params.runId)).find((e) => e.id === params.executionId);
+      if (!execution) return notFound('That execution');
+
+      if (!holdsOn(String(params.projectId), 'evidence:delete')) {
+        return problem(
+          403,
+          'Not allowed',
+          'You do not have permission to remove evidence in this project.',
+        );
+      }
+
+      const index = (execution.evidence ?? []).findIndex((e) => e.id === params.evidenceId);
+      if (index < 0) return notFound('That evidence');
+
+      // AFTER the lookup, mirroring the server: the answer depends on the row. Evidence with no
+      // recorded author (`createdBy: null`) fails it too — an OWN grant does not reach work nobody
+      // can attribute.
+      const author = execution.evidence[index].createdBy?.id ?? null;
+      if (
+        qualifierOn(String(params.projectId), 'evidence:delete') === 'OWN' &&
+        author !== currentUser.id
+      ) {
+        return problem(
+          403,
+          'Forbidden',
+          'You can only remove evidence you attached. Ask a test lead to remove this one.',
+        );
+      }
+
+      execution.evidence = execution.evidence.filter((_, i) => i !== index);
+      return new HttpResponse(null, { status: 204 });
+    },
+  ),
 
   http.patch(`${API}/projects/:projectId/runs/:runId/executions/:executionId`, async ({ params, request }) => {
     await delay(LATENCY);

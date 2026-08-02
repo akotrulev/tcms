@@ -63,7 +63,7 @@ export function runExecutions(runId: string): TestExecution[] {
         comment: null,
         evidence: [],
       })),
-      evidence: [] as Evidence[],
+      evidence: seededEvidence(kind, i),
       lockVersion: 1,
     } satisfies TestExecution;
   });
@@ -178,3 +178,73 @@ export function recountRun(runId: string): void {
   }
   run.counts = tally;
 }
+
+/**
+ * Evidence on a seeded execution — only on the ones that FAILED, which is where a tester actually
+ * attaches a screenshot.
+ *
+ * **The authors deliberately disagree with the executor.** `executedBy` is `users[0]`, who is also
+ * the signed-in `currentUser`; seeding evidence to that same person would let a client that read
+ * the wrong field — or ignored authorship entirely — pass every assertion and render an enabled
+ * Delete on every row. §64's rule: seeded to the answer, both implementations look correct.
+ *
+ * So a failed execution carries one row authored by the caller (Delete enabled), one by a colleague
+ * (disabled, with the OWN sentence), and one with **no author at all** — the arm that exists only
+ * in code, governs the oldest rows in a real installation, and appears in no fixture unless
+ * somebody puts it there deliberately.
+ */
+function seededEvidence(kind: string, i: number): Evidence[] {
+  if (kind !== 'FAILED') return [];
+  const at = '2026-07-28T09:14:00Z';
+  const person = (n: number) => ({
+    id: users[n].id,
+    displayName: users[n].displayName,
+    email: users[n].email,
+    avatarUrl: null,
+  });
+  return [
+    {
+      id: uid(940 + i * 3, 'x'),
+      filename: 'balance-assertion.png',
+      contentType: 'image/png',
+      sizeBytes: 184_320,
+      url: TRANSPARENT_PNG,
+      thumbnailUrl: null,
+      caption: 'Balance shows 45.00 EUR after the refund',
+      createdBy: person(0),
+      createdAt: at,
+    },
+    {
+      id: uid(941 + i * 3, 'x'),
+      filename: 'server.log',
+      contentType: 'text/plain',
+      sizeBytes: 20_480,
+      url: TRANSPARENT_PNG,
+      thumbnailUrl: null,
+      caption: null,
+      createdBy: person(1 % users.length),
+      createdAt: at,
+    },
+    {
+      id: uid(942 + i * 3, 'x'),
+      filename: 'imported-from-the-old-tool.png',
+      contentType: 'image/png',
+      sizeBytes: 51_200,
+      url: TRANSPARENT_PNG,
+      thumbnailUrl: null,
+      caption: null,
+      // No author. Not an oversight — see the header.
+      createdBy: null,
+      createdAt: at,
+    },
+  ];
+}
+
+/**
+ * A 1×1 transparent PNG as a data: URI, so a thumbnail genuinely renders in mock mode.
+ *
+ * There is no server here to serve the `/content` route the real `url` points at, and a dead `src`
+ * would make the evidence strip look broken rather than populated.
+ */
+const TRANSPARENT_PNG =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';

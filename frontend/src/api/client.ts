@@ -172,7 +172,11 @@ async function request<T>(path: string, init: RequestInit = {}, options: Request
       ...init,
       signal: budget(timeoutMs, options.signal),
       headers: {
-        'Content-Type': 'application/json',
+        // A FormData body must NOT carry a hand-set Content-Type. The browser generates
+        // `multipart/form-data; boundary=…`, and the boundary is the only thing that tells the
+        // server where one part ends — set the header here and it is lost, after which the server
+        // cannot parse a single part and answers 400 for a request that looks correct in devtools.
+        ...(init.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
         ...authHeader(),
         ...(options.idempotencyKey ? { 'Idempotency-Key': options.idempotencyKey } : {}),
         ...options.headers,
@@ -252,4 +256,15 @@ export const api = {
   put: <T>(path: string, body?: unknown, options?: RequestOptions) =>
     request<T>(path, { method: 'PUT', body: JSON.stringify(body ?? {}) }, options),
   del: <T>(path: string, options?: RequestOptions) => request<T>(path, { method: 'DELETE' }, options),
+  /**
+   * A `multipart/form-data` POST — today only evidence upload.
+   *
+   * <p>Separate from `post` rather than a body-type branch inside it, because the two differ in
+   * more than serialization: the caller must not set `Content-Type` (see `request`), and an upload
+   * carries a file over a link the product does not choose, so it defaults to the **long** budget.
+   * A 10 MB attachment on hotel wifi outruns the 10s interactive one, and the failure looks like a
+   * broken server rather than a slow connection.
+   */
+  upload: <T>(path: string, form: FormData, options?: RequestOptions) =>
+    request<T>(path, { method: 'POST', body: form }, { timeoutMs: TIMEOUTS.long, ...options }),
 };

@@ -76,7 +76,24 @@ export default mergeConfig(
        * is to re-run until it passes, and that habit is what hides a real intermittent defect when
        * one finally arrives.
        */
-      testTimeout: 20_000,
+      /*
+       * **Raised 20s → 30s in the evidence slice, and the recurrence is the point.**
+       *
+       * Adding five tests elsewhere in the suite pushed `DocPageEditorPage`'s two `userEvent.type`
+       * tests over the 20 s budget — the same two, always, and always *Test timed out*, never an
+       * assertion. They pass alone in under 15 s for the whole file. So the suite has a load-
+       * dependent cliff and this number is how far the cliff is from the slowest test, which means
+       * **any slice that adds tests anywhere can redden a file it never touched.**
+       *
+       * Raising it again is the recorded remedy and it is still treating the symptom. The real fix
+       * is that two tests type whole sentences character-by-character through React's scheduler:
+       * `userEvent.type(el, text)` is dozens of real-timer round trips, and `paste` or a direct
+       * change event would assert the same thing in a fraction of the time. That is a change to
+       * `DocPageEditorPage.test.tsx`'s approach rather than to a budget, it is out of the evidence
+       * slice's scope, and it is written down here so the next person raising this number sees that
+       * it has now been raised twice for one cause.
+       */
+      testTimeout: 30_000,
       coverage: {
         provider: 'v8',
         reporter: ['text', 'html'],

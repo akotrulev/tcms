@@ -65,11 +65,15 @@ export {
 export { useConditions, useCreateSharedStep, useSharedSteps } from './library';
 export { useCreatePlan, usePlan, usePlanStatistics, usePlans } from './plans';
 export {
+  MAX_EVIDENCE_BYTES,
+  useAttachEvidence,
   useCreateRun,
+  useDeleteEvidence,
   useExecution,
   useRun,
   useRuns,
   useSubmitResult,
+  type EvidenceUploadInput,
   type ExecutionResultInput,
 } from './runs';
 export {
