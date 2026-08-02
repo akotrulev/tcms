@@ -393,3 +393,64 @@ over them is §66's warning, not evidence.
 | **Check** | migration-in-place |
 | **Mutation** | — |
 | **Must show** | **Nothing is owed. §72 adds no migration** — `test_run.status`, `started_at`, `completed_at` and `updated_by` have all been in `V1` from the beginning; `updated_by` is merely *mapped* for the first time. **`V22` is still free.** Recorded rather than omitted, because an absent row in this file reads as a check nobody thought about. |
+
+---
+
+## §73 — the plan lifecycle
+
+`test_plan.status` had exactly one writer — the create factory, writing `DRAFT` — so four of five
+values were unreachable and `closed_at` was a column nothing filled. `plan:edit`, `plan:approve` and
+`plan:delete` had **zero consumers in Java**. Scope for every row below:
+`--tests 'com.tcms.execution.PlanLifecycleEndpointTest'` (23 tests).
+
+### Run in the slice — PASSED
+
+| | |
+|---|---|
+| **File** | `execution/PlanLifecycle.java`, `permissionFor` |
+| **Mutation** | drop the "unmaking" arm — decide the gate from the **target alone**, the reading of §6g a careful implementer would arrive at |
+| **Result** | ✅ **RUN — reddens exactly 2**: *a Test Engineer cannot RESCIND an approval by asking for DRAFT*, and *nor un-start a plan somebody is executing against*. **This is the slice's central claim** and nothing else in the suite observes it: the mutated build still refuses the engineer the move *into* APPROVED, so a gate test written the obvious way passes on the defect. |
+
+| | |
+|---|---|
+| **File** | `execution/PlanLifecycle.java` |
+| **Mutation** | `APPROVE_PLAN = "plan:approve"` → `"plan:edit"` |
+| **Result** | ✅ **RUN — reddens exactly 3**: the two above plus *a Test Engineer is refused the approval*. The keys **discriminate** — `V3` grants `plan:edit` to Test Engineer and withholds `plan:approve`, so unlike §71's pair a persona the suite can build tells them apart. |
+
+| | |
+|---|---|
+| **File** | `execution/PlanDeleteService.java`, `apply` |
+| **Mutation** | `if (liveRuns > 0)` → `if (false)` — count the runs and ignore the answer |
+| **Result** | ✅ **RUN — reddens exactly 1**: *a plan with a live run is refused*. Worth stating what stays green: nothing else notices a plan being deleted out from under four runs, because `findPlanKeys` is not filtered on `deleted_at` and the runs keep rendering `TP-n`. |
+
+| | |
+|---|---|
+| **File** | `execution/TestPlan.java`, `applyStatus` |
+| **Mutation** | set `closedAt` on close and never clear it on reopen |
+| **Result** | ✅ **RUN — reddens exactly 1**: *closing stamps closed_at, and reopening to ACTIVE clears it again*. §72 queued the identical mutation for `TestRun.completedAt` and it is **still queued** — the two rows should be run together. |
+
+### Queued — not yet run
+
+| | |
+|---|---|
+| **File** | `execution/PlanLifecycle.java`, `decide` |
+| **Mutation** | allow `CLOSED` from any state (drop the `current == ACTIVE` test) |
+| **Must redden** | **exactly 1** — *CLOSED is reachable only from ACTIVE*. The pair to watch: with this defect in, `PlanDeleteService`'s refusal and the ladder stop partitioning the space, and a plan nobody executed can be recorded as a finished release. |
+
+| | |
+|---|---|
+| **File** | `execution/PlanStatusService.java`, `setStatus` |
+| **Mutation** | resolve the permission from the request alone — pass `PlanLifecycle.EDIT_PLAN` unconditionally as the `RequiredPermission` |
+| **Must redden** | **exactly 3** (the two edge tests + the approval refusal). Distinct from mutation 1 above: that one keeps the row in the decision and mis-reads it, this one **stops reading the row at all**, which is the shape a later refactor toward `writeGranted` would produce. |
+
+| | |
+|---|---|
+| **File** | `execution/PlanStatusService.java`, `apply` |
+| **Mutation** | return `Updated` for `Decision.Unchanged` **after** calling `move(...)` — i.e. treat a repeated click as a real move |
+| **Must redden** | **exactly 1** — *setting the status a plan already has is 200 and writes NOTHING*. The visible symptom is an audit trail where the change that mattered is buried under rows recording that nothing did. |
+
+| | |
+|---|---|
+| **Check** | migration-in-place |
+| **Mutation** | — |
+| **Must show** | **Nothing is owed. §73 adds no migration** — `status`, `closed_at`, `updated_by` and `deleted_at` have all been in `V1` from the beginning; `closed_at` and `updated_by` are merely *mapped* for the first time. **`V22` is still free.** |

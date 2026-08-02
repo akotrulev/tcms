@@ -343,3 +343,36 @@ a browser pass can reach by removing `'run:close'` from `src/mocks/fixtures/core
 same instant. There is no `If-Match` on the status endpoint by design (the target state is absolute),
 so the race resolves to "the close wins and the result 409s" or the reverse, and both are correct.
 Recorded so nobody reads its absence as an oversight.
+
+---
+
+## §73 — the plan lifecycle: the ladder, and the delete that refuses
+
+**Built and NOT browser-verified.** The eighth slice in the deferred queue.
+
+**The live-only rows come first, for §72's reason and one more.** `test_plan.status` had no writer,
+so on every real instance **every plan has always been `DRAFT`** — and the mock's fixtures carried
+only `ACTIVE` and `CLOSED` plans, so *the state a fresh install produces was the one state mock mode
+never rendered*. §72 wrote that lesson about runs; here it was already true of plans, three files
+away. This slice adds `TP-4` (DRAFT, no runs) and `TP-5` (IN_REVIEW) to the fixtures, so rows 3–8
+work in mock mode as written.
+
+**The mock persona holds `plan:edit`, `plan:approve` and `plan:delete`**, so row 4 needs a caller
+without one of them: remove `'plan:approve'` from `src/mocks/fixtures/core.ts`.
+
+| # | Flow | What must be true | Mode |
+|---|---|---|---|
+| 1 | Live: create a plan → open it from the list | The list chip reads **"Draft"** in the draft colour, not a grey unlabelled fall-through. The old map was `Record<string, string>`, carried an `ARCHIVED` that is not a plan status, and was **missing `IN_REVIEW` and `APPROVED`** — the two states this slice makes reachable. | **live only** |
+| 2 | Live: Submit for review → Approve → Start plan → Close plan | The header chip follows each step. `psql`: `status` moves, `closed_at` is set **only** on the close, `updated_by` is the actor, and `audit_event` holds **four** rows — `plan.submitted`, `plan.approved`, `plan.started`, `plan.closed` — each with `from` and `to`. | **live only** |
+| 3 | Reopen the closed plan | The chip returns to **"Active"**, `closed_at` is **null** again, and the audit action is `plan.reopened`, not a second `plan.started`. | mock + live |
+| 4 | Sign in as a caller with `plan:edit` but not `plan:approve` (Test Engineer) → open a plan in review | **Approve plan is disabled**; "Return to draft" beside it is **enabled**. Then open an *approved* plan: the same "Return to draft" button is now **disabled**. **The same control, the same target, gated differently by where the plan is** — the slice's central rule, seen from the UI. | mock + live |
+| 5 | On a draft plan, press **Close plan** — there is no such control, so use devtools/curl | **409** *"Only a plan that is being executed can be closed. Start the plan, or delete it if it was never used."* The absence of the button is the point; the server refusing anyway is the proof it is not a UI convention. | **live only** |
+| 6 | Draft plan (`TP-4`) → Delete → confirm | 204, the plan leaves the list, and the following read is a 404 page rather than an empty panel. | mock + live |
+| 7 | A plan with runs (`TP-1`) → Delete → confirm | The dialog **stays open** and shows *"3 test runs have been executed against this plan… Close the plan instead."* Not a corner toast, and not a closed dialog: nothing on that screen could have predicted this refusal, so it is the only place the sentence can land. | mock + live |
+| 8 | After row 7, open the run list | Each run still shows its `TP-n` chip and the link still opens the plan. This is what the refusal protects — and it is why the check is *"the runs are still whole"*, not *"the delete failed"*. | mock + live |
+| 9 | Live: a plan with exit criteria written by hand into `exit_criteria`, then the plan **list** | The "Exit criteria" column counts only criteria whose `met` is **false**. The list never evaluates anything, so every criterion arrives with `met: null` — the old `!c.met` counted all of them as unmet and would have read "3 unmet" for a plan whose gates were green. Invisible until the column has a writer, which is the next slice. | **live only** |
+
+**The row no browser can produce:** a lead approving while another lead returns the plan to draft in
+the same instant. There is no `If-Match` on this endpoint by design (the target state is absolute),
+so the race resolves to whichever lands second, and both orders are legal moves. Recorded so its
+absence does not read as an oversight.
