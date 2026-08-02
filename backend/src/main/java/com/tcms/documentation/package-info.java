@@ -41,12 +41,31 @@
  *
  * <h2>Allowed dependencies</h2>
  *
- * <p>{@code tenancy} and {@code project} — the isolation boundary and the gate
- * ({@link com.tcms.project.ProjectService#readVisible} / {@code #writeGranted}). Not
- * {@code identity}: unlike {@code repository}, {@code execution} and {@code work}, nothing here
- * renders a person. A page has {@code created_by} and {@code updated_by} columns and the contract
- * puts neither on the wire, so asking {@code identity} what somebody is called would be asking for
- * a value with no consumer.
+ * <p>{@code tenancy}, {@code project} and — since the artifact register — {@code identity}.
+ *
+ * <p>~~Not {@code identity}: unlike {@code repository}, {@code execution} and {@code work}, nothing
+ * here renders a person. A page has {@code created_by} and {@code updated_by} columns and the
+ * contract puts neither on the wire, so asking {@code identity} what somebody is called would be
+ * asking for a value with no consumer.~~ <strong>→ superseded.</strong> That was true of the
+ * documentation space and was never true of the register beside it: the contract's {@code Artifact}
+ * has {@code updatedBy} in its {@code required} array, because "who changed the environment guide,
+ * and when" is the question a stale-artifact conversation opens with. The claim was accurate about
+ * the part of the module that existed and was stated about the module, which is the difference
+ * between a scoped observation and a rule.
+ *
+ * <p>The dependency is narrow and it is worth naming what it is not. What
+ * {@link com.tcms.documentation.ArtifactPeople} asks {@code identity} is <em>what is this person
+ * called</em>. It is never <em>may they</em>: the gate stays
+ * {@link com.tcms.project.ProjectService}, and no class in this package computes an authorization
+ * answer. That is the same line {@code repository.CaseOwners} draws, and the reason the port-and-
+ * adapter shape used for {@code ProjectAccess} is not repeated — {@code project} cannot depend on
+ * {@code identity} without a cycle, and this module can, so a port here would mean making
+ * {@code identity} depend on the documentation module to hand back a display name.
+ *
+ * <p>{@code execution} is <strong>still not</strong> a dependency, and a plan-scope artifact needs a
+ * fact from it. {@link com.tcms.documentation.PlanFacts} is that edge, concentrated in one file and
+ * reading {@code test_plan} as native SQL — the pattern {@code work.BoardFacts} names, and its
+ * fourth instance.
  *
  * <h2>What is deliberately not built</h2>
  *
@@ -65,5 +84,5 @@
  * waiting for this module.
  */
 @org.springframework.modulith.ApplicationModule(
-        allowedDependencies = {"tenancy", "project"})
+        allowedDependencies = {"tenancy", "project", "identity"})
 package com.tcms.documentation;

@@ -286,6 +286,78 @@ class SeedDataTest extends IntegrationTestBase {
     }
 
     @Test
+    @DisplayName("no permission is granted with two different restrictive qualifiers")
+    void noPermissionCarriesTwoDifferentRestrictiveQualifiers() throws SQLException {
+        // THE COMPUTED CHECK that keeps PermissionQualifier#strongest total, and the reason that
+        // method throws rather than picking.
+        //
+        // "Strongest wins" is a real rule with real consequences: a caller holding a permission
+        // through two grants gets the union of what each covers, because demoting them for holding
+        // an ADDITIONAL role would make adding a role take capability away. It is expressible as a
+        // single value only while at most one restrictive qualifier is in play per key. ALL absorbs
+        // anything and NONE is the identity, so those merges are always answerable — but OWN and
+        // PLAN_SCOPE restrict along DIFFERENT axes, one by who wrote the row and one by what scope
+        // it sits at. Their union is "rows you wrote OR rows at plan scope", and PermissionQualifier
+        // has no value that says it.
+        //
+        // Before V19 this was vacuous — one restrictive value cannot disagree with itself — which
+        // is exactly why nobody had to think about it and exactly the shape §50 warns about: the
+        // property held by accident, and the accident was invisible at the place the rule was
+        // written (an ordinal comparison over an enum's declaration order).
+        //
+        // The repair for a violation here is never to relax the merge. It is to decide which single
+        // restriction the key carries, because a key that means two different things to two roles
+        // is a key that cannot be rendered on the permissions screen either.
+        assertThat(queryStrings("""
+                SELECT rp.permission_key || ' → ' || string_agg(DISTINCT rp.qualifier, ', ')
+                  FROM role_permission rp
+                 WHERE rp.qualifier <> 'ALL'
+                 GROUP BY rp.permission_key
+                HAVING COUNT(DISTINCT rp.qualifier) > 1
+                 ORDER BY 1
+                """))
+                .as("""
+                        Permission keys granted with two different restrictive qualifiers. \
+                        PermissionQualifier#strongest cannot merge these — it throws rather than \
+                        silently narrowing or widening a grant — so a caller holding both would get \
+                        a 500 at the gate instead of an authorization answer. Decide on one \
+                        restriction for the key; do NOT make the merge pick a winner, which would \
+                        make an authorization decision depend on enum declaration order.""")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("Test Engineer edits a plan's artifacts and not the project's — the V19 grant")
+    void testEngineerHoldsArtifactEditOnlyAtPlanScope() throws SQLException {
+        // The roles spec's Artifacts table states this as `plan scope only`, and V12's two-value
+        // CHECK could not express it. It is asserted as DATA rather than through the endpoint
+        // because the endpoint's gate reads this row: a test that only drove HTTP would pass on a
+        // day the grant said ALL and the gate had been written to match it.
+        //
+        // The direction matters. Test Engineer's grant was ALL until V19 — V12's backfill default,
+        // correct for every row that existed then — so this does not fail closed. An artifact:edit
+        // gate written against the old data lets a Test Engineer rewrite the test strategy that
+        // every cycle inherits read-only (plan §6n), which is a silent widening, not an outage.
+        assertThat(queryStrings("""
+                SELECT r.name || ' / ' || rp.permission_key || ' = ' || rp.qualifier
+                  FROM role_permission rp
+                  JOIN role r ON r.id = rp.role_id
+                 WHERE rp.permission_key = 'artifact:edit'
+                 ORDER BY r.name
+                """))
+                .as("""
+                        Every grant of artifact:edit. Test Engineer must be PLAN_SCOPE; the three \
+                        roles that own the project's shared documents must be ALL. A role appearing \
+                        here that the spec's Artifacts table does not grant is the defect — the \
+                        spec is authoritative.""")
+                .containsExactly(
+                        "Company Admin / artifact:edit = ALL",
+                        "Instance Admin / artifact:edit = ALL",
+                        "Test Engineer / artifact:edit = PLAN_SCOPE",
+                        "Test Lead / artifact:edit = ALL");
+    }
+
+    @Test
     @DisplayName("Automation Service is exactly the six permissions of spec A6")
     void automationServiceIsTheSmallestRole() throws SQLException {
         // A leaked CI token is the realistic breach, so this grant is enumerated rather

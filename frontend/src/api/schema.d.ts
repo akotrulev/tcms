@@ -2310,7 +2310,56 @@ export interface paths {
             };
         };
         put?: never;
-        post?: never;
+        /**
+         * Register an artifact
+         * @description Registers a **reference** — a documentation page or an external URL — at project or plan
+         *     scope.
+         *
+         *     `FILE` and `GENERATED_REPORT` are declared on `Artifact` because the register renders them,
+         *     and are deliberately **not** accepted here. An upload needs the storage port (open question
+         *     #28: a filesystem adapter, so the bytes proxy through the API and a request-size limit has
+         *     to exist first), and a pinned report needs the `reporting` module, which does not exist. A
+         *     `kind` this endpoint cannot honour is a `400` rather than a silently different artifact.
+         *
+         *     Steering people toward references is the design, not a limitation of this slice — plan §6n
+         *     calls the register's failure mode "a graveyard of outdated copies", and a strategy document
+         *     *authored* as a doc page and *registered* here cannot go stale the way an uploaded copy of
+         *     it does.
+         *
+         *     `status` is absent from the input on purpose (plan §6g): `SUPERSEDED` is the outcome of
+         *     superseding something, and a create that could set it would be an author approving their
+         *     own record.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ArtifactInput"];
+                };
+            };
+            responses: {
+                /** @description Registered */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Artifact"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -4061,6 +4110,58 @@ export interface components {
             updatedBy: components["schemas"]["UserRef"];
             /** Format: date-time */
             updatedAt: string;
+        };
+        /**
+         * @description A registration. Which of `docPageId` / `url` is required is decided by `kind`, and which of
+         *     `planId` is required is decided by `scope` — both are validated server-side and answered as
+         *     a `400` naming the field, because a schema that expressed them as `oneOf` would generate a
+         *     union the SPA has to discriminate before it can render one form.
+         */
+        ArtifactInput: {
+            /**
+             * @description `PLAN` requires `planId`. `PROJECT` requires it to be absent — a project-scope artifact
+             *     is inherited by *every* plan (plan §6n), so a plan id on one would name a relationship
+             *     that does not exist.
+             *
+             *     This is also the field the permission qualifier reads: `artifact:edit` is held outright
+             *     by a Test Lead and **plan-scope-only** by a Test Engineer, so a `PROJECT` here can be a
+             *     `403` where a `PLAN` from the same caller is a `201`.
+             * @enum {string}
+             */
+            scope: "PROJECT" | "PLAN";
+            /**
+             * Format: uuid
+             * @description Required when `scope` is `PLAN`, and rejected otherwise.
+             */
+            planId?: string | null;
+            /**
+             * @description Strategy · TestData · Environment · SignOff · Compliance · Tooling · Template · Other
+             *     (plan §6n). A free string rather than an enum because the list is described as
+             *     project-configurable, and the register groups by it rather than switching on it.
+             */
+            category: string;
+            /**
+             * @description The two **reference** kinds. Narrower than `Artifact.kind` on purpose — see the
+             *     operation description for why `FILE` and `GENERATED_REPORT` are not accepted here.
+             * @enum {string}
+             */
+            kind: "DOC_PAGE_REF" | "EXTERNAL_URL";
+            title: string;
+            description?: string | null;
+            /**
+             * Format: uuid
+             * @description Required when `kind` is `DOC_PAGE_REF`. Must name a live page **in this project** — a
+             *     page in another project of the same company is a `400`, and one in another company is
+             *     the same `400` rather than a `404`, because distinguishing them would confirm the id
+             *     names something real (§6t).
+             */
+            docPageId?: string | null;
+            /**
+             * @description Required when `kind` is `EXTERNAL_URL`. Must be `http` or `https`: the register renders
+             *     this as a link, and a `javascript:` or `data:` URL rendered as one is stored XSS with
+             *     the product's own markup around it.
+             */
+            url?: string | null;
         };
         User: components["schemas"]["UserRef"] & {
             /** @enum {string} */

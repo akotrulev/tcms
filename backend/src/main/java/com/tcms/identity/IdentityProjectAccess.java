@@ -108,6 +108,50 @@ public class IdentityProjectAccess implements ProjectAccess {
             case NONE -> false;
             case ALL -> true;
             case OWN -> userId.equals(authorId);
+            // A grant restricted by row scope, asked about a row's author. The two questions do not
+            // meet: this method has no scope to compare, so neither answer would be about the
+            // caller's actual grant. Refusing loudly rather than returning false — which reads as a
+            // clean authorization denial and would be investigated against the grants, where
+            // nothing is wrong — for PermissionQualifier#ofStored's reason. Unreachable today:
+            // artifact:edit is the only PLAN_SCOPE grant and no caller asks it about an author.
+            case PLAN_SCOPE -> throw new IllegalStateException(
+                    "'" + permission + "' is PLAN_SCOPE-qualified for this caller, so authorship "
+                            + "does not decide it. Use canDoOnScope — see the roles spec's "
+                            + "Artifacts table and V19.");
+        };
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>The same three lines as {@link #canDoOnAuthored}, over the other axis:
+     *
+     * <ul>
+     *   <li>{@link PermissionQualifier#NONE} is a refusal, so this needs no {@code canDo} call in
+     *       front of it and callers cannot get the order wrong.</li>
+     *   <li>{@link PermissionQualifier#ALL} is a yes at either scope. A Test Lead editing the
+     *       project's test strategy is the ordinary case, not an exception.</li>
+     *   <li>{@link PermissionQualifier#PLAN_SCOPE} is a yes only for a plan's own row. Note it does
+     *       <em>not</em> consult the caller: a Test Engineer may supersede a colleague's snapshot
+     *       inside the cycle, which is the difference from {@code OWN} and the reason V19 added a
+     *       value rather than reusing one.</li>
+     * </ul>
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public boolean canDoOnScope(
+            UUID userId, UUID projectId, String permission, boolean rowIsPlanScoped) {
+
+        return switch (permissions.qualifierOf(userId, projectId, permission)) {
+            case NONE -> false;
+            case ALL -> true;
+            case PLAN_SCOPE -> rowIsPlanScoped;
+            // Mirror of the arm above, and unreachable for the same reason: no key is granted with
+            // two different restrictive qualifiers (V19, SeedDataTest), so a scope question never
+            // meets an authorship-restricted grant.
+            case OWN -> throw new IllegalStateException(
+                    "'" + permission + "' is OWN-qualified for this caller, so row scope does not "
+                            + "decide it. Use canDoOnAuthored — see roles spec §A5 and V12.");
         };
     }
 

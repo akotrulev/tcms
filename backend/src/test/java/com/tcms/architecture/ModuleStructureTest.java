@@ -72,8 +72,11 @@ class ModuleStructureTest {
                         comment records what it does instead. `work` is the sharper case — it may \
                         depend on NEITHER `execution` nor `repository`, while the derived half of the \
                         board is made entirely of their rows, so both edges are concentrated in \
-                        `work.BoardFacts`. `documentation` is the narrowest yet: tenancy and project \
-                        only, because nothing in it renders a person.""")
+                        `work.BoardFacts`. `documentation` was the narrowest — tenancy and project \
+                        only, "because nothing in it renders a person" — until the artifact register \
+                        arrived with `updatedBy` in the contract's required array and made that false; \
+                        it now takes `identity` for display names only, and reaches `test_plan` \
+                        through `documentation.PlanFacts` rather than depending on `execution`.""")
                 .containsExactly(
                         "auth", "documentation", "execution", "identity", "project", "provisioning",
                         "repository", "tenancy", "work");

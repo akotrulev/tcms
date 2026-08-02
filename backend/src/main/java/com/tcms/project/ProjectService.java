@@ -234,6 +234,50 @@ public class ProjectService {
     }
 
     /**
+     * <strong>The gate for a write whose permission is {@code PLAN_SCOPE}-qualified for some
+     * role.</strong> {@link #writeGrantedByAuthorship}'s twin over the other restrictive axis: it
+     * decides whether the caller holds {@code permission} on the project at all, and hands the
+     * callback a {@link RowScopeGate} for the half only the callback can ask.
+     *
+     * <p>Everything the authorship gate's header says about the split applies unchanged, including
+     * <strong>the honest cost</strong>: a callback that never calls {@link RowScopeGate#mayActOn}
+     * silently gets the unqualified behaviour, so the endpoint's test asserts the refusal from the
+     * outside — a Test Engineer creating a project-scope artifact — rather than trusting this
+     * signature's shape.
+     *
+     * <p>The scope reaches the callback from the <em>request</em> on a create and from the
+     * <em>row</em> on an edit, and both are correct: the qualifier restricts which rows a grant
+     * covers, and a create is the act of bringing such a row into existence.
+     *
+     * @param permission the permission the action needs, a constant at the call site as in
+     *                   {@link #writeGranted}
+     */
+    @Transactional
+    public <T> GateResult<T> writeGrantedByRowScope(
+            UUID userId,
+            UUID projectId,
+            String permission,
+            BiFunction<Project, RowScopeGate, T> write) {
+
+        Optional<Project> project = projects.findScopedById(projectId);
+        if (project.isEmpty() || !access.canView(userId, project.get().getId())) {
+            // The read gates first and in this order, for the reason writeGranted gives: a caller
+            // who cannot see the project must not tell a nonexistent id from an ungranted one.
+            return new GateResult.Unreachable<>();
+        }
+        UUID gatedProjectId = project.get().getId();
+        if (!access.canDo(userId, gatedProjectId, permission)) {
+            // Held-for-nothing is refused before any row is read, so a Viewer's 403 costs no lookup
+            // and cannot depend on whether the row they named exists.
+            return new GateResult.Denied<>();
+        }
+        RowScopeGate rowScope =
+                planScoped -> access.canDoOnScope(userId, gatedProjectId, permission, planScoped);
+
+        return new GateResult.Allowed<>(write.apply(project.get(), rowScope));
+    }
+
+    /**
      * <strong>The gate for a write that has no project to be gated on.</strong> Runs {@code write}
      * only if the caller holds {@code permission} company-wide in the company currently open.
      *

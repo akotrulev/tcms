@@ -99,6 +99,29 @@ public interface ProjectAccess {
     boolean canDoOnAuthored(UUID userId, UUID projectId, String permission, UUID authorId);
 
     /**
+     * May this caller do {@code permission} to a row <strong>at the given scope</strong>?
+     *
+     * <p>{@link #canDoOnAuthored}'s twin for the other restrictive qualifier, and everything that
+     * method's header says about why the row's fact crosses the boundary — rather than the grant
+     * crossing back out to be interpreted — applies here unchanged. The alternative would put "what
+     * does {@code PLAN_SCOPE} mean" in every module that owns a scoped row, which is the second
+     * authorization-resolution path plan §6b names.
+     *
+     * <p>The rule it answers is the roles spec's Artifacts row: {@code artifact:edit} is held
+     * outright by a Test Lead and plan-scope-only by a Test Engineer. Project-scope artifacts are
+     * inherited read-only by every plan (plan §6n), so they are the project's shared documents and
+     * editing one edits every cycle.
+     *
+     * <p>Note this is asked of <em>creates</em> as well as edits, where there is no row yet: the
+     * scope in the request is the scope the row would have. That is not a widening — a create that
+     * lands a project-scope artifact is exactly the act the qualifier withholds, and gating it on
+     * the requested scope is the only point at which it can be refused.
+     *
+     * @param rowIsPlanScoped whether the row belongs to one plan rather than the whole project
+     */
+    boolean canDoOnScope(UUID userId, UUID projectId, String permission, boolean rowIsPlanScoped);
+
+    /**
      * Does this caller hold {@code permission} <strong>company-wide</strong>, in the company
      * currently open — with no project in the question at all?
      *
