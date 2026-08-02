@@ -236,6 +236,63 @@ class ContractConventionTest {
                 .isEmpty();
     }
 
+    // ------------------------------------------------ required vs the record ----
+
+    /**
+     * The response records this check pins, and the schema each one serves.
+     *
+     * <p>Deliberately a short, explicit list rather than a scan of every {@code *View} in the
+     * codebase: the pairing between a record and a schema is a fact only a human knows, and a
+     * check that guessed it would fail on the first view whose name does not match its schema.
+     * What is <em>computed</em> is the part reading cannot do — the required set, resolved
+     * through {@code allOf}, compared against the record's actual components.
+     */
+    private static final Map<String, Class<?>> RESPONSE_RECORDS = Map.of(
+            "TestCaseSummary", com.tcms.repository.TestCaseSummaryView.class,
+            "TestCase", com.tcms.repository.TestCaseDetailView.class);
+
+    @Test
+    @DisplayName("a response record has a component for every property its schema requires")
+    void requiredPropertiesHaveAComponent() {
+        List<String> offenders = new ArrayList<>();
+
+        RESPONSE_RECORDS.forEach((schema, record) -> {
+            Set<String> components = new java.util.LinkedHashSet<>();
+            for (var component : record.getRecordComponents()) {
+                components.add(component.getName());
+            }
+            for (String required : contract.requiredOf("#/components/schemas/" + schema)) {
+                if (!components.contains(required)) {
+                    offenders.add(schema + "." + required
+                            + "  is required by the contract and absent from "
+                            + record.getSimpleName());
+                }
+            }
+        });
+
+        assertThat(offenders)
+                .as("""
+                        A record that omits a required property serves a response the contract says
+                        cannot happen — Jackson emits no key at all, and every consumer reads the
+                        absence as whatever its language's "missing" is.
+
+                        This check exists because that shipped. §66 added `createdBy` to
+                        TestCaseSummary — which `TestCase` is an `allOf` of — and TestCaseDetailView
+                        never grew the component, so `GET /cases/{caseId}` omitted the key for two
+                        slices. The case detail is the only screen with a delete affordance, its gate
+                        is `case:delete` qualified OWN, and the SPA reads `data.createdBy?.id ?? null`
+                        — an absent key became `null`, null is a SUPPLIED author matching nobody, and
+                        a Test Engineer was refused their own case. The exact inverse of the feature.
+
+                        Nothing could see it. `tsc` allows optional chaining on a required field, the
+                        page's own test supplies a fixture that has the key, and the detail endpoint's
+                        field test enumerated the required list BY HAND — written before `createdBy`
+                        existed and never revisited. That hand-written list is what this replaces.
+
+                        Missing components:""")
+                .isEmpty();
+    }
+
     // -------------------------------------------------------------- helpers ----
 
     /**

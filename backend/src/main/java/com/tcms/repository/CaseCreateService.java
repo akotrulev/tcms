@@ -1,5 +1,6 @@
 package com.tcms.repository;
 
+import com.tcms.project.ClassificationDimensionView;
 import com.tcms.project.GateResult;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectService;
@@ -93,6 +94,7 @@ public class CaseCreateService {
     private final SuiteRepository suites;
     private final CaseSteps steps;
     private final SharedStepService sharedSteps;
+    private final CaseClassifications classifications;
     private final CaseRenderer renderer;
     private final CaseVersions versions;
     private final DisplayKeys displayKeys;
@@ -106,6 +108,7 @@ public class CaseCreateService {
             SuiteRepository suites,
             CaseSteps steps,
             SharedStepService sharedSteps,
+            CaseClassifications classifications,
             CaseRenderer renderer,
             CaseVersions versions,
             DisplayKeys displayKeys,
@@ -117,6 +120,7 @@ public class CaseCreateService {
         this.suites = suites;
         this.steps = steps;
         this.sharedSteps = sharedSteps;
+        this.classifications = classifications;
         this.renderer = renderer;
         this.versions = versions;
         this.displayKeys = displayKeys;
@@ -207,6 +211,12 @@ public class CaseCreateService {
             liveSuiteIds.add(suite.getId());
         }
 
+        // Resolved once, used to validate and then to render — see CaseUpdateService for why the
+        // two must be the same read rather than two reads a few lines apart.
+        List<ClassificationDimensionView> vocabularies =
+                renderer.vocabularies(userId, project.getId());
+        ClassificationVocabulary vocabulary = ClassificationVocabulary.of(vocabularies);
+
         CaseEdit.Outcome validated = CaseEdit.validate(
                 request,
                 liveSuiteIds,
@@ -220,6 +230,11 @@ public class CaseCreateService {
                 // makes is to references already made, not to making new ones.
                 sharedSteps.liveLibraryIds(
                         project.getId(), CaseEdit.referencedSharedStepIds(request.steps())),
+                vocabulary,
+                // Empty, for the same reason as the step ids above: nothing is stored yet, so there
+                // is no classification to leave alone. A create that omits the field makes an
+                // unclassified case, which is the only thing "leave it alone" can mean here.
+                Set.of(),
                 cases::existsByAutomationKey);
 
         if (validated instanceof CaseEdit.Outcome.Invalid invalid) {
@@ -247,9 +262,10 @@ public class CaseCreateService {
         // at its cause rather than under the version row written on top of it.
         cases.saveAndFlush(created);
         steps.reconcile(created, edit.steps());
+        classifications.reconcile(created, edit.classificationValueIds(), vocabulary, companyId);
 
         CaseVersions.Decision decision = versions.initial(edit);
-        TestCaseDetailView view = render(companyId, userId, project.getId(), created, liveSuites);
+        TestCaseDetailView view = renderer.render(created, liveSuites, vocabularies, companyId);
         versions.write(created, edit, decision, view, userId, now);
 
         auditEvents.save(AuditEvent.record(

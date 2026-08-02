@@ -49,6 +49,30 @@ public class CaseClassification {
     protected CaseClassification() {
     }
 
+    /**
+     * One case's position on one axis — the first writer this table has had.
+     *
+     * <p>{@code companyId} comes from the caller for {@link CaseTag#of}'s reason: RLS refuses an
+     * insert whose value does not match {@code app.current_company}, so passing the case's own
+     * company is what makes the row readable rather than one this connection writes and never sees.
+     *
+     * <p>{@code dimensionId} comes from the vocabulary the value was validated against, and never
+     * from a second lookup. The column is denormalized — derivable through
+     * {@code classification_value} — and {@code V2}'s trigger <strong>verifies the copy agrees</strong>
+     * before trusting it, because the SINGLE-cardinality check counts rows by this column and a row
+     * lying about its own axis would slip past it. So a wrong value here is a {@code 23514} rather
+     * than a silent bypass, and the way to keep it right is to take it from the same map that
+     * decided the value was acceptable at all.
+     */
+    static CaseClassification of(UUID caseId, UUID valueId, UUID dimensionId, UUID companyId) {
+        CaseClassification row = new CaseClassification();
+        row.caseId = caseId;
+        row.valueId = valueId;
+        row.dimensionId = dimensionId;
+        row.companyId = companyId;
+        return row;
+    }
+
     public UUID getCaseId() {
         return caseId;
     }

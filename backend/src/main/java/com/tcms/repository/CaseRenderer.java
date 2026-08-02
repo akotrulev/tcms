@@ -30,6 +30,7 @@ class CaseRenderer {
     private final ProjectConfigurationService configuration;
     private final CaseSummaries summaries;
     private final CaseConditions conditions;
+    private final CaseClassifications classifications;
     private final CaseAutomationTagRepository automationTags;
     private final TestStepRepository stepRows;
 
@@ -37,12 +38,14 @@ class CaseRenderer {
             ProjectConfigurationService configuration,
             CaseSummaries summaries,
             CaseConditions conditions,
+            CaseClassifications classifications,
             CaseAutomationTagRepository automationTags,
             TestStepRepository stepRows) {
 
         this.configuration = configuration;
         this.summaries = summaries;
         this.conditions = conditions;
+        this.classifications = classifications;
         this.automationTags = automationTags;
         this.stepRows = stepRows;
     }
@@ -82,6 +85,14 @@ class CaseRenderer {
                 summary,
                 automationTags.findForCase(row.getId()).stream()
                         .map(CaseAutomationTag::getTag)
+                        .toList(),
+                // Sorted, so the response is stable between two requests that changed nothing —
+                // the set has no order of its own, and an unstable one would make the version
+                // SNAPSHOT (this same render, serialized) differ from itself.
+                classifications
+                        .liveValueIdsOf(row.getId(), ClassificationVocabulary.of(vocabularies))
+                        .stream()
+                        .sorted()
                         .toList(),
                 stepRows.findForCase(row.getId()).stream().map(TestStepView::of).toList(),
                 conditions.forCase(row, liveSuites));

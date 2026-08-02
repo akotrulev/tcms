@@ -192,6 +192,34 @@ public final class OpenApiContract {
     }
 
     /**
+     * Every property a schema requires, <strong>collected through {@code allOf}</strong>.
+     *
+     * <p>The traversal is the whole value. {@code required} does not descend, so a schema written
+     * as {@code allOf: [Summary, {required: [...]}]} states its obligations in two places that no
+     * reader holds in mind at once — which is exactly how a property required by the first branch
+     * came to be missing from the record serving the whole thing. Reading either branch alone
+     * yields a list that looks complete.
+     *
+     * @param ref a local {@code $ref}, e.g. {@code #/components/schemas/TestCase}
+     */
+    Set<String> requiredOf(String ref) {
+        Set<String> required = new java.util.LinkedHashSet<>();
+        collectRequired(resolve(Map.of("$ref", ref)), required);
+        return required;
+    }
+
+    private void collectRequired(Map<String, Object> schema, Set<String> into) {
+        if (schema.get("required") instanceof List<?> declared) {
+            declared.forEach(name -> into.add(String.valueOf(name)));
+        }
+        if (schema.get("allOf") instanceof List<?> branches) {
+            for (Object branch : branches) {
+                collectRequired(resolve(asMap(branch)), into);
+            }
+        }
+    }
+
+    /**
      * Visits every mapping node in the document, deepest-last, handing the visitor a
      * JSON-Pointer-ish location so a failure message names the line a human has to edit.
      */

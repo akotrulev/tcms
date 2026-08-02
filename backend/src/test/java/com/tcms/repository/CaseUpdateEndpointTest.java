@@ -94,6 +94,25 @@ class CaseUpdateEndpointTest extends IntegrationTestBase {
     /** Test Engineer in Umbra only. */
     private static final UUID OUTSIDER = UUID.fromString("e0003000-0000-4000-8000-000000000005");
 
+    /** A live Feature value of ACME_BANKING — the ordinary case. */
+    private static final UUID FEATURE_CARDS = UUID.fromString("e0005000-0000-4000-8000-000000000001");
+    /** Its child, so a case can be classified at a leaf. */
+    private static final UUID FEATURE_CARDS_3DS =
+            UUID.fromString("e0005000-0000-4000-8000-000000000002");
+    /** Retired in ACME_BANKING — the soft-deleted arm the reconcile must leave alone. */
+    private static final UUID FEATURE_RETIRED =
+            UUID.fromString("e0005000-0000-4000-8000-000000000003");
+    /**
+     * A live Feature value of ACME_MOBILE — the sibling project.
+     *
+     * <p>The whole reason this slice validates at all. It is in the same company, so it satisfies
+     * {@code case_classification}'s foreign key, the company column, RLS, and every check V2's
+     * trigger makes — it is refused only because the vocabulary this project was served does not
+     * contain it.
+     */
+    private static final UUID FEATURE_MOBILE_ONLY =
+            UUID.fromString("e0005000-0000-4000-8000-000000000004");
+
     private static final UUID PAYMENTS = UUID.fromString("e0004000-0000-4000-8000-000000000001");
     private static final UUID REFUNDS = UUID.fromString("e0004000-0000-4000-8000-000000000002");
     private static final UUID MOBILE_SUITE = UUID.fromString("e0004000-0000-4000-8000-000000000003");
@@ -162,9 +181,32 @@ class CaseUpdateEndpointTest extends IntegrationTestBase {
         }));
 
         seedTrees();
+        seedVocabularies();
         resetMutableRows();
         seedCases();
         seedSteps();
+    }
+
+    /**
+     * The classification a case may be given — the company's three locked dimensions plus a Feature
+     * value in each of the two projects.
+     *
+     * <p>The company-level values are seeded by {@code tcms_seed_company_defaults} with generated
+     * ids, so they are looked up by name rather than pinned; the Feature values are inserted here
+     * with fixed ids because the tests name them. {@code tcms_seed_project_defaults} has already
+     * created each project's own (empty) Feature dimension in {@link #seedTrees()}.
+     */
+    private void seedVocabularies() throws SQLException {
+        try (Connection connection = appConnection(ACME)) {
+            seedCompanyDefaults(connection, ACME);
+            featureValue(connection, FEATURE_CARDS, ACME_BANKING, null, "cards", "Cards", false);
+            featureValue(connection, FEATURE_CARDS_3DS, ACME_BANKING, FEATURE_CARDS,
+                    "cards.three_d_secure", "3-D Secure", false);
+            featureValue(connection, FEATURE_RETIRED, ACME_BANKING, null,
+                    "cheques", "Cheques", true);
+            featureValue(connection, FEATURE_MOBILE_ONLY, ACME_MOBILE, null,
+                    "biometrics", "Biometrics", false);
+        }
     }
 
     /**
@@ -966,13 +1008,16 @@ class CaseUpdateEndpointTest extends IntegrationTestBase {
     class RefusedFields {
 
         @Test
-        @DisplayName("each of the six answers 400 keyed on its own name")
+        @DisplayName("each of the five answers 400 keyed on its own name")
         void eachUnsupportedFieldIsRefused() throws Exception {
             // Accepting and ignoring them is a save that reports success and discards what the user
             // typed — the user then discovers it only by reloading, and retypes it.
+            //
+            // classificationValueIds LEFT this list: it has a write path now, and its own nested
+            // class below. That is what the removal of a boundary looks like from a test — a field
+            // that moved from "refused" to "specified", not a line quietly deleted.
             Map<String, Object> values = new LinkedHashMap<>();
             values.put("ownerId", ENGINEER.toString());
-            values.put("classificationValueIds", List.of(UUID.randomUUID().toString()));
             values.put("tags", List.of("regression"));
             values.put("automationTags", List.of("@smoke"));
             values.put("preconditions", List.of(Map.of("conditionId", UUID.randomUUID().toString())));
@@ -999,6 +1044,339 @@ class CaseUpdateEndpointTest extends IntegrationTestBase {
             assertThat(patch(LEAD, ACME, ACME_BANKING, caseId("full"), edit("Renamed"), null)
                     .getResponse().getStatus())
                     .isEqualTo(200);
+        }
+    }
+
+    // =====================================================================
+    // Classification
+    // =====================================================================
+
+    @Nested
+    @DisplayName("Classification — the values a case carries, and the three ways to get it wrong")
+    class Classification {
+
+        @Test
+        @DisplayName("a live value of this project is stored, and comes back on the case")
+        void aValueIsAssigned() throws Exception {
+            Map<String, Object> payload = edit("Renamed");
+            payload.put("classificationValueIds", List.of(FEATURE_CARDS.toString()));
+
+            MvcResult result = patch(LEAD, ACME, ACME_BANKING, caseId("full"), payload, null);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(200);
+            assertThat(storedClassification(caseId("full"))).containsExactly(FEATURE_CARDS);
+            assertThat(idsOf(body(result))).containsExactly(FEATURE_CARDS);
+            // The names must agree with the ids on the SAME response — the contract promises they
+            // cannot disagree, and one filter implementation is what makes that true.
+            assertThat(namesOf(body(result), "features")).containsExactly("Cards");
+        }
+
+        @Test
+        @DisplayName("a PARENT value is assignable — nothing in the product requires a leaf")
+        void aParentValueIsAssignable() throws Exception {
+            // The editor claimed for two milestones that a flat select "would let someone set a
+            // parent where a leaf is required". No such rule exists in the plan, the ERD, the roles
+            // spec or V1 — §6q's descendant rule is about FILTERING. Asserted rather than assumed,
+            // because the belief was load-bearing enough to keep the field read-only.
+            Map<String, Object> payload = edit("Renamed");
+            payload.put("classificationValueIds", List.of(FEATURE_CARDS.toString()));
+
+            assertThat(patch(LEAD, ACME, ACME_BANKING, caseId("full"), payload, null)
+                    .getResponse().getStatus())
+                    .isEqualTo(200);
+            assertThat(storedClassification(caseId("full"))).containsExactly(FEATURE_CARDS);
+        }
+
+        @Test
+        @DisplayName("a SIBLING PROJECT's value is refused — it passes every database check")
+        void aSiblingProjectsValueIsRefused() throws Exception {
+            // The defect this validation exists for. The FK accepts it, the company column matches,
+            // RLS admits it and V2's trigger is satisfied, so without the vocabulary check it would
+            // be STORED — and every later read of this case would resolve a classification through
+            // a project the reader holds no grant on.
+            Map<String, Object> payload = edit("Renamed");
+            payload.put("classificationValueIds", List.of(FEATURE_MOBILE_ONLY.toString()));
+
+            MvcResult result = patch(LEAD, ACME, ACME_BANKING, caseId("full"), payload, null);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(result)).containsKey("classificationValueIds");
+            assertThat(storedClassification(caseId("full"))).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a RETIRED value cannot be newly assigned")
+        void aRetiredValueIsRefused() throws Exception {
+            Map<String, Object> payload = edit("Renamed");
+            payload.put("classificationValueIds", List.of(FEATURE_RETIRED.toString()));
+
+            assertThat(patch(LEAD, ACME, ACME_BANKING, caseId("full"), payload, null)
+                    .getResponse().getStatus())
+                    .isEqualTo(400);
+        }
+
+        @Test
+        @DisplayName("a value naming nothing is a field error, not the 500 the foreign key would give")
+        void anUnknownValueIsAFieldError() throws Exception {
+            Map<String, Object> payload = edit("Renamed");
+            payload.put("classificationValueIds", List.of(UUID.randomUUID().toString()));
+
+            MvcResult result = patch(LEAD, ACME, ACME_BANKING, caseId("full"), payload, null);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(result)).containsKey("classificationValueIds");
+        }
+
+        @Test
+        @DisplayName("the refusal does not say WHICH of the three reasons it was")
+        void theRefusalDoesNotDistinguishItsCause() throws Exception {
+            // Retired, another project's, and nonexistent must read identically: telling a caller
+            // that an id they may not use nevertheless exists is the inference channel §6t closes.
+            Map<String, Object> siblings = edit("A");
+            siblings.put("classificationValueIds", List.of(FEATURE_MOBILE_ONLY.toString()));
+            Map<String, Object> nowhere = edit("A");
+            nowhere.put("classificationValueIds", List.of(UUID.randomUUID().toString()));
+
+            assertThat(errorsOf(patch(LEAD, ACME, ACME_BANKING, caseId("full"), siblings, null)))
+                    .isEqualTo(errorsOf(patch(LEAD, ACME, ACME_BANKING, caseId("full"), nowhere, null)));
+        }
+
+        @Test
+        @DisplayName("two values on a SINGLE dimension are a 400, not the trigger's constraint violation")
+        void twoValuesOnOneSingleAxisAreRefused() throws Exception {
+            UUID functional = companyValueId("test_type", "Functional");
+            UUID performance = companyValueId("test_type", "Performance");
+
+            Map<String, Object> payload = edit("Renamed");
+            payload.put("classificationValueIds",
+                    List.of(functional.toString(), performance.toString()));
+
+            MvcResult result = patch(LEAD, ACME, ACME_BANKING, caseId("full"), payload, null);
+
+            // 400 and not 500: V2's trigger raises 23505 for this, and a constraint violation
+            // reaching the client is a 500 on a form that has a field to put a sentence on.
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(result)).containsKey("classificationValueIds");
+            assertThat(storedClassification(caseId("full"))).isEmpty();
+        }
+
+        @Test
+        @DisplayName("one value on each of two different SINGLE dimensions is fine")
+        void oneValuePerSingleAxisIsAccepted() throws Exception {
+            // The check must count per dimension, not across them. Counting globally would refuse
+            // a Test Type AND a Test Level together, which is the normal case.
+            UUID functional = companyValueId("test_type", "Functional");
+            UUID api = companyValueId("test_level", "API");
+
+            Map<String, Object> payload = edit("Renamed");
+            payload.put("classificationValueIds", List.of(functional.toString(), api.toString()));
+
+            assertThat(patch(LEAD, ACME, ACME_BANKING, caseId("full"), payload, null)
+                    .getResponse().getStatus())
+                    .isEqualTo(200);
+            assertThat(storedClassification(caseId("full")))
+                    .containsExactlyInAnyOrder(functional, api);
+        }
+
+        @Test
+        @DisplayName("several values on a MULTI dimension are fine — Feature is the one that matters")
+        void severalValuesOnAMultiAxisAreAccepted() throws Exception {
+            Map<String, Object> payload = edit("Renamed");
+            payload.put("classificationValueIds",
+                    List.of(FEATURE_CARDS.toString(), FEATURE_CARDS_3DS.toString()));
+
+            assertThat(patch(LEAD, ACME, ACME_BANKING, caseId("full"), payload, null)
+                    .getResponse().getStatus())
+                    .isEqualTo(200);
+            assertThat(storedClassification(caseId("full")))
+                    .containsExactlyInAnyOrder(FEATURE_CARDS, FEATURE_CARDS_3DS);
+        }
+
+        @Test
+        @DisplayName("a value left out of the payload is removed")
+        void anOmittedValueIsRemoved() throws Exception {
+            assign(FEATURE_CARDS, FEATURE_CARDS_3DS);
+
+            Map<String, Object> payload = edit("Renamed");
+            payload.put("classificationValueIds", List.of(FEATURE_CARDS.toString()));
+            patch(LEAD, ACME, ACME_BANKING, caseId("full"), payload, null);
+
+            assertThat(storedClassification(caseId("full"))).containsExactly(FEATURE_CARDS);
+        }
+
+        @Test
+        @DisplayName("an empty array clears the classification")
+        void anEmptyArrayClearsIt() throws Exception {
+            assign(FEATURE_CARDS);
+
+            Map<String, Object> payload = edit("Renamed");
+            payload.put("classificationValueIds", List.of());
+            patch(LEAD, ACME, ACME_BANKING, caseId("full"), payload, null);
+
+            assertThat(storedClassification(caseId("full"))).isEmpty();
+        }
+
+        @Test
+        @DisplayName("OMITTING the field leaves the classification alone — absent is not empty")
+        void omittingTheFieldLeavesItAlone() throws Exception {
+            assign(FEATURE_CARDS);
+
+            patch(LEAD, ACME, ACME_BANKING, caseId("full"), edit("Renamed"), null);
+
+            assertThat(storedClassification(caseId("full"))).containsExactly(FEATURE_CARDS);
+        }
+
+        @Test
+        @DisplayName("replacing the value on a SINGLE dimension works — delete must precede insert")
+        void replacingASingleAxisValueWorks() throws Exception {
+            UUID functional = companyValueId("test_type", "Functional");
+            UUID performance = companyValueId("test_type", "Performance");
+            assign(functional);
+
+            Map<String, Object> payload = edit("Renamed");
+            payload.put("classificationValueIds", List.of(performance.toString()));
+
+            // With the insert flushed first, V2's trigger counts the OUTGOING value as an existing
+            // one and refuses the incoming one as a second value on the axis — a 500 on the most
+            // ordinary edit there is. Hibernate orders inserts before deletes within a flush, so
+            // this passes only because the reconcile forces the other order explicitly.
+            assertThat(patch(LEAD, ACME, ACME_BANKING, caseId("full"), payload, null)
+                    .getResponse().getStatus())
+                    .isEqualTo(200);
+            assertThat(storedClassification(caseId("full"))).containsExactly(performance);
+        }
+
+        @Test
+        @DisplayName("a RETIRED value already on the case survives a save that cannot mention it")
+        void aRetiredAssignmentSurvives() throws Exception {
+            // The reconcile's bound, and the defect it prevents. GET never serves this value, so
+            // the client cannot resubmit it — and a reconcile that read "absent" as "delete" would
+            // silently discard a classification nobody chose to drop, on the first save of any case
+            // carrying one.
+            assign(FEATURE_RETIRED, FEATURE_CARDS);
+
+            Map<String, Object> payload = edit("Renamed");
+            payload.put("classificationValueIds", List.of(FEATURE_CARDS.toString()));
+            assertThat(patch(LEAD, ACME, ACME_BANKING, caseId("full"), payload, null)
+                    .getResponse().getStatus())
+                    .isEqualTo(200);
+
+            assertThat(storedClassification(caseId("full")))
+                    .containsExactlyInAnyOrder(FEATURE_RETIRED, FEATURE_CARDS);
+        }
+
+        @Test
+        @DisplayName("a retired value is not SERVED, though it is stored — ids and names agree")
+        void aRetiredAssignmentIsNotServed() throws Exception {
+            assign(FEATURE_RETIRED, FEATURE_CARDS);
+
+            JsonNode served = body(patch(LEAD, ACME, ACME_BANKING, caseId("full"),
+                    edit("Renamed"), null));
+
+            assertThat(idsOf(served)).containsExactly(FEATURE_CARDS);
+            assertThat(namesOf(served, "features")).containsExactly("Cards");
+        }
+
+        @Test
+        @DisplayName("the same values in a different order write NO second version")
+        void reorderingIsNotAChange() throws Exception {
+            Map<String, Object> first = edit("Stable");
+            first.put("classificationValueIds",
+                    List.of(FEATURE_CARDS.toString(), FEATURE_CARDS_3DS.toString()));
+            patch(LEAD, ACME, ACME_BANKING, caseId("full"), first, null);
+            int after = versionsOf(caseId("full")).size();
+
+            Map<String, Object> reversed = edit("Stable");
+            reversed.put("classificationValueIds",
+                    List.of(FEATURE_CARDS_3DS.toString(), FEATURE_CARDS.toString()));
+            patch(LEAD, ACME, ACME_BANKING, caseId("full"), reversed, null);
+
+            // CaseVersions#hash digests the edit's JSON, so an unsorted list would make two equal
+            // classifications hash differently and fill the version list with empty diffs — the
+            // noise plan §6j added the hash to keep out.
+            assertThat(versionsOf(caseId("full")).size()).isEqualTo(after);
+        }
+
+        @Test
+        @DisplayName("changing only the classification DOES write a version")
+        void aClassificationChangeIsAChange() throws Exception {
+            Map<String, Object> first = edit("Stable");
+            first.put("classificationValueIds", List.of(FEATURE_CARDS.toString()));
+            patch(LEAD, ACME, ACME_BANKING, caseId("full"), first, null);
+            int after = versionsOf(caseId("full")).size();
+
+            Map<String, Object> changed = edit("Stable");
+            changed.put("classificationValueIds", List.of(FEATURE_CARDS_3DS.toString()));
+            patch(LEAD, ACME, ACME_BANKING, caseId("full"), changed, null);
+
+            // The other half of the rule above, and the reason classification had to join the hash
+            // rather than merely the snapshot: before this slice, a save that reclassified a case
+            // recorded no version at all.
+            assertThat(versionsOf(caseId("full")).size()).isEqualTo(after + 1);
+        }
+
+        @Test
+        @DisplayName("a Viewer cannot classify — it is a write, gated by case:edit")
+        void aViewerCannotClassify() throws Exception {
+            Map<String, Object> payload = edit("Renamed");
+            payload.put("classificationValueIds", List.of(FEATURE_CARDS.toString()));
+
+            assertThat(patch(VIEWER, ACME, ACME_BANKING, caseId("full"), payload, null)
+                    .getResponse().getStatus())
+                    .isEqualTo(403);
+            assertThat(storedClassification(caseId("full"))).isEmpty();
+        }
+
+        /** Puts the case in a starting state, through the API, so no test seeds rows by hand. */
+        private void assign(UUID... valueIds) throws Exception {
+            Map<String, Object> payload = edit("Seeded");
+            payload.put("classificationValueIds",
+                    java.util.Arrays.stream(valueIds).map(UUID::toString).toList());
+
+            if (java.util.Arrays.asList(valueIds).contains(FEATURE_RETIRED)) {
+                // Except this one, which the API deliberately refuses to create — a retired value
+                // can only be assigned by having been assigned before it was retired. Written
+                // directly, for the same reason §67 wrote its null-author row in SQL: the state is
+                // real and unreachable through any endpoint, which is what makes it the arm most
+                // likely to be wrong.
+                assignDirectly(valueIds);
+                return;
+            }
+            assertThat(patch(LEAD, ACME, ACME_BANKING, caseId("full"), payload, null)
+                    .getResponse().getStatus())
+                    .isEqualTo(200);
+        }
+
+        private void assignDirectly(UUID... valueIds) throws SQLException {
+            try (Connection connection = appConnection(ACME)) {
+                for (UUID valueId : valueIds) {
+                    try (var statement = connection.prepareStatement("""
+                            INSERT INTO case_classification
+                                (company_id, case_id, value_id, dimension_id)
+                            SELECT CAST(? AS uuid), CAST(? AS uuid), v.id, v.dimension_id
+                              FROM classification_value v
+                             WHERE v.id = CAST(? AS uuid)
+                            ON CONFLICT DO NOTHING
+                            """)) {
+                        statement.setString(1, ACME.toString());
+                        statement.setString(2, caseId("full").toString());
+                        statement.setString(3, valueId.toString());
+                        statement.executeUpdate();
+                    }
+                }
+            }
+        }
+
+        private List<UUID> idsOf(JsonNode served) {
+            List<UUID> ids = new ArrayList<>();
+            served.get("classificationValueIds").forEach(node -> ids.add(UUID.fromString(node.asText())));
+            return ids;
+        }
+
+        private List<String> namesOf(JsonNode served, String field) {
+            List<String> names = new ArrayList<>();
+            served.get(field).forEach(node -> names.add(node.asText()));
+            return names;
         }
     }
 
@@ -1378,6 +1756,101 @@ class CaseUpdateEndpointTest extends IntegrationTestBase {
             step(connection, stepId("two"), ACME, caseId("full"), 1, "Enter the full amount");
 
             step(connection, stepId("other-case"), ACME, caseId("other"), 0, "Someone else's step");
+        }
+    }
+
+    private void seedCompanyDefaults(Connection connection, UUID companyId) throws SQLException {
+        try (var statement = connection.prepareStatement(
+                "SELECT tcms_seed_company_defaults(CAST(? AS uuid))")) {
+            statement.setString(1, companyId.toString());
+            statement.execute();
+        }
+    }
+
+    /**
+     * One value on a project's Feature dimension.
+     *
+     * <p>The dimension is resolved by {@code (company, project, key)} rather than by id because
+     * {@code tcms_seed_project_defaults} generated it — pinning the id here would mean asserting
+     * against a value the product did not create.
+     *
+     * @param retired sets {@code deleted_at}, which is a SOFT delete: the value stops being offered
+     *                and every assignment to it survives, which is the state the reconcile's bound
+     *                exists for
+     */
+    @SuppressWarnings("checkstyle:ParameterNumber")
+    private void featureValue(
+            Connection connection, UUID id, UUID projectId, UUID parentId,
+            String path, String name, boolean retired) throws SQLException {
+
+        try (var statement = connection.prepareStatement("""
+                INSERT INTO classification_value
+                    (id, company_id, dimension_id, parent_id, path, name, color, position, deleted_at)
+                SELECT CAST(? AS uuid), CAST(? AS uuid), d.id, CAST(? AS uuid), CAST(? AS ltree),
+                       ?, NULL, 0, CAST(? AS timestamptz)
+                  FROM classification_dimension d
+                 WHERE d.company_id = CAST(? AS uuid)
+                   AND d.project_id = CAST(? AS uuid)
+                   AND d.key = 'feature'
+                ON CONFLICT (id) DO NOTHING
+                """)) {
+            statement.setString(1, id.toString());
+            statement.setString(2, ACME.toString());
+            statement.setString(3, parentId == null ? null : parentId.toString());
+            statement.setString(4, path);
+            statement.setString(5, name);
+            // A fixed instant rather than now(): nothing asserts the value, and a deterministic
+            // fixture is one less thing that can differ between runs.
+            statement.setString(6, retired ? "2026-01-01T00:00:00Z" : null);
+            statement.setString(7, ACME.toString());
+            statement.setString(8, projectId.toString());
+            statement.executeUpdate();
+        }
+    }
+
+    /**
+     * A company-level value's generated id, by dimension key and name.
+     *
+     * <p>Looked up rather than pinned, so these tests run against the vocabulary
+     * {@code tcms_seed_company_defaults} actually creates. A fixture that inserted its own
+     * "Functional" would pass while the seeded one was broken.
+     */
+    private UUID companyValueId(String dimensionKey, String name) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+                var statement = connection.prepareStatement("""
+                        SELECT v.id
+                          FROM classification_value v
+                          JOIN classification_dimension d ON d.id = v.dimension_id
+                         WHERE d.company_id = CAST(? AS uuid)
+                           AND d.project_id IS NULL
+                           AND d.key = ?
+                           AND v.name = ?
+                        """)) {
+            statement.setString(1, ACME.toString());
+            statement.setString(2, dimensionKey);
+            statement.setString(3, name);
+            try (ResultSet rows = statement.executeQuery()) {
+                assertThat(rows.next())
+                        .as("the seeded vocabulary has no %s called %s", dimensionKey, name)
+                        .isTrue();
+                return UUID.fromString(rows.getString(1));
+            }
+        }
+    }
+
+    /** The values a case carries in the database, whatever the API chooses to serve. */
+    private List<UUID> storedClassification(UUID caseId) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+                var statement = connection.prepareStatement(
+                        "SELECT value_id FROM case_classification WHERE case_id = CAST(? AS uuid)")) {
+            statement.setString(1, caseId.toString());
+            List<UUID> found = new ArrayList<>();
+            try (ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) {
+                    found.add(UUID.fromString(rows.getString(1)));
+                }
+            }
+            return found;
         }
     }
 

@@ -1,10 +1,7 @@
 package com.tcms.repository;
 
-import com.tcms.project.ClassificationDimensionView;
-import com.tcms.project.ProjectConfigurationService;
 import com.tcms.project.ProjectService;
 import com.tcms.tenancy.CompanyContext;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -56,32 +53,20 @@ import org.springframework.transaction.annotation.Transactional;
 public class CaseDetailService {
 
     private final ProjectService projects;
-    private final ProjectConfigurationService configuration;
     private final TestCaseRepository cases;
     private final SuiteRepository suites;
-    private final CaseSummaries summaries;
-    private final CaseConditions conditions;
-    private final TestStepRepository steps;
-    private final CaseAutomationTagRepository automationTags;
+    private final CaseRenderer renderer;
 
     public CaseDetailService(
             ProjectService projects,
-            ProjectConfigurationService configuration,
             TestCaseRepository cases,
             SuiteRepository suites,
-            CaseSummaries summaries,
-            CaseConditions conditions,
-            TestStepRepository steps,
-            CaseAutomationTagRepository automationTags) {
+            CaseRenderer renderer) {
 
         this.projects = projects;
-        this.configuration = configuration;
         this.cases = cases;
         this.suites = suites;
-        this.summaries = summaries;
-        this.conditions = conditions;
-        this.steps = steps;
-        this.automationTags = automationTags;
+        this.renderer = renderer;
     }
 
     /**
@@ -103,27 +88,21 @@ public class CaseDetailService {
     private TestCaseDetailView detail(
             UUID companyId, UUID userId, UUID projectId, TestCase row) {
 
-        List<Suite> liveSuites = suites.findLiveForProject(projectId);
-        // Through project's own service rather than its repositories, for the reason CaseService
-        // gives: the vocabulary is that module's to shape, and asking it through the gate a second
-        // time costs one permission evaluation and keeps this module free of a second reading of
-        // another module's tables.
-        List<ClassificationDimensionView> vocabularies =
-                configuration.findClassification(userId, projectId).orElse(List.of());
-
-        // A batch of one, through the same renderer the grid uses — see CaseSummaries for what
-        // that buys and what a second implementation would cost. getFirst() is safe because the
-        // renderer returns one view per case it was given, in order.
-        TestCaseSummaryView summary =
-                summaries.render(companyId, List.of(row), liveSuites, vocabularies).getFirst();
-
-        return TestCaseDetailView.of(
-                row,
-                summary,
-                automationTags.findForCase(row.getId()).stream()
-                        .map(CaseAutomationTag::getTag)
-                        .toList(),
-                steps.findForCase(row.getId()).stream().map(TestStepView::of).toList(),
-                conditions.forCase(row, liveSuites));
+        // Through CaseRenderer, which is the one assembler of a case's shape — this method WAS a
+        // fourth byte-identical copy of it, and the oldest: CaseRenderer was extracted from the two
+        // WRITE paths and the read it had been copied from was never moved onto it. That is the
+        // wrong way round, since this is the render the writers exist to agree with.
+        //
+        // It stayed invisible because a duplicate that agrees is indistinguishable from a
+        // delegation. It became visible the moment a field was added to the view, which is the only
+        // moment it could ever have — and that is exactly the failure the class header describes:
+        // one writer serving a field GET does not, so a case shows one thing on save and another on
+        // reload with neither screen revealing which is stored.
+        //
+        // The vocabulary is still resolved through project's own service rather than its
+        // repositories, for the reason CaseService gives — CaseRenderer#vocabularies does the same
+        // call, so asking it there keeps this module free of a second reading of another module's
+        // tables.
+        return renderer.render(companyId, userId, projectId, row, suites.findLiveForProject(projectId));
     }
 }

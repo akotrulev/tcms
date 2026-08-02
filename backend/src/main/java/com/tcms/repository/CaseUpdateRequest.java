@@ -22,13 +22,18 @@ import java.util.UUID;
  * client. A caller wanting true partial-update semantics needs {@code JsonNullable} or a presence
  * map, which is a shape change on the contract and not something to infer from one field's absence.
  *
- * <h2>The six fields this endpoint refuses</h2>
+ * <h2>The five fields this endpoint refuses — it was six</h2>
  *
- * <p>{@code ownerId}, {@code classificationValueIds}, {@code tags}, {@code automationTags},
- * {@code preconditions} and {@code postconditions} are on the contract's {@code TestCaseInput} and
- * are <strong>rejected with a 400 when present</strong> rather than ignored. Each needs a write path
- * this slice does not build — cardinality validation against the project's dimensions for
- * classification, the library-versus-inline shape for conditions, a membership check for the owner.
+ * <p>{@code ownerId}, {@code tags}, {@code automationTags}, {@code preconditions} and
+ * {@code postconditions} are on the contract's {@code TestCaseInput} and are <strong>rejected with a
+ * 400 when present</strong> rather than ignored. Each needs a write path no slice has built yet —
+ * the library-versus-inline shape for conditions, a membership check for the owner.
+ *
+ * <p><strong>{@code classificationValueIds} left this list</strong>, which is what the paragraph
+ * below always said would happen to each of them in turn: it is accepted, validated against the
+ * project's dimensions and persisted, and the boundary was deleted in the one place it was written.
+ * The rules it is validated against live on {@link CaseEdit#validate}'s {@code vocabulary}
+ * parameter, and the reconcile that applies them is {@link CaseClassifications}.
  *
  * <p>Accepting them and dropping them is the failure the SPA's own mock handler comments on: a save
  * that reports success and discards a value the user typed. The user then has no way to discover it
@@ -53,11 +58,19 @@ public record CaseUpdateRequest(
         List<StepInput> steps,
         String changeComment,
 
-        // --- the refused six. Declared so they can be REJECTED rather than silently swallowed by
+        // Absent (null) means "leave the classification alone"; an empty list means "clear it".
+        // The two are the same Java value for every OTHER nullable field on this record — see the
+        // header — and they are distinguishable here only because the field is a collection, where
+        // "not sent" and "sent empty" have different representations. That is worth having: the
+        // bulk actions reconstruct a request without touching classification, and a null here is
+        // how they say so without having to carry the case's stored values through code that has
+        // no interest in them.
+        List<UUID> classificationValueIds,
+
+        // --- the refused five. Declared so they can be REJECTED rather than silently swallowed by
         // Jackson's unknown-property handling, which would make them indistinguishable from a
         // typo and let the caller believe they were applied.
         UUID ownerId,
-        List<UUID> classificationValueIds,
         List<String> tags,
         List<String> automationTags,
         List<Object> preconditions,

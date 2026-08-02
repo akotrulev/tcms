@@ -36,4 +36,22 @@ public interface CaseClassificationRepository
              WHERE c.caseId IN :caseIds
             """)
     List<CaseClassification> findForCases(@Param("caseIds") Collection<UUID> caseIds);
+
+    /**
+     * One case's assignments — the reconcile's before-picture, and the detail view's ids.
+     *
+     * <p>Not {@code findForCases(List.of(id))} at the call sites, even though it is the same query
+     * with a one-element list: those callers want a list per case and this one wants a list, and
+     * spelling the single-case read once keeps the {@code IN ()} guard ({@link #findForCases} must
+     * never be given an empty collection) out of code that structurally cannot violate it.
+     *
+     * <p>Unfiltered by liveness, deliberately, and both callers filter differently: the reconcile
+     * needs to see a retired assignment precisely so it can leave it alone, and the renderer needs
+     * to see one so it can drop it. A predicate here would make the first impossible.
+     */
+    @Query("""
+            SELECT c FROM CaseClassification c
+             WHERE c.caseId = :caseId
+            """)
+    List<CaseClassification> findForCase(@Param("caseId") UUID caseId);
 }

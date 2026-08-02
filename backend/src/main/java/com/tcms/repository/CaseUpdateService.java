@@ -1,5 +1,6 @@
 package com.tcms.repository;
 
+import com.tcms.project.ClassificationDimensionView;
 import com.tcms.project.GateResult;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectService;
@@ -88,6 +89,7 @@ public class CaseUpdateService {
     private final CaseSteps steps;
     private final TestStepRepository stepRows;
     private final SharedStepService sharedSteps;
+    private final CaseClassifications classifications;
     private final CaseRenderer renderer;
     private final CaseVersions versions;
     private final AuditEventRepository auditEvents;
@@ -100,6 +102,7 @@ public class CaseUpdateService {
             CaseSteps steps,
             TestStepRepository stepRows,
             SharedStepService sharedSteps,
+            CaseClassifications classifications,
             CaseRenderer renderer,
             CaseVersions versions,
             AuditEventRepository auditEvents,
@@ -111,6 +114,7 @@ public class CaseUpdateService {
         this.steps = steps;
         this.stepRows = stepRows;
         this.sharedSteps = sharedSteps;
+        this.classifications = classifications;
         this.renderer = renderer;
         this.versions = versions;
         this.auditEvents = auditEvents;
@@ -212,11 +216,22 @@ public class CaseUpdateService {
         acceptableSharedStepIds.addAll(sharedSteps.liveLibraryIds(
                 project.getId(), CaseEdit.referencedSharedStepIds(request.steps())));
 
+        // Resolved BEFORE validating and then reused for the render, rather than being read again
+        // inside it. Two reads would be two answers to "what does this project offer" a few lines
+        // apart, and the write would be checked against one of them while the response was rendered
+        // from the other — so a value retired between the two would be accepted and then omitted
+        // from the very response that reports the save.
+        List<ClassificationDimensionView> vocabularies =
+                renderer.vocabularies(userId, project.getId());
+        ClassificationVocabulary vocabulary = ClassificationVocabulary.of(vocabularies);
+
         CaseEdit.Outcome validated = CaseEdit.validate(
                 request,
                 liveSuiteIds,
                 existingStepIds,
                 acceptableSharedStepIds,
+                vocabulary,
+                classifications.liveValueIdsOf(testCase.getId(), vocabulary),
                 key -> cases.existsByAutomationKeyOtherThan(key, testCase.getId()));
 
         if (validated instanceof CaseEdit.Outcome.Invalid invalid) {
@@ -227,6 +242,10 @@ public class CaseUpdateService {
         Instant now = clock.instant();
         testCase.applyEdit(edit, userId, now);
         steps.reconcile(testCase, edit.steps());
+        // Before the render, not after: the response IS the version snapshot, and rendering first
+        // would report the classification the case had on the way in — so the row, the response and
+        // the recorded history would each say something different about the save that just happened.
+        classifications.reconcile(testCase, edit.classificationValueIds(), vocabulary, companyId);
 
         // Decided before the version number is stamped, and stamped before anything is rendered, so
         // the snapshot and the response are one render carrying the same number.
@@ -240,7 +259,7 @@ public class CaseUpdateService {
         // it survives, and why the flush is justified on the debugging property alone.
         cases.saveAndFlush(testCase);
 
-        TestCaseDetailView view = render(companyId, userId, project.getId(), testCase, liveSuites);
+        TestCaseDetailView view = renderer.render(testCase, liveSuites, vocabularies, companyId);
         versions.write(testCase, edit, decision, view, userId, now);
 
         auditEvents.save(AuditEvent.record(
@@ -262,18 +281,4 @@ public class CaseUpdateService {
         return new Outcome.Updated(view);
     }
 
-    /**
-     * The case as the API serves it — the same renderers the grid and the detail endpoint use.
-     *
-     * <p>Was a private method here and a byte-identical one in {@link CaseCreateService}, each
-     * arguing in its javadoc that there must not be another copy. {@link CaseBulkService} would have
-     * been the third, so the argument became {@link CaseRenderer}. §27's reasoning is unchanged and
-     * now lives there: a field rendered differently from {@code GET} shows one value on save and
-     * another on reload, with neither screen revealing which is stored.
-     */
-    private TestCaseDetailView render(
-            UUID companyId, UUID userId, UUID projectId, TestCase row, List<Suite> liveSuites) {
-
-        return renderer.render(companyId, userId, projectId, row, liveSuites);
-    }
 }

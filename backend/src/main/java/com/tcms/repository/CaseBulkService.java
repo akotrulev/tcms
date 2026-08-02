@@ -91,6 +91,7 @@ public class CaseBulkService {
     private final SuiteRepository suites;
     private final ConditionRepository conditions;
     private final CaseConditionRepository caseConditions;
+    private final CaseClassificationRepository caseClassifications;
     private final CaseTagRepository caseTags;
     private final TestStepRepository stepRows;
     private final CaseRenderer renderer;
@@ -106,6 +107,7 @@ public class CaseBulkService {
             SuiteRepository suites,
             ConditionRepository conditions,
             CaseConditionRepository caseConditions,
+            CaseClassificationRepository caseClassifications,
             CaseTagRepository caseTags,
             TestStepRepository stepRows,
             CaseRenderer renderer,
@@ -119,6 +121,7 @@ public class CaseBulkService {
         this.suites = suites;
         this.conditions = conditions;
         this.caseConditions = caseConditions;
+        this.caseClassifications = caseClassifications;
         this.caseTags = caseTags;
         this.stepRows = stepRows;
         this.renderer = renderer;
@@ -485,6 +488,7 @@ public class CaseBulkService {
                         row,
                         stepRows.findForCase(row.getId()),
                         context.liveSuiteIds(),
+                        context.classificationOf(row.getId()),
                         key -> cases.existsByAutomationKeyOtherThan(key, row.getId()))
                 // evaluate() already refused every case loadContext could not reconstruct, and the
                 // only fields this class changes are ones validate accepts by construction — a
@@ -572,10 +576,26 @@ public class CaseBulkService {
             List<ClassificationDimensionView> vocabularies,
             Map<UUID, Set<String>> tags,
             Map<UUID, List<CaseCondition>> conditions,
+            Map<UUID, Set<UUID>> classifications,
             Map<UUID, CaseEdit> priorEdits) {
 
         List<CaseCondition> conditionsOf(UUID caseId) {
             return conditions.getOrDefault(caseId, List.of());
+        }
+
+        /**
+         * What the case is classified as — carried into the reconstructed edit so its hash
+         * describes the whole case.
+         *
+         * <p>No bulk action changes classification, and that is exactly why this has to be here: an
+         * edit reconstructed without it hashes as though the case had none, so the version this
+         * class writes would differ from the one the next ordinary save computes for identical
+         * content, and that save would be credited with restoring a classification nobody touched.
+         * The same trap {@link #writeVersion}'s header describes for {@code suiteId}, on a field
+         * this class never reads.
+         */
+        Set<UUID> classificationOf(UUID caseId) {
+            return classifications.getOrDefault(caseId, Set.of());
         }
 
         /** Whether a version row can be written for this case at all. */
@@ -615,6 +635,27 @@ public class CaseBulkService {
         // Reconstructed once, here, and read twice — by the verdict (may this case be changed at
         // all) and by the version writer. Doing it in both places would read every case's steps
         // twice per operation, and would let the two disagree.
+        List<ClassificationDimensionView> vocabularies =
+                authored ? renderer.vocabularies(userId, project.getId()) : List.of();
+
+        // Resolved for the whole batch before the loop, like every other per-case lookup here: one
+        // pass over the assignments rather than a query per case, and filtered through the same
+        // vocabulary the renderer uses so a retired value is excluded here exactly as it is
+        // everywhere else. Empty when the command changes nothing authored, because then no
+        // version is written and nothing reads it.
+        Map<UUID, Set<UUID>> classificationsByCase = new HashMap<>();
+        if (authored && !found.isEmpty()) {
+            Set<UUID> offered = ClassificationVocabulary.of(vocabularies).liveValueIds();
+            for (CaseClassification assignment
+                    : caseClassifications.findForCases(found.stream().map(TestCase::getId).toList())) {
+                if (offered.contains(assignment.getValueId())) {
+                    classificationsByCase
+                            .computeIfAbsent(assignment.getCaseId(), key -> new HashSet<>())
+                            .add(assignment.getValueId());
+                }
+            }
+        }
+
         Map<UUID, CaseEdit> priorEdits = new HashMap<>();
         if (authored) {
             for (TestCase row : found) {
@@ -622,6 +663,7 @@ public class CaseBulkService {
                                 row,
                                 stepRows.findForCase(row.getId()),
                                 liveSuiteIds,
+                                classificationsByCase.getOrDefault(row.getId(), Set.of()),
                                 key -> cases.existsByAutomationKeyOtherThan(key, row.getId()))
                         .ifPresent(edit -> priorEdits.put(row.getId(), edit));
             }
@@ -630,9 +672,10 @@ public class CaseBulkService {
         return new Context(
                 liveSuites,
                 liveSuiteIds,
-                authored ? renderer.vocabularies(userId, project.getId()) : List.of(),
+                vocabularies,
                 tags,
                 byCase,
+                classificationsByCase,
                 Map.copyOf(priorEdits));
     }
 }

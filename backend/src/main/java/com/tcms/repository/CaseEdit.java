@@ -3,6 +3,7 @@ package com.tcms.repository;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -48,6 +49,15 @@ record CaseEdit(
         String notAutomatableReason,
         Integer estimatedDurationSec,
         List<StepEdit> steps,
+        // Sorted and de-duplicated by #validate, and that is a HASH requirement rather than tidiness.
+        // CaseVersions#hash digests this record's JSON, and its javadoc rests the whole determinism
+        // argument on there being no map in the shape and every collection preserving order — which
+        // holds for `steps`, where order IS the content, and would have been false the moment a SET
+        // arrived in a list. Two saves choosing the same three values in a different order are the
+        // same classification, so they must hash the same or the version list fills with entries
+        // whose diff is empty. Canonicalising here means the ordering question is answered once,
+        // before anything can observe it.
+        List<UUID> classificationValueIds,
         String changeComment) {
 
     /** The longest title the SPA's editor accepts. The column itself is unbounded {@code TEXT}. */
@@ -112,6 +122,30 @@ record CaseEdit(
      *                        fix on an untouched step would be refused over a reference the author
      *                        never made and cannot see. That is a worse defect than the one the
      *                        check closes, and it is only avoided by resolving the union.
+     * @param vocabulary the classification this project offers — the same list the editor was
+     *                   served, so a value the client could pick is a value this accepts. Absence
+     *                   from it is refused for the three reasons {@link ClassificationVocabulary}
+     *                   sets out, of which the sibling-project one is the reason this parameter
+     *                   exists at all: that id satisfies the foreign key, the company check and the
+     *                   V2 trigger, so nothing below this line would have caught it.
+     *                   <p><strong>A null {@code classificationValueIds} on the request means
+     *                   "leave it alone" and is not validated against this</strong> — see
+     *                   {@link CaseUpdateRequest} — so the bulk path may pass
+     *                   {@link ClassificationVocabulary#none()} rather than resolving a vocabulary
+     *                   it has no field to check against.
+     * @param storedClassificationValueIds what the case is classified as <em>now</em>, restricted
+     *                   to values the project still offers — exactly the set {@code GET} serves.
+     *                   Used only when the request omits the field, and then it becomes the edit's
+     *                   value verbatim, <strong>unvalidated</strong>: it describes what is already
+     *                   stored rather than something a caller asked for, and re-litigating it here
+     *                   would let a vocabulary change refuse a save that does not touch
+     *                   classification. §64's rule about stored references, arrived at from the
+     *                   other direction.
+     *                   <p>It is not merely a default. {@link CaseVersions#hash} digests this
+     *                   record, so an edit that left classification alone while reporting an empty
+     *                   list would hash as though the caller had cleared it — and the next save
+     *                   that <em>did</em> send the unchanged classification would then look like a
+     *                   change and write a version whose diff is empty.
      * @param automationKeyTaken tests whether a non-null automation key is already used by a
      *                           <em>different</em> case in this company. {@code automation_key} is
      *                           unique per company via a partial index that deliberately does
@@ -125,11 +159,16 @@ record CaseEdit(
             Set<UUID> liveSuiteIds,
             Set<UUID> existingStepIds,
             Set<UUID> acceptableSharedStepIds,
+            ClassificationVocabulary vocabulary,
+            Set<UUID> storedClassificationValueIds,
             java.util.function.Predicate<String> automationKeyTaken) {
 
         Map<String, List<String>> errors = new LinkedHashMap<>();
 
         refuseUnsupported(request, errors);
+
+        List<UUID> classification = normalizeClassification(
+                request.classificationValueIds(), vocabulary, storedClassificationValueIds, errors);
 
         String title = trimToNull(request.title());
         if (title == null) {
@@ -232,6 +271,7 @@ record CaseEdit(
                 automation == AutomationStatus.NOT_AUTOMATABLE ? notAutomatable : null,
                 duration,
                 format == StepFormat.GHERKIN ? List.of() : steps,
+                classification,
                 trimToNull(request.changeComment())));
     }
 
@@ -259,6 +299,12 @@ record CaseEdit(
      * hash to keep out. What happened in bulk is recorded in the audit event, which is where "who
      * did what to how many" belongs.
      *
+     * @param storedClassificationValueIds the case's live classification, which the reconstruction
+     *                                     carries so the hash describes the whole case. A bulk
+     *                                     action changes none of it; leaving it out would make
+     *                                     every bulk-written version hash as though the case had
+     *                                     been un-classified, and the next ordinary save would then
+     *                                     read as a change that restored it.
      * @return empty when the stored row does not validate — a case with no steps in structured
      *         format, or one whose suite has since been deleted. Rare and real, so the caller skips
      *         that case with a reason rather than this throwing and failing the whole operation.
@@ -269,6 +315,7 @@ record CaseEdit(
             TestCase row,
             List<TestStep> steps,
             Set<UUID> liveSuiteIds,
+            Set<UUID> storedClassificationValueIds,
             java.util.function.Predicate<String> automationKeyTaken) {
 
         CaseUpdateRequest asRequest = new CaseUpdateRequest(
@@ -297,12 +344,20 @@ record CaseEdit(
                                 step.getExpectedResult(),
                                 step.getSharedStepId()))
                         .toList(),
+                // Null means "leave the classification alone", which is exactly what a bulk action
+                // does — none of the eight touches it. The case's stored values are supplied
+                // separately, below, so the reconstructed edit still HASHES as the whole case;
+                // passing them here instead would re-validate a stored classification against a
+                // live vocabulary, and a case carrying a since-retired value would fail to
+                // reconstruct and be skipped by a MOVE_TO_SUITE that has nothing to do with it.
+                // §64 made the identical argument for a retired shared step.
+                null,
                 // See the header. Null, not a description of the bulk edit.
                 null,
-                // The refused six stay null: they are refused on the way IN, and this is a
+                // The refused five stay null: they are refused on the way IN, and this is a
                 // reconstruction of what is already stored, so passing any of them would make a
                 // stored row fail validation for a rule about requests.
-                null, null, null, null, null, null);
+                null, null, null, null, null);
 
         Set<UUID> existingStepIds = new HashSet<>();
         Set<UUID> storedSharedStepIds = new HashSet<>();
@@ -321,14 +376,86 @@ record CaseEdit(
         // refused for a reason it did not cause, by a check added for a different path entirely.
         // It also keeps this method free of a query, which is what lets it stay a pure function.
         Outcome outcome = validate(
-                asRequest, liveSuiteIds, existingStepIds, storedSharedStepIds, automationKeyTaken);
+                asRequest,
+                liveSuiteIds,
+                existingStepIds,
+                storedSharedStepIds,
+                // Never consulted: the request's classification is null above, so nothing is
+                // checked against a vocabulary. Passing `none()` rather than resolving one is what
+                // keeps this a pure function — the caller would otherwise need a project read to
+                // reconstruct a field the bulk actions do not change.
+                ClassificationVocabulary.none(),
+                storedClassificationValueIds,
+                automationKeyTaken);
         return outcome instanceof Outcome.Valid valid
                 ? Optional.of(valid.edit())
                 : Optional.empty();
     }
 
     /**
-     * Rejects the six contract fields this endpoint does not implement — see
+     * The submitted classification, checked against what the project offers and canonicalized.
+     *
+     * <p>Returns the sorted, de-duplicated set the edit carries. A refusal still returns a list —
+     * the caller collects every field's errors before deciding, so returning early here would make
+     * a bad classification hide a bad title.
+     *
+     * <h2>The two rules, and why the second is a message rather than a constraint</h2>
+     *
+     * <p>A value must be one this project offers. A value must not be the second one on a
+     * SINGLE-cardinality axis — Test Type and Test Level, per plan §6d. The database enforces the
+     * second too, in {@code V2}'s {@code case_classification_integrity} trigger, and that is the
+     * backstop rather than the check: the trigger raises {@code 23505}, which reaches the client as
+     * a 500 on a form that has a perfectly good field to put a sentence on. The layered pair is the
+     * same arrangement {@code ck_not_automatable_reason} already has, and the trigger stays because
+     * this method is not the only way a row could ever be written.
+     *
+     * <p>Duplicates are de-duplicated rather than refused. The set is the target state, and asking
+     * for the same value twice is not a contradiction — the primary key {@code (case_id, value_id)}
+     * already says a case carries a value once or not at all, so refusing would be this layer
+     * inventing a rule the schema does not have. A second <em>different</em> value on a SINGLE axis
+     * is the opposite: two contradictory instructions with no way to choose between them, which is
+     * why that one is refused instead of, say, keeping the first.
+     */
+    private static List<UUID> normalizeClassification(
+            List<UUID> submitted,
+            ClassificationVocabulary vocabulary,
+            Set<UUID> stored,
+            Map<String, List<String>> errors) {
+
+        if (submitted == null) {
+            // "Leave it alone" — see CaseUpdateRequest. Sorted for the same hash reason as below;
+            // the input is a Set, so it has no order of its own to preserve.
+            return stored.stream().sorted().toList();
+        }
+
+        Set<UUID> distinct = new LinkedHashSet<>();
+        Set<UUID> singleAxesTaken = new HashSet<>();
+        for (UUID valueId : submitted) {
+            if (valueId == null || !distinct.add(valueId)) {
+                continue;
+            }
+            UUID dimensionId = vocabulary.dimensionOf(valueId);
+            if (dimensionId == null) {
+                // Deliberately one message for three causes — retired, another project's, or
+                // nothing at all. See ClassificationVocabulary: distinguishing them would confirm
+                // the existence of a value the caller may not use.
+                errors.computeIfAbsent("classificationValueIds", k -> new ArrayList<>())
+                        .add("That value is not one this project offers.");
+                continue;
+            }
+            if (vocabulary.allowsOnlyOneValue(dimensionId) && !singleAxesTaken.add(dimensionId)) {
+                errors.computeIfAbsent("classificationValueIds", k -> new ArrayList<>())
+                        .add("Choose one " + vocabulary.nameOf(dimensionId) + ", not several.");
+            }
+        }
+
+        // Sorted, so the same three values chosen in two different orders are one classification
+        // and hash identically — see the field's comment on the record above.
+        return distinct.stream().sorted().toList();
+    }
+
+    /**
+     * Rejects the five contract fields this endpoint does not implement — see
      * {@link CaseUpdateRequest}'s header for why refusing beats ignoring.
      */
     private static void refuseUnsupported(
@@ -337,9 +464,6 @@ record CaseEdit(
         String message = "This field cannot be changed here yet.";
         if (request.ownerId() != null) {
             errors.computeIfAbsent("ownerId", k -> new ArrayList<>()).add(message);
-        }
-        if (request.classificationValueIds() != null) {
-            errors.computeIfAbsent("classificationValueIds", k -> new ArrayList<>()).add(message);
         }
         if (request.tags() != null) {
             errors.computeIfAbsent("tags", k -> new ArrayList<>()).add(message);

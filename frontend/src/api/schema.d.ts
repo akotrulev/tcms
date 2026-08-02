@@ -3550,6 +3550,27 @@ export interface components {
             updatedAt: string;
         };
         TestCase: components["schemas"]["TestCaseSummary"] & {
+            /**
+             * @description Every classification value this case carries, as ids — the same assignments
+             *     `testType`, `testLevel` and `features` render by name.
+             *
+             *     **The detail carries ids and the summary does not**, deliberately. Names are for
+             *     display and the grid needs nothing else; ids are what an *editor* needs, because
+             *     a name cannot be turned back into a value. The Feature dimension is hierarchical,
+             *     so two leaves under different parents may legitimately share a name, and the three
+             *     company-level vocabularies are renameable per company. Without this field the
+             *     editor would have to guess which value a name meant, and its first save would
+             *     silently rewrite the case's classification.
+             *
+             *     **Filtered exactly as the names are**: a value retired since it was assigned is
+             *     absent here and absent from `features`/`testType`/`testLevel`, so the two can
+             *     never disagree about what this case is classified as. The assignment itself
+             *     survives in the database — retiring a value is a soft delete precisely because
+             *     cases and executions already reference it — and a save leaves it alone rather
+             *     than deleting it, since a client cannot preserve a value it was never shown. See
+             *     `TestCaseInput.classificationValueIds` for the write side of that rule.
+             */
+            classificationValueIds: string[];
             description: string | null;
             objective: string | null;
             /** @description Case-level, alongside per-step expected results (plan §6m). */
@@ -3592,6 +3613,33 @@ export interface components {
             estimatedDurationSec?: number | null;
             /** Format: uuid */
             ownerId?: string | null;
+            /**
+             * @description The case's classification, as a **complete set** — every value it should carry after
+             *     this save. Omitting the field leaves the classification alone; sending `[]` clears it.
+             *
+             *     Each id must name a **live value of a dimension this project offers** — the company's
+             *     Test Type / Test Level / Execution Phase, or this project's own Feature tree. A value
+             *     from a *sibling project's* Feature dimension is refused with a field error rather than
+             *     stored: it belongs to the same company, so it satisfies the foreign key and the
+             *     company check, and every later read would resolve it through a project the reader was
+             *     never granted. The same argument `suiteId` and `TestStepInput.sharedStepId` each make,
+             *     on the third column that needed it.
+             *
+             *     **At most one value per SINGLE-cardinality dimension** (Test Type and Test Level; plan
+             *     §6d). A second is a `400` keyed on this field, not the `23505` the V2 trigger would
+             *     raise — the trigger is the backstop that holds when this check is wrong, and a
+             *     constraint violation reaching the client is a 500 where a form error belongs.
+             *
+             *     A **parent** value in the Feature tree is assignable, not only a leaf. Nothing in the
+             *     product forbids it, and §6q's rule that a feature filter includes its descendants is
+             *     about reading, not about what may be assigned.
+             *
+             *     **The reconcile is bounded by the vocabulary the caller was served.** Assignments to
+             *     values retired since they were made are neither returned by `GET` nor removed by a
+             *     save that omits them — a client cannot resubmit a value it was never shown, so
+             *     treating its absence as an instruction to delete would make every save silently
+             *     discard classifications nobody chose to drop.
+             */
             classificationValueIds?: string[];
             tags?: string[];
             steps?: components["schemas"]["TestStepInput"][];

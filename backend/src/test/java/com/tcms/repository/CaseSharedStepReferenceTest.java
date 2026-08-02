@@ -239,6 +239,10 @@ class CaseSharedStepReferenceTest {
                 Set.of(SUITE),
                 Set.of(EXISTING_STEP),
                 acceptableSharedStepIds,
+                // This class is about step references. The request below sends no classification,
+                // so an empty vocabulary is never consulted and cannot colour a refusal under test.
+                ClassificationVocabulary.none(),
+                Set.of(),
                 key -> false);
     }
 
@@ -259,8 +263,11 @@ class CaseSharedStepReferenceTest {
                 null,
                 null,
                 steps,
+                // classificationValueIds — null means "leave it alone", which for a request this
+                // class never applies is the value that makes the field invisible to it.
                 null,
-                null, null, null, null, null, null);
+                null,
+                null, null, null, null, null);
     }
 
     /** A step being KEPT — it carries the id of a step already on the case. */

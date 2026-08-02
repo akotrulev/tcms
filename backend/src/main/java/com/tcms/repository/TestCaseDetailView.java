@@ -64,9 +64,29 @@ public record TestCaseDetailView(
         AutomationStatus automationStatus,
         StepFormat stepFormat,
         UserRefView owner,
+        // WHO WROTE THE CASE. Required by TestCaseSummary, which `TestCase` is an allOf of, and
+        // MISSING HERE until 2026-08-02 — §66 put it on the wire for the grid and this view, which
+        // shares the contract schema, kept omitting the key.
+        //
+        // It is not a cosmetic omission: the case detail is the only screen with a delete
+        // affordance, its gate is `case:delete` qualified OWN, and the SPA passes
+        // `data.createdBy?.id ?? null`. An absent key reads as null, null is a SUPPLIED author that
+        // matches nobody, and the gate therefore refused a Test Engineer their own case — the exact
+        // inverse of what §66 shipped. Nothing caught it: `tsc` allows optional chaining on a
+        // required field, and the page's own test supplies a fixture that has the key.
+        UserRefView createdBy,
         String testType,
         String testLevel,
         List<String> features,
+        // The same assignments `features`/`testType`/`testLevel` render by name, as ids — what an
+        // editor needs and a name cannot supply, since the Feature tree may hold two leaves with
+        // one name and the company vocabularies are renameable. Detail only: the grid draws names
+        // and would pay four ids a row for nothing.
+        //
+        // Filtered by CaseClassifications#liveValueIdsOf, which is the SAME rule CaseSummaries
+        // applies to the names — one implementation, so the ids and the names on one response can
+        // never disagree about what the case is classified as.
+        List<UUID> classificationValueIds,
         List<String> tags,
         List<HealthSignal> healthSignals,
         Instant updatedAt,
@@ -89,6 +109,7 @@ public record TestCaseDetailView(
             TestCase row,
             TestCaseSummaryView summary,
             List<String> automationTags,
+            List<UUID> classificationValueIds,
             List<TestStepView> steps,
             CaseConditions.Resolved conditions) {
 
@@ -104,9 +125,11 @@ public record TestCaseDetailView(
                 summary.automationStatus(),
                 summary.stepFormat(),
                 summary.owner(),
+                summary.createdBy(),
                 summary.testType(),
                 summary.testLevel(),
                 summary.features(),
+                classificationValueIds,
                 summary.tags(),
                 summary.healthSignals(),
                 summary.updatedAt(),
