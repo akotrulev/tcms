@@ -18,6 +18,7 @@ export const keys = {
   projects: ['projects'] as const,
   project: (id: string) => ['projects', id] as const,
   classification: (p: string) => ['projects', p, 'classification'] as const,
+  projectSettings: (p: string) => ['projects', p, 'settings'] as const,
   statuses: (p: string) => ['projects', p, 'statuses'] as const,
   projectMembers: (p: string) => ['projects', p, 'members'] as const,
   suites: (p: string) => ['projects', p, 'suites'] as const,

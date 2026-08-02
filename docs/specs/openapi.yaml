@@ -417,6 +417,72 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Problem' }
 
+  /projects/{projectId}/settings:
+    parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+    get:
+      tags: [projects]
+      operationId: getProjectSettings
+      summary: The project's own policy — plan §6g's review settings
+      description: |
+        **Readable by anyone who can see the project**, deliberately, and not gated on
+        `project:settings` like the `PUT` beside it. §6g's first requirement is that "a project
+        that never turns review on should see no extra UI at all", which is a decision every
+        client has to make on every artifact screen for every reader — a Test Engineer, a
+        Viewer — and none of them is an admin. Gating the read on the write key would leave the
+        SPA unable to find out whether to render the review panel at all.
+
+        Nothing here is sensitive in the way the key suggests: these are facts about how the
+        project behaves, deducible by anybody who presses a button.
+
+        A project nobody has configured answers the **defaults** — review off for all three
+        artifact types, `RETAIN`, no required peer reviews, and the
+        author-cannot-approve-own-work rule on. `updatedBy` and `updatedAt` are `null` for such
+        a project, which is most of them; a client renders "never changed" rather than
+        attributing the defaults to whoever created the project.
+      responses:
+        '200':
+          description: The project's settings
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSettings' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [projects]
+      operationId: updateProjectSettings
+      summary: Replace the project's settings
+      description: |
+        Needs `project:settings` on this project — the key §69's classification vocabulary
+        editor already uses.
+
+        A `PUT` rather than a `PATCH`: the form shows every control and submits every control,
+        nothing here is a list and nothing here is clearable, so "leave this one alone" has no
+        meaning a user of this screen could ask for.
+
+        **`requiredPeerReviews` is copied onto each review as it is submitted**, and the
+        approval check reads it from there. Raising the bar therefore governs reviews opened
+        afterwards and does not freeze reviews already in flight, whose reviewers were asked
+        under the old rule and some of whom have already spoken.
+
+        Switching review **off** does not close reviews that are already open: those rows
+        record something that happened, and a project changing its policy has not caused
+        everyone to withdraw. It stops new ones being opened.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectSettingsUpdate' }
+      responses:
+        '200':
+          description: The settings as they now stand
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSettings' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /projects/{projectId}/statuses:
     parameters: [{ $ref: '#/components/parameters/ProjectId' }]
     get:
@@ -2957,6 +3023,85 @@ components:
     ReviewVerdict:
       type: string
       enum: [LGTM, CHANGES_REQUESTED, REJECTED, APPROVED]
+
+    EditAfterApproval:
+      type: string
+      # Plan §6g: "Recommend Retain + stale marker as the default, and Re-review as the opt-in
+      # for teams that need it. Forcing full re-approval on a typo fix is how review processes
+      # get abandoned." RETAIN is what the product has always done without it being a choice.
+      enum: [RETAIN, RE_REVIEW]
+
+    ProjectSettings:
+      type: object
+      description: |
+        One project's §6g policy. **Flat rather than a nested `settings` object**, because a
+        contract's `required` array does not descend into an inline nested object — every
+        property under one comes out optional and no consumer can rely on it.
+      required:
+        - projectId
+        - reviewEnabledCase
+        - reviewEnabledSuite
+        - reviewEnabledPlan
+        - requiredPeerReviews
+        - authorMayApproveOwnWork
+        - editAfterApproval
+      properties:
+        projectId: { type: string, format: uuid }
+        reviewEnabledCase:
+          type: boolean
+          description: |
+            §6g's opt-in for cases. **Off by default.** When false the reviewer apparatus does
+            not exist for cases in this project — no review is opened, no peer verdict can be
+            recorded, and the client renders no panel. The **status ladder is unaffected**:
+            turning review off must not withdraw `IN_REVIEW` and `APPROVED` from a four-value
+            status the team has used since M1.
+        reviewEnabledSuite: { type: boolean, description: §6g's opt-in for suites. Off by default. }
+        reviewEnabledPlan: { type: boolean, description: §6g's opt-in for plans. Off by default. }
+        requiredPeerReviews:
+          type: integer
+          minimum: 0
+          maximum: 20
+          description: |
+            §6g's "configurable minimum peer reviews before approval is offered (default 0)".
+            Counted as **distinct people other than the submitter whose latest verdict is
+            LGTM** — the trail is append-only precisely so that relenting in either direction
+            is visible, so somebody who said LGTM and then requested changes is not standing
+            behind it.
+
+            Copied onto each review at submission and read from there, never live.
+        authorMayApproveOwnWork:
+          type: boolean
+          description: |
+            `false` — the default — means §6g's author-cannot-approve-own-work rule is **on**.
+            Stored in the positive so no consumer reads a double negative. "Author" is whoever
+            **submitted** the review, not whoever created the artifact.
+
+            A review whose submitter is unattributable does not bind the rule, or the artifact
+            could never be approved by anyone.
+        editAfterApproval: { $ref: '#/components/schemas/EditAfterApproval' }
+        updatedBy:
+          allOf: [{ $ref: '#/components/schemas/UserRef' }]
+          nullable: true
+          description: Null for a project nobody has configured — which is most of them.
+        updatedAt: { type: string, format: date-time, nullable: true }
+
+    ProjectSettingsUpdate:
+      type: object
+      description: |
+        A full replacement. The three `reviewEnabled*` switches default to **false** when
+        omitted — an absent switch is "off", which is both §6g's default and the safe reading —
+        while `requiredPeerReviews` and `editAfterApproval` are **required**, because 0 and
+        RETAIN are meaningful values a dropped field would silently assert.
+      required:
+        - requiredPeerReviews
+        - editAfterApproval
+      properties:
+        reviewEnabledCase: { type: boolean, default: false }
+        reviewEnabledSuite: { type: boolean, default: false }
+        reviewEnabledPlan: { type: boolean, default: false }
+        requiredPeerReviews: { type: integer, minimum: 0, maximum: 20 }
+        authorMayApproveOwnWork: { type: boolean, default: false }
+        editAfterApproval: { $ref: '#/components/schemas/EditAfterApproval' }
 
     # -------------------------------------------------------------- enums ---
     LifecycleStatus:

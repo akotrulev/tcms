@@ -249,7 +249,14 @@ class ContractConventionTest {
      */
     private static final Map<String, Class<?>> RESPONSE_RECORDS = Map.of(
             "TestCaseSummary", com.tcms.repository.TestCaseSummaryView.class,
-            "TestCase", com.tcms.repository.TestCaseDetailView.class);
+            "TestCase", com.tcms.repository.TestCaseDetailView.class,
+            // Seven required properties, six of them primitives — so the failure this catches on
+            // ProjectSettings is not an absent key but a renamed one, which reads to a client as the
+            // setting having reverted to its default. §6g's opt-in defaulting to "off" is the safe
+            // direction; author-may-approve defaulting to "false" is not, since the property is
+            // stored in the positive and an absent key would read as the rule being ON when the
+            // project turned it off.
+            "ProjectSettings", com.tcms.project.ProjectSettingsView.class);
 
     @Test
     @DisplayName("a response record has a component for every property its schema requires")

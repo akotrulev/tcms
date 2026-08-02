@@ -3,6 +3,8 @@ package com.tcms.execution;
 import com.tcms.project.GateResult;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectService;
+import com.tcms.project.ReviewService;
+import com.tcms.project.ReviewSubjectType;
 import com.tcms.tenancy.AuditEvent;
 import com.tcms.tenancy.AuditEventRepository;
 import java.time.Clock;
@@ -78,6 +80,12 @@ public class PlanUpdateService {
     private static final String EDIT_PLAN = "plan:edit";
 
     private static final String AUDIT_ACTION = "plan.updated";
+
+    /**
+     * §6g's RE_REVIEW demotion. Its own verb, for {@code CaseUpdateService}'s reason: an approval
+     * that ended is what somebody comes looking for, and "plan.updated" is not where they look.
+     */
+    private static final String AUDIT_ACTION_RE_REVIEW = "plan.re_review_required";
     private static final String AUDIT_TARGET = "test_plan";
 
     private final ProjectService projects;
@@ -87,6 +95,7 @@ public class PlanUpdateService {
     private final PlanVersions versions;
     private final PlanCriteria criteria;
     private final CaseFacts cases;
+    private final ReviewService reviews;
     private final AuditEventRepository auditEvents;
     private final Clock clock;
 
@@ -99,6 +108,7 @@ public class PlanUpdateService {
             PlanVersions versions,
             PlanCriteria criteria,
             CaseFacts cases,
+            ReviewService reviews,
             AuditEventRepository auditEvents,
             Clock clock) {
 
@@ -109,6 +119,7 @@ public class PlanUpdateService {
         this.versions = versions;
         this.criteria = criteria;
         this.cases = cases;
+        this.reviews = reviews;
         this.auditEvents = auditEvents;
         this.clock = clock;
     }
@@ -215,6 +226,13 @@ public class PlanUpdateService {
         PlanEdit edit = ((PlanEdit.Outcome.Valid) validated).edit();
 
         Instant now = clock.instant();
+
+        // §6g's edit-after-approval rule, RE_REVIEW arm — see EditAfterApproval#RE_REVIEW for why
+        // the demotion is not gated on plan:approve. Read before applyEdit, which cannot change the
+        // status: §73 put that on PUT /plans/{id}/status and PlanEdit does not accept one.
+        boolean unApproves = plan.getStatus() == PlanStatus.APPROVED
+                && reviews.reReviewOnEdit(project.getId(), ReviewSubjectType.PLAN);
+
         plan.applyEdit(
                 edit,
                 criteria.serialize(edit.entryCriteria()),
@@ -229,6 +247,13 @@ public class PlanUpdateService {
         PlanVersions.Decision decision = versions.decide(plan, snapshot);
         if (decision.isNew()) {
             plan.stampVersion(decision.versionNo());
+        }
+
+        // After the snapshot is taken and before the row is written: the version records the plan's
+        // SCOPE (§74's PlanSnapshot) and the status is deliberately not in it — §73 declined to put
+        // it there — so demoting must not change what this edit's version says it covers.
+        if (unApproves) {
+            plan.applyStatus(PlanStatus.DRAFT, userId, now);
         }
 
         plans.saveAndFlush(plan);
@@ -269,6 +294,19 @@ public class PlanUpdateService {
                         + ",\"versionNo\":" + plan.getCurrentVersionNo()
                         + ",\"scopeChanged\":" + decision.isNew() + "}",
                 now));
+
+        if (unApproves) {
+            auditEvents.save(AuditEvent.record(
+                    project.getId(),
+                    userId,
+                    AUDIT_ACTION_RE_REVIEW,
+                    AUDIT_TARGET,
+                    List.of(plan.getId()),
+                    "{\"key\":" + AuditEvent.jsonString(plan.getKey())
+                            + ",\"from\":\"APPROVED\",\"to\":\"DRAFT\""
+                            + ",\"reason\":\"EDIT_AFTER_APPROVAL\"}",
+                    now));
+        }
 
         return new Outcome.Updated(views.viewOf(plan));
     }

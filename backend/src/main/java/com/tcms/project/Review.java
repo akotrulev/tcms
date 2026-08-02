@@ -75,11 +75,18 @@ public class Review {
     /**
      * §6g's "configurable minimum peer reviews before approval is offered (default 0)".
      *
-     * <p>Mapped because {@code ddl-auto: validate} does not require it and leaving it off would
-     * hide a column that already exists — but <strong>nothing reads it and nothing sets it</strong>,
-     * because the per-project setting it would be copied from has nowhere to live yet: {@code project}
-     * has no {@code settings} column, only {@code company} does. Stamped from the row's default, so
-     * the day that setting arrives it has one place to write to and no historical rows to reinterpret.
+     * <p><strong>Copied from {@link ReviewSettings#requiredPeerReviews()} at submission, and read
+     * from here rather than from the project.</strong> That is the whole reason the column is on
+     * this table instead of only on {@code project_settings}: a lead who raises the bar from 2 to 4
+     * must not thereby freeze every review already in flight, whose reviewers were asked under the
+     * old rule and some of whom have already spoken. The setting governs reviews opened after it;
+     * this column governs this one.
+     *
+     * <p>Until {@code V23} there was nowhere for the setting to live, so this was stamped from the
+     * row's default and nothing read it — the state the class header used to describe, and which
+     * that comment named this slice as the fix for. Rows written before {@code V23} carry {@code 0}
+     * and are therefore unaffected, which is the correct reading of a review opened when the product
+     * had no such requirement.
      */
     @Column(name = "required_peer_reviews", nullable = false)
     private int requiredPeerReviews;
@@ -113,13 +120,19 @@ public class Review {
     protected Review() {
     }
 
-    /** Opens a review over a subject's current version. */
+    /**
+     * Opens a review over a subject's current version.
+     *
+     * @param requiredPeerReviews the project's setting <em>at this moment</em>, pinned onto the row
+     *                            — see {@link #requiredPeerReviews}
+     */
     static Review open(
             UUID companyId,
             UUID projectId,
             ReviewSubjectType subjectType,
             UUID subjectId,
             int subjectVersionNo,
+            int requiredPeerReviews,
             UUID submittedBy,
             Instant at) {
 
@@ -131,7 +144,7 @@ public class Review {
         opened.subjectId = subjectId;
         opened.subjectVersionNo = subjectVersionNo;
         opened.state = ReviewState.IN_REVIEW;
-        opened.requiredPeerReviews = 0;
+        opened.requiredPeerReviews = requiredPeerReviews;
         opened.createdAt = at;
         opened.createdBy = submittedBy;
         return opened;
@@ -199,5 +212,10 @@ public class Review {
 
     public UUID getCreatedBy() {
         return createdBy;
+    }
+
+    /** How many peer LGTMs this review needs before it may be approved — pinned at submission. */
+    public int getRequiredPeerReviews() {
+        return requiredPeerReviews;
     }
 }

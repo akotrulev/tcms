@@ -3,6 +3,8 @@ package com.tcms.repository;
 import com.tcms.project.GateResult;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectService;
+import com.tcms.project.ReviewService;
+import com.tcms.project.ReviewSubjectType;
 import com.tcms.tenancy.AuditEvent;
 import com.tcms.tenancy.AuditEventRepository;
 import com.tcms.tenancy.CompanyContext;
@@ -75,6 +77,7 @@ public class SuiteWriteService {
     private final SuiteService tree;
     private final SuiteVersions versions;
     private final DisplayKeys displayKeys;
+    private final ReviewService reviews;
     private final AuditEventRepository auditEvents;
     private final Clock clock;
 
@@ -84,6 +87,7 @@ public class SuiteWriteService {
             SuiteService tree,
             SuiteVersions versions,
             DisplayKeys displayKeys,
+            ReviewService reviews,
             AuditEventRepository auditEvents,
             Clock clock) {
 
@@ -92,6 +96,7 @@ public class SuiteWriteService {
         this.tree = tree;
         this.versions = versions;
         this.displayKeys = displayKeys;
+        this.reviews = reviews;
         this.auditEvents = auditEvents;
         this.clock = clock;
     }
@@ -244,13 +249,34 @@ public class SuiteWriteService {
             SuiteEdit edit = ((SuiteEdit.Outcome.Valid) validated).edit();
 
             Instant now = clock.instant();
+
+            // §6g's edit-after-approval rule, RE_REVIEW arm — see EditAfterApproval#RE_REVIEW for
+            // why the demotion is not gated on suite:approve.
+            //
+            // SCOPE, stated rather than left to be discovered: this covers the suite's OWN edit, the
+            // rename. It deliberately does not fire when a case is moved into or out of an approved
+            // folder, which also changes what §6g says a suite review is about — its composition.
+            // Doing that properly means every case write knowing which suites it just invalidated,
+            // and the demotion arriving as a side effect of editing a different artifact; it is a
+            // slice of its own and is named in the handoff rather than half-built here.
+            boolean unApproves = suite.getLifecycleStatus() == LifecycleStatus.APPROVED
+                    && reviews.reReviewOnEdit(project.getId(), ReviewSubjectType.SUITE);
+
             suite.applyEdit(edit, userId, now);
+            if (unApproves) {
+                suite.applyStatus(LifecycleStatus.DRAFT, userId, now);
+            }
             suites.saveAndFlush(suite);
 
             // No version row: a name is content, and suite_version holds composition. See
             // SuiteVersions for why bumping here would start the every-edit-bumps-every-ancestor
             // spiral V1's own schema comment exists to refuse.
             audit(project.getId(), userId, "suite.renamed", suite, now);
+            if (unApproves) {
+                // Its own verb, for CaseUpdateService's reason: an approval that ended is what
+                // somebody comes looking for, and "suite.renamed" is not where they would look.
+                audit(project.getId(), userId, "suite.re_review_required", suite, now);
+            }
 
             return new Outcome.Updated(view(companyId, project.getId(), suite));
         }));

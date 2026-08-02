@@ -1,5 +1,6 @@
 package com.tcms.project;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -36,6 +37,27 @@ public interface ReviewRepository extends JpaRepository<Review, UUID> {
             @Param("projectId") UUID projectId,
             @Param("subjectType") ReviewSubjectType subjectType,
             @Param("subjectId") UUID subjectId);
+
+    /**
+     * The open reviews for a set of subjects — {@link #findOpenForSubject}'s batch, and the reason
+     * it exists is {@code CaseBulkService}.
+     *
+     * <p>A bulk approve of four hundred cases has to answer §6g's approval preconditions for every
+     * row, and asking {@link #findOpenForSubject} per row is the N+1 that looks harmless because
+     * each query is fast — {@code CaseOwners}' reason and {@code findForReviews}' beside it. Two
+     * queries serve the whole operation: this one, then the participations of whatever it returns.
+     */
+    @Query("""
+            SELECT r FROM Review r
+             WHERE r.projectId = :projectId
+               AND r.subjectType = :subjectType
+               AND r.subjectId IN :subjectIds
+               AND r.state = com.tcms.project.ReviewState.IN_REVIEW
+            """)
+    List<Review> findOpenForSubjects(
+            @Param("projectId") UUID projectId,
+            @Param("subjectType") ReviewSubjectType subjectType,
+            @Param("subjectIds") Collection<UUID> subjectIds);
 
     /**
      * Every review of a subject, newest first — the subject's review history.

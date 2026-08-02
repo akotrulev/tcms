@@ -4,6 +4,8 @@ import com.tcms.project.ClassificationDimensionView;
 import com.tcms.project.GateResult;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectService;
+import com.tcms.project.ReviewService;
+import com.tcms.project.ReviewSubjectType;
 import com.tcms.tenancy.AuditEvent;
 import com.tcms.tenancy.AuditEventRepository;
 import com.tcms.tenancy.CompanyContext;
@@ -81,6 +83,12 @@ public class CaseUpdateService {
     private static final String EDIT_CASE = "case:edit";
 
     private static final String AUDIT_ACTION = "case.updated";
+
+    /**
+     * §6g's RE_REVIEW demotion. A verb of its own — see the write below for why it is not a field on
+     * the save's own audit row.
+     */
+    private static final String AUDIT_ACTION_RE_REVIEW = "case.re_review_required";
     private static final String AUDIT_TARGET = "test_case";
 
     private final ProjectService projects;
@@ -92,6 +100,7 @@ public class CaseUpdateService {
     private final CaseClassifications classifications;
     private final CaseRenderer renderer;
     private final CaseVersions versions;
+    private final ReviewService reviews;
     private final AuditEventRepository auditEvents;
     private final Clock clock;
 
@@ -105,6 +114,7 @@ public class CaseUpdateService {
             CaseClassifications classifications,
             CaseRenderer renderer,
             CaseVersions versions,
+            ReviewService reviews,
             AuditEventRepository auditEvents,
             Clock clock) {
 
@@ -117,6 +127,7 @@ public class CaseUpdateService {
         this.classifications = classifications;
         this.renderer = renderer;
         this.versions = versions;
+        this.reviews = reviews;
         this.auditEvents = auditEvents;
         this.clock = clock;
     }
@@ -240,12 +251,31 @@ public class CaseUpdateService {
         CaseEdit edit = ((CaseEdit.Outcome.Valid) validated).edit();
 
         Instant now = clock.instant();
+
+        // §6g's edit-after-approval rule, RE_REVIEW arm. Read BEFORE applyEdit only for clarity —
+        // an ordinary edit cannot change the status, because CaseUpdateRequest omits it deliberately
+        // ("a status an ordinary edit can set is an approval anyone grants themselves by saving").
+        boolean unApproves = testCase.getLifecycleStatus() == LifecycleStatus.APPROVED
+                && reviews.reReviewOnEdit(project.getId(), ReviewSubjectType.CASE);
+
         testCase.applyEdit(edit, userId, now);
         steps.reconcile(testCase, edit.steps());
         // Before the render, not after: the response IS the version snapshot, and rendering first
         // would report the classification the case had on the way in — so the row, the response and
         // the recorded history would each say something different about the save that just happened.
         classifications.reconcile(testCase, edit.classificationValueIds(), vocabulary, companyId);
+
+        // Applied BEFORE the render, so the response carries DRAFT rather than reporting the
+        // approval the save just ended — the same ordering the classification reconcile above is
+        // placed for, and for the same reason: the row, the response and the recorded history must
+        // not each say something different about one save.
+        //
+        // No version row of its own and no version bump: the status is not authored content and is
+        // not in CaseVersions#hash, so the edit's own version — decided just below — is the whole
+        // record of what changed. §75's identical call on a suite's status.
+        if (unApproves) {
+            testCase.moveToStatus(LifecycleStatus.DRAFT, userId, now);
+        }
 
         // Decided before the version number is stamped, and stamped before anything is rendered, so
         // the snapshot and the response are one render carrying the same number.
@@ -277,6 +307,24 @@ public class CaseUpdateService {
                 "{\"versionNo\":" + decision.versionNo()
                         + ",\"newVersion\":" + decision.isNew() + "}",
                 now));
+
+        // Its OWN audit row, not a field on the save's. An approval that ended is the fact somebody
+        // will come looking for, and "case.updated" is the most common action in the table — burying
+        // it there makes it findable only by whoever already knows to look. §75's argument for six
+        // distinct verbs, applied to an act nobody explicitly requested, which is exactly why the
+        // trail has to name it.
+        if (unApproves) {
+            auditEvents.save(AuditEvent.record(
+                    project.getId(),
+                    userId,
+                    AUDIT_ACTION_RE_REVIEW,
+                    AUDIT_TARGET,
+                    List.of(testCase.getId()),
+                    "{\"key\":" + AuditEvent.jsonString(testCase.getKey())
+                            + ",\"from\":\"APPROVED\",\"to\":\"DRAFT\""
+                            + ",\"reason\":\"EDIT_AFTER_APPROVAL\"}",
+                    now));
+        }
 
         return new Outcome.Updated(view);
     }

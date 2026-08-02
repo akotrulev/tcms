@@ -1,8 +1,56 @@
 /** Plan §6g's review record — the trail behind a submitted case, suite or plan. */
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { api, qs } from '../client';
-import type { Review, ReviewSubjectType } from '../types';
+import type {
+  ProjectSettings,
+  ProjectSettingsUpdate,
+  Review,
+  ReviewSubjectType,
+} from '../types';
 import { base, keys } from './keys';
+
+/**
+ * The project's §6g policy — **read by every artifact screen, not just the settings one**.
+ *
+ * §6g's first requirement is that "a project that never turns review on should see no extra UI at
+ * all", so the review panel's very existence depends on this. The endpoint is therefore gated on
+ * project visibility rather than on `project:settings`: a Viewer must be able to learn that review
+ * is off, or the requirement is unimplementable for exactly the readers it is about.
+ *
+ * No `enabled` gate on the project id, unlike the subject-keyed queries below — a project route
+ * cannot render without its `projectId`, and every sibling project-scoped query here is written the
+ * same way.
+ */
+export function useProjectSettings(projectId: string): UseQueryResult<ProjectSettings> {
+  return useQuery({
+    queryKey: keys.projectSettings(projectId),
+    queryFn: ({ signal }) =>
+      api.get<ProjectSettings>(`${base(projectId)}/settings`, { signal }),
+  });
+}
+
+/**
+ * Replaces the project's settings. Needs `project:settings`.
+ *
+ * A `PUT` of the whole value, matching the contract: the form submits every control, so there is no
+ * partial-update shape for a caller to get wrong.
+ *
+ * Invalidates rather than writing the response into the cache, for `useRecordReviewVerdict`'s
+ * reason — and one more that is specific to this key: **turning review on or off changes what every
+ * open artifact screen should render**, so the panels have to re-ask rather than keep a copy taken
+ * before the switch moved.
+ */
+export function useUpdateProjectSettings(projectId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (update: ProjectSettingsUpdate) =>
+      api.put<ProjectSettings>(`${base(projectId)}/settings`, update),
+    // The form shows the 403 and the field errors in place, beside the controls they are about.
+    meta: { handled: true },
+    onSuccess: () =>
+      client.invalidateQueries({ queryKey: keys.projectSettings(projectId) }),
+  });
+}
 
 /**
  * Every review of one subject, newest first — usually one, often none.

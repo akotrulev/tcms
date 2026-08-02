@@ -19,10 +19,13 @@ export { caseDetail, caseVersions, recordCaseVersion, writeCase } from './cases'
 export { materialiseRun, planScopeCaseIds, recountRun, runExecutions } from './executions';
 export { addWorkItem, workItems } from './workItems';
 export {
+  defaultProjectSettings,
   openReviewFor,
   recordVerdict,
   reviewMoved,
   reviewsForSubject,
+  saveProjectSettings,
+  settingsForProject,
   type MockReview,
   type ReviewStanding,
 } from './reviews';

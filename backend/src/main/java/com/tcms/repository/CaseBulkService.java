@@ -374,7 +374,7 @@ public class CaseBulkService {
             TestCase row, BulkCommand command, Context context, boolean approver) {
         return switch (command) {
             case BulkCommand.SetStatus status ->
-                    evaluateStatus(row, status.target(), approver);
+                    evaluateStatus(row, status.target(), approver, context);
 
             case BulkCommand.SetAutomationStatus automation -> {
                 if (row.getAutomationStatus() == automation.target()
@@ -448,7 +448,8 @@ public class CaseBulkService {
      * @param approver whether the caller holds {@code case:approve} on this project — resolved once
      *                 per operation rather than per row, and only for the command that has edges
      */
-    private BulkVerdict evaluateStatus(TestCase row, LifecycleStatus target, boolean approver) {
+    private BulkVerdict evaluateStatus(
+            TestCase row, LifecycleStatus target, boolean approver, Context context) {
         LifecycleStatus current = row.getLifecycleStatus();
         LifecycleLadder.Decision decision = LifecycleLadder.decide(current, target, "case");
 
@@ -463,6 +464,15 @@ public class CaseBulkService {
         if (!approver && BulkOperations.APPROVE_CASE.equals(
                 LifecycleLadder.permissionFor(current, target, BulkOperations.CASE_KEYS))) {
             return new BulkVerdict.Skipped(leadOnly(current, target));
+        }
+
+        // §6g's approval preconditions, AFTER the permission half and before the ladder's verdict is
+        // turned into a change — the order the two status endpoints use. A caller who may not
+        // approve at all is told that, rather than being told they are the author of a review they
+        // could not have signed off either way.
+        String refusal = context.reviewRefusals().get(row.getId());
+        if (refusal != null) {
+            return new BulkVerdict.Skipped(refusal);
         }
 
         return switch (decision) {
@@ -685,7 +695,13 @@ public class CaseBulkService {
             Map<UUID, Set<String>> tags,
             Map<UUID, List<CaseCondition>> conditions,
             Map<UUID, Set<UUID>> classifications,
-            Map<UUID, CaseEdit> priorEdits) {
+            Map<UUID, CaseEdit> priorEdits,
+            /**
+             * Why §6g's policy refuses this case's approval, per case — empty for every case that
+             * may proceed, and empty entirely for any command that is not a move into
+             * {@code APPROVED}. See {@code ReviewService#refusesEach}.
+             */
+            Map<UUID, String> reviewRefusals) {
 
         List<CaseCondition> conditionsOf(UUID caseId) {
             return conditions.getOrDefault(caseId, List.of());
@@ -777,6 +793,22 @@ public class CaseBulkService {
             }
         }
 
+        // §6g's approval preconditions, resolved for the whole selection in two queries before the
+        // loop — ReviewService#refusesEach exists for exactly this call site, because asking per row
+        // is two queries per case over a selection of four hundred. Only a move INTO approval can be
+        // refused by policy, so nothing is loaded for the other seven actions or for the six other
+        // status targets.
+        Map<UUID, String> reviewRefusals =
+                command instanceof BulkCommand.SetStatus status
+                        && status.target() == LifecycleStatus.APPROVED
+                        && !found.isEmpty()
+                        ? reviews.refusesEach(
+                                project.getId(),
+                                ReviewSubjectType.CASE,
+                                found.stream().map(TestCase::getId).toList(),
+                                userId)
+                        : Map.of();
+
         return new Context(
                 liveSuites,
                 liveSuiteIds,
@@ -784,6 +816,7 @@ public class CaseBulkService {
                 tags,
                 byCase,
                 classificationsByCase,
-                Map.copyOf(priorEdits));
+                Map.copyOf(priorEdits),
+                reviewRefusals);
     }
 }

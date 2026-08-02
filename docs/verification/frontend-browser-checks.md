@@ -486,3 +486,47 @@ row at all** until somebody submits one after this deploy, including the artifac
 `V22`'s partial unique index is what decides it, and the loser gets a constraint violation rather
 than a second open review — recorded here so its absence does not read as an oversight, and queued
 as a backend check.
+
+---
+
+## §77 — per-project review settings: the switch that decides whether §76 exists
+
+**Built and NOT browser-verified.** The twelfth slice in the deferred queue.
+
+**Read row 1 before any other.** This slice changes the *default* from "review everywhere" to
+"review nowhere", so on both mock and live the first observable effect is that **§76's panel
+disappears from every screen** until somebody turns it on. Every row in §76's block above now
+presupposes that the project has review enabled — which is exactly what row 2 here does, and the
+honest way to run the two blocks is §77 row 2 first.
+
+**The mock deliberately disagrees with a fresh install, in one direction only.** `settingsForProject`
+seeds the **demo project** with review on so §76's fixture reviews are reachable, and every other
+project on the defaults. Both are states a real instance produces; a store that did only one of them
+would be §72's finding (fixtures sitting in a state a fresh install cannot produce) or would make the
+panel look unbuilt.
+
+| # | Flow | What must be true | Mode |
+|---|---|---|---|
+| 1 | Live: open any case, suite and plan **before touching the settings screen** | **No Review panel anywhere** — not an empty panel, not a "review is off" placeholder, nothing. §6g's "a project that never turns it on should see no extra UI at all". `psql`: `SELECT * FROM project_settings` has one row per project, all three `review_enabled_*` false. | **live only** — the state disappears once row 2 runs |
+| 2 | Project → **Review** in the nav rail. Turn on Test plans only, Save | 200, "Last changed … by you". Re-open a **plan**: the panel is there. Re-open a **case**: still nothing. The opt-in is per artifact type and this is the row that proves the map is not read as any-of. | mock + live |
+| 3 | As a **Viewer** (no `project:settings`), open the same screen | The page **renders with every control disabled** and the current values visible — §31's disable-don't-hide — rather than 403ing or hiding the rail item. A Viewer must be able to find out why no artifact shows a panel. | mock + live |
+| 4 | As a Viewer, confirm the rail item is present | "Review" appears under Project. Hiding it would leave the reader in row 3's situation with no route to the answer. | mock + live |
+| 5 | Set **Peer reviews required** to `21`, then to `-1` | The field goes red with *"Between 0 and 20."* **before** any request is sent, and Save is disabled. The server refuses the same values on the same field; `V23`'s CHECK is the backstop behind both. | mock + live |
+| 6 | Turn review on for plans, set peer minimum **1**, leave *the person who submits cannot approve* **on**. Submit a plan as yourself and try to approve it | **409 in place** — *"You submitted this plan for review, and this project asks somebody else to approve it."* The plan stays **In review**. Not a 403: the permission is held and the policy is what refuses. | mock + live |
+| 7 | Same plan: have a **second account** press Looks good, then approve as the first | The approval now succeeds. This is the pair row 6 is half of, and it is the only way to see the peer minimum satisfied. | **live only** — needs two accounts |
+| 8 | With the minimum at 1: have person B say **Looks good**, then **Request changes**, then try to approve | **Refused** — *"…needs 1 peer review … and has 0."* The latest verdict is what counts, and the trail shows both rows. The single most valuable row here: the cheap implementation passes row 7 perfectly and fails only this. | **live only** |
+| 9 | Approve your own plan's LGTM: press Looks good as the submitter, then approve, with the author rule **off** | Still refused on the peer minimum — *"has 0"*. The submitter's own LGTM is not a second opinion, and the two settings are independent. | **live only** |
+| 10 | Raise the minimum from 1 to 5 **while a review is open**, then approve that review | It **still approves**. The count is pinned onto the review at submission, so the goalposts do not move under reviewers who were already asked. Then submit a *new* plan and confirm it needs 5. | mock + live |
+| 11 | With **Keep the approval** (RETAIN): approve a plan, then rename it | Status stays **Approved**, and the panel shows §76's staleness warning if the edit wrote a version. This is the behaviour the product has always had; the row exists so the contrast in 12 is readable. | mock + live |
+| 12 | Switch to **Return it to draft** (RE_REVIEW), approve a plan, then rename it | Status becomes **Draft**. The warning Alert on the settings screen must have been visible before saving. `psql`: an audit row with action `plan.re_review_required` naming you, `from APPROVED to DRAFT`. | mock + live |
+| 13 | As a **Test Engineer** (holds `plan:edit`, not `plan:approve`), edit that approved plan under RE_REVIEW | **The edit succeeds and the plan drops to Draft.** This looks wrong and is the design — see `EditAfterApproval.RE_REVIEW`. Charging the approve key would make an approved plan uneditable by the people §6g expects to edit it. The row exists so a future reader meets the decision in the product rather than only in a javadoc. | **live only** |
+| 14 | Turn review **off** for plans while a plan is sitting In review | The panel disappears from that plan, and its status chip **still reads In review**. `psql`: its `review` row is **still `IN_REVIEW`** — switching the policy off does not withdraw submissions on anyone's behalf. | mock + live |
+| 15 | Turn review off entirely, then move a case through Draft → In review → Approved from the bulk dialog | Every move **succeeds**. The ladder is not the apparatus: a project with review off keeps the four statuses it has used since M1. This is the row that would have caught the alternative reading, which would have silently removed approval from every existing project on upgrade day. | mock + live |
+| 16 | The settings screen at 390 px | The three switches, the number field and the mode select stack without overflow; the RE_REVIEW warning wraps; Save and Discard stay reachable without horizontal scroll. | mock + live |
+| 17 | Change one switch, then press **Discard changes** | The form returns to the server's values and Save re-disables. Then change one and navigate away and back: the draft is gone, which is correct — nothing here is autosaved. | mock + live |
+
+**Not reproducible in a browser:** two admins saving the settings form at the same instant.
+`project_settings.lock_version` is maintained (`@Version`) but **nothing sends an `If-Match`**, so
+the second write wins silently. Recorded rather than implied — adding the header is a later slice,
+and the column is annotated now precisely so that slice does not first have to discover it was
+reading `0` for ever (§74's finding).

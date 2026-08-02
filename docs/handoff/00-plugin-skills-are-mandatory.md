@@ -4,6 +4,21 @@ This project is being built with the **`fe-react`, `be-java`, `data`, `qa-java`,
 
 **At the start of any new session:**
 
+0. **Read the orientation cache FIRST — `docs/agent-context/be-java.md` and `docs/agent-context/fe-react.md`.**
+   They are the `ep-agent-orientation-cache` protocol's output: the version lane, the layout, and —
+   the part worth the most — a **seam list** recording what each shipped slice extracted, why, and the
+   defect it prevents. That is the fastest path to "what already exists that I must reuse rather than
+   re-derive", and it is where a slice's `#confirmed` findings live between sessions.
+   - **Read it before `HANDOFF.md`'s narrative and before the raw DDL.** The narrative records what
+     each slice *did*, which over-represents finished work (the same reason `docs/audits/` §1 gives
+     for not deriving from it); the cache records what the code *is*.
+   - **Validate, don't inherit.** Check its `Baseline commit:` header against `git log` and read the
+     delta. A cache whose header lags is normal — §76 updated the body and not the header — so trust
+     the body over the header, and re-derive anything a commit since the baseline could have moved.
+     Its claims are marked `#confirmed`; a claim that decides your slice's shape still gets one grep.
+   - **Update it before you finish**, in the same commit as the slice. `fe-react.md` was last written
+     at §70 and went stale across five frontend-touching slices (§72–§76) because only the backend
+     half of that habit stuck.
 1. **Frontend work** → invoke the `fe-react:fe-react` skill (or `Skill` tool with `fe-react:fe-react`). It loads the agent definition at
    `~/.claude/plugins/cache/skills-library/fe-react/<hash>/frontend/react/agents/fe-react.md`
    and runs a **phased pipeline**. Read the phase table there and load **only that phase's `SKILL.md` files** before producing anything they cover. Skills live at

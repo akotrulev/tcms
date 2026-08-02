@@ -2,8 +2,14 @@ import { useState } from 'react';
 import { Alert, Box, Button, Chip, Stack, TextField, Typography } from '@mui/material';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlineOutlined';
 import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
-import type { PermissionKey, Review, ReviewParticipation, ReviewSubjectType } from '../../api/types';
-import { useRecordReviewVerdict, useReviews } from '../../api/queries';
+import type {
+  PermissionKey,
+  ProjectSettings,
+  Review,
+  ReviewParticipation,
+  ReviewSubjectType,
+} from '../../api/types';
+import { useProjectSettings, useRecordReviewVerdict, useReviews } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
@@ -15,6 +21,20 @@ import {
   reviewSubjectLabels,
   reviewVerdictLabels,
 } from '../../lib/labels';
+
+/**
+ * Which settings flag switches review on for each artifact type.
+ *
+ * `satisfies Record<ReviewSubjectType, ...>` for `lib/labels.ts`' reason: a fourth subject type
+ * becomes a **compile error here** rather than silently reading `undefined` and hiding the panel on
+ * the one artifact somebody just added support for. The value type is pinned to the settings keys,
+ * so a renamed contract field fails the build too.
+ */
+const reviewEnabledKeys = {
+  CASE: 'reviewEnabledCase',
+  SUITE: 'reviewEnabledSuite',
+  PLAN: 'reviewEnabledPlan',
+} satisfies Record<ReviewSubjectType, keyof ProjectSettings>;
 
 /**
  * Who was asked to look at this artifact, what they said, and who signed it off — plan §6g's
@@ -31,6 +51,17 @@ import {
  * the plan header, the bulk dialog — because §6g's state machine has exactly one gate and this tier
  * is not it. A panel with an Approve button would be a second door to the sign-off for everyone
  * holding the advisory key.
+ *
+ * ### It renders nothing at all when the project has review switched off
+ *
+ * §6g's opening requirement — *"a project that never turns it on should see no extra UI at all"* —
+ * and the check lives **here** rather than at the three call sites, so a fourth screen that mounts
+ * this panel cannot forget it. The setting is per artifact type, so a project reviewing plans and
+ * not cases gets the panel on one and not the other.
+ *
+ * The gate is deliberately **not** rendered as an empty state saying "review is off": a project
+ * that never enabled it has no use for a permanent panel explaining a feature it declined, which is
+ * exactly the "extra UI" the requirement is about.
  */
 export function ReviewPanel({
   projectId,
@@ -48,7 +79,20 @@ export function ReviewPanel({
    */
   currentVersionNo?: number;
 }) {
+  const settings = useProjectSettings(projectId);
   const reviews = useReviews(projectId, subjectType, subjectId);
+
+  /*
+    While the settings are loading this renders nothing rather than a panel that may be about to
+    disappear. `useCan`'s "not yet is not no" rule (§65) does not apply here, because the two
+    failures are not comparable: a permission resolving late must not deny an affordance the caller
+    holds, while a panel that flashes in and then vanishes is worse than one that arrives a beat
+    late. `data` is undefined while pending and on failure, and both mean "do not render" — a
+    settings read that failed is not evidence review is on.
+  */
+  if (!settings.data?.[reviewEnabledKeys[subjectType]]) {
+    return null;
+  }
 
   return (
     <Panel title="Review" testId="Review.Panel">

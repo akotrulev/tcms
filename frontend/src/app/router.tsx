@@ -83,6 +83,11 @@ const ClassificationSettingsPage = lazy(() =>
     default: m.ClassificationSettingsPage,
   })),
 );
+const ReviewSettingsPage = lazy(() =>
+  import('../features/settings/ReviewSettingsPage').then((m) => ({
+    default: m.ReviewSettingsPage,
+  })),
+);
 
 /** Route-level fallback, shaped like a page so the shell doesn't jump while a chunk loads. */
 function RouteFallback() {
@@ -299,6 +304,21 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <ClassificationSettingsPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            The second screen the comment above predicted. §6g's four review settings — the opt-in
+            that decides whether the review panel exists at all, and the three rules that decide what
+            approval requires. Under `/settings/` for the same reason, and the path shape is now
+            carrying its weight rather than being speculative.
+          */}
+          <Route
+            path="/projects/:projectId/settings/review"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <ReviewSettingsPage />
               </Suspense>
             }
           />

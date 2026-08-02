@@ -662,6 +662,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The project's own policy — plan §6g's review settings
+         * @description **Readable by anyone who can see the project**, deliberately, and not gated on
+         *     `project:settings` like the `PUT` beside it. §6g's first requirement is that "a project
+         *     that never turns review on should see no extra UI at all", which is a decision every
+         *     client has to make on every artifact screen for every reader — a Test Engineer, a
+         *     Viewer — and none of them is an admin. Gating the read on the write key would leave the
+         *     SPA unable to find out whether to render the review panel at all.
+         *
+         *     Nothing here is sensitive in the way the key suggests: these are facts about how the
+         *     project behaves, deducible by anybody who presses a button.
+         *
+         *     A project nobody has configured answers the **defaults** — review off for all three
+         *     artifact types, `RETAIN`, no required peer reviews, and the
+         *     author-cannot-approve-own-work rule on. `updatedBy` and `updatedAt` are `null` for such
+         *     a project, which is most of them; a client renders "never changed" rather than
+         *     attributing the defaults to whoever created the project.
+         */
+        get: operations["getProjectSettings"];
+        /**
+         * Replace the project's settings
+         * @description Needs `project:settings` on this project — the key §69's classification vocabulary
+         *     editor already uses.
+         *
+         *     A `PUT` rather than a `PATCH`: the form shows every control and submits every control,
+         *     nothing here is a list and nothing here is clearable, so "leave this one alone" has no
+         *     meaning a user of this screen could ask for.
+         *
+         *     **`requiredPeerReviews` is copied onto each review as it is submitted**, and the
+         *     approval check reads it from there. Raising the bar therefore governs reviews opened
+         *     afterwards and does not freeze reviews already in flight, whose reviewers were asked
+         *     under the old rule and some of whom have already spoken.
+         *
+         *     Switching review **off** does not close reviews that are already open: those rows
+         *     record something that happened, and a project changing its policy has not caused
+         *     everyone to withdraw. It stops new ones being opened.
+         */
+        put: operations["updateProjectSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/statuses": {
         parameters: {
             query?: never;
@@ -4143,6 +4197,71 @@ export interface components {
         /** @enum {string} */
         ReviewVerdict: "LGTM" | "CHANGES_REQUESTED" | "REJECTED" | "APPROVED";
         /** @enum {string} */
+        EditAfterApproval: "RETAIN" | "RE_REVIEW";
+        /**
+         * @description One project's §6g policy. **Flat rather than a nested `settings` object**, because a
+         *     contract's `required` array does not descend into an inline nested object — every
+         *     property under one comes out optional and no consumer can rely on it.
+         */
+        ProjectSettings: {
+            /** Format: uuid */
+            projectId: string;
+            /**
+             * @description §6g's opt-in for cases. **Off by default.** When false the reviewer apparatus does
+             *     not exist for cases in this project — no review is opened, no peer verdict can be
+             *     recorded, and the client renders no panel. The **status ladder is unaffected**:
+             *     turning review off must not withdraw `IN_REVIEW` and `APPROVED` from a four-value
+             *     status the team has used since M1.
+             */
+            reviewEnabledCase: boolean;
+            /** @description §6g's opt-in for suites. Off by default. */
+            reviewEnabledSuite: boolean;
+            /** @description §6g's opt-in for plans. Off by default. */
+            reviewEnabledPlan: boolean;
+            /**
+             * @description §6g's "configurable minimum peer reviews before approval is offered (default 0)".
+             *     Counted as **distinct people other than the submitter whose latest verdict is
+             *     LGTM** — the trail is append-only precisely so that relenting in either direction
+             *     is visible, so somebody who said LGTM and then requested changes is not standing
+             *     behind it.
+             *
+             *     Copied onto each review at submission and read from there, never live.
+             */
+            requiredPeerReviews: number;
+            /**
+             * @description `false` — the default — means §6g's author-cannot-approve-own-work rule is **on**.
+             *     Stored in the positive so no consumer reads a double negative. "Author" is whoever
+             *     **submitted** the review, not whoever created the artifact.
+             *
+             *     A review whose submitter is unattributable does not bind the rule, or the artifact
+             *     could never be approved by anyone.
+             */
+            authorMayApproveOwnWork: boolean;
+            editAfterApproval: components["schemas"]["EditAfterApproval"];
+            /** @description Null for a project nobody has configured — which is most of them. */
+            updatedBy?: components["schemas"]["UserRef"] | null;
+            /** Format: date-time */
+            updatedAt?: string | null;
+        };
+        /**
+         * @description A full replacement. The three `reviewEnabled*` switches default to **false** when
+         *     omitted — an absent switch is "off", which is both §6g's default and the safe reading —
+         *     while `requiredPeerReviews` and `editAfterApproval` are **required**, because 0 and
+         *     RETAIN are meaningful values a dropped field would silently assert.
+         */
+        ProjectSettingsUpdate: {
+            /** @default false */
+            reviewEnabledCase: boolean;
+            /** @default false */
+            reviewEnabledSuite: boolean;
+            /** @default false */
+            reviewEnabledPlan: boolean;
+            requiredPeerReviews: number;
+            /** @default false */
+            authorMayApproveOwnWork: boolean;
+            editAfterApproval: components["schemas"]["EditAfterApproval"];
+        };
+        /** @enum {string} */
         LifecycleStatus: "DRAFT" | "IN_REVIEW" | "APPROVED" | "DEPRECATED";
         /** @enum {string} */
         AutomationStatus: "MANUAL" | "TO_BE_AUTOMATED" | "AUTOMATED" | "NOT_AUTOMATABLE";
@@ -5850,6 +5969,60 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getProjectSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The project's settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectSettings"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateProjectSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description The settings as they now stand */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectSettings"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     listReviews: {
         parameters: {
             query: {

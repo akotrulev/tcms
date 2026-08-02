@@ -139,7 +139,16 @@ public class PlanStatusService {
             // 200 with the plan and nothing written — no timestamp re-stamped, no audit row. See
             // Decision.Unchanged: a repeated click must not bury the change that happened.
             case PlanLifecycle.Decision.Unchanged ignored -> new Outcome.Updated(views.viewOf(plan));
-            case PlanLifecycle.Decision.Move move -> move(userId, projectId, plan, move.target());
+            // §6g's review policy gets its say AFTER the ladder has agreed the move exists and
+            // BEFORE anything is written — SuiteStatusService's placement, for its reason.
+            case PlanLifecycle.Decision.Move move -> reviews.refuses(
+                            projectId,
+                            ReviewSubjectType.PLAN,
+                            plan.getId(),
+                            PlanLifecycle.standingOf(move.target()),
+                            userId)
+                    .<Outcome>map(Outcome.Refused::new)
+                    .orElseGet(() -> move(userId, projectId, plan, move.target()));
         };
     }
 

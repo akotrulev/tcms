@@ -3,7 +3,7 @@
 # fe-react — orientation cache (TCMS)
 
 **Last verified:** 2026-08-02
-**Baseline commit:** `68c3cd5`
+**Baseline commit:** `02fa872`
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
 `frontend/vite.config.ts`
 
@@ -25,7 +25,7 @@
 - **`npm run build` is THE gate** (`tsc -b` + vite build). **Do not trust `tsc --noEmit`** — it has
   reported 0 errors while the build failed with nine (working agreement). `#confirmed`
 - `npm run lint` — oxlint, must stay at **0 warnings**; it prints nothing when clean.
-- `npm run test:run` — Vitest + RTL. **534/534** at this baseline. **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
+- `npm run test:run` — Vitest + RTL. **616/616** at this baseline (§77). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
 - `npm run gen:api` — regenerate `src/api/schema.d.ts` after **any** `openapi.yaml` change. Runs
   through `npx` on purpose (the scaffold pins TS 6, the tool peer-requires 5.x); do not "fix" it.
 - **Live mode:** `VITE_API_MODE=live` in `.env.local` proxies `/api` to `localhost:8080`.
@@ -38,7 +38,27 @@
 `src/{api,app,auth,components,features,lib,mocks,notifications,a11y,test}`. Feature folders under
 `features/<area>/`; routes are project-scoped under `/projects/:projectId/*` (`app/router.tsx`, lazy).
 
+> **⚠ This file went FIVE SLICES STALE (§72–§76) and was repaired in §77.** Only the backend half of
+> the update-the-cache habit had stuck. If you are reading this and the baseline lags HEAD by more
+> than a slice, the seam list below is a lead and not evidence — re-grep anything that decides your
+> slice's shape. `docs/handoff/00-plugin-skills-are-mandatory.md` step 0 now states the protocol.
+
 ## Seams to reuse
+
+- **`useProjectSettings(projectId)` gates §6g's whole reviewer UI, and it is read by ARTIFACT screens
+  rather than only by the settings page (§77).** §6g's opening requirement is that a project which
+  never turns review on shows *"no extra UI at all"*, so `ReviewPanel` reads the settings and
+  **returns `null`** when review is off for its subject type — the check lives **in the panel**, not
+  at its three call sites, so a fourth screen that mounts it cannot forget. The endpoint is gated on
+  **project visibility, not `project:settings`**, precisely so a Viewer's client can make that
+  decision. `reviewEnabledKeys` is `satisfies Record<ReviewSubjectType, keyof ProjectSettings>`, so a
+  fourth subject type is a compile error rather than a silently hidden panel.
+  **While the settings are pending the panel renders nothing** — deliberately *not* §65's
+  "not yet is not no" rule, which is about permissions: a panel that flashes in and vanishes is worse
+  than one arriving a beat late, and a failed settings read is not evidence review is on. `#confirmed`
+- **The status ladders and the review apparatus are separate on the client too.** Turning review off
+  hides the panel and changes **nothing** about the Draft/In review/Approved controls on the suite
+  tree, plan header or bulk dialog. `#confirmed`
 
 - **TanStack Query owns all server state**; no server data in any client store. `src/api/queries/` is
   the data module — one `keys` factory (`queries/keys.ts`), per-endpoint timeout budgets. `#confirmed`
@@ -85,6 +105,14 @@
   the RFC-7807 `errors` map onto its fields and falls back to a root alert via `describeError`.
   `mode: 'onBlur'`; **focus on open, never `reset(defaults)`** — a reset keyed on an object literal
   re-runs each render and wipes a failed submit's errors. `#confirmed`
+- **The MUI slot spelling is `slotProps`, and getting it wrong has now cost FOUR slices** (§71
+  extracted `lib/muiTestIds.ts` to end it, §74 recorded a third occurrence via `PlanCreateDialog`,
+  §77 a fourth). `muiTestIds` owns the *shape* of the object; **the prop name is the part it cannot
+  own**, which is the whole gap — a file written from an older sibling reintroduces `inputProps=` and
+  MUI v7 rejects it. `Switch`/`Checkbox` → `slotProps={inputTestId(id)}`; `TextField` →
+  `slotProps={{ htmlInput: { 'data-testid': … } }}`; `Select` →
+  `SelectDisplayProps={selectTestId(id)}` or `slotProps={{ select: { SelectDisplayProps: … } }}`.
+  **Caught by `npm run build`, never by the test runner.** `#confirmed`
 - **`data-testid` goes on the INPUT, not the wrapper**: `slotProps={{ htmlInput: { 'data-testid': … } }}`.
   Putting it on the `TextField` lands it on the root div and `userEvent.type` silently does nothing —
   cost six tests failing for one reason in §61. Tests reach a MUI select's combobox via
@@ -136,6 +164,19 @@
 
 ## Session log
 
+- 2026-08-02 · EXTEND · Per-project review settings (§77) — §6g's four settings get a screen and the
+  review panel gets an off switch. New: `features/settings/ReviewSettingsPage.tsx`,
+  `useProjectSettings`/`useUpdateProjectSettings`, `keys.projectSettings`,
+  `editAfterApprovalLabels`/`Descriptions`, the `/projects/:id/settings/review` route and its rail
+  item, and the mock's `settingsForProject`/`saveProjectSettings` + both handlers.
+  **`ReviewPanel` now returns `null` when review is off** — which reddened all 11 of its tests at
+  once, because their `mockReads` fallthrough answered `[]` and `[].reviewEnabledPlan` is
+  `undefined`. That is the feature working; the fixture moved to the enabled state and the
+  default-off case got **its own test** rather than remaining a fallthrough's accident.
+  The mock seeds the **demo project on and every other project off**, deliberately: both are states a
+  real instance produces, and having only one is §72's fixture rule in one direction or the other.
+  **The MUI slot trap fired a fourth time** (`inputProps` vs v7's `slotProps`), caught by
+  `npm run build`. 2 tests written, 11 repaired; 616/616.
 - 2026-08-02 · FIX · The verb the contract checks could not see (§70). Chasing §69's four
   unaccounted-for tests found that `contractOperations.test.ts` and `apiResponseTypes.test.ts` each
   hard-coded the client's verbs and spelled its `del` as `delete`, omitting `upload` — so **eight

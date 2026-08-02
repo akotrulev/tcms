@@ -14,6 +14,7 @@ import type {
   CriterionMetric,
   DocBlockType,
   DocPageStatus,
+  EditAfterApproval,
   HealthSignal,
   LifecycleStatus,
   PlanStatus,
@@ -225,6 +226,31 @@ export const reviewSubjectLabels = {
   SUITE: 'suite',
   PLAN: 'plan',
 } as const satisfies Record<ReviewSubjectType, string>;
+
+/**
+ * §6g's two answers to "what does an edit to an approved artifact do".
+ *
+ * Worded as the *outcome* rather than as the enum: "Retain" and "Re-review" are the plan's terms
+ * and mean nothing to somebody meeting this setting for the first time in a dropdown.
+ */
+export const editAfterApprovalLabels = {
+  RETAIN: 'Keep the approval, and mark it stale',
+  RE_REVIEW: 'Return it to draft — approval must be re-earned',
+} as const satisfies Record<EditAfterApproval, string>;
+
+/**
+ * The consequence of each, beside the label so the two cannot drift.
+ *
+ * The Re-review sentence names the cost rather than selling the feature: §6g recommends Retain
+ * precisely because "forcing full re-approval on a typo fix is how review processes get abandoned",
+ * and an admin choosing between them should read that here rather than discover it in a month.
+ */
+export const editAfterApprovalDescriptions = {
+  RETAIN:
+    'Recommended. Edits are allowed and the approval stands, with a warning shown that the content has changed since it was reviewed.',
+  RE_REVIEW:
+    'Strict — right for regulated work. Any edit to an approved case, suite or plan sends it back to draft, and it must go through review again.',
+} as const satisfies Record<EditAfterApproval, string>;
 
 /**
  * The metrics a plan's entry and exit criteria may be gated on, in the reader's words.

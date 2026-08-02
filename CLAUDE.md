@@ -4,6 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Read first
 
+**`docs/agent-context/be-java.md` and `docs/agent-context/fe-react.md` come before everything else.**
+They are the orientation cache (`ep-agent-orientation-cache`): version lane, layout, and the **seam
+list** — what each shipped slice extracted, why, and the defect it prevents. Read the relevant one
+before the handoff narrative and before the raw DDL: the narrative records what a slice *did*, the
+cache records what the code *is*. Check its `Baseline commit:` header against `git log` and read the
+delta — a lagging header is normal, so **trust the body over the header** and re-grep anything a
+later commit could have moved. **Update it in the slice's own commit.**
+
 `docs/HANDOFF.md` is the living session handoff — current state, what is done, what is next, and the
 lessons this project has already paid for. Read it before starting work; update it when you finish.
 

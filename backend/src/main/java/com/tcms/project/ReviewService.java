@@ -4,6 +4,7 @@ import com.tcms.tenancy.CompanyContext;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -63,6 +64,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ReviewService {
 
     private final ProjectService projects;
+    private final ProjectSettingsService settings;
     private final ReviewRepository reviews;
     private final ReviewParticipationRepository participations;
     private final PeopleDirectory people;
@@ -70,12 +72,14 @@ public class ReviewService {
 
     public ReviewService(
             ProjectService projects,
+            ProjectSettingsService settings,
             ReviewRepository reviews,
             ReviewParticipationRepository participations,
             PeopleDirectory people,
             Clock clock) {
 
         this.projects = projects;
+        this.settings = settings;
         this.reviews = reviews;
         this.participations = participations;
         this.people = people;
@@ -152,12 +156,29 @@ public class ReviewService {
             Instant at) {
 
         UUID companyId = CompanyContext.require();
+        ReviewSettings policy = settings.effective(projectId);
         Optional<Review> open = reviews.findOpenForSubject(projectId, subjectType, subjectId);
 
+        // §6g's opt-in, and the ONE place it is applied to the record. A project with review off for
+        // this artifact type keeps no review at all: nothing is opened here, so there is no panel to
+        // render, no participation to record and no approval precondition to meet.
+        //
+        // The ladder is deliberately untouched — see ReviewSettings#reviewEnabledFor. What this must
+        // NOT do is close an already-open review when the setting is switched off: those rows are a
+        // record of something that happened, and a project turning the feature off mid-flight has
+        // not thereby caused everyone to withdraw. They stay open, and stay closable by the moves
+        // below, which is why this guard covers only the OPENING arm.
         if (to == ReviewStanding.IN_REVIEW) {
-            if (open.isEmpty()) {
+            if (open.isEmpty() && policy.reviewEnabledFor(subjectType)) {
                 reviews.saveAndFlush(Review.open(
-                        companyId, projectId, subjectType, subjectId, versionNo, actorId, at));
+                        companyId,
+                        projectId,
+                        subjectType,
+                        subjectId,
+                        versionNo,
+                        policy.requiredPeerReviews(),
+                        actorId,
+                        at));
             }
             return;
         }
@@ -198,6 +219,192 @@ public class ReviewService {
             }
         }
         reviews.saveAndFlush(review);
+    }
+
+    /**
+     * Whether §6g's review policy <strong>refuses</strong> a move the ladder would otherwise allow —
+     * asked by each ladder <em>before</em> it applies anything, and answering the message to refuse
+     * with.
+     *
+     * <h2>Why this is a second method and not a check inside {@link #moved}</h2>
+     *
+     * <p>{@link #moved} is told what already happened: it runs after the artifact's status has been
+     * written, inside the same transaction, and its job is to keep the record in step. A
+     * precondition discovered there could only be enforced by throwing, which would turn an ordinary
+     * business refusal into a rolled-back transaction and a 500 — and the three call sites each need
+     * to render the refusal their own way (a status endpoint's 409, a bulk operation's per-row
+     * skip). So the question is asked first and separately, and the answer is a message.
+     *
+     * <h2>The two rules, and when they bind</h2>
+     *
+     * <p>Both are properties of an <strong>open review</strong>, so both are inert on a project with
+     * review switched off for this artifact type — there is no review, nobody was asked, and there is
+     * nothing to be a peer of. That is not a loophole: it is what "off by default" means, and a
+     * project that wants the rules turns the workflow on.
+     *
+     * <ul>
+     *   <li><strong>Author cannot approve own work</strong> (§6g: <em>"the single most valuable
+     *       setting here"</em>, default on). "Author" is whoever <em>submitted</em> the review, not
+     *       whoever created the artifact — the submitter is the person putting it forward, and on a
+     *       case written by one engineer and submitted by their lead it is the lead's sign-off that
+     *       would be self-granted. An <strong>unattributable</strong> review (a null
+     *       {@code createdBy}, which the column permits) does <em>not</em> bind the rule: refusing
+     *       everybody from approving a review whose submitter is unknown creates an artifact that
+     *       can never be approved by anyone, which is a dead end where the rule's purpose was to
+     *       route the decision to a second person.</li>
+     *   <li><strong>Minimum peer reviews</strong> (§6g, default 0). Read from the <em>review</em>'s
+     *       pinned count, never the live setting — {@link Review#getRequiredPeerReviews()} says
+     *       why.</li>
+     * </ul>
+     *
+     * @param to the standing the ladder is about to move the artifact to; only
+     *           {@link ReviewStanding#APPROVED} can be refused here, because the other two take
+     *           nothing away that a policy could protect
+     * @return the refusal, or empty when the move may proceed
+     */
+    @Transactional(readOnly = true)
+    public Optional<String> refuses(
+            UUID projectId,
+            ReviewSubjectType subjectType,
+            UUID subjectId,
+            ReviewStanding to,
+            UUID actorId) {
+
+        if (to != ReviewStanding.APPROVED) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(
+                refusesEach(projectId, subjectType, List.of(subjectId), actorId).get(subjectId));
+    }
+
+    /**
+     * {@link #refuses}' batch — the same two rules over many subjects in <strong>two queries</strong>
+     * rather than two per subject.
+     *
+     * <p>This exists for {@code CaseBulkService}, which evaluates a filtered selection of up to four
+     * hundred cases and would otherwise ask {@link ReviewRepository#findOpenForSubject} and then the
+     * participations once per row — the N+1 that looks harmless because each query is fast
+     * ({@code CaseOwners}' reason). The single-subject form above <em>delegates to this</em> rather
+     * than carrying its own copy of the two rules: §58's E1 is a hand-maintained pair under an
+     * instruction to keep them in step, and the pair here would be a policy check whose bulk and
+     * single-item answers could silently diverge — which is precisely the class of defect §75 found
+     * between {@code BulkOperations.permission} and {@code PlanLifecycle}.
+     *
+     * @return only the subjects that are refused, keyed by subject id. A subject absent from the map
+     *         may proceed, which is the common case and the cheap one to check.
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, String> refusesEach(
+            UUID projectId,
+            ReviewSubjectType subjectType,
+            Collection<UUID> subjectIds,
+            UUID actorId) {
+
+        if (subjectIds.isEmpty()) {
+            return Map.of();
+        }
+        List<Review> open = reviews.findOpenForSubjects(projectId, subjectType, subjectIds);
+        if (open.isEmpty()) {
+            // Nothing to enforce against. An artifact approved with no open review is §76's case —
+            // every artifact approved before the record existed has none — and inventing a
+            // precondition for it would refuse a move the product has always allowed.
+            return Map.of();
+        }
+        ReviewSettings policy = settings.effective(projectId);
+        Map<UUID, Integer> lgtms = standingLgtms(open);
+
+        Map<UUID, String> refused = new HashMap<>();
+        for (Review review : open) {
+            if (!policy.authorMayApproveOwnWork()
+                    && review.getCreatedBy() != null
+                    && review.getCreatedBy().equals(actorId)) {
+
+                refused.put(review.getSubjectId(),
+                        "You submitted this " + noun(subjectType) + " for review, and this project "
+                                + "asks somebody else to approve it.");
+                continue;
+            }
+
+            int required = review.getRequiredPeerReviews();
+            int held = lgtms.getOrDefault(review.getId(), 0);
+            if (required > 0 && held < required) {
+                refused.put(review.getSubjectId(),
+                        "This " + noun(subjectType) + " needs " + required + " peer "
+                                + (required == 1 ? "review" : "reviews") + " before it can be "
+                                + "approved, and has " + held + ".");
+            }
+        }
+        return refused;
+    }
+
+    /**
+     * How many <em>distinct people other than the submitter</em> currently stand behind each review.
+     *
+     * <p>Counted in Java rather than SQL because the rule is "the person's <strong>latest</strong>
+     * verdict is LGTM", and {@link ReviewParticipation} is append-only precisely so that relenting
+     * in either direction is visible: somebody who said LGTM and then requested changes has two rows
+     * and is not standing behind it, and somebody who did the reverse is. A {@code COUNT(DISTINCT
+     * user_id) WHERE verdict = 'LGTM'} would count the first of those, which is the reading that
+     * makes a review trail decorative.
+     *
+     * <p><strong>The submitter's own LGTM does not count</strong>, whatever the author-may-approve
+     * setting says: the two settings answer different questions, and a peer review by the person who
+     * asked for it is not a second opinion. {@code APPROVAL}-kind rows are excluded for the same
+     * reason — they are the sign-off itself, not a peer's advice.
+     */
+    private Map<UUID, Integer> standingLgtms(List<Review> reviewRows) {
+        Map<UUID, UUID> submitters = new HashMap<>();
+        for (Review review : reviewRows) {
+            submitters.put(review.getId(), review.getCreatedBy());
+        }
+
+        Map<UUID, Map<UUID, ReviewParticipation.Verdict>> latest = new HashMap<>();
+        for (ReviewParticipation row
+                : participations.findForReviews(reviewRows.stream().map(Review::getId).toList())) {
+
+            if (row.getKind() != ReviewParticipation.Kind.PEER_REVIEW || row.getUserId() == null) {
+                continue;
+            }
+            if (row.getUserId().equals(submitters.get(row.getReviewId()))) {
+                continue;
+            }
+            // findForReviews is ordered oldest-first, so the last write for a user wins.
+            latest.computeIfAbsent(row.getReviewId(), id -> new HashMap<>())
+                    .put(row.getUserId(), row.getVerdict());
+        }
+
+        Map<UUID, Integer> counts = new HashMap<>();
+        latest.forEach((reviewId, byUser) -> counts.put(reviewId, (int) byUser.values().stream()
+                .filter(verdict -> verdict == ReviewParticipation.Verdict.LGTM)
+                .count()));
+        return counts;
+    }
+
+    private static String noun(ReviewSubjectType subjectType) {
+        return subjectType.name().toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * Whether an edit to an artifact that is currently approved must <strong>return it to
+     * draft</strong> — §6g's edit-after-approval rule, asked by the three write paths.
+     *
+     * <p>The caller checks the artifact's own status; this answers only the policy half, because the
+     * three aggregates carry three different status enums in two modules this one cannot import.
+     * What each caller then does is identical and is described on {@link EditAfterApproval#RE_REVIEW}
+     * — including the decision that the demotion is <strong>not</strong> gated on {@code *:approve},
+     * which is the one thing about this feature that looks wrong until the reason is read.
+     *
+     * <p><strong>Tied to the opt-in.</strong> A project with review switched off for this artifact
+     * type has opted out of §6g for it, and having one §6g rule keep firing there would be the
+     * surprise — an edit silently un-approving something on a project whose team was told review was
+     * off. The default is off and the default mode is {@code RETAIN}, so this answers {@code false}
+     * twice over until somebody deliberately configures it.
+     */
+    @Transactional(readOnly = true)
+    public boolean reReviewOnEdit(UUID projectId, ReviewSubjectType subjectType) {
+        ReviewSettings policy = settings.effective(projectId);
+        return policy.reviewEnabledFor(subjectType)
+                && policy.editAfterApproval() == EditAfterApproval.RE_REVIEW;
     }
 
     // ------------------------------------------------------------------- the reads ----

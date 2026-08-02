@@ -52,9 +52,40 @@ function review(overrides: Partial<Review> = {}): Review {
   } as Review
 }
 
-function mockReads(reviews: Review[], keys: string[]) {
+/**
+ * The project's §6g settings, with review switched **on** — which every test below except
+ * `hidesItselfWhenReviewIsOff` depends on.
+ *
+ * Worth stating why this is here at all: when the opt-in landed, all 11 of this file's tests went
+ * red at once, because the panel correctly renders **nothing** for a project that has not enabled
+ * review — and the unmatched-path arm of `mockReads` was answering `[]`, whose
+ * `reviewEnabledPlan` is `undefined`. That is the feature working, and the fixture had to move to
+ * the state a project that *turned review on* is in. The default-off state now has its own test
+ * rather than being the accidental behaviour of a fallthrough.
+ */
+function settings(overrides: Record<string, unknown> = {}) {
+  return {
+    projectId: PROJECT,
+    reviewEnabledCase: true,
+    reviewEnabledSuite: true,
+    reviewEnabledPlan: true,
+    requiredPeerReviews: 0,
+    authorMayApproveOwnWork: false,
+    editAfterApproval: 'RETAIN',
+    updatedBy: null,
+    updatedAt: null,
+    ...overrides,
+  }
+}
+
+function mockReads(
+  reviews: Review[],
+  keys: string[],
+  projectSettings: Record<string, unknown> = settings(),
+) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(keys)
+    if (path.includes('/settings')) return projectSettings
     if (path.includes('/reviews')) return reviews
     return []
   }) as never)
@@ -76,6 +107,38 @@ function renderPanel(currentVersionNo?: number, subjectType: 'PLAN' | 'CASE' = '
 describe('ReviewPanel — the record, and the sign-off it must not offer', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+  })
+
+  /*
+    §6g's opening requirement: "a project that never turns it on should see no extra UI at all."
+    The check lives in the panel rather than at its three call sites, so this is the test that a
+    fourth screen mounting it cannot forget — and it asserts the panel's *root* is absent, not that
+    the list is empty, because an empty panel headed "Review" is precisely the extra UI the
+    requirement refuses.
+  */
+  it('renders nothing at all when the project has review switched off for this type', async () => {
+    mockReads([review()], ['plan:review'], settings({ reviewEnabledPlan: false }))
+
+    renderPanel()
+
+    // Barriered on a sibling that DOES resolve, so this cannot pass merely by running before the
+    // settings arrive — the failure §66 and §76 both caught, where an assertion is satisfied by a
+    // pending state rather than by the answer.
+    await waitFor(() => expect(api.get).toHaveBeenCalled())
+    await waitFor(() => {
+      expect(screen.queryByTestId('Review.Panel')).not.toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('Review.Current')).not.toBeInTheDocument()
+  })
+
+  it('renders the panel when the type is enabled even though a sibling type is not', async () => {
+    // The opt-in is per artifact type, not per project — a project reviewing plans and not cases
+    // must get the panel on one and not the other, and a check that read any-of would not.
+    mockReads([review()], ['plan:review'], settings({ reviewEnabledCase: false }))
+
+    renderPanel()
+
+    expect(await screen.findByTestId('Review.Current')).toBeInTheDocument()
   })
 
   it('renders the open review, its submitter and the trail', async () => {

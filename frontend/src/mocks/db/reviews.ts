@@ -13,7 +13,13 @@
  * in review before has no row, which is the state every real instance is in for its existing work
  * and is why the fixtures below carry one of each.
  */
-import type { Review, ReviewParticipation, ReviewSubjectType, UserRef } from '../../api/types';
+import type {
+  ProjectSettings,
+  Review,
+  ReviewParticipation,
+  ReviewSubjectType,
+  UserRef,
+} from '../../api/types';
 import { db, newId } from './store';
 
 /** Where an artifact sits relative to review — the server's `ReviewStanding`, three values. */
@@ -130,4 +136,69 @@ function participation(
     comment,
     createdAt: new Date().toISOString(),
   };
+}
+
+/**
+ * §6g's defaults — the same six values `ProjectSettings.defaults()` answers on the server, and the
+ * same ones `V23`'s column defaults write.
+ *
+ * Duplicated here rather than imported from anywhere, because the mock exists to be a second
+ * implementation of the contract; what must not diverge is the *contract*, and a test pins these
+ * against the schema's own declared defaults.
+ */
+export function defaultProjectSettings(projectId: string): ProjectSettings {
+  return {
+    projectId,
+    reviewEnabledCase: false,
+    reviewEnabledSuite: false,
+    reviewEnabledPlan: false,
+    requiredPeerReviews: 0,
+    authorMayApproveOwnWork: false,
+    editAfterApproval: 'RETAIN',
+    updatedBy: null,
+    updatedAt: null,
+  };
+}
+
+/**
+ * A project's settings — **the one read**, defaults-tolerant exactly like
+ * `ProjectSettingsService#effective`.
+ *
+ * The demo project is seeded with review ON so the fixtures §76 added are reachable and the panel
+ * has something to render; every other project answers the defaults, which is what a real newly
+ * provisioned project looks like. Both are states a real instance produces, and having only one of
+ * them is how mock mode starts disagreeing with a fresh install (§72).
+ */
+export function settingsForProject(projectId: string): ProjectSettings {
+  const stored = db.projectSettings.get(projectId);
+  if (stored) return stored;
+
+  const seeded: ProjectSettings =
+    projectId === db.projects[0]?.id
+      ? {
+          ...defaultProjectSettings(projectId),
+          reviewEnabledCase: true,
+          reviewEnabledSuite: true,
+          reviewEnabledPlan: true,
+        }
+      : defaultProjectSettings(projectId);
+
+  db.projectSettings.set(projectId, seeded);
+  return seeded;
+}
+
+/** Replaces them, stamping the editor — the server's PUT, mirrored. */
+export function saveProjectSettings(
+  projectId: string,
+  update: Omit<ProjectSettings, 'projectId' | 'updatedBy' | 'updatedAt'>,
+  actor: UserRef,
+): ProjectSettings {
+  const saved: ProjectSettings = {
+    ...update,
+    projectId,
+    updatedBy: actor,
+    updatedAt: new Date().toISOString(),
+  };
+  db.projectSettings.set(projectId, saved);
+  return saved;
 }

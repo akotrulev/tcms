@@ -19,6 +19,7 @@ import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
 import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
+import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
 import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import InventoryOutlinedIcon from '@mui/icons-material/Inventory2Outlined';
@@ -100,6 +101,17 @@ function projectNav(projectId: string): { heading: string; items: NavItem[] }[] 
           label: 'Classification',
           to: `${p}/settings/classification`,
           icon: <LocalOfferOutlinedIcon fontSize="small" />,
+        },
+        /*
+          §6g's review policy. Shown to everybody who can see the project, not only to holders of
+          `project:settings`: the page renders its current state read-only for the rest, which is
+          §31's disable-don't-hide, and hiding the rail item would leave a reader with no way to
+          find out why no artifact in the project shows a review panel.
+        */
+        {
+          label: 'Review',
+          to: `${p}/settings/review`,
+          icon: <RateReviewOutlinedIcon fontSize="small" />,
         },
       ],
     },

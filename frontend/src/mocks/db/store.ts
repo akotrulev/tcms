@@ -21,6 +21,7 @@ import type {
   Configuration,
   DocPage,
   Project,
+  ProjectSettings,
   RoleAssignment,
   Suite,
   Team,
@@ -111,6 +112,18 @@ interface Store {
    * point of the panel is that a verdict recorded in mock mode is there on the next read.
    */
   reviews: MockReview[];
+  /**
+   * The projects' §6g settings, keyed by project id — mutable, because the settings screen writes
+   * them and every artifact screen reads them to decide whether a review panel exists at all.
+   *
+   * **Seeded ON for the demo project and OFF for the others**, deliberately. §72's rule is that the
+   * mock's fixtures must not sit in a state a fresh install cannot produce — and here the trap runs
+   * both ways, because the fixtures already carry reviews. A store that defaulted every project to
+   * "review on" would show mock mode a panel that a real, freshly provisioned project never has;
+   * one that defaulted them all to off would hide the review fixtures §76 added and make the panel
+   * look unbuilt. Both states are real, so both are present.
+   */
+  projectSettings: Map<string, ProjectSettings>;
   runs: TestRun[];
   executions: Map<string, TestExecution[]>;
   docPages: typeof docPages;
@@ -198,6 +211,7 @@ export const db: Store = {
   sharedSteps: clone(sharedSteps),
   plans: clone(plans),
   reviews: clone(reviews) as MockReview[],
+  projectSettings: new Map(),
   runs: clone(runs),
   executions: new Map(),
   docPages: clone(docPages),

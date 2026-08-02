@@ -100,6 +100,7 @@ public class ProjectCreateService {
 
     private final ProjectService projects;
     private final ProjectRepository repository;
+    private final ProjectSettingsService settings;
     private final AuditEventRepository auditEvents;
     private final EntityManager entityManager;
     private final Clock clock;
@@ -107,12 +108,14 @@ public class ProjectCreateService {
     public ProjectCreateService(
             ProjectService projects,
             ProjectRepository repository,
+            ProjectSettingsService settings,
             AuditEventRepository auditEvents,
             EntityManager entityManager,
             Clock clock) {
 
         this.projects = projects;
         this.repository = repository;
+        this.settings = settings;
         this.auditEvents = auditEvents;
         this.entityManager = entityManager;
         this.clock = clock;
@@ -190,6 +193,12 @@ public class ProjectCreateService {
                 projectId, companyId, edit.key(), edit.name(), edit.description(), now));
 
         seedDefaults(companyId, projectId);
+
+        // The project's §6g policy row, on its defaults (V23). In the same transaction as the
+        // project, so a project can never exist without one — which is what lets every consumer read
+        // the settings as a row rather than as an Optional. ProjectSettingsService#effective
+        // tolerates the row's absence anyway, and says why.
+        settings.createFor(companyId, projectId, now);
 
         auditEvents.save(AuditEvent.record(
                 projectId,

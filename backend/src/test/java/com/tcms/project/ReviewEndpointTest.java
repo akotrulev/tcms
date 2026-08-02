@@ -137,6 +137,9 @@ class ReviewEndpointTest extends IntegrationTestBase {
     private RoleAssignmentRepository roleAssignments;
 
     @Autowired
+    private ProjectSettingsRepository projectSettings;
+
+    @Autowired
     private TransactionTemplate tx;
 
     @BeforeEach
@@ -180,6 +183,45 @@ class ReviewEndpointTest extends IntegrationTestBase {
         clearMutableRows();
         seedProjectDefaults();
         seedRepository();
+
+        // §6g's opt-in is OFF by default (V23), which is what a real project gets — so a fixture
+        // that did not do this would leave every assertion in this class reading an empty list, and
+        // that is exactly what happened when the setting landed: 17 of these tests went red at once
+        // on a code change that was working correctly. Recorded rather than papered over, because
+        // the inverse — a fixture sitting in a state no real install produces — is §72's finding and
+        // this is the moment it would have been introduced.
+        //
+        // The two POLICY settings are left at their permissive values here on purpose. These tests
+        // are about the RECORD (who was asked, who said what, who signed off) and most of them have
+        // one persona submit and then approve, which the default author-cannot-approve rule refuses.
+        // The rule and the peer minimum have their own nested class, which turns them on explicitly.
+        enableReview(ACME, ACME_BANKING, 0, true);
+        enableReview(ACME, ACME_MOBILE, 0, true);
+        enableReview(UMBRA, UMBRA_BANKING, 0, true);
+    }
+
+    /**
+     * Turns §6g's workflow on for a project, for all three artifact types.
+     *
+     * @param requiredPeers     §6g's minimum peer reviews — pinned onto each review as it opens, so
+     *                          this must be set BEFORE the submission it is meant to govern
+     * @param authorMayApprove  {@code true} disables the author-cannot-approve-own-work rule
+     */
+    private void enableReview(
+            UUID companyId, UUID projectId, int requiredPeers, boolean authorMayApprove) {
+
+        inCompany(companyId, () -> tx.executeWithoutResult(status -> {
+            Instant at = Instant.now();
+            ProjectSettings row = projectSettings.findForProject(projectId)
+                    .orElseGet(() -> ProjectSettings.initial(companyId, projectId, at));
+            row.apply(
+                    new ReviewSettings(
+                            true, true, true, requiredPeers, authorMayApprove,
+                            EditAfterApproval.RETAIN),
+                    null,
+                    at);
+            projectSettings.saveAndFlush(row);
+        }));
     }
 
     // =====================================================================
@@ -555,6 +597,432 @@ class ReviewEndpointTest extends IntegrationTestBase {
 
     // =====================================================================
     // helpers — requests
+
+    // =====================================================================
+    // The project's own §6g policy — V23, and the four things it unblocks
+    // =====================================================================
+
+    @Nested
+    @DisplayName("The settings endpoint")
+    class Settings {
+
+        @Test
+        @DisplayName("a project nobody configured answers §6g's defaults, not an empty body")
+        void defaultsForAnUnconfiguredProject() throws Exception {
+            // ACME_MOBILE is enabled by the fixture, so this uses a project the fixture left alone
+            // by resetting it first — the point is the SHAPE of the answer for a project with no
+            // deliberate configuration, which is what every real project looks like on day one.
+            assertThat(putSettings(LEAD, ACME_MOBILE, defaultSettingsPayload())
+                    .getResponse().getStatus()).isEqualTo(200);
+
+            JsonNode settings = body(getSettings(LEAD, ACME_MOBILE));
+
+            assertThat(settings.get("reviewEnabledCase").asBoolean()).isFalse();
+            assertThat(settings.get("reviewEnabledSuite").asBoolean()).isFalse();
+            assertThat(settings.get("reviewEnabledPlan").asBoolean()).isFalse();
+            assertThat(settings.get("requiredPeerReviews").asInt()).isZero();
+            // The rule is ON by default, which is this field being FALSE — §6g calls it the single
+            // most valuable setting here, and a default that made it opt-in would be the wrong way
+            // round in the one direction that matters.
+            assertThat(settings.get("authorMayApproveOwnWork").asBoolean()).isFalse();
+            assertThat(settings.get("editAfterApproval").asText()).isEqualTo("RETAIN");
+        }
+
+        @Test
+        @DisplayName("a Viewer can read them — §6g's 'no extra UI' is unimplementable otherwise")
+        void aViewerMayRead() throws Exception {
+            // The Viewer holds project:read and NOT project:settings. If this were 403 the SPA
+            // could not decide whether to render a review panel for the persona §6g's requirement
+            // is most about, and the only ways out are worse: render it always, or infer the
+            // setting from a 409 after somebody clicks.
+            assertThat(getSettings(VIEWER, ACME_BANKING).getResponse().getStatus()).isEqualTo(200);
+        }
+
+        @Test
+        @DisplayName("an engineer cannot change them — the write is project:settings")
+        void writeNeedsTheKey() throws Exception {
+            MvcResult refused = putSettings(ENGINEER, ACME_BANKING, defaultSettingsPayload());
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(403);
+            // Never the permission key — naming it publishes the catalogue to the caller who is not
+            // entitled to it.
+            assertThat(detailOf(refused)).doesNotContain("project:settings");
+        }
+
+        @Test
+        @DisplayName("a caller with no grant gets 404, never 403 — the project is not confirmed")
+        void noGrantIsNotFound() throws Exception {
+            assertThat(getSettings(NO_GRANT, ACME_BANKING).getResponse().getStatus())
+                    .isEqualTo(404);
+            assertThat(putSettings(NO_GRANT, ACME_BANKING, defaultSettingsPayload())
+                    .getResponse().getStatus()).isEqualTo(404);
+        }
+
+        @Test
+        @DisplayName("the peer minimum is bounded at both ends, on its own field")
+        void peerMinimumIsBounded() throws Exception {
+            Map<String, Object> tooMany = defaultSettingsPayload();
+            tooMany.put("requiredPeerReviews", 21);
+
+            MvcResult refused = putSettings(LEAD, ACME_BANKING, tooMany);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(refused)).containsKey("requiredPeerReviews");
+
+            Map<String, Object> negative = defaultSettingsPayload();
+            negative.put("requiredPeerReviews", -1);
+            assertThat(putSettings(LEAD, ACME_BANKING, negative).getResponse().getStatus())
+                    .isEqualTo(400);
+        }
+
+        @Test
+        @DisplayName("an unknown edit-after-approval mode is a field error, not a 500")
+        void unknownModeIsAFieldError() throws Exception {
+            Map<String, Object> payload = defaultSettingsPayload();
+            payload.put("editAfterApproval", "REREVIEW");
+
+            MvcResult refused = putSettings(LEAD, ACME_BANKING, payload);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(refused)).containsKey("editAfterApproval");
+        }
+
+        @Test
+        @DisplayName("a saved value round-trips and names who changed it")
+        void roundTrips() throws Exception {
+            Map<String, Object> payload = defaultSettingsPayload();
+            payload.put("reviewEnabledPlan", true);
+            payload.put("requiredPeerReviews", 2);
+            payload.put("editAfterApproval", "RE_REVIEW");
+
+            assertThat(putSettings(LEAD, ACME_BANKING, payload).getResponse().getStatus())
+                    .isEqualTo(200);
+
+            JsonNode settings = body(getSettings(LEAD, ACME_BANKING));
+            assertThat(settings.get("reviewEnabledPlan").asBoolean()).isTrue();
+            assertThat(settings.get("reviewEnabledCase").asBoolean()).isFalse();
+            assertThat(settings.get("requiredPeerReviews").asInt()).isEqualTo(2);
+            assertThat(settings.get("editAfterApproval").asText()).isEqualTo("RE_REVIEW");
+            assertThat(settings.get("updatedBy").get("id").asText())
+                    .isEqualTo(LEAD.toString());
+            assertThat(settings.get("updatedAt").isNull()).isFalse();
+        }
+    }
+
+    @Nested
+    @DisplayName("The opt-in — review off means no record, and the ladder untouched")
+    class OptIn {
+
+        @Test
+        @DisplayName("with review off, submitting a plan opens no review at all")
+        void offMeansNoRecord() throws Exception {
+            enableReview(ACME, ACME_BANKING, 0, true);
+            Map<String, Object> allOff = defaultSettingsPayload();
+            assertThat(putSettings(LEAD, ACME_BANKING, allOff).getResponse().getStatus())
+                    .isEqualTo(200);
+
+            UUID plan = plan(LEAD, "Release with review off");
+            setPlanStatus(LEAD, plan, "IN_REVIEW");
+
+            assertThat(reviewsOf(LEAD, "PLAN", plan))
+                    .as("review is off for plans, so no record is kept")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("with review off, the STATUS still moves — the ladder is not the apparatus")
+        void offDoesNotWithdrawTheLadder() throws Exception {
+            assertThat(putSettings(LEAD, ACME_BANKING, defaultSettingsPayload())
+                    .getResponse().getStatus()).isEqualTo(200);
+
+            UUID plan = plan(LEAD, "Release, ladder only");
+
+            // The whole point of the narrow reading. A project turning review off must not discover
+            // that IN_REVIEW and APPROVED have been withdrawn from a status its team has used since
+            // M1 — and since off is the DEFAULT, the opposite reading would have taken approvals
+            // away from every existing project on the day this shipped.
+            MvcResult submitted = attemptPlanStatus(LEAD, plan, "IN_REVIEW");
+            assertThat(submitted.getResponse().getStatus()).isEqualTo(200);
+            assertThat(body(submitted).get("status").asText()).isEqualTo("IN_REVIEW");
+
+            MvcResult approved = attemptPlanStatus(LEAD, plan, "APPROVED");
+            assertThat(approved.getResponse().getStatus()).isEqualTo(200);
+            assertThat(body(approved).get("status").asText()).isEqualTo("APPROVED");
+        }
+
+        @Test
+        @DisplayName("switching review off does not close a review that is already open")
+        void offDoesNotCloseOpenReviews() throws Exception {
+            UUID plan = plan(LEAD, "Release, mid-flight");
+            setPlanStatus(LEAD, plan, "IN_REVIEW");
+            assertThat(onlyReview(LEAD, "PLAN", plan).get("state").asText()).isEqualTo("IN_REVIEW");
+
+            assertThat(putSettings(LEAD, ACME_BANKING, defaultSettingsPayload())
+                    .getResponse().getStatus()).isEqualTo(200);
+
+            // Those rows record something that happened. A project changing its policy has not
+            // caused everybody who was asked to withdraw, so the guard covers only the OPENING arm.
+            assertThat(onlyReview(LEAD, "PLAN", plan).get("state").asText()).isEqualTo("IN_REVIEW");
+        }
+
+        @Test
+        @DisplayName("the opt-in is per artifact type, not per project")
+        void perArtifactType() throws Exception {
+            Map<String, Object> plansOnly = defaultSettingsPayload();
+            plansOnly.put("reviewEnabledPlan", true);
+            assertThat(putSettings(LEAD, ACME_BANKING, plansOnly).getResponse().getStatus())
+                    .isEqualTo(200);
+
+            UUID plan = plan(LEAD, "Release, plans reviewed");
+            setPlanStatus(LEAD, plan, "IN_REVIEW");
+            assertThat(reviewsOf(LEAD, "PLAN", plan)).hasSize(1);
+
+            setSuiteStatus(LEAD, PAYMENTS, "IN_REVIEW");
+            assertThat(reviewsOf(LEAD, "SUITE", PAYMENTS))
+                    .as("suites are not reviewed in this project, so the suite ladder writes nothing")
+                    .isEmpty();
+        }
+    }
+
+    @Nested
+    @DisplayName("Author cannot approve own work — §6g's most valuable setting")
+    class AuthorCannotApprove {
+
+        @Test
+        @DisplayName("the submitter is refused their own sign-off, with 409 and a reason")
+        void theSubmitterIsRefused() throws Exception {
+            // The rule ON is the DEFAULT — authorMayApproveOwnWork false.
+            enableReview(ACME, ACME_BANKING, 0, false);
+
+            UUID plan = plan(LEAD, "Release, self-approved");
+            setPlanStatus(LEAD, plan, "IN_REVIEW");
+
+            MvcResult refused = attemptPlanStatus(LEAD, plan, "APPROVED");
+
+            // 409, not 403: the permission IS held — this lead may approve plans — and what refuses
+            // is the project's policy about this particular review. A 403 would send them to ask
+            // for a permission they already have.
+            assertThat(refused.getResponse().getStatus()).isEqualTo(409);
+            assertThat(detailOf(refused)).contains("somebody else");
+
+            assertThat(onlyReview(LEAD, "PLAN", plan).get("state").asText())
+                    .as("the review is untouched — the refusal happens before anything is written")
+                    .isEqualTo("IN_REVIEW");
+        }
+
+        @Test
+        @DisplayName("a different lead may approve the same review")
+        void somebodyElseMayApprove() throws Exception {
+            enableReview(ACME, ACME_BANKING, 0, false);
+
+            // Submitted by the ENGINEER, who holds plan:edit — §6g: "submitting for review needs
+            // only edit rights" — and approved by the LEAD, which is the arrangement the rule
+            // exists to produce.
+            UUID plan = plan(LEAD, "Release, peer approved");
+            setPlanStatus(ENGINEER, plan, "IN_REVIEW");
+
+            MvcResult approved = attemptPlanStatus(LEAD, plan, "APPROVED");
+
+            assertThat(approved.getResponse().getStatus()).isEqualTo(200);
+            assertThat(onlyReview(LEAD, "PLAN", plan).get("state").asText()).isEqualTo("APPROVED");
+        }
+
+        @Test
+        @DisplayName("turning the rule off lets the submitter approve — it is a setting, not a law")
+        void theRuleCanBeTurnedOff() throws Exception {
+            enableReview(ACME, ACME_BANKING, 0, true);
+
+            UUID plan = plan(LEAD, "Release, small team");
+            setPlanStatus(LEAD, plan, "IN_REVIEW");
+
+            assertThat(attemptPlanStatus(LEAD, plan, "APPROVED").getResponse().getStatus())
+                    .isEqualTo(200);
+        }
+    }
+
+    @Nested
+    @DisplayName("The peer minimum — counted from the trail, pinned at submission")
+    class PeerMinimum {
+
+        @Test
+        @DisplayName("approval is refused until enough peers have said LGTM")
+        void refusedUntilMet() throws Exception {
+            enableReview(ACME, ACME_BANKING, 1, true);
+
+            UUID plan = plan(LEAD, "Release, needs a peer");
+            setPlanStatus(LEAD, plan, "IN_REVIEW");
+
+            MvcResult refused = attemptPlanStatus(LEAD, plan, "APPROVED");
+            assertThat(refused.getResponse().getStatus()).isEqualTo(409);
+            assertThat(detailOf(refused)).contains("1 peer review").contains("has 0");
+
+            UUID reviewId = UUID.fromString(onlyReview(LEAD, "PLAN", plan).get("id").asText());
+            assertThat(verdict(ENGINEER, reviewId, "LGTM").getResponse().getStatus()).isEqualTo(201);
+
+            assertThat(attemptPlanStatus(LEAD, plan, "APPROVED").getResponse().getStatus())
+                    .isEqualTo(200);
+        }
+
+        @Test
+        @DisplayName("the submitter's own LGTM does not count as a peer review")
+        void theSubmittersOwnLgtmDoesNotCount() throws Exception {
+            enableReview(ACME, ACME_BANKING, 1, true);
+
+            UUID plan = plan(LEAD, "Release, self LGTM");
+            setPlanStatus(LEAD, plan, "IN_REVIEW");
+            UUID reviewId = UUID.fromString(onlyReview(LEAD, "PLAN", plan).get("id").asText());
+
+            assertThat(verdict(LEAD, reviewId, "LGTM").getResponse().getStatus()).isEqualTo(201);
+
+            // The two settings answer different questions, and a peer review by the person who
+            // asked for it is not a second opinion — so this holds even with the
+            // author-cannot-approve rule switched off.
+            MvcResult refused = attemptPlanStatus(LEAD, plan, "APPROVED");
+            assertThat(refused.getResponse().getStatus()).isEqualTo(409);
+            assertThat(detailOf(refused)).contains("has 0");
+        }
+
+        @Test
+        @DisplayName("a peer who changes their mind stops counting — the LATEST verdict is what counts")
+        void relentingIsVisible() throws Exception {
+            enableReview(ACME, ACME_BANKING, 1, true);
+
+            UUID plan = plan(LEAD, "Release, changed mind");
+            setPlanStatus(LEAD, plan, "IN_REVIEW");
+            UUID reviewId = UUID.fromString(onlyReview(LEAD, "PLAN", plan).get("id").asText());
+
+            assertThat(verdict(ENGINEER, reviewId, "LGTM").getResponse().getStatus()).isEqualTo(201);
+            assertThat(verdict(ENGINEER, reviewId, "CHANGES_REQUESTED").getResponse().getStatus())
+                    .isEqualTo(201);
+
+            // The trail is append-only precisely so relenting is visible. A COUNT(DISTINCT user)
+            // WHERE verdict='LGTM' would still see the first row and approve — which is the reading
+            // that makes a review trail decorative.
+            assertThat(attemptPlanStatus(LEAD, plan, "APPROVED").getResponse().getStatus())
+                    .isEqualTo(409);
+        }
+
+        @Test
+        @DisplayName("raising the minimum does not freeze a review already open")
+        void thePinnedCountGoverns() throws Exception {
+            enableReview(ACME, ACME_BANKING, 0, true);
+
+            UUID plan = plan(LEAD, "Release, bar raised later");
+            setPlanStatus(LEAD, plan, "IN_REVIEW");
+
+            // The reviewers on this review were asked under the old rule and some may already have
+            // spoken. The count is copied onto the review at submission for exactly this reason —
+            // Review#requiredPeerReviews — so the new setting governs the NEXT one.
+            enableReview(ACME, ACME_BANKING, 5, true);
+
+            assertThat(attemptPlanStatus(LEAD, plan, "APPROVED").getResponse().getStatus())
+                    .isEqualTo(200);
+        }
+    }
+
+    @Nested
+    @DisplayName("Edit after approval — the RE_REVIEW arm")
+    class EditAfterApprovalMode {
+
+        @Test
+        @DisplayName("RETAIN leaves an approved plan approved when it is edited")
+        void retainKeepsTheApproval() throws Exception {
+            enableReview(ACME, ACME_BANKING, 0, true);
+
+            UUID plan = approvedPlan("Release, retained");
+
+            renamePlan(LEAD, plan, "Release, retained (typo fixed)");
+
+            assertThat(planStatusOf(plan)).isEqualTo("APPROVED");
+        }
+
+        @Test
+        @DisplayName("RE_REVIEW returns an edited approved plan to draft, and closes nothing else")
+        void reReviewReturnsItToDraft() throws Exception {
+            enableReview(ACME, ACME_BANKING, 0, true);
+            UUID plan = approvedPlan("Release, re-reviewed");
+
+            Map<String, Object> payload = defaultSettingsPayload();
+            payload.put("reviewEnabledPlan", true);
+            payload.put("authorMayApproveOwnWork", true);
+            payload.put("editAfterApproval", "RE_REVIEW");
+            assertThat(putSettings(LEAD, ACME_BANKING, payload).getResponse().getStatus())
+                    .isEqualTo(200);
+
+            renamePlan(LEAD, plan, "Release, re-reviewed (edited)");
+
+            assertThat(planStatusOf(plan)).isEqualTo("DRAFT");
+            // The approving review is history and stays APPROVED — it records what happened, and
+            // the plan's own status is the live fact. Rescinding an approval does not rewrite the
+            // review that granted it (Review's class header).
+            assertThat(onlyReview(LEAD, "PLAN", plan).get("state").asText()).isEqualTo("APPROVED");
+        }
+
+        @Test
+        @DisplayName("the demotion does NOT cost plan:approve — an engineer's edit performs it")
+        void theEditorNeedsOnlyEditRights() throws Exception {
+            enableReview(ACME, ACME_BANKING, 0, true);
+            UUID plan = approvedPlan("Release, engineer edits");
+
+            Map<String, Object> payload = defaultSettingsPayload();
+            payload.put("reviewEnabledPlan", true);
+            payload.put("authorMayApproveOwnWork", true);
+            payload.put("editAfterApproval", "RE_REVIEW");
+            assertThat(putSettings(LEAD, ACME_BANKING, payload).getResponse().getStatus())
+                    .isEqualTo(200);
+
+            // This looks like §75's defect reopened and is not — see EditAfterApproval.RE_REVIEW.
+            // Nobody requested the transition, the project configured it in advance, and charging
+            // the approve key here would make an approved plan UNEDITABLE by the people §6g expects
+            // to edit it, which turns a policy into a lock.
+            renamePlan(ENGINEER, plan, "Release, engineer edited");
+
+            assertThat(planStatusOf(plan)).isEqualTo("DRAFT");
+        }
+
+        @Test
+        @DisplayName("with review off for plans, RE_REVIEW does not fire — it is a review setting")
+        void tiedToTheOptIn() throws Exception {
+            enableReview(ACME, ACME_BANKING, 0, true);
+            UUID plan = approvedPlan("Release, review off later");
+
+            Map<String, Object> payload = defaultSettingsPayload();
+            payload.put("reviewEnabledPlan", false);
+            payload.put("editAfterApproval", "RE_REVIEW");
+            assertThat(putSettings(LEAD, ACME_BANKING, payload).getResponse().getStatus())
+                    .isEqualTo(200);
+
+            renamePlan(LEAD, plan, "Release, review off later (edited)");
+
+            // A project that opted out of §6g for plans should not find one §6g rule still firing —
+            // an edit silently un-approving something on a project whose team was told review is
+            // off is the surprise, not the protection.
+            assertThat(planStatusOf(plan)).isEqualTo("APPROVED");
+        }
+    }
+
+    /** A plan taken all the way to APPROVED through the real endpoints. */
+    private UUID approvedPlan(String name) throws Exception {
+        UUID plan = plan(LEAD, name);
+        setPlanStatus(LEAD, plan, "IN_REVIEW");
+        setPlanStatus(LEAD, plan, "APPROVED");
+        return plan;
+    }
+
+    private void renamePlan(UUID userId, UUID planId, String name) throws Exception {
+        MvcResult result = mvc.perform(MockMvcRequestBuilders
+                        .patch("/api/v1/projects/" + ACME_BANKING + "/plans/" + planId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, ACME))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("name", name))))
+                .andReturn();
+
+        assertThat(result.getResponse().getStatus())
+                .as("the edit this test depends on; %s", result.getResponse().getContentAsString())
+                .isEqualTo(200);
+    }
+
     // =====================================================================
 
     /** A plan created through the real endpoint, so its shape is never a fixture's opinion. */
@@ -600,6 +1068,67 @@ class ReviewEndpointTest extends IntegrationTestBase {
                         result.getResponse().getContentAsString())
                 .isEqualTo(200);
         return result;
+    }
+
+    /**
+     * The plan-status move WITHOUT the 200 assertion — for the tests whose whole subject is a
+     * refusal. {@link #setPlanStatus} asserts success because every test that uses it depends on the
+     * move having happened; these need the status code itself.
+     */
+    private MvcResult attemptPlanStatus(UUID userId, UUID planId, String status) throws Exception {
+        return mvc.perform(MockMvcRequestBuilders
+                        .put("/api/v1/projects/" + ACME_BANKING + "/plans/" + planId + "/status")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, ACME))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("status", status))))
+                .andReturn();
+    }
+
+    /** A peer verdict, without the 201 assertion. */
+    private MvcResult verdict(UUID userId, UUID reviewId, String verdict) throws Exception {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("verdict", verdict);
+        return mvc.perform(MockMvcRequestBuilders
+                        .post("/api/v1/projects/" + ACME_BANKING + "/reviews/" + reviewId
+                                + "/participations")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, ACME))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(payload)))
+                .andReturn();
+    }
+
+    private MvcResult getSettings(UUID userId, UUID projectId) throws Exception {
+        return mvc.perform(MockMvcRequestBuilders
+                        .get("/api/v1/projects/" + projectId + "/settings")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, ACME))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andReturn();
+    }
+
+    private MvcResult putSettings(UUID userId, UUID projectId, Map<String, Object> payload)
+            throws Exception {
+
+        return mvc.perform(MockMvcRequestBuilders
+                        .put("/api/v1/projects/" + projectId + "/settings")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, ACME))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(payload)))
+                .andReturn();
+    }
+
+    /** Every setting at its §6g default, as a request body — the base for a one-field override. */
+    private static Map<String, Object> defaultSettingsPayload() {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("reviewEnabledCase", false);
+        payload.put("reviewEnabledSuite", false);
+        payload.put("reviewEnabledPlan", false);
+        payload.put("requiredPeerReviews", 0);
+        payload.put("authorMayApproveOwnWork", false);
+        payload.put("editAfterApproval", "RETAIN");
+        return payload;
     }
 
     private void setSuiteStatus(UUID userId, UUID suiteId, String status) throws Exception {

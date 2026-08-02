@@ -58,6 +58,11 @@ export type ReviewParticipation = S['ReviewParticipation'];
 export type ReviewParticipationInput = S['ReviewParticipationInput'];
 export type ReviewSubjectType = S['ReviewSubjectType'];
 export type ReviewState = S['ReviewState'];
+// The project's own §6g policy. Beside the review types because every one of its fields is about
+// them, and because the panel reads the two together on every artifact screen.
+export type ProjectSettings = S['ProjectSettings'];
+export type ProjectSettingsUpdate = S['ProjectSettingsUpdate'];
+export type EditAfterApproval = S['EditAfterApproval'];
 /**
  * What a participation says. Read off `ReviewParticipation` rather than the *input* schema, for the
  * reason `CriterionMetric` gives one module over and in the opposite direction: the input declares

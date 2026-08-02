@@ -67,7 +67,12 @@ export {
   type CaseVersion,
 } from './cases';
 export { useConditions, useCreateSharedStep, useSharedSteps } from './library';
-export { useRecordReviewVerdict, useReviews } from './reviews';
+export {
+  useProjectSettings,
+  useRecordReviewVerdict,
+  useReviews,
+  useUpdateProjectSettings,
+} from './reviews';
 export {
   useCreatePlan,
   useDeletePlan,

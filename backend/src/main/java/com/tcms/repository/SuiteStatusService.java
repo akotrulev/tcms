@@ -183,7 +183,19 @@ public class SuiteStatusService {
             case LifecycleLadder.Decision.Unchanged ignored ->
                     new Outcome.Updated(tree.viewOf(companyId, projectId, suite));
             case LifecycleLadder.Decision.Move move ->
-                    move(companyId, userId, projectId, suite, move.target());
+                    // §6g's review policy gets its say AFTER the ladder has agreed the move exists
+                    // and BEFORE anything is written — the placement §72 argued for, one rung in.
+                    // A move the ladder does not have is refused as such rather than as a policy
+                    // failure, so the two refusals never describe each other's problem.
+                    reviews.refuses(
+                                    projectId,
+                                    ReviewSubjectType.SUITE,
+                                    suite.getId(),
+                                    LifecycleLadder.standingOf(move.target()),
+                                    userId)
+                            .<Outcome>map(Outcome.Refused::new)
+                            .orElseGet(() ->
+                                    move(companyId, userId, projectId, suite, move.target()));
         };
     }
 

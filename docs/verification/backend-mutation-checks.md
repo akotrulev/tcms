@@ -651,3 +651,95 @@ exactly that: a `waitFor(...toBeDisabled())` satisfied by the pending state, pro
 | **Check** | migration-in-place |
 | **Mutation** | — |
 | **Must show** | **`V22` lands with this slice** (`V22__review_state_withdrawn_and_one_open_review.sql`) and is the first migration since `V21`. It drops and re-adds `review_state_check` and adds two indexes — no data rewrite, because the table has never held a row on any instance. **`V23` is the next free number.** |
+
+---
+
+## §77 — per-project review settings (`V23`)
+
+**Written 2026-08-02. Nothing in this section was run inline** — the policy restated above, followed
+this time.
+
+One row in this section is unlike every other row in this file: the slice's *own gate run* produced
+a mutation-shaped result for free. Enabling the opt-in with a default of **off** reddened **18 of
+1419** tests at once, 17 of them in `ReviewEndpointTest`, because that class's fixture creates
+projects by direct insert and therefore gets exactly what a real newly provisioned project gets. That
+is the opt-in demonstrably working, and it is recorded here rather than as a mutation because it
+cannot be re-run: the fixture now enables review, so the "before" state no longer exists.
+
+### Queued — not yet run
+
+| | |
+|---|---|
+| **File** | `project/ReviewService.java`, `moved` |
+| **Mutation** | drop the `policy.reviewEnabledFor(subjectType)` condition from the opening arm, so a review opens whatever the setting says |
+| **Scope** | `com.tcms.project.ReviewEndpointTest` |
+| **Must redden** | **exactly 3** — *with review off, submitting a plan opens no review at all*, *the opt-in is per artifact type, not per project*, and *with review off for plans, RE_REVIEW does not fire*. The third is the interesting one: it fails for a **second-order** reason (a review exists, so `reReviewOnEdit`'s other arm is reached), which is what makes it evidence the two settings are genuinely wired to the same switch. |
+
+| | |
+|---|---|
+| **File** | `project/ReviewService.java`, `refusesEach` |
+| **Mutation** | drop the author check — delete the `!policy.authorMayApproveOwnWork() && …` block |
+| **Scope** | `com.tcms.project.ReviewEndpointTest` |
+| **Must redden** | **exactly 1** — *the submitter is refused their own sign-off*. **Only one**, and that is the property worth confirming: the two neighbouring tests (*a different lead may approve*, *turning the rule off lets the submitter approve*) must stay green, or they are measuring the gate rather than the rule. |
+
+| | |
+|---|---|
+| **File** | `project/ReviewService.java`, `standingLgtms` |
+| **Mutation** | count every `LGTM` row rather than each person's latest verdict — replace the per-user map with a filter over the whole trail |
+| **Scope** | `com.tcms.project.ReviewEndpointTest` |
+| **Must redden** | **exactly 1** — *a peer who changes their mind stops counting*. This is the row most worth running: the cheap implementation passes *refused until enough peers have said LGTM* perfectly, and the trail is append-only precisely so that relenting is visible. A green suite under this mutation would mean the review trail is decorative. |
+
+| | |
+|---|---|
+| **File** | `project/ReviewService.java`, `standingLgtms` |
+| **Mutation** | stop excluding the submitter — delete the `row.getUserId().equals(submitters.get(...))` skip |
+| **Scope** | `com.tcms.project.ReviewEndpointTest` |
+| **Must redden** | **exactly 1** — *the submitter's own LGTM does not count as a peer review*. Independent of the author-cannot-approve rule by construction (that test runs with the rule **off**), so a mutation reddening both would mean the two settings have been collapsed into one. |
+
+| | |
+|---|---|
+| **File** | `project/Review.java`, `open` |
+| **Mutation** | write `0` to `requiredPeerReviews` instead of the setting's value (the pre-`V23` behaviour) |
+| **Scope** | `com.tcms.project.ReviewEndpointTest` |
+| **Must redden** | **exactly 3** — the three `PeerMinimum` tests that require a peer. *raising the minimum does not freeze a review already open* must stay **green**, because it asserts the opposite direction. |
+
+| | |
+|---|---|
+| **File** | `project/Review.java`, `open` |
+| **Mutation** | read the live setting in `refusesEach` instead of `review.getRequiredPeerReviews()` |
+| **Scope** | `com.tcms.project.ReviewEndpointTest` |
+| **Must redden** | **exactly 1** — *raising the minimum does not freeze a review already open*. The whole reason the count is a column on `review` rather than only on `project_settings`. |
+
+| | |
+|---|---|
+| **File** | `execution/PlanUpdateService.java` |
+| **Mutation** | drop the `unApproves` demotion (delete the `plan.applyStatus(PlanStatus.DRAFT, …)` block) |
+| **Scope** | `com.tcms.project.ReviewEndpointTest` |
+| **Must redden** | **exactly 2** — *RE_REVIEW returns an edited approved plan to draft* and *the demotion does NOT cost plan:approve*. *RETAIN leaves an approved plan approved* must stay green, which is what separates the two modes. |
+
+| | |
+|---|---|
+| **File** | `execution/PlanUpdateService.java` |
+| **Mutation** | gate the demotion on `plan:approve` — refuse the edit when the caller lacks it |
+| **Scope** | `com.tcms.project.ReviewEndpointTest` |
+| **Must redden** | **exactly 1** — *the demotion does NOT cost plan:approve — an engineer's edit performs it*. **The single most important row in this section.** This mutation is the "obvious" reading, it looks like §75's rescind defect being closed, and it is wrong for the three reasons written on `EditAfterApproval.RE_REVIEW`; the test is the only thing standing between this slice and a future session "fixing" it. If this row reddens nothing, the test is not asserting authorship at all. |
+
+| | |
+|---|---|
+| **File** | `project/ProjectSettingsService.java`, `effective` |
+| **Mutation** | throw on a missing row instead of answering `ProjectSettings.defaults()` |
+| **Scope** | `com.tcms.project.ReviewEndpointTest`, `com.tcms.project.ProjectEndpointTest` |
+| **Must redden** | **unknown, and finding out is the point.** `V23` backfills every project and `ProjectCreateService` writes one, so the honest expectation is **nothing reddens** — which would mean the tolerance is untested and the argument for it (fail to the safe state, never 500 on a case list) rests on reading alone. A row that reddens tells us which path still produces a settings-less project. |
+
+| | |
+|---|---|
+| **File** | `project/ProjectSettingsService.java`, `find` |
+| **Mutation** | gate the read on `project:settings` (swap `readVisible` for `writeGranted`) |
+| **Scope** | `com.tcms.project.ReviewEndpointTest` |
+| **Must redden** | **exactly 1** — *a Viewer can read them*. The one test standing behind §6g's "no extra UI at all" being implementable by a client rendering for a non-admin. |
+
+| | |
+|---|---|
+| **Check** | migration-in-place |
+| **Mutation** | — |
+| **Must show** | **`V23` lands with this slice** and is the first migration since `V22`. It creates a table, one index, an RLS policy and **backfills one row per existing project** — the first migration in the product to create a table after `V1`, so the things to confirm on a real box are: the policy carries `V4`'s `nullif(...)` predicate and not `V1`'s (a table born with the old spelling reintroduces the reset-GUC 500 on exactly one table), the `tcms_app` default privileges actually covered the new table without an explicit `GRANT`, and the backfill left **exactly one row per project**. `SchemaConventionTest`'s policy count moves 56 → 57. **`V24` is the next free number.** |

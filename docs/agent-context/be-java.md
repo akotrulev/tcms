@@ -3,7 +3,7 @@
 # be-java — orientation cache (TCMS)
 
 **Last verified:** 2026-08-02
-**Baseline commit:** `086a669`
+**Baseline commit:** `02fa872`
 **Fingerprint files:** `backend/build.gradle.kts`, `backend/gradle/libs.versions.toml`, `backend/gradle/wrapper/gradle-wrapper.properties`
 
 > Authoritative docs win over this file. `CLAUDE.md`, `docs/HANDOFF.md` (an index — sections live in
@@ -63,8 +63,15 @@ provisioning · auth · shared`.
   return zero rows, fail-closed and silent. `RepositoryTransactionTest` derives the repository list
   from the live context, so a new repository that forgets fails the build. `#confirmed`
 - **Flyway owns all DDL**; `hibernate.ddl-auto: validate`, `baseline-on-migrate: false`. Migrations
-  at `src/main/resources/db/migration`. **Head is `V22`; `V23` is the next free number.** Booting the
+  at `src/main/resources/db/migration`. **Head is `V23`; `V24` is the next free number.** Booting the
   real context in a test is itself a schema-drift gate. `#confirmed`
+  **`V23` is the first migration since `V1` to CREATE A TABLE**, which makes two things live that no
+  previous migration had to think about: a new table's RLS policy must be written with **`V4`'s
+  `nullif(current_setting(...), '')` predicate and not `V1`'s bare one** (a table born with the old
+  spelling reintroduces the reset-GUC 500 on exactly that table), and `SchemaConventionTest`'s policy
+  **count moves 56 → 57** — the count is what makes the predicate check non-vacuous, so a new
+  company-owned table is meant to move it. No `GRANT` is needed: `deploy/postgres/initdb/10-tcms-roles.sql`
+  sets `ALTER DEFAULT PRIVILEGES` before Flyway runs. `#confirmed`
 - **Privilege split** — Flyway migrates as `tcms_owner`, the pool connects as `tcms_app`, neither is
   a superuser and neither holds `BYPASSRLS`. Mirrored in three places that must agree:
   `deploy/postgres/initdb/10-tcms-roles.sql` (deployment),
@@ -399,8 +406,67 @@ provisioning · auth · shared`.
   because changing it splits existing rows. It will present as an audit filter that silently matches
   nothing, which is §45's absent-row family. Sweep it when the audit screen is built. `#confirmed`
 
+- **Per-project §6g policy lives in `project_settings` since §77, and `ProjectSettingsService.effective`
+  is the ONE read.** `ProjectSettings` (entity, PK = `project_id`) + `ReviewSettings` (the value that
+  crosses module boundaries) + `EditAfterApproval` + `ProjectSettingsService`/`Controller`/`View`/
+  `Request`, **`V23`**. Four things had nowhere to live and all four were live defects: the opt-in
+  (so §76's apparatus applied to every project unconditionally), `review.required_peer_reviews`
+  (mapped, written from a column default, read by nothing), author-cannot-approve-own-work (§6g's
+  *"single most valuable setting"*, absent), and the edit-after-approval mode (`ReviewPanel` rendered
+  the Retain half; the Re-review half did not exist).
+  **A typed table, not `project.settings JSONB`** — §74's closed-vocabulary argument, because a
+  misspelled key in a blob reads identically to an unconfigured setting. The **ERD says `settings`
+  belongs to `company`** and §6g says the opt-in is per project *and per artifact type*; settled with
+  the user in favour of §6g, and `company.settings` is left unmapped and unclaimed.
+  **`reviewEnabledFor` is a switch over `ReviewSubjectType`**, so a fourth type is a compile error.
+  **"Off" is NARROW: it suppresses the reviewer apparatus and NOT the status ladder.** The wide
+  reading would have removed approval from every existing project on upgrade day, since off is the
+  default. For the same reason, switching review off does **not** close reviews already open — the
+  guard in `ReviewService.moved` covers only the *opening* arm. `#confirmed`
+- **`ReviewService.refusesEach` is the policy check, and `refuses` DELEGATES to it.** Asked by each
+  ladder *before* it applies anything, returning the message to refuse with — a precondition
+  discovered inside `moved` could only be enforced by throwing, and `moved` runs *after* the status
+  is written. Batch-first because `CaseBulkService` evaluates up to 400 rows (`findOpenForSubjects` +
+  one participations query), and because a single-item and a bulk copy of one policy is §58's E1 —
+  the exact divergence §75 found between `BulkOperations.permission` and `PlanLifecycle`.
+  **The peer count is read from `review.required_peer_reviews`, never the live setting** (raising the
+  bar must not freeze reviews in flight), counts **each person's LATEST verdict** in Java (the trail
+  is append-only so relenting is visible; `COUNT(DISTINCT user) WHERE LGTM` is the reading that makes
+  it decorative), and **never counts the submitter's own LGTM** whatever the author rule says.
+  `#confirmed`
+- **`EditAfterApproval.RE_REVIEW`'s demotion is deliberately NOT gated on `*:approve`, and it looks
+  like §75's defect reopened.** §75: leaving an approval is an approval act. This is not that, for
+  three reasons that must hold together — nobody *requested* the transition (the caller asked to
+  edit, which §6g permits, and the project declared in advance that editing invalidates approval);
+  it is opt-in and off by default, so a `RETAIN` project keeps all of §75's protection; and it writes
+  its **own audit verb** (`*.re_review_required`), never a field on the save's row. Gating it on the
+  approve key would make an approved artifact **uneditable by the people §6g expects to edit it**.
+  The queued mutation applying that gate is flagged as the most important row in the file: it is the
+  obvious reading and it looks like a fix. Wired into `CaseUpdateService`, `SuiteWriteService`
+  (rename only — the composition case is named and not built) and `PlanUpdateService`. `#confirmed`
+- **The settings GET is gated on project VISIBILITY, the PUT on `project:settings`** — §69's key,
+  second consumer. Not a relaxation: §6g's "a project that never turns it on should see no extra UI
+  at all" is a decision every artifact screen makes for every reader, Viewer included, and none of
+  them holds the write key. `effective` takes **no user and asks no permission** — every caller has
+  already been through its own gate, and the value is the project's behaviour rather than something
+  a caller may or may not see. `#confirmed`
+
 ## Session log
 
+- 2026-08-02 · EXTEND · Per-project review settings (§77) — §6g's four settings get the row they have
+  needed since the workflow was designed. New: `ProjectSettings`, `ReviewSettings`,
+  `EditAfterApproval`, `ProjectSettingsRepository`/`Service`/`Controller`/`View`/`Request`,
+  `ReviewService.refuses`/`refusesEach`/`reReviewOnEdit`, `ReviewRepository.findOpenForSubjects`,
+  `Review.getRequiredPeerReviews`, **`V23`** (the first table created since `V1`).
+  **The ERD/plan conflict was put to the user, not decided in a comment**: the ERD puts `settings` on
+  `company`, §6g requires per-project-per-artifact-type. **The gate run produced a mutation result
+  for free — 18 of 1419 reddened**, 17 of them `ReviewEndpointTest` finding zero reviews because its
+  fixture creates projects by direct insert and therefore gets what a real fresh project gets: review
+  off. §72's fixture rule from the other side — there the mock sat in a state no install produces,
+  here the *tests* assumed a feature was on. The 18th was `SchemaConventionTest` 56 → 57, working as
+  designed. 22 tests, **0 mutations run inline** (policy, followed), 11 queued. The MUI slot trap
+  fired a **fourth** time (`inputProps` vs v7's `slotProps`) — `muiTestIds` owns the shape, not the
+  prop name, which is the gap; caught by `npm run build`, not by the test runner.
 - 2026-08-02 · EXTEND · The review record (§76) — `review` and `review_participation` get their first
   writer ever, and `case:review`/`suite:review`/`plan:review` their first consumers. New:
   `ReviewService`, `Review`, `ReviewParticipation`, `ReviewState`, `ReviewStanding`,
