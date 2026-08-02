@@ -186,7 +186,13 @@ clean, `npm run lint` 0 warnings, `npm run test:run` **610/610** (594 → 610: *
 generated**, the 5 being 2 new `api.*` call sites × the 2 per-call-site contract checks plus 1 new
 `qs(...)` site — §70's arithmetic, checked rather than noted, on its sixth opportunity).
 
-**Seven mutations run, three queued.** Four backend and three frontend:
+**Seven mutations run, three queued — and running any of them was a policy breach.** §65's rule is
+that mutation checks are deferred *in full*; §72–§75 each ran a handful inline and recorded them as
+`✅ RUN`, which is what this slice followed, and the user corrected it on the day: **write the row,
+run nothing**. Both queue headers and `CLAUDE.md` now say so. The results are kept below because
+they are true and the queue would otherwise re-run them, not because running them was right.
+
+Four backend and three frontend:
 
 | Mutation | Red |
 |---|---|

@@ -33,6 +33,11 @@ Then per row: drive the flow, check the observation, and check `window.__tcmsErr
 end of each. **Record what was found in the slice's handoff section**, not here — this file is the
 queue, not the findings.
 
+> **⚠ The same rule binds the sibling queue, restated 2026-08-02: NOTHING is run inline** — not a
+> browser pass, and not a mutation check either, however cheap the individual one looks. See
+> `backend-mutation-checks.md`'s header for the correction and why §72–§76's partial runs were a
+> drift rather than the policy.
+
 ---
 
 ## §65 — permission qualifiers on the wire

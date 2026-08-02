@@ -35,7 +35,10 @@ key; the gate is decided by the row (§69's seam, fifth consumer) and resolves t
 `findInProject`, never `findById`, which would accept a **sibling project's** review. **The record
 starts when a writer exists** — an artifact already `IN_REVIEW` has no row on any real instance until
 it is re-submitted, so the panel reads "Not in review" beside a chip saying In review, correctly.
-**Seven mutations run, three queued** — and the fifth is the one to read: it **failed to redden**,
+**Seven mutations run, three queued — and running them at all was a drift the user corrected the
+same day**: §65 defers mutation checks *in full*, §72–§75's inline handfuls made the exception look
+like the rule, and both queue headers plus `CLAUDE.md` now say **write the row, run nothing**. The
+fifth is still the one to read: it **failed to redden**,
 because `waitFor(...toBeDisabled())` is satisfied by `useCan`'s pending state, so a panel with a
 hard-coded permission passed it. §66's finding inside this slice's own tests, caught only by running
 the mutation. **`V23` is the next free number**, and the per-project settings row now blocks four

@@ -5,6 +5,14 @@
 *during* feature work, where it is slowest and least useful. It is now **deferred and batched**:
 a slice records the mutation it would have run, and this file is executed as one pass later.
 
+> **⚠ ZERO mutations run inline. Restated by the user on 2026-08-02, after §76 ran seven.**
+> §72–§76 each ran a handful during the slice and queued the rest, and the `✅ RUN` rows below made
+> that look like the policy rather than a drift from it. It was a drift. **Every** mutation a slice
+> identifies is written here and run in the batch pass — none is "cheap enough" to run inline, and
+> the fact that a run one has occasionally found something (§76's frontend gate did) is not an
+> argument for the exception: it is an argument for running this file, which would have found the
+> same thing at the same cost, later.
+
 **This does not lower the bar, it moves it.** The claim "this test would catch that defect" is still
 required — it is just made checkable later instead of proven now. A slice that lands without adding
 its row here has skipped the check outright, which is the thing the batching is meant to avoid.

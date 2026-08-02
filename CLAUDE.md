@@ -305,7 +305,10 @@ A second stack for a concurrent browser pass is `cp .env.lane-b.example .env.lan
   driven and what it would have mutated**, appended to the matching queue —
   `docs/verification/frontend-browser-checks.md` and `docs/verification/backend-mutation-checks.md`
   — in a form that can be executed later. Landing without adding those rows skips the check
-  outright, which is what batching exists to avoid. **A slice in an unrun queue is *built and
+  outright, which is what batching exists to avoid. **Deferred means ALL of them, restated
+  2026-08-02**: do not run "just the cheap one" or "just the highest-signal one" during a slice.
+  §72–§76 each ran a handful inline and recorded them as `✅ RUN` in the queue, which made the
+  exception look like the rule; it was not. Write the row, run nothing. **A slice in an unrun queue is *built and
   unverified*, and must be described that way rather than as done.**
 - **A schema-wide or catalogue-wide invariant needs a computed check, not a careful reading.**
   Reading V1 top to bottom missed five join tables without `company_id`; scripting the comparison
