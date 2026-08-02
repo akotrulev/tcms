@@ -113,7 +113,19 @@ class ContractConventionTest {
             // holding an invitation must not confer the ability to overwrite an existing
             // credential. So the schema's single property is genuinely sometimes absent, and
             // `required: [password]` would describe the more dangerous of the two flows.
-            ".paths./auth/invitations/{token}/accept.post.requestBody.content.application/json.schema");
+            ".paths./auth/invitations/{token}/accept.post.requestBody.content.application/json.schema",
+
+            // The argument to a bulk operation. Which property is required is decided by the
+            // sibling `action` — `lifecycleStatus` for SET_STATUS, `suiteId` for MOVE_TO_SUITE —
+            // so there is no property present across all eight actions and any `required` array
+            // here would be a lie about seven of them. The per-action requirement is enforced
+            // server-side by BulkOperations.parse and covered by CaseBulkEndpointTest, which
+            // asserts the 400 names the missing field. Expressing it as a `oneOf` discriminated
+            // on `action` states it in the schema and was rejected for CaseConditionInput's
+            // reason plus one of its own: the server must validate the combination anyway, being
+            // the only side that knows the action, so the union would cost every consumer a
+            // narrow to buy a check the client cannot use. See BulkPayload's own description.
+            ".components.schemas.BulkPayload");
 
     @Test
     @DisplayName("every object schema with properties declares a required array")

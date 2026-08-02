@@ -3487,25 +3487,97 @@ export interface components {
             body: string[];
             usageCount: number;
         };
+        /**
+         * @description One action, one argument, over a selection of cases.
+         *
+         *     **The permission depends on the argument, not only on the action.** `SET_STATUS` targeting
+         *     `APPROVED` needs `case:approve` — Lead and up, and explicitly *not* Test Engineer (roles
+         *     spec, Review table; plan §6g: *"the state machine has exactly one gate, held by
+         *     `*:approve`"*). Every other action and every other target needs `case:edit`. A caller who
+         *     holds `case:edit` and not `case:approve` therefore gets a 403 on one value of one field and
+         *     a 200 on the rest, which is why the SPA gates the APPROVED option separately rather than
+         *     gating the dialog.
+         */
         BulkOperation: {
-            /** @enum {string} */
-            action: "ATTACH_CONDITIONS" | "DETACH_CONDITIONS" | "SET_STATUS" | "SET_AUTOMATION_STATUS" | "SET_OWNER" | "ADD_TAGS" | "SUBMIT_FOR_REVIEW" | "MOVE_TO_SUITE";
-            caseIds: string[];
             /**
-             * @default APPEND
+             * @description `SUBMIT_FOR_REVIEW` is `SET_STATUS` with `lifecycleStatus: IN_REVIEW` and is kept
+             *     because plan §6g uses the vocabulary ("bulk-submit"). The server aliases it at the
+             *     parse boundary, so there is one implementation of the state change rather than two
+             *     spellings that drift apart.
              * @enum {string}
              */
-            mode: "APPEND" | "PREPEND" | "REPLACE";
+            action: "ATTACH_CONDITIONS" | "DETACH_CONDITIONS" | "SET_STATUS" | "SET_AUTOMATION_STATUS" | "SET_OWNER" | "ADD_TAGS" | "SUBMIT_FOR_REVIEW" | "MOVE_TO_SUITE";
+            /**
+             * @description The selection, in the caller's own order. Duplicates are collapsed and the result
+             *     reports each distinct id exactly once.
+             *
+             *     Capped because the whole operation is one transaction and one audit event, so an
+             *     unbounded selection is an unbounded lock. 500 is comfortably above the case grid's
+             *     largest page, so no selection a user can actually make in the product hits it.
+             */
+            caseIds: string[];
             /**
              * @description Preview first. The UI must show the preview before committing.
              * @default true
              */
             dryRun: boolean;
-            /** @default true */
-            dedupe: boolean;
-            payload?: {
-                [key: string]: unknown;
-            };
+            payload?: components["schemas"]["BulkPayload"];
+        };
+        /**
+         * @description The argument, typed. Every property is optional here and **exactly the ones its action
+         *     needs are required by the server**, which answers 400 with the field name when one is
+         *     missing — the same shape a form validation error takes, so the message lands on the control.
+         *
+         *     Deliberately a flat object with optional members rather than a `oneOf` discriminated on
+         *     `action`. A `oneOf` states the per-action requirement in the schema itself, which is
+         *     genuinely better, and generates a TypeScript union the SPA would have to narrow at every
+         *     call site to build a payload it constructs one field at a time. The server has to validate
+         *     the combination either way — it is the only side that knows the action — so the `oneOf`
+         *     would buy a compile-time check the client cannot use while costing every consumer a narrow.
+         */
+        BulkPayload: {
+            /** @description Required by `SET_STATUS`. Refused for every other action. */
+            lifecycleStatus?: components["schemas"]["LifecycleStatus"];
+            /** @description Required by `SET_AUTOMATION_STATUS`. */
+            automationStatus?: components["schemas"]["AutomationStatus"];
+            /**
+             * @description Required by `SET_AUTOMATION_STATUS` when the target is `NOT_AUTOMATABLE`, by the same
+             *     `V1` check constraint the single-case editor obeys — which is what keeps automation
+             *     coverage honestly denominated rather than letting anything inconvenient be filed as
+             *     impossible.
+             */
+            notAutomatableReason?: string | null;
+            /**
+             * Format: uuid
+             * @description Required by `SET_OWNER`; `null` clears the owner. Validated against the project's
+             *     member list — the same *active member ∧ project grant* predicate `GET /members` and
+             *     `POST /work-items` use (§54), so the picker offers exactly the set the server accepts.
+             */
+            ownerId?: string | null;
+            /**
+             * Format: uuid
+             * @description Required by `MOVE_TO_SUITE`. Must be a live suite in this project.
+             */
+            suiteId?: string;
+            /**
+             * @description Required by `ADD_TAGS`. Additive and set-valued: a tag a case already carries leaves it
+             *     `unchanged` rather than failing, and nothing is removed. There is no bulk tag *removal*
+             *     in this slice.
+             */
+            tags?: string[];
+            /**
+             * Format: uuid
+             * @description Required by `ATTACH_CONDITIONS` and `DETACH_CONDITIONS`.
+             */
+            conditionId?: string;
+            /**
+             * @description Which list the attachment lands in, for `ATTACH_CONDITIONS`. `BOTH` is not offered:
+             *     it describes what a *library* condition may be used as, while an attachment is always
+             *     one position in one of the two lists (see the `ConditionKind` javadoc).
+             * @default PRE
+             * @enum {string}
+             */
+            conditionKind: "PRE" | "POST";
         };
         /**
          * @description Every outcome is reported as a LIST OF KEYS, not a count. The UI has to name what

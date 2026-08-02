@@ -1,9 +1,7 @@
 package com.tcms.repository;
 
-import com.tcms.project.ClassificationDimensionView;
 import com.tcms.project.GateResult;
 import com.tcms.project.Project;
-import com.tcms.project.ProjectConfigurationService;
 import com.tcms.project.ProjectService;
 import com.tcms.tenancy.AuditEvent;
 import com.tcms.tenancy.AuditEventRepository;
@@ -91,14 +89,10 @@ public class CaseCreateService {
     private static final int MAX_IDEMPOTENCY_KEY = 200;
 
     private final ProjectService projects;
-    private final ProjectConfigurationService configuration;
     private final TestCaseRepository cases;
     private final SuiteRepository suites;
-    private final CaseSummaries summaries;
-    private final CaseConditions conditions;
     private final CaseSteps steps;
-    private final TestStepRepository stepRows;
-    private final CaseAutomationTagRepository automationTags;
+    private final CaseRenderer renderer;
     private final CaseVersions versions;
     private final DisplayKeys displayKeys;
     private final AuditEventRepository auditEvents;
@@ -107,28 +101,20 @@ public class CaseCreateService {
     @SuppressWarnings("checkstyle:ParameterNumber")
     public CaseCreateService(
             ProjectService projects,
-            ProjectConfigurationService configuration,
             TestCaseRepository cases,
             SuiteRepository suites,
-            CaseSummaries summaries,
-            CaseConditions conditions,
             CaseSteps steps,
-            TestStepRepository stepRows,
-            CaseAutomationTagRepository automationTags,
+            CaseRenderer renderer,
             CaseVersions versions,
             DisplayKeys displayKeys,
             AuditEventRepository auditEvents,
             Clock clock) {
 
         this.projects = projects;
-        this.configuration = configuration;
         this.cases = cases;
         this.suites = suites;
-        this.summaries = summaries;
-        this.conditions = conditions;
         this.steps = steps;
-        this.stepRows = stepRows;
-        this.automationTags = automationTags;
+        this.renderer = renderer;
         this.versions = versions;
         this.displayKeys = displayKeys;
         this.auditEvents = auditEvents;
@@ -285,19 +271,6 @@ public class CaseCreateService {
     private TestCaseDetailView render(
             UUID companyId, UUID userId, UUID projectId, TestCase row, List<Suite> liveSuites) {
 
-        List<ClassificationDimensionView> vocabularies =
-                configuration.findClassification(userId, projectId).orElse(List.of());
-
-        TestCaseSummaryView summary =
-                summaries.render(companyId, List.of(row), liveSuites, vocabularies).getFirst();
-
-        return TestCaseDetailView.of(
-                row,
-                summary,
-                automationTags.findForCase(row.getId()).stream()
-                        .map(CaseAutomationTag::getTag)
-                        .toList(),
-                stepRows.findForCase(row.getId()).stream().map(TestStepView::of).toList(),
-                conditions.forCase(row, liveSuites));
+        return renderer.render(companyId, userId, projectId, row, liveSuites);
     }
 }

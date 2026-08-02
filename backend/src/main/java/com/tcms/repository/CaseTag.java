@@ -43,6 +43,27 @@ public class CaseTag {
     protected CaseTag() {
     }
 
+    /**
+     * A label on a case — the first writer this table has had.
+     *
+     * <p>{@code companyId} is taken from the caller rather than defaulted or read from a trigger:
+     * every company-owned table carries it, it leads every index, and RLS refuses an insert whose
+     * value does not match {@code app.current_company} (ERD §0.1). Passing the case's own company is
+     * what makes that check pass rather than a row this connection can write and never read again.
+     *
+     * <p>No position and no id. The primary key is {@code (case_id, tag)}, which is the schema
+     * saying tags are a <em>set</em>: adding one a case already carries is not a second row, and the
+     * caller checks membership before inserting rather than relying on a constraint violation to
+     * tell it so halfway through a batch of 500.
+     */
+    static CaseTag of(UUID caseId, String tag, UUID companyId) {
+        CaseTag row = new CaseTag();
+        row.caseId = caseId;
+        row.tag = tag;
+        row.companyId = companyId;
+        return row;
+    }
+
     public UUID getCaseId() {
         return caseId;
     }

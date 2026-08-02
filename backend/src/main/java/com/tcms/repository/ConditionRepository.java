@@ -2,6 +2,7 @@ package com.tcms.repository;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -86,4 +87,23 @@ public interface ConditionRepository extends JpaRepository<Condition, UUID> {
             @Param("projectId") UUID projectId,
             @Param("types") Collection<ConditionType> types,
             @Param("needle") String needle);
+
+    /**
+     * One live library entry, <strong>proved to be this project's</strong>.
+     *
+     * <p>The {@code projectId} predicate is the point, and {@link #findLiveByIds} deliberately does
+     * not carry it: that method resolves conditions already attached to cases the caller can read,
+     * so the attachment itself is the proof of reachability. This one resolves an id the caller
+     * <em>sent</em>, which proves nothing — without the predicate, a bulk attach could staple a
+     * sibling project's condition onto 500 cases, and every read of them would then resolve a
+     * condition through a project the reader was never granted.
+     */
+    @Query("""
+            SELECT c FROM Condition c
+             WHERE c.id = :conditionId
+               AND c.projectId = :projectId
+               AND c.deletedAt IS NULL
+            """)
+    Optional<Condition> findLiveInProject(
+            @Param("projectId") UUID projectId, @Param("conditionId") UUID conditionId);
 }

@@ -374,6 +374,62 @@ public class TestCase {
     }
 
     /**
+     * Moves this case to a lifecycle status — <strong>the only writer of this column</strong>.
+     *
+     * <p>Deliberately not part of {@link #applyEdit}, and the header on that method says why: a
+     * status an ordinary save can set is an approval anyone grants themselves by pressing Save. It
+     * is reachable only from {@link CaseBulkService}, whose gate asks {@code case:approve} when the
+     * target is {@code APPROVED} and {@code case:edit} otherwise (plan §6g's single gate).
+     *
+     * <p>Whether the transition is legal is {@link CaseBulkService}'s to decide, not this method's.
+     * The rule — {@code APPROVED} is reachable only from {@code IN_REVIEW} — needs to produce a
+     * per-case <em>reason</em> for the preview, and an entity that could only refuse by throwing
+     * would turn one ineligible case into a failed operation over the other 43.
+     */
+    void moveToStatus(LifecycleStatus status, UUID actorId, Instant now) {
+        this.lifecycleStatus = status;
+        this.updatedAt = now;
+        this.updatedBy = actorId;
+    }
+
+    /**
+     * Sets the automation status, and the reason that must accompany {@code NOT_AUTOMATABLE}.
+     *
+     * <p>The two move together because {@code V1}'s {@code ck_not_automatable_reason} requires it,
+     * and separate setters are how one of them gets called without the other and the constraint
+     * surfaces as a 500 halfway through a batch.
+     */
+    void applyAutomationStatus(
+            AutomationStatus status, String reason, UUID actorId, Instant now) {
+
+        this.automationStatus = status;
+        this.notAutomatableReason = reason;
+        this.updatedAt = now;
+        this.updatedBy = actorId;
+    }
+
+    /** Assigns an owner, or clears one when {@code ownerId} is null. */
+    void assignOwner(UUID newOwnerId, UUID actorId, Instant now) {
+        this.ownerId = newOwnerId;
+        this.updatedAt = now;
+        this.updatedBy = actorId;
+    }
+
+    /**
+     * Moves this case into another suite <em>of the same project</em>.
+     *
+     * <p>The caller checks that. This method cannot: {@code projectId} is {@code updatable = false}
+     * so a case cannot change project by any path, but a suite id belonging to a different project
+     * would move the case into a folder no read of either project's tree walks — and the case simply
+     * disappears from both, which is {@link CaseEdit#validate}'s reason for the same check.
+     */
+    void moveToSuite(UUID newSuiteId, UUID actorId, Instant now) {
+        this.suiteId = newSuiteId;
+        this.updatedAt = now;
+        this.updatedBy = actorId;
+    }
+
+    /**
      * Records that a new authored version now exists — called only when one was actually written.
      *
      * <p>Separate from {@link #applyEdit} because the two do not always both happen: a save whose

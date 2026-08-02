@@ -1,9 +1,7 @@
 package com.tcms.repository;
 
-import com.tcms.project.ClassificationDimensionView;
 import com.tcms.project.GateResult;
 import com.tcms.project.Project;
-import com.tcms.project.ProjectConfigurationService;
 import com.tcms.project.ProjectService;
 import com.tcms.tenancy.AuditEvent;
 import com.tcms.tenancy.AuditEventRepository;
@@ -85,41 +83,32 @@ public class CaseUpdateService {
     private static final String AUDIT_TARGET = "test_case";
 
     private final ProjectService projects;
-    private final ProjectConfigurationService configuration;
     private final TestCaseRepository cases;
     private final SuiteRepository suites;
-    private final CaseSummaries summaries;
-    private final CaseConditions conditions;
     private final CaseSteps steps;
     private final TestStepRepository stepRows;
-    private final CaseAutomationTagRepository automationTags;
+    private final CaseRenderer renderer;
     private final CaseVersions versions;
     private final AuditEventRepository auditEvents;
     private final Clock clock;
 
     public CaseUpdateService(
             ProjectService projects,
-            ProjectConfigurationService configuration,
             TestCaseRepository cases,
             SuiteRepository suites,
-            CaseSummaries summaries,
-            CaseConditions conditions,
             CaseSteps steps,
             TestStepRepository stepRows,
-            CaseAutomationTagRepository automationTags,
+            CaseRenderer renderer,
             CaseVersions versions,
             AuditEventRepository auditEvents,
             Clock clock) {
 
         this.projects = projects;
-        this.configuration = configuration;
         this.cases = cases;
         this.suites = suites;
-        this.summaries = summaries;
-        this.conditions = conditions;
         this.steps = steps;
         this.stepRows = stepRows;
-        this.automationTags = automationTags;
+        this.renderer = renderer;
         this.versions = versions;
         this.auditEvents = auditEvents;
         this.clock = clock;
@@ -257,30 +246,17 @@ public class CaseUpdateService {
     }
 
     /**
-     * The case as the API serves it — through {@link CaseSummaries} and {@link CaseConditions}, the
-     * same renderers the grid and the detail endpoint use.
+     * The case as the API serves it — the same renderers the grid and the detail endpoint use.
      *
-     * <p>Not a third implementation of a case's shape. §27's argument applies with more force after a
-     * write than before one: if this response rendered a field differently from {@code GET}, the
-     * editor would show one value on save and another on reload, and neither screen would reveal
-     * which is stored.
+     * <p>Was a private method here and a byte-identical one in {@link CaseCreateService}, each
+     * arguing in its javadoc that there must not be another copy. {@link CaseBulkService} would have
+     * been the third, so the argument became {@link CaseRenderer}. §27's reasoning is unchanged and
+     * now lives there: a field rendered differently from {@code GET} shows one value on save and
+     * another on reload, with neither screen revealing which is stored.
      */
     private TestCaseDetailView render(
             UUID companyId, UUID userId, UUID projectId, TestCase row, List<Suite> liveSuites) {
 
-        List<ClassificationDimensionView> vocabularies =
-                configuration.findClassification(userId, projectId).orElse(List.of());
-
-        TestCaseSummaryView summary =
-                summaries.render(companyId, List.of(row), liveSuites, vocabularies).getFirst();
-
-        return TestCaseDetailView.of(
-                row,
-                summary,
-                automationTags.findForCase(row.getId()).stream()
-                        .map(CaseAutomationTag::getTag)
-                        .toList(),
-                stepRows.findForCase(row.getId()).stream().map(TestStepView::of).toList(),
-                conditions.forCase(row, liveSuites));
+        return renderer.render(companyId, userId, projectId, row, liveSuites);
     }
 }

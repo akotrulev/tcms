@@ -69,6 +69,7 @@ public class CaseController {
     private final CaseUpdateService cases;
     private final CaseCreateService creation;
     private final CaseDeleteService deletion;
+    private final CaseBulkService bulk;
 
     public CaseController(
             CaseService search,
@@ -76,13 +77,15 @@ public class CaseController {
             CaseVersionService history,
             CaseUpdateService cases,
             CaseCreateService creation,
-            CaseDeleteService deletion) {
+            CaseDeleteService deletion,
+            CaseBulkService bulk) {
         this.search = search;
         this.detail = detail;
         this.history = history;
         this.cases = cases;
         this.creation = creation;
         this.deletion = deletion;
+        this.bulk = bulk;
     }
 
     /**
@@ -291,6 +294,49 @@ public class CaseController {
             case CaseUpdateService.Outcome.Stale ignored ->
                     ResponseEntity.status(HttpStatus.CONFLICT).body(ApiProblem.conflict());
             case CaseUpdateService.Outcome.Updated updated -> ResponseEntity.ok(updated.view());
+        };
+    }
+
+    /**
+     * Previews or applies one operation over a selection of cases.
+     *
+     * <h2>Why the 403 carries a body here, when the sibling writes' does not</h2>
+     *
+     * <p>{@link CaseUpdateService}'s refusal is one sentence because there is one way to be refused:
+     * the caller lacks {@code case:edit}. This endpoint has two, and they need opposite advice. A
+     * Test Engineer moving cases to {@code APPROVED} is refused for lacking {@code case:approve}
+     * while holding everything else — telling them "you cannot change cases here" is false, since
+     * they change cases every day, and would send them to ask for a permission they already have.
+     * So {@link BulkOperations#refusal} picks the sentence and the controller passes it through
+     * rather than choosing one that fits neither.
+     *
+     * <p>Unlike §61's scope refusal this is <strong>not</strong> a field error, and the difference
+     * is that {@code case:approve} is a real permission key. §31's disable-don't-hide therefore
+     * works here as designed: {@code GET /me/permissions} carries the key, so the SPA disables the
+     * APPROVED option for a caller who does not hold it and this refusal should be unreachable from
+     * the product's own UI. It is answered properly anyway, for anyone arriving another way.
+     *
+     * <p>200 for both a preview and a commit. A preview is not a creation and has nothing to locate,
+     * and a commit's own result — which cases changed — is the response body rather than a resource
+     * at a new URL, so neither 201 nor 204 describes what happened.
+     */
+    @PostMapping("/bulk")
+    public ResponseEntity<Object> bulk(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @RequestBody BulkOperationRequest request) {
+
+        CaseBulkService.Outcome outcome =
+                bulk.run(UUID.fromString(jwt.getSubject()), projectId, request);
+
+        return switch (outcome) {
+            case CaseBulkService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
+            case CaseBulkService.Outcome.Forbidden forbidden ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN)
+                            .body(ApiProblem.forbidden(forbidden.detail()));
+            case CaseBulkService.Outcome.Invalid invalid ->
+                    ResponseEntity.badRequest().body(ApiProblem.validation(invalid.errors()));
+            case CaseBulkService.Outcome.Done done -> ResponseEntity.ok(done.result());
         };
     }
 

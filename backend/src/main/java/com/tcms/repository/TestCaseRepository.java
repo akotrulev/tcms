@@ -1,5 +1,7 @@
 package com.tcms.repository;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -54,6 +56,29 @@ public interface TestCaseRepository extends JpaRepository<TestCase, UUID> {
             """)
     Optional<TestCase> findLiveInProject(
             @Param("projectId") UUID projectId, @Param("caseId") UUID caseId);
+
+    /**
+     * The live cases from a selection that are actually in this project — {@link #findLiveInProject}
+     * for a bulk operation, in one query.
+     *
+     * <p><strong>Returns fewer rows than ids given, and that is the point.</strong> An id that is
+     * soft-deleted, that belongs to a sibling project, or that never existed simply is not in the
+     * result, and {@link CaseBulkService} turns each absentee into a {@code Skipped} verdict with a
+     * reason. Doing this per id would be 500 round trips to render one preview; doing it without the
+     * {@code projectId} predicate would edit cases through a project the caller was granted, which
+     * is the two-segment-path hole {@code findLiveInProject}'s caller comment describes.
+     *
+     * <p>The caller must not pass an empty collection — an empty {@code IN ()} is a SQL syntax error
+     * — and does not, because the parse step already rejects an empty selection with a 400.
+     */
+    @Query("""
+            SELECT tc FROM TestCase tc
+             WHERE tc.projectId = :projectId
+               AND tc.id IN :caseIds
+               AND tc.deletedAt IS NULL
+            """)
+    List<TestCase> findLiveInProjectByIds(
+            @Param("projectId") UUID projectId, @Param("caseIds") Collection<UUID> caseIds);
 
     /**
      * Is this automation key already claimed by a <em>different</em> case in this company?

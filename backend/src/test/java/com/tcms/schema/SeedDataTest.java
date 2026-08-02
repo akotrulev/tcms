@@ -286,6 +286,41 @@ class SeedDataTest extends IntegrationTestBase {
     }
 
     @Test
+    @DisplayName("nothing may approve a case it may not edit — the bulk gate asks only the stronger key")
+    void everyApproverIsAlsoAnEditor() throws SQLException {
+        // THE COMPUTED CHECK behind a simplification in BulkOperations#permission, which resolves
+        // ONE permission per operation: case:approve when the target status is APPROVED, case:edit
+        // otherwise. Asking only the stronger key is correct precisely while every role holding
+        // approve also holds edit — and that is a property of the seeded catalogue, not a law.
+        //
+        // If a role were ever granted case:approve WITHOUT case:edit, that role could move cases to
+        // APPROVED through the bulk endpoint and the gate would never ask whether it may write a
+        // case at all. The failure is a widening, not an outage: the role gets MORE than intended
+        // and nothing errors, which is the §45/§61 shape both of those sections were about.
+        //
+        // The repair is to grant the missing case:edit, or to make the gate ask both keys — never
+        // to delete this check. It is written over the whole catalogue rather than over the six
+        // roles by name so a seventh role added in a later migration is covered without anyone
+        // remembering that this reasoning exists.
+        assertThat(queryStrings("""
+                SELECT r.name
+                  FROM role r
+                 WHERE EXISTS (SELECT 1 FROM role_permission rp
+                                WHERE rp.role_id = r.id AND rp.permission_key = 'case:approve')
+                   AND NOT EXISTS (SELECT 1 FROM role_permission rp
+                                    WHERE rp.role_id = r.id AND rp.permission_key = 'case:edit')
+                 ORDER BY r.name
+                """))
+                .as("""
+                        Roles that may approve a case but not edit one. CaseBulkService gates a \
+                        status change on ONE key — case:approve for APPROVED, case:edit otherwise \
+                        — which is only sound while approvers are a subset of editors. Grant \
+                        case:edit to these roles, or make BulkOperations#permission require both \
+                        keys; do not delete this check.""")
+                .isEmpty();
+    }
+
+    @Test
     @DisplayName("no permission is granted with two different restrictive qualifiers")
     void noPermissionCarriesTwoDifferentRestrictiveQualifiers() throws SQLException {
         // THE COMPUTED CHECK that keeps PermissionQualifier#strongest total, and the reason that

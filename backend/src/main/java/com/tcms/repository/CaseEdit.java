@@ -1,9 +1,11 @@
 package com.tcms.repository;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -199,6 +201,86 @@ record CaseEdit(
                 duration,
                 format == StepFormat.GHERKIN ? List.of() : steps,
                 trimToNull(request.changeComment())));
+    }
+
+    /**
+     * The authored content a <em>stored</em> case currently has, as an edit.
+     *
+     * <h2>Why this exists, and why it goes back through {@link #validate}</h2>
+     *
+     * <p>{@link CaseBulkService} changes {@code suiteId} and {@code automationStatus}, both of which
+     * {@link CaseVersions#hash} digests. Writing a version row for those changes needs a
+     * {@code CaseEdit} describing the case after the change — but the caller never sent one, because
+     * a bulk request carries one field, not a whole case.
+     *
+     * <p>The tempting shortcut is to build the record directly from the row's getters. That is a
+     * <strong>second normalizer</strong>, and the failure is silent and total: if it trims where
+     * {@link #validate} does not, or keeps a Gherkin source where {@code validate} drops it, then
+     * every hash it produces disagrees with every hash the edit path produces, and the next save of
+     * every touched case writes a spurious version whose diff is empty. Round-tripping through
+     * {@code validate} means there is exactly one normalizer and the two paths cannot disagree by
+     * construction.
+     *
+     * <p>{@code changeComment} is deliberately null. It is hashed, so putting "changed in a bulk
+     * edit" here would make the next ordinary save — which sends no comment — differ by the comment
+     * alone and write a version with an empty diff, which is precisely the noise plan §6j added the
+     * hash to keep out. What happened in bulk is recorded in the audit event, which is where "who
+     * did what to how many" belongs.
+     *
+     * @return empty when the stored row does not validate — a case with no steps in structured
+     *         format, or one whose suite has since been deleted. Rare and real, so the caller skips
+     *         that case with a reason rather than this throwing and failing the whole operation.
+     *         Applying the change without a version row is not an option: it is exactly the silent
+     *         mis-attribution this method exists to prevent.
+     */
+    static Optional<CaseEdit> of(
+            TestCase row,
+            List<TestStep> steps,
+            Set<UUID> liveSuiteIds,
+            java.util.function.Predicate<String> automationKeyTaken) {
+
+        CaseUpdateRequest asRequest = new CaseUpdateRequest(
+                row.getTitle(),
+                row.getSuiteId(),
+                row.getDescription(),
+                row.getObjective(),
+                row.getExpectedOutcome(),
+                row.getStepFormat(),
+                row.getGherkinSource(),
+                row.getPriority(),
+                row.getSeverity(),
+                row.getAutomationStatus(),
+                row.getAutomationKey(),
+                row.getNotAutomatableReason(),
+                row.getEstimatedDurationSec(),
+                steps.stream()
+                        .map(step -> new CaseUpdateRequest.StepInput(
+                                step.getId(),
+                                // The contract spells a keyword as a nullable string while the
+                                // column is an enum, so the reconstruction spells it back — name(),
+                                // which is exactly what the parser upper-cases and looks up.
+                                step.getKeyword() == null ? null : step.getKeyword().name(),
+                                step.getAction(),
+                                step.getTestData(),
+                                step.getExpectedResult(),
+                                step.getSharedStepId()))
+                        .toList(),
+                // See the header. Null, not a description of the bulk edit.
+                null,
+                // The refused six stay null: they are refused on the way IN, and this is a
+                // reconstruction of what is already stored, so passing any of them would make a
+                // stored row fail validation for a rule about requests.
+                null, null, null, null, null, null);
+
+        Set<UUID> existingStepIds = new HashSet<>();
+        for (TestStep step : steps) {
+            existingStepIds.add(step.getId());
+        }
+
+        Outcome outcome = validate(asRequest, liveSuiteIds, existingStepIds, automationKeyTaken);
+        return outcome instanceof Outcome.Valid valid
+                ? Optional.of(valid.edit())
+                : Optional.empty();
     }
 
     /**

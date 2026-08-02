@@ -61,6 +61,33 @@ public class CaseCondition {
     protected CaseCondition() {
     }
 
+    /**
+     * Attaches a library condition to a case — the first writer this table has had, which is why the
+     * class header said "nothing in this module writes either side yet" until this slice.
+     *
+     * <p>The reference form only. {@code inline_body} stays null and {@code V1}'s
+     * {@code CHECK ((condition_id IS NULL) &lt;&gt; (inline_body IS NULL))} is satisfied by
+     * {@code conditionId} being non-null — which the caller guarantees by having resolved the
+     * condition before calling. An inline attachment has no column to hold the title the contract
+     * requires, so nothing serves one and nothing should create one.
+     *
+     * @param position appended at the end of its kind's list. Bulk attachment has no meaningful
+     *                 place to insert in the middle of a list it cannot see, and appending is the
+     *                 only order that is the same for all 500 cases.
+     */
+    static CaseCondition of(
+            UUID caseId, UUID conditionId, ConditionKind kind, int position, UUID companyId) {
+
+        CaseCondition row = new CaseCondition();
+        row.id = UUID.randomUUID();
+        row.caseId = caseId;
+        row.conditionId = conditionId;
+        row.kind = kind;
+        row.position = position;
+        row.companyId = companyId;
+        return row;
+    }
+
     public UUID getId() {
         return id;
     }

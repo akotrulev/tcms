@@ -1,5 +1,6 @@
 package com.tcms.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -42,4 +43,24 @@ public interface CaseConditionRepository extends JpaRepository<CaseCondition, UU
              ORDER BY cc.kind ASC, cc.position ASC, cc.id ASC
             """)
     List<CaseCondition> findForCase(@Param("caseId") UUID caseId);
+
+    /**
+     * Every own-attachment on a selection of cases, in one query — {@link #findForCase} for a bulk
+     * operation.
+     *
+     * <p>Includes inline rows, unlike {@code findForCase}, and deliberately. That method excludes
+     * them because it feeds a <em>response</em> that requires a title an inline row cannot supply.
+     * This one feeds a <em>decision</em>: whether a case already carries the condition being
+     * attached, and what the next free position in its list is. Excluding inline rows there would
+     * count positions that exist, so an attachment would collide with a row the query pretended was
+     * not there.
+     *
+     * <p>Ordered so the caller can take the last position per (case, kind) without sorting again.
+     */
+    @Query("""
+            SELECT cc FROM CaseCondition cc
+             WHERE cc.caseId IN :caseIds
+             ORDER BY cc.caseId ASC, cc.kind ASC, cc.position ASC
+            """)
+    List<CaseCondition> findForCases(@Param("caseIds") Collection<UUID> caseIds);
 }
