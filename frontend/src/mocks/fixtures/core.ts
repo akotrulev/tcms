@@ -712,6 +712,34 @@ export const reviews = [
     createdAt: '2026-07-29T11:20:00Z',
     approvedBy: null,
     approvedAt: null,
+    // Three requests and the awkward one is deliberate: user 2 was asked AND has spoken, the QA
+    // Chapter was asked as a TEAM, and user 0 was asked and has said nothing. That third row is
+    // the whole reason `assignees` and `participations` are two lists — a request nobody has
+    // answered is what a lead opens this panel to find, and merging the lists would render it as
+    // somebody with no verdict, which is also what a person who was never asked looks like.
+    assignees: [
+      {
+        id: uid(8, 'w'),
+        user: userRefOf(2),
+        team: null,
+        assignedBy: userRefOf(1),
+        assignedAt: '2026-07-29T11:22:00Z',
+      },
+      {
+        id: uid(9, 'w'),
+        user: null,
+        team: { id: uid(3, 't'), name: 'QA Chapter' },
+        assignedBy: userRefOf(1),
+        assignedAt: '2026-07-29T11:22:00Z',
+      },
+      {
+        id: uid(10, 'w'),
+        user: userRefOf(0),
+        team: null,
+        assignedBy: userRefOf(1),
+        assignedAt: '2026-07-29T11:23:00Z',
+      },
+    ],
     participations: [
       {
         id: uid(2, 'w'),
@@ -769,6 +797,10 @@ export const reviews = [
     createdAt: '2026-07-24T09:00:00Z',
     approvedBy: null,
     approvedAt: null,
+    // Deliberately none, `comments`' reason: most reviews on a real instance were never assigned
+    // to anybody, because §6g's peer review is open to the whole tier and assignment is a nudge.
+    // A fixture set where every review has assignees is the state §72's rule is about.
+    assignees: [],
     participations: [
       {
         id: uid(4, 'w'),

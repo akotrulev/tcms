@@ -3,7 +3,7 @@
 # be-java — orientation cache (TCMS)
 
 **Last verified:** 2026-08-02
-**Baseline commit:** `e76bd9f`
+**Baseline commit:** `a40f347`
 **Fingerprint files:** `backend/build.gradle.kts`, `backend/gradle/libs.versions.toml`, `backend/gradle/wrapper/gradle-wrapper.properties`
 
 > Authoritative docs win over this file. `CLAUDE.md`, `docs/HANDOFF.md` (an index — sections live in
@@ -232,7 +232,43 @@ provisioning · auth · shared`.
   **`anchor_type`/`anchor_id` stay NULL and unmapped**: validating a step id needs
   `repository.test_step`, which this module may not import, so it is a `PeopleDirectory`-shaped port
   or §64's unvalidated reference. **`refuseIfClosed` is the ONE spelling of "this review has
-  ended"**, read by all three write paths — the verdict endpoint's inline copy moved into it.
+  ended"**, read by all FIVE write paths since §80 — the verdict endpoint's inline copy moved into it.
+
+- **`review_assignment` is NEW in §80 (`V25`) — the first review table not already in `V1`.** That
+  absence is itself the finding: `V1` designed the record of what happened and never the worklist of
+  what is outstanding. `ReviewAssignment` + `ReviewAssigneeEdit` + `ReviewAssignmentRepository` +
+  `ReviewAssigneeView`/`ReviewAssignmentRequest`, `ReviewService.assign`/`unassign`/`store`,
+  `POST …/reviews/{id}/assignees` and `DELETE …/assignees/{assignmentId}`.
+  **A worklist entry, NOT part of the audit record** — that is `review` + `review_participation` —
+  and the three consequences ARE the design: unassigning is a **hard delete** (no tombstone; the
+  opposite call from `ReviewComment`, for the opposite reason — a remark is something somebody said,
+  a request is something somebody was asked), a deleted **team CASCADES** (§71's 409 deliberately NOT
+  extended: what is lost is a request, not authority, and refusing would make a team undeletable
+  until every review it was asked to look at had closed), and **re-asking writes nothing** (§79's
+  re-stamp defect in the one place it recurs; the partial unique indexes are the backstop, the
+  `findForUser`/`findForTeam` read is the check).
+  Gate is `*:review` via `writeGrantedOnTarget` (§69's seam, **6th** consumer) — **no new key
+  invented**, because one seeded to nobody is a 403 nobody can grant out of (§67's `evidence:read`,
+  §79's `suite:comment`); `case:comment` would let a Viewer fill somebody
+  else's queue and `*:approve` would confine the request to the tier it exists to prepare.
+  **The assignee is validated on `ProjectAccess.canView`, NOT company membership** — §71's bar one
+  table over and the wrong one here, because a colleague with no grant cannot open the artifact.
+  `ReviewService` holds `ProjectAccess` directly for this, and only this: it asks about the
+  **assignee**, never the caller. Both refusals carry one sentence (§6t). **The submitter is refused,
+  derived from `standingLgtms` already skipping their own LGTM** rather than invented.
+  Uniqueness is **two partial indexes**, because a plain four-column UNIQUE enforces nothing —
+  every team row has a NULL user and NULL ≠ NULL. Policy count **57 → 58**;
+  `ix_review_assignment_assignee_user` is added **before its query**, for §6l's queue. `#confirmed`
+- **`TeamDirectory` is the THIRD port in `project` (§80)**, after `ProjectAccess` and
+  `PeopleDirectory`, implemented by `identity.IdentityTeamDirectory`. Not a method on
+  `PeopleDirectory`: that port's one rule is §6u's company-membership naming, for which a team has no
+  analogue, so one interface would hold two unrelated resolution rules. **Two methods on purpose** —
+  `resolve` tolerates a missing team (a render does), `find` is what a WRITE calls, because a write
+  must refuse one or the product stores an unchecked `team_id` (§64), and "ask `resolve` with one id
+  and check the map" is how a validation stops looking like one. It must never answer **membership**:
+  §6g's "any member can action it" is `PermissionEvaluator`'s question (§71), and a team is
+  deliberately not expanded into per-member rows at assignment time, because membership moves.
+  `#confirmed`
   `#confirmed`
 - **`project.PeopleDirectory` is the ONE resolution of "what is this person called" (§76).** Port in
   `project` (which may depend on `tenancy` only — its package comment prescribes exactly this),
@@ -418,12 +454,18 @@ provisioning · auth · shared`.
 
 - ~~**Four review-workflow permission keys still have no consumer in Java**~~ → **three got one in
   §76** (`case:review`, `suite:review`, `plan:review`) **and the fourth, `case:comment`, in §79** —
-  the review block of the catalogue is now fully consumed. What is now true instead: **reviewer
-  ASSIGNMENT is the only unbuilt half of §6g's apparatus.** `review_participation` records who
-  *spoke*, never who was *asked*; §6g wants a user **or a team** assignable, and §6l's board needs it
-  before a pending-review card can exist. Also unbuilt and deliberately so: **§6g's gating rules**
-  (require APPROVED before a case joins a run or a plan starts), which §6g itself calls *"powerful
-  and genuinely obstructive"* and which need a documented lead override. `#confirmed`
+  the review block of the catalogue is fully consumed. ~~**Reviewer ASSIGNMENT is the only unbuilt
+  half of §6g's apparatus**~~ → **built in §80**, and it needed **no new key** — one seeded to
+  nobody is a 403 nobody can grant out of (§67/§79) — so asking costs the subject's `*:review`,
+  §79's argument for resolving a thread: a statement about the review's progress. What is now true
+  instead: **§6g's apparatus is complete and has no INBOX.** Nothing outside `ReviewPanel` surfaces a
+  request, so §6l's *"Review requested → card for each reviewer"* is buildable and unbuilt — and the
+  interesting part is that the queue needs the subject **expanded**, which means reading `repository`
+  and `execution` from `project`. That is a fourth port, a read model elsewhere, or the domain event
+  §76 refused. `ix_review_assignment_assignee_user` exists so that slice does not open with a
+  migration. Also still unbuilt and deliberately so: **§6g's gating rules** (require APPROVED before a
+  case joins a run or a plan starts), which §6g itself calls *"powerful and genuinely obstructive"*,
+  and **notifications** — all four of §6g's events now have a trigger and there is no channel. `#confirmed`
 
 - **`audit_event.target_type` is spelled two ways and nothing reads it yet.** Every service writes
   the snake_case table name (`test_run`, `test_case`, `test_plan`, `doc_page`, …) except
@@ -478,6 +520,23 @@ provisioning · auth · shared`.
   a caller may or may not see. `#confirmed`
 
 ## Session log
+
+- 2026-08-02 · EXTEND · Reviewer assignment (§80) — the last unbuilt half of §6g's apparatus, and
+  **the first review slice that needed a new table**: `review_assignment` is not in `V1`, because
+  `V1` designed the record of what happened and never the worklist of what is outstanding. New:
+  `ReviewAssignment`, `ReviewAssigneeEdit`, `ReviewAssignmentRepository`, `ReviewAssigneeView`,
+  `ReviewAssignmentRequest`, `TeamDirectory` + `TeamRefView` + `identity.IdentityTeamDirectory`,
+  `ReviewService.assign`/`unassign`/`store`/`addAssignee`/`removeAssignee`, two controller routes,
+  **`V25`** (policy count 57 → 58). **The slice is one idea** — an assignment is a worklist entry and
+  not part of the audit record — from which the hard delete, the team cascade (§71's 409 NOT
+  extended) and the write-nothing re-ask all follow. **No new key invented** (one seeded to nobody is a 403
+  nobody can grant out of), so asking costs `*:review`, and the two gate mutations are a **pair** proving it
+  is neither the tier below nor the tier above. **The build caught the contract slip**:
+  `ReviewAssignmentInput` shipped with no `required` array, and `ContractConventionTest` failed —
+  both fields are required-and-nullable, `RoleAssignmentInput.projectId`'s shape, or "ask nobody"
+  would be expressible only by omission. **Zero mutations run inline** (policy); eight queued.
+  Backend 1458 → **1476**; frontend 627 → **640** (9 written, **4 generated** by §70's data-driven
+  checks discovering the two new `api.*` call sites, `api.del` among them).
 
 - 2026-08-02 · EXTEND · Review comments (§79) — `review_comment`'s first writer ever, and
   `case:comment`'s first consumer in Java, which empties the review block of the catalogue. New:

@@ -69,10 +69,12 @@ export {
 export { useConditions, useCreateSharedStep, useSharedSteps } from './library';
 export {
   useAddReviewComment,
+  useAssignReviewer,
   useProjectSettings,
   useRecordReviewVerdict,
   useReviews,
   useSetReviewCommentResolution,
+  useUnassignReviewer,
   useUpdateProjectSettings,
 } from './reviews';
 export {

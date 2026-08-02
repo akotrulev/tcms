@@ -807,3 +807,65 @@ the subject's own `*:review`. A gate that read the same key for both would pass 
 | **Check** | migration-in-place |
 | **Mutation** | — |
 | **Must show** | **`V24` lands with this slice.** It adds a column, a CHECK and an index to a table that has never held a row on any real instance, so the in-place run should be uneventful — which is the thing to confirm rather than assume. `SchemaConventionTest`'s policy count stays **57** (no new table) and the new index must lead with `company_id`. **`V25` is the next free number.** |
+
+---
+
+## §80 — reviewer assignment
+
+Eight rows, and the first two are the pair to run together: they are the slice's one gate decision,
+and each is only meaningful beside the other.
+
+| | |
+|---|---|
+| **File** | `project/ReviewService.java`, `assign` |
+| **Mutation** | ask `"plan:approve"` (a constant, since the enum has no approve accessor) instead of `review.getSubjectType().reviewPermission()` |
+| **Scope** | `com.tcms.project.ReviewEndpointTest` |
+| **Must redden** | **exactly 1** — *an engineer may ask — the request is the reviewing tier's, not the approver's*. `ENGINEER` holds `plan:review` and **not** `plan:approve`, which is what makes this discriminating rather than vacuous (§71's `company:teams` had no such persona). If it reddens nothing, the request has been quietly confined to the people whose sign-off it exists to prepare. |
+
+| | |
+|---|---|
+| **File** | `project/ReviewService.java`, `assign` |
+| **Mutation** | ask `ReviewSubjectType.COMMENT_PERMISSION` instead of `reviewPermission()` |
+| **Scope** | `com.tcms.project.ReviewEndpointTest` |
+| **Must redden** | **exactly 1** — *a Viewer cannot ask — the bottom tier does not fill other people's queues*. The other end of the row above, and the pair is the point: the key must be **neither** the tier below nor the tier above. Both green under one key would mean the gate is not measuring anything. |
+
+| | |
+|---|---|
+| **File** | `project/ReviewService.java`, `store` |
+| **Mutation** | drop both `findForUser`/`findForTeam` guards and always `saveAndFlush` |
+| **Scope** | `com.tcms.project.ReviewEndpointTest` |
+| **Must redden** | **exactly 1** — *asking somebody already asked writes nothing and keeps the original asker*. This is §79's resolution defect in the one place it would recur: an unconditional write re-stamps `assigned_by`, so the field kept to record who asked names whoever clicked last. Note the expected failure mode is a **constraint violation**, not a duplicate row — `V25`'s partial unique index is the backstop behind the check, and seeing it fire is confirmation the backstop is real. |
+
+| | |
+|---|---|
+| **File** | `project/ReviewAssigneeEdit.java`, `validate` |
+| **Mutation** | drop the `!userReachesProject` arm (accept any user id the FK admits) |
+| **Scope** | `com.tcms.project.ReviewEndpointTest` |
+| **Must redden** | **exactly 2** — *a colleague with no grant on the project cannot be asked* and *a SIBLING COMPANY's account is refused with the same sentence, and stored never*. §71's defect one table over: `assignee_user_id` references instance-level `app_user`, so an outsider's id satisfies the FK, the company column, RLS and every constraint. Both tests assert **no row was written**, which a status-only assertion would have missed. |
+
+| | |
+|---|---|
+| **File** | `project/ReviewAssigneeEdit.java`, `validate` |
+| **Mutation** | drop the `userId.equals(review.getCreatedBy())` arm |
+| **Scope** | `com.tcms.project.ReviewEndpointTest` |
+| **Must redden** | **exactly 1** — *the submitter cannot be asked — their own review would not count*. The rule is **derived** rather than invented: `standingLgtms` already skips the submitter's own LGTM, so without this arm the product stores a request that can never be discharged. If this reddens nothing, the derivation is not being checked and the two halves are free to drift apart. |
+
+| | |
+|---|---|
+| **File** | `project/ReviewAssignmentRepository.java`, `findInReview` |
+| **Mutation** | drop the `a.reviewId = :reviewId` predicate (resolve an assignment by id alone, RLS-scoped to the company) |
+| **Scope** | `com.tcms.project.ReviewEndpointTest` |
+| **Must redden** | **exactly 1** — *an assignment id belonging to another review is 404, and deletes nothing*. §64's `sharedStepId` family a sixth time; the test asserts the foreign row **survived**, so a status-only assertion would have passed against a delete that happened anyway. |
+
+| | |
+|---|---|
+| **File** | `project/ReviewService.java`, `addAssignee` / `removeAssignee` |
+| **Mutation** | remove the `refuseIfClosed` call from **both** assignment paths |
+| **Scope** | `com.tcms.project.ReviewEndpointTest` |
+| **Must redden** | **exactly 2** — *a closed review takes no request* and *a closed review refuses the withdrawal too, and the row survives*. Two rather than §79's one, because both paths have a test of their own here; that asymmetry is deliberate and is the repair §79's sixth row asked for, applied to the new pair rather than retrofitted to the old one. |
+
+| | |
+|---|---|
+| **Check** | migration-in-place, and the cascade |
+| **Mutation** | — |
+| **Must show** | **`V25` lands with this slice**, creating a table rather than altering one. `SchemaConventionTest`'s policy count moves **57 → 58** and both unique indexes plus the read index must lead with `company_id`. Separately confirm the cascade by hand on a migrated database: deleting a `team` row removes its `review_assignment` rows and **nothing else** — the decision §71's 409 is deliberately not extended to, and the one behaviour here that lives in the DDL rather than in Java. `deletingATeamCascadesOntoItsRequests` covers it, and this row is the reminder to look at the real box too. **`V26` is the next free number.** |

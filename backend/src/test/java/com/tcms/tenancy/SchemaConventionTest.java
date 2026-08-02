@@ -255,10 +255,11 @@ class SchemaConventionTest extends IntegrationTestBase {
                 .isEmpty();
         assertThat(checked)
                 .as("fixture precondition: policies must have been found, or this asserts nothing")
-                // 56 from V1, + project_settings (V23). A new company-owned table moves this
-                // number, deliberately: the count is what makes the predicate check non-vacuous, and
-                // a table added without its policy would otherwise pass by not being looked at.
-                .isEqualTo(57);
+                // 56 from V1, + project_settings (V23), + review_assignment (V25). A new
+                // company-owned table moves this number, deliberately: the count is what makes the
+                // predicate check non-vacuous, and a table added without its policy would otherwise
+                // pass by not being looked at.
+                .isEqualTo(58);
     }
 
     @Test

@@ -1,50 +1,70 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-02 (latest section: **§79, review comments** — `review_comment` was the last of
-the three review tables with **no entity, no query and no writer of any kind**, and `case:comment`
-the last review permission with **no consumer in Java**; §76 and §77 both recorded that as *correct*
-rather than as an omission, because `V3` grants it to **Viewer** while the review tier goes to Test
-Engineer and up. **The slice is one decision, and it is a permission the catalogue does not have**:
-`*:review` and `*:approve` are triples, one key per artifact type, while commenting is **one key**
-named after the artifact it was first written for — and a review's subject may be a case, a suite or
-a plan. Adding `suite:comment`/`plan:comment` would seed **two keys granted to nobody**, so
-commenting on a folder would be a 403 no administrator can grant their way out of (§67's argument
-against an invented `evidence:read`); and the documents already say the other thing — the roles
-spec's Review table lists the bottom tier as *"read **an item** in full and leave threaded
-comments"*, an item, not a case. So `case:comment` is asked whatever the subject, and
-`SeedDataTest.everyReviewerIsAlsoACommenter` **derives** the ladder that makes it sound rather than
-assuming it (`everyApproverIsAlsoAnEditor`'s shape). **Resolving costs a DIFFERENT key and the
-asymmetry is the design**: marking a thread dealt with is a statement about the review's progress, so
-it costs the subject's `*:review`; *"the reviewing tier **or** the comment's author"* — GitHub's
-rule, `evidence:delete`'s shape — was refused because the only caller it adds is a **Viewer resolving
-their own feedback**, which takes a point off the reviewer's list with nobody having addressed it.
-The two mutations are a **pair**: each gate swapped for the other's key reddens **exactly one** test,
-and they are *different* tests. **The defect the slice shipped in its own first draft** is the one to
-read: resolving an already-resolved thread wrote unconditionally, re-stamping `resolved_at` and
-handing `resolved_by` to whoever clicked last — so the two columns kept to record *who dealt with
-this* would name the second person to agree. **One of sixteen tests failed on the first run**, which
-is the opposite of §66's warning signal, and it failed because it was written from the contract
-sentence rather than from the code. **`V24` adds `resolved_by`, because an act with no actor is not a
-record** — `V1` gave the table a timestamp and no actor, enough to grey a thread out and not enough
-for §6g's *"proving to an auditor that someone competent signed off"* — plus the read path's index,
-the one `V22` gave participations and this table could not because nothing read it; the CHECK is
-**one-directional on purpose**. **Threads are one level deep** and the parent resolves through
-`findInReview`, never `findById`, which RLS scopes to the **company** and which therefore accepts a
-**sibling project's** comment: §64/§68/§69's family a fourth time, and here it renders a remark
-inside a conversation its author never saw. **The anchor is deliberately not built** — §6g's
-*"anchored to a specific step or field where possible"* needs `repository.test_step`, a table this
-module may not import, so the choice is a `PeopleDirectory`-shaped port or an id nothing validates,
-which is §64's defect written down in advance; the port is named so the next slice does not start
-from the cheap version. **The frontend finding is a cast that outlived its contract**: the panel
-test's fixture ended `} as Review`, so adding `comments` turned **all eleven of that file's tests red
-at runtime with zero type errors** — §65's finding in a second file, repaired by deleting the cast.
-**Zero mutations run inline; seven queued, thirteen browser rows**, and row 2 is live-only because
-mock mode signs in as one persona holding every key. **Reviewer assignment is now the only unbuilt
-half of §6g's apparatus.** Before that, and not summarised here because neither section prepended to
-this header: **§77, per-project review settings** (`V23` — §6g's four settings get the row they have
-needed since the workflow was designed, and the `RE_REVIEW` demotion that must **not** cost the
-approve key) and **§78, open-question decision round 2** (no code; plan §8 emptied, five entries
-that the product had already answered, and the Helm chart that now waits on the S3 adapter). Before
+**Date:** 2026-08-03 (latest section: **§80, reviewer assignment** — §6g's apparatus is
+complete. `review_participation` has recorded who **spoke** since §76 and *nothing has ever recorded
+who was **asked***, so the workflow §76–§79 built had **no inbox**: a review opens and the people who
+should look at it find out through some other product. §6l names the same gap from the other end
+(*"Review requested → card for each reviewer"*) and cannot draw a card for a request nothing stored;
+`ReviewController`'s own header records the third sighting, refusing "all reviews in this project"
+because the queue is *a different question*. **This is the first review slice that needed a NEW
+TABLE** — §76, §77 and §79 each found theirs already in `V1` — and that absence is itself the
+finding: **`V1` designed the record of what happened and never the worklist of what is
+outstanding.** **The slice is one idea and everything follows from it: a worklist entry is NOT part
+of the audit record.** That record is `review` + `review_participation`; this is a routing hint,
+alive only while the review is open. So **unassigning is a HARD DELETE** — the opposite call from
+`ReviewComment`, for the opposite reason, because a remark is something somebody *said* and a
+request is something somebody was *asked*, and a trail of retracted requests reads as a history of
+suspicion; **a deleted team CASCADES**, which is §71's 409 deliberately **not** extended, because
+what is lost is a request rather than authority and refusing would make a team undeletable until
+every review it was asked to look at had closed — a review whose only assignee is a dissolved team
+being precisely the one that never closes on its own; and **re-asking somebody already asked writes
+nothing**, §79's re-stamp defect in the one place it recurs, since an unconditional write hands
+`assigned_by` to whoever clicked last. **No new key was invented** — one seeded to nobody is a
+403 no administrator can grant their way out of, the argument §67 used against `evidence:read` and
+§79 against `suite:comment` — so asking costs the subject's `*:review`, §79's argument for resolving
+a thread. **The two cheap readings are both wrong and each
+names a persona**: `case:comment` would let a Viewer, *often the client themselves*, put work on a
+contributor's queue, and `*:approve` would confine the request to the very people whose sign-off it
+exists to **prepare**. **The mutation is a PAIR and neither half means anything alone** — the
+approve swap reddens exactly one test, the comment swap exactly one *different* test, because the
+key must be neither the tier below nor the tier above; this is the shape §71 could not achieve for
+`company:teams`, where `V3` grants both candidates to identical roles. **The assignee is validated
+on project VISIBILITY, not company membership** — §71's bar one table over and the wrong one here,
+because a colleague with no grant cannot open the artifact, so asking them produces a request that
+sits on their list for ever; `assignee_user_id` references instance-level `app_user`, so a sibling
+company's account satisfies the FK, the company column, RLS and every constraint (§64's family a
+fifth time). Both refusals carry the **same sentence**, or the endpoint is an instance-wide account
+oracle (§6t). **The submitter is refused and the rule is DERIVED, not invented**: `standingLgtms`
+already skips the submitter's own LGTM, so such a request could never be discharged.
+**`TeamDirectory` is the third port in `project`** and deliberately not a method on
+`PeopleDirectory`, whose one rule is §6u's company-membership naming that a team has no analogue
+for; it has **two** methods because a render tolerates a missing team and a **write must refuse
+one** or the product stores an unchecked `team_id` (§64), and it must never answer membership — a
+team is not expanded into per-member rows, because membership moves. **`V25`'s uniqueness is TWO
+PARTIAL INDEXES**, because a plain four-column UNIQUE enforces nothing: every team row has a NULL
+user and NULL ≠ NULL, so the same team could be asked a hundred times (§20's `COALESCE` trap solved
+the other way). Policy count **57 → 58**, and a fourth index lands **before its query** so §6l's
+queue does not open with a migration. **THE BUILD CAUGHT THE CONTRACT SLIP**:
+`ReviewAssignmentInput` shipped with no `required` array and `ContractConventionTest` went red —
+both fields are required-**and**-nullable (`RoleAssignmentInput.projectId`'s shape), or "ask this
+person, nobody else" is expressible only by omission and a dropped field is indistinguishable from a
+choice. **§79's cast repair paid off one slice later**: adding `assignees` to `Review` was **one
+build error in one place**, where the same change under `as Review` turned eleven tests red at
+runtime with zero type errors. **Four frontend tests failed on the first run and all four for §66's
+reason** — `toBeEnabled()` on a MUI Select's **display div** is satisfied while `useCan` is still
+pending, so the click landed on a disabled control; the barrier is now derived from the gate
+(`useProjectMembers` is `enabled` on `allowed`, so the `/members` request firing IS the proof). A
+fifth failed because MUI's default Chip delete icon carries no identifier. **A doc comment was false
+when written** — it claimed the picker filtered the submitter and it did not — and was **implemented
+rather than deleted**, because a picker that can produce a 400 is the one thing it must not be.
+**Zero mutations run inline; eight queued, fourteen browser rows**, and rows 3–4 are live-only
+because mock mode signs in as one persona holding every key. **§6g's apparatus now has no INBOX, and
+that is the next slice**: nothing outside the panel surfaces a request, and the queue needs the
+subject **expanded**, which means reading `repository` and `execution` from `project` — a fourth
+port, a read model elsewhere, or the domain event §76 refused. Before that, and not summarised here
+because that section did not prepend to this header: **§79, review comments** — the one comment key
+where there are three review keys, and the resolution that named nobody; plus **§77, per-project
+review settings** (`V23`) and **§78, open-question decision round 2**. Before
 that: **§76, the review record** — `review` and
 `review_participation` have been in `V1` since the beginning with **no entity, no query and no
 writer of any kind**, and §75 named this slice on its way out by *deriving* it rather than listing
@@ -930,3 +950,4 @@ See [`docs/plans/2026-07-31-parallel-execution-rework.md`](plans/2026-07-31-para
 | [§77](handoff/77-per-project-review-settings.md) | Per-project review settings — the row four behaviours were waiting on, and the demotion that must not cost the approve key |
 | [§78](handoff/78-open-question-decisions-round-2.md) | Open-question decision round 2 — §8 emptied, five that were answered by the product and never struck, and the chart that now depends on the S3 adapter |
 | [§79](handoff/79-review-comments.md) | Review comments — the one comment key where there are three review keys, and the resolution that named nobody |
+| [§80](handoff/80-reviewer-assignment.md) | Reviewer assignment — the request nothing recorded, and the table that is not part of the record |

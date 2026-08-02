@@ -21,6 +21,11 @@ import java.util.UUID;
  * @param approvedBy       null unless {@code state} is {@code APPROVED}, and null on an approved
  *                         review whose approver has been offboarded. The pair with
  *                         {@code approvedAt} is what an auditor reads
+ * @param assignees        who was <strong>asked</strong> to review, oldest request first — §6g's
+ *                         reviewer assignment. Distinct from {@code participations}, which is who
+ *                         <em>spoke</em>: the two lists overlap when the workflow is working and
+ *                         diverge in exactly the way a lead wants to see, since a name in one and
+ *                         not the other is a review nobody has got to
  * @param comments         §6g's threads, roots only — each carrying its own replies. Served with
  *                         the review rather than from an endpoint of their own, for the reason the
  *                         participations are: the panel reads a review as one thing, and a second
@@ -37,6 +42,7 @@ public record ReviewView(
         Instant createdAt,
         UserRefView approvedBy,
         Instant approvedAt,
+        List<ReviewAssigneeView> assignees,
         List<ReviewParticipationView> participations,
         List<ReviewCommentView> comments) {
 }

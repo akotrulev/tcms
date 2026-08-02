@@ -563,3 +563,37 @@ at all, and a fixture set where every review has threads is §72's finding waiti
 where possible"*, and `anchor_type` / `anchor_id` stay NULL on every row — see `ReviewComment`'s
 header for what accepting one would need first (a `PeopleDirectory`-shaped port into `repository`).
 There is nothing to drive, and the row exists so the absence is not mistaken for a defect.
+
+---
+
+## §80 — reviewer assignment: asked, and not the same fact as spoke
+
+**Run §77 row 2 first**, for §79's reason: every row here presupposes a project with review switched
+on for the artifact being opened.
+
+The mock's fixtures carry **three requests on the demo project's open plan review** — a person who
+has also given a verdict, a **team** (QA Chapter), and a person who has said nothing — and **none**
+on the rejected case review. The third of those three is the row the whole section exists for, and
+the empty case is §72's rule applied to a fixture: most reviews on a real instance were never
+assigned to anybody, because §6g's peer review is open to the whole tier and a request is a nudge.
+
+| # | Flow | What must be true | Mode |
+|---|---|---|---|
+| 1 | Open the demo project's plan in review | Above the verdict trail: an **Asked to review** section with three chips — a person icon, a **group** icon on "QA Chapter", and a third person who appears in **no** verdict row. The trail below still lists only the one person who spoke. | mock + live |
+| 2 | Compare the two lists deliberately | A name in "Asked to review" and **not** in the trail is a request nobody has answered — the row a lead opens this panel to find. If the two lists have been merged into one, this row is unverifiable and the slice's premise is gone. | mock + live |
+| 3 | As a **Viewer** (`case:comment`, no `plan:review`), open the same plan | The chips are **readable**; the **Ask** button and the picker are **disabled**, not hidden (§31), and the chips carry **no ✕**. Asking is the reviewing tier's act — the bottom tier does not fill other people's queues. | **live only** — mock mode signs in as one persona holding everything |
+| 4 | As a **Test Engineer** (holds `plan:review`, **not** `plan:approve`) | The picker and **Ask** are **enabled**. This is the gate decision made visible: the request must not be confined to the people whose sign-off it exists to prepare. | **live only** — same reason as row 3 |
+| 5 | Open the picker | It lists project members and teams (teams suffixed "(team)"). **The submitter is absent**, and so is anybody already asked. Both absences are deliberate — the first is a server field error, the second a write that does nothing. | mock + live |
+| 6 | Pick a person, press **Ask** | A new chip appears with their name and the select clears. `psql`: one `review_assignment` row, `assignee_user_id` set, `assignee_team_id` NULL, `assigned_by` = you. | mock + live |
+| 7 | Pick a team, press **Ask** | A chip with the **group** icon and the team's name — and **no member names**. §6g says any member may action it; expanding the team would freeze the membership as it was when the page loaded. | mock + live |
+| 8 | Press the ✕ on a chip | It disappears immediately and no confirmation is asked. `psql`: the row is **gone**, not tombstoned — an assignment is a worklist entry, not part of the audit record. | mock + live |
+| 9 | Ask the same person twice (second tab, or re-open the picker after a refetch) | The chip count **does not change** and the original **"asked by"** attribution survives. Re-stamping would hand the request to whoever clicked last — §79's resolution defect in the one place it recurs. | mock + live |
+| 10 | Approve or reject the plan, then re-open it | The chips are **still readable** and there is **no picker and no ✕**. A closed review takes no writes, and both affordances would only ever produce a 409. | mock + live |
+| 11 | Open a plan in review that nobody has been asked to look at | *"Nobody has been asked yet. Anyone with review rights can still give a verdict."* — and on a **closed** review with no requests the whole section is **absent**, not an empty heading (§6g's "no extra UI"). | mock + live |
+| 12 | The panel at 390 px with three chips and the picker | The chips wrap rather than overflow; the select and **Ask** stack rather than pushing the panel into horizontal scroll. | mock + live |
+| 13 | Live only: delete a team that has an outstanding request | The chip is gone on the next load and **the person asked individually is untouched**. This is the decision §71's 409 is deliberately not extended to — what cascades is a request, not authority — and the DDL is the only thing enforcing it. | **live only** — needs the teams screen and a migrated database |
+| 14 | Live only: ask somebody, then sign in as them | Nothing surfaces on their board or anywhere outside this panel. **That is correct today and is the next slice**: §6l's *"Review requested → card for each reviewer"* needs the queue this table now makes possible. Recorded so the absence is not read as a defect. | **live only** — needs two accounts |
+
+**Not exercisable here:** asking a **sibling company's** account or a sibling company's team. Both
+are refused as field errors and neither is reachable from any picker in either mode — the check is
+the backend queue's, and the rows exist there.

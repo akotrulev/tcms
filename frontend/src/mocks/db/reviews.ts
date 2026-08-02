@@ -19,6 +19,7 @@ import type {
   ReviewComment,
   ReviewParticipation,
   ReviewSubjectType,
+  TeamRef,
   UserRef,
 } from '../../api/types';
 import { db, newId } from './store';
@@ -89,6 +90,7 @@ export function reviewMoved(
         createdAt: new Date().toISOString(),
         approvedBy: null,
         approvedAt: null,
+        assignees: [],
         participations: [],
         comments: [],
       });
@@ -165,6 +167,47 @@ export function addComment(
 
   root.replies.push(written);
   return written;
+}
+
+/**
+ * Asks a person or a team — §6g's reviewer assignment.
+ *
+ * **Already asked writes nothing and is not an error**, the server's rule and §79's reason:
+ * re-stamping would hand `assignedBy` to whoever clicked last, so the field kept to record who
+ * asked would name the second person to agree. A mock that appended a second chip would teach an
+ * author that double-asking is visible when it is not.
+ */
+export function assignReviewer(
+  review: MockReview,
+  actor: UserRef,
+  assignee: { user: UserRef } | { team: TeamRef },
+): void {
+  const already = review.assignees.some((row) =>
+    'user' in assignee ? row.user?.id === assignee.user.id : row.team?.id === assignee.team.id,
+  );
+  if (already) return;
+
+  review.assignees.push({
+    id: newId(),
+    user: 'user' in assignee ? assignee.user : null,
+    team: 'team' in assignee ? assignee.team : null,
+    assignedBy: actor,
+    assignedAt: new Date().toISOString(),
+  });
+}
+
+/**
+ * Withdraws a request — a **hard delete**, no tombstone.
+ *
+ * An assignment is a worklist entry rather than part of the audit record, which is the server's
+ * decision and the reason a comment cannot be deleted while this can. Returns false when the id
+ * names nothing in this review, which the handler turns into the server's 404.
+ */
+export function unassignReviewer(review: MockReview, assignmentId: string): boolean {
+  const at = review.assignees.findIndex((row) => row.id === assignmentId);
+  if (at < 0) return false;
+  review.assignees.splice(at, 1);
+  return true;
 }
 
 /** Marks a thread dealt with, or re-opens it. Roots only — `undefined` when the id is a reply. */

@@ -154,6 +154,68 @@ export function useAddReviewComment(
 }
 
 /**
+ * Asks a person or a team to review — §6g's reviewer assignment.
+ *
+ * Costs the subject's `*:review`, the same key the verdict does and **not** `case:comment`: asking
+ * somebody to look at an artifact is a statement about the review's progress, so the bottom tier
+ * does not get to fill other people's queues. That is the server's decision; what this hook must
+ * not do is offer a shape the server refuses.
+ *
+ * The argument is a union rather than two optional ids, so "neither" and "both" — the server's one
+ * field error — are **unrepresentable here**. §31's disable-don't-hide at the level of the type,
+ * the narrowing `useRecordReviewVerdict` already applies to its verdict.
+ *
+ * Invalidates rather than writing the response into the cache, for `useRecordReviewVerdict`'s
+ * reason.
+ */
+export function useAssignReviewer(
+  projectId: string,
+  subjectType: ReviewSubjectType,
+  subjectId: string,
+) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      reviewId,
+      assignee,
+    }: {
+      reviewId: string;
+      assignee: { userId: string } | { teamId: string };
+    }) =>
+      api.post<Review>(`${base(projectId)}/reviews/${reviewId}/assignees`, {
+        userId: 'userId' in assignee ? assignee.userId : null,
+        teamId: 'teamId' in assignee ? assignee.teamId : null,
+      }),
+    // In place, beside the list it is about — `useRecordReviewVerdict`'s reason. The refusals this
+    // one can reach are all about *who* was named, which only means anything next to the picker.
+    meta: { handled: true },
+    onSuccess: () =>
+      client.invalidateQueries({ queryKey: keys.reviews(projectId, subjectType, subjectId) }),
+  });
+}
+
+/**
+ * Withdraws a request. Costs the same `*:review` the assignment did.
+ *
+ * Addresses the **assignment's** id, not the assignee's: one person may be asked to review several
+ * artifacts, and an assignee-keyed delete could name a pairing that never existed.
+ */
+export function useUnassignReviewer(
+  projectId: string,
+  subjectType: ReviewSubjectType,
+  subjectId: string,
+) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ reviewId, assignmentId }: { reviewId: string; assignmentId: string }) =>
+      api.del<Review>(`${base(projectId)}/reviews/${reviewId}/assignees/${assignmentId}`),
+    meta: { handled: true },
+    onSuccess: () =>
+      client.invalidateQueries({ queryKey: keys.reviews(projectId, subjectType, subjectId) }),
+  });
+}
+
+/**
  * Marks a thread dealt with, or re-opens it. Costs the subject's `*:review` key — **not**
  * `case:comment`, and the asymmetry with the hook above is deliberate on the server's side.
  *

@@ -68,7 +68,20 @@ public class ReviewService {
     private final ReviewRepository reviews;
     private final ReviewParticipationRepository participations;
     private final ReviewCommentRepository comments;
+    private final ReviewAssignmentRepository assignments;
     private final PeopleDirectory people;
+    private final TeamDirectory teams;
+    /**
+     * Asked about the <strong>assignee</strong>, never about the caller.
+     *
+     * <p>The caller's gate is {@link ProjectService}'s and stays there — this class holds the port
+     * directly only because {@link ReviewAssigneeEdit} needs to know whether <em>somebody else</em>
+     * can see the project, which no gate signature answers and which is a validation question rather
+     * than an authorization one. Both roads lead to the same {@code PermissionEvaluator}, so this is
+     * not the second authorization-resolution path {@link ProjectAccess}'s header refuses; it is the
+     * same one asked about a different person.
+     */
+    private final ProjectAccess access;
     private final Clock clock;
 
     public ReviewService(
@@ -77,7 +90,10 @@ public class ReviewService {
             ReviewRepository reviews,
             ReviewParticipationRepository participations,
             ReviewCommentRepository comments,
+            ReviewAssignmentRepository assignments,
             PeopleDirectory people,
+            TeamDirectory teams,
+            ProjectAccess access,
             Clock clock) {
 
         this.projects = projects;
@@ -85,7 +101,10 @@ public class ReviewService {
         this.reviews = reviews;
         this.participations = participations;
         this.comments = comments;
+        this.assignments = assignments;
         this.people = people;
+        this.teams = teams;
+        this.access = access;
         this.clock = clock;
     }
 
@@ -659,12 +678,174 @@ public class ReviewService {
         return new Outcome.Recorded(render(companyId, List.of(review)).getFirst());
     }
 
+    // ------------------------------------------------------------------ assignment ----
+
     /**
-     * The one spelling of "this review has ended", read by all three writes.
+     * Asks a person or a team to review — §6g's <em>"assign a user or a team; any member of the team
+     * can action it"</em>, and the last unbuilt half of its apparatus.
      *
-     * <p>Three copies of one sentence is §58's E1 at sentence scale: the verdict endpoint and the
-     * two comment endpoints refuse for identical reasons and must name the identical way forward,
-     * and a copy that drifts tells one caller to resubmit and another nothing.
+     * <p><strong>This costs {@code *:review}, the subject's own key.</strong> The catalogue has no
+     * key for asking, and none was invented — a new key is seeded to nobody, so on every existing
+     * instance it is a 403 no administrator can grant their way out of (§67's argument against
+     * {@code evidence:read}, §79's against {@code suite:comment}). So the question is which
+     * existing key this is: asking somebody to look at an artifact is a statement
+     * about the review's progress, which is exactly the argument §79 settled for resolving a thread.
+     * The two cheaper readings were considered. {@code case:comment} would let a Viewer — often the
+     * client themselves — put work on a contributor's queue, which is the one thing the bottom tier
+     * is defined not to do. {@code *:approve} would confine the request to the people whose sign-off
+     * it exists to <em>prepare</em>, so a Test Engineer could not ask a colleague to look at their
+     * own case before submitting it for a lead's approval. The gate is decided by the row, through
+     * {@link ProjectService#writeGrantedOnTarget} — §69's seam, and a review that does not resolve is
+     * 404 before any permission is named.
+     *
+     * <p><strong>Re-asking somebody already asked writes nothing and answers 201.</strong>
+     * {@link #resolveComment}'s decision and §79's reason, which lands harder here: re-stamping would
+     * hand {@code assigned_by} to whoever clicked last, so the column kept to record who asked would
+     * name the second person to agree that this was a good idea. {@code V25}'s partial unique indexes
+     * are the backstop behind the check, not the check.
+     *
+     * <p><strong>A closed review takes no writes</strong>, this one included — 409, in the one
+     * sentence {@link #refuseIfClosed} holds for all four write paths. Asking somebody to review a
+     * decision that has already been taken is the clearest case in the family.
+     */
+    @Transactional
+    public Outcome assign(
+            UUID userId, UUID projectId, UUID reviewId, ReviewAssignmentRequest request) {
+
+        UUID companyId = CompanyContext.require();
+
+        var gated = projects.writeGrantedOnTarget(
+                userId,
+                projectId,
+                project -> reviews.findInProject(project.getId(), reviewId),
+                review -> ProjectService.RequiredPermission.onProject(
+                        review.getSubjectType().reviewPermission()),
+                (project, review) -> addAssignee(companyId, userId, project, review, request));
+
+        return unwrap(gated);
+    }
+
+    private Outcome addAssignee(
+            UUID companyId,
+            UUID actorId,
+            Project project,
+            Review review,
+            ReviewAssignmentRequest request) {
+
+        // Closed before validation — §74's order, and its reason: a caller told to fix a field on a
+        // review that has ended is being told to do something that will not help.
+        Optional<Outcome> closed = refuseIfClosed(review);
+        if (closed.isPresent()) {
+            return closed.get();
+        }
+
+        UUID assigneeId = request == null ? null : request.userId();
+        UUID teamId = request == null ? null : request.teamId();
+
+        // Both resolved BEFORE validation, so ReviewAssigneeEdit refuses facts rather than ids —
+        // ReviewCommentEdit's arrangement. canView is asked of the ASSIGNEE here, not of the caller,
+        // whose gate has already run one frame up.
+        boolean reaches = assigneeId != null && access.canView(assigneeId, project.getId());
+        TeamRefView team = teamId == null ? null : teams.find(companyId, teamId).orElse(null);
+
+        return switch (ReviewAssigneeEdit.validate(request, review, reaches, team)) {
+            case ReviewAssigneeEdit.Outcome.Invalid invalid -> new Outcome.Invalid(invalid.errors());
+            case ReviewAssigneeEdit.Outcome.Valid valid -> {
+                store(companyId, actorId, review.getId(), valid.edit());
+                yield new Outcome.Recorded(render(companyId, List.of(review)).getFirst());
+            }
+        };
+    }
+
+    /**
+     * Writes the request, unless it is already there.
+     *
+     * <p>The read is the check and the unique index is the backstop ({@code V20}'s and {@code V21}'s
+     * rule). Two people asking the same colleague at the same instant is a real race and the loser
+     * hits the index — which is the one case this method cannot make idempotent, and it surfaces as
+     * the constraint violation it is rather than as a silent second row.
+     */
+    private void store(UUID companyId, UUID actorId, UUID reviewId, ReviewAssigneeEdit edit) {
+        Instant now = clock.instant();
+
+        if (edit.userId() != null) {
+            if (assignments.findForUser(reviewId, edit.userId()).isPresent()) {
+                return;
+            }
+            assignments.saveAndFlush(
+                    ReviewAssignment.ofUser(companyId, reviewId, edit.userId(), actorId, now));
+            return;
+        }
+
+        if (assignments.findForTeam(reviewId, edit.teamId()).isPresent()) {
+            return;
+        }
+        assignments.saveAndFlush(
+                ReviewAssignment.ofTeam(companyId, reviewId, edit.teamId(), actorId, now));
+    }
+
+    /**
+     * Withdraws a request.
+     *
+     * <p><strong>A hard delete, and that is the decision.</strong> An assignment is a worklist entry
+     * and not part of the audit record — {@code V25}'s header carries the argument in full, and
+     * {@link ReviewComment}'s refusal to delete a comment is the same question answered the other
+     * way for the opposite reason: a remark is something somebody <em>said</em> and a request is
+     * something somebody was <em>asked</em>. Asking the wrong person and correcting it should leave
+     * nothing behind; a trail of retracted requests reads as a history of suspicion.
+     *
+     * <p><strong>There is no author arm.</strong> {@code evidence:delete}'s {@code OWN} shape — the
+     * asker, or the reviewing tier — was considered and refused for §79's reason at one remove: the
+     * only caller it would add is somebody withdrawing a request they made while lacking
+     * {@code *:review}, and nobody can be in that state, because making the request cost the key in
+     * the first place. A second door needs a caller it is right for.
+     *
+     * <p>Resolved through {@link ReviewAssignmentRepository#findInReview}, never {@code findById},
+     * for the reason that method gives.
+     */
+    @Transactional
+    public Outcome unassign(UUID userId, UUID projectId, UUID reviewId, UUID assignmentId) {
+
+        UUID companyId = CompanyContext.require();
+
+        var gated = projects.writeGrantedOnTarget(
+                userId,
+                projectId,
+                project -> reviews.findInProject(project.getId(), reviewId),
+                review -> ProjectService.RequiredPermission.onProject(
+                        review.getSubjectType().reviewPermission()),
+                (project, review) -> removeAssignee(companyId, review, assignmentId));
+
+        return unwrap(gated);
+    }
+
+    private Outcome removeAssignee(UUID companyId, Review review, UUID assignmentId) {
+        Optional<ReviewAssignment> found =
+                assignments.findInReview(review.getId(), assignmentId);
+        if (found.isEmpty()) {
+            // A path segment naming nothing is a 404, bodiless and identical to the review's own,
+            // so the pair cannot be used to probe which ids exist (§6t) — resolveComment's rule.
+            return new Outcome.NotFound();
+        }
+        // Closed AFTER the lookup and before the write, resolveComment's order: a caller who names
+        // a request that does not exist is told that, whatever state the review is in.
+        Optional<Outcome> closed = refuseIfClosed(review);
+        if (closed.isPresent()) {
+            return closed.get();
+        }
+
+        assignments.delete(found.get());
+        assignments.flush();
+        return new Outcome.Recorded(render(companyId, List.of(review)).getFirst());
+    }
+
+    /**
+     * The one spelling of "this review has ended", read by all five writes.
+     *
+     * <p>Five copies of one sentence is §58's E1 at sentence scale: the verdict endpoint, the two
+     * comment endpoints and the two assignment endpoints refuse for identical reasons and must name
+     * the identical way forward, and a copy that drifts tells one caller to resubmit and another
+     * nothing.
      */
     private static Optional<Outcome> refuseIfClosed(Review review) {
         if (review.getState() == ReviewState.IN_REVIEW) {
@@ -726,6 +907,11 @@ public class ReviewService {
             commentsByReview.computeIfAbsent(row.getReviewId(), id -> new ArrayList<>()).add(row);
         }
 
+        Map<UUID, List<ReviewAssignment>> assignedByReview = new HashMap<>();
+        for (ReviewAssignment row : assignments.findForReviews(reviewIds)) {
+            assignedByReview.computeIfAbsent(row.getReviewId(), id -> new ArrayList<>()).add(row);
+        }
+
         Set<UUID> peopleIds = new HashSet<>();
         for (Review review : rows) {
             addIfPresent(peopleIds, review.getCreatedBy());
@@ -742,7 +928,22 @@ public class ReviewService {
                 addIfPresent(peopleIds, row.getResolvedBy());
             }
         }
+        // The assignees join the SAME id set — submitters, approvers, participants, commenters,
+        // resolvers, the people asked and the people who asked them are one question about one set
+        // of ids, and a second call would double a two-query resolution to render one more column.
+        Set<UUID> teamIds = new HashSet<>();
+        for (List<ReviewAssignment> forOne : assignedByReview.values()) {
+            for (ReviewAssignment row : forOne) {
+                addIfPresent(peopleIds, row.getAssigneeUserId());
+                addIfPresent(peopleIds, row.getAssignedBy());
+                addIfPresent(teamIds, row.getAssigneeTeamId());
+            }
+        }
         Map<UUID, UserRefView> resolved = people.resolve(companyId, peopleIds);
+        // A second port, so unavoidably a second call — and skipped entirely when nothing names a
+        // team, which is the common case: an empty collection bound into SQL `IN ()` is a syntax
+        // error, and the port answers an empty map rather than making every caller remember that.
+        Map<UUID, TeamRefView> resolvedTeams = teams.resolve(companyId, teamIds);
 
         List<ReviewView> views = new ArrayList<>(rows.size());
         for (Review review : rows) {
@@ -757,6 +958,17 @@ public class ReviewService {
                                     row.getCreatedAt()))
                             .toList();
 
+            List<ReviewAssigneeView> asked =
+                    assignedByReview.getOrDefault(review.getId(), List.of()).stream()
+                            .map(row -> new ReviewAssigneeView(
+                                    row.getId(),
+                                    row.isTeam() ? null : resolved.get(row.getAssigneeUserId()),
+                                    row.isTeam() ? resolvedTeams.get(row.getAssigneeTeamId()) : null,
+                                    row.getAssignedBy() == null
+                                            ? null : resolved.get(row.getAssignedBy()),
+                                    row.getAssignedAt()))
+                            .toList();
+
             views.add(new ReviewView(
                     review.getId(),
                     review.getSubjectType(),
@@ -767,6 +979,7 @@ public class ReviewService {
                     review.getCreatedAt(),
                     review.getApprovedBy() == null ? null : resolved.get(review.getApprovedBy()),
                     review.getApprovedAt(),
+                    asked,
                     trail,
                     threads(commentsByReview.getOrDefault(review.getId(), List.of()), resolved)));
         }

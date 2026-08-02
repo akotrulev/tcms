@@ -20,6 +20,7 @@ export { materialiseRun, planScopeCaseIds, recountRun, runExecutions } from './e
 export { addWorkItem, workItems } from './workItems';
 export {
   addComment,
+  assignReviewer,
   commentExists,
   defaultProjectSettings,
   openReviewFor,
@@ -30,6 +31,7 @@ export {
   reviewsForSubject,
   saveProjectSettings,
   settingsForProject,
+  unassignReviewer,
   type MockReview,
   type ReviewStanding,
 } from './reviews';

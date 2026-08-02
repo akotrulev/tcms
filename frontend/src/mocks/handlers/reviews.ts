@@ -6,6 +6,7 @@ import { HttpResponse, delay, http } from 'msw';
 import type { ReviewSubjectType } from '../../api/types';
 import {
   addComment,
+  assignReviewer,
   commentExists,
   db,
   recordVerdict,
@@ -14,8 +15,9 @@ import {
   setResolution,
   settingsForProject,
   threadRoot,
+  unassignReviewer,
 } from '../db';
-import { API, LATENCY, holdsOn, meRef, notFound, problem } from './shared';
+import { API, LATENCY, holdsOn, meRef, notFound, problem, projectMembers } from './shared';
 
 const SUBJECT_TYPES: ReviewSubjectType[] = ['CASE', 'SUITE', 'PLAN'];
 
@@ -228,6 +230,129 @@ export const reviewHandlers = [
         });
       }
       return HttpResponse.json(review, { status: 201 });
+    },
+  ),
+
+  /**
+   * Asks a person or a team — §6g's reviewer assignment.
+   *
+   * Costs `*:review`, the same key the verdict does: asking somebody to look at an artifact is a
+   * statement about the review's progress, so `case:comment` is deliberately **not** enough. A mock
+   * that gated this on the comment key would give the Viewer an "Ask" control that 403s live —
+   * §31's disable-don't-hide inverted, which is the failure a stateful mock exists to prevent.
+   *
+   * The three field errors are the server's, in the server's words. The visibility check is the one
+   * thing the mock cannot mirror faithfully — it has no evaluator for *another* person — so it
+   * checks project membership, which is the list the picker offers and a subset of the server's
+   * rule. Recorded rather than hidden: a name the picker cannot produce is refused here for the
+   * right reason with slightly different reach.
+   */
+  http.post(
+    `${API}/projects/:projectId/reviews/:reviewId/assignees`,
+    async ({ params, request }) => {
+      await delay(LATENCY);
+      const projectId = String(params.projectId);
+      const review = db.reviews.find(
+        (row) => row.id === params.reviewId && row.projectId === projectId,
+      );
+      if (!review) return notFound('That review');
+
+      if (!holdsOn(projectId, REVIEW_PERMISSION[review.subjectType])) {
+        return problem(
+          403,
+          'Not allowed',
+          "You do not have permission to review this project's work.",
+        );
+      }
+
+      // Closed before validation — the comment handler's order, and the server's (§74).
+      if (review.state !== 'IN_REVIEW') {
+        return problem(
+          409,
+          'Review closed',
+          `This review has already ended. Submit the ${SUBJECT_NOUN[review.subjectType]} for `
+            + 'review again to reopen it.',
+        );
+      }
+
+      const body = (await request.json()) as { userId?: string | null; teamId?: string | null };
+      const userId = body.userId ?? null;
+      const teamId = body.teamId ?? null;
+
+      if ((userId === null) === (teamId === null)) {
+        return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+          userId: ['Ask either one person or one team to review, not both.'],
+        });
+      }
+
+      if (userId !== null) {
+        // The same list the picker offers and the same one `POST /work-items` validates its
+        // assignee against — the mock's spelling of the server's "one implementation, two
+        // callers", which is what makes a picker built from it unable to produce a 400.
+        const person = projectMembers(projectId).find((row) => row.id === userId);
+        if (!person) {
+          return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+            userId: ['That person cannot see this project, so they cannot review it.'],
+          });
+        }
+        if (review.submittedBy?.id === userId) {
+          return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+            userId: [
+              'They submitted this for review, so their own review would not count towards it.',
+            ],
+          });
+        }
+        assignReviewer(review, meRef(), { user: person });
+        return HttpResponse.json(review, { status: 201 });
+      }
+
+      const team = db.teams.find((row) => row.id === teamId);
+      if (!team) {
+        return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+          teamId: ['That team no longer exists.'],
+        });
+      }
+      assignReviewer(review, meRef(), { team: { id: team.id, name: team.name } });
+      return HttpResponse.json(review, { status: 201 });
+    },
+  ),
+
+  /** Withdraws a request. A hard delete, and 200 with the whole review — never 204. */
+  http.delete(
+    `${API}/projects/:projectId/reviews/:reviewId/assignees/:assignmentId`,
+    async ({ params }) => {
+      await delay(LATENCY);
+      const projectId = String(params.projectId);
+      const review = db.reviews.find(
+        (row) => row.id === params.reviewId && row.projectId === projectId,
+      );
+      if (!review) return notFound('That review');
+
+      if (!holdsOn(projectId, REVIEW_PERMISSION[review.subjectType])) {
+        return problem(
+          403,
+          'Not allowed',
+          "You do not have permission to review this project's work.",
+        );
+      }
+
+      // The lookup comes first, so an id naming nothing is 404 whatever state the review is in —
+      // the server's order on this path, and the mirror image of the assign handler above.
+      if (!review.assignees.some((row) => row.id === params.assignmentId)) {
+        return notFound('That request');
+      }
+
+      if (review.state !== 'IN_REVIEW') {
+        return problem(
+          409,
+          'Review closed',
+          `This review has already ended. Submit the ${SUBJECT_NOUN[review.subjectType]} for `
+            + 'review again to reopen it.',
+        );
+      }
+
+      unassignReviewer(review, String(params.assignmentId));
+      return HttpResponse.json(review);
     },
   ),
 

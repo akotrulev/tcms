@@ -648,6 +648,109 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
 
+  /projects/{projectId}/reviews/{reviewId}/assignees:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - name: reviewId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [projects]
+      operationId: assignReviewer
+      summary: Ask a person or a team to review
+      description: |
+        §6g's *"Reviewers — assign a user **or** a team; any member of the team can action
+        it"*, and the last unbuilt half of its apparatus. Until this endpoint the record
+        held who **spoke** (`participations`) and never who was **asked**, so the workflow
+        had no inbox and §6l's board could not draw a card for a request nothing stored.
+
+        **This costs `*:review`, the subject's own key.** No new key was invented — one
+        seeded to nobody is a 403 no administrator can grant their way out of, the standing
+        argument against `evidence:read` and `suite:comment` — so the question is which
+        existing key this is. Asking somebody to look at an artifact is a statement
+        about the review's progress — §79's argument for resolving a thread. Both cheaper
+        readings were refused: `case:comment` would let a Viewer, often the client
+        themselves, put work on a contributor's queue, which is the one thing the bottom
+        tier is defined not to do; `*:approve` would confine the request to the people whose
+        sign-off it exists to *prepare*.
+
+        **Re-asking somebody already asked writes nothing and answers 201.** Re-stamping
+        would hand `assignedBy` to whoever clicked last, so the field kept to record who
+        asked would name the second person to agree — §79's resolution defect, in the one
+        place it would recur.
+
+        **An assignment is a worklist entry, not part of the audit record.** That record is
+        the review and its participations. Hence the hard delete below, and hence a deleted
+        team taking its outstanding requests with it rather than being refused the way a
+        team holding role grants is (§71): what cascades is a request, not authority, and
+        the review stays visible, reviewable and approvable by exactly the same people.
+
+        `409` once the review has ended, on the same terms as every other write here.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReviewAssignmentInput' }
+      responses:
+        '201':
+          description: |
+            The whole review, re-rendered — the participations endpoint's decision and for its
+            reason. No `Location`: the URL it would name serves no `GET`, and one pointing at a
+            route that answers 405 is worse than none.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Review' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /projects/{projectId}/reviews/{reviewId}/assignees/{assignmentId}:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - name: reviewId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: assignmentId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [projects]
+      operationId: unassignReviewer
+      summary: Withdraw a request to review
+      description: |
+        A **hard delete**, and that is the decision: an assignment is a worklist entry, so
+        asking the wrong person and correcting it should leave nothing behind — a trail of
+        retracted requests reads as a history of suspicion. A comment is the same question
+        answered the other way for the opposite reason: a remark is something somebody
+        *said*, a request is something somebody was *asked*.
+
+        Costs the same `*:review` the assignment did. There is deliberately **no author
+        arm** — `evidence:delete`'s "the owner, or the tier" shape — because the only caller
+        it would add is somebody withdrawing a request they made while lacking `*:review`,
+        and nobody can be in that state: making the request cost the key.
+
+        `404` when `assignmentId` names nothing in this review, bodiless and identical to
+        the review's own 404 so the pair cannot be used to probe which ids exist.
+      responses:
+        '200':
+          description: |
+            The whole review, re-rendered. Not `204`: the panel renders a review as one thing
+            and every other write on it re-serves that whole thing, so a bodiless answer would
+            make this the one action after which the client's copy is stale — and it would
+            refetch immediately, a second round trip for what this response already knows.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Review' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
   /projects/{projectId}/reviews/{reviewId}/comments:
     parameters:
       - { $ref: '#/components/parameters/ProjectId' }
@@ -3059,7 +3162,8 @@ components:
       # state, and an absent array would make "no verdicts" indistinguishable from "the server
       # did not send them" (§48's rule about required arrays).
       required:
-        [id, subjectType, subjectId, subjectVersionNo, state, createdAt, participations, comments]
+        [id, subjectType, subjectId, subjectVersionNo, state, createdAt, assignees,
+         participations, comments]
       properties:
         id: { type: string, format: uuid }
         subjectType: { $ref: '#/components/schemas/ReviewSubjectType' }
@@ -3082,6 +3186,14 @@ components:
           allOf: [{ $ref: '#/components/schemas/UserRef' }]
           nullable: true
         approvedAt: { type: string, format: date-time, nullable: true }
+        assignees:
+          type: array
+          description: |
+            §6g's reviewer assignment — who was **asked**, oldest request first. Distinct from
+            `participations`, which is who *spoke*: a name in one and not the other is a review
+            nobody has got to, which is the comparison a lead reads this panel for. Required and
+            may be empty, for the reason `participations` is.
+          items: { $ref: '#/components/schemas/ReviewAssignee' }
         participations:
           type: array
           items: { $ref: '#/components/schemas/ReviewParticipation' }
@@ -3092,6 +3204,92 @@ components:
             empty, for the reason `participations` is: an absent array would make "nobody has
             commented" indistinguishable from "the server did not send them".
           items: { $ref: '#/components/schemas/ReviewComment' }
+
+    ReviewAssignee:
+      type: object
+      # `id` is THIS REQUEST's id — what DELETE addresses — and not the assignee's. One person
+      # may be asked to review several artifacts, so an assignee-keyed delete would have to send
+      # the review id too and could still name a pairing that never existed.
+      #
+      # Exactly one of `user` and `team` is non-null on a well-formed row (the table's
+      # num_nonnulls check). A flattened (kind, id, name) triple was refused: the two carry
+      # different affordances — a person's row can say "that's you", a team's cannot — and
+      # collapsing them makes the client re-derive from a string which it is holding.
+      required: [id, assignedAt]
+      properties:
+        id: { type: string, format: uuid }
+        user:
+          allOf: [{ $ref: '#/components/schemas/UserRef' }]
+          nullable: true
+          description: |
+            The person asked, or null when `team` names a team instead. Also null — with `team`
+            null too — for a request whose account no longer resolves, which the client renders
+            as a request nobody can action rather than dropping (§66).
+        team:
+          allOf: [{ $ref: '#/components/schemas/TeamRef' }]
+          nullable: true
+          description: |
+            The team asked. §6g: *"any member of the team can action it"* — and the members are
+            deliberately **not** expanded here. A panel that listed them would freeze the
+            membership as it was when the page loaded and invite the reader to treat it as the
+            list of people who owe a review.
+        assignedBy:
+          allOf: [{ $ref: '#/components/schemas/UserRef' }]
+          nullable: true
+          description: Null for an unattributable request, as every actor field here may be (§66).
+        assignedAt: { type: string, format: date-time }
+
+    TeamRef:
+      type: object
+      # Deliberately smaller than `Team`, which carries leads, members and the projects the
+      # team's grants reach — the last of those filtered by what the CALLER may see, so serving
+      # it from a review panel would mean the review record reasoning about an org-chart
+      # disclosure rule.
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+
+    ReviewAssignmentInput:
+      type: object
+      # Two nullable fields with an exactly-one rule, the shape `RoleAssignmentInput` already
+      # uses for the identical "a user or a team" question. A (kind, id) pair would need its own
+      # enum, its own parse failure, and its own error for "kind says TEAM and the id names a
+      # person" — all to express what two typed fields express by existing.
+      #
+      # BOTH are `required` and both are nullable, which reads oddly until the alternative is
+      # written out. Leaving them optional says "sometimes absent", and the server cannot tell an
+      # absent field from an explicit null — so "ask this person, nobody else" would be expressible
+      # only by omission, and a client that dropped a field by accident would be indistinguishable
+      # from one making a choice. `RoleAssignmentInput.projectId` is required-and-nullable for
+      # exactly this reason one module over. Required also makes the exactly-one rule legible in the
+      # generated type: the caller states both terms, and one of them is null.
+      #
+      # Sending neither and sending both are both field errors, reported on `userId` with one
+      # sentence, because the field a client fixes is the same either way.
+      required: [userId, teamId]
+      properties:
+        userId:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            One person, who must be able to **see this project** — not merely be a member of the
+            company. A colleague with no grant here cannot open the artifact, so asking them
+            produces a request that sits on their list for ever; the bar is the same
+            `project:read` question the gate asks of the caller, so the set of people who can be
+            asked is exactly the set the picker lists.
+
+            **The submitter is refused.** Their own peer review does not count towards
+            `requiredPeerReviews` — the server already skips it, on the ground that a review by
+            the person who asked for it is not a second opinion — so the request could never be
+            discharged. This is who *submitted* it, not who wrote the artifact: on a case written
+            by an engineer and put forward by their lead, the engineer is a fine reviewer.
+        teamId:
+          type: string
+          format: uuid
+          nullable: true
+          description: One team in this company, any member of which may action the request (§6g).
 
     ReviewComment:
       type: object

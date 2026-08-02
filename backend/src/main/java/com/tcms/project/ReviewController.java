@@ -9,6 +9,7 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,8 +20,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * A subject's reviews, one peer's verdict on an open one, and the threads that hang off it — plan
- * §6g's reviewer apparatus over HTTP.
+ * A subject's reviews, one peer's verdict on an open one, who was asked to give it, and the threads
+ * that hang off it — plan §6g's reviewer apparatus over HTTP.
  *
  * <p>Its own class rather than three more methods on {@link ProjectController}, for the reason §71
  * moved {@code GET /teams} off {@code AdminController}: one path family, one class. The subject is
@@ -138,10 +139,59 @@ public class ReviewController {
     }
 
     /**
-     * The three write paths' one mapping from outcome to response.
+     * Asks a person or a team to review — §6g's reviewer assignment.
      *
-     * <p>Written once rather than three times: the statuses and the problem envelopes are identical
-     * and only the success status and the 403's sentence differ, so three copies would be three
+     * <p>201 with the whole review, {@link #participate}'s decision and for its reason. No
+     * {@code Location} even though this one <em>does</em> address a resource below: the URL it would
+     * name serves no {@code GET}, and a {@code Location} pointing at a route that answers 405 is
+     * worse than none.
+     *
+     * <p>{@code POST} and not {@code PUT} on a collection: a request is added to a list, not
+     * declared as the whole of it. The wholesale form would make "clear everybody" expressible,
+     * which is the one bulk act nobody asked for, and it would put two clients' concurrent
+     * assignments in a last-write-wins race that neither could see.
+     */
+    @PostMapping("/{reviewId}/assignees")
+    public ResponseEntity<Object> assign(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID reviewId,
+            @RequestBody ReviewAssignmentRequest request) {
+
+        return respond(
+                reviews.assign(UUID.fromString(jwt.getSubject()), projectId, reviewId, request),
+                HttpStatus.CREATED,
+                "You do not have permission to review this project's work.");
+    }
+
+    /**
+     * Withdraws a request.
+     *
+     * <p>200 with the whole review rather than 204, which is the shape a delete usually takes here.
+     * The panel renders a review as one thing and every other write on it re-serves that whole
+     * thing; answering 204 would make this the one action after which the client's copy is stale,
+     * and it would refetch immediately — a second round trip to learn what this response already
+     * knows.
+     */
+    @DeleteMapping("/{reviewId}/assignees/{assignmentId}")
+    public ResponseEntity<Object> unassign(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID reviewId,
+            @PathVariable UUID assignmentId) {
+
+        return respond(
+                reviews.unassign(
+                        UUID.fromString(jwt.getSubject()), projectId, reviewId, assignmentId),
+                HttpStatus.OK,
+                "You do not have permission to review this project's work.");
+    }
+
+    /**
+     * The five write paths' one mapping from outcome to response.
+     *
+     * <p>Written once rather than five times: the statuses and the problem envelopes are identical
+     * and only the success status and the 403's sentence differ, so five copies would be five
      * places for a refusal to drift (§58's E1). The switch stays exhaustive under {@code -Werror},
      * so a new {@link ReviewService.Outcome} is a compile error here rather than a silent 500.
      */

@@ -12,6 +12,8 @@ import com.tcms.identity.CompanyMembershipRepository;
 import com.tcms.identity.Role;
 import com.tcms.identity.RoleAssignment;
 import com.tcms.identity.RoleAssignmentRepository;
+import com.tcms.identity.Team;
+import com.tcms.identity.TeamRepository;
 import com.tcms.tenancy.Company;
 import com.tcms.tenancy.CompanyContext;
 import com.tcms.tenancy.CompanyRepository;
@@ -105,6 +107,11 @@ class ReviewEndpointTest extends IntegrationTestBase {
     /** Test Lead in Umbra only. */
     private static final UUID OUTSIDER = UUID.fromString("9a003000-0000-4000-8000-000000000005");
 
+    /** A team in Acme — §6g's "assign a user <em>or</em> a team". */
+    private static final UUID ACME_QA_TEAM = UUID.fromString("9a006000-0000-4000-8000-000000000001");
+    /** A team in Umbra. Satisfies nothing here, and is the fourth column in §64's family. */
+    private static final UUID UMBRA_TEAM = UUID.fromString("9a006000-0000-4000-8000-000000000002");
+
     /** The suite the cases live in, and a review subject in its own right. */
     private static final UUID PAYMENTS = UUID.fromString("9a004000-0000-4000-8000-000000000001");
     private static final UUID CASE_ONE = UUID.fromString("9a005000-0000-4000-8000-000000000001");
@@ -140,6 +147,9 @@ class ReviewEndpointTest extends IntegrationTestBase {
     private ProjectSettingsRepository projectSettings;
 
     @Autowired
+    private TeamRepository teams;
+
+    @Autowired
     private TransactionTemplate tx;
 
     @BeforeEach
@@ -170,12 +180,16 @@ class ReviewEndpointTest extends IntegrationTestBase {
             grant("rv-lead-mobile", ACME, Role.TEST_LEAD_ID, LEAD, ACME_MOBILE, now);
             grant("rv-eng", ACME, Role.TEST_ENGINEER_ID, ENGINEER, ACME_BANKING, now);
             grant("rv-view", ACME, Role.VIEWER_ID, VIEWER, ACME_BANKING, now);
+
+            seedTeam(ACME_QA_TEAM, ACME, now);
         }));
 
         inCompany(UMBRA, () -> tx.executeWithoutResult(status -> {
             seedProject(UMBRA_BANKING, UMBRA, "RVUOLB", "Online Banking", now);
             member(UMBRA, OUTSIDER, "O. Outsider", now);
             grant("rv-out", UMBRA, Role.TEST_LEAD_ID, OUTSIDER, UMBRA_BANKING, now);
+
+            seedTeam(UMBRA_TEAM, UMBRA, now);
         }));
 
         seedCompanyDefaults(ACME);
@@ -789,6 +803,319 @@ class ReviewEndpointTest extends IntegrationTestBase {
                             + "grant separates them — 404, never 403 (§6t)")
                     .isEqualTo(404);
             assertThat(commentCount(review)).isZero();
+        }
+    }
+
+    // =====================================================================
+    // Assignment — who was ASKED, which is the fact the record was missing
+    // =====================================================================
+
+    @Nested
+    @DisplayName("Assignment — the request, and the four things it refuses")
+    class Assignment {
+
+        @Test
+        @DisplayName("a lead asks an engineer, and the request names both of them")
+        void aLeadAsksAnEngineer() throws Exception {
+            UUID review = openPlanReview();
+
+            MvcResult result = assign(LEAD, review, ENGINEER, null);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(201);
+            JsonNode asked = body(result).get("assignees").get(0);
+            assertThat(asked.get("user").get("id").asText()).isEqualTo(ENGINEER.toString());
+            assertThat(asked.get("team").isNull())
+                    .as("exactly one of the two is populated — V25's num_nonnulls check")
+                    .isTrue();
+            assertThat(asked.get("assignedBy").get("id").asText()).isEqualTo(LEAD.toString());
+            assertThat(body(result).get("participations"))
+                    .as("asked is not the same fact as spoke — the whole reason for the table")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("a team can be asked, and its members are deliberately not expanded")
+        void aTeamCanBeAsked() throws Exception {
+            UUID review = openPlanReview();
+
+            MvcResult result = assign(LEAD, review, null, ACME_QA_TEAM);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(201);
+            JsonNode asked = body(result).get("assignees").get(0);
+            assertThat(asked.get("team").get("name").asText()).isEqualTo("QA");
+            assertThat(asked.get("user").isNull()).isTrue();
+            assertThat(asked.get("team").has("members"))
+                    .as("§6g: any member may action it — and a frozen member list read as a "
+                            + "roster of who owes a review is exactly what TeamRef refuses to be")
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("an engineer may ask — the request is the reviewing tier's, not the approver's")
+        void anEngineerMayAsk() throws Exception {
+            UUID review = openPlanReview();
+
+            MvcResult result = assign(ENGINEER, review, VIEWER, null);
+
+            assertThat(result.getResponse().getStatus())
+                    .as("""
+                            THE GATE DECISION, and the persona that makes it discriminating. \
+                            ENGINEER holds plan:review and NOT plan:approve, so a gate keyed on \
+                            the approve key answers 403 here — and would confine the request to \
+                            the very people whose sign-off it exists to PREPARE.""")
+                    .isEqualTo(201);
+            assertThat(body(result).get("assignees").get(0).get("user").get("id").asText())
+                    .as("a Viewer can be asked: they hold project:read, which is the bar")
+                    .isEqualTo(VIEWER.toString());
+        }
+
+        @Test
+        @DisplayName("a Viewer cannot ask — the bottom tier does not fill other people's queues")
+        void aViewerCannotAsk() throws Exception {
+            UUID review = openPlanReview();
+
+            MvcResult result = assign(VIEWER, review, ENGINEER, null);
+
+            assertThat(result.getResponse().getStatus())
+                    .as("403 rather than 404: the Viewer can see this project and this review")
+                    .isEqualTo(403);
+            assertThat(detailOf(result)).doesNotContain("plan:review");
+            assertThat(assignmentCount(review)).isZero();
+        }
+
+        @Test
+        @DisplayName("asking somebody already asked writes nothing and keeps the original asker")
+        void reAskingIsIdempotent() throws Exception {
+            UUID review = openPlanReview();
+            JsonNode first = body(assign(LEAD, review, ENGINEER, null)).get("assignees").get(0);
+
+            MvcResult again = assign(ENGINEER, review, ENGINEER, null);
+
+            assertThat(again.getResponse().getStatus()).isEqualTo(201);
+            assertThat(assignmentCount(review)).isEqualTo(1);
+            JsonNode after = body(again).get("assignees").get(0);
+            assertThat(after.get("assignedBy").get("id").asText())
+                    .as("""
+                            §79's defect in the one place it would recur: re-stamping would hand \
+                            assignedBy to whoever clicked last, so the column kept to record who \
+                            asked would name the second person to agree.""")
+                    .isEqualTo(LEAD.toString());
+            assertThat(after.get("assignedAt").asText()).isEqualTo(first.get("assignedAt").asText());
+        }
+
+        @Test
+        @DisplayName("naming neither a person nor a team is a field error, and writes nothing")
+        void neitherIsAFieldError() throws Exception {
+            UUID review = openPlanReview();
+
+            MvcResult result = assign(LEAD, review, null, null);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(result)).containsKey("userId");
+            assertThat(assignmentCount(review)).isZero();
+        }
+
+        @Test
+        @DisplayName("naming both is the same field error — the rule is exactly one")
+        void bothIsTheSameFieldError() throws Exception {
+            UUID review = openPlanReview();
+
+            MvcResult result = assign(LEAD, review, ENGINEER, ACME_QA_TEAM);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(result)).containsKey("userId");
+            assertThat(assignmentCount(review))
+                    .as("a refused request must write neither half")
+                    .isZero();
+        }
+
+        @Test
+        @DisplayName("a colleague with no grant on the project cannot be asked")
+        void somebodyWhoCannotSeeTheProjectCannotBeAsked() throws Exception {
+            UUID review = openPlanReview();
+
+            MvcResult result = assign(LEAD, review, NO_GRANT, null);
+
+            assertThat(result.getResponse().getStatus())
+                    .as("""
+                            An ACTIVE member of this company holding no project grant. Company \
+                            membership is the bar §71 used one table over and it is the wrong one \
+                            here: they cannot open the artifact, so the request would sit on \
+                            their list for ever.""")
+                    .isEqualTo(400);
+            assertThat(errorsOf(result)).containsKey("userId");
+            assertThat(assignmentCount(review)).isZero();
+        }
+
+        @Test
+        @DisplayName("a SIBLING COMPANY's account is refused with the same sentence, and stored never")
+        void aSiblingCompanysAccountCannotBeAsked() throws Exception {
+            UUID review = openPlanReview();
+
+            MvcResult result = assign(LEAD, review, OUTSIDER, null);
+
+            assertThat(result.getResponse().getStatus())
+                    .as("""
+                            §71's defect one table over: assignee_user_id references \
+                            instance-level app_user, so this id satisfies the FK, the company \
+                            column, RLS and every constraint — and holds no grant here.""")
+                    .isEqualTo(400);
+            assertThat(errorsOf(result).get("userId"))
+                    .as("""
+                            the SAME sentence the no-grant case gets. Telling them apart makes \
+                            the endpoint an oracle for which accounts exist on the instance \
+                            (§6t).""")
+                    .isEqualTo(errorsOf(assign(LEAD, review, NO_GRANT, null)).get("userId"));
+            assertThat(assignmentCount(review)).isZero();
+        }
+
+        @Test
+        @DisplayName("the submitter cannot be asked — their own review would not count")
+        void theSubmitterCannotBeAsked() throws Exception {
+            UUID review = openPlanReview();
+
+            MvcResult result = assign(LEAD, review, LEAD, null);
+
+            assertThat(result.getResponse().getStatus())
+                    .as("""
+                            Derived, not invented: standingLgtms already skips the submitter's \
+                            own LGTM, so this request could never be discharged.""")
+                    .isEqualTo(400);
+            assertThat(errorsOf(result)).containsKey("userId");
+            assertThat(assignmentCount(review)).isZero();
+        }
+
+        @Test
+        @DisplayName("a sibling company's team is refused, and its name never reaches the response")
+        void aSiblingCompanysTeamCannotBeAsked() throws Exception {
+            UUID review = openPlanReview();
+
+            MvcResult result = assign(LEAD, review, null, UMBRA_TEAM);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(result)).containsKey("teamId");
+            assertThat(assignmentCount(review))
+                    .as("§64's sharedStepId from the other end — an unchecked team_id is a stored "
+                            + "reference nothing validated")
+                    .isZero();
+        }
+
+        @Test
+        @DisplayName("a closed review takes no request — 409, the fourth write path saying it")
+        void aClosedReviewRefusesTheRequest() throws Exception {
+            UUID plan = plan(LEAD, "Release 6.1");
+            setPlanStatus(LEAD, plan, "IN_REVIEW");
+            UUID review = UUID.fromString(onlyReview(LEAD, "PLAN", plan).get("id").asText());
+            setPlanStatus(LEAD, plan, "APPROVED");
+
+            MvcResult result = assign(LEAD, review, ENGINEER, null);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(409);
+            assertThat(assignmentCount(review)).isZero();
+        }
+
+        @Test
+        @DisplayName("withdrawing removes the row entirely — a request leaves no tombstone")
+        void withdrawingIsAHardDelete() throws Exception {
+            UUID review = openPlanReview();
+            UUID assignment = assignmentId(assign(LEAD, review, ENGINEER, null));
+
+            MvcResult result = unassign(LEAD, review, assignment);
+
+            assertThat(result.getResponse().getStatus())
+                    .as("200 with the whole review, not 204 — every other write here re-serves it")
+                    .isEqualTo(200);
+            assertThat(body(result).get("assignees")).isEmpty();
+            assertThat(assignmentCount(review))
+                    .as("an assignment is a worklist entry, not part of the audit record (V25)")
+                    .isZero();
+        }
+
+        @Test
+        @DisplayName("an assignment id belonging to another review is 404, and deletes nothing")
+        void anotherReviewsAssignmentIsNotReachable() throws Exception {
+            UUID mine = openPlanReview();
+            UUID other = openPlanReview();
+            UUID assignment = assignmentId(assign(LEAD, other, ENGINEER, null));
+
+            MvcResult result = unassign(LEAD, mine, assignment);
+
+            assertThat(result.getResponse().getStatus())
+                    .as("""
+                            findInReview, never findById — the latter is scoped by RLS to the \
+                            COMPANY, so it resolves this row and the caller withdraws a request \
+                            attached to a review the gate never examined. Two reviews in one \
+                            project is the narrower case; the cross-PROJECT one is refused a \
+                            frame earlier, by findInProject, and is pinned in Isolation.""")
+                    .isEqualTo(404);
+            assertThat(assignmentCount(other)).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("an assignment id naming nothing is a bodiless 404")
+        void anAbsentAssignmentIs404() throws Exception {
+            UUID review = openPlanReview();
+
+            MvcResult result = unassign(LEAD, review, ABSENT);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(404);
+            assertThat(result.getResponse().getContentAsString())
+                    .as("identical to the review's own 404, so the pair cannot probe which ids "
+                            + "exist (§6t)")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("a closed review refuses the withdrawal too, and the row survives")
+        void aClosedReviewRefusesTheWithdrawal() throws Exception {
+            UUID plan = plan(LEAD, "Release 6.2");
+            setPlanStatus(LEAD, plan, "IN_REVIEW");
+            UUID review = UUID.fromString(onlyReview(LEAD, "PLAN", plan).get("id").asText());
+            UUID assignment = assignmentId(assign(LEAD, review, ENGINEER, null));
+            setPlanStatus(LEAD, plan, "APPROVED");
+
+            MvcResult result = unassign(LEAD, review, assignment);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(409);
+            assertThat(assignmentCount(review)).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("deleting a team takes its outstanding requests with it, and nothing else")
+        void deletingATeamCascadesOntoItsRequests() throws Exception {
+            UUID plan = plan(LEAD, "Release 6.3");
+            setPlanStatus(LEAD, plan, "IN_REVIEW");
+            UUID review = UUID.fromString(onlyReview(LEAD, "PLAN", plan).get("id").asText());
+            assign(LEAD, review, null, ACME_QA_TEAM);
+            assign(LEAD, review, ENGINEER, null);
+            assertThat(assignmentCount(review)).isEqualTo(2);
+
+            deleteTeamRow(ACME_QA_TEAM);
+
+            assertThat(assignmentCount(review))
+                    .as("""
+                            V25's ON DELETE CASCADE, and the decision §71's 409 is deliberately \
+                            NOT extended to: what is lost is a request, not authority, and the \
+                            review stays reviewable by exactly the same people. The person asked \
+                            individually is untouched.""")
+                    .isEqualTo(1);
+            assertThat(onlyReview(LEAD, "PLAN", plan).get("assignees")).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("the request and the verdict are two lists, and the panel reads both")
+        void askedAndSpokeAreServedSeparately() throws Exception {
+            UUID review = openPlanReview();
+            assign(LEAD, review, ENGINEER, null);
+
+            MvcResult result = participate(ENGINEER, review, "LGTM", "Looks right");
+
+            assertThat(body(result).get("assignees")).hasSize(1);
+            assertThat(body(result).get("participations")).hasSize(1);
+            assertThat(body(result).get("assignees").get(0).get("user").get("id").asText())
+                    .as("the same person in both, which is what the workflow working looks like")
+                    .isEqualTo(body(result).get("participations").get(0)
+                            .get("user").get("id").asText());
         }
     }
 
@@ -1507,6 +1834,43 @@ class ReviewEndpointTest extends IntegrationTestBase {
                 .andReturn();
     }
 
+    private MvcResult assign(UUID userId, UUID reviewId, UUID assigneeId, UUID teamId)
+            throws Exception {
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("userId", assigneeId);
+        payload.put("teamId", teamId);
+
+        return mvc.perform(MockMvcRequestBuilders
+                        .post("/api/v1/projects/" + ACME_BANKING + "/reviews/" + reviewId
+                                + "/assignees")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, ACME))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(payload)))
+                .andReturn();
+    }
+
+    private MvcResult unassign(UUID userId, UUID reviewId, UUID assignmentId) throws Exception {
+        return mvc.perform(MockMvcRequestBuilders
+                        .delete("/api/v1/projects/" + ACME_BANKING + "/reviews/" + reviewId
+                                + "/assignees/" + assignmentId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, ACME))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andReturn();
+    }
+
+    /** The id of the request a 201 just created — the newest, the render being oldest-first. */
+    private UUID assignmentId(MvcResult created) throws Exception {
+        assertThat(created.getResponse().getStatus())
+                .as("the fixture depends on this write succeeding; %s",
+                        created.getResponse().getContentAsString())
+                .isEqualTo(201);
+
+        JsonNode asked = body(created).get("assignees");
+        return UUID.fromString(asked.get(asked.size() - 1).get("id").asText());
+    }
+
     private MvcResult resolve(UUID userId, UUID reviewId, UUID commentId, boolean resolved)
             throws Exception {
 
@@ -1615,6 +1979,22 @@ class ReviewEndpointTest extends IntegrationTestBase {
     private void seedProject(UUID id, UUID companyId, String key, String name, Instant now) {
         if (projects.findById(id).isEmpty()) {
             projects.save(Project.create(id, companyId, key, name, null, now));
+        }
+    }
+
+    /**
+     * Creates the team once and leaves it alone thereafter.
+     *
+     * <p>Not {@code save} unconditionally: {@code team} is not in {@link #clearMutableRows}, so the
+     * row survives between tests, and re-saving a detached {@link Team} whose {@code @Version} is
+     * still 0 against a row Hibernate has already bumped is a {@code StaleObjectStateException} —
+     * which reds not this test but every test in the class, from {@code @BeforeEach}. One of the
+     * assignment tests also deletes the team on purpose, so the absent case is real rather than
+     * defensive.
+     */
+    private void seedTeam(UUID teamId, UUID companyId, Instant now) {
+        if (teams.findScopedById(teamId).isEmpty()) {
+            teams.saveAndFlush(Team.create(teamId, companyId, "QA", null, null, now));
         }
     }
 
@@ -1771,6 +2151,29 @@ class ReviewEndpointTest extends IntegrationTestBase {
                 SELECT count(*) FROM review_comment
                  WHERE review_id = CAST(? AS uuid) AND resolved_at IS NOT NULL
                 """, reviewId.toString());
+    }
+
+    /** Read past the API, so a refusal that answered 400 and wrote anyway is visible. */
+    private int assignmentCount(UUID reviewId) throws SQLException {
+        return count(
+                "SELECT count(*) FROM review_assignment WHERE review_id = CAST(? AS uuid)",
+                reviewId.toString());
+    }
+
+    /**
+     * Deletes a team row directly, past {@code TeamWriteService}.
+     *
+     * <p>The endpoint refuses a team holding role grants (§71) and this test is about what happens
+     * to a team that is legitimately deleted, so driving it through the API would be testing the
+     * refusal rather than the cascade. The cascade is the database's, which is where it is asserted.
+     */
+    private void deleteTeamRow(UUID teamId) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+             var statement = connection.prepareStatement(
+                     "DELETE FROM team WHERE id = CAST(? AS uuid)")) {
+            statement.setString(1, teamId.toString());
+            statement.executeUpdate();
+        }
     }
 
     private int participationCount(UUID reviewId) throws SQLException {

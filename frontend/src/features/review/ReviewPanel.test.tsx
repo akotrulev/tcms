@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
@@ -57,6 +57,7 @@ function review(overrides: Partial<Review> = {}): Review {
     createdAt: '2026-07-29T11:20:00Z',
     approvedBy: null,
     approvedAt: null,
+    assignees: [],
     participations: [],
     comments: [],
     ...overrides,
@@ -107,13 +108,41 @@ function mockReads(
   reviews: Review[],
   keys: string[],
   projectSettings: Record<string, unknown> = settings(),
+  /**
+   * What the assignment picker is offered.
+   *
+   * Defaulted to empty rather than to a fixture, so every test that does not care about the picker
+   * keeps a picker with nothing in it — which is the state the panel must survive, and which the
+   * unmatched-path `[]` arm was already producing before this parameter existed.
+   */
+  directory: { members?: unknown[]; teams?: unknown[] } = {},
 ) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(keys)
     if (path.includes('/settings')) return projectSettings
     if (path.includes('/reviews')) return reviews
+    if (path.includes('/members')) return directory.members ?? []
+    if (path.startsWith('/teams')) return directory.teams ?? []
     return []
   }) as never)
+}
+
+/**
+ * Waits until the assignment gate has resolved **true** — the barrier the picker tests need.
+ *
+ * `useProjectMembers` is called with the gate's own `allowed` as its `enabled`, so the request for
+ * `/members` firing at all *is* the proof the permission came back held. Written this way because
+ * the obvious barrier is wrong: the select's test id sits on MUI's display `div`, which is not a
+ * form element, so `toBeEnabled()` on it is satisfied immediately and the click lands on a control
+ * that is still disabled — §66's "passes against the pending state" in this file's own tests, which
+ * is exactly how these four failed on the first run.
+ */
+async function pickerReady() {
+  await waitFor(() =>
+    expect(
+      vi.mocked(api.get).mock.calls.some((call) => String(call[0]).includes('/members')),
+    ).toBe(true),
+  )
 }
 
 function renderPanel(currentVersionNo?: number, subjectType: 'PLAN' | 'CASE' = 'PLAN') {
@@ -428,5 +457,203 @@ describe('ReviewPanel — the record, and the sign-off it must not offer', () =>
     renderPanel()
 
     expect(await screen.findByTestId('Review.Thread.Root')).toHaveTextContent('A former member')
+  })
+
+  /*
+    Reviewer assignment — §6g's "assign a user or a team", and the half of the panel that says what
+    is OUTSTANDING rather than what has happened. The risk here is the mirror of the one above: a
+    panel that renders who was asked is one merge away from a panel that renders being asked and
+    having spoken as the same fact, at which point an unanswered request is indistinguishable from
+    somebody who was never asked — which is exactly the row a lead opens this panel to find.
+  */
+
+  it('renders a person, a team and an offboarded assignee as three requests', async () => {
+    mockReads(
+      [
+        review({
+          assignees: [
+            { id: 'a1', user: person('Marco'), team: null, assignedBy: person('Ana'), assignedAt: '2026-07-29T11:22:00Z' },
+            { id: 'a2', user: null, team: { id: 't1', name: 'QA Chapter' }, assignedBy: person('Ana'), assignedAt: '2026-07-29T11:22:00Z' },
+            { id: 'a3', user: null, team: null, assignedBy: null, assignedAt: '2026-07-29T11:23:00Z' },
+          ],
+        }),
+      ],
+      ['plan:review'],
+    )
+    renderPanel()
+
+    const chips = await screen.findAllByTestId('Review.Assignee')
+    expect(chips).toHaveLength(3)
+    expect(chips[0]).toHaveTextContent('Marco')
+    expect(chips[1]).toHaveTextContent('QA Chapter')
+    // Both null is a real row — the person asked has since been offboarded — and the request
+    // stands. Dropping it would hide the one request nobody can discharge.
+    expect(chips[2]).toHaveTextContent('A former member')
+  })
+
+  it('shows a request nobody has answered beside an empty verdict trail', async () => {
+    mockReads(
+      [
+        review({
+          assignees: [
+            { id: 'a1', user: person('Marco'), team: null, assignedBy: person('Ana'), assignedAt: '2026-07-29T11:22:00Z' },
+          ],
+          participations: [],
+        }),
+      ],
+      ['plan:review'],
+    )
+    renderPanel()
+
+    // The two lists are separate on purpose. Merged, this row would render as "Marco, no verdict",
+    // which is also what somebody who was never asked looks like.
+    expect(await screen.findByTestId('Review.Assignees')).toHaveTextContent('Marco')
+    expect(screen.getByTestId('Review.Trail.Empty')).toBeInTheDocument()
+  })
+
+  it('offers no way to ask or to withdraw without the review key', async () => {
+    mockReads(
+      [
+        review({
+          assignees: [
+            { id: 'a1', user: person('Marco'), team: null, assignedBy: person('Ana'), assignedAt: '2026-07-29T11:22:00Z' },
+          ],
+        }),
+      ],
+      // case:comment and NOT plan:review — the Viewer, the persona the three tiers exist for. The
+      // list stays readable; filling somebody else's queue is the reviewing tier's act.
+      ['case:comment'],
+    )
+    renderPanel()
+
+    await waitFor(() => expect(screen.getByTestId('Review.Assign.Submit')).toBeDisabled())
+    expect(screen.getByTestId('Review.Assignee')).toHaveTextContent('Marco')
+    expect(screen.queryByTestId('Review.Assignee.Remove')).toBeNull()
+  })
+
+  it('asks the selected person, and sends a userId rather than a teamId', async () => {
+    mockReads([review()], ['plan:review'], settings(), {
+      members: [person('Marco'), person('Bo')],
+      teams: [{ id: 't1', name: 'QA Chapter' }],
+    })
+    const post = vi.spyOn(api, 'post').mockResolvedValue(review() as never)
+    renderPanel()
+
+    await pickerReady()
+    await userEvent.click(screen.getByTestId('Review.Assign.Choice'))
+    await userEvent.click(await screen.findByRole('option', { name: 'Marco' }))
+    await userEvent.click(screen.getByTestId('Review.Assign.Submit'))
+
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith(
+        `/projects/${PROJECT}/reviews/r1/assignees`,
+        { userId: 'Marco-id', teamId: null },
+      ),
+    )
+  })
+
+  it('asks the selected team, and sends a teamId rather than a userId', async () => {
+    mockReads([review()], ['plan:review'], settings(), {
+      members: [person('Marco')],
+      teams: [{ id: 't1', name: 'QA Chapter' }],
+    })
+    const post = vi.spyOn(api, 'post').mockResolvedValue(review() as never)
+    renderPanel()
+
+    await pickerReady()
+    await userEvent.click(screen.getByTestId('Review.Assign.Choice'))
+    await userEvent.click(await screen.findByRole('option', { name: 'QA Chapter (team)' }))
+    await userEvent.click(screen.getByTestId('Review.Assign.Submit'))
+
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith(
+        `/projects/${PROJECT}/reviews/r1/assignees`,
+        { userId: null, teamId: 't1' },
+      ),
+    )
+  })
+
+  it('offers neither the submitter nor anybody already asked', async () => {
+    mockReads(
+      [
+        review({
+          // Ana submitted it; Marco has already been asked.
+          assignees: [
+            { id: 'a1', user: person('Marco'), team: null, assignedBy: person('Ana'), assignedAt: '2026-07-29T11:22:00Z' },
+          ],
+        }),
+      ],
+      ['plan:review'],
+      settings(),
+      { members: [person('Ana'), person('Marco'), person('Bo')], teams: [] },
+    )
+    renderPanel()
+
+    await pickerReady()
+    await userEvent.click(screen.getByTestId('Review.Assign.Choice'))
+
+    // Ana is the server's field error — their own peer review would not count towards the
+    // required minimum, so offering them is offering a request that can never be discharged.
+    // Marco is already asked, and asking again writes nothing.
+    expect(await screen.findByRole('option', { name: 'Bo' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Ana' })).toBeNull()
+    expect(screen.queryByRole('option', { name: 'Marco' })).toBeNull()
+  })
+
+  it('withdraws a request through the assignment id, not the assignee id', async () => {
+    mockReads(
+      [
+        review({
+          assignees: [
+            { id: 'a1', user: person('Marco'), team: null, assignedBy: person('Ana'), assignedAt: '2026-07-29T11:22:00Z' },
+          ],
+        }),
+      ],
+      ['plan:review'],
+    )
+    const del = vi.spyOn(api, 'del').mockResolvedValue(review() as never)
+    renderPanel()
+
+    // The same barrier the picker tests use, and it applies here because the chip's gate asks the
+    // same key on the same project: the delete affordance exists only once `useCan` resolves TRUE,
+    // and a `findBy` on the icon alone times out against the pending state rather than waiting for
+    // it — which is how this test failed on its first run.
+    await pickerReady()
+    const chip = screen.getByTestId('Review.Assignee')
+    await userEvent.click(within(chip).getByTestId('Review.Assignee.Remove'))
+
+    // `a1`, not `Marco-id`: one person may be asked to review several artifacts, so an
+    // assignee-keyed delete could name a pairing that never existed.
+    await waitFor(() =>
+      expect(del).toHaveBeenCalledWith(`/projects/${PROJECT}/reviews/r1/assignees/a1`),
+    )
+  })
+
+  it('keeps a closed review’s requests readable and offers no picker', async () => {
+    mockReads(
+      [
+        review({
+          state: 'APPROVED',
+          assignees: [
+            { id: 'a1', user: person('Marco'), team: null, assignedBy: person('Ana'), assignedAt: '2026-07-29T11:22:00Z' },
+          ],
+        }),
+      ],
+      ['plan:review'],
+    )
+    renderPanel()
+
+    expect(await screen.findByTestId('Review.Assignee')).toHaveTextContent('Marco')
+    expect(screen.queryByTestId('Review.Assign.Submit')).toBeNull()
+    // Nor a withdrawal: the server answers 409, so the affordance would only ever be a refusal.
+    expect(screen.queryByTestId('Review.Assignee.Remove')).toBeNull()
+  })
+
+  it('drops the section entirely on a closed review nobody was asked to look at', async () => {
+    mockReads([review({ state: 'REJECTED', assignees: [] })], ['plan:review'])
+    renderPanel()
+
+    await screen.findByTestId('Review.Current')
+    expect(screen.queryByTestId('Review.Assignees')).toBeNull()
   })
 })

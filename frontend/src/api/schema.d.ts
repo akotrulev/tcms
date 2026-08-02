@@ -903,6 +903,90 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/reviews/{reviewId}/assignees": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                reviewId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask a person or a team to review
+         * @description §6g's *"Reviewers — assign a user **or** a team; any member of the team can action
+         *     it"*, and the last unbuilt half of its apparatus. Until this endpoint the record
+         *     held who **spoke** (`participations`) and never who was **asked**, so the workflow
+         *     had no inbox and §6l's board could not draw a card for a request nothing stored.
+         *
+         *     **This costs `*:review`, the subject's own key.** The roles spec is explicit that
+         *     there is *no key* for review requests, so nothing new is seeded and the question is
+         *     which existing one this is. Asking somebody to look at an artifact is a statement
+         *     about the review's progress — §79's argument for resolving a thread. Both cheaper
+         *     readings were refused: `case:comment` would let a Viewer, often the client
+         *     themselves, put work on a contributor's queue, which is the one thing the bottom
+         *     tier is defined not to do; `*:approve` would confine the request to the people whose
+         *     sign-off it exists to *prepare*.
+         *
+         *     **Re-asking somebody already asked writes nothing and answers 201.** Re-stamping
+         *     would hand `assignedBy` to whoever clicked last, so the field kept to record who
+         *     asked would name the second person to agree — §79's resolution defect, in the one
+         *     place it would recur.
+         *
+         *     **An assignment is a worklist entry, not part of the audit record.** That record is
+         *     the review and its participations. Hence the hard delete below, and hence a deleted
+         *     team taking its outstanding requests with it rather than being refused the way a
+         *     team holding role grants is (§71): what cascades is a request, not authority, and
+         *     the review stays visible, reviewable and approvable by exactly the same people.
+         *
+         *     `409` once the review has ended, on the same terms as every other write here.
+         */
+        post: operations["assignReviewer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/reviews/{reviewId}/assignees/{assignmentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                reviewId: string;
+                assignmentId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Withdraw a request to review
+         * @description A **hard delete**, and that is the decision: an assignment is a worklist entry, so
+         *     asking the wrong person and correcting it should leave nothing behind — a trail of
+         *     retracted requests reads as a history of suspicion. A comment is the same question
+         *     answered the other way for the opposite reason: a remark is something somebody
+         *     *said*, a request is something somebody was *asked*.
+         *
+         *     Costs the same `*:review` the assignment did. There is deliberately **no author
+         *     arm** — `evidence:delete`'s "the owner, or the tier" shape — because the only caller
+         *     it would add is somebody withdrawing a request they made while lacking `*:review`,
+         *     and nobody can be in that state: making the request cost the key.
+         *
+         *     `404` when `assignmentId` names nothing in this review, bodiless and identical to
+         *     the review's own 404 so the pair cannot be used to probe which ids exist.
+         */
+        delete: operations["unassignReviewer"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/reviews/{reviewId}/comments": {
         parameters: {
             query?: never;
@@ -4250,6 +4334,13 @@ export interface components {
             approvedBy?: components["schemas"]["UserRef"] | null;
             /** Format: date-time */
             approvedAt?: string | null;
+            /**
+             * @description §6g's reviewer assignment — who was **asked**, oldest request first. Distinct from
+             *     `participations`, which is who *spoke*: a name in one and not the other is a review
+             *     nobody has got to, which is the comparison a lead reads this panel for. Required and
+             *     may be empty, for the reason `participations` is.
+             */
+            assignees: components["schemas"]["ReviewAssignee"][];
             participations: components["schemas"]["ReviewParticipation"][];
             /**
              * @description §6g's threads — **roots only**, each carrying its own replies. Required and may be
@@ -4257,6 +4348,54 @@ export interface components {
              *     commented" indistinguishable from "the server did not send them".
              */
             comments: components["schemas"]["ReviewComment"][];
+        };
+        ReviewAssignee: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description The person asked, or null when `team` names a team instead. Also null — with `team`
+             *     null too — for a request whose account no longer resolves, which the client renders
+             *     as a request nobody can action rather than dropping (§66).
+             */
+            user?: components["schemas"]["UserRef"] | null;
+            /**
+             * @description The team asked. §6g: *"any member of the team can action it"* — and the members are
+             *     deliberately **not** expanded here. A panel that listed them would freeze the
+             *     membership as it was when the page loaded and invite the reader to treat it as the
+             *     list of people who owe a review.
+             */
+            team?: components["schemas"]["TeamRef"] | null;
+            /** @description Null for an unattributable request, as every actor field here may be (§66). */
+            assignedBy?: components["schemas"]["UserRef"] | null;
+            /** Format: date-time */
+            assignedAt: string;
+        };
+        TeamRef: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
+        ReviewAssignmentInput: {
+            /**
+             * Format: uuid
+             * @description One person, who must be able to **see this project** — not merely be a member of the
+             *     company. A colleague with no grant here cannot open the artifact, so asking them
+             *     produces a request that sits on their list for ever; the bar is the same
+             *     `project:read` question the gate asks of the caller, so the set of people who can be
+             *     asked is exactly the set the picker lists.
+             *
+             *     **The submitter is refused.** Their own peer review does not count towards
+             *     `requiredPeerReviews` — the server already skips it, on the ground that a review by
+             *     the person who asked for it is not a second opinion — so the request could never be
+             *     discharged. This is who *submitted* it, not who wrote the artifact: on a case written
+             *     by an engineer and put forward by their lead, the engineer is a fine reviewer.
+             */
+            userId: string | null;
+            /**
+             * Format: uuid
+             * @description One team in this company, any member of which may action the request (§6g).
+             */
+            teamId: string | null;
         };
         ReviewComment: {
             /** Format: uuid */
@@ -6219,6 +6358,75 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    assignReviewer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                reviewId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewAssignmentInput"];
+            };
+        };
+        responses: {
+            /**
+             * @description The whole review, re-rendered — the participations endpoint's decision and for its
+             *     reason. No `Location`: the URL it would name serves no `GET`, and one pointing at a
+             *     route that answers 405 is worse than none.
+             */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Review"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    unassignReviewer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                reviewId: string;
+                assignmentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description The whole review, re-rendered. Not `204`: the panel renders a review as one thing
+             *     and every other write on it re-serves that whole thing, so a bodiless answer would
+             *     make this the one action after which the client's copy is stale — and it would
+             *     refetch immediately, a second round trip for what this response already knows.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Review"];
+                };
+            };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];

@@ -3,7 +3,7 @@
 # fe-react — orientation cache (TCMS)
 
 **Last verified:** 2026-08-02
-**Baseline commit:** `e76bd9f`
+**Baseline commit:** `a40f347`
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
 `frontend/vite.config.ts`
 
@@ -25,7 +25,7 @@
 - **`npm run build` is THE gate** (`tsc -b` + vite build). **Do not trust `tsc --noEmit`** — it has
   reported 0 errors while the build failed with nine (working agreement). `#confirmed`
 - `npm run lint` — oxlint, must stay at **0 warnings**; it prints nothing when clean.
-- `npm run test:run` — Vitest + RTL. **627/627** at this baseline (§79). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
+- `npm run test:run` — Vitest + RTL. **640/640** at this baseline (§80). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
 - `npm run gen:api` — regenerate `src/api/schema.d.ts` after **any** `openapi.yaml` change. Runs
   through `npx` on purpose (the scaffold pins TS 6, the tool peer-requires 5.x); do not "fix" it.
 - **Live mode:** `VITE_API_MODE=live` in `.env.local` proxies `/api` to `localhost:8080`.
@@ -56,7 +56,28 @@
   A **reply carries no Reply button** — the server refuses a reply to a reply, so rendering one would
   be an affordance the product does not have — and a **closed review** renders the conversation with
   no write affordance at all. `#confirmed`
-- **A fixture factory must NOT end `as <ContractType>` (§79).** `ReviewPanel.test.tsx`'s did, so
+- **`ReviewPanel` renders ASKED and SPOKE as two lists and they must not be merged (§80).**
+  `assignees` is who was *asked* (§6g's reviewer assignment); `participations` is who *spoke*.
+  Merging them is wrong in both directions: somebody may give a verdict without being asked, and a
+  request nobody has answered — the row a lead opens this panel to find — would render as "a person
+  with no verdict", which is also what somebody never asked looks like. Both the chips and the picker
+  ask the subject's `REVIEW_PERMISSION`, **not** `case:comment`: the bottom tier does not fill other
+  people's queues. The picker is built from `useProjectMembers`, a **subset** of the server's rule
+  (a Company Admin is assignable and not offered) — narrower never produces a 400, wider would be a
+  form a user fills in correctly and cannot submit. `useAssignReviewer` takes
+  `{userId} | {teamId}` as a **union**, so the server's neither/both field error is unrepresentable.
+  `#confirmed`
+- **A barrier on a MUI Select's test id is NOT a barrier (§80).** `Review.Assign.Choice` sits on the
+  Select's **display `div`** via `selectTestId`, which is not a form element — so
+  `expect(...).toBeEnabled()` passes immediately and the click lands while `useCan` is still pending
+  and the control still disabled. Four tests failed this way on their first run (§66's finding, §71's
+  hidden-input trap, one line). **Barrier on something derived from the resolved gate instead**:
+  `useProjectMembers` is `enabled` on the gate's `allowed`, so the `/members` request firing at all
+  is the proof. Same family: MUI's default Chip delete icon has **no identifier**, so pass
+  `deleteIcon` explicitly when a test must click it. `#confirmed`
+- **A fixture factory must NOT end `as <ContractType>` (§79, and it paid off in §80).** Adding
+  `assignees` to `Review` was **one build error in one place**, where §79's cast turned eleven tests
+  red at runtime with zero type errors. `ReviewPanel.test.tsx`'s did, so
   adding a required field to `Review` reddened all eleven of its tests **at runtime** with **zero
   type errors**. §65's finding (five files mocking `/me/permissions` through `as never`) in a second
   file. Declare the return type and let the object be checked, so the next contract change is one
@@ -180,6 +201,20 @@
 
 ## Session log
 
+- 2026-08-02 · EXTEND · Reviewer assignment (§80) — §6g's *"assign a user or a team"* lands in
+  `ReviewPanel` as an **Asked to review** section above the verdict trail. New: `useAssignReviewer`,
+  `useUnassignReviewer`, `Assignees`/`AssignForm`, `ReviewAssignee` + `TeamRef` types, the mock's
+  `assignReviewer`/`unassignReviewer` and two handlers, and three fixture requests on the demo plan's
+  open review (a person who also spoke, a **team**, and a person who has said nothing) beside a review
+  with **none** — §72's rule, both shapes present. **Asked and spoke are two lists**; see the seam
+  above. **The findings were both in the tests**: four failed because `toBeEnabled()` on a MUI Select
+  display div is satisfied while the gate is pending, and a fifth because MUI's default Chip delete
+  icon carries no test id. A doc comment also claimed the picker filtered the submitter when it did
+  not — implemented rather than deleted, because a picker that can produce a 400 is the one thing it
+  must not be. 9 tests written (20 → 29 in that file), **640/640** overall — the other 4 are §70's
+  data-driven contract checks generating cases for the two new `api.*` call sites unattended.
+  **0 mutations run inline**, 14 browser rows queued (**rows 3 and 4 are live-only and are the ones
+  the slice turns on**).
 - 2026-08-02 · EXTEND · Review comments (§79) — §6g's threads land in `ReviewPanel`. New:
   `useAddReviewComment`, `useSetReviewCommentResolution`, `Threads`/`Thread`/`CommentBody`/
   `CommentForm` in `ReviewPanel.tsx`, `ReviewComment` + `ReviewCommentInput` types, the mock's

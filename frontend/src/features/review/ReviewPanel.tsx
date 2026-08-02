@@ -1,27 +1,46 @@
 import { useState } from 'react';
-import { Alert, Box, Button, Chip, Divider, Stack, TextField, Typography } from '@mui/material';
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  Divider,
+  MenuItem,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material';
+import CancelIcon from '@mui/icons-material/Cancel';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlineOutlined';
+import GroupOutlinedIcon from '@mui/icons-material/GroupOutlined';
+import PersonOutlineIcon from '@mui/icons-material/PersonOutlineOutlined';
 import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
 import type {
   PermissionKey,
   ProjectSettings,
   Review,
+  ReviewAssignee,
   ReviewComment,
   ReviewParticipation,
   ReviewSubjectType,
 } from '../../api/types';
 import {
   useAddReviewComment,
+  useAssignReviewer,
+  useProjectMembers,
   useProjectSettings,
   useRecordReviewVerdict,
   useReviews,
   useSetReviewCommentResolution,
+  useTeams,
+  useUnassignReviewer,
 } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
 import { describeError } from '../../lib/describeError';
 import { formatDateTime } from '../../lib/format';
+import { selectTestId } from '../../lib/muiTestIds';
 import {
   reviewStateColors,
   reviewStateLabels,
@@ -205,6 +224,16 @@ function CurrentReview({
         </Alert>
       )}
 
+      <Assignees
+        projectId={projectId}
+        subjectType={subjectType}
+        subjectId={subjectId}
+        reviewId={review.id}
+        assignees={review.assignees}
+        submittedById={review.submittedBy?.id}
+        isOpen={isOpen}
+      />
+
       <Trail participations={review.participations} />
 
       <Threads
@@ -228,6 +257,235 @@ function CurrentReview({
             />
           )}
         </PermissionGate>
+      )}
+    </Stack>
+  );
+}
+
+/**
+ * Who was **asked** — §6g's reviewer assignment, and the half of the panel that says what is
+ * outstanding rather than what has happened.
+ *
+ * ### Asked and spoke are two lists, deliberately not merged
+ *
+ * The obvious tidy-up is one list of people with a verdict beside each. It is wrong in both
+ * directions: somebody may give a verdict without ever being asked (§6g's peer review is open to
+ * the tier, not to a nominated few), and a request nobody has answered is precisely the row a lead
+ * opens this panel to find. Merging them would render the second as a person with no verdict — the
+ * same shape as somebody who was never asked at all.
+ *
+ * ### The picker offers project members and teams, and cannot offer a refusal
+ *
+ * `useProjectMembers` is the server's own "people who can be given work in this project" list, and
+ * the assignment endpoint validates against project visibility — of which that list is a **subset**
+ * (a Company Admin sees the project without holding a grant on it, so they are assignable and not
+ * offered). A picker narrower than the rule is a picker that never produces a 400; the reverse
+ * would be a form a user fills in correctly and cannot submit.
+ *
+ * The submitter is filtered out here as well as refused there, for the same reason and with the
+ * server still owning it: their own peer review would not count towards the required minimum, so
+ * offering them is offering a request that can never be discharged.
+ */
+function Assignees({
+  projectId,
+  subjectType,
+  subjectId,
+  reviewId,
+  assignees,
+  submittedById,
+  isOpen,
+}: {
+  projectId: string;
+  subjectType: ReviewSubjectType;
+  subjectId: string;
+  reviewId: string;
+  assignees: ReviewAssignee[];
+  /** Filtered out of the picker — see this component's header. Absent when unattributable. */
+  submittedById: string | undefined;
+  isOpen: boolean;
+}) {
+  const unassign = useUnassignReviewer(projectId, subjectType, subjectId);
+
+  if (assignees.length === 0 && !isOpen) {
+    // A closed review nobody was asked to look at gets no section — nothing to show and nothing
+    // that can be added, which is `Threads`' rule and §6g's "no extra UI" applied one level in.
+    return null;
+  }
+
+  return (
+    <Stack sx={{ gap: 1 }} data-testid="Review.Assignees">
+      <Typography variant="subtitle2">Asked to review</Typography>
+
+      {assignees.length === 0 ? (
+        <Typography variant="body2" color="text.secondary" data-testid="Review.Assignees.Empty">
+          Nobody has been asked yet. Anyone with review rights can still give a verdict.
+        </Typography>
+      ) : (
+        <Stack direction="row" sx={{ gap: 0.75, flexWrap: 'wrap' }}>
+          {assignees.map((assignee) => (
+            <PermissionGate
+              key={assignee.id}
+              projectId={projectId}
+              permission={REVIEW_PERMISSION[subjectType]}
+            >
+              {({ allowed }) => (
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  icon={assignee.team ? <GroupOutlinedIcon /> : <PersonOutlineIcon />}
+                  /*
+                    Both null is a real row: the person asked has been offboarded since, and the
+                    request stands. Dropping the chip would hide a request nobody can discharge,
+                    which is the one state a lead most needs to see (§66's rule, from the render
+                    side).
+                  */
+                  label={
+                    assignee.team?.name ?? assignee.user?.displayName ?? 'A former member'
+                  }
+                  data-testid="Review.Assignee"
+                  /*
+                    An explicit delete icon, only so it can carry a test id. MUI's default one is
+                    an internal component with no identifier of its own, so a test can find the
+                    chip and have nothing to click — the same class of miss as §71's hidden native
+                    input, discovered here the same way.
+                  */
+                  deleteIcon={<CancelIcon data-testid="Review.Assignee.Remove" />}
+                  onDelete={
+                    isOpen && allowed
+                      ? () => unassign.mutate({ reviewId, assignmentId: assignee.id })
+                      : undefined
+                  }
+                />
+              )}
+            </PermissionGate>
+          ))}
+        </Stack>
+      )}
+
+      {isOpen && (
+        <PermissionGate projectId={projectId} permission={REVIEW_PERMISSION[subjectType]}>
+          {({ allowed }) => (
+            <AssignForm
+              projectId={projectId}
+              subjectType={subjectType}
+              subjectId={subjectId}
+              reviewId={reviewId}
+              assignees={assignees}
+              submittedById={submittedById}
+              allowed={allowed}
+            />
+          )}
+        </PermissionGate>
+      )}
+
+      {unassign.isError && (
+        <Alert severity="error" data-testid="Review.Assignees.Error">
+          {describeError(unassign.error).body}
+        </Alert>
+      )}
+    </Stack>
+  );
+}
+
+/**
+ * The picker. One select of people and teams, and one button.
+ *
+ * The value is prefixed (`user:` / `team:`) rather than being two selects or a select plus a radio:
+ * the request names exactly one of the two, so a single control is the shape that cannot express
+ * "both" or "neither" — the hook's union type, at the level of the widget.
+ */
+function AssignForm({
+  projectId,
+  subjectType,
+  subjectId,
+  reviewId,
+  assignees,
+  submittedById,
+  allowed,
+}: {
+  projectId: string;
+  subjectType: ReviewSubjectType;
+  subjectId: string;
+  reviewId: string;
+  assignees: ReviewAssignee[];
+  submittedById: string | undefined;
+  allowed: boolean;
+}) {
+  const [choice, setChoice] = useState('');
+  const assign = useAssignReviewer(projectId, subjectType, subjectId);
+  const members = useProjectMembers(projectId, allowed);
+  const teams = useTeams();
+
+  // Already asked, so not offered again. The server answers 201 and writes nothing either way, so
+  // this is about not showing a name whose selection does visibly nothing.
+  const askedUsers = new Set(assignees.map((row) => row.user?.id).filter(Boolean));
+  const askedTeams = new Set(assignees.map((row) => row.team?.id).filter(Boolean));
+
+  const people = (members.data ?? []).filter(
+    // The submitter is the server's field error, not this filter's rule — offered and then
+    // refused would be a picker that produces a 400, which is the one thing it must not do.
+    (person) => !askedUsers.has(person.id) && person.id !== submittedById,
+  );
+  const groups = (teams.data ?? []).filter((team) => !askedTeams.has(team.id));
+
+  return (
+    <Stack direction="row" sx={{ gap: 1, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      <TextField
+        select
+        size="small"
+        label="Ask someone to review"
+        value={choice}
+        disabled={!allowed || assign.isPending}
+        onChange={(event) => setChoice(event.target.value)}
+        sx={{ minWidth: 240 }}
+        /*
+          On the Select's DISPLAY element, not `htmlInput`. A `TextField select` renders a hidden
+          native input plus the div a user actually clicks, so an id on the former is findable and
+          `pointer-events: none` — §71's trap, which fired again there despite the helper existing,
+          because the file it was copied from predates it.
+        */
+        slotProps={{ select: { SelectDisplayProps: selectTestId('Review.Assign.Choice') } }}
+      >
+        {people.map((person) => (
+          <MenuItem key={person.id} value={`user:${person.id}`}>
+            {person.displayName}
+          </MenuItem>
+        ))}
+        {groups.map((team) => (
+          <MenuItem key={team.id} value={`team:${team.id}`}>
+            {team.name} (team)
+          </MenuItem>
+        ))}
+      </TextField>
+      <Button
+        variant="outlined"
+        size="small"
+        sx={{ mt: 0.5 }}
+        disabled={!allowed || assign.isPending || !choice}
+        onClick={() =>
+          assign.mutate(
+            {
+              reviewId,
+              assignee: choice.startsWith('team:')
+                ? { teamId: choice.slice('team:'.length) }
+                : { userId: choice.slice('user:'.length) },
+            },
+            { onSuccess: () => setChoice('') },
+          )
+        }
+        data-testid="Review.Assign.Submit"
+      >
+        Ask
+      </Button>
+      {assign.isError && (
+        <Alert severity="error" sx={{ flexBasis: '100%' }} data-testid="Review.Assign.Error">
+          {/*
+            Beside the picker, because every refusal this can reach is about *who* was named — the
+            submitter, somebody with no grant, a team that has gone — and a toast detached from the
+            select would name a person the reader can no longer see.
+          */}
+          {describeError(assign.error).body}
+        </Alert>
       )}
     </Stack>
   );
