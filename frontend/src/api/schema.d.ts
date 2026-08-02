@@ -2284,8 +2284,21 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
+                    /**
+                     * @description Omitted means `PROJECT` — the project's own register, which is the whole register on a
+                     *     project that runs no cycles.
+                     */
                     scope?: "PROJECT" | "PLAN";
-                    /** @description When scope=PLAN, project-scope artifacts are also returned, flagged inherited. */
+                    /**
+                     * @description Required when `scope=PLAN`, and a `400` without it: a plan register with no plan names
+                     *     no rows, and answering the project's register instead would silently show one thing
+                     *     under a heading promising another.
+                     *
+                     *     When present, project-scope artifacts are returned **as well**, flagged `inherited`
+                     *     (plan §6n) — a tester opening a cycle should find the environment guide without hunting
+                     *     for it. Rejected when `scope=PROJECT`, because nothing about a project's own register
+                     *     depends on a plan.
+                     */
                     planId?: string;
                 };
                 header?: never;
@@ -2305,6 +2318,7 @@ export interface paths {
                         "application/json": components["schemas"]["Artifact"][];
                     };
                 };
+                400: components["responses"]["BadRequest"];
                 401: components["responses"]["Unauthorized"];
                 404: components["responses"]["NotFound"];
             };
@@ -4105,6 +4119,15 @@ export interface components {
             /** @description Project-scope artifact shown read-only inside a plan (plan §6n). */
             inherited: boolean;
             url?: string | null;
+            /**
+             * Format: uuid
+             * @description Set when `kind` is `DOC_PAGE_REF`, so the register can link through to the page.
+             *
+             *     Without it the kind plan §6n steers people toward is the one kind the reader cannot
+             *     open — a row that says "Documentation page" and goes nowhere, while an `EXTERNAL_URL`
+             *     beside it is clickable. That asymmetry would push people back to pasting links.
+             */
+            docPageId?: string | null;
             filename?: string | null;
             sizeBytes?: number | null;
             updatedBy: components["schemas"]["UserRef"];

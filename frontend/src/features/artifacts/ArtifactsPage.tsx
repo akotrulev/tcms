@@ -1,8 +1,11 @@
-import { Box, Chip, MenuItem, Select, Stack, Table, TableBody, TableCell, TableHead, TableRow, Tooltip, Typography } from '@mui/material';
+import { Box, Button, Chip, MenuItem, Select, Stack, Table, TableBody, TableCell, TableHead, TableRow, Tooltip, Typography } from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link as RouterLink, useParams } from 'react-router-dom';
 import type { Artifact } from '../../api/types';
-import { useArtifacts, usePlans, useProject } from '../../api/queries';
+import { useArtifacts, useDocPages, usePlans, useProject } from '../../api/queries';
+import { PermissionGate } from '../../components/PermissionGate';
+import { RegisterArtifactDialog } from './ArtifactDialogs';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
@@ -21,10 +24,14 @@ import { ScrollX } from '../../components/ScrollX';
 export function ArtifactsPage() {
   const { projectId = '' } = useParams();
   const [planId, setPlanId] = useState<string>('');
+  const [registering, setRegistering] = useState(false);
 
   const project = useProject(projectId);
   const plans = usePlans(projectId);
   const artifacts = useArtifacts(projectId, planId ? 'PLAN' : 'PROJECT', planId || undefined);
+  // For the register dialog's documentation picker. Cheap and already cached whenever the reader
+  // has visited Documentation; the register is where a doc page gets promoted to a project asset.
+  const pages = useDocPages(projectId);
 
   return (
     <Box>
@@ -38,7 +45,8 @@ export function ArtifactsPage() {
         ]}
         subtitle="Strategy, environment, test data and sign-off documents. Plan artifacts sit alongside the project's, which they inherit."
         actions={
-          <Box sx={{ minWidth: 260 }}>
+          <Stack direction="row" sx={{ gap: 1, alignItems: 'center' }}>
+            <Box sx={{ minWidth: 260 }}>
             <Select
               size="small"
               fullWidth
@@ -55,9 +63,44 @@ export function ArtifactsPage() {
                 </MenuItem>
               ))}
             </Select>
-          </Box>
+            </Box>
+            {/*
+              Disabled-with-a-reason rather than hidden (§31), and the gate is honest only about
+              the half it can see: `artifact:edit` is keys-only on the wire, so a Test Engineer —
+              who holds it for plan scope alone — gets an ENABLED button here and a refusal on the
+              scope field if they choose the project. The dialog is written for that, and the
+              server answers that one 403 with a body so the message lands on the control.
+            */}
+            <PermissionGate projectId={projectId} permission="artifact:edit">
+              {({ allowed }) => (
+                <Button
+                  variant="contained"
+                  startIcon={<AddIcon />}
+                  disabled={!allowed}
+                  onClick={() => setRegistering(true)}
+                  data-testid="Artifacts.Register"
+                >
+                  Register
+                </Button>
+              )}
+            </PermissionGate>
+          </Stack>
         }
       />
+
+      {registering && (
+        <RegisterArtifactDialog
+          open
+          onClose={() => setRegistering(false)}
+          projectId={projectId}
+          plans={plans.data ?? []}
+          pages={pages.data ?? []}
+          // Continues what the reader was doing: viewing Release 1's register and pressing
+          // Register means Release 1, not "start again and tell us which cycle".
+          defaultPlanId={planId || undefined}
+          onRegistered={() => undefined}
+        />
+      )}
 
       <Panel testId="Artifacts.Panel" dense>
         <DataRegion
@@ -72,14 +115,25 @@ export function ArtifactsPage() {
               : 'Attach the test strategy, environment guide and test data this project depends on.',
           }}
         >
-          {(rows) => <ArtifactTable rows={rows} showInheritance={!!planId} />}
+          {(rows) => (
+            <ArtifactTable rows={rows} showInheritance={!!planId} projectId={projectId} />
+          )}
         </DataRegion>
       </Panel>
     </Box>
   );
 }
 
-function ArtifactTable({ rows, showInheritance }: { rows: Artifact[]; showInheritance: boolean }) {
+function ArtifactTable({
+  rows,
+  showInheritance,
+  projectId,
+}: {
+  rows: Artifact[];
+  showInheritance: boolean;
+  /** For the documentation link — the register is the only place a doc page is linked from. */
+  projectId: string;
+}) {
   // Grouped by category with a deterministic order inside each group. Category is how people
   // look for these ("where's the environment guide?"), not the upload date.
   const sorted = [...rows].sort(
@@ -111,7 +165,22 @@ function ArtifactTable({ rows, showInheritance }: { rows: Artifact[]; showInheri
               </TableCell>
               <TableCell>
                 <Stack direction="row" sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                  {artifact.kind === 'EXTERNAL_URL' && artifact.url ? (
+                  {/*
+                    A documentation reference links to the page. Without this the kind plan §6n
+                    steers people toward is the one kind the reader cannot open, while the external
+                    link beside it is clickable — an asymmetry that pushes people back to pasting
+                    URLs, which is the failure the register exists to prevent.
+                  */}
+                  {artifact.kind === 'DOC_PAGE_REF' && artifact.docPageId ? (
+                    <Box
+                      component={RouterLink}
+                      to={`/projects/${projectId}/docs/${artifact.docPageId}`}
+                      data-testid="Artifacts.Row.PageLink"
+                      sx={{ fontWeight: 500, fontSize: '0.8125rem' }}
+                    >
+                      {artifact.title}
+                    </Box>
+                  ) : artifact.kind === 'EXTERNAL_URL' && artifact.url ? (
                     <Box
                       component="a"
                       href={artifact.url}

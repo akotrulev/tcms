@@ -85,8 +85,25 @@ public class ArtifactWriteService {
         record NotFound() implements Outcome {
         }
 
-        /** Readable, and the permission the action needs is not held at this scope. */
+        /** Readable, and {@code artifact:edit} is not held here at all. Bodiless 403. */
         record Forbidden() implements Outcome {
+        }
+
+        /**
+         * Readable, {@code artifact:edit} <em>is</em> held — and not for the scope asked for.
+         *
+         * <p>A separate outcome from {@link Forbidden} because the client can act on it and cannot
+         * act on the other. §31's rule is that an action the server will refuse renders disabled
+         * with a reason rather than inviting a 403, and the SPA cannot honour that here: its
+         * permission model is keys-only, so {@code artifact:edit} reads as held and the control
+         * enables. Given that, the next best thing is a refusal that says which field was the
+         * problem, so the form can put the sentence on the scope selector instead of showing a bare
+         * "forbidden" for a form the user is one radio button away from submitting successfully.
+         *
+         * <p>This discloses nothing §6t protects. The caller already reads the project and already
+         * holds the permission; what they learn is the shape of their own grant.
+         */
+        record ForbiddenAtScope() implements Outcome {
         }
 
         /** Field name to messages, for the form to land on its inputs. */
@@ -119,7 +136,7 @@ public class ArtifactWriteService {
                     if (!rowScope.mayActOn(input.scope() == ArtifactScope.PLAN)) {
                         // The qualifier, applied. A Test Engineer reaching for PROJECT scope lands
                         // here; the same caller with PLAN scope does not.
-                        return new Outcome.Forbidden();
+                        return new Outcome.ForbiddenAtScope();
                     }
 
                     Instant now = clock.instant();

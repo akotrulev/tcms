@@ -2,7 +2,7 @@
 import { HttpResponse, delay, http } from 'msw';
 import type { Artifact, DocBlock, DocPage, DocPageStatus, DocPageSummary } from '../../api/types';
 import { allocateDocPageKey, db, newId } from '../db';
-import { API, LATENCY, notFound, permissionsOn, problem } from './shared';
+import { API, LATENCY, notFound, permissionsOn, problem, userRef } from './shared';
 
 /** Mirrors the server's own cap, so the message lands on the field without a round trip. */
 const MAX_TITLE = 200;
@@ -94,6 +94,64 @@ function validate(input: PageInput, existingIds: string[], onCreate: boolean) {
     }
     seen.add(block.id);
   });
+
+  return errors;
+}
+
+type ArtifactRegistration = {
+  scope?: 'PROJECT' | 'PLAN';
+  planId?: string | null;
+  category?: string;
+  kind?: 'DOC_PAGE_REF' | 'EXTERNAL_URL';
+  title?: string;
+  description?: string | null;
+  docPageId?: string | null;
+  url?: string | null;
+};
+
+/**
+ * Validates a registration the way the server does, field keys included.
+ *
+ * Written from the server's rules rather than from what the dialog happens to send — the §52
+ * lesson, and the reason the `javascript:` refusal is here even though the dialog's own input
+ * would not produce one. A handler that only accepts what one client produces is a handler that
+ * agrees with that client and with nothing else.
+ */
+function validateArtifact(input: ArtifactRegistration) {
+  const errors: Record<string, string[]> = {};
+
+  const title = input.title?.trim() ?? '';
+  if (!title) errors.title = ['Give the artifact a title.'];
+  else if (title.length > MAX_TITLE) {
+    errors.title = [`Keep the title to ${MAX_TITLE} characters.`];
+  }
+  if (!input.category?.trim()) errors.category = ['Give the artifact a category.'];
+
+  if (input.scope === 'PLAN') {
+    if (!input.planId) errors.planId = ['Choose the plan this artifact belongs to.'];
+  } else if (input.planId) {
+    // Refused rather than dropped: a client sending a plan id believes the artifact is scoped to
+    // it, and storing a project-scope row while ignoring the field is the silent disagreement §50
+    // built two checks to catch.
+    errors.planId = ['A project-scope artifact belongs to every plan, so it takes no plan.'];
+  }
+
+  if (input.kind === 'DOC_PAGE_REF') {
+    if (!input.docPageId) errors.docPageId = ['Choose the page this artifact points to.'];
+    else if (!db.docPages.some((p) => p.id === input.docPageId)) {
+      errors.docPageId = ['That page is not in this project.'];
+    }
+  } else if (input.kind === 'EXTERNAL_URL') {
+    const url = input.url?.trim() ?? '';
+    if (!url) errors.url = ['Give the link this artifact points to.'];
+    else if (!/^https?:\/\//i.test(url)) {
+      // The register renders these inside an anchor, so a `javascript:` value is stored XSS in
+      // the product's own markup — on the screen where a colleague's link is clicked unread.
+      errors.url = ['Links must start with http:// or https://.'];
+    }
+  } else {
+    errors.kind = ['Choose what kind of artifact this is.'];
+  }
 
   return errors;
 }
@@ -349,5 +407,73 @@ export const documentationHandlers = [
     }
     const rows = scope ? db.artifacts.filter((a) => a.scope === scope) : db.artifacts;
     return HttpResponse.json(rows);
+  }),
+
+  http.post(`${API}/projects/:projectId/artifacts`, async ({ params, request }) => {
+    await delay(LATENCY);
+    const projectId = String(params.projectId);
+
+    const refused = gate(projectId, 'artifact:edit');
+    if (refused) return refused;
+
+    const body = (await request.json()) as ArtifactRegistration;
+    const errors = validateArtifact(body);
+    if (Object.keys(errors).length > 0) {
+      return problem(400, 'Invalid artifact', 'Check the highlighted fields.', errors);
+    }
+
+    /*
+      The scope qualifier (V19), mirrored.
+
+      This is the one gate in the mock that a permission KEY cannot express, and mirroring it here
+      is the whole reason the handler is worth more than a stub: `artifact:edit` is held by a Test
+      Engineer, so `gate` above passes, and the refusal depends on the SCOPE of the row being
+      written. A mock that stopped at the key would let mock mode register a project-scope artifact
+      that live mode refuses — the "mock agrees with itself" class §54 found three instances of.
+
+      403 WITH a body, matching the server: the caller holds the permission and is one radio button
+      away from succeeding, so the refusal names the field rather than being bare.
+    */
+    if (body.scope === 'PROJECT' && !permissionsOn(projectId).includes('artifact:delete')) {
+      // `artifact:delete` stands in for "unqualified artifact:edit" here, because the mock's
+      // permission list has no qualifiers to read. The roles spec grants delete to exactly the
+      // three roles that hold artifact:edit unqualified (Instance Admin, Company Admin, Test Lead)
+      // and withholds it from Test Engineer — so it is the same set, derived rather than hardcoded.
+      return problem(
+        403,
+        'Not allowed at this scope',
+        'Your role can add artifacts to a plan, but not to the project.',
+        {
+          scope: [
+            'Your role can add artifacts to a plan, but not to the project as a whole. ' +
+              'Project artifacts are inherited by every plan, so a Test Lead owns them.',
+          ],
+        },
+      );
+    }
+
+    const artifact: Artifact = {
+      id: newId(),
+      scope: body.scope!,
+      category: body.category!.trim(),
+      kind: body.kind!,
+      title: body.title!.trim(),
+      description: body.description?.trim() || null,
+      // Always ACTIVE — a status an ordinary create could set is an approval its author granted
+      // themselves (§6g), which is why `status` is not on the input at all.
+      status: 'ACTIVE',
+      // False at either scope: a row just created is this register's own. It becomes inherited
+      // only when read from inside a plan, which the GET above computes.
+      inherited: false,
+      url: body.kind === 'EXTERNAL_URL' ? body.url!.trim() : null,
+      docPageId: body.kind === 'DOC_PAGE_REF' ? body.docPageId! : null,
+      filename: null,
+      sizeBytes: null,
+      updatedBy: userRef(0),
+      updatedAt: new Date().toISOString(),
+    };
+
+    db.artifacts.push(artifact);
+    return HttpResponse.json(artifact, { status: 201 });
   }),
 ];

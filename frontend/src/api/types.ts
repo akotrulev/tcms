@@ -80,6 +80,7 @@ export type DocPageStatus = S['DocPageSummary']['status'];
 export type DocBlockType = S['DocBlock']['blockType'];
 export type DocLink = S['DocLink'];
 export type Artifact = S['Artifact'];
+export type ArtifactInput = S['ArtifactInput'];
 
 // work
 export type WorkItem = S['WorkItem'];

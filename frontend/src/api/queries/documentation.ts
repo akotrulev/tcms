@@ -1,7 +1,14 @@
 /** The documentation space and the artifact register. */
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { api, qs } from '../client';
-import type { Artifact, DocPage, DocPageInput, DocPageStatus, DocPageSummary } from '../types';
+import type {
+  Artifact,
+  ArtifactInput,
+  DocPage,
+  DocPageInput,
+  DocPageStatus,
+  DocPageSummary,
+} from '../types';
 import { base, keys } from './keys';
 
 export function useDocPages(projectId: string): UseQueryResult<DocPageSummary[]> {
@@ -120,5 +127,33 @@ export function useArtifacts(
     queryKey: keys.artifacts(projectId, scope, planId),
     queryFn: ({ signal }) =>
       api.get<Artifact[]>(`${base(projectId)}/artifacts${qs({ scope, planId })}`, { signal }),
+  });
+}
+
+/**
+ * Registers a reference in the artifact register.
+ *
+ * Only the two **reference** kinds are accepted — `FILE` needs the storage port that open question
+ * #28 resolved and nobody built, `GENERATED_REPORT` needs the `reporting` module. The contract's
+ * `ArtifactInput.kind` is a narrower enum than `Artifact.kind` for exactly this reason, so the
+ * unregistrable kinds are a compile error here rather than a 400 at runtime.
+ *
+ * **Both scopes are invalidated, not just the one written.** A project-scope artifact appears in
+ * every plan's register as an inherited row (plan §6n), so writing one changes lists this mutation
+ * never named. `keys.artifacts` is keyed by scope and plan, so invalidating the prefix is what
+ * makes the inherited copy refresh — invalidating the exact key would leave a plan's register
+ * showing a register that is one document short.
+ */
+export function useCreateArtifact(projectId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ArtifactInput) =>
+      api.post<Artifact>(`${base(projectId)}/artifacts`, input),
+    // The dialog renders field errors on its own inputs — including the scope-qualified 403, which
+    // the server words as advice about the scope selector — so the global notification would be a
+    // second, vaguer copy of a message already on screen.
+    meta: { handled: true },
+    onSuccess: () =>
+      client.invalidateQueries({ queryKey: ['projects', projectId, 'artifacts'] }),
   });
 }

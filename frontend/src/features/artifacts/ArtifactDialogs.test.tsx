@@ -1,0 +1,194 @@
+import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ApiError, api } from '../../api/client'
+import { TestProviders } from '../../test/TestProviders'
+import { createTestQueryClient } from '../../test/queryClient'
+import { RegisterArtifactDialog } from './ArtifactDialogs'
+
+/**
+ * Registering an artifact — the form whose fields decide what its other fields mean.
+ *
+ * Four things are locked here, and every one is invisible to the build and the linter:
+ *
+ *   1. **The scope-qualified 403 lands on the scope selector, not in a banner.** This is the one
+ *      the whole slice turns on. A Test Engineer holds `artifact:edit` — just not at project scope
+ *      — so `PermissionGate` cannot disable the button and §31's disable-don't-hide rule is
+ *      structurally unavailable: the SPA's permission model is keys-only and has no qualifier to
+ *      read. The server therefore answers that single refusal with a *body*, and if the dialog
+ *      treats a 403 the way it treats every other 403 the user gets "forbidden" on a form they are
+ *      one radio button away from submitting.
+ *   2. **The payload matches the scope and kind chosen**, sending `null` rather than the leftover
+ *      value of a control that is no longer displayed. The server refuses a `planId` at PROJECT
+ *      scope rather than ignoring it, so a stale value is a 400 on a field the user cannot see.
+ *   3. **The cross-field rules match the server's**, so the form cannot refuse what the API accepts
+ *      or accept what it refuses. The `javascript:` case is a security control, not tidiness.
+ *   4. **The plan being viewed is carried into the form.** Somebody on Release 1's register who
+ *      presses Register means Release 1.
+ */
+
+const plans = [
+  { id: 'plan-1', key: 'OLB-P1', name: 'Release 1', status: 'ACTIVE' },
+  { id: 'plan-2', key: 'OLB-P2', name: 'Release 2', status: 'DRAFT' },
+] as never
+
+const pages = [
+  { id: 'page-1', key: 'DOC-1', title: 'Test strategy', parentId: null, slug: 's', status: 'PUBLISHED', updatedAt: '2026-08-01T00:00:00Z' },
+] as never
+
+const registered = {
+  id: 'artifact-1',
+  scope: 'PLAN',
+  category: 'SignOff',
+  kind: 'EXTERNAL_URL',
+  title: 'Sign-off',
+  description: null,
+  status: 'ACTIVE',
+  inherited: false,
+  url: 'https://sign.example.test/r1',
+  docPageId: null,
+  filename: null,
+  sizeBytes: null,
+  updatedBy: { id: 'u1', displayName: 'L. Lead', email: 'l@x.test', avatarUrl: null },
+  updatedAt: '2026-08-02T00:00:00Z',
+}
+
+/** The gate reads `artifact:edit`; nothing else in this dialog reads anything. */
+function mockPermissions(permissions: string[]) {
+  vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
+    if (path.startsWith('/me/permissions')) return { projectId: 'p1', permissions }
+    throw new Error(`unmocked read: ${path}`)
+  }) as never)
+}
+
+function renderDialog(defaultPlanId?: string) {
+  return render(
+    <TestProviders client={createTestQueryClient()}>
+      <RegisterArtifactDialog
+        open
+        onClose={onClose}
+        projectId="p1"
+        plans={plans}
+        pages={pages}
+        defaultPlanId={defaultPlanId}
+        onRegistered={onRegistered}
+      />
+    </TestProviders>,
+  )
+}
+
+let onClose: () => void
+let onRegistered: () => void
+
+/** MUI renders a select's options into a portal, so the listbox is found on the document. */
+async function choose(testId: string, optionName: string | RegExp) {
+  const select = screen.getByTestId(testId).closest('.MuiInputBase-root')!
+  await userEvent.click(within(select as HTMLElement).getByRole('combobox'))
+  await userEvent.click(await screen.findByRole('option', { name: optionName }))
+}
+
+describe('RegisterArtifactDialog', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    onClose = vi.fn()
+    onRegistered = vi.fn()
+    mockPermissions(['artifact:edit'])
+  })
+
+  it('puts the scope-qualified 403 on the scope selector rather than in a banner', async () => {
+    // THE test of this file. The server distinguishes "you hold nothing" (bodiless 403) from "you
+    // hold it, not here" (403 with an errors map), and only the second is actionable.
+    vi.spyOn(api, 'post').mockRejectedValue(
+      new ApiError(403, 'Your role can add artifacts to a plan, but not to the project.', {
+        scope: ['Your role can add artifacts to a plan, but not to the project as a whole.'],
+      }),
+    )
+    renderDialog()
+
+    await userEvent.type(screen.getByTestId('Artifacts.Dialog.TitleField'), 'Test strategy')
+    await userEvent.type(screen.getByTestId('Artifacts.Dialog.Url'), 'https://wiki.example.test/s')
+    await userEvent.click(screen.getByTestId('Artifacts.Dialog.Submit'))
+
+    await waitFor(() => {
+      expect(screen.getByText(/can add artifacts to a plan, but not to the project/i))
+        .toBeInTheDocument()
+    })
+    // Still open: the user changes the scope and submits again. Closing on a refusal would throw
+    // away a form that is one choice from succeeding.
+    expect(onClose).not.toHaveBeenCalled()
+    expect(onRegistered).not.toHaveBeenCalled()
+  })
+
+  it('sends no planId at PROJECT scope, even after a plan was chosen and the scope changed back', async () => {
+    // The stale-value case. The server REFUSES a planId at PROJECT scope rather than ignoring it
+    // (§50), so a leftover value is a 400 on a control the user can no longer see.
+    const post = vi.spyOn(api, 'post').mockResolvedValue(registered as never)
+    renderDialog('plan-1')
+
+    await userEvent.type(screen.getByTestId('Artifacts.Dialog.TitleField'), 'Strategy')
+    await userEvent.type(screen.getByTestId('Artifacts.Dialog.Url'), 'https://wiki.example.test/s')
+    await choose('Artifacts.Dialog.Scope', /every plan inherits it/i)
+    await userEvent.click(screen.getByTestId('Artifacts.Dialog.Submit'))
+
+    await waitFor(() => expect(post).toHaveBeenCalled())
+    expect(post.mock.calls[0][1]).toMatchObject({ scope: 'PROJECT', planId: null })
+  })
+
+  it('carries the plan being viewed into the form', async () => {
+    const post = vi.spyOn(api, 'post').mockResolvedValue(registered as never)
+    renderDialog('plan-2')
+
+    await userEvent.type(screen.getByTestId('Artifacts.Dialog.TitleField'), 'Sign-off')
+    await userEvent.type(screen.getByTestId('Artifacts.Dialog.Url'), 'https://sign.example.test/r2')
+    await userEvent.click(screen.getByTestId('Artifacts.Dialog.Submit'))
+
+    await waitFor(() => expect(post).toHaveBeenCalled())
+    expect(post.mock.calls[0][1]).toMatchObject({ scope: 'PLAN', planId: 'plan-2' })
+  })
+
+  it('refuses a javascript: link without asking the server', async () => {
+    // A security control: the register renders EXTERNAL_URL rows inside an anchor, so this value
+    // stored would be XSS in the product's own markup. The server refuses it too — this is so the
+    // user finds out before submitting, and so the rule exists in the layer that renders the link.
+    const post = vi.spyOn(api, 'post')
+    renderDialog()
+
+    await userEvent.type(screen.getByTestId('Artifacts.Dialog.TitleField'), 'Innocent')
+    await userEvent.type(screen.getByTestId('Artifacts.Dialog.Url'), 'javascript:alert(1)')
+    await userEvent.click(screen.getByTestId('Artifacts.Dialog.Submit'))
+
+    await waitFor(() => {
+      expect(screen.getByText(/must start with http:\/\/ or https:\/\//i)).toBeInTheDocument()
+    })
+    expect(post).not.toHaveBeenCalled()
+  })
+
+  it('sends a docPageId and no url when the artifact is a documentation reference', async () => {
+    const post = vi.spyOn(api, 'post').mockResolvedValue(registered as never)
+    renderDialog()
+
+    await userEvent.type(screen.getByTestId('Artifacts.Dialog.TitleField'), 'Test strategy')
+    await choose('Artifacts.Dialog.Kind', /page in this project's documentation/i)
+    await choose('Artifacts.Dialog.Page', /Test strategy/i)
+    await userEvent.click(screen.getByTestId('Artifacts.Dialog.Submit'))
+
+    await waitFor(() => expect(post).toHaveBeenCalled())
+    expect(post.mock.calls[0][1]).toMatchObject({
+      kind: 'DOC_PAGE_REF',
+      docPageId: 'page-1',
+      url: null,
+    })
+  })
+
+  it('closes and reports the artifact once the server has taken it', async () => {
+    vi.spyOn(api, 'post').mockResolvedValue(registered as never)
+    renderDialog('plan-1')
+
+    await userEvent.type(screen.getByTestId('Artifacts.Dialog.TitleField'), 'Sign-off')
+    await userEvent.type(screen.getByTestId('Artifacts.Dialog.Url'), 'https://sign.example.test/r1')
+    await userEvent.click(screen.getByTestId('Artifacts.Dialog.Submit'))
+
+    await waitFor(() => expect(onRegistered).toHaveBeenCalledWith(registered))
+    expect(onClose).toHaveBeenCalled()
+  })
+})

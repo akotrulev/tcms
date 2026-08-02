@@ -257,6 +257,26 @@ class ArtifactEndpointTest extends IntegrationTestBase {
 
             assertThat(result.getResponse().getStatus()).isEqualTo(403);
             assertThat(countArtifacts(ACME)).isZero();
+
+            // The refusal names the field, unlike the bodiless 403 a Viewer gets. §31's rule is
+            // that an action the server will refuse renders disabled with a reason — and the SPA
+            // structurally cannot honour it here, because its permission model is keys-only and
+            // this caller DOES hold artifact:edit. So the next best thing is a refusal the form can
+            // put on the scope selector, one radio button away from succeeding.
+            assertThat(errorFields(result)).containsExactly("scope");
+        }
+
+        @Test
+        @DisplayName("a Viewer's refusal stays bodiless — they hold nothing, so there is no advice")
+        void theViewerRefusalCarriesNoField() throws Exception {
+            MvcResult result = create(VIEWER, ACME_BANKING,
+                    link("PLAN", BANKING_PLAN, "SignOff", "Sign-off", "https://x.example.test/a"));
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(403);
+            assertThat(result.getResponse().getContentAsString())
+                    .as("changing the scope would not help a caller who holds no artifact:edit, so "
+                            + "advice naming the scope field would be actively misleading")
+                    .isEmpty();
         }
 
         @Test

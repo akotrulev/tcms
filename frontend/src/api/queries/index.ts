@@ -74,6 +74,7 @@ export {
 } from './runs';
 export {
   useArtifacts,
+  useCreateArtifact,
   useCreateDocPage,
   useDeleteDocPage,
   useDocPage,

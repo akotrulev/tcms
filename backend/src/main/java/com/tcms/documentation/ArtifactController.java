@@ -100,6 +100,12 @@ public class ArtifactController {
                     ResponseEntity.badRequest().body(problem(invalid.errors()));
             case ArtifactWriteService.Outcome.Forbidden ignored ->
                     ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            // 403 with a body, unlike its sibling. The caller holds the permission and not for this
+            // scope, and naming the field is what lets the form put the sentence on the scope
+            // selector — see the outcome's own header for why that discloses nothing.
+            case ArtifactWriteService.Outcome.ForbiddenAtScope ignored -> ResponseEntity
+                    .status(HttpStatus.FORBIDDEN)
+                    .body(scopeProblem());
             case ArtifactWriteService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
         };
     }
@@ -114,6 +120,23 @@ public class ArtifactController {
                 HttpStatus.BAD_REQUEST, "The artifact could not be registered.");
         detail.setTitle("Invalid artifact");
         detail.setProperty("errors", errors);
+        return detail;
+    }
+
+    /**
+     * The scope-qualified refusal, worded as something the user can act on.
+     *
+     * <p>Same {@code errors} shape as the 400 so the form has one code path for "a field was the
+     * problem" rather than two that must be kept in step.
+     */
+    private static ProblemDetail scopeProblem() {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.FORBIDDEN, "Your role can add artifacts to a plan, but not to the project.");
+        detail.setTitle("Not allowed at this scope");
+        detail.setProperty("errors", Map.of(
+                "scope",
+                List.of("Your role can add artifacts to a plan, but not to the project as a whole. "
+                        + "Project artifacts are inherited by every plan, so a Test Lead owns them.")));
         return detail;
     }
 
