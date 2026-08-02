@@ -260,9 +260,20 @@ a hundred slightly different ones.
 
 ## Running work in parallel
 
-Read `docs/plans/2026-07-31-parallel-execution-rework.md` before starting a second lane. The three
-rules that bite hardest:
+**Cap: 4 agents at once, and fewer whenever the gate says so.** Read
+`docs/plans/2026-07-31-parallel-execution-rework.md` **§0** before starting a second lane — it is the
+operative gate and sub-caps; the rest of that document explains why each rule exists.
 
+Four is a ceiling, not a target, and it is only reachable for the fan-out shape (N implementations
+behind one frozen port — the M3 result parsers, the M4 tracker adapters, the report renderers).
+**Backend lanes cap at 2** (each runs Testcontainers Postgres), **browser passes at 2** (only two
+stacks exist), **contract and migration lanes at 1**. A vertical slice is 1.
+
+The rules that bite hardest:
+
+- **Freeze the premise first.** If the orientation pass is still discovering what the slice is, run
+  serially — lanes re-derive premises from a handoff one slice stale and redo the work. This is §45's
+  cost finding ("2x the time and tokens") turned into a precondition rather than a ban.
 - **One contract holder.** `openapi.yaml` and `npm run gen:api` belong to exactly one lane per run;
   `schema.d.ts` is generated and two regenerations do not merge. A lane needing a contract change
   hands over rather than editing in parallel.
@@ -271,6 +282,9 @@ rules that bite hardest:
   database**. Testcontainers cannot see this — it migrates a fresh container every time.
 - **Choose lanes by Modulith module, not by a "Next"-list order.** The boundaries are already
   enforced by ArchUnit, so the seam is machine-checked rather than hoped for.
+- **Pre-assign the fixture UUID prefix space per lane, in writing.** It is hand-managed with no check
+  behind it and has collided **five times** (§19, most recently §62). Two lanes writing tests will
+  take the same prefix, and the failure reads as a real defect in whichever lane runs second.
 
 A second stack for a concurrent browser pass is `cp .env.lane-b.example .env.lane-b`,
 `docker compose --env-file .env.lane-b up`, and `npm run dev:lane-b` (6432 / 9080 / 6173).

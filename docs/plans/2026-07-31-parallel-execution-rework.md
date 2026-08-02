@@ -1,7 +1,7 @@
 # Reworking the plan so work can run in parallel
 
-**Date:** 2026-07-31.
-**Status:** implemented, except where a row below says otherwise.
+**Date:** 2026-07-31 · **Amended 2026-08-02** with §0, the operative gate and the 4-agent cap.
+**Status:** implemented, except where a row below says otherwise. **Start at §0.**
 **Question this answers:** *can the delivery plan be reworked so more than one lane of work runs
 at once, safely?*
 
@@ -10,6 +10,65 @@ shape §22–§32 have all used. The reworks below raise the safe lane count fro
 and the payoff lands at M3/M4 rather than on the next three slices. That timing is the honest part
 of the answer and it is not a reason to skip the reworks: they are cheap, and two of them are
 improvements on their own terms.
+
+---
+
+## 0. The gate and the cap — read this before starting any run
+
+> **Added 2026-08-02.** The rest of this document explains *why* each rule exists; this section is
+> the operative form. It supersedes the blanket "work is sequential from here" that handoff §45 and
+> `docs/HANDOFF.md` have carried since 2026-08-01 — see §0.4 for what did and did not survive.
+
+### 0.1 The cap
+
+**At most 4 agents at once. Fewer whenever any rule in §0.2 or §0.3 says so.**
+
+Four is a ceiling, not a target. Every sub-cap below bites *before* it, and three of them bite at 2.
+A run of two module-disjoint lanes is a normal parallel run; a run of four is only reachable for the
+fan-out shape in §5, where four lanes write four files behind one frozen port.
+
+### 0.2 The safety gate — parallel is safe only when EVERY row holds
+
+| # | Condition | Why, and where it is explained |
+|---|---|---|
+| 1 | **The premise is frozen, not being discovered.** A port, an interface or a written spec exists before the lanes start. | §6. Lanes re-derive premises from a handoff one slice stale, and redo the work. This is the rule that disqualifies most vertical slices. |
+| 2 | **Lanes are disjoint by Modulith module**, or are N implementations behind one port. | §5. ArchUnit machine-checks the boundary, so the seam is real rather than hoped for. |
+| 3 | **Exactly one contract holder — or zero.** Every other lane is forbidden `openapi.yaml` and `npm run gen:api`. | §3. `schema.d.ts` is generated; two regenerations do not merge. |
+| 4 | **Flyway versions pre-assigned**, and preferably **at most one lane writes DDL**. | §4. `out-of-order` is unset, so a `V13` landing after a `V14` is refused on any already-migrated database. Testcontainers cannot see this. |
+| 5 | **Each backend-touching lane has its own git worktree.** | §6. One `backend/build/` and one Gradle daemon cannot serve two lanes. This is the one sanctioned exception to `CLAUDE.md`'s "do not branch per task". |
+| 6 | **Fixture UUID prefix space pre-assigned per lane**, in writing, before any lane writes a test. | §19's collision has now fired **five times** (most recently §62, where `b0` was already the board tests' and `project_pkey` is global). The prefix space is hand-managed and has no check behind it — it is the single most reliable way a parallel run goes red for a reason that looks like a real defect. |
+| 7 | **Each lane writes its own `docs/handoff/NN-*.md`**; the index row is merged last. | §2. This is why the handoff was split in the first place (§10). |
+
+If a row cannot be satisfied, the honest move is **fewer lanes**, not a waiver.
+
+### 0.3 Sub-caps that bite before 4
+
+| Resource | Cap | Reason |
+|---|---:|---|
+| Lanes running the **backend suite** | **2** | Each runs Testcontainers Postgres; §6 already records that "two lanes is comfortable on a laptop; four is not". |
+| Lanes needing a **browser pass** | **2** | Only two stacks exist — the default and `.env.lane-b` (6432 / 9080 / 6173). A third needs a third set of ports invented first. |
+| Lanes editing the **contract** | **1** | Gate row 3. |
+| Lanes writing a **migration** | **1** preferred, 2 with pre-assigned versions | Gate row 4. |
+| Lanes that are **pure functions over fixtures** (parsers, adapters, renderers) | **4** | No schema, no contract, no UI, no shared build state. This is the only shape that actually reaches the cap. |
+
+**So the practical reading:** 4 agents is reachable for §5's fan-outs — four result parsers (M3), four
+`IssueTracker` adapters (M4), three report renderers (§6e). For anything touching the backend it is
+2. For a vertical slice it is 1.
+
+### 0.4 What this supersedes, and what it does not
+
+~~**Work is sequential from here unless the user asks otherwise** (§45, 2026-08-01).~~
+→ **Superseded 2026-08-02**: parallel is allowed again, bounded by §0.1–§0.3. The user's instruction
+was *"unless the user asks otherwise"*, and this is that.
+
+**§45's finding is not superseded and is the reason the cap exists.** Three lanes were run and the
+verdict was *"they take 2x the time and tokens"*: wall clock is bounded by the longest lane, and
+every lane re-derives the same premises. That is a **cost** finding, not a correctness one — which is
+exactly why the answer is a ceiling with sub-caps rather than a ban. Gate row 1 is §45's finding
+turned into a precondition: freeze the premise and the re-derivation stops being paid for N times.
+
+**Still true, still binding:** everything in §1–§6. The reworks that made parallelism possible at all
+(the file splits, the numbering rule, the second stack, the lane-selection rule) are unchanged.
 
 ---
 
@@ -156,18 +215,29 @@ Two smaller residuals, both stated rather than solved:
 
 1. **Now (done):** reworks 1, 2, 4, 5, 6 — the file splits, the numbering rule, the second stack,
    the lane-selection rule.
-2. **Keep the current cadence serial through the rest of M1 and M1.5** — the project-creation path,
-   `GET …/cases/{caseId}/versions`, and the `execution` module. These are the slices where the
-   orientation pass is still finding something every time.
+2. ~~**Keep the current cadence serial through the rest of M1 and M1.5**~~ → **done, and it held**:
+   those slices ran serially and the orientation pass changed the slice before it started in most of
+   them. The general form of this recommendation is now **§0.2 gate row 1** — serial is the default
+   whenever the premise is still being discovered, which is a property of the work rather than of a
+   milestone.
 3. **Do not batch the contract for vertical slices** (§3).
-4. **Plan the real parallel push for M3 and M4**, on the fan-outs in §5.
+4. **Plan the real parallel push for M3 and M4**, on the fan-outs in §5 — **still the recommendation,
+   and still unstarted.** M3 is 0% and M4 ~12% (`docs/audits/2026-08-02-remaining-scope-assessment.md`),
+   so both fan-outs are entirely ahead. These are the runs the 4-agent cap in §0.1 was set for.
 
 ## 8. Checklist before starting any parallel run
 
+- [ ] **Lane count is within §0.1 (max 4) and every sub-cap in §0.3** — backend lanes ≤ 2, browser
+      passes ≤ 2, contract lanes ≤ 1, migration lanes ≤ 1.
+- [ ] **The premise is frozen** — a port, interface or spec exists — not still being discovered
+      (§0.2 row 1). If it is not, run serially.
 - [ ] One lane named as the **contract holder**; every other lane is forbidden `openapi.yaml` and
       `npm run gen:api`.
 - [ ] Flyway versions **pre-assigned**, with renumber-at-integration understood (§4).
 - [ ] Lanes chosen by **Modulith module**, not by "Next"-list order (§5).
 - [ ] The second lane on a **git worktree** if it touches the backend (§6).
 - [ ] Lane B's stack up via `.env.lane-b` if it needs a browser pass, or the pass is queued.
+- [ ] **Fixture UUID prefix space assigned per lane, in writing** — the hand-managed namespace that
+      has now collided five times (§0.2 row 6). Check the census first:
+      `grep -rhoE 'UUID\.fromString\("[0-9a-f]{2}' backend/src/test/java | grep -oE '[0-9a-f]{2}$' | sort -u`
 - [ ] Each lane writes **its own** `docs/handoff/NN-*.md`; the index row is merged last.
