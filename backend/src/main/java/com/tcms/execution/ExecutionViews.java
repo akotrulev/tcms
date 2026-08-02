@@ -125,7 +125,11 @@ class ExecutionViews {
      * no longer has anywhere to render, and inventing a step for it would put text on the screen that
      * the version never said.
      */
-    List<StepResultView> steps(PinnedCase pin, Map<UUID, StepOutcome> recorded) {
+    List<StepResultView> steps(
+            PinnedCase pin,
+            Map<UUID, StepOutcome> recorded,
+            Map<UUID, List<EvidenceView>> evidenceByStepResult) {
+
         if (pin == null) {
             return List.of();
         }
@@ -141,7 +145,12 @@ class ExecutionViews {
                     step.expectedResult(),
                     outcome == null ? null : outcome.getStatusId(),
                     outcome == null ? null : outcome.getComment(),
-                    List.of()));
+                    // Keyed by the step RESULT's id, not the step's: evidence.step_result_id is
+                    // what the row carries, and a step with no recorded result has no result id
+                    // and therefore cannot have evidence — which is the rule the write enforces.
+                    outcome == null
+                            ? List.of()
+                            : evidenceByStepResult.getOrDefault(outcome.getId(), List.of())));
         }
         return List.copyOf(steps);
     }

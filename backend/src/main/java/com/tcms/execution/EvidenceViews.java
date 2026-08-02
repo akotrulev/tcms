@@ -83,17 +83,50 @@ class EvidenceViews {
     }
 
     /**
-     * Groups a batch by execution, for the run detail.
+     * One execution's evidence, split by what it documents.
      *
-     * <p>Returns rows whose {@code stepResultId} is null <em>and</em> those it is not — the caller
-     * partitions, because only it knows which list it is filling.
+     * @param onExecution  the verdict as a whole — {@code step_result_id IS NULL}
+     * @param byStepResult keyed by {@code step_result.id}, <strong>not</strong> by step id: that is
+     *                     the column the row carries, and a step with no recorded result has no
+     *                     result id and therefore cannot have evidence
      */
-    Map<UUID, List<Evidence>> byExecution(Collection<Evidence> rows) {
-        Map<UUID, List<Evidence>> grouped = new HashMap<>();
-        for (Evidence row : rows) {
-            grouped.computeIfAbsent(row.getExecutionId(), id -> new ArrayList<>()).add(row);
+    record Partitioned(List<EvidenceView> onExecution, Map<UUID, List<EvidenceView>> byStepResult) {
+    }
+
+    /**
+     * Renders and partitions in one pass, so the two lists cannot disagree about the same file and
+     * the rows are read once.
+     *
+     * <p>Joined by id rather than by position. {@link #render} may drop a row (an unreadable
+     * attachment), so the two lists are not index-aligned — and a positional zip would then
+     * misattribute every row after the first skip, quietly moving one tester's screenshot onto
+     * another step. The map costs one pass and cannot do that.
+     */
+    Partitioned partition(UUID companyId, UUID projectId, UUID runId, List<Evidence> rows) {
+        List<EvidenceView> views = render(companyId, projectId, runId, rows);
+        Map<UUID, EvidenceView> byId = new HashMap<>(views.size());
+        for (EvidenceView view : views) {
+            byId.put(view.id(), view);
         }
-        return grouped;
+
+        List<EvidenceView> onExecution = new ArrayList<>();
+        Map<UUID, List<EvidenceView>> byStepResult = new HashMap<>();
+        for (Evidence row : rows) {
+            EvidenceView view = byId.get(row.getId());
+            if (view == null) {
+                // Dropped by render — an unreadable attachment. Skipped here too, so the two
+                // halves stay consistent with each other and with what the user can open.
+                continue;
+            }
+            if (row.getStepResultId() == null) {
+                onExecution.add(view);
+            } else {
+                byStepResult
+                        .computeIfAbsent(row.getStepResultId(), id -> new ArrayList<>())
+                        .add(view);
+            }
+        }
+        return new Partitioned(List.copyOf(onExecution), Map.copyOf(byStepResult));
     }
 
     /**

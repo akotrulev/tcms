@@ -377,6 +377,15 @@ public class ExecutionService {
         TestExecutionSummaryView summary =
                 views.render(companyId, List.of(execution), vocabulary).getFirst();
 
+        // One read, partitioned in one pass — evidence on the execution as a whole
+        // (step_result_id IS NULL) and evidence on a particular step. Two reads or a per-step
+        // lookup would be the N+1 that looks harmless because each query is fast.
+        EvidenceViews.Partitioned evidence = evidenceViews.partition(
+                companyId,
+                execution.getProjectId(),
+                execution.getRunId(),
+                evidenceRows.findByExecutionIdOrderByCreatedAtAsc(execution.getId()));
+
         return TestExecutionView.of(
                 summary,
                 execution.getComment(),
@@ -384,12 +393,8 @@ public class ExecutionService {
                 pin == null ? StepFormat.STRUCTURED : pin.stepFormat(),
                 pin == null ? List.of() : pin.preconditions(),
                 pin == null ? List.of() : pin.postconditions(),
-                views.steps(pin, existingSteps(execution.getId())),
-                evidenceViews.render(
-                        companyId,
-                        execution.getProjectId(),
-                        execution.getRunId(),
-                        evidenceRows.findByExecutionIdOrderByCreatedAtAsc(execution.getId())),
+                views.steps(pin, existingSteps(execution.getId()), evidence.byStepResult()),
+                evidence.onExecution(),
                 execution.getLockVersion());
     }
 }

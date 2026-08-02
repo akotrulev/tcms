@@ -1014,6 +1014,75 @@ class ExecutionEndpointTest extends IntegrationTestBase {
             assertThat(get(ENGINEER, ACME, url).getResponse().getStatus()).isEqualTo(404);
         }
 
+        @Test
+        @DisplayName("evidence on a step renders on that step and not on the execution")
+        void attachesToAStep() throws Exception {
+            List<String> stepIds = stepIdsOf(EXEC_A);
+            // A step must have a recorded result before it can carry evidence — there is no
+            // step_result row to attach to otherwise.
+            String payload = resultWithSteps(failedStatus(), List.of(
+                    Map.of("stepId", stepIds.get(0), "statusId", failedStatus().toString())));
+            patch(ENGINEER, ACME, RUN, EXEC_A, payload, "0");
+
+            JsonNode attached = body(attachToStep(ENGINEER, EXEC_A,
+                    UUID.fromString(stepIds.get(0)), "step.png"));
+            assertThat(attached.get("filename").asText()).isEqualTo("step.png");
+
+            JsonNode execution = body(get(ENGINEER, ACME, executionPath(RUN, EXEC_A)));
+            // The whole point of the split: a file documenting WHERE it went wrong must not appear
+            // as a file documenting the verdict. Both assertions, because either one alone passes
+            // against an implementation that puts every row in both lists.
+            assertThat(execution.get("evidence"))
+                    .as("step evidence must not also count as execution evidence")
+                    .isEmpty();
+            assertThat(execution.get("steps").get(0).get("evidence")).hasSize(1);
+            assertThat(execution.get("steps").get(1).get("evidence")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a step with no recorded result cannot carry evidence")
+        void refusesAStepWithNoResult() throws Exception {
+            List<String> stepIds = stepIdsOf(EXEC_A);
+
+            MvcResult refused = attachToStep(ENGINEER, EXEC_A,
+                    UUID.fromString(stepIds.get(0)), "early.png");
+
+            // 400 on the field rather than 500 or a silent execution-level attach. Inventing a
+            // step_result row here would record a verdict nobody gave.
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(body(refused).get("errors").get("stepId").get(0).asText())
+                    .contains("Record a result for this step");
+        }
+
+        @Test
+        @DisplayName("a step id belonging to a different case is refused rather than stored")
+        void refusesAForeignStep() throws Exception {
+            // §64's defect one table over: an id that would satisfy a foreign key and belongs to
+            // somebody else's case must be a field error, not a 500 and not a stored row.
+            List<String> otherStepIds = stepIdsOf(EXEC_B);
+
+            MvcResult refused = attachToStep(ENGINEER, EXEC_A,
+                    UUID.fromString(otherStepIds.get(0)), "foreign.png");
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(body(get(ENGINEER, ACME, executionPath(RUN, EXEC_A))).get("evidence"))
+                    .isEmpty();
+        }
+
+        private MvcResult attachToStep(
+                UUID userId, UUID executionId, UUID stepId, String filename) throws Exception {
+
+            return mvc.perform(MockMvcRequestBuilders
+                            .multipart("/api/v1" + executionPath(RUN, executionId) + "/evidence")
+                            .file(new org.springframework.mock.web.MockMultipartFile(
+                                    "file", filename, "image/png", new byte[] {4, 5, 6}))
+                            .param("stepId", stepId.toString())
+                            .header(HttpHeaders.AUTHORIZATION,
+                                    "Bearer " + tokenFor(userId, ACME))
+                            .accept(MediaType.APPLICATION_JSON))
+                    .andReturn();
+        }
+
         /** Attaches as {@code userId} and returns the new evidence's id. */
         private UUID attachedId(UUID userId, UUID executionId, String filename) throws Exception {
             MvcResult result = attach(userId, ACME, executionId, filename, "image/png",

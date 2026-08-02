@@ -22,4 +22,14 @@ public interface StepOutcomeRepository extends JpaRepository<StepOutcome, UUID> 
     @Transactional(readOnly = true)
     @Query("SELECT s FROM StepOutcome s WHERE s.executionId IN :executionIds")
     List<StepOutcome> findForExecutions(@Param("executionIds") Collection<UUID> executionIds);
+
+    /**
+     * The row step-level evidence hangs on.
+     *
+     * <p>Scoped by execution as well as by step: {@code step_id} is a {@code test_step} id shared by
+     * every execution of that case, so looking it up alone would find another run's result and
+     * attach this tester's screenshot to it.
+     */
+    @Transactional(readOnly = true)
+    java.util.Optional<StepOutcome> findByExecutionIdAndStepId(UUID executionId, UUID stepId);
 }

@@ -72,6 +72,11 @@ public class StepOutcome {
         this.comment = comment;
     }
 
+    /** What {@code evidence.step_result_id} points at when a file is attached to this step. */
+    UUID getId() {
+        return id;
+    }
+
     UUID getExecutionId() {
         return executionId;
     }

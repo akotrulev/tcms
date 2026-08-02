@@ -68,14 +68,6 @@ public class EvidenceController {
             @RequestParam(value = "caption", required = false) String caption,
             @RequestParam(value = "stepId", required = false) UUID stepId) throws IOException {
 
-        // The contract declares stepId and this slice does not implement it. Refused explicitly
-        // rather than ignored: a parameter a handler accepts and drops is §50's defect class, and
-        // the worse direction of it — the spec, the generated types and autocomplete all agree
-        // with the caller while the server quietly does something else.
-        if (stepId != null) {
-            return ResponseEntity.badRequest().body(validationProblem(Map.of(
-                    "stepId", List.of("Attaching evidence to a single step is not available yet."))));
-        }
         if (file.isEmpty()) {
             return ResponseEntity.badRequest().body(validationProblem(Map.of(
                     "file", List.of("Choose a file to attach."))));
@@ -94,10 +86,12 @@ public class EvidenceController {
                 caption);
 
         EvidenceService.Outcome outcome = evidence.attach(
-                UUID.fromString(jwt.getSubject()), projectId, runId, executionId, upload);
+                UUID.fromString(jwt.getSubject()), projectId, runId, executionId, stepId, upload);
 
         return switch (outcome) {
             case EvidenceService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
+            case EvidenceService.Outcome.Invalid invalid ->
+                    ResponseEntity.badRequest().body(validationProblem(invalid.errors()));
             case EvidenceService.Outcome.Forbidden ignored ->
                     ResponseEntity.status(HttpStatus.FORBIDDEN).body(
                             forbidden("You do not have permission to attach evidence in this "
@@ -163,7 +157,12 @@ public class EvidenceController {
                             forbidden("You can only remove evidence you attached. Ask a test lead "
                                     + "to remove this one."));
             case EvidenceService.Outcome.Deleted ignored -> ResponseEntity.noContent().build();
+            // Unreachable: a delete has no input to validate and creates nothing. Written out
+            // because the switch is exhaustive over the sealed type — which is what turned adding
+            // Outcome.Invalid into a compile error here rather than a silently unhandled case.
             case EvidenceService.Outcome.Attached ignored ->
+                    ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            case EvidenceService.Outcome.Invalid ignored ->
                     ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         };
     }

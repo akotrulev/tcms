@@ -66,6 +66,7 @@ public class EvidenceService {
     private final TestExecutionRepository executions;
     private final EvidenceRepository evidenceRows;
     private final AttachmentRepository attachments;
+    private final StepOutcomeRepository stepOutcomes;
     private final EvidenceStore store;
     private final EvidenceViews views;
     private final Clock clock;
@@ -76,6 +77,7 @@ public class EvidenceService {
             TestExecutionRepository executions,
             EvidenceRepository evidenceRows,
             AttachmentRepository attachments,
+            StepOutcomeRepository stepOutcomes,
             EvidenceStore store,
             EvidenceViews views,
             Clock clock) {
@@ -85,6 +87,7 @@ public class EvidenceService {
         this.executions = executions;
         this.evidenceRows = evidenceRows;
         this.attachments = attachments;
+        this.stepOutcomes = stepOutcomes;
         this.store = store;
         this.views = views;
         this.clock = clock;
@@ -105,6 +108,10 @@ public class EvidenceService {
         record NotTheAuthor() implements Outcome {
         }
 
+        /** Field name to messages, for the form to land on its input. */
+        record Invalid(java.util.Map<String, List<String>> errors) implements Outcome {
+        }
+
         /** Attached. 201, with the rendered evidence. */
         record Attached(EvidenceView view) implements Outcome {
         }
@@ -120,7 +127,8 @@ public class EvidenceService {
 
     @Transactional
     public Outcome attach(
-            UUID userId, UUID projectId, UUID runId, UUID executionId, EvidenceUpload upload) {
+            UUID userId, UUID projectId, UUID runId, UUID executionId, UUID stepId,
+            EvidenceUpload upload) {
 
         UUID companyId = CompanyContext.require();
         Instant now = clock.instant();
@@ -134,7 +142,8 @@ public class EvidenceService {
         TestExecution execution = found.get();
 
         GateResult<Outcome> gate = projects.writeGranted(userId, projectId, ATTACH_EVIDENCE,
-                project -> write(companyId, projectId, runId, userId, execution, upload, now));
+                project -> write(
+                        companyId, projectId, runId, userId, execution, stepId, upload, now));
 
         return switch (gate) {
             case GateResult.Allowed<Outcome> allowed -> allowed.value();
@@ -223,19 +232,46 @@ public class EvidenceService {
             UUID runId,
             UUID userId,
             TestExecution execution,
+            UUID stepId,
             EvidenceUpload upload,
             Instant now) {
 
+        // Resolved INSIDE the gate's callback, so a caller who may not attach anything cannot use
+        // this endpoint to discover which steps of a case have been marked — the same structural
+        // reason ExecutionService validates a statusId only once the caller is allowed.
+        UUID stepResultId = null;
+        if (stepId != null) {
+            Optional<StepOutcome> outcome =
+                    stepOutcomes.findByExecutionIdAndStepId(execution.getId(), stepId);
+            if (outcome.isEmpty()) {
+                // Covers both "not a step of this case" and "a step nobody has marked yet". They
+                // are one message on purpose: distinguishing them would answer whether a step id
+                // exists to a caller who guessed it, and the fix is the same either way — record a
+                // result on the step first. Inventing a step_result row here would record a verdict
+                // nobody gave, which is worse than refusing.
+                return new Outcome.Invalid(java.util.Map.of("stepId", List.of(
+                        "Record a result for this step before attaching evidence to it.")));
+            }
+            stepResultId = outcome.get().getId();
+        }
+
         String key = storageKey(companyId, execution.getId());
 
-        Attachment attachment = Attachment.forExecution(
-                companyId, execution.getId(), key, upload.filename(), upload.contentType(),
-                upload.sizeBytes(), upload.checksum(), userId, now);
+        // The attachment's owner is the step result when there is one, so attachment.owner_type
+        // tells the truth about what the file documents — and a future sweep by owner finds it
+        // where V1's polymorphic table says to look.
+        Attachment attachment = stepResultId == null
+                ? Attachment.forExecution(
+                        companyId, execution.getId(), key, upload.filename(), upload.contentType(),
+                        upload.sizeBytes(), upload.checksum(), userId, now)
+                : Attachment.forStepResult(
+                        companyId, stepResultId, key, upload.filename(), upload.contentType(),
+                        upload.sizeBytes(), upload.checksum(), userId, now);
         attachments.saveAndFlush(attachment);
 
         Evidence evidence = Evidence.attach(
-                companyId, execution.getId(), null, attachment.getId(), upload.caption(), userId,
-                now);
+                companyId, execution.getId(), stepResultId, attachment.getId(), upload.caption(),
+                userId, now);
         evidenceRows.saveAndFlush(evidence);
 
         store.put(key, upload.bytes());
