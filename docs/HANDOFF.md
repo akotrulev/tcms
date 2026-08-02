@@ -1,6 +1,44 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-02 (latest section: **§72, the run lifecycle** — `test_run.status` had been
+**Date:** 2026-08-02 (latest section: **§73, the plan lifecycle** — `PlanStatus` has five values,
+`TestPlan.create` writes `DRAFT`, and **nothing else has ever written that column**, so four of the
+five were unreachable and **no plan on any real instance has ever been in review, approved, active or
+closed**; `test_plan.closed_at` was a `V1` column the entity did not even map. §72's finding one
+aggregate over, found the same way, and named twice in `TestPlan`'s own javadoc — *"there is no
+mutator, because `plan:edit` is a separate permission and a separate slice"*. **Three permissions get
+their first consumer in Java at once** (`plan:edit`, `plan:approve`, `plan:delete`), the sixth
+instance of that shape; **`plan:review` stays unconsumed and that is the correct answer**, because
+§6g puts peer review *inside* `IN_REVIEW` accumulating on the item without moving it, so the key
+belongs to the reviewer apparatus and not to a transition — as do `case:review` and `suite:review`.
+**The slice is one decision: the gate is decided by the EDGE, not by the target.** The natural
+reading of §6g — `plan:approve` guards the move *into* `APPROVED`, the shape `BulkOperations` uses
+one module over — compiles, passes an "an engineer cannot approve" test, and **lets that same
+engineer rescind a lead's sign-off by asking for `DRAFT`**, the button beside it. So `permissionFor`
+takes both ends: `plan:approve` grants the sign-off, ends the plan, and **takes either back**;
+`plan:edit` carries a plan forward through the states nobody has signed off. Roles spec §A4 principle
+1 unchanged, and the reason the gate reads a **stored** fact — `writeGrantedOnTarget`, §69's seam,
+second consumer. **The mutation is the proof**: dropping that arm reddens **exactly 2** while every
+other gate assertion stays green, so the cheaper implementation would have shipped with a full class
+of tests passing. **The ladder must not require approval**, because §6g says review is optional, off
+by default, per project — and that setting does not exist yet — so `DRAFT → ACTIVE` is legal and
+review is a detour; two "reachable only from" rules survive it, `APPROVED` only from `IN_REVIEW`
+(§62's call) and `CLOSED` only from `ACTIVE` (a plan nobody started, recorded as a finished release,
+is `RunLifecycle`'s 0%-executed run). **Delete and close partition the space**: `plan:delete` refuses
+with 409 and the count while a live run names the plan — `findPlanKeys` is not filtered on
+`deleted_at`, so nothing breaks loudly, the runs keep rendering `TP-3` and the link goes nowhere —
+and the way out is `CLOSED`, not force. **Delete a plan nobody executed; close one somebody did.**
+**Two pre-existing defects, both in one file, and the first is the lesson**: `PlanListPage`'s colour
+map is the *sibling* of the defect §72 found on the run list and §72's sweep never reached it —
+`Record<string, string>`, carrying an **`ARCHIVED`** that is not a plan status, **missing `IN_REVIEW`
+and `APPROVED`**, with `status.toLowerCase()` beside it; a fix applied to one instance of a class
+needs the grep that finds the others. And the exit-criteria column counted `!c.met`, where **null
+means *not evaluated*, not *unmet*** — so a plan whose gates were green would have read "3 unmet",
+unfireable only because `exit_criteria` has no writer, **which the next slice gives it**. The mock's
+fixtures gained a `DRAFT` and an `IN_REVIEW` plan: §72's lesson applied rather than restated, since
+every fixture plan was `ACTIVE` or `CLOSED` while every real plan was `DRAFT`. **Six mutations run,
+four queued** — four backend (exactly 2 / 3 / 1 / 1) and two frontend, the latter not optional
+because all 7 frontend tests passed first time. **No migration; `V22` is still free.** Before that:
+**§72, the run lifecycle** — `test_run.status` had been
 written **exactly once in the product's life**, to `NOT_STARTED` by `TestRun.create`, so on every
 real instance **every run has always read "Not started"** — including after every one of its results
 had been recorded — and `started_at`/`completed_at` were columns nothing ever filled. Three
@@ -715,3 +753,4 @@ See [`docs/plans/2026-07-31-parallel-execution-rework.md`](plans/2026-07-31-para
 | [§70](handoff/70-the-verb-the-contract-checks-could-not-see.md) | The verb the contract checks could not see — `api.delete` never existed, and eight call sites went unchecked behind a guard that counts |
 | [§71](handoff/71-team-management.md) | Team management — the permission with no consumer, and the membership that must be a membership |
 | [§72](handoff/72-the-run-lifecycle.md) | The run lifecycle — the status nothing ever wrote, and the freeze §67 deferred |
+| [§73](handoff/73-the-plan-lifecycle.md) | The plan lifecycle — the ladder nothing could climb, and the gate decided by the edge |
