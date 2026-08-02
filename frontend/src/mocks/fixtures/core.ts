@@ -249,42 +249,104 @@ export const roles: Role[] = [
   },
 ];
 
+/**
+ * Who holds what, and the fixture carries the awkward rows on purpose.
+ *
+ * Three shapes have to be present or a screen that renders them cannot be built, let alone seen:
+ *
+ *   1. **A grant naming a project** — the ordinary case, and the only kind revocable from a
+ *      project screen.
+ *   2. **A PROJECT-scope grant naming NO project** — the inheritance roles spec §A1.1 added on
+ *      2026-08-02: "this role on every project in the company, unless that project says
+ *      otherwise". Marco is a Test Lead everywhere.
+ *   3. **Rule 2 actually being overridden.** Marco is a Viewer on Online Banking, so his
+ *      company-wide Test Lead is dead *there* and live everywhere else. §A1.1 is REPLACE, not
+ *      union — a project grant wins outright, including when it confers less — and a fixture
+ *      without this row leaves the branch that renders it unreachable in development. Same class
+ *      as §54's accepted-and-ignored `Idempotency-Key`.
+ *
+ * Tom's Company Admin row is the control for the exemption: he is also covered by Checkout
+ * Squad's grant on Online Banking, so he is in the overridden *set* — and his row must still not
+ * be marked replaced, because COMPANY-scope roles are never overridden (§A1.1 property 2). A
+ * predicate that reached for the set alone would mark it, which is precisely the privilege
+ * inversion the exemption exists to stop.
+ *
+ * **`user` and `team` are exclusive**, mirroring `ck_role_assignment_subject`: a team grant names
+ * the team and nobody else, and the server's `RoleAssignmentView` sends `user: null` for one. The
+ * previous fixture set both on two rows, which taught the "granted via" column a shape live mode
+ * never produces.
+ *
+ * Company Admin is never granted ON a project here either — the server refuses that with a 400 on
+ * `roleId`, so a fixture holding one was a row no path in the product could have created.
+ */
 export const roleAssignments: RoleAssignment[] = [
   {
+    // COMPANY scope, company-wide: authority over the company, not a default for its projects.
     id: uid(1, 'g'),
     role: roles[1],
-    user: ref(users[0]),
+    user: ref(users[3]),
     team: null,
-    projectId: PROJECT_ID,
-    projectName: 'Acme Online Banking',
-    grantedAt: '2026-01-15T10:00:00Z',
+    projectId: null,
+    projectName: null,
+    grantedAt: '2026-01-08T09:00:00Z',
   },
   {
+    // PROJECT scope, company-wide: the §A1.1 inheritance — Test Lead on every project…
     id: uid(2, 'g'),
     role: roles[2],
     user: ref(users[1]),
+    team: null,
+    projectId: null,
+    projectName: null,
+    grantedAt: '2026-01-15T10:00:00Z',
+  },
+  {
+    // …except this one, which granted him less. The row above is replaced here, not added to.
+    id: uid(3, 'g'),
+    role: roles[5],
+    user: ref(users[1]),
+    team: null,
+    projectId: PROJECT_ID,
+    projectName: 'Acme Online Banking',
+    grantedAt: '2026-02-10T14:20:00Z',
+  },
+  {
+    // The two team grants, matching the org chart above rather than restating it differently.
+    id: uid(4, 'g'),
+    role: roles[2],
+    user: null,
     team: { id: uid(1, 't'), name: 'Payments Squad' },
     projectId: PROJECT_ID,
     projectName: 'Acme Online Banking',
     grantedAt: '2026-01-15T10:00:00Z',
   },
   {
-    id: uid(3, 'g'),
-    role: roles[2],
-    user: ref(users[2]),
+    id: uid(5, 'g'),
+    role: roles[3],
+    user: null,
     team: { id: uid(2, 't'), name: 'Checkout Squad' },
     projectId: PROJECT_ID,
     projectName: 'Acme Online Banking',
     grantedAt: '2026-02-03T09:30:00Z',
   },
   {
-    id: uid(4, 'g'),
-    role: roles[1],
-    user: ref(users[2]),
-    team: null,
+    id: uid(6, 'g'),
+    role: roles[2],
+    user: null,
+    team: { id: uid(2, 't'), name: 'Checkout Squad' },
     projectId: PROJECT_ID_2,
     projectName: 'Acme Mobile App',
     grantedAt: '2026-02-03T09:30:00Z',
+  },
+  {
+    // The seeded persona's own Viewer grant, so `projects[1].myRole` has a row behind it.
+    id: uid(7, 'g'),
+    role: roles[5],
+    user: ref(users[0]),
+    team: null,
+    projectId: PROJECT_ID_2,
+    projectName: 'Acme Mobile App',
+    grantedAt: '2026-03-11T08:45:00Z',
   },
 ];
 

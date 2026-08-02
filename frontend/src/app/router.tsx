@@ -75,6 +75,9 @@ const ArtifactsPage = lazy(() =>
 );
 const BoardPage = lazy(() => import('../features/board/BoardPage').then((m) => ({ default: m.BoardPage })));
 const TeamsPage = lazy(() => import('../features/admin/TeamsPage').then((m) => ({ default: m.TeamsPage })));
+const ProjectAccessPage = lazy(() =>
+  import('../features/admin/ProjectAccessPage').then((m) => ({ default: m.ProjectAccessPage })),
+);
 
 /** Route-level fallback, shaped like a page so the shell doesn't jump while a chunk loads. */
 function RouteFallback() {
@@ -265,6 +268,21 @@ function AppRoutes() {
               </Suspense>
             }
           />
+          {/*
+            Project administration. `/admin/teams` is the COMPANY view of the same access model and
+            stays where it is; this is the per-project one, so it lives under the project segment
+            like every other screen whose subject is a project. The two render through the same
+            table and role reference, so the split is one of scope rather than of implementation.
+          */}
+          <Route
+            path="/projects/:projectId/access"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <ProjectAccessPage />
+              </Suspense>
+            }
+          />
+
           <Route
             path="/projects/:projectId/artifacts"
             element={

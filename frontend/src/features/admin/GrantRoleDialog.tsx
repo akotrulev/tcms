@@ -55,10 +55,20 @@ export function GrantRoleDialog({
   open,
   onClose,
   onGranted,
+  lockedProjectId,
 }: {
   open: boolean;
   onClose: () => void;
   onGranted: (assignment: RoleAssignment) => void;
+  /**
+   * Pins the grant to one project and renders the scope as a fact rather than a question.
+   *
+   * Set by `ProjectAccessPage`, which is *about* one project: a scope select there would offer to
+   * do something the page did not claim to be for, and the obvious mis-click — leaving it on "the
+   * whole company" — is now the one choice with company-wide blast radius (see the scope select's
+   * own copy). Unset on the company screen, where choosing the scope is the whole question.
+   */
+  lockedProjectId?: string;
 }) {
   const roles = useRoles();
   const users = useUsers();
@@ -66,7 +76,7 @@ export function GrantRoleDialog({
   const projects = useProjects();
   const grant = useGrantRole();
 
-  const [scope, setScope] = useState<string>(COMPANY_SCOPE);
+  const [scope, setScope] = useState<string>(lockedProjectId ?? COMPANY_SCOPE);
   const [roleId, setRoleId] = useState('');
   const [subject, setSubject] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -80,15 +90,25 @@ export function GrantRoleDialog({
     table, because a nullable `company_id` under RLS is permanently unreachable. The server refuses
     it with a 400 naming `roleId`; offering it here would be offering a choice we know is refused.
 
-    Filtered further by the CHOSEN SCOPE, because the server refuses a mismatch rather than
-    coercing it — a COMPANY-scope role pinned to one project would quietly demote a Company Admin,
-    and a PROJECT-scope role widened to the company would hand over every project present and
-    future. Both are 400s; neither should be reachable from the form.
+    Filtered further by the CHOSEN SCOPE, and the two branches are no longer symmetric:
+
+      - **A project** takes PROJECT-scope roles only. A COMPANY-scope role pinned to one project is
+        still a 400 on `roleId` — Company Admin is authority over the company, and letting a
+        project name it would let anyone holding `project:members` redefine it (roles spec §A1.1,
+        exemption 2).
+      - **The whole company** takes BOTH, and that changed on 2026-08-02. It used to take
+        COMPANY-scope only, and this filter still said so after the server stopped agreeing: roles
+        spec §A1.1 made a PROJECT-scope role grantable with no project, meaning *this role on every
+        project in the company, unless that project says otherwise*. The old refusal's fear — "this
+        hands somebody every project present and future" — was correct and is now the stated
+        intent, made governable by the per-project override rather than by the refusal. A form that
+        kept refusing it would be the §50 shape in the client's direction: the server accepts an
+        input no screen can produce.
   */
   const grantableRoles = useMemo(
     () =>
       (roles.data ?? []).filter((role) =>
-        projectId ? role.scope === 'PROJECT' : role.scope === 'COMPANY',
+        projectId ? role.scope === 'PROJECT' : role.scope !== 'SYSTEM',
       ),
     [roles.data, projectId],
   );
@@ -145,6 +165,10 @@ export function GrantRoleDialog({
               select
               label="Where"
               value={scope}
+              // Locked, not hidden: the project screen's grant is still a scoped act and the field
+              // is what says which scope. Removing it would make the one company-wide-capable
+              // control on that page invisible rather than fixed.
+              disabled={!!lockedProjectId}
               // Clearing the role is the point: the role list is scope-dependent, so a role chosen
               // under the old scope is one the server would refuse with a 400 on a select the user
               // did not touch.
@@ -155,7 +179,7 @@ export function GrantRoleDialog({
               helperText={
                 projectId
                   ? 'The role applies to this project only.'
-                  : 'The role applies to every project in the company, present and future.'
+                  : 'A company role applies everywhere. A project role granted here becomes the default on every project — including ones created later.'
               }
               slotProps={{ htmlInput: { 'data-testid': `${TestId}.Scope` } }}
             >
@@ -175,8 +199,16 @@ export function GrantRoleDialog({
               error={!!fieldErrors.roleId}
               helperText={
                 fieldErrors.roleId ??
-                selectedRole?.description ??
-                'Only the roles that fit the scope above are offered.'
+                /*
+                  The inheritance warning wins over the role's own description, because it is the
+                  consequence the administrator cannot see from the two selects: at company scope a
+                  PROJECT-scope role is not "this role, here" but "this role on everything that
+                  does not say otherwise", and the projects it reaches are not on this screen.
+                */
+                (!projectId && selectedRole?.scope === 'PROJECT'
+                  ? `Applies to every project that has not granted them a role of its own — a project grant replaces this one there, even when it confers less. ${selectedRole.description}`
+                  : (selectedRole?.description ??
+                    'Only the roles that fit the scope above are offered.'))
               }
               slotProps={{ htmlInput: { 'data-testid': `${TestId}.Role` } }}
             >

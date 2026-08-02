@@ -8,6 +8,7 @@ import { ApiError } from '../../api/client';
 import { useAcceptInvitation, useInvitationPreview } from '../../api/queries';
 import { useAuth } from '../../auth/useAuth';
 import { Identifier } from '../../components/Identifier';
+import { offerToSaveCredentials } from '../../lib/credentials';
 
 /**
  * Redeeming an invitation — the other public route, and the only screen a stranger can reach.
@@ -181,6 +182,19 @@ function AcceptForm({ token, email, displayName, passwordRequired }: AcceptFormP
   async function submit(password?: string) {
     try {
       await accept.mutateAsync(password === undefined ? {} : { password });
+      /*
+        Offer the password they just chose to the browser's manager, before sending them to sign in
+        with it — this is the one moment in the product where a *new* password exists, so it is the
+        moment worth capturing. Missing it means the invitee types it once here, then again on the
+        very next screen, with nothing offering to remember it.
+
+        Only when they actually set one: the no-password branch below is an existing account
+        joining a second company, and storing its old password over again would offer to save a
+        credential this page never saw.
+      */
+      if (password !== undefined) {
+        void offerToSaveCredentials({ id: email, password, name: displayName });
+      }
       // 204, not a session. Sign-in is the next step, and the address travels so the invitee
       // doesn't have to remember which of their addresses was invited.
       navigate('/login', { replace: true, state: { acceptedEmail: email } });
@@ -235,9 +249,38 @@ function AcceptForm({ token, email, displayName, passwordRequired }: AcceptFormP
           noValidate
           aria-busy={isSubmitting}
           data-testid={`${TestIdPrefix}.Form`}
+          /* See `LoginPage` — declared for the password managers' heuristics, never followed. */
+          method="post"
+          action="/accept-invitation"
         >
           <Stack sx={{ gap: 2 }}>
             <Typography variant="body2">Choose a password to finish setting up your account.</Typography>
+
+            {/*
+              The username field, and it exists for the password manager rather than for the
+              invitee — who cannot change it and has already read it in the heading above.
+
+              A password form with no username field is the classic reason a manager declines to
+              save, or saves the entry filed under no account at all, which then never autofills.
+              Safari has no Credential Management API for passwords, so for iCloud Keychain this
+              field *is* the mechanism. `readOnly` rather than `disabled`: a disabled input is not
+              submitted and is skipped by the same heuristics this is here to satisfy.
+
+              It also stops being a caption pretending to be data — the address the account is
+              being created under now renders as the field it is.
+            */}
+            <TextField
+              label="Email"
+              type="email"
+              name="email"
+              autoComplete="username"
+              value={email}
+              fullWidth
+              slotProps={{
+                htmlInput: { readOnly: true, 'data-testid': `${TestIdPrefix}.EmailField` },
+              }}
+              helperText="Your invitation was sent to this address."
+            />
 
             <TextField
               label="Password"

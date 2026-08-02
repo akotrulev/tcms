@@ -7,6 +7,7 @@ import { ApiError } from '../../api/client';
 import { IS_MOCK_API } from '../../app/apiMode';
 import { Identifier } from '../../components/Identifier';
 import { useAuth } from '../../auth/useAuth';
+import { offerToSaveCredentials } from '../../lib/credentials';
 
 /**
  * One Zod schema, one inferred type. The same schema would validate on the server if this
@@ -88,6 +89,16 @@ export function LoginPage() {
   const onSubmit = handleSubmit(async (data) => {
     try {
       await login(data.email, data.password, data.rememberMe);
+      /*
+        Offer the credential to the browser's password manager, and only now — the contract of the
+        Credential Management API is "these worked", so a store before the await would teach the
+        manager a password the server had not accepted yet, which then autofills forever.
+
+        Not awaited. The prompt is the browser's and it survives the client-side route change below
+        because the document does not unload; awaiting it would hold the user on the sign-in form
+        for as long as they took to answer a dialog that is not ours.
+      */
+      void offerToSaveCredentials({ id: data.email, password: data.password });
       navigate(from, { replace: true });
     } catch (error) {
       if (error instanceof ApiError && error.hasFieldErrors) {
@@ -136,6 +147,17 @@ export function LoginPage() {
           component="form"
           onSubmit={onSubmit}
           noValidate
+          /*
+            `method`/`action` are never followed — `onSubmit` prevents the default — and they are
+            here for the password managers, not for the network. Safari implements no Credential
+            Management API for passwords, so iCloud Keychain's offer to save is driven entirely by
+            how this form *looks*: a real `<form>` posting to a sign-in path, with a `username`
+            field and a `current-password` field. The declared action is what turns the ambiguous
+            "some form" into "a login form" for that heuristic, and it costs nothing here because
+            submission never reaches it. Chromium is handled explicitly, in `lib/credentials.ts`.
+          */
+          method="post"
+          action="/login"
           aria-busy={isSubmitting}
           data-testid={`${TestIdPrefix}.Form`}
           sx={{

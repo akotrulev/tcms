@@ -82,6 +82,14 @@ function projectNav(projectId: string): { heading: string; items: NavItem[] }[] 
       heading: 'Project',
       items: [
         { label: 'Artifacts', to: `${p}/artifacts`, icon: <InventoryOutlinedIcon fontSize="small" /> },
+        /*
+          `${p}/…`, and it earns the Project heading on exactly the test the note below sets: it is
+          about the project in the picker and switching projects changes what it shows. It is the
+          per-project view of the access model — what THIS project granted, and what it inherits
+          from the company — while `Teams & roles` below stays the company-wide one. Two headings,
+          two scopes, one implementation underneath.
+        */
+        { label: 'Access & roles', to: `${p}/access`, icon: <GroupsOutlinedIcon fontSize="small" /> },
       ],
     },
     /*
@@ -93,6 +101,12 @@ function projectNav(projectId: string): { heading: string; items: NavItem[] }[] 
       are granted per project — which is the opposite of the model (a role is held across the whole
       company), so the one place a person goes to understand permissions was mis-teaching them before
       they arrived.
+
+      That remains true and `Access & roles` above does not undo it. A role is still *held* across
+      the company; a project may grant its own and, per roles spec §A1.1, a project grant REPLACES
+      the company-wide one there. Two entries because there are two genuinely different questions —
+      "who is in this company and what do they hold" and "who can act on this project" — not because
+      the same screen is listed twice.
     */
     {
       heading: 'Company',

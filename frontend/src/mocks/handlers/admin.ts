@@ -166,12 +166,29 @@ export const adminHandlers = [
     return HttpResponse.json(roles);
   }),
 
+  /*
+    The list is **filtered by what the caller may staff**, not by what they can see — mirroring
+    `AdminDirectoryService.listRoleAssignments`, which filters on `AdminReach.mayStaff` so that
+    every row carries a Revoke the server will accept and every grant it would accept a revoke for
+    is on the screen.
+
+    It used to return everything to everybody, and that mattered once a project screen started
+    reading the company-wide rows: the seeded persona is an ordinary member (`companyScopePermissions`
+    below the fixtures explains why), so live mode shows them **no** company-wide grants while an
+    unfiltered mock showed them all of them. A mock more generous than the server is the same defect
+    class as one that is stricter — the branch the product actually renders becomes the one nobody
+    develops against.
+
+    **To drive the company-wide branch in mock mode, add `'company:members'` to
+    `companyScopePermissions` in `fixtures/core.ts`** — the same documented toggle that file already
+    carries for `project:create`.
+  */
   http.get(`${API}/role-assignments`, async ({ request }) => {
     await delay(LATENCY);
     const projectId = new URL(request.url).searchParams.get('projectId');
-    const rows = projectId
-      ? db.roleAssignments.filter((a) => a.projectId === projectId)
-      : db.roleAssignments;
+    const rows = db.roleAssignments
+      .filter((a) => !projectId || a.projectId === projectId)
+      .filter((a) => mayStaff(a.projectId));
     return HttpResponse.json(rows);
   }),
 
@@ -228,11 +245,23 @@ export const adminHandlers = [
       errors.roleId = [
         'This role applies to the whole company, so it cannot be granted on a single project.',
       ];
-    } else if (role.scope === 'PROJECT' && !projectId) {
-      errors.roleId = [
-        'This role applies to one project, so choose the project it should apply to.',
-      ];
     }
+    /*
+      There is deliberately NO `role.scope === 'PROJECT' && !projectId` refusal, and its removal on
+      2026-08-02 is the point rather than a relaxation. Roles spec §A1.1 made a PROJECT-scope role
+      grantable with no project — "this role on every project in the company, unless that project
+      says otherwise" — and this handler still refused it after `RoleGrantService` stopped doing so.
+
+      A mock that is stricter than the server is the failure mode this file keeps a list of: the
+      branch it forbids becomes unreachable in development, so the screen that renders inheritance
+      cannot be built or seen until a live pass. The fixture below carries a company-wide grant for
+      the same reason — a rule with no row is a rule nobody looks at.
+
+      The asymmetry with COMPANY scope above is the model's, not an oversight: a COMPANY-scope role
+      pinned to a project is still refused, because Company Admin is authority over the company and
+      letting a project name it would let anyone holding `project:members` redefine it (§A1.1,
+      exemption 2).
+    */
 
     if (hasUser && !hasTeam && !users.some((u) => u.id === body.userId)) {
       errors.userId = ['That person is not a member of this company.'];

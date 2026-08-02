@@ -112,12 +112,51 @@ describe('GrantRoleDialog', () => {
     vi.restoreAllMocks()
   })
 
-  it('offers only COMPANY-scope roles while the scope is the whole company', async () => {
+  /*
+    Rewritten 2026-08-02, not deleted. It used to assert `['Company Admin']` — that a PROJECT-scope
+    role could not be granted company-wide — which was the product's rule until roles spec §A1.1
+    made such a grant mean "this role on every project unless that project says otherwise". The
+    backend rewrote its own two pinning tests the same way in the same change, and the assertion
+    that matters is still here: SYSTEM is never offered, because those grants live in
+    `instance_role_assignment` and only the operator CLI writes them.
+  */
+  it('offers company and project roles at company scope — but never the SYSTEM one', async () => {
     mockReads({ company: ['company:members'], project: [] })
     renderDialog()
     await screen.findByTestId('Admin.Grant')
 
-    expect(await optionNames('Admin.Grant.Role')).toEqual(['Company Admin'])
+    const names = await optionNames('Admin.Grant.Role')
+    expect(names).toEqual(['Company Admin', 'Viewer'])
+    expect(names).not.toContain('Instance Admin')
+  })
+
+  it('warns that a project role granted company-wide reaches every project', async () => {
+    mockReads({ company: ['company:members'], project: [] })
+    renderDialog()
+    await screen.findByTestId('Admin.Grant')
+
+    await chooseFrom('Admin.Grant.Role', 'Viewer')
+
+    // The consequence the two selects cannot show: the projects it reaches are not on this screen,
+    // and §A1.1 is replace-not-union, so the sentence has to say both.
+    const role = screen.getByTestId('Admin.Grant.Role').closest('.MuiFormControl-root')!
+    expect(role.textContent).toMatch(/every project that has not granted them a role of its own/i)
+    expect(role.textContent).toMatch(/even when it confers less/i)
+  })
+
+  it('pins the scope and offers project roles only when opened from a project', async () => {
+    mockReads({ company: ['company:members'], project: ['project:members'] })
+    render(
+      <TestProviders client={createTestQueryClient()}>
+        <GrantRoleDialog open lockedProjectId={PROJECT} onClose={() => {}} onGranted={() => {}} />
+      </TestProviders>,
+    )
+    await screen.findByTestId('Admin.Grant')
+
+    // Disabled rather than absent: the scope is still what the grant is about, so the field states
+    // it. And with a project pinned, Company Admin must not be offered — the server refuses it.
+    expect(screen.getByTestId('Admin.Grant.Scope')).toBeDisabled()
+    expect(await optionNames('Admin.Grant.Role')).toEqual(['Viewer'])
   })
 
   it('offers only PROJECT-scope roles once a project is chosen, and never the SYSTEM one', async () => {

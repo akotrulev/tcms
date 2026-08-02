@@ -1,5 +1,4 @@
 import {
-  Alert,
   Box,
   Button,
   Chip,
@@ -13,20 +12,19 @@ import {
   Typography,
 } from '@mui/material';
 import { useMemo, useState } from 'react';
-import { ApiError } from '../../api/client';
 import { useAuth } from '../../auth/useAuth';
-import type { Role, RoleAssignment, Team, User } from '../../api/types';
-import { useRevokeRole, useRoleAssignments, useRoles, useTeams, useUsers } from '../../api/queries';
+import type { Team, User } from '../../api/types';
+import { useRoleAssignments, useRoles, useTeams, useUsers } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
-import { describeError } from '../../lib/describeError';
 import { formatAge, formatCount, formatDateTime } from '../../lib/format';
-import { allPermissions, groupByArea, holdsEveryPermission } from '../../lib/permissions';
 import { GrantRoleDialog } from './GrantRoleDialog';
 import { InviteUserDialog } from './InviteUserDialog';
 import { RemoveUserDialog } from './RemoveUserDialog';
+import { RoleAssignmentTable } from './RoleAssignmentTable';
+import { RoleReference } from './RoleReference';
 import { ScrollX } from '../../components/ScrollX';
 
 /**
@@ -46,6 +44,11 @@ import { ScrollX } from '../../components/ScrollX';
  * Revoke the server will accept, and the gate on it is scope-dependent for the same reason the
  * grant's is: `project:members` for a row naming a project, `company:members` for one that does
  * not.
+ *
+ * This is the **company** view of that list, deliberately unfiltered. The per-project view of the
+ * same data — with the roles a project inherits from the company, and which of them a project
+ * grant has replaced — is `ProjectAccessPage`, reached from a project's own rail. Both render
+ * through `RoleAssignmentTable` so the two cannot drift about what a Revoke means.
  */
 export function TeamsPage() {
   const teams = useTeams();
@@ -122,7 +125,7 @@ export function TeamsPage() {
             isEmpty={(rows) => rows.length === 0}
             empty={{ kind: 'no-records', title: 'No assignments', body: 'Nobody holds a project role yet.' }}
           >
-            {(rows) => <AssignmentTable rows={rows} />}
+            {(rows) => <RoleAssignmentTable rows={rows} testId="Admin.Assignments" />}
           </DataRegion>
         </Panel>
 
@@ -269,7 +272,7 @@ export function TeamsPage() {
             state={{ ...roles, refetch: () => void roles.refetch() }}
             isEmpty={(rows) => rows.length === 0}
           >
-            {(rows) => <RoleList roles={rows} />}
+            {(rows) => <RoleReference roles={rows} testId="Admin.Roles" />}
           </DataRegion>
         </Panel>
       </Stack>
@@ -344,187 +347,6 @@ function TeamTree({ teams }: { teams: Team[] }) {
                     }}
                   />
                 </Tooltip>
-              ))}
-            </Stack>
-          )}
-        </Box>
-      ))}
-    </Stack>
-  );
-}
-
-function AssignmentTable({ rows }: { rows: RoleAssignment[] }) {
-  const revoke = useRevokeRole();
-  /*
-    Keyed by assignment id rather than held as one string. The self-lockout refusal belongs to the
-    row that caused it — a single `error` would move the message onto whichever row was clicked
-    next, which is how a warning about YOUR grant ends up under somebody else's name.
-  */
-  const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
-
-  const onRevoke = async (assignment: RoleAssignment) => {
-    setRowErrors((current) => ({ ...current, [assignment.id]: '' }));
-    try {
-      await revoke.mutateAsync(assignment.id);
-    } catch (error) {
-      // The one refusal `PermissionGate` cannot predict: "you may not revoke the grant carrying
-      // your own ability to revoke" is a fact about the ROW, not about the caller's permissions,
-      // so it can only be surfaced where it happens.
-      const message =
-        error instanceof ApiError && error.fieldErrors?.assignmentId
-          ? error.fieldErrors.assignmentId.join(' ')
-          : describeError(error).body;
-      setRowErrors((current) => ({ ...current, [assignment.id]: message }));
-    }
-  };
-
-  return (
-    <ScrollX>
-      <Table size="small" data-testid="Admin.Assignments.Grid">
-        <TableHead>
-          <TableRow>
-            <TableCell sx={{ color: 'text.secondary' }}>Who</TableCell>
-            <TableCell sx={{ color: 'text.secondary', width: 140 }}>Role</TableCell>
-            <TableCell sx={{ color: 'text.secondary', width: 180 }}>Project</TableCell>
-            <TableCell sx={{ color: 'text.secondary', width: 160 }}>Granted via</TableCell>
-            <TableCell sx={{ color: 'text.secondary', width: 130 }}>Granted</TableCell>
-            <TableCell sx={{ color: 'text.secondary', width: 110 }} align="right">
-              {/* Header intentionally blank-labelled: the column holds one action per row. */}
-              Access
-            </TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {[...rows]
-            // `projectName` is null for a system-scoped role (an Admin holds it instance-wide,
-            // not on a project), so those sort first under an explicit label rather than
-            // crashing the comparator or drifting to the bottom unexplained.
-            .sort(
-              (a, b) =>
-                (a.projectName ?? '').localeCompare(b.projectName ?? '') ||
-                (a.user?.displayName ?? '').localeCompare(b.user?.displayName ?? ''),
-            )
-            .map((assignment) => (
-              <TableRow key={assignment.id} data-testid="Admin.Assignments.Row" hover>
-                <TableCell sx={{ fontWeight: 500 }}>{assignment.user?.displayName ?? '—'}</TableCell>
-                <TableCell>
-                  <Chip size="small" variant="outlined" label={assignment.role.name} />
-                </TableCell>
-                <TableCell>
-                  {assignment.projectName ?? (
-                    <Tooltip title="A system-scoped role applies across every project.">
-                      <Box component="span" sx={{ color: 'text.secondary' }}>
-                        Instance-wide
-                      </Box>
-                    </Tooltip>
-                  )}
-                </TableCell>
-                <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-                  {/* Whether a role came through a team or directly determines how you revoke
-                      it — removing a person from a project won't help if the team grants it. */}
-                  {assignment.team ? `${assignment.team.name} (team)` : 'granted directly'}
-                </TableCell>
-                <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-                  {formatDateTime(assignment.grantedAt)}
-                  {rowErrors[assignment.id] && (
-                    <Alert
-                      severity="error"
-                      role="alert"
-                      sx={{ mt: 0.5, py: 0, fontSize: '0.7rem' }}
-                      data-testid="Admin.Assignments.Row.Error"
-                    >
-                      {rowErrors[assignment.id]}
-                    </Alert>
-                  )}
-                </TableCell>
-                <TableCell align="right">
-                  {/*
-                    The same scope-dependent gate the server applies, and the same one the grant
-                    dialog applies — a row naming a project asks that project's `project:members`, a
-                    company-wide row asks `company:members`. Disabled with a reason rather than
-                    hidden: an action cell that empties on some rows shifts the whole column.
-                  */}
-                  <PermissionGate
-                    projectId={assignment.projectId ?? 'company'}
-                    permission={assignment.projectId ? 'project:members' : 'company:members'}
-                  >
-                    {({ allowed }) => (
-                      <Button
-                        size="small"
-                        color="error"
-                        disabled={!allowed || revoke.isPending}
-                        onClick={() => void onRevoke(assignment)}
-                        data-testid="Admin.Assignments.Row.Revoke"
-                      >
-                        Revoke
-                      </Button>
-                    )}
-                  </PermissionGate>
-                </TableCell>
-              </TableRow>
-            ))}
-        </TableBody>
-      </Table>
-    </ScrollX>
-  );
-}
-
-function RoleList({ roles }: { roles: Role[] }) {
-  return (
-    <Stack sx={{ gap: 2 }}>
-      {roles.map((role) => (
-        <Box key={role.id} data-testid="Admin.Roles.Item">
-          <Stack direction="row" sx={{ alignItems: 'center', gap: 1, mb: 0.5, flexWrap: 'wrap' }}>
-            <Typography variant="body2" sx={{ fontWeight: 600 }}>
-              {role.name}
-            </Typography>
-            <Chip size="small" variant="outlined" label={role.scope.toLowerCase()} />
-            {role.builtIn && (
-              <Tooltip title="Built in. Its permissions can't be edited, so behaviour stays predictable across projects.">
-                <Chip size="small" variant="outlined" label="built in" />
-              </Tooltip>
-            )}
-          </Stack>
-
-          <Typography variant="body2" sx={{ color: 'text.secondary', mb: 0.75 }}>
-            {role.description}
-          </Typography>
-
-          {/*
-            Coverage is DERIVED from the catalogue, not read from a sentinel. The previous pass
-            looked for a '*' permission; no such permission exists in the model, and a sentinel
-            would keep reading as full coverage after a new permission was added that the role
-            does not hold. Now a gap renders as a gap (lib/permissions.ts).
-          */}
-          {holdsEveryPermission(role.permissions) ? (
-            <Chip
-              size="small"
-              label={`every permission (${allPermissions.length})`}
-              data-testid="Admin.Roles.AllPermissions"
-              sx={{
-                bgcolor: 'color-mix(in srgb, var(--color-failed) 12%, transparent)',
-                color: 'var(--color-failed)',
-                border: '1px solid color-mix(in srgb, var(--color-failed) 40%, transparent)',
-              }}
-            />
-          ) : (
-            <Stack sx={{ gap: 0.75 }} data-testid="Admin.Roles.Permissions">
-              {groupByArea(role.permissions).map((group) => (
-                <Stack key={group.area} direction="row" sx={{ gap: 0.75, alignItems: 'baseline' }}>
-                  <Typography
-                    variant="caption"
-                    sx={{ color: 'text.secondary', minWidth: 96, flexShrink: 0 }}
-                  >
-                    {group.label}
-                  </Typography>
-                  <Stack direction="row" sx={{ gap: 0.5, flexWrap: 'wrap' }}>
-                    {group.permissions.map((permission) => (
-                      <Identifier key={permission} variant="muted">
-                        {permission}
-                      </Identifier>
-                    ))}
-                  </Stack>
-                </Stack>
               ))}
             </Stack>
           )}
