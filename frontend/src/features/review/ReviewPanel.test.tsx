@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
-import type { Review } from '../../api/types'
+import type { Review, ReviewComment } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
@@ -36,6 +36,16 @@ const person = (name: string) => ({
   avatarUrl: null,
 })
 
+/**
+ * A review, fully spelled out — and **no `as Review` cast**, which is the point of this comment.
+ *
+ * It used to end `} as Review`, and when `comments` was added to the contract in §79 every one of
+ * this file's eleven tests went red at runtime (`comments.length` of `undefined`) with **zero type
+ * errors**, because the cast told the compiler the object was already a `Review`. §65's finding, in
+ * a second file: a fixture that asserts its own shape is a fixture that stops tracking the
+ * contract. Without the cast, the next required field is a build failure here rather than eleven
+ * confusing runtime failures.
+ */
 function review(overrides: Partial<Review> = {}): Review {
   return {
     id: 'r1',
@@ -48,8 +58,23 @@ function review(overrides: Partial<Review> = {}): Review {
     approvedBy: null,
     approvedAt: null,
     participations: [],
+    comments: [],
     ...overrides,
-  } as Review
+  }
+}
+
+/** One thread, spelled out for the same reason `review` is — no cast, so the contract binds. */
+function thread(overrides: Partial<ReviewComment> = {}): ReviewComment {
+  return {
+    id: 'c1',
+    author: person('Bo'),
+    body: 'A remark',
+    createdAt: '2026-07-29T14:06:00Z',
+    resolvedAt: null,
+    resolvedBy: null,
+    replies: [],
+    ...overrides,
+  }
 }
 
 /**
@@ -271,5 +296,137 @@ describe('ReviewPanel — the record, and the sign-off it must not offer', () =>
     renderPanel()
 
     expect(await screen.findByTestId('Review.Current')).toHaveTextContent('a former member')
+  })
+
+  /*
+    §6g's threads, and the one thing this panel gets wrong most easily: the two affordances cost
+    two DIFFERENT keys. Writing a remark costs `case:comment` on every subject type — the catalogue
+    has one comment key where it has three review keys, because commenting is a tier — while
+    resolving costs the subject's own `*:review`. A panel that asked one key for both would either
+    hide commenting from the Viewer §6b built the key for, or offer a Viewer a resolve button whose
+    only outcome is a 403.
+
+    These are frontend tests because a frontend test can hold a permission set the seeded catalogue
+    cannot produce (§71's finding): `case:comment` WITHOUT `plan:review` is a real Viewer, and
+    `plan:review` without `case:comment` is a persona no role has — which is why the server's half
+    is a computed check over the catalogue rather than a test.
+  */
+  it('lets a commenter write while refusing them the resolve control', async () => {
+    mockReads(
+      [review({ comments: [thread({ id: 'c1', body: 'Is settlement in scope?' })] })],
+      ['case:comment'],
+    )
+    renderPanel()
+
+    // A positive assertion first, so nothing here can be satisfied by `useCan`'s pending state —
+    // §66's finding, and §76's repair of the same shape in this very file.
+    await waitFor(() => expect(screen.getByTestId('Review.Comment.New.Body')).toBeEnabled())
+    expect(screen.getByTestId('Review.Thread.Root')).toHaveTextContent('Is settlement in scope?')
+    expect(screen.getByTestId('Review.Thread.ReplyToggle')).toBeEnabled()
+    expect(screen.getByTestId('Review.Thread.Resolve')).toBeDisabled()
+    // And the tier above it is refused too — the panel must not confuse "may comment" with "may
+    // give a verdict", which is the same three-tier distinction one rung up.
+    expect(screen.getByTestId('Review.Lgtm')).toBeDisabled()
+  })
+
+  it('lets a reviewer resolve, and shows who resolved a thread already dealt with', async () => {
+    mockReads(
+      [
+        review({
+          comments: [
+            thread({
+              id: 'c1',
+              body: 'The exit criterion reads 0%.',
+              resolvedAt: '2026-07-30T08:05:00Z',
+              resolvedBy: person('Ana'),
+            }),
+          ],
+        }),
+      ],
+      ['plan:review', 'case:comment'],
+    )
+    renderPanel()
+
+    await waitFor(() => expect(screen.getByTestId('Review.Thread.Resolve')).toBeEnabled())
+    expect(screen.getByTestId('Review.Thread.Resolve')).toHaveTextContent('Re-open')
+    expect(screen.getByTestId('Review.Thread.Resolved')).toHaveTextContent('Resolved by Ana')
+  })
+
+  it('posts a comment with a null parent, and a reply with the thread root', async () => {
+    mockReads([review({ comments: [thread({ id: 'c1', body: 'Root' })] })], ['case:comment'])
+    const post = vi.spyOn(api, 'post').mockResolvedValue(review() as never)
+    renderPanel()
+
+    await waitFor(() => expect(screen.getByTestId('Review.Comment.New.Body')).toBeEnabled())
+    await userEvent.type(screen.getByTestId('Review.Comment.New.Body'), 'A new point')
+    await userEvent.click(screen.getByTestId('Review.Comment.New.Submit'))
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1))
+    expect(post.mock.calls[0][0]).toBe(`/projects/${PROJECT}/reviews/r1/comments`)
+    expect(post.mock.calls[0][1]).toEqual({ body: 'A new point', parentId: null })
+
+    await userEvent.click(screen.getByTestId('Review.Thread.ReplyToggle'))
+    await userEvent.type(screen.getByTestId('Review.Comment.Reply.Body'), 'Answering that')
+    await userEvent.click(screen.getByTestId('Review.Comment.Reply.Submit'))
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2))
+    expect(post.mock.calls[1][1]).toEqual({ body: 'Answering that', parentId: 'c1' })
+  })
+
+  it('renders a reply under its root and offers no reply-to-a-reply', async () => {
+    // The server refuses a reply to a reply as a field error, so a control here would be an
+    // affordance the product does not have — §31, from the side where the answer is "nobody may".
+    mockReads(
+      [
+        review({
+          comments: [
+            thread({
+              id: 'c1',
+              body: 'Root',
+              replies: [thread({ id: 'c2', body: 'A reply' })],
+            }),
+          ],
+        }),
+      ],
+      ['case:comment'],
+    )
+    renderPanel()
+
+    expect(await screen.findByTestId('Review.Thread.Replies')).toHaveTextContent('A reply')
+    expect(screen.getAllByTestId('Review.Thread')).toHaveLength(1)
+    expect(screen.getAllByTestId('Review.Thread.ReplyToggle')).toHaveLength(1)
+  })
+
+  it('offers no comment form once the review has ended, and drops the section when it is empty', async () => {
+    mockReads(
+      [review({ state: 'REJECTED', comments: [] })],
+      ['case:comment', 'plan:review'],
+    )
+    renderPanel()
+
+    await screen.findByTestId('Review.Current')
+    // A closed review nobody discussed has nothing to show and nothing that can be added; a heading
+    // over an empty list would be the "extra UI" §6g objects to, in miniature.
+    expect(screen.queryByTestId('Review.Comments')).toBeNull()
+    expect(screen.queryByTestId('Review.Comment.New')).toBeNull()
+  })
+
+  it('keeps a closed review’s conversation readable without offering a reply', async () => {
+    mockReads(
+      [review({ state: 'APPROVED', comments: [thread({ id: 'c1', body: 'Settled offline' })] })],
+      ['case:comment', 'plan:review'],
+    )
+    renderPanel()
+
+    expect(await screen.findByTestId('Review.Thread.Root')).toHaveTextContent('Settled offline')
+    expect(screen.queryByTestId('Review.Thread.ReplyToggle')).toBeNull()
+    expect(screen.queryByTestId('Review.Comment.New')).toBeNull()
+  })
+
+  it('keeps a comment whose author no longer resolves', async () => {
+    mockReads([review({ comments: [thread({ id: 'c1', author: null })] })], ['case:comment'])
+    renderPanel()
+
+    expect(await screen.findByTestId('Review.Thread.Root')).toHaveTextContent('A former member')
   })
 })

@@ -21,6 +21,11 @@ import java.util.UUID;
  * @param approvedBy       null unless {@code state} is {@code APPROVED}, and null on an approved
  *                         review whose approver has been offboarded. The pair with
  *                         {@code approvedAt} is what an auditor reads
+ * @param comments         §6g's threads, roots only — each carrying its own replies. Served with
+ *                         the review rather than from an endpoint of their own, for the reason the
+ *                         participations are: the panel reads a review as one thing, and a second
+ *                         call would let it render a trail and a conversation that disagree about
+ *                         which review they belong to
  */
 public record ReviewView(
         UUID id,
@@ -32,5 +37,6 @@ public record ReviewView(
         Instant createdAt,
         UserRefView approvedBy,
         Instant approvedAt,
-        List<ReviewParticipationView> participations) {
+        List<ReviewParticipationView> participations,
+        List<ReviewCommentView> comments) {
 }

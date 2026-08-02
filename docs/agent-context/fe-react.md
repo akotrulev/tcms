@@ -3,7 +3,7 @@
 # fe-react — orientation cache (TCMS)
 
 **Last verified:** 2026-08-02
-**Baseline commit:** `02fa872`
+**Baseline commit:** `e76bd9f`
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
 `frontend/vite.config.ts`
 
@@ -25,7 +25,7 @@
 - **`npm run build` is THE gate** (`tsc -b` + vite build). **Do not trust `tsc --noEmit`** — it has
   reported 0 errors while the build failed with nine (working agreement). `#confirmed`
 - `npm run lint` — oxlint, must stay at **0 warnings**; it prints nothing when clean.
-- `npm run test:run` — Vitest + RTL. **616/616** at this baseline (§77). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
+- `npm run test:run` — Vitest + RTL. **627/627** at this baseline (§79). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
 - `npm run gen:api` — regenerate `src/api/schema.d.ts` after **any** `openapi.yaml` change. Runs
   through `npx` on purpose (the scaffold pins TS 6, the tool peer-requires 5.x); do not "fix" it.
 - **Live mode:** `VITE_API_MODE=live` in `.env.local` proxies `/api` to `localhost:8080`.
@@ -45,6 +45,22 @@
 
 ## Seams to reuse
 
+- **`ReviewPanel` carries TWO permission tiers and they are different keys (§79).** The comment box
+  and Reply ask **`case:comment`** for *every* subject type — the catalogue has one comment key where
+  it has three review keys, because commenting is the bottom tier §6b built for the client who
+  reviews coverage without write access — while **Resolve** asks the subject's own
+  `REVIEW_PERMISSION[subjectType]`, as the verdict buttons do. **Do not "simplify" the two into
+  one:** a Viewer must be able to write and unable to resolve, and the panel's tests hold a
+  permission set the seeded catalogue cannot produce, which is the only place that pair is
+  observable (§71's finding from the good side). Both controls are **disabled, never hidden** (§31).
+  A **reply carries no Reply button** — the server refuses a reply to a reply, so rendering one would
+  be an affordance the product does not have — and a **closed review** renders the conversation with
+  no write affordance at all. `#confirmed`
+- **A fixture factory must NOT end `as <ContractType>` (§79).** `ReviewPanel.test.tsx`'s did, so
+  adding a required field to `Review` reddened all eleven of its tests **at runtime** with **zero
+  type errors**. §65's finding (five files mocking `/me/permissions` through `as never`) in a second
+  file. Declare the return type and let the object be checked, so the next contract change is one
+  build failure rather than a page of confusing runtime ones. `#confirmed`
 - **`useProjectSettings(projectId)` gates §6g's whole reviewer UI, and it is read by ARTIFACT screens
   rather than only by the settings page (§77).** §6g's opening requirement is that a project which
   never turns review on shows *"no extra UI at all"*, so `ReviewPanel` reads the settings and
@@ -164,6 +180,17 @@
 
 ## Session log
 
+- 2026-08-02 · EXTEND · Review comments (§79) — §6g's threads land in `ReviewPanel`. New:
+  `useAddReviewComment`, `useSetReviewCommentResolution`, `Threads`/`Thread`/`CommentBody`/
+  `CommentForm` in `ReviewPanel.tsx`, `ReviewComment` + `ReviewCommentInput` types, the mock's
+  `addComment`/`threadRoot`/`commentExists`/`setResolution` and its two new handlers, and two
+  fixture threads on the demo plan's open review (one with a reply, one resolved) beside a review
+  with **none** — §72's rule, both shapes present. **The two affordances cost two different keys**;
+  see the seam above. **The finding was a cast**: the test fixture's `as Review` hid a new required
+  field from the compiler and turned eleven tests red at runtime. The panel's empty trail also stopped
+  saying *"Nobody has commented yet"*, wording that named a feature two slices before it existed.
+  7 tests written (13 → 20 in that file), 627/627 overall; **0 mutations run inline**, 13 browser rows
+  queued.
 - 2026-08-02 · EXTEND · Per-project review settings (§77) — §6g's four settings get a screen and the
   review panel gets an off switch. New: `features/settings/ReviewSettingsPage.tsx`,
   `useProjectSettings`/`useUpdateProjectSettings`, `keys.projectSettings`,

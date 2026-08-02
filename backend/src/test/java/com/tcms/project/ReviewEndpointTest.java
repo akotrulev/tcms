@@ -515,6 +515,284 @@ class ReviewEndpointTest extends IntegrationTestBase {
     // =====================================================================
 
     @Nested
+    @DisplayName("Comments — the tier below review, and the thread that is one level deep")
+    class Comments {
+
+        @Test
+        @DisplayName("a Viewer holding case:comment may comment on a PLAN review")
+        void aViewerMayCommentOnAPlan() throws Exception {
+            UUID review = openPlanReview();
+
+            MvcResult result = comment(VIEWER, review, "Is the migration suite in scope?", null);
+
+            assertThat(result.getResponse().getStatus())
+                    .as("""
+                            THE ONE-KEY DECISION, and the persona that makes it discriminating. \
+                            The Viewer holds case:comment and NOT plan:review — the same persona \
+                            that gets 403 from the verdict endpoint one @Nested class up. A gate \
+                            keyed on the subject type would answer 403 here, and §6b's whole \
+                            reason for case:comment is the client who reviews coverage without \
+                            write access.""")
+                    .isEqualTo(201);
+
+            JsonNode thread = body(result).get("comments").get(0);
+            assertThat(thread.get("body").asText()).isEqualTo("Is the migration suite in scope?");
+            assertThat(thread.get("author").get("id").asText()).isEqualTo(VIEWER.toString());
+            assertThat(thread.get("resolvedAt").isNull()).isTrue();
+            assertThat(thread.get("replies")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a reply hangs under its root, and the root is the only top-level entry")
+        void aReplyHangsUnderItsRoot() throws Exception {
+            UUID review = openPlanReview();
+            UUID root = commentId(comment(VIEWER, review, "Is the migration suite in scope?", null));
+
+            MvcResult result = comment(ENGINEER, review, "It is — added last week.", root);
+
+            JsonNode threads = body(result).get("comments");
+            assertThat(threads).as("one thread, not two entries").hasSize(1);
+            assertThat(threads.get(0).get("replies")).hasSize(1);
+            assertThat(threads.get(0).get("replies").get(0).get("body").asText())
+                    .isEqualTo("It is — added last week.");
+            assertThat(threads.get(0).get("replies").get(0).get("replies"))
+                    .as("exactly one level: a reply's own replies is always empty")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("a reply to a reply is a field error — a thread has a bottom")
+        void aReplyToAReplyIsRefused() throws Exception {
+            UUID review = openPlanReview();
+            UUID root = commentId(comment(VIEWER, review, "Root", null));
+            UUID reply = commentId(comment(ENGINEER, review, "Reply", root));
+
+            MvcResult result = comment(VIEWER, review, "Reply to the reply", reply);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(result)).containsKey("parentId");
+            assertThat(commentCount(review))
+                    .as("a refused reply must write nothing")
+                    .isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("a parent from another project's review is refused, and stores nothing")
+        void aParentFromAnotherReviewIsRefused() throws Exception {
+            UUID mine = openPlanReview();
+            UUID theirs = openPlanReview();
+            UUID foreign = commentId(comment(VIEWER, theirs, "Somewhere else", null));
+
+            MvcResult result = comment(VIEWER, mine, "Threaded onto the wrong conversation", foreign);
+
+            assertThat(result.getResponse().getStatus())
+                    .as("""
+                            §64's sharedStepId and §68's classification value, third time: the id \
+                            satisfies the foreign key, the company column and RLS, and unchecked \
+                            it is STORED — after which the remark renders inside a conversation \
+                            its author never saw.""")
+                    .isEqualTo(400);
+            assertThat(errorsOf(result)).containsKey("parentId");
+            assertThat(commentCount(mine)).isZero();
+            assertThat(commentCount(theirs)).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("an empty remark is a field error, not a 201 with nothing in it")
+        void aBlankBodyIsRefused() throws Exception {
+            UUID review = openPlanReview();
+
+            MvcResult result = comment(VIEWER, review, "   ", null);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(result)).containsKey("body");
+            assertThat(commentCount(review)).isZero();
+        }
+
+        @Test
+        @DisplayName("a remark past the length bound is refused")
+        void anOversizedBodyIsRefused() throws Exception {
+            UUID review = openPlanReview();
+
+            MvcResult result = comment(VIEWER, review, "x".repeat(5_001), null);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(result)).containsKey("body");
+        }
+
+        @Test
+        @DisplayName("a closed review refuses the comment with 409, as it refuses the verdict")
+        void aClosedReviewRefuses() throws Exception {
+            UUID plan = plan(LEAD, "Release 6.1");
+            setPlanStatus(LEAD, plan, "IN_REVIEW");
+            UUID review = UUID.fromString(onlyReview(LEAD, "PLAN", plan).get("id").asText());
+            setPlanStatus(LEAD, plan, "APPROVED");
+
+            MvcResult result = comment(VIEWER, review, "One more thought", null);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(409);
+            assertThat(detailOf(result))
+                    .as("the same sentence the verdict endpoint gives — one spelling, one way out")
+                    .contains("Submit the plan for review again");
+            assertThat(commentCount(review)).isZero();
+        }
+
+        @Test
+        @DisplayName("an engineer resolves a thread, and the record names who did it")
+        void resolvingNamesItsActor() throws Exception {
+            UUID review = openPlanReview();
+            UUID root = commentId(comment(VIEWER, review, "Is the migration suite in scope?", null));
+
+            MvcResult result = resolve(ENGINEER, review, root, true);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(200);
+            JsonNode thread = body(result).get("comments").get(0);
+            assertThat(thread.get("resolvedAt").isNull()).isFalse();
+            assertThat(thread.get("resolvedBy").get("id").asText())
+                    .as("""
+                            V24's column. V1 gave the table a resolved_at and no actor, which is \
+                            enough to grey a thread out and not enough for the one thing the \
+                            record exists for.""")
+                    .isEqualTo(ENGINEER.toString());
+        }
+
+        @Test
+        @DisplayName("a Viewer cannot resolve — writing a remark and closing one are two tiers")
+        void aViewerCannotResolve() throws Exception {
+            UUID review = openPlanReview();
+            UUID root = commentId(comment(VIEWER, review, "Mine", null));
+
+            MvcResult result = resolve(VIEWER, review, root, true);
+
+            assertThat(result.getResponse().getStatus())
+                    .as("""
+                            THE ASYMMETRY. The same caller was allowed to write this very comment \
+                            two lines up; resolving it is the reviewing tier's act, because a \
+                            client marking their own feedback dealt with takes it off the \
+                            reviewer's list without anybody having addressed it.""")
+                    .isEqualTo(403);
+            assertThat(resolvedCount(review)).isZero();
+        }
+
+        @Test
+        @DisplayName("resolving a reply is refused — half a conversation is not dealt with")
+        void aReplyCannotBeResolved() throws Exception {
+            UUID review = openPlanReview();
+            UUID root = commentId(comment(VIEWER, review, "Root", null));
+            UUID reply = commentId(comment(ENGINEER, review, "Reply", root));
+
+            MvcResult result = resolve(ENGINEER, review, reply, true);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(result)).containsKey("resolved");
+            assertThat(resolvedCount(review)).isZero();
+        }
+
+        @Test
+        @DisplayName("re-opening clears both columns together")
+        void reopeningClearsBoth() throws Exception {
+            UUID review = openPlanReview();
+            UUID root = commentId(comment(VIEWER, review, "Root", null));
+            resolve(ENGINEER, review, root, true);
+
+            MvcResult result = resolve(ENGINEER, review, root, false);
+
+            JsonNode thread = body(result).get("comments").get(0);
+            assertThat(thread.get("resolvedAt").isNull()).isTrue();
+            assertThat(thread.get("resolvedBy").isNull())
+                    .as("""
+                            both columns move together in both directions — V24's CHECK is the \
+                            backstop, and a resolver left behind on a re-opened thread would read \
+                            as a resolution somebody undid without saying so""")
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("resolving an already-resolved thread is a 200 that re-stamps nothing")
+        void resolvingTwiceIsIdempotent() throws Exception {
+            UUID review = openPlanReview();
+            UUID root = commentId(comment(VIEWER, review, "Root", null));
+            String first = body(resolve(ENGINEER, review, root, true))
+                    .get("comments").get(0).get("resolvedAt").asText();
+
+            MvcResult again = resolve(ENGINEER, review, root, true);
+
+            assertThat(again.getResponse().getStatus()).isEqualTo(200);
+            assertThat(body(again).get("comments").get(0).get("resolvedAt").asText())
+                    .as("""
+                            THE DEFECT THIS CAUGHT, in the first draft of this very slice: an \
+                            unconditional write re-stamped resolved_at and handed resolved_by to \
+                            whoever clicked last, so the two columns V24 added to record who dealt \
+                            with a thread would have named the second person to agree rather than \
+                            the person who decided. A 200 that changes nothing is the \
+                            behaviour.""")
+                    .isEqualTo(first);
+            assertThat(body(again).get("comments").get(0).get("resolvedBy").get("id").asText())
+                    .isEqualTo(ENGINEER.toString());
+        }
+
+        @Test
+        @DisplayName("a missing `resolved` is a field error, not a silent no-op")
+        void anAbsentResolvedIsAFieldError() throws Exception {
+            UUID review = openPlanReview();
+            UUID root = commentId(comment(VIEWER, review, "Root", null));
+
+            MvcResult result = mvc.perform(MockMvcRequestBuilders
+                            .put("/api/v1/projects/" + ACME_BANKING + "/reviews/" + review
+                                    + "/comments/" + root + "/resolution")
+                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(ENGINEER, ACME))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .accept(MediaType.APPLICATION_JSON)
+                            .content("{}"))
+                    .andReturn();
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(result)).containsKey("resolved");
+        }
+
+        @Test
+        @DisplayName("a comment id from another review is 404, and resolves nothing there")
+        void aCommentFromAnotherReviewIsNotFound() throws Exception {
+            UUID mine = openPlanReview();
+            UUID theirs = openPlanReview();
+            UUID foreign = commentId(comment(VIEWER, theirs, "Somewhere else", null));
+
+            MvcResult result = resolve(ENGINEER, mine, foreign, true);
+
+            assertThat(result.getResponse().getStatus())
+                    .as("resolved through the review, never findById — RLS scopes that to the "
+                            + "company")
+                    .isEqualTo(404);
+            assertThat(resolvedCount(theirs))
+                    .as("and the row it named must be untouched")
+                    .isZero();
+        }
+
+        @Test
+        @DisplayName("a comment id that names nothing is a bodiless 404")
+        void anUnknownCommentIsNotFound() throws Exception {
+            UUID review = openPlanReview();
+
+            assertThat(resolve(ENGINEER, review, ABSENT, true).getResponse().getStatus())
+                    .isEqualTo(404);
+        }
+
+        @Test
+        @DisplayName("a member with no grant cannot comment, and gets 404 rather than 403")
+        void aMemberWithNoGrantIsNotFound() throws Exception {
+            UUID review = openPlanReview();
+
+            MvcResult result = comment(NO_GRANT, review, "Can I see this?", null);
+
+            assertThat(result.getResponse().getStatus())
+                    .as("persona 3: the rows ARE in this caller's company, so only the project "
+                            + "grant separates them — 404, never 403 (§6t)")
+                    .isEqualTo(404);
+            assertThat(commentCount(review)).isZero();
+        }
+    }
+
+    @Nested
     @DisplayName("Isolation — the review id is resolved through the project, never the company")
     class Isolation {
 
@@ -1212,6 +1490,56 @@ class ReviewEndpointTest extends IntegrationTestBase {
                 .andReturn();
     }
 
+    private MvcResult comment(UUID userId, UUID reviewId, String body, UUID parentId)
+            throws Exception {
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("body", body);
+        payload.put("parentId", parentId);
+
+        return mvc.perform(MockMvcRequestBuilders
+                        .post("/api/v1/projects/" + ACME_BANKING + "/reviews/" + reviewId
+                                + "/comments")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, ACME))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(payload)))
+                .andReturn();
+    }
+
+    private MvcResult resolve(UUID userId, UUID reviewId, UUID commentId, boolean resolved)
+            throws Exception {
+
+        return mvc.perform(MockMvcRequestBuilders
+                        .put("/api/v1/projects/" + ACME_BANKING + "/reviews/" + reviewId
+                                + "/comments/" + commentId + "/resolution")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, ACME))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("resolved", resolved))))
+                .andReturn();
+    }
+
+    /**
+     * The id of the comment a 201 just created — the newest root, or the newest reply under one.
+     *
+     * <p>The response is the whole review rather than the row, so the id has to be read out of the
+     * threads. Taking the <em>last</em> entry at each level relies on the render being oldest-first,
+     * which {@code ReviewCommentRepository.findForReviews} guarantees and a test above asserts.
+     */
+    private UUID commentId(MvcResult created) throws Exception {
+        assertThat(created.getResponse().getStatus())
+                .as("the fixture depends on this write succeeding; %s",
+                        created.getResponse().getContentAsString())
+                .isEqualTo(201);
+
+        JsonNode threads = body(created).get("comments");
+        JsonNode last = threads.get(threads.size() - 1);
+        JsonNode replies = last.get("replies");
+        return UUID.fromString(
+                (replies.isEmpty() ? last : replies.get(replies.size() - 1)).get("id").asText());
+    }
+
     private MvcResult get(UUID userId, String subjectType, UUID subjectId) throws Exception {
         return mvc.perform(MockMvcRequestBuilders
                         .get("/api/v1/projects/" + ACME_BANKING + "/reviews")
@@ -1398,6 +1726,7 @@ class ReviewEndpointTest extends IntegrationTestBase {
         for (UUID companyId : List.of(ACME, UMBRA)) {
             try (Connection connection = appConnection(companyId)) {
                 execute(connection, "DELETE FROM audit_event");
+                execute(connection, "DELETE FROM review_comment");
                 execute(connection, "DELETE FROM review_participation");
                 execute(connection, "DELETE FROM review");
                 execute(connection, "DELETE FROM plan_scope_item");
@@ -1428,6 +1757,20 @@ class ReviewEndpointTest extends IntegrationTestBase {
                 SELECT count(*) FROM review
                  WHERE subject_type = ? AND subject_id = CAST(? AS uuid) AND state = 'IN_REVIEW'
                 """, subjectType, subjectId.toString());
+    }
+
+    /** Read past the API, so a refusal that answered 400 and wrote anyway is visible. */
+    private int commentCount(UUID reviewId) throws SQLException {
+        return count(
+                "SELECT count(*) FROM review_comment WHERE review_id = CAST(? AS uuid)",
+                reviewId.toString());
+    }
+
+    private int resolvedCount(UUID reviewId) throws SQLException {
+        return count("""
+                SELECT count(*) FROM review_comment
+                 WHERE review_id = CAST(? AS uuid) AND resolved_at IS NOT NULL
+                """, reviewId.toString());
     }
 
     private int participationCount(UUID reviewId) throws SQLException {

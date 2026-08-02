@@ -530,3 +530,36 @@ panel look unbuilt.
 the second write wins silently. Recorded rather than implied — adding the header is a later slice,
 and the column is annotated now precisely so that slice does not first have to discover it was
 reading `0` for ever (§74's finding).
+
+---
+
+## §79 — review comments: the tier that may write and may not resolve
+
+**Run §77 row 2 first** — every row here presupposes a project with review switched on for the
+artifact being opened, and §77's row 1 is the only chance to see the off state.
+
+The mock's fixtures carry **two threads on the demo project's open plan review** — one with a reply,
+one already resolved and naming its resolver — and **none** on the rejected case review. That second
+shape is the one to check against a real box: most reviews on a real instance have no conversation
+at all, and a fixture set where every review has threads is §72's finding waiting to happen.
+
+| # | Flow | What must be true | Mode |
+|---|---|---|---|
+| 1 | Open the demo project's plan in review | Under the verdict trail: a **Comments** section with two threads. The first shows a reply indented beneath it; the second is greyed with **"Resolved by …"** and a **Re-open** button. The reply has **no Reply button of its own** — threads are one level deep and the server refuses a reply to a reply. | mock + live |
+| 2 | As a **Viewer** (`case:comment`, no `plan:review`), open the same plan | The comment box and **Reply** are **enabled**; **Resolve** and both verdict buttons are **disabled**, not hidden (§31). This is the row the whole slice turns on: one comment key for all three artifact types, and the reviewing tier above it. | **live only** — mock mode signs in as one persona holding everything | 
+| 3 | Write a comment and press Comment | It appears at the bottom of the list, attributed to you, with the box cleared. `psql`: one `review_comment` row, `parent_id` NULL, `resolved_at` NULL. | mock + live |
+| 4 | Press **Reply** on that thread, write, press Reply | It lands **under** the root rather than as a new thread, and the reply form closes. `psql`: `parent_id` = the root's id. | mock + live |
+| 5 | Press **Resolve** on a thread as a Test Engineer | It greys out and reads "Resolved by *you*", with the button now **Re-open**. `psql`: `resolved_at` **and** `resolved_by` both set. | mock + live |
+| 6 | Press **Re-open** | Both columns clear together — the row must not keep a `resolved_by` on an open thread. | mock + live |
+| 7 | Press **Resolve** twice in a row (or on an already-resolved thread from a second tab) | The timestamp and the resolver **do not change**. The defect this prevents shipped in the slice's first draft: an unconditional write hands the record to whoever clicked last. | mock + live |
+| 8 | Approve or reject the plan, then re-open it | The conversation is **still readable**, and **no comment box, no Reply, no Resolve**. A closed review takes no writes, and offering the affordance would be an affordance whose only outcome is a 409. | mock + live |
+| 9 | Open a case or plan whose review has **no** comments | The section reads **"No comments yet."** with the box below it while the review is open — and on a **closed** review with no comments the whole section is **absent**, not an empty heading. | mock + live |
+| 10 | Paste 5001 characters and press Comment | Refused with *"Keep the comment under 5000 characters."* in place, beside the box. Then clear it: the button disables on empty rather than letting the server refuse a blank. | mock + live |
+| 11 | Write a comment containing a blank line and a list | The paragraph break survives (`pre-wrap`). What a reviewer typed is part of what they said; collapsing it changes the remark. | mock + live |
+| 12 | The panel at 390 px, on a thread with a reply | The reply's indent does not push the body into horizontal scroll; the two buttons wrap rather than overflow. | mock + live |
+| 13 | Live only: comment as one account, then resolve as another | The thread names **two different people** — the author on the remark, the resolver on the resolution line. The pair is the whole reason `V24` added the actor column. | **live only** — needs two accounts |
+
+**Not exercisable here:** the anchor. §6g wants comments *"anchored to a specific step or field
+where possible"*, and `anchor_type` / `anchor_id` stay NULL on every row — see `ReviewComment`'s
+header for what accepting one would need first (a `PeopleDirectory`-shaped port into `repository`).
+There is nothing to drive, and the row exists so the absence is not mistaken for a defect.

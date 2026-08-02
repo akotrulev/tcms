@@ -743,3 +743,67 @@ cannot be re-run: the fixture now enables review, so the "before" state no longe
 | **Check** | migration-in-place |
 | **Mutation** | — |
 | **Must show** | **`V23` lands with this slice** and is the first migration since `V22`. It creates a table, one index, an RLS policy and **backfills one row per existing project** — the first migration in the product to create a table after `V1`, so the things to confirm on a real box are: the policy carries `V4`'s `nullif(...)` predicate and not `V1`'s (a table born with the old spelling reintroduces the reset-GUC 500 on exactly one table), the `tcms_app` default privileges actually covered the new table without an explicit `GRANT`, and the backfill left **exactly one row per project**. `SchemaConventionTest`'s policy count moves 56 → 57. **`V24` is the next free number.** |
+
+---
+
+## §79 — review comments (`V24`)
+
+`review_comment` was the last of the three review tables with no entity, no query and no writer, and
+`case:comment` the last review permission with no consumer in Java. What must be proved is the
+**asymmetry**: writing a remark costs one key for all three subject types, and resolving one costs
+the subject's own `*:review`. A gate that read the same key for both would pass most of these tests.
+
+| | |
+|---|---|
+| **File** | `project/ReviewService.java`, `comment` |
+| **Mutation** | ask `review.getSubjectType().reviewPermission()` instead of `ReviewSubjectType.COMMENT_PERMISSION` |
+| **Scope** | `com.tcms.project.ReviewEndpointTest` |
+| **Must redden** | **exactly 1** — *a Viewer holding case:comment may comment on a PLAN review*. The one-key decision, and the Viewer is the only persona in the seeded catalogue that can tell the two keys apart. If this reddens nothing, the comment gate is untested and §6b's whole reason for `case:comment` — the client who reviews coverage without write access — is unreachable. |
+
+| | |
+|---|---|
+| **File** | `project/ReviewService.java`, `resolveComment` |
+| **Mutation** | ask `ReviewSubjectType.COMMENT_PERMISSION` instead of `reviewPermission()` |
+| **Scope** | `com.tcms.project.ReviewEndpointTest` |
+| **Must redden** | **exactly 1** — *a Viewer cannot resolve*. The other half of the row above, and the pair is the point: each mutation reddens one test and they are different tests. Both green under one key would mean the panel's two controls are one control. |
+
+| | |
+|---|---|
+| **File** | `project/ReviewCommentRepository.java`, `findInReview` |
+| **Mutation** | drop the `c.reviewId = :reviewId` predicate (resolve a comment by id alone, RLS-scoped to the company) |
+| **Scope** | `com.tcms.project.ReviewEndpointTest` |
+| **Must redden** | **exactly 2** — *a parent from another project's review is refused* and *a comment id from another review is 404*. §64's `sharedStepId` family, third instance; the second test also asserts the foreign row was **not** resolved, which a status-only assertion would have missed. |
+
+| | |
+|---|---|
+| **File** | `project/ReviewService.java`, `applyResolution` |
+| **Mutation** | drop the `comment.isResolved() != request.resolved()` guard (write unconditionally) |
+| **Scope** | `com.tcms.project.ReviewEndpointTest` |
+| **Must redden** | **exactly 1** — *resolving an already-resolved thread is a 200 that re-stamps nothing*. **This mutation is the defect the slice actually shipped in its first draft** and the test caught it: an unconditional write re-stamps `resolved_at` and hands `resolved_by` to whoever clicked last, so `V24`'s two columns would name the second person to agree rather than the person who decided. |
+
+| | |
+|---|---|
+| **File** | `project/ReviewCommentEdit.java`, `validate` |
+| **Mutation** | accept a parent that is itself a reply (drop `\|\| !parent.isRoot()`) |
+| **Scope** | `com.tcms.project.ReviewEndpointTest` |
+| **Must redden** | **exactly 1** — *a reply to a reply is a field error*. The depth rule is what makes `ReviewCommentView.replies` non-recursive in practice; without it the server stores a grandchild the renderer drops on the floor, which is a remark nobody can see or answer. |
+
+| | |
+|---|---|
+| **File** | `project/ReviewService.java`, `addComment` / `applyResolution` |
+| **Mutation** | remove the `refuseIfClosed` call from **both** comment paths |
+| **Scope** | `com.tcms.project.ReviewEndpointTest` |
+| **Must redden** | **exactly 1** — *a closed review refuses the comment with 409*. Only one, because the resolution path's closed-review case is not covered by a test of its own; **that gap is the finding this row exists to surface**, and the repair is a test rather than a weaker mutation. |
+
+| | |
+|---|---|
+| **File** | `schema/SeedDataTest.java` |
+| **Mutation** | — (run `everyReviewerIsAlsoACommenter` after granting `plan:review` to a role without `case:comment` in a scratch migration, or simply read its failure message) |
+| **Scope** | `com.tcms.schema.SeedDataTest` |
+| **Must show** | the check is **not vacuous** — the query must select at least one role when the ladder is broken. §71's `company:teams` finding is the warning here: a computed check that can never select anything is a check nobody is running. |
+
+| | |
+|---|---|
+| **Check** | migration-in-place |
+| **Mutation** | — |
+| **Must show** | **`V24` lands with this slice.** It adds a column, a CHECK and an index to a table that has never held a row on any real instance, so the in-place run should be uneventful — which is the thing to confirm rather than assume. `SchemaConventionTest`'s policy count stays **57** (no new table) and the new index must lead with `company_id`. **`V25` is the next free number.** |

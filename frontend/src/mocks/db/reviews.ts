@@ -16,6 +16,7 @@
 import type {
   ProjectSettings,
   Review,
+  ReviewComment,
   ReviewParticipation,
   ReviewSubjectType,
   UserRef,
@@ -89,6 +90,7 @@ export function reviewMoved(
         approvedBy: null,
         approvedAt: null,
         participations: [],
+        comments: [],
       });
     }
     return;
@@ -120,6 +122,76 @@ export function recordVerdict(
   comment: string | null,
 ): void {
   review.participations.push(participation(actor, 'PEER_REVIEW', verdict, comment));
+}
+
+/**
+ * Writes one remark — a thread root, or a reply under one.
+ *
+ * The stored shape is the served shape: roots at the top level, each carrying its own `replies`.
+ * The server stores rows flat with a `parentId` and assembles them, and the mock keeping them
+ * already-assembled is the one place the two implementations differ in *storage* rather than in
+ * behaviour — which is fine, and would not be if a second reader had to un-nest them.
+ *
+ * Returns null when the parent does not resolve **or is itself a reply**, which the handler turns
+ * into the server's field error. Threads are one level deep on both sides or mock mode teaches an
+ * author a shape the product refuses.
+ */
+export function addComment(
+  review: MockReview,
+  actor: UserRef,
+  body: string,
+  parentId: string | null,
+): ReviewComment | null {
+  const written: ReviewComment = {
+    id: newId(),
+    author: actor,
+    body,
+    createdAt: new Date().toISOString(),
+    resolvedAt: null,
+    resolvedBy: null,
+    replies: [],
+  };
+
+  if (!parentId) {
+    review.comments.push(written);
+    return written;
+  }
+
+  const root = review.comments.find((thread) => thread.id === parentId);
+  // A reply's own id never matches a root's, so a reply-to-a-reply lands here as "no such root" —
+  // the same refusal, which is also how the server words it: telling the two apart tells a caller
+  // that the id they guessed names a real comment somewhere they cannot see.
+  if (!root) return null;
+
+  root.replies.push(written);
+  return written;
+}
+
+/** Marks a thread dealt with, or re-opens it. Roots only — `undefined` when the id is a reply. */
+export function threadRoot(review: MockReview, commentId: string): ReviewComment | undefined {
+  return review.comments.find((thread) => thread.id === commentId);
+}
+
+/** Whether any comment in this review carries the id at all — a reply included. */
+export function commentExists(review: MockReview, commentId: string): boolean {
+  return review.comments.some(
+    (thread) =>
+      thread.id === commentId || thread.replies.some((reply) => reply.id === commentId),
+  );
+}
+
+/**
+ * Sets a thread's resolution.
+ *
+ * **Already in the requested state writes nothing**, which is not housekeeping: re-stamping would
+ * hand `resolvedBy` to whoever clicked last, so the pair that records who dealt with a thread would
+ * name the second person to agree rather than the person who decided. The server's rule, and it was
+ * a real defect in the first draft of it.
+ */
+export function setResolution(thread: ReviewComment, actor: UserRef, resolved: boolean): void {
+  if (!!thread.resolvedAt === resolved) return;
+  thread.resolvedAt = resolved ? new Date().toISOString() : null;
+  thread.resolvedBy = resolved ? actor : null;
 }
 
 function participation(

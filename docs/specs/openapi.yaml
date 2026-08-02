@@ -648,6 +648,113 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
 
+  /projects/{projectId}/reviews/{reviewId}/comments:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - name: reviewId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [projects]
+      operationId: addReviewComment
+      summary: Write a remark on an open review
+      description: |
+        §6g's threads — *"Review without inline comments degrades into Slack conversations
+        that vanish."*
+
+        **This costs `case:comment`, whatever the subject is.** The catalogue has one comment
+        key where it has three review keys and three approve keys, and that is deliberate: the
+        roles spec's Review table lists commenting as the bottom **tier** — *"read an item in
+        full and leave threaded comments"* — held by Viewer and up, built for the case where
+        the client reviews test coverage themselves without gaining any write access. Adding
+        `suite:comment` and `plan:comment` would seed two keys nobody holds, which on every
+        existing instance is a 403 no administrator can grant their way out of. `case:comment`
+        is seeded by `V3`, granted since M0, and had **no consumer in Java** until this
+        endpoint.
+
+        **Threads are one level deep.** `parentId` names the root being replied to, validated
+        against *this review's* comments — a comment from another project's review is a field
+        error rather than a stored reference, and so is a reply to a reply. A tree has no
+        bottom to render and no natural place to resolve.
+
+        There is deliberately **no `anchorType` / `anchorId`**, though `V1` has the columns and
+        §6g asks for anchoring *"where possible"*: the only candidate anchor is a case's step,
+        whose ids live in a module the review record may not import, so accepting one today
+        would store a reference nothing validates — the defect §64 found four milestones after
+        it shipped.
+
+        `409` once the review has ended, on the same terms as the verdict endpoint: a review
+        is history once it closes, and the way forward is to submit the artifact again.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReviewCommentInput' }
+      responses:
+        '201':
+          description: |
+            The whole review, re-rendered — the participations endpoint's decision and for its
+            reason: a comment is only ever read inside the conversation it joins. No
+            `Location`; a comment has no URL of its own.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Review' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /projects/{projectId}/reviews/{reviewId}/comments/{commentId}/resolution:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - name: reviewId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: commentId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    put:
+      tags: [projects]
+      operationId: setReviewCommentResolution
+      summary: Mark a thread dealt with, or re-open it
+      description: |
+        §6g's *"resolvable"*.
+
+        **This costs `*:review`, not `case:comment`** — the asymmetry with the endpoint above
+        is the decision. Writing a remark is the bottom tier's act; declaring one dealt with is
+        a statement about the review's progress, which belongs to the tier running the review.
+        "The reviewing tier *or* the comment's own author" was considered and refused: the only
+        caller it adds is a Viewer resolving their own feedback, which takes it off the
+        reviewer's list without anybody having addressed it.
+
+        **Only a thread root.** Resolution is a property of the thread, so resolving a reply is
+        a field error rather than a silent no-op.
+
+        `PUT` with a required boolean, not `PATCH` and not two verbs: for a boolean, absent and
+        `false` are the same bytes, so a `PATCH` could never express "re-open this". No
+        `If-Match` — the target state is absolute, so there is no stale-read-derived value to
+        lose. Setting a thread to the state it is already in writes nothing and answers 200.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReviewCommentResolutionInput' }
+      responses:
+        '200':
+          description: The whole review, re-rendered.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Review' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
   # ---------------------------------------------------------- repository ----
   /projects/{projectId}/suites:
     parameters: [{ $ref: '#/components/parameters/ProjectId' }]
@@ -2951,7 +3058,8 @@ components:
       # is required and may be empty: a review nobody has commented on yet is an ordinary
       # state, and an absent array would make "no verdicts" indistinguishable from "the server
       # did not send them" (§48's rule about required arrays).
-      required: [id, subjectType, subjectId, subjectVersionNo, state, createdAt, participations]
+      required:
+        [id, subjectType, subjectId, subjectVersionNo, state, createdAt, participations, comments]
       properties:
         id: { type: string, format: uuid }
         subjectType: { $ref: '#/components/schemas/ReviewSubjectType' }
@@ -2977,6 +3085,77 @@ components:
         participations:
           type: array
           items: { $ref: '#/components/schemas/ReviewParticipation' }
+        comments:
+          type: array
+          description: |
+            §6g's threads — **roots only**, each carrying its own replies. Required and may be
+            empty, for the reason `participations` is: an absent array would make "nobody has
+            commented" indistinguishable from "the server did not send them".
+          items: { $ref: '#/components/schemas/ReviewComment' }
+
+    ReviewComment:
+      type: object
+      # `replies` is required and always present, exactly one level deep: a reply's own
+      # `replies` is always empty, and the server refuses a reply to a reply. Nesting is the
+      # contract's job rather than every client's — assembling roots from a flat parentId list
+      # is one rule, and §68's buildValueTree found two implementations of one such rule
+      # disagreeing about orphans.
+      required: [id, body, createdAt, replies]
+      properties:
+        id: { type: string, format: uuid }
+        author:
+          allOf: [{ $ref: '#/components/schemas/UserRef' }]
+          nullable: true
+          description: Null when the account no longer resolves — `ReviewParticipation.user`'s rule.
+        body: { type: string }
+        createdAt: { type: string, format: date-time }
+        resolvedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            Null while the thread is open, and **always null on a reply**: resolution is a
+            property of the thread, so half a conversation cannot be marked dealt with.
+        resolvedBy:
+          allOf: [{ $ref: '#/components/schemas/UserRef' }]
+          nullable: true
+          description: |
+            Who marked it dealt with — `V24`'s column. `V1` gave the table a `resolved_at` and
+            no actor, which is enough to grey a thread out and not enough for the one thing the
+            record exists for: proving to an auditor who did what.
+        replies:
+          type: array
+          items: { $ref: '#/components/schemas/ReviewComment' }
+
+    ReviewCommentInput:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
+          maxLength: 5000
+          description: |
+            The remark. Blank is a field error rather than a silently-dropped write: answering
+            201 to one would put an empty entry in the trail.
+        parentId:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            The thread root this replies to, or absent to start a thread. Validated against
+            *this review's* comments — a comment on another review, and a reply to a reply, are
+            both field errors carrying the same sentence, because telling them apart tells a
+            caller that the id they guessed names a real comment somewhere they cannot see.
+
+    ReviewCommentResolutionInput:
+      type: object
+      required: [resolved]
+      properties:
+        resolved:
+          type: boolean
+          description: |
+            Required. Null is a field error rather than "leave it alone" — a body that names no
+            state has not asked for anything.
 
     ReviewParticipation:
       type: object

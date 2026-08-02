@@ -67,6 +67,7 @@ public class ReviewService {
     private final ProjectSettingsService settings;
     private final ReviewRepository reviews;
     private final ReviewParticipationRepository participations;
+    private final ReviewCommentRepository comments;
     private final PeopleDirectory people;
     private final Clock clock;
 
@@ -75,6 +76,7 @@ public class ReviewService {
             ProjectSettingsService settings,
             ReviewRepository reviews,
             ReviewParticipationRepository participations,
+            ReviewCommentRepository comments,
             PeopleDirectory people,
             Clock clock) {
 
@@ -82,6 +84,7 @@ public class ReviewService {
         this.settings = settings;
         this.reviews = reviews;
         this.participations = participations;
+        this.comments = comments;
         this.people = people;
         this.clock = clock;
     }
@@ -467,11 +470,7 @@ public class ReviewService {
                 (project, review) -> apply(companyId, userId, review, verdict,
                         request == null ? null : request.comment()));
 
-        return switch (gated) {
-            case GateResult.Unreachable<Outcome> ignored -> new Outcome.NotFound();
-            case GateResult.Denied<Outcome> ignored -> new Outcome.Forbidden();
-            case GateResult.Allowed<Outcome> allowed -> allowed.value();
-        };
+        return unwrap(gated);
     }
 
     private Outcome apply(
@@ -487,12 +486,11 @@ public class ReviewService {
         }
         // After the permission and before the state check, the order §72 argued for: a caller who
         // may not review at all is refused before learning whether this particular review is still
-        // open, and a caller who may is told the thing they can act on.
-        if (review.getState() != ReviewState.IN_REVIEW) {
-            return new Outcome.Closed(
-                    "This review has already ended. Submit the "
-                            + review.getSubjectType().name().toLowerCase(Locale.ROOT)
-                            + " for review again to reopen it.");
+        // open, and a caller who may is told the thing they can act on. The sentence itself lives in
+        // refuseIfClosed, because the two comment endpoints refuse identically.
+        Optional<Outcome> closed = refuseIfClosed(review);
+        if (closed.isPresent()) {
+            return closed.get();
         }
 
         Instant now = clock.instant();
@@ -506,6 +504,185 @@ public class ReviewService {
                 now));
 
         return new Outcome.Recorded(render(companyId, List.of(review)).getFirst());
+    }
+
+    // ------------------------------------------------------------------- comments ----
+
+    /**
+     * Writes one remark on an open review — §6g's threads, and {@code review_comment}'s first
+     * writer.
+     *
+     * <p><strong>The gate is {@code case:comment}, whatever the subject is</strong>, and
+     * {@link ReviewSubjectType#COMMENT_PERMISSION} carries the reasoning: the catalogue has one
+     * comment key where it has three review keys, because commenting is a <em>tier</em> and not a
+     * per-artifact judgement. It still resolves the review before asking, through
+     * {@link ProjectService#writeGrantedOnTarget}, for §69's reason — a review that does not resolve
+     * is 404 before any permission is named — even though the answer this time does not depend on
+     * the row. Using the cheaper {@code writeGranted} would ask the permission first and leak, by
+     * the difference between 403 and 404, that a review id names something.
+     *
+     * <p><strong>A closed review takes no writes</strong>, this one included: 409, the same sentence
+     * {@link #record} gives, from the one place that spells it. A review is history once it ends —
+     * letting comments accumulate on it would grow a conversation under a decision nobody can act on
+     * any more, and the way forward is the same one the verdict endpoint names.
+     */
+    @Transactional
+    public Outcome comment(
+            UUID userId, UUID projectId, UUID reviewId, ReviewCommentRequest request) {
+
+        UUID companyId = CompanyContext.require();
+
+        var gated = projects.writeGrantedOnTarget(
+                userId,
+                projectId,
+                project -> reviews.findInProject(project.getId(), reviewId),
+                review -> ProjectService.RequiredPermission.onProject(
+                        ReviewSubjectType.COMMENT_PERMISSION),
+                (project, review) -> addComment(companyId, userId, review, request));
+
+        return unwrap(gated);
+    }
+
+    private Outcome addComment(
+            UUID companyId, UUID userId, Review review, ReviewCommentRequest request) {
+
+        Optional<Outcome> closed = refuseIfClosed(review);
+        if (closed.isPresent()) {
+            return closed.get();
+        }
+
+        // Resolved through the REVIEW, never findById: a comment id from a sibling project's review
+        // satisfies RLS, which is scoped to the company (§64/§68/§69's family). Null when none was
+        // asked for and null when one was asked for and did not resolve — ReviewCommentEdit tells
+        // the two apart by reading the request, which is why it takes both.
+        UUID parentId = request == null ? null : request.parentId();
+        ReviewComment parent = parentId == null
+                ? null
+                : comments.findInReview(review.getId(), parentId).orElse(null);
+
+        return switch (ReviewCommentEdit.validate(request, parent)) {
+            case ReviewCommentEdit.Outcome.Invalid invalid -> new Outcome.Invalid(invalid.errors());
+            case ReviewCommentEdit.Outcome.Valid valid -> {
+                comments.saveAndFlush(ReviewComment.of(
+                        companyId,
+                        review.getId(),
+                        valid.edit().parentId(),
+                        valid.edit().body(),
+                        userId,
+                        clock.instant()));
+                yield new Outcome.Recorded(render(companyId, List.of(review)).getFirst());
+            }
+        };
+    }
+
+    /**
+     * Marks a thread dealt with, or re-opens it.
+     *
+     * <p><strong>This costs {@code *:review}, not {@code case:comment}</strong>, and the asymmetry
+     * with {@link #comment} is the decision. Writing a remark is the bottom tier's act; declaring
+     * one dealt with is a statement about the review's progress, which is the tier that runs the
+     * review. The alternative considered was "the reviewing tier <em>or</em> the comment's own
+     * author", the shape {@code evidence:delete} has — refused because the only caller it adds is a
+     * Viewer resolving their own comment, and a client marking their own feedback dealt with takes
+     * it off the reviewer's list without anybody having addressed it. A second door needs a caller
+     * it is right for, and this one has none.
+     *
+     * <p><strong>Only a root.</strong> Resolution is a property of the thread, so a reply is a field
+     * error rather than a silent no-op — a client that could resolve a reply would render half a
+     * conversation as dealt with.
+     *
+     * <p>Setting a thread to the state it is already in writes nothing and answers 200:
+     * {@code SuiteStatusService}'s call, and for its reason — the request asked for a state and the
+     * state is what it asked for.
+     */
+    @Transactional
+    public Outcome resolveComment(
+            UUID userId,
+            UUID projectId,
+            UUID reviewId,
+            UUID commentId,
+            ReviewCommentResolutionRequest request) {
+
+        UUID companyId = CompanyContext.require();
+
+        var gated = projects.writeGrantedOnTarget(
+                userId,
+                projectId,
+                project -> reviews.findInProject(project.getId(), reviewId),
+                review -> ProjectService.RequiredPermission.onProject(
+                        review.getSubjectType().reviewPermission()),
+                (project, review) -> applyResolution(companyId, userId, review, commentId, request));
+
+        return unwrap(gated);
+    }
+
+    private Outcome applyResolution(
+            UUID companyId,
+            UUID userId,
+            Review review,
+            UUID commentId,
+            ReviewCommentResolutionRequest request) {
+
+        Optional<ReviewComment> found = comments.findInReview(review.getId(), commentId);
+        if (found.isEmpty()) {
+            // A path segment naming nothing is a 404, not a field error — and it is bodiless and
+            // identical to the review's own 404, so the pair cannot be used to probe which ids
+            // exist (§6t).
+            return new Outcome.NotFound();
+        }
+        // Closed before validation — §74's order, and its reason: a caller told to fix a field on a
+        // review that has ended is being told to do something that will not help.
+        Optional<Outcome> closed = refuseIfClosed(review);
+        if (closed.isPresent()) {
+            return closed.get();
+        }
+        if (request == null || request.resolved() == null) {
+            return new Outcome.Invalid(Map.of("resolved", List.of(
+                    "Say whether the thread is resolved: true or false.")));
+        }
+
+        ReviewComment comment = found.get();
+        if (!comment.isRoot()) {
+            return new Outcome.Invalid(Map.of("resolved", List.of(
+                    "Resolve the comment that started the thread, not a reply to it.")));
+        }
+
+        // Already in the requested state: 200, and NOTHING IS WRITTEN. Not a micro-optimisation —
+        // resolving twice would re-stamp resolvedAt and hand resolvedBy to whoever clicked last, so
+        // the two columns V24 added to say who dealt with this and when would name the second
+        // person to agree rather than the person who decided. SuiteStatusService's call, and this
+        // is the reason it matters more here than it did there.
+        if (comment.isResolved() != request.resolved()) {
+            comment.resolve(request.resolved(), userId, clock.instant());
+            comments.saveAndFlush(comment);
+        }
+        return new Outcome.Recorded(render(companyId, List.of(review)).getFirst());
+    }
+
+    /**
+     * The one spelling of "this review has ended", read by all three writes.
+     *
+     * <p>Three copies of one sentence is §58's E1 at sentence scale: the verdict endpoint and the
+     * two comment endpoints refuse for identical reasons and must name the identical way forward,
+     * and a copy that drifts tells one caller to resubmit and another nothing.
+     */
+    private static Optional<Outcome> refuseIfClosed(Review review) {
+        if (review.getState() == ReviewState.IN_REVIEW) {
+            return Optional.empty();
+        }
+        return Optional.of(new Outcome.Closed(
+                "This review has already ended. Submit the "
+                        + noun(review.getSubjectType())
+                        + " for review again to reopen it."));
+    }
+
+    /** The gate's three answers, mapped once rather than at each of the three call sites. */
+    private static Outcome unwrap(GateResult<Outcome> gated) {
+        return switch (gated) {
+            case GateResult.Unreachable<Outcome> ignored -> new Outcome.NotFound();
+            case GateResult.Denied<Outcome> ignored -> new Outcome.Forbidden();
+            case GateResult.Allowed<Outcome> allowed -> allowed.value();
+        };
     }
 
     /**
@@ -537,10 +714,16 @@ public class ReviewService {
             return List.of();
         }
 
+        List<UUID> reviewIds = rows.stream().map(Review::getId).toList();
+
         Map<UUID, List<ReviewParticipation>> byReview = new HashMap<>();
-        for (ReviewParticipation row
-                : participations.findForReviews(rows.stream().map(Review::getId).toList())) {
+        for (ReviewParticipation row : participations.findForReviews(reviewIds)) {
             byReview.computeIfAbsent(row.getReviewId(), id -> new ArrayList<>()).add(row);
+        }
+
+        Map<UUID, List<ReviewComment>> commentsByReview = new HashMap<>();
+        for (ReviewComment row : comments.findForReviews(reviewIds)) {
+            commentsByReview.computeIfAbsent(row.getReviewId(), id -> new ArrayList<>()).add(row);
         }
 
         Set<UUID> peopleIds = new HashSet<>();
@@ -551,6 +734,12 @@ public class ReviewService {
         for (List<ReviewParticipation> forOne : byReview.values()) {
             for (ReviewParticipation row : forOne) {
                 addIfPresent(peopleIds, row.getUserId());
+            }
+        }
+        for (List<ReviewComment> forOne : commentsByReview.values()) {
+            for (ReviewComment row : forOne) {
+                addIfPresent(peopleIds, row.getCreatedBy());
+                addIfPresent(peopleIds, row.getResolvedBy());
             }
         }
         Map<UUID, UserRefView> resolved = people.resolve(companyId, peopleIds);
@@ -578,9 +767,68 @@ public class ReviewService {
                     review.getCreatedAt(),
                     review.getApprovedBy() == null ? null : resolved.get(review.getApprovedBy()),
                     review.getApprovedAt(),
-                    trail));
+                    trail,
+                    threads(commentsByReview.getOrDefault(review.getId(), List.of()), resolved)));
         }
         return views;
+    }
+
+    /**
+     * A review's flat comment rows, assembled into roots-with-replies.
+     *
+     * <p>Both loops walk the same oldest-first list, so a reply is never seen before its root and
+     * the order inside a thread is the order it was written. <strong>A reply whose root is not in
+     * the list is surfaced as a root of its own</strong> rather than dropped — §68's
+     * {@code buildValueTree} rule, and the reason it matters more here than it did there: a remark
+     * nothing renders is one nobody can answer or resolve, and it would sit in the database looking
+     * to its author like a comment they made. Nothing today can produce one, since {@code parent_id}
+     * has a foreign key and the parent is validated into the same review; that is exactly the state
+     * {@code SuiteTree}'s orphan-dropping was in before it was not.
+     */
+    private static List<ReviewCommentView> threads(
+            List<ReviewComment> rows, Map<UUID, UserRefView> resolved) {
+
+        if (rows.isEmpty()) {
+            return List.of();
+        }
+
+        Map<UUID, List<ReviewCommentView>> repliesByRoot = new HashMap<>();
+        Set<UUID> rootIds = new HashSet<>();
+        for (ReviewComment row : rows) {
+            if (row.isRoot()) {
+                rootIds.add(row.getId());
+            }
+        }
+        for (ReviewComment row : rows) {
+            if (!row.isRoot() && rootIds.contains(row.getParentId())) {
+                repliesByRoot.computeIfAbsent(row.getParentId(), id -> new ArrayList<>())
+                        .add(view(row, resolved, List.of()));
+            }
+        }
+
+        List<ReviewCommentView> threads = new ArrayList<>();
+        for (ReviewComment row : rows) {
+            if (row.isRoot()) {
+                threads.add(view(
+                        row, resolved, repliesByRoot.getOrDefault(row.getId(), List.of())));
+            } else if (!rootIds.contains(row.getParentId())) {
+                threads.add(view(row, resolved, List.of()));
+            }
+        }
+        return threads;
+    }
+
+    private static ReviewCommentView view(
+            ReviewComment row, Map<UUID, UserRefView> resolved, List<ReviewCommentView> replies) {
+
+        return new ReviewCommentView(
+                row.getId(),
+                row.getCreatedBy() == null ? null : resolved.get(row.getCreatedBy()),
+                row.getBody(),
+                row.getCreatedAt(),
+                row.getResolvedAt(),
+                row.getResolvedBy() == null ? null : resolved.get(row.getResolvedBy()),
+                replies);
     }
 
     private static void addIfPresent(Set<UUID> ids, UUID id) {

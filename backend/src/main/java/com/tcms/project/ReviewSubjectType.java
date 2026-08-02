@@ -41,6 +41,30 @@ public enum ReviewSubjectType {
     /** A test plan. Reviewing it is the release-readiness signature (§6g). */
     PLAN("plan:review");
 
+    /**
+     * The permission a <em>comment</em> costs — <strong>one key for all three subject types</strong>,
+     * held at project scope.
+     *
+     * <p>A field rather than a method, and deliberately not a third column on the constants above,
+     * because the asymmetry is the finding. {@code *:review} and {@code *:approve} are triples in
+     * the catalogue; commenting is a single key named after the artifact it was first written for.
+     * The roles spec's own review table lists it as the bottom tier — <em>"Read an item in full and
+     * leave threaded comments"</em>, an <em>item</em> — against {@code *:review} and
+     * {@code *:approve} spelled per type, and §6b's note gives the reason it exists at all: a
+     * Viewer, <em>"often the client themselves"</em>, may leave feedback without any write access.
+     * That is a tier, not a per-artifact judgement, which is why one key is the right shape and why
+     * inventing {@code suite:comment} and {@code plan:comment} was refused: a new key is seeded to
+     * nobody, so on every existing instance it would be a 403 no administrator can grant their way
+     * out of (§67's argument against an invented {@code evidence:read}, §69's against asking a
+     * company key at project scope).
+     *
+     * <p>What must stay true for this to be sound is that the commenting tier is <em>below</em> the
+     * reviewing one — every role that may review may also comment. That is a property of the seeded
+     * catalogue rather than of this line, so {@code SeedDataTest} derives it rather than assuming
+     * it, the shape {@code everyApproverIsAlsoAnEditor} already has.
+     */
+    public static final String COMMENT_PERMISSION = "case:comment";
+
     private final String reviewPermission;
 
     ReviewSubjectType(String reviewPermission) {

@@ -286,6 +286,47 @@ class SeedDataTest extends IntegrationTestBase {
     }
 
     @Test
+    @DisplayName("nothing may review work it may not comment on — the tiers are a ladder, not three sets")
+    void everyReviewerIsAlsoACommenter() throws SQLException {
+        // THE COMPUTED CHECK behind ReviewSubjectType.COMMENT_PERMISSION, which is ONE key —
+        // case:comment — for all three subject types, where reviewing and approving are triples.
+        //
+        // §6g describes three tiers and the roles spec's Review table lists them in order:
+        // case:comment (Viewer and up) below *:review (Test Engineer and up) below *:approve (Test
+        // Lead and up). "Below" is what makes one comment key the right shape rather than a
+        // shortcut: a reviewer is a commenter with more rights, so gating the comment endpoint on
+        // the bottom key gates it for everybody who should reach it.
+        //
+        // If a role were ever granted plan:review WITHOUT case:comment, the ladder would stop being
+        // a ladder and that role could record a binding-adjacent verdict on a plan while being
+        // refused the remark explaining it — a 403 on the weaker act and a 201 on the stronger one,
+        // which reads as a defect from every direction. The repair is to grant case:comment, or to
+        // add the two missing comment keys to the catalogue and key the gate off the subject type
+        // like the review keys; never to delete this check.
+        //
+        // Written over the catalogue rather than over the six roles by name, so a seventh role
+        // added in a later migration is covered without anyone remembering this reasoning exists.
+        assertThat(queryStrings("""
+                SELECT DISTINCT r.name
+                  FROM role r
+                  JOIN role_permission rp ON rp.role_id = r.id
+                 WHERE rp.permission_key IN ('case:review', 'suite:review', 'plan:review')
+                   AND NOT EXISTS (SELECT 1 FROM role_permission held
+                                    WHERE held.role_id = r.id
+                                      AND held.permission_key = 'case:comment')
+                 ORDER BY r.name
+                """))
+                .as("""
+                        Roles that may review work but not comment on it. ReviewService gates the \
+                        comment endpoint on case:comment for ALL THREE subject types, which is \
+                        sound only while the commenting tier sits below the reviewing one. Grant \
+                        case:comment to these roles, or add suite:comment/plan:comment to the \
+                        catalogue and key the gate off the subject type; do not delete this \
+                        check.""")
+                .isEmpty();
+    }
+
+    @Test
     @DisplayName("nothing may approve a case it may not edit — the bulk gate asks only the stronger key")
     void everyApproverIsAlsoAnEditor() throws SQLException {
         // THE COMPUTED CHECK behind a simplification in BulkOperations#permission, which resolves

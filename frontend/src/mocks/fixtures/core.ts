@@ -722,6 +722,39 @@ export const reviews = [
         createdAt: '2026-07-29T14:05:00Z',
       },
     ],
+    // Two threads and both shapes: one open with a reply under it, one already resolved. The
+    // resolved one carries a `resolvedBy`, so the column `V24` added is rendered by something
+    // rather than being a field only a live pass could ever show.
+    comments: [
+      {
+        id: uid(5, 'w'),
+        author: userRefOf(2),
+        body: 'Should the settlement suite be in scope, or is that a separate sign-off?',
+        createdAt: '2026-07-29T14:06:00Z',
+        resolvedAt: null,
+        resolvedBy: null,
+        replies: [
+          {
+            id: uid(6, 'w'),
+            author: userRefOf(1),
+            body: 'Separate — it ships a week later and has its own plan.',
+            createdAt: '2026-07-29T15:12:00Z',
+            resolvedAt: null,
+            resolvedBy: null,
+            replies: [],
+          },
+        ],
+      },
+      {
+        id: uid(7, 'w'),
+        author: userRefOf(0),
+        body: 'The exit criterion for blocked cases reads as 0%, which cannot be right.',
+        createdAt: '2026-07-29T16:40:00Z',
+        resolvedAt: '2026-07-30T08:05:00Z',
+        resolvedBy: userRefOf(1),
+        replies: [],
+      },
+    ],
   },
   {
     id: uid(3, 'w'),
@@ -746,6 +779,10 @@ export const reviews = [
         createdAt: '2026-07-24T16:40:00Z',
       },
     ],
+    // Deliberately none. A rejected review with an empty conversation is what most reviews on a
+    // real instance look like, and a fixture set where every review has threads is exactly the
+    // state §72's rule is about — the mock never sitting where a fresh install does.
+    comments: [],
   },
 ];
 

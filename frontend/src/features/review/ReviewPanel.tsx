@@ -1,15 +1,22 @@
 import { useState } from 'react';
-import { Alert, Box, Button, Chip, Stack, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Chip, Divider, Stack, TextField, Typography } from '@mui/material';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlineOutlined';
 import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
 import type {
   PermissionKey,
   ProjectSettings,
   Review,
+  ReviewComment,
   ReviewParticipation,
   ReviewSubjectType,
 } from '../../api/types';
-import { useProjectSettings, useRecordReviewVerdict, useReviews } from '../../api/queries';
+import {
+  useAddReviewComment,
+  useProjectSettings,
+  useRecordReviewVerdict,
+  useReviews,
+  useSetReviewCommentResolution,
+} from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
@@ -200,6 +207,15 @@ function CurrentReview({
 
       <Trail participations={review.participations} />
 
+      <Threads
+        projectId={projectId}
+        subjectType={subjectType}
+        subjectId={subjectId}
+        reviewId={review.id}
+        comments={review.comments}
+        isOpen={isOpen}
+      />
+
       {isOpen && (
         <PermissionGate projectId={projectId} permission={REVIEW_PERMISSION[subjectType]}>
           {({ allowed }) => (
@@ -220,8 +236,10 @@ function CurrentReview({
 function Trail({ participations }: { participations: ReviewParticipation[] }) {
   if (participations.length === 0) {
     return (
+      // "Nobody has given a verdict" and not "nobody has commented": since §79 the two are
+      // different things on this panel, and the old wording named the one below it.
       <Typography variant="body2" color="text.secondary" data-testid="Review.Trail.Empty">
-        Nobody has commented yet.
+        Nobody has given a verdict yet.
       </Typography>
     );
   }
@@ -250,6 +268,296 @@ function Trail({ participations }: { participations: ReviewParticipation[] }) {
           )}
         </Box>
       ))}
+    </Stack>
+  );
+}
+
+/**
+ * §6g's threads — *"Review without inline comments degrades into Slack conversations that
+ * vanish."*
+ *
+ * ### The two affordances cost two different permissions, and that is not an oversight
+ *
+ * Writing a remark costs `case:comment` for **every** subject type — the catalogue has one comment
+ * key where it has three review keys, because commenting is the bottom tier rather than a
+ * per-artifact judgement, and §6b built it for the client who reviews coverage without any write
+ * access. Resolving costs the subject's `*:review`: declaring a point dealt with is a statement
+ * about the review's progress. So a Viewer can write here and cannot resolve, and both controls are
+ * *disabled rather than hidden* (§31) so the difference is legible instead of being learned from a
+ * 403.
+ *
+ * ### Threads are one level deep, and the server enforces it
+ *
+ * A reply carries no reply affordance, because a reply to a reply is a field error. Rendering the
+ * control anyway would be an affordance the product does not have.
+ */
+function Threads({
+  projectId,
+  subjectType,
+  subjectId,
+  reviewId,
+  comments,
+  isOpen,
+}: {
+  projectId: string;
+  subjectType: ReviewSubjectType;
+  subjectId: string;
+  reviewId: string;
+  comments: ReviewComment[];
+  isOpen: boolean;
+}) {
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
+
+  if (comments.length === 0 && !isOpen) {
+    // A closed review nobody discussed gets no comment section at all — there is nothing to show
+    // and nothing that can be added, and an empty heading would be the "extra UI" §6g objects to.
+    return null;
+  }
+
+  return (
+    <Stack sx={{ gap: 1.25 }} data-testid="Review.Comments">
+      <Divider />
+      <Typography variant="subtitle2">Comments</Typography>
+
+      {comments.length === 0 ? (
+        <Typography variant="body2" color="text.secondary" data-testid="Review.Comments.Empty">
+          No comments yet.
+        </Typography>
+      ) : (
+        comments.map((thread) => (
+          <Thread
+            key={thread.id}
+            projectId={projectId}
+            subjectType={subjectType}
+            subjectId={subjectId}
+            reviewId={reviewId}
+            thread={thread}
+            isOpen={isOpen}
+            replying={replyingTo === thread.id}
+            onReplyToggle={() =>
+              setReplyingTo((current) => (current === thread.id ? null : thread.id))
+            }
+          />
+        ))
+      )}
+
+      {isOpen && (
+        <PermissionGate projectId={projectId} permission="case:comment">
+          {({ allowed }) => (
+            <CommentForm
+              projectId={projectId}
+              subjectType={subjectType}
+              subjectId={subjectId}
+              reviewId={reviewId}
+              parentId={null}
+              allowed={allowed}
+              label="Add a comment"
+              submitLabel="Comment"
+              testId="Review.Comment.New"
+            />
+          )}
+        </PermissionGate>
+      )}
+    </Stack>
+  );
+}
+
+function Thread({
+  projectId,
+  subjectType,
+  subjectId,
+  reviewId,
+  thread,
+  isOpen,
+  replying,
+  onReplyToggle,
+}: {
+  projectId: string;
+  subjectType: ReviewSubjectType;
+  subjectId: string;
+  reviewId: string;
+  thread: ReviewComment;
+  isOpen: boolean;
+  replying: boolean;
+  onReplyToggle: () => void;
+}) {
+  const resolution = useSetReviewCommentResolution(projectId, subjectType, subjectId);
+  const resolved = !!thread.resolvedAt;
+
+  return (
+    <Box
+      data-testid="Review.Thread"
+      sx={{
+        pl: 1.5,
+        borderLeft: '2px solid',
+        borderColor: resolved ? 'success.main' : 'divider',
+        opacity: resolved ? 0.7 : 1,
+      }}
+    >
+      <CommentBody comment={thread} testId="Review.Thread.Root" />
+
+      {resolved && (
+        <Typography variant="caption" color="text.secondary" data-testid="Review.Thread.Resolved">
+          {/*
+            The resolver is named, which is the whole reason `V24` added the column: a thread marked
+            dealt with by nobody is the one entry an auditor cannot follow up. Null survives it, for
+            `submittedBy`'s reason — the account may have been offboarded since.
+          */}
+          Resolved by {thread.resolvedBy?.displayName ?? 'a former member'} ·{' '}
+          {formatDateTime(thread.resolvedAt ?? '')}
+        </Typography>
+      )}
+
+      {thread.replies.length > 0 && (
+        <Stack sx={{ gap: 0.75, mt: 0.75, pl: 2 }} data-testid="Review.Thread.Replies">
+          {thread.replies.map((reply) => (
+            <CommentBody key={reply.id} comment={reply} testId="Review.Thread.Reply" />
+          ))}
+        </Stack>
+      )}
+
+      {isOpen && (
+        <Stack direction="row" sx={{ gap: 1, mt: 0.75, flexWrap: 'wrap' }}>
+          <PermissionGate projectId={projectId} permission="case:comment">
+            {({ allowed }) => (
+              <Button
+                size="small"
+                disabled={!allowed}
+                onClick={onReplyToggle}
+                data-testid="Review.Thread.ReplyToggle"
+              >
+                {replying ? 'Cancel' : 'Reply'}
+              </Button>
+            )}
+          </PermissionGate>
+          <PermissionGate projectId={projectId} permission={REVIEW_PERMISSION[subjectType]}>
+            {({ allowed }) => (
+              <Button
+                size="small"
+                disabled={!allowed || resolution.isPending}
+                onClick={() =>
+                  resolution.mutate({ reviewId, commentId: thread.id, resolved: !resolved })
+                }
+                data-testid="Review.Thread.Resolve"
+              >
+                {resolved ? 'Re-open' : 'Resolve'}
+              </Button>
+            )}
+          </PermissionGate>
+        </Stack>
+      )}
+
+      {replying && (
+        <PermissionGate projectId={projectId} permission="case:comment">
+          {({ allowed }) => (
+            <CommentForm
+              projectId={projectId}
+              subjectType={subjectType}
+              subjectId={subjectId}
+              reviewId={reviewId}
+              parentId={thread.id}
+              allowed={allowed}
+              label="Reply"
+              submitLabel="Reply"
+              testId="Review.Comment.Reply"
+              onDone={onReplyToggle}
+            />
+          )}
+        </PermissionGate>
+      )}
+
+      {resolution.isError && (
+        <Alert severity="error" sx={{ mt: 1 }} data-testid="Review.Thread.Error">
+          {describeError(resolution.error).body}
+        </Alert>
+      )}
+    </Box>
+  );
+}
+
+function CommentBody({ comment, testId }: { comment: ReviewComment; testId: string }) {
+  return (
+    <Box data-testid={testId}>
+      <Typography variant="caption" color="text.secondary">
+        {comment.author?.displayName ?? 'A former member'} · {formatDateTime(comment.createdAt)}
+      </Typography>
+      {/*
+        `pre-wrap`, because the body is prose a reviewer typed: a paragraph break they made is part
+        of what they said, and collapsing it changes the remark.
+      */}
+      <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+        {comment.body}
+      </Typography>
+    </Box>
+  );
+}
+
+function CommentForm({
+  projectId,
+  subjectType,
+  subjectId,
+  reviewId,
+  parentId,
+  allowed,
+  label,
+  submitLabel,
+  testId,
+  onDone,
+}: {
+  projectId: string;
+  subjectType: ReviewSubjectType;
+  subjectId: string;
+  reviewId: string;
+  parentId: string | null;
+  allowed: boolean;
+  label: string;
+  submitLabel: string;
+  testId: string;
+  onDone?: () => void;
+}) {
+  const [body, setBody] = useState('');
+  const add = useAddReviewComment(projectId, subjectType, subjectId);
+
+  return (
+    <Stack sx={{ gap: 1, mt: 1 }} data-testid={testId}>
+      <TextField
+        size="small"
+        multiline
+        minRows={2}
+        label={label}
+        value={body}
+        disabled={!allowed || add.isPending}
+        onChange={(event) => setBody(event.target.value)}
+        slotProps={{ htmlInput: { 'data-testid': `${testId}.Body` } }}
+      />
+      <Box>
+        <Button
+          variant="contained"
+          size="small"
+          // Empty is refused by the server as a field error, so the button is disabled rather than
+          // letting a caller discover it — the same rule the editor's Save follows.
+          disabled={!allowed || add.isPending || !body.trim()}
+          onClick={() =>
+            add.mutate(
+              { reviewId, body, parentId },
+              {
+                onSuccess: () => {
+                  setBody('');
+                  onDone?.();
+                },
+              },
+            )
+          }
+          data-testid={`${testId}.Submit`}
+        >
+          {submitLabel}
+        </Button>
+      </Box>
+      {add.isError && (
+        <Alert severity="error" data-testid={`${testId}.Error`}>
+          {describeError(add.error).body}
+        </Alert>
+      )}
     </Stack>
   );
 }

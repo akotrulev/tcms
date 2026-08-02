@@ -1,12 +1,19 @@
-/** The review record's two endpoints — plan §6g's advisory tier, and the trail behind it. */
+/**
+ * The review record's endpoints — plan §6g's advisory tier, the trail behind it, and the threads
+ * that hang off it.
+ */
 import { HttpResponse, delay, http } from 'msw';
 import type { ReviewSubjectType } from '../../api/types';
 import {
+  addComment,
+  commentExists,
   db,
   recordVerdict,
   reviewsForSubject,
   saveProjectSettings,
+  setResolution,
   settingsForProject,
+  threadRoot,
 } from '../db';
 import { API, LATENCY, holdsOn, meRef, notFound, problem } from './shared';
 
@@ -18,6 +25,9 @@ const REVIEW_PERMISSION: Record<ReviewSubjectType, string> = {
   SUITE: 'suite:review',
   PLAN: 'plan:review',
 };
+
+/** `ReviewCommentEdit.MAX_BODY`, and the contract's `maxLength` on `ReviewCommentInput.body`. */
+const MAX_COMMENT = 5000;
 
 const SUBJECT_NOUN: Record<ReviewSubjectType, string> = {
   CASE: 'case',
@@ -158,6 +168,124 @@ export const reviewHandlers = [
       const comment = body.comment?.trim() ? body.comment.trim() : null;
       recordVerdict(review, meRef(), body.verdict, comment);
       return HttpResponse.json(review, { status: 201 });
+    },
+  ),
+
+  /**
+   * A remark on an open review — §6g's threads.
+   *
+   * **Gated on `case:comment` whatever the subject is**, which is the whole shape of the server's
+   * decision: the catalogue has one comment key and three review keys, because commenting is the
+   * bottom tier rather than a per-artifact judgement. A mock that asked `REVIEW_PERMISSION` here
+   * would hide the control from exactly the Viewer §6b built the key for, and mock mode would look
+   * correct while contradicting the product.
+   */
+  http.post(
+    `${API}/projects/:projectId/reviews/:reviewId/comments`,
+    async ({ params, request }) => {
+      await delay(LATENCY);
+      const projectId = String(params.projectId);
+      const review = db.reviews.find(
+        (row) => row.id === params.reviewId && row.projectId === projectId,
+      );
+      if (!review) return notFound('That review');
+
+      if (!holdsOn(projectId, 'case:comment')) {
+        return problem(
+          403,
+          'Not allowed',
+          "You do not have permission to comment on this project's work.",
+        );
+      }
+
+      // Closed before validation, the server's order (§74): a caller told to fix a field on a
+      // review that has ended is being told to do something that will not help.
+      if (review.state !== 'IN_REVIEW') {
+        return problem(
+          409,
+          'Review closed',
+          `This review has already ended. Submit the ${SUBJECT_NOUN[review.subjectType]} for `
+            + 'review again to reopen it.',
+        );
+      }
+
+      const body = (await request.json()) as { body?: string; parentId?: string | null };
+      const text = body.body?.trim() ?? '';
+      if (!text) {
+        return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+          body: ['Write a comment.'],
+        });
+      }
+      if (text.length > MAX_COMMENT) {
+        return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+          body: [`Keep the comment under ${MAX_COMMENT} characters.`],
+        });
+      }
+
+      if (!addComment(review, meRef(), text, body.parentId ?? null)) {
+        return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+          parentId: ['That comment cannot be replied to.'],
+        });
+      }
+      return HttpResponse.json(review, { status: 201 });
+    },
+  ),
+
+  /**
+   * A thread's resolution — and this one costs `*:review`, not `case:comment`.
+   *
+   * The asymmetry with the handler above is the server's decision and the mock has to carry it, or
+   * the Viewer gets a resolve control in mock mode that 403s against a real backend — §31's
+   * disable-don't-hide inverted, which is the failure mode a stateful mock exists to prevent.
+   */
+  http.put(
+    `${API}/projects/:projectId/reviews/:reviewId/comments/:commentId/resolution`,
+    async ({ params, request }) => {
+      await delay(LATENCY);
+      const projectId = String(params.projectId);
+      const review = db.reviews.find(
+        (row) => row.id === params.reviewId && row.projectId === projectId,
+      );
+      if (!review) return notFound('That review');
+
+      if (!holdsOn(projectId, REVIEW_PERMISSION[review.subjectType])) {
+        return problem(
+          403,
+          'Not allowed',
+          "You do not have permission to review this project's work.",
+        );
+      }
+
+      const commentId = String(params.commentId);
+      // A path segment naming nothing is a 404; a reply is a field error. Two different answers to
+      // two different mistakes, as the server gives them.
+      if (!commentExists(review, commentId)) return notFound('That comment');
+
+      if (review.state !== 'IN_REVIEW') {
+        return problem(
+          409,
+          'Review closed',
+          `This review has already ended. Submit the ${SUBJECT_NOUN[review.subjectType]} for `
+            + 'review again to reopen it.',
+        );
+      }
+
+      const body = (await request.json()) as { resolved?: boolean };
+      if (typeof body.resolved !== 'boolean') {
+        return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+          resolved: ['Say whether the thread is resolved: true or false.'],
+        });
+      }
+
+      const thread = threadRoot(review, commentId);
+      if (!thread) {
+        return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+          resolved: ['Resolve the comment that started the thread, not a reply to it.'],
+        });
+      }
+
+      setResolution(thread, meRef(), body.resolved);
+      return HttpResponse.json(review);
     },
   ),
 ];

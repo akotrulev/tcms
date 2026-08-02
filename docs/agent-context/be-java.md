@@ -3,7 +3,7 @@
 # be-java — orientation cache (TCMS)
 
 **Last verified:** 2026-08-02
-**Baseline commit:** `02fa872`
+**Baseline commit:** `e76bd9f`
 **Fingerprint files:** `backend/build.gradle.kts`, `backend/gradle/libs.versions.toml`, `backend/gradle/wrapper/gradle-wrapper.properties`
 
 > Authoritative docs win over this file. `CLAUDE.md`, `docs/HANDOFF.md` (an index — sections live in
@@ -63,7 +63,7 @@ provisioning · auth · shared`.
   return zero rows, fail-closed and silent. `RepositoryTransactionTest` derives the repository list
   from the live context, so a new repository that forgets fails the build. `#confirmed`
 - **Flyway owns all DDL**; `hibernate.ddl-auto: validate`, `baseline-on-migrate: false`. Migrations
-  at `src/main/resources/db/migration`. **Head is `V23`; `V24` is the next free number.** Booting the
+  at `src/main/resources/db/migration`. **Head is `V24`; `V25` is the next free number.** Booting the
   real context in a test is itself a schema-drift gate. `#confirmed`
   **`V23` is the first migration since `V1` to CREATE A TABLE**, which makes two things live that no
   previous migration had to think about: a new table's RLS policy must be written with **`V4`'s
@@ -206,6 +206,34 @@ provisioning · auth · shared`.
   Gate via `ProjectService.writeGrantedOnTarget` (§69's seam, **5th** consumer) on
   `ReviewSubjectType.reviewPermission()`, resolving through `findInProject` — `findById` is
   RLS-scoped to the COMPANY and accepts a sibling project's review. `#confirmed`
+- **`review_comment` has a writer since §79, and `case:comment` its first consumer — asked for ALL
+  THREE subject types.** `ReviewComment` + `ReviewCommentEdit` + `ReviewCommentRepository` +
+  `ReviewCommentView`/`Request`/`ResolutionRequest`, `ReviewService.comment`/`resolveComment`,
+  `POST …/reviews/{id}/comments` and `PUT …/comments/{id}/resolution`, **`V24`**.
+  **The catalogue has ONE comment key where it has three review keys**, so
+  `ReviewSubjectType.COMMENT_PERMISSION` is a static field rather than a third column on the
+  constants — the asymmetry is the finding. Adding `suite:comment`/`plan:comment` was refused: a new
+  key is seeded to nobody, so it is a 403 no administrator can grant their way out of (§67's
+  `evidence:read` argument). The roles spec's Review table already calls it a tier — *"read an ITEM
+  in full and leave threaded comments"*. `SeedDataTest.everyReviewerIsAlsoACommenter` **derives** the
+  ladder that makes it sound (`everyApproverIsAlsoAnEditor`'s shape); when it fails, grant
+  `case:comment`, do not delete the check.
+  **RESOLVING costs `*:review`, not `case:comment`** — a statement about the review's progress
+  belongs to the tier running it; *"the reviewing tier OR the comment's author"* (`evidence:delete`'s
+  shape) was refused because its only new caller is a Viewer resolving their own feedback. The two
+  gate mutations are a **pair**: each reddens exactly 1, and they are different tests.
+  **Already-in-the-requested-state writes NOTHING** — the unconditional version re-stamps
+  `resolved_at` and hands `resolved_by` to whoever clicked last, which was a live defect in this
+  slice's first draft and is the only test of sixteen that failed on the first run.
+  **Threads are ONE level deep**, the parent resolves through `ReviewCommentRepository.findInReview`
+  (never `findById`, RLS-scoped to the company — §64/§68/§69's family), and both parent refusals
+  carry the same sentence. `ReviewCommentView` is nested, so assembly lives on the server (§68's
+  `buildValueTree`) and an orphaned reply surfaces as a root.
+  **`anchor_type`/`anchor_id` stay NULL and unmapped**: validating a step id needs
+  `repository.test_step`, which this module may not import, so it is a `PeopleDirectory`-shaped port
+  or §64's unvalidated reference. **`refuseIfClosed` is the ONE spelling of "this review has
+  ended"**, read by all three write paths — the verdict endpoint's inline copy moved into it.
+  `#confirmed`
 - **`project.PeopleDirectory` is the ONE resolution of "what is this person called" (§76).** Port in
   `project` (which may depend on `tenancy` only — its package comment prescribes exactly this),
   implemented by `identity.IdentityPeopleDirectory`; `ProjectAccess` is the first instance of that
@@ -388,16 +416,14 @@ provisioning · auth · shared`.
   `suite_version` was in for a long time. A plan timeline is the natural consumer and it is §6p's.
   `#confirmed`
 
-- ~~**Four review-workflow permission keys still have no consumer in Java**~~ → **three of them got
-  one in §76** (`case:review`, `suite:review`, `plan:review`). **`case:comment` is still unconsumed
-  and that is correct**: `V3` grants it to **Viewer** and the review tier to Test Engineer and up —
-  §6g's three tiers — so it belongs to `review_comment`, which has no writer. What is now true
-  instead: **the reviewer apparatus's spine exists and its two extensions do not.** `review_comment`
-  is still schema-with-no-code, reviewer *assignment* does not exist (`review_participation` records
-  who spoke, not who was asked), and **the per-project settings row blocks four things at once** —
-  §6g's review opt-in, author-cannot-approve-own-work, `required_peer_reviews` (mapped, written from
-  the column default, read by nothing), and the edit-after-approval mode. `project` has no
-  `settings` column; `company` does. `#confirmed`
+- ~~**Four review-workflow permission keys still have no consumer in Java**~~ → **three got one in
+  §76** (`case:review`, `suite:review`, `plan:review`) **and the fourth, `case:comment`, in §79** —
+  the review block of the catalogue is now fully consumed. What is now true instead: **reviewer
+  ASSIGNMENT is the only unbuilt half of §6g's apparatus.** `review_participation` records who
+  *spoke*, never who was *asked*; §6g wants a user **or a team** assignable, and §6l's board needs it
+  before a pending-review card can exist. Also unbuilt and deliberately so: **§6g's gating rules**
+  (require APPROVED before a case joins a run or a plan starts), which §6g itself calls *"powerful
+  and genuinely obstructive"* and which need a documented lead override. `#confirmed`
 
 - **`audit_event.target_type` is spelled two ways and nothing reads it yet.** Every service writes
   the snake_case table name (`test_run`, `test_case`, `test_plan`, `doc_page`, …) except
@@ -453,6 +479,23 @@ provisioning · auth · shared`.
 
 ## Session log
 
+- 2026-08-02 · EXTEND · Review comments (§79) — `review_comment`'s first writer ever, and
+  `case:comment`'s first consumer in Java, which empties the review block of the catalogue. New:
+  `ReviewComment`, `ReviewCommentEdit`, `ReviewCommentRepository`, `ReviewCommentView`,
+  `ReviewCommentRequest`, `ReviewCommentResolutionRequest`, `ReviewSubjectType.COMMENT_PERMISSION`,
+  `ReviewService.comment`/`resolveComment`/`refuseIfClosed`/`unwrap`/`threads`,
+  `ReviewController.respond` (three write paths, one mapping), `SeedDataTest.everyReviewerIsAlsoACommenter`,
+  **`V24`**. **The slice is one decision**: the catalogue has one comment key and three review keys,
+  and adding the two missing ones would seed keys granted to nobody — so `case:comment` is asked for
+  all three subject types, and the ladder that makes that sound is a computed check. **Resolving
+  costs `*:review` instead**, and the two gate mutations are a pair that redden one test each.
+  **The defect: resolving twice re-stamped the record** and would have handed `resolved_by` to
+  whoever clicked last — one of sixteen tests failed on the first run, because it was written from
+  the contract sentence rather than the code. `V24` adds `resolved_by` (an act with no actor is not a
+  record) and the read path's index; no new table, so the policy count stays 57. **Frontend finding:**
+  `ReviewPanel.test.tsx`'s fixture ended `} as Review`, so a new required field reddened all eleven of
+  its tests at runtime with zero type errors — §65's finding in a second file; the cast is gone.
+  17 backend tests, 7 frontend, **0 mutations run inline** (policy, followed), 7 queued.
 - 2026-08-02 · EXTEND · Per-project review settings (§77) — §6g's four settings get the row they have
   needed since the workflow was designed. New: `ProjectSettings`, `ReviewSettings`,
   `EditAfterApproval`, `ProjectSettingsRepository`/`Service`/`Controller`/`View`/`Request`,

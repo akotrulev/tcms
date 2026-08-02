@@ -903,6 +903,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/reviews/{reviewId}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                reviewId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Write a remark on an open review
+         * @description §6g's threads — *"Review without inline comments degrades into Slack conversations
+         *     that vanish."*
+         *
+         *     **This costs `case:comment`, whatever the subject is.** The catalogue has one comment
+         *     key where it has three review keys and three approve keys, and that is deliberate: the
+         *     roles spec's Review table lists commenting as the bottom **tier** — *"read an item in
+         *     full and leave threaded comments"* — held by Viewer and up, built for the case where
+         *     the client reviews test coverage themselves without gaining any write access. Adding
+         *     `suite:comment` and `plan:comment` would seed two keys nobody holds, which on every
+         *     existing instance is a 403 no administrator can grant their way out of. `case:comment`
+         *     is seeded by `V3`, granted since M0, and had **no consumer in Java** until this
+         *     endpoint.
+         *
+         *     **Threads are one level deep.** `parentId` names the root being replied to, validated
+         *     against *this review's* comments — a comment from another project's review is a field
+         *     error rather than a stored reference, and so is a reply to a reply. A tree has no
+         *     bottom to render and no natural place to resolve.
+         *
+         *     There is deliberately **no `anchorType` / `anchorId`**, though `V1` has the columns and
+         *     §6g asks for anchoring *"where possible"*: the only candidate anchor is a case's step,
+         *     whose ids live in a module the review record may not import, so accepting one today
+         *     would store a reference nothing validates — the defect §64 found four milestones after
+         *     it shipped.
+         *
+         *     `409` once the review has ended, on the same terms as the verdict endpoint: a review
+         *     is history once it closes, and the way forward is to submit the artifact again.
+         */
+        post: operations["addReviewComment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/reviews/{reviewId}/comments/{commentId}/resolution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                reviewId: string;
+                commentId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Mark a thread dealt with, or re-open it
+         * @description §6g's *"resolvable"*.
+         *
+         *     **This costs `*:review`, not `case:comment`** — the asymmetry with the endpoint above
+         *     is the decision. Writing a remark is the bottom tier's act; declaring one dealt with is
+         *     a statement about the review's progress, which belongs to the tier running the review.
+         *     "The reviewing tier *or* the comment's own author" was considered and refused: the only
+         *     caller it adds is a Viewer resolving their own feedback, which takes it off the
+         *     reviewer's list without anybody having addressed it.
+         *
+         *     **Only a thread root.** Resolution is a property of the thread, so resolving a reply is
+         *     a field error rather than a silent no-op.
+         *
+         *     `PUT` with a required boolean, not `PATCH` and not two verbs: for a boolean, absent and
+         *     `false` are the same bytes, so a `PATCH` could never express "re-open this". No
+         *     `If-Match` — the target state is absolute, so there is no stale-read-derived value to
+         *     lose. Setting a thread to the state it is already in writes nothing and answers 200.
+         */
+        put: operations["setReviewCommentResolution"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/suites": {
         parameters: {
             query?: never;
@@ -4164,6 +4251,56 @@ export interface components {
             /** Format: date-time */
             approvedAt?: string | null;
             participations: components["schemas"]["ReviewParticipation"][];
+            /**
+             * @description §6g's threads — **roots only**, each carrying its own replies. Required and may be
+             *     empty, for the reason `participations` is: an absent array would make "nobody has
+             *     commented" indistinguishable from "the server did not send them".
+             */
+            comments: components["schemas"]["ReviewComment"][];
+        };
+        ReviewComment: {
+            /** Format: uuid */
+            id: string;
+            /** @description Null when the account no longer resolves — `ReviewParticipation.user`'s rule. */
+            author?: components["schemas"]["UserRef"] | null;
+            body: string;
+            /** Format: date-time */
+            createdAt: string;
+            /**
+             * Format: date-time
+             * @description Null while the thread is open, and **always null on a reply**: resolution is a
+             *     property of the thread, so half a conversation cannot be marked dealt with.
+             */
+            resolvedAt?: string | null;
+            /**
+             * @description Who marked it dealt with — `V24`'s column. `V1` gave the table a `resolved_at` and
+             *     no actor, which is enough to grey a thread out and not enough for the one thing the
+             *     record exists for: proving to an auditor who did what.
+             */
+            resolvedBy?: components["schemas"]["UserRef"] | null;
+            replies: components["schemas"]["ReviewComment"][];
+        };
+        ReviewCommentInput: {
+            /**
+             * @description The remark. Blank is a field error rather than a silently-dropped write: answering
+             *     201 to one would put an empty entry in the trail.
+             */
+            body: string;
+            /**
+             * Format: uuid
+             * @description The thread root this replies to, or absent to start a thread. Validated against
+             *     *this review's* comments — a comment on another review, and a reply to a reply, are
+             *     both field errors carrying the same sentence, because telling them apart tells a
+             *     caller that the id they guessed names a real comment somewhere they cannot see.
+             */
+            parentId?: string | null;
+        };
+        ReviewCommentResolutionInput: {
+            /**
+             * @description Required. Null is a field error rather than "leave it alone" — a body that names no
+             *     state has not asked for anything.
+             */
+            resolved: boolean;
         };
         ReviewParticipation: {
             /** Format: uuid */
@@ -6074,6 +6211,75 @@ export interface operations {
              *     inventing one would promise a `GET` nothing serves.
              */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Review"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    addReviewComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                reviewId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewCommentInput"];
+            };
+        };
+        responses: {
+            /**
+             * @description The whole review, re-rendered — the participations endpoint's decision and for its
+             *     reason: a comment is only ever read inside the conversation it joins. No
+             *     `Location`; a comment has no URL of its own.
+             */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Review"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    setReviewCommentResolution: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                reviewId: string;
+                commentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewCommentResolutionInput"];
+            };
+        };
+        responses: {
+            /** @description The whole review, re-rendered. */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

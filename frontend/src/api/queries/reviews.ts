@@ -114,3 +114,74 @@ export function useRecordReviewVerdict(
       client.invalidateQueries({ queryKey: keys.reviews(projectId, subjectType, subjectId) }),
   });
 }
+
+/**
+ * Writes one remark on an open review — §6g's threads.
+ *
+ * Costs `case:comment` whatever the subject is, which is the server's decision and not this hook's:
+ * the catalogue has one comment key where it has three review keys, because commenting is the
+ * bottom **tier** rather than a per-artifact judgement. `lib/permissions.ts` already carries the
+ * key; what this file must not do is spell a `suite:comment` that does not exist.
+ *
+ * `parentId` is optional and absent means "start a thread". Invalidates rather than writing the
+ * response into the cache, for `useRecordReviewVerdict`'s reason.
+ */
+export function useAddReviewComment(
+  projectId: string,
+  subjectType: ReviewSubjectType,
+  subjectId: string,
+) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      reviewId,
+      body,
+      parentId,
+    }: {
+      reviewId: string;
+      body: string;
+      parentId?: string | null;
+    }) =>
+      api.post<Review>(`${base(projectId)}/reviews/${reviewId}/comments`, {
+        body: body.trim(),
+        parentId: parentId ?? null,
+      }),
+    // In place, beside the thread it is about — `useRecordReviewVerdict`'s reason.
+    meta: { handled: true },
+    onSuccess: () =>
+      client.invalidateQueries({ queryKey: keys.reviews(projectId, subjectType, subjectId) }),
+  });
+}
+
+/**
+ * Marks a thread dealt with, or re-opens it. Costs the subject's `*:review` key — **not**
+ * `case:comment`, and the asymmetry with the hook above is deliberate on the server's side.
+ *
+ * A `PUT` of the whole state rather than a toggle, so two clicks racing settle on what was asked for
+ * rather than on how many requests arrived.
+ */
+export function useSetReviewCommentResolution(
+  projectId: string,
+  subjectType: ReviewSubjectType,
+  subjectId: string,
+) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      reviewId,
+      commentId,
+      resolved,
+    }: {
+      reviewId: string;
+      commentId: string;
+      resolved: boolean;
+    }) =>
+      api.put<Review>(
+        `${base(projectId)}/reviews/${reviewId}/comments/${commentId}/resolution`,
+        { resolved },
+      ),
+    meta: { handled: true },
+    onSuccess: () =>
+      client.invalidateQueries({ queryKey: keys.reviews(projectId, subjectType, subjectId) }),
+  });
+}

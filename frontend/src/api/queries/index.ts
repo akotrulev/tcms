@@ -68,9 +68,11 @@ export {
 } from './cases';
 export { useConditions, useCreateSharedStep, useSharedSteps } from './library';
 export {
+  useAddReviewComment,
   useProjectSettings,
   useRecordReviewVerdict,
   useReviews,
+  useSetReviewCommentResolution,
   useUpdateProjectSettings,
 } from './reviews';
 export {

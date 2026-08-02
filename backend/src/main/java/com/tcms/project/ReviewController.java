@@ -12,14 +12,15 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * A subject's reviews, and one peer's verdict on an open one — plan §6g's reviewer apparatus over
- * HTTP.
+ * A subject's reviews, one peer's verdict on an open one, and the threads that hang off it — plan
+ * §6g's reviewer apparatus over HTTP.
  *
  * <p>Its own class rather than three more methods on {@link ProjectController}, for the reason §71
  * moved {@code GET /teams} off {@code AdminController}: one path family, one class. The subject is
@@ -83,17 +84,80 @@ public class ReviewController {
             @PathVariable UUID reviewId,
             @RequestBody ReviewParticipationRequest request) {
 
-        return switch (reviews.record(
-                UUID.fromString(jwt.getSubject()), projectId, reviewId, request)) {
+        return respond(
+                reviews.record(UUID.fromString(jwt.getSubject()), projectId, reviewId, request),
+                HttpStatus.CREATED,
+                "You do not have permission to review this project's work.");
+    }
 
+    /**
+     * Writes one remark on an open review — §6g's threads.
+     *
+     * <p>201 with the whole review, {@link #participate}'s decision and for its reason: a comment is
+     * only ever read inside the conversation it joins. No {@code Location}, because a comment has no
+     * URL of its own — the resolution route below addresses one, and a {@code GET} on it would serve
+     * a fragment of a panel that never renders fragments.
+     */
+    @PostMapping("/{reviewId}/comments")
+    public ResponseEntity<Object> comment(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID reviewId,
+            @RequestBody ReviewCommentRequest request) {
+
+        return respond(
+                reviews.comment(UUID.fromString(jwt.getSubject()), projectId, reviewId, request),
+                HttpStatus.CREATED,
+                // A different sentence from the one above, because a different key was missing and
+                // the two are held by different tiers (§6g): telling a Viewer they may not review
+                // when what they lack is the right to comment names the wrong thing to ask for.
+                "You do not have permission to comment on this project's work.");
+    }
+
+    /**
+     * Marks a thread dealt with, or re-opens it.
+     *
+     * <p>{@code PUT} on a sub-resource rather than two verbs, for the reason
+     * {@link ReviewCommentResolutionRequest} gives, and 200 rather than 201 because nothing is
+     * created — the state of an existing thread is being set to what the request names, which
+     * includes setting it to what it already is.
+     */
+    @PutMapping("/{reviewId}/comments/{commentId}/resolution")
+    public ResponseEntity<Object> resolve(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID reviewId,
+            @PathVariable UUID commentId,
+            @RequestBody ReviewCommentResolutionRequest request) {
+
+        return respond(
+                reviews.resolveComment(
+                        UUID.fromString(jwt.getSubject()), projectId, reviewId, commentId, request),
+                HttpStatus.OK,
+                "You do not have permission to review this project's work.");
+    }
+
+    /**
+     * The three write paths' one mapping from outcome to response.
+     *
+     * <p>Written once rather than three times: the statuses and the problem envelopes are identical
+     * and only the success status and the 403's sentence differ, so three copies would be three
+     * places for a refusal to drift (§58's E1). The switch stays exhaustive under {@code -Werror},
+     * so a new {@link ReviewService.Outcome} is a compile error here rather than a silent 500.
+     */
+    private static ResponseEntity<Object> respond(
+            ReviewService.Outcome outcome, HttpStatus success, String forbiddenDetail) {
+
+        return switch (outcome) {
             case ReviewService.Outcome.Recorded recorded ->
-                    ResponseEntity.status(HttpStatus.CREATED).body(recorded.view());
+                    ResponseEntity.status(success).body(recorded.view());
             case ReviewService.Outcome.Invalid invalid ->
                     ResponseEntity.badRequest().body(validationProblem(invalid.errors()));
             case ReviewService.Outcome.Closed closed ->
                     ResponseEntity.status(HttpStatus.CONFLICT).body(closedProblem(closed.message()));
             case ReviewService.Outcome.Forbidden ignored ->
-                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(forbiddenProblem());
+                    ResponseEntity.status(HttpStatus.FORBIDDEN)
+                            .body(forbiddenProblem(forbiddenDetail));
             case ReviewService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
         };
     }
@@ -130,14 +194,15 @@ public class ReviewController {
         return problem;
     }
 
-    private static ProblemDetail forbiddenProblem() {
+    private static ProblemDetail forbiddenProblem(String detail) {
         ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
         problem.setTitle("Not allowed");
         // What they cannot do, in their words, and never the permission key — naming it publishes
         // the catalogue to exactly the caller who is not entitled to it. One sentence for all three
         // subject types, deliberately: which of case:review, suite:review or plan:review they are
-        // missing is not something the person reading this can act on differently.
-        problem.setDetail("You do not have permission to review this project's work.");
+        // missing is not something the person reading this can act on differently. Commenting is a
+        // different tier and therefore a different sentence — see the comment route.
+        problem.setDetail(detail);
         return problem;
     }
 }

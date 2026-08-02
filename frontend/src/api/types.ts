@@ -56,6 +56,8 @@ export type Facet = S['Facet'];
 export type Review = S['Review'];
 export type ReviewParticipation = S['ReviewParticipation'];
 export type ReviewParticipationInput = S['ReviewParticipationInput'];
+export type ReviewComment = S['ReviewComment'];
+export type ReviewCommentInput = S['ReviewCommentInput'];
 export type ReviewSubjectType = S['ReviewSubjectType'];
 export type ReviewState = S['ReviewState'];
 // The project's own §6g policy. Beside the review types because every one of its fields is about
