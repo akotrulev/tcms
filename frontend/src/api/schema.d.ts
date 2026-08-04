@@ -3354,46 +3354,93 @@ export interface paths {
         put?: never;
         /**
          * Generate a report
-         * @description Async by contract — returns 202 with a job to poll (plan §6e).
+         * @description Async by contract — returns 202 with a job to poll (plan §6e). The work outlives the
+         *     request that asked for it, which is why there is a job row at all: an in-request dispatch
+         *     is lost on a restart, leaving a client polling an id that resolves to nothing with no
+         *     symptom anywhere but a spinner.
+         *
+         *     Needs `report:export` — held by every role but Automation Service (roles spec §A5).
+         *     Generating *is* exporting: the artifact is a file somebody downloads. There is deliberately
+         *     no `report:generate` key, because a key `V3` seeds to nobody is a 403 no administrator can
+         *     grant their way out of.
+         *
+         *     **What is refused at request time, and what is not.** An unknown `type` and a `format` this
+         *     deployment cannot render are both 400s here, decided by asking the server what it actually
+         *     has rather than by a list beside the check. A report's *own* parameters — a `runId` that is
+         *     absent, or names a run in another project — are checked inside the worker and surface as a
+         *     FAILED job carrying that sentence, because validating them here would mean either a second
+         *     copy of every report's rules or a database read on the request path.
          */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    projectId: components["parameters"]["ProjectId"];
-                };
-                cookie?: never;
+        post: operations["generateReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/reports/jobs/{jobId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                jobId: components["parameters"]["JobId"];
             };
-            requestBody: {
-                content: {
-                    "application/json": {
-                        /** @example aggregate_execution */
-                        type: string;
-                        /** @enum {string} */
-                        format: "PDF" | "MD" | "HTML";
-                        parameters?: {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-            };
-            responses: {
-                /** @description Accepted */
-                202: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ReportJob"];
-                    };
-                };
-                400: components["responses"]["BadRequest"];
-                401: components["responses"]["Unauthorized"];
-                403: components["responses"]["Forbidden"];
-                404: components["responses"]["NotFound"];
-            };
+            cookie?: never;
         };
+        /**
+         * Poll a generation job
+         * @description Where a request got to. **Without this route the 202 above would hand back an id nothing
+         *     can resolve** — the client would have no way to learn that its report was ready, or that it
+         *     had failed and why.
+         *
+         *     Needs `report:view`, not `report:export`: reading whether your own request finished is not
+         *     exporting anything, and a role that may see reports but not take them away must still be
+         *     able to watch one being made. It is that key's first consumer since `V3` seeded it in M0.
+         *
+         *     The job is scoped by the project in the path as well as by its id, so a job id from a
+         *     sibling project answers 404 rather than being served through a gate that was evaluated
+         *     against a different project.
+         */
+        get: operations["readReportJob"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/reports/artifacts/{artifactId}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                artifactId: components["parameters"]["ArtifactId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The report bytes
+         * @description What `ReportJob.downloadUrl` and `ReportJob.modelUrl` point at — **without this route both
+         *     fields would be a lie**, and a generate endpoint shipped alone would have had to invent the
+         *     URL, with every client taking the invention for the contract (§67, verbatim).
+         *
+         *     An ordinary session-authenticated route rather than a public link, for `downloadEvidence`'s
+         *     reason: the filesystem adapter cannot issue an expiring signed URL, and a guessable
+         *     permanent one would be an unauthenticated read of a customer's results.
+         *
+         *     Needs `report:export` — this is the download, which is what that key names.
+         *
+         *     **The project in the path is proved through the job, not through the artifact.**
+         *     `report_artifact` carries no `project_id` (`V1` scoped it by company and definition), so
+         *     the row that scopes it is the `report_job` naming it. That is total in the designed system;
+         *     the day something produces an artifact without a job, this route needs a second answer.
+         */
+        get: operations["downloadReportArtifact"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -5753,10 +5800,42 @@ export interface components {
         ReportJob: {
             /** Format: uuid */
             jobId: string;
+            /** @description The report that was asked for, echoed back. See the generate operation. */
+            type: string;
             /** @enum {string} */
             status: "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
             format: string;
+            /**
+             * @description Where the rendered artifact is, in the format that was asked for. Null until the job
+             *     reaches COMPLETED, and null for ever on a FAILED one.
+             *
+             *     **Server-supplied, never composed by the client.** The route it points at is
+             *     `GET /projects/{projectId}/reports/artifacts/{artifactId}/content`, and a client that
+             *     built that string itself would be holding a second copy of the server's routing —
+             *     which is what makes moving the route a breaking change nothing detects (§67, on
+             *     `Evidence.url`).
+             */
             downloadUrl: string | null;
+            /**
+             * @description Where the serialized report **model** is — the same JSON the on-screen view renders,
+             *     written for every job alongside whatever format was asked for.
+             *
+             *     This is what makes the screen and the export provably one model rather than two
+             *     computations that can disagree (plan §6e: "the on-screen report view consumes the same
+             *     model via JSON, so what you see is what exports"). When `format` is itself JSON both
+             *     fields point at the same artifact.
+             */
+            modelUrl: string | null;
+            /**
+             * @description Why a FAILED job failed, in a sentence written to be shown to the person who asked.
+             *     Null in every other state.
+             *
+             *     Report-specific parameter faults surface here rather than as a 400 — a `runId` naming
+             *     a run in another project cannot be checked without reading the database, and doing so
+             *     on the request path would mean a second copy of every report's parameter rules. What
+             *     the request *can* refuse, it refuses with a 400: see the generate operation.
+             */
+            error: string | null;
         };
         DocPageSummary: {
             /** Format: uuid */
@@ -6344,6 +6423,8 @@ export interface components {
         RunId: string;
         ExecutionId: string;
         EvidenceId: string;
+        JobId: string;
+        ArtifactId: string;
         Page: number;
         Size: number;
         /**
@@ -6908,6 +6989,131 @@ export interface operations {
                     "application/octet-stream": string;
                 };
             };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    generateReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * @description Which report. This is an open string rather than an enum because §6e's
+                     *     catalogue names ten and the set a deployment can produce grows slice by slice —
+                     *     an enum here would have to be edited in lockstep with the server, and a client
+                     *     generated from a stale one could not ask for a report that exists.
+                     *
+                     *     A type this server cannot compute is a 400 naming what it can.
+                     *     **`run_summary` is the only one today** (§87): one run's results, its pass rate
+                     *     and its outstanding work.
+                     * @example run_summary
+                     */
+                    type: string;
+                    /**
+                     * @description The set a person downloads. **Not the set this server can render** — the two
+                     *     are deliberately different, and asking for one it cannot produce is a 400 at
+                     *     request time rather than a job that goes FAILED an hour later, because a client
+                     *     cannot tell an unsupported format from a broken server by watching a job die.
+                     *
+                     *     Today only `MD` renders. `PDF` needs a headless browser that is not in the
+                     *     image and says so in the refusal; `HTML` is a later slice. The enum is *not*
+                     *     narrowed to what is installed: what a deployment can render is a property of
+                     *     that deployment, and the refusal names it.
+                     * @enum {string}
+                     */
+                    format: "PDF" | "MD" | "HTML";
+                    /**
+                     * @description What the report is computed over, stored verbatim and frozen onto the artifact
+                     *     — `V1`'s reason, in one line: "a report you cannot reproduce is a report nobody
+                     *     trusts" (§6e).
+                     *
+                     *     Untyped because each report takes different ones. `run_summary` takes a single
+                     *     required `runId` (uuid).
+                     */
+                    parameters?: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+        responses: {
+            /**
+             * @description Queued. The job is PENDING and `downloadUrl` is null; poll the job to find out when it
+             *     is not.
+             */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportJob"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    readReportJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                jobId: components["parameters"]["JobId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The job */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportJob"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    downloadReportArtifact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                artifactId: components["parameters"]["ArtifactId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description The bytes, `attachment` — a report is a file somebody keeps, unlike evidence, which is
+             *     served `inline` so a screenshot renders in place.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };

@@ -146,6 +146,55 @@ public class ProjectService {
     }
 
     /**
+     * <strong>The gate for a read that costs a permission key beyond visibility.</strong> Runs
+     * {@code read} only if the caller may see the project <em>and</em> holds {@code permission} on
+     * it — {@link #writeGranted}'s shape, in a read-only transaction, and answering the same three
+     * states.
+     *
+     * <h2>Why a read needs three states here when every other read needs two</h2>
+     *
+     * <p>{@link GateResult}'s header states the general rule and it still holds: a read collapses
+     * "no such project", "another company's" and "yours but not granted" into one bodiless 404,
+     * because telling them apart makes the endpoint an oracle for another tenancy (§6t). What that
+     * argument is about is <em>project visibility</em> — the thing a caller could otherwise use the
+     * response to discover.
+     *
+     * <p>This method is for the reads whose gate is a <strong>second</strong> question asked of a
+     * caller who has already passed the first. {@code report:view} (§87) is the product's first:
+     * the caller can see the project, is looking at it, and the only thing being withheld is a
+     * feature of it. Answering 404 there conceals nothing they do not already know and instead says
+     * the job they just requested does not exist — false, and alarming about the one thing a
+     * reporting pipeline must never seem to have done. So the visibility half still answers 404 and
+     * the permission half answers 403, which is exactly {@code writeGranted}'s split and exactly
+     * the reason it has one.
+     *
+     * <p>It is a distinct method rather than a flag for {@link #writeGranted}'s stated reason,
+     * turned around: a read that called the write gate would run in a read-write transaction and
+     * would read, in the diff, as a write — and the two must not become the same call with an
+     * argument deciding which, or the argument is what gets it wrong.
+     *
+     * @param permission the permission key the read needs, a constant at the call site as in
+     *                   {@link #writeGranted} — never a value named by the request
+     * @param read       applied to the gated project, for {@link #readVisible}'s reason: nothing
+     *                   downstream should accept a {@code projectId} it has not had gated
+     */
+    @Transactional(readOnly = true)
+    public <T> GateResult<T> readGranted(
+            UUID userId, UUID projectId, String permission, Function<Project, T> read) {
+
+        Optional<Project> project = visibleProject(userId, projectId);
+        if (project.isEmpty()) {
+            // Visibility first, as in writeGranted: a caller who cannot see the project must not
+            // be able to tell a nonexistent id from an ungranted one by observing 403 over 404.
+            return new GateResult.Unreachable<>();
+        }
+        if (!access.canDo(userId, project.get().getId(), permission)) {
+            return new GateResult.Denied<>();
+        }
+        return new GateResult.Allowed<>(read.apply(project.get()));
+    }
+
+    /**
      * <strong>The read gate for a cross-project read</strong> — {@code readVisible} with no project
      * named. Runs {@code read} against every project in the active company this caller may see.
      *

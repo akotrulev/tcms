@@ -256,7 +256,11 @@ class ContractConventionTest {
             // direction; author-may-approve defaulting to "false" is not, since the property is
             // stored in the positive and an absent key would read as the rule being ON when the
             // project turned it off.
-            "ProjectSettings", com.tcms.project.ProjectSettingsView.class);
+            "ProjectSettings", com.tcms.project.ProjectSettingsView.class,
+            // Three of its seven are required-AND-nullable (§87), which is exactly the shape this
+            // check is for: a poller cannot tell "the server did not send `error`" from "there is
+            // no error", so the component has to exist even though the value is usually null.
+            "ReportJob", com.tcms.reporting.ReportJobView.class);
 
     @Test
     @DisplayName("a response record has a component for every property its schema requires")

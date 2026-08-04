@@ -1,0 +1,70 @@
+package com.tcms.reporting;
+
+import java.util.UUID;
+
+/**
+ * What a client is told about a generation request — the contract's {@code ReportJob}, served by
+ * both the 202 and the poll.
+ *
+ * <h2>One shape for the accept and the poll, deliberately</h2>
+ *
+ * <p>The 202 could have answered with the id alone. It answers with the whole job because a client
+ * that receives one shape on the accept and a different one from the poll has to hold two readings
+ * of "where is my report" — and the accept's shape would be the one that is never exercised again,
+ * which is the copy that drifts (§58 E1). Serving the same record means the first response is a
+ * poll response that happens to be free.
+ *
+ * <h2>Every field is present; three are null until they are not</h2>
+ *
+ * <p>{@code downloadUrl}, {@code modelUrl} and {@code error} are required-and-nullable in the
+ * contract. A poller reads {@code status} to decide whether to keep polling, and must not also have
+ * to tell "this server did not send the field" from "there is no error" — the second is a fact and
+ * the first is a bug, and an absent key renders as whichever the client's language calls missing
+ * ({@code ContractConventionTest.requiredPropertiesHaveAComponent}, which this record is registered
+ * with).
+ *
+ * <h2>The URLs are composed HERE and never by the client</h2>
+ *
+ * <p>{@code Evidence.url}'s rule (§67): a client that builds the download path itself holds a second
+ * copy of the server's routing, so moving the route becomes a breaking change nothing detects. The
+ * path is project-scoped because that is what the download gate resolves against — see
+ * {@link ReportJobRepository#findByArtifact} for why the artifact alone cannot scope itself.
+ *
+ * @param modelUrl the serialized {@link ReportModel} — written for every job, so the on-screen view
+ *     and the export are one model rendered twice rather than two computations that can disagree
+ *     (plan §6e). Equal to {@code downloadUrl} when the requested format was itself JSON.
+ */
+public record ReportJobView(
+        UUID jobId,
+        String type,
+        String status,
+        String format,
+        String downloadUrl,
+        String modelUrl,
+        String error) {
+
+    static ReportJobView of(ReportJob job) {
+        return new ReportJobView(
+                job.getId(),
+                job.getType(),
+                job.getStatus().name(),
+                job.getFormat().name(),
+                contentUrl(job.getProjectId(), job.getArtifactId()),
+                contentUrl(job.getProjectId(), job.getModelArtifactId()),
+                job.getError());
+    }
+
+    /**
+     * Null in, null out — which is what makes the field's nullability mean the one thing it says.
+     *
+     * <p>A job that has not completed has no artifact, and composing a URL for a null id would
+     * produce a link to {@code …/artifacts/null/content}: a string that is not null, that a client
+     * would render as a working download, and that 404s. The nullable field exists precisely so
+     * there is nothing to render.
+     */
+    private static String contentUrl(UUID projectId, UUID artifactId) {
+        return artifactId == null
+                ? null
+                : "/api/v1/projects/" + projectId + "/reports/artifacts/" + artifactId + "/content";
+    }
+}

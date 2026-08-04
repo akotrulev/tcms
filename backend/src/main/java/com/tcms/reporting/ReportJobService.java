@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -95,8 +96,14 @@ public class ReportJobService {
         record Invalid(Map<String, List<String>> errors) implements Outcome {
         }
 
-        /** Queued. 202, with the id the client polls. */
-        record Accepted(UUID jobId) implements Outcome {
+        /**
+         * Queued. 202, with the whole job rather than only the id the client polls.
+         *
+         * <p>{@link ReportJobView}'s header argues it: a client given one shape on the accept and a
+         * different one from the poll holds two readings of "where is my report", and the accept's
+         * is the one never exercised again.
+         */
+        record Accepted(ReportJobView job) implements Outcome {
         }
     }
 
@@ -109,6 +116,11 @@ public class ReportJobService {
      * connection for as long as the report takes, on the one endpoint whose cost the product does
      * not choose.
      *
+     * @param format the requested format <strong>as text</strong>, not as a {@link ReportFormat}.
+     *     The parse is a refusal like the other two and belongs beside them: a value that is not a
+     *     format at all and one this deployment cannot render are the same mistake from the caller's
+     *     side, and answering them in two places is how they end up worded two ways — one of them by
+     *     Jackson, about deserialization, to a person who asked for a PDF.
      * @param parameters the raw JSON body of {@code parameters}, stored verbatim. It is what
      *     {@code report_artifact.filter_snapshot} is later set from, which is what makes a number
      *     read six months later explainable ({@code V1}: "a report you cannot reproduce is a report
@@ -116,7 +128,7 @@ public class ReportJobService {
      */
     @Transactional
     public Outcome request(
-            UUID userId, UUID projectId, String type, ReportFormat format, String parameters) {
+            UUID userId, UUID projectId, String type, String format, String parameters) {
 
         UUID companyId = CompanyContext.require();
 
@@ -134,11 +146,13 @@ public class ReportJobService {
             UUID companyId,
             Project project,
             String type,
-            ReportFormat format,
+            String format,
             String parameters,
             UUID userId) {
 
-        Map<String, List<String>> errors = validate(type, format, parameters);
+        Optional<ReportFormat> parsed = parseFormat(format);
+
+        Map<String, List<String>> errors = validate(type, format, parsed, parameters);
         if (!errors.isEmpty()) {
             return new Outcome.Invalid(errors);
         }
@@ -151,13 +165,15 @@ public class ReportJobService {
                 // so the day a definition can be named there is one call site to change.
                 null,
                 type,
-                format,
+                // Present: `validate` refused every other case above, and the job cannot be written
+                // without one.
+                parsed.orElseThrow(),
                 parameters == null || parameters.isBlank() ? "{}" : parameters,
                 userId,
                 clock.instant());
 
         jobs.save(job);
-        return new Outcome.Accepted(job.getId());
+        return new Outcome.Accepted(ReportJobView.of(job));
     }
 
     /**
@@ -168,7 +184,7 @@ public class ReportJobService {
      * is a form that reveals its next objection only after the first is fixed.
      */
     private Map<String, List<String>> validate(
-            String type, ReportFormat format, String parameters) {
+            String type, String format, Optional<ReportFormat> parsed, String parameters) {
 
         Map<String, List<String>> errors = new LinkedHashMap<>();
 
@@ -180,11 +196,17 @@ public class ReportJobService {
                     + "'. It can produce: " + String.join(", ", computations.supported()) + "."));
         }
 
-        if (format == null) {
+        if (format == null || format.isBlank()) {
             errors.put("format", List.of("Say which format to render. This server can produce: "
                     + supportedFormats() + "."));
-        } else if (!renderers.supports(format)) {
-            errors.put("format", List.of(refusalFor(format)));
+        } else if (parsed.isEmpty()) {
+            // Not a format the schema even knows. Worded as "cannot render" rather than "unknown"
+            // on purpose: the two are the same fact to the caller — this file will not arrive — and
+            // the only useful half of the sentence is the list of what will.
+            errors.put("format", List.of("This server cannot render '" + format
+                    + "'. It can produce: " + supportedFormats() + "."));
+        } else if (!renderers.supports(parsed.get())) {
+            errors.put("format", List.of(refusalFor(parsed.get())));
         }
 
         if (parameters != null && !parameters.isBlank()) {
@@ -216,6 +238,25 @@ public class ReportJobService {
         }
         return "This server cannot render " + format + ". It can produce: "
                 + supportedFormats() + ".";
+    }
+
+    /**
+     * The requested text as a {@link ReportFormat}, if it names one at all.
+     *
+     * <p>Case-insensitive, because the contract's enum is upper case and a client sending
+     * {@code "md"} has made no mistake worth a refusal — the alternative is a 400 whose fix is
+     * invisible in the message.
+     */
+    private static Optional<ReportFormat> parseFormat(String requested) {
+        if (requested == null) {
+            return Optional.empty();
+        }
+        for (ReportFormat format : ReportFormat.values()) {
+            if (format.name().equalsIgnoreCase(requested.trim())) {
+                return Optional.of(format);
+            }
+        }
+        return Optional.empty();
     }
 
     private String supportedFormats() {

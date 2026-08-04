@@ -18,6 +18,14 @@ package com.tcms.project;
  * thing a test repository must never seem to have done. So that state answers 403, and the two
  * genuinely unreachable states keep answering 404 exactly as before.
  *
+ * <p><strong>Since §87 a read can want these three states too</strong>, and it does not weaken the
+ * rule above — it locates it. {@link ProjectService#readGranted} gates the reads whose permission is
+ * a <em>second</em> question, asked of a caller whose project visibility has already been settled;
+ * {@code report:view} is the first. The concealment argument is about visibility, which that method
+ * still answers with {@link Unreachable}. What is left for {@link Denied} is a feature of a project
+ * the caller is demonstrably looking at, where 404 would claim their own report request had
+ * vanished.
+ *
  * <p>Modelled as a sealed interface rather than as an enum beside a nullable value, so the
  * controller's {@code switch} over it is exhaustive at compile time. The failure that guards
  * against is the specific one this type exists to prevent: a fourth outcome added later and handled

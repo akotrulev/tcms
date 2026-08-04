@@ -390,8 +390,12 @@ class ReportJobPipelineTest extends IntegrationTestBase {
 
     private ReportJobService.Outcome requests(
             UUID userId, UUID projectId, String type, ReportFormat format, String parameters) {
+        // The service takes the format as text since §87 — the parse is one of its three
+        // request-time refusals, so an unrenderable format and an unspellable one are worded once.
+        // These call sites keep the enum because they are all asking for a format that exists.
         return readIn(companyOf(projectId),
-                () -> requests.request(userId, projectId, type, format, parameters));
+                () -> requests.request(
+                        userId, projectId, type, format == null ? null : format.name(), parameters));
     }
 
     private int runIn(UUID companyId) {
@@ -402,7 +406,7 @@ class ReportJobPipelineTest extends IntegrationTestBase {
 
     private static UUID accepted(ReportJobService.Outcome outcome) {
         assertThat(outcome).isInstanceOf(ReportJobService.Outcome.Accepted.class);
-        return ((ReportJobService.Outcome.Accepted) outcome).jobId();
+        return ((ReportJobService.Outcome.Accepted) outcome).job().jobId();
     }
 
     private ReportArtifact artifact(UUID id) {
