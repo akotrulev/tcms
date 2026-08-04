@@ -28,4 +28,26 @@ This project is being built with the **`fe-react`, `be-java`, `data`, `qa-java`,
    - The agent runs **inline**, not as a subagent, unless asked otherwise.
 2. **Backend work** → `be-java:be-java` skill. Also `be-java:be-java-database-code` for JPA/persistence and `data:data-postgresql` / `data:data-migrations` for schema and migration work.
 3. **Never improvise a pattern a skill owns.** The skill wins over instinct, and over general guidance, for its domain. If a listed skill is missing on disk, say so and proceed with general rules — never substitute invented guidance.
+
+3a. **A plugin enabled in `.claude/settings.json` may still not be INVOKABLE, and §82 hit this.**
+   That session's registry loaded only the user-scope plugins (`fe-react`, `devops`,
+   `business-analysis`, `qa-dotnet`, `be-dotnet`); the three enabled at **project** scope —
+   **`be-java`, `data`, `qa-java`** — did not register, so `Skill be-java:be-java` answered
+   **`Unknown skill`** while the plugin was correctly defined in `marketplace.json` and fully
+   present on disk.
+
+   **Check, do not assume, and do not silently improvise if it fails.** The files are the fallback
+   and they are authoritative:
+
+   ```
+   ~/.claude/plugins/cache/skills-library/be-java/<hash>/backend/java/agents/be-java.md
+   ~/.claude/plugins/cache/skills-library/be-java/<hash>/backend/java/skills/<name>/SKILL.md
+       # pattern-guide · pattern-writer · database-code · code-review · auth0 · cognito
+   ```
+
+   `Read` the agent definition and follow it as operating instructions — the phase table, the
+   brownfield orientation pass and the output contract all still apply. Say in one line that the
+   plugin did not register and that you are reading it from disk, so the difference is visible in
+   the transcript rather than looking like the skill was skipped. A `/plugin` install at **user**
+   scope, or a fresh session, is the real fix.
 4. The user's global `CLAUDE.md` requires: **no remote/cloud planning**, and all generated `.md` artifacts saved **into this project** under `docs/plans/`, `docs/specs/`, `docs/audits/` — never to a global directory.
