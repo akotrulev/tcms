@@ -1,8 +1,14 @@
 package com.tcms.reporting;
 
 /**
- * One format's view of a {@link ReportModel} — §6e's "one model, three renderers", with the third
- * (HTML) arriving in R4 and PDF refused for now (see {@link ReportRenderers}).
+ * One format's view of a {@link ReportDocument} — §6e's "one model, three renderers", all three of
+ * which now exist; PDF is still refused (see {@link ReportRenderers}).
+ *
+ * <h2>It takes a document, not a model, and that is R4's doing</h2>
+ *
+ * <p>§6e makes the report header mandatory on the output. A second {@code render(model, header)}
+ * parameter would have left every renderer free to ignore it, and a report with no provenance
+ * renders perfectly and forwards to a client perfectly — see {@link ReportDocument}.
  *
  * <h2>Bytes, not a string</h2>
  *
@@ -31,5 +37,5 @@ interface ReportRenderer {
     String fileExtension();
 
     /** The whole artifact. Called once per job per format; never streamed, never partial. */
-    byte[] render(ReportModel model);
+    byte[] render(ReportDocument document);
 }

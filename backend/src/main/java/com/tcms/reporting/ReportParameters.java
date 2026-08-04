@@ -4,6 +4,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -76,6 +79,27 @@ record ReportParameters(JsonNode node) {
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException("'" + name + "' is not a valid id", e);
         }
+    }
+
+    /**
+     * Every parameter that was sent, in the order the request wrote them — the header's selection
+     * block (§6e), assembled here because this type owns the node.
+     *
+     * <p>A scalar prints as its text and a nested object or array as its own compact JSON. Nothing
+     * is filtered and nothing is renamed: {@link ReportHeaders} states at length why the selection
+     * has to be what the client sent rather than what the report understood.
+     */
+    List<ReportModel.Entry> entries() {
+        List<ReportModel.Entry> entries = new ArrayList<>();
+        // properties(), not the deprecated fields(): both iterate in insertion order, which is what
+        // makes the selection read in the order the client wrote it.
+        for (Map.Entry<String, JsonNode> field : node.properties()) {
+            JsonNode value = field.getValue();
+            entries.add(new ReportModel.Entry(
+                    field.getKey(),
+                    value.isValueNode() ? value.asText() : value.toString()));
+        }
+        return List.copyOf(entries);
     }
 
     /** An optional string parameter, empty when absent, null or blank. */

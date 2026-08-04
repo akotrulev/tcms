@@ -54,18 +54,21 @@ class MarkdownReportRenderer implements ReportRenderer {
     }
 
     @Override
-    public byte[] render(ReportModel model) {
+    public byte[] render(ReportDocument document) {
+        ReportModel model = document.report();
         StringBuilder out = new StringBuilder();
 
         out.append("# ").append(inline(model.title())).append("\n\n");
 
-        for (ReportModel.Entry entry : model.metadata()) {
+        // The header block and the report's own metadata are one list by construction — see
+        // ReportDocument#headerBlock. A definition list is the closest GFM has to a header block,
+        // and it is what survives being pasted into a PR or a tracker comment, which is the format's
+        // whole reason for existing.
+        for (ReportModel.Entry entry : document.headerBlock()) {
             out.append("- **").append(inline(entry.label())).append(":** ")
                     .append(inline(entry.value())).append('\n');
         }
-        if (!model.metadata().isEmpty()) {
-            out.append('\n');
-        }
+        out.append('\n');
 
         for (ReportModel.Section section : model.sections()) {
             out.append("## ").append(inline(section.heading())).append("\n\n");

@@ -91,6 +91,7 @@ class ReportJobRunner {
     private final ReportJobRepository jobs;
     private final ReportArtifactRepository artifacts;
     private final ReportComputations computations;
+    private final ReportHeaders headers;
     private final ReportRenderers renderers;
     private final ReportStore store;
     private final ExecutionFactRefreshService facts;
@@ -101,6 +102,7 @@ class ReportJobRunner {
             ReportJobRepository jobs,
             ReportArtifactRepository artifacts,
             ReportComputations computations,
+            ReportHeaders headers,
             ReportRenderers renderers,
             ReportStore store,
             ExecutionFactRefreshService facts,
@@ -110,6 +112,7 @@ class ReportJobRunner {
         this.jobs = jobs;
         this.artifacts = artifacts;
         this.computations = computations;
+        this.headers = headers;
         this.renderers = renderers;
         this.store = store;
         this.facts = facts;
@@ -194,7 +197,7 @@ class ReportJobRunner {
             String filterSnapshot,
             UUID requestedBy,
             Instant watermark,
-            ReportModel model) {
+            ReportDocument document) {
     }
 
     /** The keys the bytes went under, in the order the artifact rows are written. */
@@ -216,8 +219,15 @@ class ReportJobRunner {
         facts.refresh();
         Instant watermark = clock.instant();
 
+        ReportParameters parameters = ReportParameters.parse(job.getParameters());
         ReportModel model = computations.require(job.getType())
-                .compute(job.getProjectId(), ReportParameters.parse(job.getParameters()));
+                .compute(job.getProjectId(), parameters);
+
+        // The header is built AFTER the computation, and only because a computation that refuses its
+        // parameters must fail the job rather than fail while assembling a header for a report that
+        // was never going to exist — the error the client polls would then name the company lookup
+        // instead of the run id they mistyped.
+        ReportHeader header = headers.of(job, parameters, clock.instant());
 
         return new Computed(
                 job.getCompanyId(),
@@ -226,7 +236,7 @@ class ReportJobRunner {
                 job.getParameters(),
                 job.getRequestedBy(),
                 watermark,
-                model);
+                new ReportDocument(header, model));
     }
 
     /**
@@ -250,7 +260,7 @@ class ReportJobRunner {
     private Stored renderAndStore(UUID jobId, Computed computed) {
         ReportRenderer renderer = renderers.require(computed.format());
         String key = storageKey(computed.companyId(), jobId, renderer.fileExtension());
-        store.put(key, renderer.render(computed.model()));
+        store.put(key, renderer.render(computed.document()));
 
         if (computed.format() == ReportFormat.JSON) {
             return new Stored(key, key);
@@ -258,7 +268,7 @@ class ReportJobRunner {
 
         ReportRenderer json = renderers.require(ReportFormat.JSON);
         String modelKey = storageKey(computed.companyId(), jobId, json.fileExtension());
-        store.put(modelKey, json.render(computed.model()));
+        store.put(modelKey, json.render(computed.document()));
         return new Stored(key, modelKey);
     }
 

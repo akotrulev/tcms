@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.lang.reflect.RecordComponent;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,6 +26,20 @@ import org.junit.jupiter.api.Test;
 @DisplayName("The report model and the two renderers R3 ships")
 class ReportRenderingTest {
 
+    /**
+     * A header with a distinct, findable value in every component — see {@link Header}, which
+     * derives its assertions from this record's own components rather than listing them.
+     */
+    private static final ReportHeader HEADER = new ReportHeader(
+            "run_summary",
+            "A single run: status breakdown, progress per tester, and results by suite.",
+            "Acme Industries",
+            "ACME — Acme Web",
+            "This report covers ACME — Acme Web in full and no other project.",
+            "Dana Lead",
+            "2026-08-04 14:03:22 UTC",
+            List.of(new ReportModel.Entry("runId", "8b0f2c1e-0000-0000-0000-000000000001")));
+
     private static final ReportModel MODEL = new ReportModel(
             "Run summary — TR-1",
             List.of(new ReportModel.Entry("Pass rate (of recorded)", "50.0%")),
@@ -39,6 +54,12 @@ class ReportRenderingTest {
                                     "Executions by status",
                                     List.of(new ReportModel.Point("PASSED", 2))))),
                     ReportModel.Section.text("Results by suite", "Nothing yet.")));
+
+    private static final ReportDocument DOCUMENT = new ReportDocument(HEADER, MODEL);
+
+    private static ReportDocument documentOf(ReportModel model) {
+        return new ReportDocument(HEADER, model);
+    }
 
     // =====================================================================
 
@@ -121,13 +142,13 @@ class ReportRenderingTest {
         void seriesRenderAsTables() {
             // §6e: "charts degrade to tables plus an optional linked PNG". The number has to survive
             // — a missing image is unreadable and a number is not.
-            assertThat(render(MODEL)).contains("### Executions by status").contains("| PASSED | 2 |");
+            assertThat(render(DOCUMENT)).contains("### Executions by status").contains("| PASSED | 2 |");
         }
 
         @Test
         @DisplayName("headings, metadata and a narrative-only section all render")
         void theWholeModelRenders() {
-            String out = render(MODEL);
+            String out = render(DOCUMENT);
 
             assertThat(out).startsWith("# Run summary — TR-1\n");
             assertThat(out).contains("- **Pass rate (of recorded):** 50.0%");
@@ -141,11 +162,15 @@ class ReportRenderingTest {
         void lineEndingsAreDeterministic() {
             // §58: this project lost seven consecutive CI runs to a difference that could not fail
             // on macOS. Two artifacts differing only in line endings are two artifacts.
-            assertThat(render(MODEL)).doesNotContain("\r");
+            assertThat(render(DOCUMENT)).doesNotContain("\r");
         }
 
         private String render(ReportModel model) {
-            return new String(renderer.render(model), StandardCharsets.UTF_8);
+            return render(documentOf(model));
+        }
+
+        private String render(ReportDocument document) {
+            return new String(renderer.render(document), StandardCharsets.UTF_8);
         }
     }
 
@@ -158,13 +183,14 @@ class ReportRenderingTest {
         @Test
         @DisplayName("the whole model survives a round trip")
         void theModelRoundTrips() throws Exception {
-            JsonNode parsed = new ObjectMapper().readTree(renderer.render(MODEL));
+            JsonNode parsed = new ObjectMapper().readTree(renderer.render(DOCUMENT));
 
-            assertThat(parsed.get("title").asText()).isEqualTo("Run summary — TR-1");
-            assertThat(parsed.get("sections")).hasSize(2);
-            assertThat(parsed.get("sections").get(0).get("table").get("rows").get(0).get(0).asText())
+            assertThat(parsed.get("report").get("title").asText()).isEqualTo("Run summary — TR-1");
+            assertThat(parsed.get("report").get("sections")).hasSize(2);
+            assertThat(parsed.get("report").get("sections")
+                    .get(0).get("table").get("rows").get(0).get(0).asText())
                     .isEqualTo("PASSED");
-            assertThat(parsed.get("sections").get(0).get("series").get(0)
+            assertThat(parsed.get("report").get("sections").get(0).get("series").get(0)
                     .get("points").get(0).get("value").asLong())
                     .as("a chart needs the magnitude, which is why Point carries a number")
                     .isEqualTo(2L);
@@ -177,12 +203,28 @@ class ReportRenderingTest {
             // tables", and an absent key says the second.
             JsonNode parsed;
             try {
-                parsed = new ObjectMapper().readTree(renderer.render(MODEL));
+                parsed = new ObjectMapper().readTree(renderer.render(DOCUMENT));
             } catch (Exception e) {
                 throw new IllegalStateException(e);
             }
-            assertThat(parsed.get("sections").get(1).has("table")).isTrue();
-            assertThat(parsed.get("sections").get(1).get("table").isNull()).isTrue();
+            assertThat(parsed.get("report").get("sections").get(1).has("table")).isTrue();
+            assertThat(parsed.get("report").get("sections").get(1).get("table").isNull()).isTrue();
+        }
+
+        @Test
+        @DisplayName("the header travels with the model, so F2 reads the header the export printed")
+        void theHeaderIsStored() throws Exception {
+            // Slice-plan decision F is what makes this an assertion rather than a detail: the screen
+            // reads THIS artifact. A JSON model with no header would leave F2 either rendering a
+            // report with no provenance or reassembling a second header from the job row — two
+            // assemblies of one header, which is the drift the one-model architecture exists to
+            // prevent.
+            JsonNode parsed = new ObjectMapper().readTree(renderer.render(DOCUMENT));
+
+            assertThat(parsed.get("header").get("reportType").asText()).isEqualTo("run_summary");
+            assertThat(parsed.get("header").get("generatedBy").asText()).isEqualTo("Dana Lead");
+            assertThat(parsed.get("header").get("selection").get(0).get("label").asText())
+                    .isEqualTo("runId");
         }
 
         @Test
@@ -190,14 +232,101 @@ class ReportRenderingTest {
         void lineEndingsAreDeterministic() {
             // Jackson's INDENT_OUTPUT alone uses SYSTEM_LINEFEED_INSTANCE, so this is the assertion
             // that the explicit indenter in the renderer is doing something.
-            String out = new String(renderer.render(MODEL), StandardCharsets.UTF_8);
+            String out = new String(renderer.render(DOCUMENT), StandardCharsets.UTF_8);
             assertThat(out).contains("\n").doesNotContain("\r");
         }
 
         @Test
         @DisplayName("the same model renders to the same bytes twice")
         void isDeterministic() {
-            assertThat(renderer.render(MODEL)).isEqualTo(renderer.render(MODEL));
+            assertThat(renderer.render(DOCUMENT)).isEqualTo(renderer.render(DOCUMENT));
+        }
+    }
+
+    @Nested
+    @DisplayName("The header — mandatory on every format §6e ships")
+    class Header {
+
+        @Test
+        @DisplayName("every component of the header reaches every renderer's output")
+        void nothingInTheHeaderIsSilentlyDropped() {
+            // A COMPUTED check, and deliberately not a list of assertions: this project's standing
+            // rule is that a catalogue-wide invariant needs one. The failure it prevents is a field
+            // added to ReportHeader — a milestone, a branding line, R6's aggregation policy — that
+            // one renderer prints and another quietly does not, which nobody sees until two people
+            // compare an HTML report against the Markdown of the same job.
+            //
+            // The header's string values are chosen to contain nothing a format escapes, so "the
+            // value appears verbatim" is a fair question to ask of Markdown, JSON and HTML alike.
+            for (ReportRenderer renderer : List.of(
+                    new MarkdownReportRenderer(), new JsonReportRenderer())) {
+
+                String out = new String(renderer.render(DOCUMENT), StandardCharsets.UTF_8);
+
+                for (RecordComponent component : ReportHeader.class.getRecordComponents()) {
+                    if (component.getType() != String.class) {
+                        continue;
+                    }
+                    Object value;
+                    try {
+                        value = component.getAccessor().invoke(HEADER);
+                    } catch (ReflectiveOperationException e) {
+                        throw new IllegalStateException(e);
+                    }
+                    assertThat(out)
+                            .as("%s must print the header's %s",
+                                    renderer.getClass().getSimpleName(), component.getName())
+                            .contains((String) value);
+                }
+
+                assertThat(out)
+                        .as("%s must print the selection the job carried",
+                                renderer.getClass().getSimpleName())
+                        .contains("runId")
+                        .contains("8b0f2c1e-0000-0000-0000-000000000001");
+            }
+        }
+
+        @Test
+        @DisplayName("the block is provenance, then selection, then the report's own metadata")
+        void theBlockIsAssembledOnce() {
+            // One assembly for every renderer (ReportDocument#headerBlock), so three formats cannot
+            // print three different subsets. The report's metadata is part of the header block
+            // because that is where the aggregation policy and every denominator live — a second
+            // place to put the policy is how one of the two comes to be blank.
+            List<String> labels = DOCUMENT.headerBlock().stream()
+                    .map(ReportModel.Entry::label)
+                    .toList();
+
+            assertThat(labels).containsExactly(
+                    "Report",
+                    "Report type",
+                    "Company",
+                    "Project scope",
+                    "Scope",
+                    "Generated by",
+                    "Generated at",
+                    "Selection — runId",
+                    "Pass rate (of recorded)");
+        }
+
+        @Test
+        @DisplayName("a caller's own parameter name cannot displace a provenance line")
+        void selectionEntriesArePrefixed() {
+            // A parameter is named by the client and could be called anything, including "Company".
+            // Merged in flat, that row would read as the header's own and the document would lie
+            // about itself.
+            ReportHeader spoofed = new ReportHeader(
+                    HEADER.reportType(), HEADER.description(), "Acme Industries",
+                    HEADER.projectScope(), HEADER.scopeNote(), HEADER.generatedBy(),
+                    HEADER.generatedAt(),
+                    List.of(new ReportModel.Entry("Company", "Somebody Else Ltd")));
+
+            List<ReportModel.Entry> block = new ReportDocument(spoofed, MODEL).headerBlock();
+
+            assertThat(block).contains(new ReportModel.Entry("Company", "Acme Industries"));
+            assertThat(block).contains(
+                    new ReportModel.Entry("Selection — Company", "Somebody Else Ltd"));
         }
     }
 

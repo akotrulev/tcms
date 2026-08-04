@@ -9,7 +9,7 @@ import com.fasterxml.jackson.databind.json.JsonMapper;
 import org.springframework.stereotype.Component;
 
 /**
- * {@link ReportModel} → JSON. <strong>Not a debug convenience</strong>: slice-plan decision F makes
+ * {@link ReportDocument} → JSON. <strong>Not a debug convenience</strong>: slice-plan decision F makes
  * this artifact what the on-screen report view (F2) reads, so the screen and the export are the same
  * model rendered twice rather than two computations that agree until they do not.
  *
@@ -73,9 +73,9 @@ class JsonReportRenderer implements ReportRenderer {
     }
 
     @Override
-    public byte[] render(ReportModel model) {
+    public byte[] render(ReportDocument document) {
         try {
-            return writer.writeValueAsBytes(model);
+            return writer.writeValueAsBytes(document);
         } catch (JsonProcessingException e) {
             // Unreachable for a record of strings and longs, and rethrown rather than swallowed:
             // a job that stored an empty JSON artifact would leave the screen (F2) rendering an
