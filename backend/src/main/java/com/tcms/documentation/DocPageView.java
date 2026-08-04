@@ -2,6 +2,7 @@ package com.tcms.documentation;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -31,11 +32,25 @@ public record DocPageView(
         String slug,
         DocPageStatus status,
         Instant updatedAt,
+        String subjectType,
+        UUID subjectId,
         List<DocBlockView> blocks,
         int currentVersionNo,
         long lockVersion) {
 
     static DocPageView of(DocPage page, List<DocBlock> blocks) {
+        return of(page, blocks, Map.of());
+    }
+
+    /**
+     * @param linksByBlock block id to the links targeting it. A block absent from the map has none,
+     *                     which is the ordinary case and is served as {@code []} — see
+     *                     {@link DocBlockView}, where the difference between an empty list and an
+     *                     absent {@code coverage} is the whole point.
+     */
+    static DocPageView of(
+            DocPage page, List<DocBlock> blocks, Map<UUID, List<BlockLinkView>> linksByBlock) {
+
         DocPageSummaryView summary = DocPageSummaryView.of(page);
         return new DocPageView(
                 summary.id(),
@@ -45,7 +60,13 @@ public record DocPageView(
                 summary.slug(),
                 summary.status(),
                 summary.updatedAt(),
-                blocks.stream().map(DocBlockView::of).toList(),
+                summary.subjectType(),
+                summary.subjectId(),
+                blocks.stream()
+                        .map(block -> DocBlockView.of(
+                                block,
+                                linksByBlock.getOrDefault(block.getId(), List.of())))
+                        .toList(),
                 page.getCurrentVersionNo(),
                 page.getLockVersion());
     }

@@ -55,10 +55,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class DocPageController {
 
     private final DocPageService pages;
+    private final BlockLinkService blockLinks;
     private final DocPageWriteService writes;
 
-    public DocPageController(DocPageService pages, DocPageWriteService writes) {
+    public DocPageController(
+            DocPageService pages, BlockLinkService blockLinks, DocPageWriteService writes) {
+
         this.pages = pages;
+        this.blockLinks = blockLinks;
         this.writes = writes;
     }
 
@@ -192,6 +196,78 @@ public class DocPageController {
         return switch (outcome) {
             case DocPageWriteService.Outcome.Deleted ignored -> ResponseEntity.noContent().build();
             default -> problem(outcome, "delete documentation pages in this project");
+        };
+    }
+
+    /**
+     * Links a case or suite to a block.
+     *
+     * <p>Two success codes, and the distinction is the endpoint's design: 201 when a link was
+     * written, 200 when one was already there. A client that treats them alike is correct; one that
+     * counts creates is not misled.
+     */
+    @PostMapping("/{pageId}/blocks/{blockId}/links")
+    public ResponseEntity<Object> link(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID pageId,
+            @PathVariable UUID blockId,
+            @RequestBody BlockLinkInput input) {
+
+        BlockLinkService.Outcome outcome = blockLinks.link(
+                UUID.fromString(jwt.getSubject()), projectId, pageId, blockId, input);
+
+        return switch (outcome) {
+            case BlockLinkService.Outcome.Created created ->
+                    ResponseEntity.status(HttpStatus.CREATED).body(created.view());
+            case BlockLinkService.Outcome.Existing existing -> ResponseEntity.ok(existing.view());
+            default -> linkProblem(outcome, "link test cases to documentation in this project");
+        };
+    }
+
+    /** Removes a link. Hard, not soft — see {@link BlockLinkService}. */
+    @DeleteMapping("/{pageId}/links/{linkId}")
+    public ResponseEntity<Object> unlink(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID pageId,
+            @PathVariable UUID linkId) {
+
+        BlockLinkService.Outcome outcome =
+                blockLinks.unlink(UUID.fromString(jwt.getSubject()), projectId, pageId, linkId);
+
+        return switch (outcome) {
+            case BlockLinkService.Outcome.Deleted ignored -> ResponseEntity.noContent().build();
+            default -> linkProblem(outcome, "unlink test cases from documentation in this project");
+        };
+    }
+
+    /**
+     * The failure half of both link writes.
+     *
+     * <p>A second mapper rather than a widened first one: {@link BlockLinkService.Outcome} and
+     * {@link DocPageWriteService.Outcome} are different sealed hierarchies, and collapsing them
+     * would mean one of the two carrying states the other cannot produce — a {@code Stale} on a link
+     * write, a {@code WouldBreak} on a page's. An arm that cannot be reached is an arm nobody
+     * maintains. The two agree where it matters, which is that an unreachable anything is a bodiless
+     * 404 (§6t).
+     */
+    private static ResponseEntity<Object> linkProblem(
+            BlockLinkService.Outcome outcome, String action) {
+
+        return switch (outcome) {
+            case BlockLinkService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
+            case BlockLinkService.Outcome.Forbidden ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN)
+                            .body(forbiddenProblem("You do not have permission to " + action + "."));
+            case BlockLinkService.Outcome.Invalid invalid ->
+                    ResponseEntity.badRequest().body(validationProblem(invalid.errors()));
+            case BlockLinkService.Outcome.Created ignored ->
+                    throw new IllegalStateException("A created link was mapped as a problem");
+            case BlockLinkService.Outcome.Existing ignored ->
+                    throw new IllegalStateException("An existing link was mapped as a problem");
+            case BlockLinkService.Outcome.Deleted ignored ->
+                    throw new IllegalStateException("A deleted link was mapped as a problem");
         };
     }
 

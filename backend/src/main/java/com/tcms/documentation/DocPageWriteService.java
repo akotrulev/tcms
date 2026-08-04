@@ -63,6 +63,7 @@ public class DocPageWriteService {
     private final ProjectService projects;
     private final DocPageRepository pages;
     private final DocBlockRepository blocks;
+    private final BlockLinks blockLinks;
     private final DocSpaceRepository spaces;
     private final PageVersions versions;
     private final DisplayKeys displayKeys;
@@ -73,6 +74,7 @@ public class DocPageWriteService {
             ProjectService projects,
             DocPageRepository pages,
             DocBlockRepository blocks,
+            BlockLinks blockLinks,
             DocSpaceRepository spaces,
             PageVersions versions,
             DisplayKeys displayKeys,
@@ -82,6 +84,7 @@ public class DocPageWriteService {
         this.projects = projects;
         this.pages = pages;
         this.blocks = blocks;
+        this.blockLinks = blockLinks;
         this.spaces = spaces;
         this.versions = versions;
         this.displayKeys = displayKeys;
@@ -144,10 +147,28 @@ public class DocPageWriteService {
     @Transactional
     public Outcome create(UUID userId, UUID projectId, DocPageInput input) {
         return gated(projects.writeGranted(userId, projectId, EDIT_DOC,
-                project -> applyCreate(userId, project, input)));
+                project -> applyCreate(userId, project, input, null)));
     }
 
-    private Outcome applyCreate(UUID userId, Project project, DocPageInput input) {
+    /**
+     * Creates a page that documents another artifact — see {@link DocSubject}.
+     *
+     * <p>Package-private, ungated and <strong>not</strong> {@code @Transactional}: the caller has
+     * already opened the transaction and run its own gate, and it has checks of its own to make in
+     * between. {@link PlanDocumentService} is the only caller and its ordering is the reason this is
+     * shaped this way — the permission, then the subject's existence, then whether it already has a
+     * document, and only then this.
+     *
+     * <p>Re-running {@code writeGranted} here instead would evaluate the same permission twice per
+     * request and, worse, would make the refusal order depend on which of two services happened to
+     * ask first.
+     */
+    Outcome writeSubjectPage(UUID userId, Project project, DocSubject subject, DocPageInput input) {
+        return applyCreate(userId, project, input, subject);
+    }
+
+    private Outcome applyCreate(
+            UUID userId, Project project, DocPageInput input, DocSubject subject) {
         List<DocPage> live = pages.findLiveForProject(project.getId());
 
         Set<UUID> liveIds = new HashSet<>();
@@ -185,6 +206,7 @@ public class DocPageWriteService {
                 allocated.keyAt(0),
                 allocated.seqAt(0),
                 valid.title(),
+                subject,
                 userId,
                 now);
 
@@ -208,6 +230,8 @@ public class DocPageWriteService {
         versions.writeInitial(created, written, userId, now);
         audit(project.getId(), userId, "doc_page.created", created, now);
 
+        // Two-arg: every block was created a statement ago, so nothing can link to one yet. Asking
+        // BlockLinks here would be one guaranteed-empty query per create.
         return new Outcome.Created(DocPageView.of(created, written));
     }
 
@@ -277,7 +301,8 @@ public class DocPageWriteService {
 
             audit(project.getId(), userId, "doc_page.edited", page, now);
 
-            return new Outcome.Updated(DocPageView.of(page, content));
+            return new Outcome.Updated(DocPageView.of(
+                    page, content, blockLinks.forPage(page.getProjectId(), page.getId())));
         }));
     }
 
@@ -354,8 +379,10 @@ public class DocPageWriteService {
                 audit(project.getId(), userId, "doc_page.status_changed", page, now);
             }
 
-            return new Outcome.Updated(
-                    DocPageView.of(page, blocks.findForPage(page.getId())));
+            return new Outcome.Updated(DocPageView.of(
+                    page,
+                    blocks.findForPage(page.getId()),
+                    blockLinks.forPage(page.getProjectId(), page.getId())));
         }));
     }
 

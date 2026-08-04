@@ -209,6 +209,14 @@ final class PageContent {
                                 + "several blocks so cases can link to the part they verify.");
             }
 
+            // THREE ARMS, NOT TWO — required on a heading, optional on a list, refused on the rest.
+            //
+            // The middle arm is §92's change. A test plan is mostly a nested scenario outline, three
+            // levels deep on most of the handed-over example's pages, and the alternative to a depth
+            // field is markers typed into the text ("1." / "a." / "i."). Those cannot be indented,
+            // cannot be renumbered, and — the reason that settles it — cannot be LINKED: a doc_link
+            // targets a block, so a scenario a case can verify has to be its own block rather than a
+            // line inside one. One bullet per block, and this is the field that says how deep.
             if (block.blockType() == DocBlockType.HEADING) {
                 if (block.level() == null) {
                     errors.computeIfAbsent(at + ".level", key -> new ArrayList<>())
@@ -217,12 +225,21 @@ final class PageContent {
                     errors.computeIfAbsent(at + ".level", key -> new ArrayList<>())
                             .add("Heading depth is between 1 and 6.");
                 }
+            } else if (block.blockType() == DocBlockType.LIST) {
+                // Optional, defaulting to 1 at storage — an unindented bullet is the common case and
+                // every list block written before this field existed is one. The bound is checked
+                // when it is sent, because a depth of 40 renders off the side of the page and a
+                // negative one renders as depth 1 with the author's intent silently lost.
+                if (block.level() != null && (block.level() < 1 || block.level() > 6)) {
+                    errors.computeIfAbsent(at + ".level", key -> new ArrayList<>())
+                            .add("Indent depth is between 1 and 6.");
+                }
             } else if (block.level() != null) {
                 // Refused rather than dropped: a level on a paragraph means the client believes it
                 // is sending a heading, and storing the type it named while discarding the depth
                 // renders that belief as a paragraph with nothing reported.
                 errors.computeIfAbsent(at + ".level", key -> new ArrayList<>())
-                        .add("Only a heading has a depth.");
+                        .add("Only a heading or a list bullet has a depth.");
             }
 
             UUID id = block.id();

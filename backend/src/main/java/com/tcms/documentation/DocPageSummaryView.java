@@ -12,6 +12,11 @@ import java.util.UUID;
  *
  * <p>No block count and no author. Both would be honest and neither is on the contract; adding a
  * field the SPA does not read means a query per page for a number nobody sees.
+ *
+ * <p>{@code subjectType} / {@code subjectId} are null on nearly every page and are on the tree row
+ * rather than only on the detail deliberately: the SPA labels a plan's document in the sidebar and
+ * routes its "edit" to the plan, and a client that had to open each page to discover what it was
+ * about would fetch the whole space to render one list.
  */
 public record DocPageSummaryView(
         UUID id,
@@ -20,9 +25,12 @@ public record DocPageSummaryView(
         String title,
         String slug,
         DocPageStatus status,
-        Instant updatedAt) {
+        Instant updatedAt,
+        String subjectType,
+        UUID subjectId) {
 
     static DocPageSummaryView of(DocPage page) {
+        DocSubject subject = page.getSubject();
         return new DocPageSummaryView(
                 page.getId(),
                 page.getKey(),
@@ -30,6 +38,8 @@ public record DocPageSummaryView(
                 page.getTitle(),
                 page.getSlug(),
                 page.getStatus(),
-                page.getUpdatedAt());
+                page.getUpdatedAt(),
+                subject == null ? null : subject.typeName(),
+                subject == null ? null : subject.id());
     }
 }

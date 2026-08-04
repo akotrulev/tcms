@@ -1,6 +1,8 @@
 package com.tcms.documentation;
 
 import jakarta.persistence.EntityManager;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 
@@ -60,5 +62,55 @@ class PlanFacts {
                 .setParameter("projectId", projectId)
                 .getResultList()
                 .isEmpty();
+    }
+
+    /**
+     * The plan's key and name, when it is a live plan of {@code projectId}.
+     *
+     * <p>The second question this file asks, and the one that needed more than a boolean:
+     * {@link PlanDocumentService} titles a plan's document after the plan, and a document called
+     * "Untitled" beside a plan called something else is how a documentation space becomes
+     * unnavigable. So the columns come back, and the alternative — returning the boolean and letting
+     * the caller title the page from what the client sent — would let a client name the document
+     * after a different plan entirely.
+     *
+     * <p><strong>{@code deleted_at IS NULL} here and not in {@link #planExistsInProject}</strong>,
+     * and the asymmetry is deliberate rather than an oversight in one of them. That method guards an
+     * artifact register entry against a plan of another project; a deleted plan's artifacts are
+     * still its artifacts and refusing them would strand rows nobody could file. This one is a
+     * create, and starting to write a document for a plan somebody has deleted produces a page that
+     * is about nothing, holds the plan's only unique-index slot, and is reachable from no screen.
+     *
+     * @return empty when there is no such plan, when it belongs to another project, or when it has
+     *         been deleted — one answer, because the caller turns all three into the same 404 (§6t)
+     */
+    Optional<PlanRef> findLivePlanInProject(UUID projectId, UUID planId) {
+        List<?> rows = entities
+                .createNativeQuery("""
+                        SELECT key, name FROM test_plan
+                         WHERE id = :planId
+                           AND project_id = :projectId
+                           AND deleted_at IS NULL
+                         LIMIT 1
+                        """)
+                .setParameter("planId", planId)
+                .setParameter("projectId", projectId)
+                .getResultList();
+
+        if (rows.isEmpty()) {
+            return Optional.empty();
+        }
+        Object[] row = (Object[]) rows.get(0);
+        return Optional.of(new PlanRef((String) row[0], (String) row[1]));
+    }
+
+    /**
+     * The two columns of a plan this module is allowed to know about.
+     *
+     * <p>Not a {@code TestPlan} and not a {@code TestPlanView}: those are {@code execution}'s
+     * vocabulary, and holding a foreign module's shape in order to read two fields off it is how a
+     * boundary drawn in {@code package-info} stops being real.
+     */
+    record PlanRef(String key, String name) {
     }
 }

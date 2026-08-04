@@ -120,6 +120,27 @@ public class DocPage {
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
+    /**
+     * What this page documents, or null on a free-standing page — see {@link DocSubject} and
+     * {@code V29}.
+     *
+     * <p>Mapped as two columns rather than an {@code @Embeddable}, because the pair is nullable as a
+     * unit and Hibernate's null-embeddable handling turns "both null" into a value whose identity
+     * depends on which fields it happens to compare. Two columns and one accessor that assembles
+     * them is the boring version, and it cannot be wrong.
+     *
+     * <p><strong>Both are {@code updatable = false}.</strong> A page does not change what it is
+     * about: the edit path replaces title and blocks, and re-pointing a plan's document at a
+     * different plan would silently move somebody's business requirements to another cycle while the
+     * partial unique index — which is on the live rows only — quietly allowed it.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "subject_type", updatable = false)
+    private DocSubjectType subjectType;
+
+    @Column(name = "subject_id", updatable = false)
+    private UUID subjectId;
+
     /** On the wire, because the SPA sends it back as {@code If-Match} (plan §6j). */
     @Version
     @Column(name = "lock_version", nullable = false)
@@ -137,6 +158,10 @@ public class DocPage {
      * is held by everyone who writes while {@code doc:publish} is not.
      *
      * @param parentPath the parent's {@link #path}, or null for a root page
+     * @param subject    what the page documents, or null for a free-standing page — the ordinary
+     *                   case. Taken at construction and never afterwards, because
+     *                   {@link #subjectType} and {@link #subjectId} are {@code updatable = false}
+     *                   and the reason is on those fields.
      */
     static DocPage create(
             UUID projectId,
@@ -146,10 +171,15 @@ public class DocPage {
             String key,
             long keySeq,
             String title,
+            DocSubject subject,
             UUID creatorId,
             Instant now) {
 
         DocPage created = new DocPage();
+        if (subject != null) {
+            created.subjectType = subject.type();
+            created.subjectId = subject.id();
+        }
         created.id = UUID.randomUUID();
         created.companyId = CompanyContext.require();
         created.projectId = projectId;
@@ -285,6 +315,16 @@ public class DocPage {
 
     public Instant getDeletedAt() {
         return deletedAt;
+    }
+
+    /**
+     * What this page documents, or null when it is free-standing.
+     *
+     * <p>Assembled here rather than exposing the two columns, so no caller can read one without the
+     * other and conclude a page has a subject from a type alone.
+     */
+    DocSubject getSubject() {
+        return subjectType == null ? null : new DocSubject(subjectType, subjectId);
     }
 
     public long getLockVersion() {

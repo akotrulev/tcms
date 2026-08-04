@@ -29,13 +29,18 @@ public class DocPageService {
     private final ProjectService projects;
     private final DocPageRepository pages;
     private final DocBlockRepository blocks;
+    private final BlockLinks links;
 
     public DocPageService(
-            ProjectService projects, DocPageRepository pages, DocBlockRepository blocks) {
+            ProjectService projects,
+            DocPageRepository pages,
+            DocBlockRepository blocks,
+            BlockLinks links) {
 
         this.projects = projects;
         this.pages = pages;
         this.blocks = blocks;
+        this.links = links;
     }
 
     /**
@@ -66,6 +71,9 @@ public class DocPageService {
         return projects.readVisible(userId, projectId, project ->
                         pages.findLiveInProject(project.getId(), pageId))
                 .flatMap(found -> found)
-                .map(page -> DocPageView.of(page, blocks.findForPage(page.getId())));
+                .map(page -> DocPageView.of(
+                        page,
+                        blocks.findForPage(page.getId()),
+                        links.forPage(page.getProjectId(), page.getId())));
     }
 }

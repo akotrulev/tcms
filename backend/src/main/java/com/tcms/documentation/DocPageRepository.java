@@ -68,4 +68,28 @@ public interface DocPageRepository extends JpaRepository<DocPage, UUID> {
                AND p.deletedAt IS NULL
             """)
     long countLiveChildren(@Param("pageId") UUID pageId);
+
+    /**
+     * The live page documenting one artifact — see {@link DocSubject} and {@code V29}.
+     *
+     * <p>Scoped by project as well as by subject, even though {@code uq_doc_page_subject} already
+     * makes at most one row match within the company. The index is the invariant; this predicate is
+     * what makes the <em>endpoint</em> honest, because the caller reached here through a project's
+     * URL and a subject id from a sibling project must not resolve.
+     *
+     * <p>{@code deletedAt IS NULL} matches the unique index's own {@code WHERE}, and the two have to
+     * agree: an index that permitted a second live row would make this {@code Optional} a lie, and a
+     * read that returned deleted rows would find the document the index had already released.
+     */
+    @Query("""
+            SELECT p FROM DocPage p
+             WHERE p.projectId = :projectId
+               AND p.subjectType = :subjectType
+               AND p.subjectId = :subjectId
+               AND p.deletedAt IS NULL
+            """)
+    Optional<DocPage> findLiveForSubject(
+            @Param("projectId") UUID projectId,
+            @Param("subjectType") DocSubjectType subjectType,
+            @Param("subjectId") UUID subjectId);
 }
