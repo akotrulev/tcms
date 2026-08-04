@@ -4,9 +4,15 @@
  * Everything here resolves back to docs/specs/openapi.yaml — if a shape looks
  * wrong, fix the spec and re-run `npm run gen:api`, don't hand-edit schema.d.ts.
  */
-import type { components } from './schema';
+import type { components, operations } from './schema';
 
 type S = components['schemas'];
+/**
+ * Operations, for the handful of shapes that exist only on a request body and never as a named
+ * schema — `generateReport`'s `format` enum is the first. Aliasing through here keeps them derived
+ * from the contract rather than retyped beside it.
+ */
+type Op = operations;
 
 // auth & identity
 export type AuthResult = S['AuthResult'];
@@ -122,6 +128,27 @@ export type RepositoryDashboard = S['RepositoryDashboard'];
 export type DashboardTile = S['DashboardTile'];
 export type DashboardBreakdown = S['DashboardBreakdown'];
 export type PlanStatistics = S['PlanStatistics'];
+export type ReportDefinition = S['ReportDefinition'];
+export type ReportJob = S['ReportJob'];
+export type ReportJobStatus = S['ReportJob']['status'];
+/**
+ * The formats a person may **ask** for — read off the generate request body, not off `ReportJob`.
+ *
+ * `ReportJob.format` is a bare `string` on purpose: a job row echoes back whatever was asked for,
+ * including a format a later release stops offering, and narrowing the response side would make an
+ * old job unreadable. The *request* side is the closed set, so this is where the union lives — and
+ * it is what `lib/labels.ts` satisfies over, so a fourth format added to the contract fails the
+ * frontend build until the picker offers it.
+ *
+ * It is deliberately **not** "the formats this server can render". That is a property of the
+ * deployment (`openapi.yaml`, verbatim: *"the enum is not narrowed to what is installed"*), the
+ * client cannot observe it, and a hard-coded copy here would be a second definition of somebody
+ * else's configuration — right until the day PDF is installed and the SPA still refuses to offer
+ * it. What the server cannot render, it refuses at request time with a sentence naming what it can.
+ */
+export type ReportFormat = NonNullable<
+  Op['generateReport']['requestBody']
+>['content']['application/json']['format'];
 
 // documentation & artifacts
 export type DocPage = S['DocPage'];

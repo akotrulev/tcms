@@ -111,7 +111,14 @@ export {
   useSetDocPageStatus,
   useUpdateDocPage,
 } from './documentation';
-export { useDashboard } from './reporting';
+export {
+  isJobFinished,
+  TERMINAL_JOB_STATES,
+  useDashboard,
+  useGenerateReport,
+  useReportDefinitions,
+  useReportJob,
+} from './reporting';
 export {
   useGrantRole,
   useCreateTeam,

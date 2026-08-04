@@ -19,6 +19,8 @@ import type {
   LifecycleStatus,
   PlanStatus,
   Priority,
+  ReportFormat,
+  ReportJobStatus,
   ReviewState,
   ReviewSubjectType,
   ReviewVerdict,
@@ -149,6 +151,54 @@ export const runStatusColors = {
   COMPLETED: 'var(--color-passed)',
   ABORTED: 'var(--color-failed)',
 } as const satisfies Record<RunStatus, string>;
+
+/**
+ * A generation job's four states (§87), in the words of the person who pressed Generate.
+ *
+ * `PENDING` reads as *Queued* rather than "Pending" because the distinction the reader cares about
+ * is "nothing has started yet" versus "it is being written now", and *Pending* says neither. The
+ * pair is what makes the wait legible: a report that sits at Queued for a minute is a worker that
+ * has not picked it up, and a report at Building is one that has.
+ */
+export const reportJobStatusLabels = {
+  PENDING: 'Queued',
+  RUNNING: 'Building',
+  COMPLETED: 'Ready',
+  FAILED: 'Failed',
+} as const satisfies Record<ReportJobStatus, string>;
+
+/** Beside the labels, for `runStatusColors`' reason: one place a state is worded and coloured. */
+export const reportJobStatusColors = {
+  PENDING: 'var(--color-draft)',
+  RUNNING: 'var(--color-info)',
+  COMPLETED: 'var(--color-passed)',
+  FAILED: 'var(--color-failed)',
+} as const satisfies Record<ReportJobStatus, string>;
+
+/**
+ * The formats a report may be asked for, and what each one is *for* — the second half is the point.
+ *
+ * A picker offering "MD · HTML · PDF" asks the reader to know what those are for; §6e's answer is
+ * that HTML is the one a client is *sent* (self-contained, opens with no network) and Markdown is
+ * the one that goes into a wiki or a pull request. The description is rendered beside the option
+ * rather than left to the acronym.
+ *
+ * **The list is not narrowed to what the server can render.** `ReportFormat`'s own comment carries
+ * the argument: what is installed is a property of the deployment, and a copy of it here would be
+ * wrong in both directions — offering nothing where PDF has been installed, and claiming to know
+ * where it has not. The refusal names what the server can produce, and it lands on this field.
+ */
+export const reportFormatLabels = {
+  MD: 'Markdown',
+  HTML: 'HTML',
+  PDF: 'PDF',
+} as const satisfies Record<ReportFormat, string>;
+
+export const reportFormatHints = {
+  MD: 'For a wiki, a pull request, or anywhere the text matters more than the layout.',
+  HTML: 'One self-contained file — charts included, opens with no network. What a client is sent.',
+  PDF: 'Needs a headless browser on the server; not every deployment has one.',
+} as const satisfies Record<ReportFormat, string>;
 
 /** Whether the run has ended — the server's `RunLifecycle.isClosed`, and the one copy of it here. */
 export const isRunClosed = (status: RunStatus) => status === 'COMPLETED' || status === 'ABORTED';

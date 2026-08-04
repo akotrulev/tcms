@@ -51,6 +51,16 @@ export const keys = {
   artifacts: (p: string, scope?: string, planId?: string) =>
     ['projects', p, 'artifacts', scope ?? 'ALL', planId ?? 'NONE'] as const,
   dashboard: (p: string) => ['projects', p, 'dashboard'] as const,
+  reportDefinitions: (p: string) => ['projects', p, 'reports'] as const,
+  /**
+   * One generation job (§87's poll).
+   *
+   * Keyed by the job as well as the project, because a screen holds several at once: generating a
+   * second report while the first is still running is the ordinary case, and a key that named only
+   * the project would make the two jobs one cache entry — the second answer overwriting the first's
+   * `downloadUrl` and the first card losing the link it had just earned.
+   */
+  reportJob: (p: string, jobId: string) => ['projects', p, 'reports', 'jobs', jobId] as const,
   users: ['users'] as const,
   teams: ['teams'] as const,
   roles: ['roles'] as const,

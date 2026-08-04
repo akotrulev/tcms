@@ -268,3 +268,81 @@ export const api = {
   upload: <T>(path: string, form: FormData, options?: RequestOptions) =>
     request<T>(path, { method: 'POST', body: form }, { timeoutMs: TIMEOUTS.long, ...options }),
 };
+
+/**
+ * Fetches a **server-supplied URL** whose body is bytes rather than JSON — today a report artifact.
+ *
+ * ## Why this is not `api.get`, and not an `<a href>` either
+ *
+ * Two properties of this app make the obvious spellings wrong, and both are silent when wrong.
+ *
+ * *An `<a href>` cannot authenticate.* The session travels in an `Authorization` header the client
+ * sets explicitly — `SecurityConfiguration` is `STATELESS` with no cookie anywhere — so a plain
+ * anchor pointed at `/api/v1/…` sends no credential and the download answers **401**. It looks
+ * like a link; it is a link to a sign-in failure. (`EvidencePanel` renders `Evidence.url` as an
+ * anchor and has the same hole; noted in the handoff rather than swept here, because evidence is
+ * served `inline` and its fix is a different rendering, not this helper.)
+ *
+ * *`api.get` cannot take this URL.* `request` prepends `BASE`, and `ReportJob.downloadUrl` already
+ * carries `/api/v1` because the **server** composes it — deliberately, so the client holds no copy
+ * of the server's routing (`openapi.yaml` on `downloadUrl`, §67 on `Evidence.url`). Passing it to
+ * `api.get` produces `/api/v1/api/v1/…` and a 404 that reads as a missing report. `request` also
+ * ends in `res.json()`, which would parse a Markdown report as JSON and fail at the wrong layer.
+ *
+ * ## The same-origin guard is not defensive programming
+ *
+ * The URL is data from the server and this function attaches the caller's bearer token to it. An
+ * absolute URL — a misconfigured `tcms.public-url`, a compromised or simply wrong deployment
+ * setting — would send that token to another host. So the URL must be **root-relative and inside
+ * `BASE`**, checked here rather than trusted, and anything else throws before a request is made.
+ */
+export async function fetchArtifact(
+  url: string,
+  options: { signal?: AbortSignal; timeoutMs?: number } = {},
+): Promise<{ blob: Blob; filename: string | null }> {
+  if (!url.startsWith(`${BASE}/`)) {
+    throw new Error(
+      `Refusing to fetch a report artifact from '${url}': the credential goes with the request, `
+        + `so the URL must be a root-relative path under ${BASE}.`,
+    );
+  }
+
+  const timeoutMs = options.timeoutMs ?? TIMEOUTS.long;
+  let res: Response;
+  try {
+    res = await fetch(url, { signal: budget(timeoutMs, options.signal), headers: authHeader() });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'TimeoutError') throw new TimeoutError(timeoutMs);
+    throw error;
+  }
+
+  if (!res.ok) {
+    // Deliberately bodiless on this route's 403 — the response is typed to a binary resource, so
+    // there is no problem document to read and `statusText` is the whole of what was said.
+    throw new ApiError(
+      res.status,
+      res.statusText || `The download failed (HTTP ${res.status}).`,
+      null,
+      res.headers.get('x-correlation-id'),
+      res.headers.get('retry-after'),
+      null,
+    );
+  }
+
+  return { blob: await res.blob(), filename: filenameFrom(res.headers.get('content-disposition')) };
+}
+
+/**
+ * The `filename` out of a `Content-Disposition`, or null when the header did not name one.
+ *
+ * Null rather than a guess: the caller has a better fallback than this parser does (it knows the
+ * report type and the format), and a filename invented here would be the same invention in every
+ * caller with no way to tell it from a real one.
+ */
+function filenameFrom(header: string | null): string | null {
+  if (!header) return null;
+  const quoted = /filename\s*=\s*"([^"]*)"/i.exec(header);
+  if (quoted?.[1]) return quoted[1];
+  const bare = /filename\s*=\s*([^;]+)/i.exec(header);
+  return bare?.[1]?.trim() || null;
+}
