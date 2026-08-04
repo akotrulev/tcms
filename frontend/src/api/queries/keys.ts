@@ -61,6 +61,17 @@ export const keys = {
    * `downloadUrl` and the first card losing the link it had just earned.
    */
   reportJob: (p: string, jobId: string) => ['projects', p, 'reports', 'jobs', jobId] as const,
+  /**
+   * The stored model that job produced (F2's on-screen view).
+   *
+   * Keyed by the **job** and not by the artifact URL, though the URL is what the request sends. The
+   * two identify the same bytes — a job's `modelUrl` is written once, when it completes, and a
+   * completed job is immutable — and the job id is the one of them that exists before the fetch
+   * does, so a key built from the URL would be absent from the cache exactly while the screen is
+   * waiting for it.
+   */
+  reportModel: (p: string, jobId: string) =>
+    ['projects', p, 'reports', 'jobs', jobId, 'model'] as const,
   users: ['users'] as const,
   teams: ['teams'] as const,
   roles: ['roles'] as const,

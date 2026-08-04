@@ -1,7 +1,8 @@
 /** The repository status dashboard, and §6e's report pipeline (§87/§88's backend, F1's client). */
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
-import { TIMEOUTS, api } from '../client';
+import { TIMEOUTS, api, fetchArtifactJson } from '../client';
 import type { ReportDefinition, ReportJob, ReportJobStatus, RepositoryDashboard } from '../types';
+import { parseReportDocument, type ReportDocument } from '../../lib/reportDocument';
 import { base, keys } from './keys';
 
 export function useDashboard(projectId: string): UseQueryResult<RepositoryDashboard> {
@@ -107,6 +108,71 @@ export function useReportJob(projectId: string, jobId: string): UseQueryResult<R
     // A finished job is immutable — the row never changes again — so there is nothing for a
     // window-focus refetch to discover. Left at the default while it runs; the interval above is
     // what keeps it current, and `staleTime` would only fight it.
+    meta: { handled: true },
+  });
+}
+
+/**
+ * The stored report model — what the on-screen view renders (F2, slice-plan decision F).
+ *
+ * ## It reads the artifact the export was rendered from, and that is the whole design
+ *
+ * §6e: *"the on-screen report view consumes the same model via JSON, so what you see is what
+ * exports."* Every job writes a `JSON` artifact beside whatever format was asked for, so this
+ * screen and the file a client is sent are one computation rendered twice. The alternative the
+ * plan rejected — a synchronous `preview` endpoint that recomputes — is a second code path
+ * producing a second answer, and it would reintroduce the long request the 202 removed.
+ *
+ * ## The URL comes from the job and is never composed here
+ *
+ * `modelUrl` is server-supplied for `downloadUrl`'s reason (§67 on `Evidence.url`): a client that
+ * built `/projects/{id}/reports/artifacts/{artifactId}/content` itself would hold a second copy of
+ * the server's routing, and moving the route would then be a breaking change nothing detects. So
+ * this hook takes the URL as data and `fetchArtifactJson` carries the credential to it — see that
+ * function's same-origin guard, which exists because this URL *is* server data.
+ *
+ * ## What it needs is `report:export`, not `report:view` — and that is a finding, not a design
+ *
+ * The artifact route is gated on `report:export`, because it is the download. Reading a report on
+ * screen therefore costs the same key as carrying it away, which contradicts the split §6e names
+ * and §87 made expressible (*"may read on screen, may not carry off"*): a persona holding
+ * `report:view` alone can watch a job succeed and then be refused the report it is watching. The
+ * fix belongs to the server — either the model artifact is served under `report:view`, or the
+ * on-screen view gets a route of its own — and this client cannot paper over it, so
+ * `ReportViewPage` renders that 403 as the sentence it is. Recorded in the handoff; unobservable
+ * in mock mode, which signs in holding every key.
+ *
+ * `staleTime: Infinity` because the artifact is **immutable**: a completed job's bytes never
+ * change, so a refetch can only re-download a file this client already parsed. `enabled` on the
+ * URL, so the hook is mounted from the first render of a job that has not finished yet and simply
+ * does not fire until there is something to fetch — the dependent-query gate `data-fetching`
+ * requires, resolving to a *state* rather than a permanent skeleton because the page renders the
+ * job's own PENDING/RUNNING/FAILED rendering above it.
+ */
+export function useReportModel(
+  projectId: string,
+  jobId: string,
+  modelUrl: string | null | undefined,
+): UseQueryResult<ReportDocument> {
+  return useQuery({
+    queryKey: keys.reportModel(projectId, jobId),
+    // Parsed at the boundary rather than cast — `lib/reportDocument.ts` says why at length, and the
+    // short version is that this is the one response in the app with no generated type behind it.
+    //
+    // The narrowing is a real check rather than `modelUrl!`: `enabled` below already stops the
+    // function running without a URL, but a non-null assertion would keep compiling the day a
+    // caller adds a condition to `enabled`, and the failure would be a request to `undefined`.
+    queryFn: async ({ signal }) => {
+      if (!modelUrl) throw new Error('This report job has no stored model to display.');
+      return parseReportDocument(
+        await fetchArtifactJson(modelUrl, { signal, timeoutMs: TIMEOUTS.long }),
+      );
+    },
+    enabled: !!projectId && !!jobId && !!modelUrl,
+    staleTime: Infinity,
+    // The region renders this failure in place, with the 403 above wording itself — a corner toast
+    // repeating it beside a page whose entire body is that message is the second copy §65's error
+    // rules exist to prevent.
     meta: { handled: true },
   });
 }

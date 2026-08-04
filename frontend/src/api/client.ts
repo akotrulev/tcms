@@ -294,12 +294,54 @@ export const api = {
  * The URL is data from the server and this function attaches the caller's bearer token to it. An
  * absolute URL — a misconfigured `tcms.public-url`, a compromised or simply wrong deployment
  * setting — would send that token to another host. So the URL must be **root-relative and inside
- * `BASE`**, checked here rather than trusted, and anything else throws before a request is made.
+ * `BASE`**, checked rather than trusted, and anything else throws before a request is made. It
+ * lives in `artifactResponse` below, which both this and `fetchArtifactJson` go through: one guard
+ * for one hazard, because the copy that drifts is whichever reader was added second.
  */
 export async function fetchArtifact(
   url: string,
   options: { signal?: AbortSignal; timeoutMs?: number } = {},
 ): Promise<{ blob: Blob; filename: string | null }> {
+  const res = await artifactResponse(url, options);
+  return { blob: await res.blob(), filename: filenameFrom(res.headers.get('content-disposition')) };
+}
+
+/**
+ * The same artifact, read as JSON — what the on-screen report view renders (F2).
+ *
+ * **It is a sibling of `fetchArtifact` rather than a `blob.text()` at the call site**, so the guard
+ * above, the budget and the error mapping are written once. The stored `JSON` model is the *same
+ * artifact route* as a Markdown download; only the parsing differs, and a screen that reached it
+ * through `blob → text → JSON.parse` would be re-deriving three of the four things this file owns
+ * in order to change the fourth.
+ *
+ * **The return type is `unknown`, deliberately, and the caller must parse it.** Every other read in
+ * this app is typed from `openapi.yaml`; this one cannot be, because the route is declared as
+ * binary — it serves five formats' bytes and a schema there would be a lie about four of them. What
+ * comes back is a **file**, possibly written months ago by a deployment this client has never seen
+ * (`JsonReportRenderer`'s own argument for not sharing the web mapper), so the shape is checked at
+ * the boundary by `lib/reportDocument.ts` and a drifted document fails loudly there rather than
+ * rendering as a report with sections missing.
+ */
+export async function fetchArtifactJson(
+  url: string,
+  options: { signal?: AbortSignal; timeoutMs?: number } = {},
+): Promise<unknown> {
+  const res = await artifactResponse(url, options);
+  return res.json();
+}
+
+/**
+ * The guarded, budgeted, credential-carrying request both readers above share.
+ *
+ * The guard is the reason this is one function: it is the only thing standing between a
+ * server-supplied string and this user's bearer token, and a second copy of it is a second thing to
+ * remember to keep correct.
+ */
+async function artifactResponse(
+  url: string,
+  options: { signal?: AbortSignal; timeoutMs?: number },
+): Promise<Response> {
   if (!url.startsWith(`${BASE}/`)) {
     throw new Error(
       `Refusing to fetch a report artifact from '${url}': the credential goes with the request, `
@@ -329,7 +371,7 @@ export async function fetchArtifact(
     );
   }
 
-  return { blob: await res.blob(), filename: filenameFrom(res.headers.get('content-disposition')) };
+  return res;
 }
 
 /**
