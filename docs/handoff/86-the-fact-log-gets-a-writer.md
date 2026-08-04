@@ -201,25 +201,36 @@ watermark is exact.
 
 ## Gates
 
-> **⚠ THE FULL GATE WAS NOT RUN TO COMPLETION ON THE CODE THAT LANDED. Read this before building on
-> the slice.** What *was* run, and passed, is the module's own suite:
-> `./gradlew test --tests 'com.tcms.reporting.*'` → **BUILD SUCCESSFUL, 23/23** (11
-> `ExecutionFactRefreshTest` + 12 `FailingRepeatedlyTest`), against the final source.
-> `compileJava` and `compileTestJava` succeeded under `-Werror` in that same run.
+`cd backend && ./gradlew build` → **BUILD SUCCESSFUL in 12m 25s**, **1553 tests across 300 classes,
+0 failures, 0 errors, 0 skipped** — counted from `build/test-results/test/*.xml` rather than read off
+the console. **1530 → 1553**, of which 23 are this slice's (11 `ExecutionFactRefreshTest` + 12
+`FailingRepeatedlyTest`). Compiles under `-Werror`. `ModuleStructureTest`'s `containsExactly` over
+**ten** modules, `SchemaConventionTest`, `RepositoryTransactionTest` and the ArchUnit rules all pass
+on the code that landed.
+
+> **This section was written before that run and has been corrected after it.** The commit
+> (`9d33f02`) went in with the gate *unconfirmed* — the module's own suite was green
+> (`--tests 'com.tcms.reporting.*'` → 23/23) and the full-suite figure was **arithmetic**, flagged as
+> such here, in `HANDOFF.md` and in the cache rather than presented as measured. It has since been
+> observed and the arithmetic was right.
 >
-> The **full `./gradlew build`** — the ~1530 pre-existing tests, `ModuleStructureTest`'s 9 → 10 edit,
-> `SchemaConventionTest`, `RepositoryTransactionTest`, the ArchUnit rules — **has not been confirmed
-> green on this code.** One full run did complete earlier in the session, but on a *pre-fix* state
-> (it reported 1541 tests / 11 failed, all eleven of them this slice's, all from the invalid-hex
-> fixture prefix). Every later full run died on Windows file-lock and daemon-stop errors —
-> `Unable to delete directory build/test-results/test/binary`, `Gradle build daemon has been
-> stopped`, `Test Executor finished with non-zero exit value -1` — caused by concurrent `gradlew`
-> invocations in this session, **not by any test**.
+> **The reason the gate would not complete is worth more than the number, because it is a rule this
+> repo already has and did not apply.** Every failed attempt — `Unable to delete directory
+> build/test-results/test/binary`, `Gradle build daemon has been stopped`, `Test Executor finished
+> with non-zero exit value -1` — came from **two `gradlew` invocations in one tree**: the subagent
+> building the slice and the parent session verifying it. `CLAUDE.md` records that one
+> `backend/build/` and one Gradle daemon cannot serve two lanes, and files it under *concurrency
+> worktrees*; **a subagent running the gate is a second lane, and the same rule binds.** The failure
+> mode is nastier than a merge conflict, because each `--stop` orphans the other's *test worker*,
+> which keeps running the suite and holding `output.bin` — so the next attempt fails on a lock left
+> by the attempt before, and the true cause is invisible in the error. What finally worked:
+> stop the agent, kill every `java.exe` whose command line mentions Gradle or `api.version=1.41`,
+> remove stray Testcontainers containers, delete `build/test-results` **and**
+> `~/.gradle/daemon`, then run exactly one build. Diagnose by finding the process that holds the
+> file; retrying is what turns one collision into five.
 >
-> **The expected count is 1530 → 1553** and it is arithmetic, not an observation.
-> **The first thing the next session must do is run `cd backend && ./gradlew build` with nothing
-> else touching Gradle**, and correct this section with the real number. Three things it could
-> plausibly catch that the module's own suite structurally cannot: `ModuleStructureTest`'s
+> Three things the full run checks that the module's own suite structurally cannot:
+> `ModuleStructureTest`'s
 > `containsExactly` over ten modules, `RepositoryTransactionTest` (which derives its list from the
 > live context — this slice adds no Spring Data repository, so it *should* be unaffected), and the
 > `@ConfigurationProperties` binding of `tcms.reporting.failing-repeatedly-window`, which fails at

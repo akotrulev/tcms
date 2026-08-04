@@ -43,13 +43,16 @@ logs a successful tick having done nothing. Two things the gate caught that read
 in the static initialiser and failed all eleven tests before one ran (§19's family, new mechanism).
 Found and **not** fixed: **`case_health` has no index on `failing_repeatedly`** while `V1` ships four
 partial indexes for other signals, so this is the first tile that scans — an index is a migration and
-this slice has none. **⚠ THE FULL GATE DID NOT COMPLETE ON THE CODE THAT LANDED**: the module's own
-suite is green (`--tests 'com.tcms.reporting.*'` → **23/23**, compiling under `-Werror`), but
-`./gradlew build` was never confirmed on the final state — the one full run that finished was
-pre-fix (1541/11 failed, all eleven this slice's, all the hex-prefix crash) and every later attempt
-died on Windows file-locks and daemon stops from concurrent `gradlew` invocations, **not on a test**.
-**1530 → 1553 is arithmetic, not an observation**, and the next session's first act must be one
-undisturbed `./gradlew build`. **Zero mutations run inline**; 9 backend rows and 8 browser rows
+this slice has none. **The gate is green and was confirmed after the commit, not before it**:
+`./gradlew build` → **BUILD SUCCESSFUL, 1530 → 1553 across 300 classes, 0 failures, 0 skipped**,
+counted from the XML rather than the console. `9d33f02` landed with that number as *arithmetic*,
+flagged as such in three places; the observation agreed with it. **The lesson is the reason it took
+six attempts, and it is a rule this repo already had**: the subagent building the slice and the
+session verifying it were **two `gradlew` invocations in one tree**, which `CLAUDE.md` forbids for
+concurrency worktrees without noticing that **a subagent running the gate is a second lane**. Each
+`--stop` orphans the other's test worker, which keeps running and holding `output.bin`, so every
+retry dies on a lock the previous retry left and the true cause never appears in the error.
+**Zero mutations run inline**; 9 backend rows and 8 browser rows
 queued, the browser ones **all live-only** because the mock invents its own health rows and has never
 been fed by a fact log.
 Before that: **§85, the team board's screen** — §84's frontend half, and

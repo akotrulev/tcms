@@ -795,11 +795,14 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   no index on `failing_repeatedly` while `V1` ships four for other signals — the first tile that
   scans, and an index is a migration. Also named-not-built: `execution_fact.executed_by` cannot name
   an `api_token`, so M3's ingested results will carry a null actor and §6e's per-tester throughput
-  will silently exclude CI. **⚠ Gate incomplete — `./gradlew build` was never confirmed green on the
-  code that landed.** `--tests 'com.tcms.reporting.*'` is **23/23** and compiles under `-Werror`; the
-  full suite's expected **1530 → 1553** is arithmetic. Every full run after the last edit died on
-  Windows file-locks / daemon stops from concurrent `gradlew` invocations, not on a test. **Run one
-  undisturbed `./gradlew build` first thing.** **Zero mutations run
+  will silently exclude CI. **Gate green, confirmed after the commit**: `./gradlew build` →
+  **1530 → 1553** across 300 classes, 0 failures, 0 skipped, counted from the XML. `9d33f02` landed
+  with that figure as arithmetic and the observation agreed. **The operational lesson: a subagent
+  running the gate is a SECOND LANE in one tree**, and `CLAUDE.md`'s one-`build/`-one-daemon rule
+  binds it exactly as it binds a concurrency worktree — six runs died on locks and daemon stops
+  because the agent and the parent session both invoked `gradlew`, each `--stop` orphaning the
+  other's test worker, which holds `output.bin` and poisons the next attempt. Diagnose by finding the
+  holding process; do not retry. **Zero mutations run
   inline** (policy); 9 queued and 8 browser rows, the browser ones **all live-only** — the mock
   invents its own health rows and has never been fed by a fact log, so mock agreement is not evidence.
 
