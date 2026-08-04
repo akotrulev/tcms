@@ -57,11 +57,17 @@ const card = (partial: Partial<WorkItem> & Pick<WorkItem, 'id' | 'title'>): Work
   return { ...base, ...partial }
 }
 
-function renderBoard(items: WorkItem[]) {
+/**
+ * `projectId` and `mine` are gone from `Board` as of §83 and the links below did not move a
+ * character — because every card this factory builds carries `projectId: 'p1'`, which is where
+ * `linkFor` reads it from now. That equality is exactly what made the old bug invisible: on a
+ * project board the route's project and the card's project are always the same value.
+ */
+function renderBoard(items: WorkItem[], crossProject = false) {
   return render(
     <TestProviders client={createTestQueryClient()}>
       <SnackbarProvider>
-        <Board items={items} projectId="p1" mine={false} />
+        <Board items={items} crossProject={crossProject} />
       </SnackbarProvider>
     </TestProviders>,
   )

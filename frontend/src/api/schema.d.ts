@@ -4095,17 +4095,30 @@ export interface paths {
          *     sourceType/sourceId and are NOT stored — their status is computed from the
          *     source on every read, so a card can never diverge from its execution (plan §6l).
          *
-         *     **Two of the five §6l generators are implemented.** `EXECUTION` cards come from
+         *     **Three of the five §6l generators are implemented.** `EXECUTION` cards come from
          *     assigned, unrecorded executions in live runs; `CASE_MAINTENANCE` cards come from
-         *     `case_health`. `REVIEW`, `DOC_UPDATE` and `DEFECT` require modules that do not
-         *     exist yet and are absent rather than empty — the `kind` enum keeps them so the
-         *     SPA's labels stay complete.
+         *     `case_health`; `REVIEW` cards come from outstanding review requests (§81).
+         *     `DOC_UPDATE` and `DEFECT` require features nothing computes or writes yet and are
+         *     absent rather than empty — the `kind` enum keeps them so the SPA's labels stay
+         *     complete.
+         *
+         *     **With no `projectId` this is §6l's personal "My Work" board (§83)** — every card
+         *     assigned to the caller across every project they can see, in one company. It is
+         *     the same operation because it is the same list; a card carries `projectId` and
+         *     `projectKey`, which is how the SPA groups an aggregate it did not have before.
          */
         get: {
             parameters: {
-                query: {
-                    projectId: string;
-                    /** @description Restrict to items assigned to the caller — the personal board. */
+                query?: {
+                    projectId?: string;
+                    /**
+                     * @description Restrict to items assigned to the caller — the personal board.
+                     *
+                     *     **Required when `projectId` is omitted.** §6l's cross-project board is the
+                     *     *personal* one; there is no board that is every project's work unfiltered, and
+                     *     silently forcing this on would answer a request nobody made with a list the
+                     *     client cannot tell apart from a company that only has the caller's work in it.
+                     */
                     mine?: boolean;
                 };
                 header?: never;
@@ -4123,6 +4136,7 @@ export interface paths {
                         "application/json": components["schemas"]["WorkItem"][];
                     };
                 };
+                400: components["responses"]["BadRequest"];
                 401: components["responses"]["Unauthorized"];
                 404: components["responses"]["NotFound"];
             };

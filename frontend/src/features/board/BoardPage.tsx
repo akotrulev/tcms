@@ -158,7 +158,6 @@ export function BoardPage() {
       {creating && (
         <TaskCreateDialog
           projectId={projectId}
-          mine={mine}
           open
           onClose={() => setCreating(false)}
           onCreated={(task) => enqueueSnackbar(`Added “${task.title}”`, { variant: 'success' })}
@@ -177,7 +176,7 @@ export function BoardPage() {
             : 'No open work in this project.',
         }}
       >
-        {(rows) => <Board items={rows} projectId={projectId} mine={mine} />}
+        {(rows) => <Board items={rows} />}
       </DataRegion>
     </Box>
   );
@@ -226,8 +225,18 @@ function describeCard(item: WorkItem): string {
  * where the old behaviour is still correct — a card the SPA has no route for should still land
  * somewhere that mentions the thing. `EXECUTION` is deliberately one of those: its `sourceId` names
  * the execution, whose route needs the run id, and a card does not carry one.
+ *
+ * **The project comes from the CARD, not from the route (§83), and that is the second repair this
+ * function has needed.** §81 fixed *which screen* a card opens and left the project as the board's
+ * own — correct while every board was one project's, and silently wrong the moment §6l's
+ * cross-project board exists: a review of a case in MOB, read on My Work, would have been sent to
+ * `/projects/{OLB}/cases/{a case OLB does not contain}` — a 404 on the one affordance the card
+ * exists to offer, and on the project board it is the same value, so nothing would have looked
+ * different where anybody was testing. `projectId` has been **required** on every card since §53
+ * (`WorkItem.projectId`), so there is no fallback arm and no route parameter to disagree with.
  */
-function linkFor(item: WorkItem, projectId: string): string {
+function linkFor(item: WorkItem): string {
+  const projectId = item.projectId;
   const search = `/projects/${projectId}/cases?q=${encodeURIComponent(item.linkedKey ?? '')}`;
   if (!item.sourceId) return item.linkedKey ? search : `/projects/${projectId}/cases`;
 
@@ -243,10 +252,21 @@ function linkFor(item: WorkItem, projectId: string): string {
   }
 }
 
-/** Exported for its test — the columns and the refusal are the logic worth pinning. */
-export function Board({ items, projectId, mine }: { items: WorkItem[]; projectId: string; mine: boolean }) {
+/**
+ * Exported for its test — the columns and the refusal are the logic worth pinning.
+ *
+ * **It takes no project (§83).** It had one for two reasons and neither survived the cross-project
+ * board: `linkFor` now reads the card's own project, and the move hook keys on nothing, because
+ * `PATCH /work-items/{id}` names no project either. What is left is a board that renders whatever
+ * cards it is handed — which is exactly what let §6l's My Work screen reuse it rather than grow a
+ * second one, and a second one is how two screens come to disagree about what "linked" means.
+ *
+ * `crossProject` is presentation only: on a board that is already one project's, stamping every
+ * card with that project is noise the reader has to filter out on every glance.
+ */
+export function Board({ items, crossProject = false }: { items: WorkItem[]; crossProject?: boolean }) {
   const { enqueueSnackbar } = useSnackbar();
-  const move = useMoveWorkItem(projectId, mine);
+  const move = useMoveWorkItem();
   const [dragging, setDragging] = useState<WorkItem | null>(null);
   const [rejected, setRejected] = useState<string | null>(null);
 
@@ -356,7 +376,7 @@ export function Board({ items, projectId, mine }: { items: WorkItem[]; projectId
                       <WorkCard
                         key={item.id}
                         item={item}
-                        projectId={projectId}
+                        crossProject={crossProject}
                         onDragStart={() => setDragging(item)}
                         onDragEnd={() => setDragging(null)}
                         onMove={(target) => void handleDrop(item, target)}
@@ -375,13 +395,14 @@ export function Board({ items, projectId, mine }: { items: WorkItem[]; projectId
 
 function WorkCard({
   item,
-  projectId,
+  crossProject,
   onDragStart,
   onDragEnd,
   onMove,
 }: {
   item: WorkItem;
-  projectId: string;
+  /** Show which project the card belongs to — true only on the cross-project board (§83). */
+  crossProject: boolean;
   onDragStart: () => void;
   onDragEnd: () => void;
   onMove: (column: Column) => void;
@@ -412,6 +433,20 @@ function WorkCard({
     >
       <Stack direction="row" sx={{ alignItems: 'center', gap: 0.75, mb: 0.5, flexWrap: 'wrap' }}>
         <Chip size="small" variant="outlined" label={kindLabels[item.kind]} data-testid="Board.Card.Kind" />
+        {/*
+          Which project this card is from — the field §83 finally reads.
+
+          The card's `projectKey` rather than its `projectId`: `ui-rules` §1, a human key where a
+          name exists and never a uuid. It is the one thing a cross-project board has to say that a
+          project board does not — two cards titled "Full refund to card" from two products are
+          indistinguishable without it, and the reader has no rail heading to fall back on because
+          this screen sits outside the project frame.
+        */}
+        {crossProject && (
+          <Identifier variant="muted" testId="Board.Card.Project">
+            {item.projectKey}
+          </Identifier>
+        )}
         {/*
           Derived cards are marked. A user who knows a card mirrors an execution understands
           why it won't drag, and where to go instead.
@@ -473,7 +508,7 @@ function WorkCard({
 
       {item.linkedKey && (
         <RouterLink
-          to={linkFor(item, projectId)}
+          to={linkFor(item)}
           data-testid="Board.Card.LinkedKey"
         >
           <Identifier variant="muted">{item.linkedKey}</Identifier>

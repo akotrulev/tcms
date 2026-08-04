@@ -3,7 +3,7 @@
 # fe-react — orientation cache (TCMS)
 
 **Last verified:** 2026-08-04
-**Baseline commit:** `3d33ad6`
+**Baseline commit:** `1669074`
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
 `frontend/vite.config.ts`
 
@@ -25,7 +25,7 @@
 - **`npm run build` is THE gate** (`tsc -b` + vite build). **Do not trust `tsc --noEmit`** — it has
   reported 0 errors while the build failed with nine (working agreement). `#confirmed`
 - `npm run lint` — oxlint, must stay at **0 warnings**; it prints nothing when clean.
-- `npm run test:run` — Vitest + RTL. **662/662** at this baseline (§82). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
+- `npm run test:run` — Vitest + RTL. **682/682** at this baseline (§83). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
 - `npm run gen:api` — regenerate `src/api/schema.d.ts` after **any** `openapi.yaml` change. Runs
   through `npx` on purpose (the scaffold pins TS 6, the tool peer-requires 5.x); do not "fix" it.
 - **Live mode:** `VITE_API_MODE=live` in `.env.local` proxies `/api` to `localhost:8080`.
@@ -37,6 +37,8 @@
 
 `src/{api,app,auth,components,features,lib,mocks,notifications,a11y,test}`. Feature folders under
 `features/<area>/`; routes are project-scoped under `/projects/:projectId/*` (`app/router.tsx`, lazy).
+**Three routes are NOT** — `/` (project list), `/admin/teams` (company), and `/my-work` (§83, the
+cross-project personal board). A screen whose subject is not a project does not live under one.
 
 > **⚠ This file went FIVE SLICES STALE (§72–§76) and was repaired in §77.** Only the backend half of
 > the update-the-cache habit had stuck. If you are reading this and the baseline lags HEAD by more
@@ -195,12 +197,46 @@
   (put there in §53 ahead of its generator), and a page test supplies its own props. Hence
   **`mocks/db/workItems.test.ts`, the first test asserting the MOCK's rules rather than a
   component's** — the pattern to copy whenever a mock module holds *logic* rather than storage.
-- **`BoardPage.linkFor` is where a card's key goes, and it keys on `sourceType` (§81).** Every card
-  routed to a case search until the inbox drew the first cards about **suites and plans**; a review of
-  `TP-5` sent there renders "no cases match", which reads as the plan having been deleted. A case goes
-  to the case detail, a plan to the plan detail, a **suite to the case list filtered to it** — a suite
-  has no page of its own and is the one §6g subject type with no screen anywhere. `EXECUTION` keeps
-  the search fallback deliberately: its route needs a run id the card does not carry.
+  **It caught a second defect in the same module in §83.** `db.runs`, `db.cases` and `db.plans`
+  carry **no `projectId`** — the contract puts the project in the *path* for all of those endpoints,
+  so the wire shapes have no such field and neither do the fixtures. The execution and maintenance
+  generators therefore drew the whole seeded repository onto **whichever project's board was asked
+  for**, stamped with that project: already a 404-on-its-key on the second project's board, and on
+  the cross-project board the same card twice with the **same React key**. `workItems()` now gates
+  both on `projectId === db.projects[0].id` — the repository belongs to the project that seeds it,
+  said once rather than inferred per generator. `personalBoard(userId)` mirrors
+  `BoardService.personalBoard`: the visible set is `db.projects` (**the same list `GET /projects`
+  answers**, one source so the two cannot disagree), and the personal filter runs **after** assembly
+  for the server's reason. `GET /work-items` mirrors both refusals — **400** for projectless +
+  `mine=false`, **404** for a project id nobody can see (it used to fall back to `projects[0]`, so a
+  stale bookmark rendered another project's board under a foreign id). The fixture seeds **one task
+  in the second project assigned to the current user**, without which My Work in mock mode is
+  byte-identical to the first project's personal board (§72's rule). `#confirmed`
+- **`BoardPage.linkFor` is where a card's key goes, and it keys on `sourceType` (§81) and on the
+  CARD's project (§83).** Every card routed to a case search until the inbox drew the first cards
+  about **suites and plans**; a review of `TP-5` sent there renders "no cases match", which reads as
+  the plan having been deleted. A case goes to the case detail, a plan to the plan detail, a **suite
+  to the case list filtered to it** — a suite has no page of its own and is the one §6g subject type
+  with no screen anywhere. `EXECUTION` keeps the search fallback deliberately: its route needs a run
+  id the card does not carry. **The project comes from `item.projectId`, never from the route** —
+  §81 left it as the board's own, which is the same value on any project board and therefore a
+  defect no test could see until §83's cross-project board existed. All four of §81's link tests
+  still pass against the old signature; only `MyWorkPage.test.tsx` reddens. `#confirmed`
+- **`Board` takes NO project and NO `mine` (§83) — it renders whatever cards it is handed.** That is
+  what let §6l's cross-project **My Work** screen (`features/board/MyWorkPage.tsx`, route
+  `/my-work`) reuse it rather than grow a second board, per `ui-rules` §8. `crossProject` is
+  presentation only: it stamps each card with its `projectKey`, which is noise on a board that is
+  already one project's. The screen deliberately has **no Everyone chip** (the server answers **400**
+  to a projectless board without `mine=true` — "Choose a board", refused rather than narrowed) and
+  **no New task** (a create needs a project it does not have). It never 404s; `[]` is the normal
+  state of a member with no grants. Rail item sits **above the project switcher**, the only one that
+  renders with no project resolved. `#confirmed`
+- **Every board key shares the `work-items` root, and the move/create hooks invalidate the ROOT
+  (§83).** The same card is on both boards, so keying an invalidation to the board you were looking
+  at leaves the other holding a card in the column it just left. `useMoveWorkItem()` takes no
+  arguments (`PATCH /work-items/{id}` names no project either); `useCreateWorkItem(projectId)` lost
+  its `mine` — which had also meant a task created under the "Everyone" filter left the `mine=true`
+  cache stale. `keys.myWork` is `['work-items','ALL',true]`; `'ALL'` cannot collide with a project id.
 - **Contract-hygiene tests are generated per call site** — `api/contractOperations.test.ts`,
   `contractParameters.test.ts` (drives the TS compiler, not a regex), `apiResponseTypes.test.ts`
   (refuses an inline literal at any `api.*` call site). A new endpoint is covered automatically,
@@ -237,6 +273,22 @@
   with the reasoning recorded in `vite.config.ts`.
 
 ## Session log
+
+- 2026-08-04 · EXTEND · §6l's cross-project "My Work" board (§83) — the bound §81 named and left
+  behind. New: `features/board/MyWorkPage.tsx` + its test, route `/my-work` (**outside the project
+  segment** — see Layout), the rail item above the project switcher, `useMyWork` + `keys.myWork`,
+  and the mock's `personalBoard` + both of `GET /work-items`'s refusals. `npm run gen:api` first —
+  `projectId` is optional now. **Two repairs came out of it, both invisible before this screen
+  existed**: `linkFor` took the *board's* project (identical to the card's on any project board, so
+  all four of §81's link tests pass against the defect), and the mock's execution/maintenance
+  generators drew the whole seeded repository onto every project's board (a 404-on-its-key on the
+  second project, a duplicate React key on the aggregate). `Board` lost `projectId` and `mine`
+  entirely and is now the one board both screens render — `ui-rules` §8, rather than a second
+  implementation. Invalidation moved to the `work-items` root, which also fixed a create under the
+  "Everyone" filter leaving the `mine=true` cache stale. 19 tests written (12 `MyWorkPage`, 7
+  `mocks/db/workItems`); 662 → **682**, the extra one being §70's contract checks generating a case
+  for the new `api.get` call site unattended. **0 mutations run inline** (policy); 19 browser rows
+  queued (three live-only), 5 frontend mutation rows.
 
 - 2026-08-04 · EXTEND · §6g's gating rules (§82) — the two approval gates get a settings panel and
   two override affordances. New: the `ReviewSettings.Gating` panel + its warning,

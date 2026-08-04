@@ -54,6 +54,7 @@ import {
   suites,
   uid,
   users,
+  workItems as workItemSeeds,
 } from '../fixtures/core';
 import {
   caseHistoryEntries,
@@ -221,7 +222,7 @@ export const db: Store = {
   teams: clone(teams),
   statuses: clone(caseStatuses),
   configurations: clone(configurations),
-  workItems: [],
+  workItems: clone(workItemSeeds),
   idempotency: new Map(),
   planIdempotency: new Map(),
   runIdempotency: new Map(),

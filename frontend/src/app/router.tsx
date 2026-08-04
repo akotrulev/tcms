@@ -74,6 +74,7 @@ const ArtifactsPage = lazy(() =>
   import('../features/artifacts/ArtifactsPage').then((m) => ({ default: m.ArtifactsPage })),
 );
 const BoardPage = lazy(() => import('../features/board/BoardPage').then((m) => ({ default: m.BoardPage })));
+const MyWorkPage = lazy(() => import('../features/board/MyWorkPage').then((m) => ({ default: m.MyWorkPage })));
 const TeamsPage = lazy(() => import('../features/admin/TeamsPage').then((m) => ({ default: m.TeamsPage })));
 const ProjectAccessPage = lazy(() =>
   import('../features/admin/ProjectAccessPage').then((m) => ({ default: m.ProjectAccessPage })),
@@ -134,6 +135,29 @@ function AppRoutes() {
             }
           />
           <Route path="/projects" element={<Navigate to="/" replace />} />
+
+          {/*
+            §6l's cross-project board (§83), and the one feature route with **no project segment**.
+
+            The comment above says the project segment is a real navigation boundary rather than a
+            disambiguator, and that is exactly why this route sits outside it: this screen spans
+            every project the caller can see, so any project in its URL would be an arbitrary one —
+            naming a project in the breadcrumb that most of the cards are not from, and making the
+            rail's project switcher appear to change a board it cannot change. `/admin/teams` is
+            the precedent: a screen whose subject is not a project does not live under one.
+
+            `/my-work` rather than `/board`, because `/projects/:projectId/board` already exists and
+            two routes with one name for two scopes is the IA defect the rail's own Company/Project
+            split was made to avoid.
+          */}
+          <Route
+            path="/my-work"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <MyWorkPage />
+              </Suspense>
+            }
+          />
 
           <Route
             path="/projects/:projectId"

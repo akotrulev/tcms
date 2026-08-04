@@ -15,6 +15,7 @@ import {
   useColorScheme,
 } from '@mui/material';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
+import AssignmentIndOutlinedIcon from '@mui/icons-material/AssignmentIndOutlined';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
 import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
@@ -60,6 +61,27 @@ interface NavItem {
   /** Marks the item active for descendant routes too, not just an exact match. */
   end?: boolean;
 }
+
+/**
+ * The one rail item that is **not** about the project in the switcher (§83).
+ *
+ * It is rendered *above* the switcher rather than in a group below it, and the placement is the
+ * whole argument: everything under the switcher is scoped by it, and §6l's My Work board spans
+ * every project the caller can see. Listing it below would tell the reader that switching projects
+ * changes it — the same misstatement the `Teams & roles` comment records for the Company group, one
+ * level further out, and this one cannot be fixed by a heading because there is no project frame to
+ * put a heading inside.
+ *
+ * It is also the only rail item that renders when **no project is resolved yet** — the rest of the
+ * rail is empty until `useProjects` answers, and a personal board is exactly what a member holding
+ * no project grants at all has.
+ */
+const MY_WORK: NavItem = {
+  label: 'My work',
+  to: '/my-work',
+  icon: <AssignmentIndOutlinedIcon fontSize="small" />,
+  end: true,
+};
 
 function projectNav(projectId: string): { heading: string; items: NavItem[] }[] {
   const p = `/projects/${projectId}`;
@@ -245,6 +267,15 @@ function RailContent({ onNavigate }: { onNavigate?: () => void }) {
           TCMS
         </Identifier>
       </Box>
+
+      {/* Personal, and therefore outside the project frame below it. See `MY_WORK`. */}
+      <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, py: 1 }}>
+        <li>
+          <RailLink item={MY_WORK} onNavigate={onNavigate} />
+        </li>
+      </Box>
+
+      <Divider />
 
       {/* Project switcher: which project you're in is the frame for every key on screen. */}
       <Box sx={{ px: 1.5, py: 1.5 }}>

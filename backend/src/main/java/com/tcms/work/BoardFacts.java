@@ -1,6 +1,7 @@
 package com.tcms.work;
 
 import jakarta.persistence.EntityManager;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
@@ -34,6 +35,25 @@ import org.springframework.stereotype.Component;
  *       is here rather than in {@code project}, whose {@code allowedDependencies} is
  *       {@code tenancy} alone.</li>
  * </ol>
+ *
+ * <h2>Every generator takes a SET of projects, and the project board is the one-element case</h2>
+ *
+ * <p>Since §83 the board is not always about one project — §6l's "My Work" aggregates every project
+ * the caller can see, and asking each generator once per project would be 3N round trips for the
+ * person the board was designed for, the one working on three. So the predicate is
+ * {@code project_id IN (:projectIds)} in all three, and the project-scoped board passes a set of one.
+ * A per-project overload beside it would be a second spelling of each query for the older caller to
+ * keep in step with (§58's E1) — and the two would drift in the direction nobody tests, since only
+ * one board would exercise each.
+ *
+ * <p><strong>The collection must never be empty.</strong> {@code IN ()} is a syntax error rather than
+ * a query matching nothing, so {@code BoardService} answers an empty board without calling here —
+ * the same guard {@code ProjectService.listVisible} states at its own grouped query, and for once it
+ * is the ordinary path rather than an edge: a company member holding no project grants is exactly who
+ * opens a personal board first.
+ *
+ * <p>Each record carries its own {@code projectId} for that reason: with several projects in one
+ * answer, the card's project is a property of the row rather than of the request.
  *
  * <p>Native SQL rather than entities, for {@code CaseFacts}' reason: a second JPA entity mapped over
  * a table another module owns is one table with two sets of column expectations for
@@ -98,20 +118,20 @@ class BoardFacts {
      * survives for history (§6p), but "go and run this" is not something to say about a deleted
      * case.
      */
-    List<AssignedExecution> assignedExecutions(UUID projectId) {
+    List<AssignedExecution> assignedExecutions(Collection<UUID> projectIds) {
         @SuppressWarnings("unchecked")
         List<Object[]> rows = entities.createNativeQuery("""
                 SELECT e.id, e.project_id, c.key, c.title, r.name, e.assignee_id
                   FROM test_execution e
                   JOIN test_run r  ON r.id = e.run_id
                   JOIN test_case c ON c.id = e.case_id AND c.deleted_at IS NULL
-                 WHERE e.project_id = :projectId
+                 WHERE e.project_id IN (:projectIds)
                    AND e.status_id IS NULL
                    AND r.status = 'IN_PROGRESS'
                    AND r.deleted_at IS NULL
                  ORDER BY c.key_seq
                 """)
-                .setParameter("projectId", projectId)
+                .setParameter("projectIds", projectIds)
                 .getResultList();
 
         return rows.stream()
@@ -203,7 +223,7 @@ class BoardFacts {
      * the one most worth answering, and the board's own sort (overdue, then priority, then id) has
      * nothing to separate these cards by, since a review carries neither.
      */
-    List<PendingReview> pendingReviews(UUID projectId) {
+    List<PendingReview> pendingReviews(Collection<UUID> projectIds) {
         @SuppressWarnings("unchecked")
         List<Object[]> rows = entities.createNativeQuery("""
                 WITH asked AS (
@@ -228,7 +248,7 @@ class BoardFacts {
                                        AND s.id = r.subject_id AND s.deleted_at IS NULL
                   LEFT JOIN test_plan p ON r.subject_type = 'PLAN'
                                        AND p.id = r.subject_id AND p.deleted_at IS NULL
-                 WHERE r.project_id = :projectId
+                 WHERE r.project_id IN (:projectIds)
                    AND r.state = 'IN_REVIEW'
                    AND COALESCE(c.id, s.id, p.id) IS NOT NULL
                    AND NOT EXISTS (SELECT 1 FROM review_participation v
@@ -236,7 +256,7 @@ class BoardFacts {
                                       AND v.user_id = asked.reviewer_id)
                  ORDER BY r.created_at, r.id, asked.reviewer_id
                 """)
-                .setParameter("projectId", projectId)
+                .setParameter("projectIds", projectIds)
                 .getResultList();
 
         return rows.stream()
@@ -287,7 +307,7 @@ class BoardFacts {
      * in the schema, has no counterpart in the contract's enum, and putting it on a card would be
      * inventing a reason the SPA has no words for.
      */
-    List<FlaggedCase> casesNeedingAttention(UUID projectId) {
+    List<FlaggedCase> casesNeedingAttention(Collection<UUID> projectIds) {
         @SuppressWarnings("unchecked")
         List<Object[]> rows = entities.createNativeQuery("""
                 SELECT c.id, c.project_id, c.key, c.title, c.owner_id,
@@ -304,13 +324,13 @@ class BoardFacts {
                        ], NULL)
                   FROM case_health h
                   JOIN test_case c ON c.id = h.case_id AND c.deleted_at IS NULL
-                 WHERE h.project_id = :projectId
+                 WHERE h.project_id IN (:projectIds)
                    AND (h.outdated_spec_changed OR h.stale_approval OR h.condition_drift
                         OR h.stale_automation OR h.never_executed OR h.long_unexecuted
                         OR h.unlinked OR h.failing_repeatedly OR h.orphaned)
                  ORDER BY c.key_seq
                 """)
-                .setParameter("projectId", projectId)
+                .setParameter("projectIds", projectIds)
                 .getResultList();
 
         return rows.stream()

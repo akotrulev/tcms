@@ -130,19 +130,22 @@ function applyServerError(
 
 export function TaskCreateDialog({
   projectId,
-  mine,
   open,
   onClose,
   onCreated,
 }: {
   projectId: string;
-  /** Carried so the created task lands in the same query key the board is reading. */
-  mine: boolean;
   open: boolean;
   onClose: () => void;
   onCreated: (task: WorkItem) => void;
 }) {
-  const create = useCreateWorkItem(projectId, mine);
+  /*
+    `mine` used to be threaded through here so the create could invalidate the one board key that
+    was on screen. It no longer is: the hook invalidates the whole `work-items` root, which is what
+    §83's second board required and what already fixed a create made under the "Everyone" filter
+    leaving the "Assigned to me" cache stale.
+  */
+  const create = useCreateWorkItem(projectId);
   // The dialog only exists while it is open (see the header), so `open` is the honest gate: the
   // query runs once per intent to add a task, and a board nobody is adding to asks nobody.
   const members = useProjectMembers(projectId, open);

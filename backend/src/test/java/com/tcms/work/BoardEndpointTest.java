@@ -57,6 +57,11 @@ import org.springframework.transaction.support.TransactionTemplate;
  *       ever sees the problem is the assignee — who gets a 404 when they click it.</li>
  *   <li><strong>{@code kind} accepted from the client.</strong> A POST with {@code kind: EXECUTION}
  *       would materialise a derived item, which is defect 1 arriving through the front door.</li>
+ *   <li><strong>A personal board carrying work from a project the caller cannot open (§83).</strong>
+ *       The cross-project board names no project, so it has no 404 to answer and nothing about the
+ *       request bounds it — the bound has to be the set of projects it assembles from. Built from
+ *       "cards assigned to me" instead, it renders the case key, the title and the project name of a
+ *       client nobody granted, and the assignee is the only person who ever sees it.</li>
  *   <li><strong>The read gate used as the write gate.</strong> Every role holds {@code project:read};
  *       {@code workitem:manage} is held by four of the six (roles spec §A6). A Viewer must be able to
  *       look at the board and unable to change it.</li>
@@ -69,6 +74,12 @@ import org.springframework.transaction.support.TransactionTemplate;
  * holding an unrecorded one, a case flagged in {@code case_health}, and a stored task. Personas are
  * a Test Lead (holds {@code workitem:manage}), a Viewer (does not), and a member with no grant at
  * all.
+ *
+ * <p><strong>Three Acme projects, and the third is what makes §83 provable.</strong> LEAD is granted
+ * on {@code PROJECT} and {@code SECOND_PROJECT} and not on {@code OTHER_PROJECT} — each of the three
+ * holds an outstanding execution assigned to LEAD, so the personal board must show two of them and
+ * hide the third. With one reachable project a board that quietly still reads a single project
+ * passes every assertion in this class.
  *
  * <p>Ids are unique to this class — {@code b0…} — and so are the company slugs and project keys.
  * {@code CaseHealthRecomputeTest} in this same slice lost eleven tests to a slug it shared with
@@ -83,8 +94,17 @@ class BoardEndpointTest extends IntegrationTestBase {
     private static final UUID PROJECT = UUID.fromString("b0001000-0000-4000-8000-000000000001");
     private static final UUID OTHER_PROJECT = UUID.fromString("b0001000-0000-4000-8000-000000000002");
     private static final UUID UMBRA_PROJECT = UUID.fromString("b0001000-0000-4000-8000-000000000003");
+    /**
+     * A second Acme project LEAD <em>is</em> granted on — the one that makes §83's aggregate provable.
+     * With only one reachable project, a personal board that quietly still reads a single project
+     * passes every assertion.
+     */
+    private static final UUID SECOND_PROJECT =
+            UUID.fromString("b0001000-0000-4000-8000-000000000004");
     private static final UUID SUITE = UUID.fromString("b0002000-0000-4000-8000-000000000001");
     private static final UUID UMBRA_SUITE = UUID.fromString("b0002000-0000-4000-8000-000000000002");
+    private static final UUID SECOND_SUITE = UUID.fromString("b0002000-0000-4000-8000-000000000003");
+    private static final UUID SIBLING_SUITE = UUID.fromString("b0002000-0000-4000-8000-000000000004");
 
     /** Holds workitem:manage on PROJECT. */
     private static final UUID LEAD = UUID.fromString("b0003000-0000-4000-8000-000000000001");
@@ -95,6 +115,8 @@ class BoardEndpointTest extends IntegrationTestBase {
 
     private static final UUID LIVE_RUN = UUID.fromString("b0004000-0000-4000-8000-000000000001");
     private static final UUID CLOSED_RUN = UUID.fromString("b0004000-0000-4000-8000-000000000002");
+    private static final UUID SECOND_RUN = UUID.fromString("b0004000-0000-4000-8000-000000000003");
+    private static final UUID SIBLING_RUN = UUID.fromString("b0004000-0000-4000-8000-000000000004");
 
     /** Unrecorded, in the live run — the one EXECUTION card. */
     private static final UUID OUTSTANDING = UUID.fromString("b0005000-0000-4000-8000-000000000001");
@@ -106,6 +128,19 @@ class BoardEndpointTest extends IntegrationTestBase {
     private static final UUID FLAGGED = UUID.fromString("b0005000-0000-4000-8000-000000000004");
     /** Umbra's case, keyed identically to prove only ids scope this. */
     private static final UUID FOREIGN = UUID.fromString("b0005000-0000-4000-8000-000000000005");
+
+    /** Outstanding in SECOND_PROJECT and assigned to LEAD — the card only §83's board can show. */
+    private static final UUID ELSEWHERE = UUID.fromString("b0005000-0000-4000-8000-00000000000a");
+    /**
+     * Outstanding in OTHER_PROJECT and assigned to LEAD, who holds no grant there.
+     *
+     * <p>The whole risk of a board that stops naming a project: work can be assigned to somebody who
+     * cannot open the project it is in (this class's defect 4, from the other end), and an aggregate
+     * built from "cards assigned to me" rather than from "projects I can see" would put it on their
+     * board — where the title, the case key and the project name of a client they were never granted
+     * all render perfectly.
+     */
+    private static final UUID UNREACHABLE = UUID.fromString("b0005000-0000-4000-8000-00000000000b");
 
     // The review fixture (§81). Each case exists to make one card either appear or not appear —
     // "asked and answered", "the review is over" and "the subject is gone" all look identical on a
@@ -183,11 +218,15 @@ class BoardEndpointTest extends IntegrationTestBase {
         inCompany(ACME, () -> tx.executeWithoutResult(status -> {
             seedProject(PROJECT, ACME, "BRDA", "Board Project", now);
             seedProject(OTHER_PROJECT, ACME, "BRDB", "Sibling Project", now);
+            seedProject(SECOND_PROJECT, ACME, "BRDC", "Second Project", now);
             member(ACME, LEAD, "L. Lead (Acme)", now);
             member(ACME, VIEWER, "V. Viewer (Acme)", now);
             member(ACME, NO_GRANT, "N. Grant", now);
             grantOnProject("lead", ACME, Role.TEST_LEAD_ID, LEAD, PROJECT, now);
             grantOnProject("viewer", ACME, Role.VIEWER_ID, VIEWER, PROJECT, now);
+            // LEAD on the second project and deliberately NOT on OTHER_PROJECT, which stays the
+            // sibling nobody granted — the two halves of §83's bound need both to exist at once.
+            grantOnProject("lead-second", ACME, Role.TEST_LEAD_ID, LEAD, SECOND_PROJECT, now);
         }));
 
         inCompany(UMBRA, () -> tx.executeWithoutResult(status ->
@@ -242,6 +281,22 @@ class BoardEndpointTest extends IntegrationTestBase {
             review(acme, REVIEW_SUITE, ACME, PROJECT, "SUITE", SUITE, "IN_REVIEW");
             askTeam(acme, ACME, REVIEW_SUITE, TEAM, VIEWER);
             askUser(acme, ACME, REVIEW_SUITE, LEAD, VIEWER);
+
+            // §83's two Acme projects beside the board's own. Both hold one outstanding execution
+            // assigned to LEAD; only the grant tells them apart, which is the point.
+            // Display keys are unique per COMPANY, not per project (uq_test_case_key), so these
+            // continue Acme's numbering rather than restarting at 1 the way Umbra's do.
+            seedProjectDefaults(acme, ACME, SECOND_PROJECT);
+            suite(acme, SECOND_SUITE, ACME, SECOND_PROJECT, "TS-2", "Root");
+            testCase(acme, ELSEWHERE, ACME, SECOND_PROJECT, SECOND_SUITE, "TC-10", 10, LEAD);
+            run(acme, SECOND_RUN, ACME, SECOND_PROJECT, "TR-3", 3, "IN_PROGRESS");
+            execution(acme, ACME, SECOND_PROJECT, SECOND_RUN, ELSEWHERE, false, LEAD);
+
+            seedProjectDefaults(acme, ACME, OTHER_PROJECT);
+            suite(acme, SIBLING_SUITE, ACME, OTHER_PROJECT, "TS-3", "Root");
+            testCase(acme, UNREACHABLE, ACME, OTHER_PROJECT, SIBLING_SUITE, "TC-9", 9, LEAD);
+            run(acme, SIBLING_RUN, ACME, OTHER_PROJECT, "TR-4", 4, "IN_PROGRESS");
+            execution(acme, ACME, OTHER_PROJECT, SIBLING_RUN, UNREACHABLE, false, LEAD);
         }
 
         try (Connection umbra = appConnection(UMBRA)) {
@@ -819,9 +874,129 @@ class BoardEndpointTest extends IntegrationTestBase {
         }
     }
 
+    @Nested
+    @DisplayName("My Work — the same board with no project named (§6l, §83)")
+    class MyWork {
+
+        @Test
+        @DisplayName("aggregates the caller's work across every project they can see")
+        void aggregatesAcrossProjects() throws Exception {
+            // The one assertion a still-single-project implementation cannot pass. LEAD is granted
+            // on PROJECT and SECOND_PROJECT and has an outstanding execution in each.
+            assertThat(keysOfKind(myWork(LEAD), "EXECUTION"))
+                    .containsExactlyInAnyOrder("TC-1", "TC-10");
+        }
+
+        @Test
+        @DisplayName("work in a project the caller was never granted stays off it")
+        void ungrantedProjectsContributeNothing() throws Exception {
+            // TC-9's execution is assigned to LEAD, in Acme, in a live run — everything except the
+            // grant. An aggregate built from "cards assigned to me" instead of "projects I can see"
+            // renders it perfectly: its title, its key, and the name of a client nobody let them
+            // near. The per-project board answers 404 for this project; the personal board has no
+            // 404 to answer, so the bound has to be the project set it assembles from.
+            assertThat(titlesOf(myWork(LEAD))).doesNotContain("Case TC-9");
+            assertThat(keysOfKind(myWork(LEAD), "EXECUTION")).doesNotContain("TC-9");
+        }
+
+        @Test
+        @DisplayName("another company's request for the same person is not on it")
+        void otherCompaniesNeverAggregate() throws Exception {
+            // REVIEW_FOREIGN asks LEAD — an instance-level app_user id — to review an Umbra case,
+            // which inserts happily (§64's family). The session's company is what keeps it out, and
+            // a cross-project read is exactly where a company predicate is easiest to lose.
+            JsonNode board = myWork(LEAD);
+
+            assertThat(keysOfKind(board, "REVIEW")).doesNotContain("TC-1");
+            for (JsonNode card : board) {
+                assertThat(card.get("projectKey").asText())
+                        .as("BRDU is Umbra's project key")
+                        .isNotEqualTo("BRDU");
+            }
+        }
+
+        @Test
+        @DisplayName("every card on it is assigned to the caller, in both kinds")
+        void isPersonal() throws Exception {
+            createAs(LEAD, """
+                    {"projectId":"%s","title":"Somebody else's"}""".formatted(PROJECT), 201);
+
+            JsonNode board = myWork(LEAD);
+
+            assertThat(board).isNotEmpty();
+            for (JsonNode card : board) {
+                assertThat(card.get("assignee").get("id").asText()).isEqualTo(LEAD.toString());
+            }
+            assertThat(titlesOf(board)).doesNotContain("Somebody else's");
+        }
+
+        @Test
+        @DisplayName("each card names its own project, which is how an aggregate can be grouped")
+        void cardsCarryTheirProject() throws Exception {
+            // projectId/projectKey were on the card before there was a board that needed them: with
+            // one project in the answer they were a nicety, and here they are the only thing that
+            // says where a card comes from. A generator reading the REQUEST's project instead of the
+            // ROW's would label every card with whichever project happened to be first.
+            for (JsonNode card : myWork(LEAD)) {
+                String expected = card.get("projectId").asText().equals(SECOND_PROJECT.toString())
+                        ? "BRDC"
+                        : "BRDA";
+                assertThat(card.get("projectKey").asText()).isEqualTo(expected);
+            }
+            assertThat(projectKeysOf(myWork(LEAD))).contains("BRDA", "BRDC");
+        }
+
+        @Test
+        @DisplayName("a member with no grants at all gets an empty board, not a 404")
+        void noGrantsIsAnEmptyBoard() throws Exception {
+            // The project board's 404 says "you cannot see THAT" — this request names nothing to be
+            // unable to see. It is also the empty-IN() path: with no visible project there is no set
+            // to query with, and `IN ()` is a syntax error rather than a predicate matching nothing.
+            var response = mvc.perform(MockMvcRequestBuilders.get("/api/v1/work-items")
+                            .param("mine", "true")
+                            .header("Authorization", "Bearer " + tokenFor(NO_GRANT, ACME)))
+                    .andReturn().getResponse();
+
+            assertThat(response.getStatus()).isEqualTo(200);
+            assertThat(json.readTree(response.getContentAsString())).isEmpty();
+        }
+
+        @Test
+        @DisplayName("no project and no mine is refused — 400, because it is not a board")
+        void unscopedIsRefused() throws Exception {
+            // Refused rather than narrowed: forcing mine=true on would answer a request nobody made
+            // with a list the client cannot tell apart from a company holding only its own work.
+            var response = mvc.perform(MockMvcRequestBuilders.get("/api/v1/work-items")
+                            .header("Authorization", "Bearer " + tokenFor(LEAD, ACME)))
+                    .andReturn().getResponse();
+
+            assertThat(response.getStatus()).isEqualTo(400);
+            assertThat(response.getContentAsString())
+                    .as("the message must name the two requests that do work")
+                    .contains("projectId")
+                    .contains("mine=true");
+        }
+
+        @Test
+        @DisplayName("the project board still answers only its own project")
+        void theProjectBoardDidNotWiden() throws Exception {
+            // The regression the widening invites: one query per fact over a SET of projects is one
+            // edit away from a project board that returns the caller's whole company.
+            assertThat(keysOfKind(boardAs(LEAD, PROJECT), "EXECUTION")).containsExactly("TC-1");
+        }
+    }
+
     // =====================================================================
     // Request plumbing
     // =====================================================================
+
+    private JsonNode myWork(UUID userId) throws Exception {
+        String body = mvc.perform(MockMvcRequestBuilders.get("/api/v1/work-items")
+                        .param("mine", "true")
+                        .header("Authorization", "Bearer " + tokenFor(userId, ACME)))
+                .andReturn().getResponse().getContentAsString();
+        return json.readTree(body);
+    }
 
     private JsonNode boardAs(UUID userId, UUID projectId) throws Exception {
         return boardAs(userId, projectId, false);
@@ -889,6 +1064,12 @@ class BoardEndpointTest extends IntegrationTestBase {
             }
         }
         throw new AssertionError("no card of kind " + kind + " on the board");
+    }
+
+    private static List<String> projectKeysOf(JsonNode board) {
+        List<String> keys = new ArrayList<>();
+        board.forEach(card -> keys.add(card.get("projectKey").asText()));
+        return keys;
     }
 
     private static List<String> titlesOf(JsonNode board) {

@@ -1,6 +1,49 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-04 (latest section: **§82, §6g's gating rules** — the last line of §6g's mechanics
+**Date:** 2026-08-04 (latest section: **§83, the cross-project board** — §6l's *"My Work"*, the view
+it calls the one most people keep open all day, and the slice whose entire path work was **leaving a
+parameter off**: §81 had already recorded that `/work-items?projectId=…` *"is the shape that
+eventually drops the parameter"*, so there is no new route, no table, no key and **no migration —
+`V27` is still free**. **The decision is that the aggregate is the PERSONAL board and the unfiltered
+one is REFUSED**: §6l describes three boards and the cross-project one is the personal one, so no
+`projectId` with `mine=false` is a **400, not a silently narrowed 200** — forcing the filter on
+would answer with a list the client **cannot tell apart from a company holding only its caller's
+work**. **Dropping the parameter removes the 404 that was implicitly bounding the board** (the
+request names nothing that could be missing, so a member with no grants gets `200 []`), which is why
+the bound has to become explicit: `ProjectService.readAllVisible`, `readVisible`'s plural, with
+`visibleProjects` now shared with `listVisible` rather than written twice. **The failure it prevents
+is a row in the fixture, not a hypothetical** — work can be assigned to somebody who cannot open its
+project (this class's defect 4, from the write side, since §53), and a board built from *"cards
+assigned to me"* rather than *"projects I can see"* renders that client's case key, title and
+project name to the one person who will never report it. Hence three Acme projects, granted on two:
+**with one reachable project, a board that quietly still reads a single project passes every
+assertion in the class.** All four sources now take a **set** and the project board is the
+one-element case — no per-project overload, because the copy that drifts is whichever board does not
+exercise it — so six projects cost **4 statements, not 24**; the empty set is answered before any
+query, since `IN ()` is a syntax error and a member with no grants is the *ordinary* first caller.
+**The comments claimed a bound the code did not hold**: `present` filters *after* `assemble`, so the
+400 bounds **the answer and not the work** — and §6l's cap, which open question #24 promoted from
+prudence to a requirement, therefore lands on **the generators rather than the response**, located
+here and deliberately not built. Frontend: **`/my-work`, the one feature route with no project
+segment** (any project in that URL is an arbitrary one, naming a project most cards are not from;
+`/admin/teams` is the precedent), reusing `Board`, which now takes no project because **neither
+thing it used one for survived**. **Two repairs it could not have been written without.** `linkFor`
+took the BOARD's project rather than the CARD's — §81 fixed *which screen* and left the project as
+the route's, identical on any single-project board and, on the aggregate, a **404 on the one
+affordance the card exists to offer**; §81's four link tests pass against the defect, and this is the
+second repair that one function has needed in three slices. And **THE MOCK HAS BEEN STAMPING CARDS
+WITH THE WRONG PROJECT SINCE PHASE 1**: `db.runs`/`db.cases`/`db.plans` carry no `projectId` (the
+contract puts it in the path), so both generators iterated the whole store and labelled every card
+with *whichever project was asked for* — the second project's board has been showing the first's
+executions and flagged cases under its own key for the product's entire mock life, and what finally
+disagreed was the aggregate, where one card appears twice **with the same derived id**. §81's
+finding one slice later in the same file, and `mocks/db/workItems.test.ts` — still the only test
+asserting the mock's own rules — gained seven. **Zero mutations run inline; twelve queued, 19 browser
+rows.** Two to run first: dropping `visibleProjects`' grant filter (**exactly 1**, and it is the
+security row) and `linkFor` reading the route again (**exactly 1** — *that "only one" is the finding,
+not a shortfall*). Named next: the **two remaining board generators**, **§6l's team board** — now
+the only one of its three with no endpoint — and **`/reports`/M2.5**. Before that: **§82, §6g's
+gating rules** — the last line of §6g's mechanics
 list, unimplemented since the plan was written, and the slice that built **almost nothing new**:
 the ladders (§73/§75), the record (§76), the settings row (§77) and the board (§81) were all
 already there, so what was missing was **two boolean columns and the two places that read them**.
@@ -1058,3 +1101,4 @@ See [`docs/plans/2026-07-31-parallel-execution-rework.md`](plans/2026-07-31-para
 | [§80](handoff/80-reviewer-assignment.md) | Reviewer assignment — the request nothing recorded, and the table that is not part of the record |
 | [§81](handoff/81-the-reviewers-inbox.md) | The reviewer's inbox — the query no module could write, and the mock that invented the feature |
 | [§82](handoff/82-the-gating-rules.md) | §6g's gating rules — the edge that is not a target, and the override nobody had to invent |
+| [§83](handoff/83-the-cross-project-board.md) | The cross-project board — the parameter that was left off, and the mock that had been showing the wrong project since Phase 1 |

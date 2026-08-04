@@ -43,7 +43,6 @@ function renderDialog(onCreated = vi.fn()) {
     <TestProviders client={createTestQueryClient()}>
       <TaskCreateDialog
         projectId={PROJECT}
-        mine={false}
         open
         onClose={() => {}}
         onCreated={onCreated}

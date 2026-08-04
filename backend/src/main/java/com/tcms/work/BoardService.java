@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -97,22 +98,66 @@ public class BoardService {
      * controller renders them differently: the first is a reachable project with nothing on its
      * board, and the second is a 404.
      *
-     * <p>{@code mine} filters <strong>after</strong> assembly rather than inside each generator.
-     * Pushing it down would mean three predicates to keep in step, and the one that gets forgotten
-     * silently shows somebody else's work on a personal board — a leak of attention rather than of
-     * data, which is why nothing would ever fail.
+     * <p>{@code mine} filters through {@link #present}, after assembly — see there. The
+     * cross-project form of this board is {@link #personalBoard}, which is that filter with no
+     * project named.
      */
     @Transactional(readOnly = true)
     public Optional<List<WorkItemView>> board(UUID userId, UUID projectId, boolean mine) {
-        return projects.readVisible(userId, projectId, project -> {
-            List<WorkItemView> cards = assemble(project);
-            if (!mine) {
-                return sorted(cards);
-            }
-            return sorted(cards.stream()
-                    .filter(card -> card.assignee() != null && card.assignee().id().equals(userId))
-                    .toList());
-        });
+        return projects.readVisible(
+                userId, projectId, project -> present(assemble(List.of(project)), userId, mine));
+    }
+
+    /**
+     * §6l's <strong>personal "My Work" board</strong> — everything assigned to this caller across
+     * every project they can see (§83).
+     *
+     * <h2>Personal by construction, and that is what makes it safe to leave uncapped</h2>
+     *
+     * <p>There is no {@code mine} parameter because there is no other cross-project board: the
+     * aggregate answers <em>"what is on my plate"</em>, and the same read without the personal filter
+     * would be "everything happening in the company", which §6l does not describe and nobody could
+     * work from. That is also why §6l's <em>"cap derived generation with sensible limits"</em> does
+     * not land here as a truncation: the bound on this <em>answer</em> is one person's workload
+     * rather than the company's, so a cap would be a silent lie about somebody's queue long before
+     * it was a protection. The project board is the unbounded one, and it is bounded by a project.
+     *
+     * <p><strong>The ANSWER is person-sized; the READ behind it is not, and that is the known cost of
+     * this shape.</strong> {@link #present} filters after {@link #assemble}, so a caller who can see
+     * every project in the company loads every live task, every outstanding execution, every flagged
+     * case and every open review request in it — and resolves all their assignees — before keeping
+     * their own. §6l's cap therefore has somewhere to land after all, just not on the response:
+     * it belongs on the derived generators, whose row counts nothing bounds. Left alone here
+     * deliberately, because pushing the filter down is the very thing {@link #present} refuses and it
+     * would change the project board too; measure before building either, since the four statements
+     * are indexed and the first company to feel this will be one with a large {@code case_health}.
+     *
+     * <p>Never a 404 and never an {@link Optional}, unlike {@link #board}: the caller named nothing,
+     * so there is nothing that could fail to resolve. A member holding no grants at all gets an empty
+     * list — reachable, and empty — which is the distinction the project board has to make and this
+     * one does not.
+     */
+    @Transactional(readOnly = true)
+    public List<WorkItemView> personalBoard(UUID userId) {
+        return projects.readAllVisible(
+                userId, visible -> present(assemble(visible), userId, true));
+    }
+
+    /**
+     * The personal filter, applied <strong>after</strong> assembly rather than inside each generator.
+     *
+     * <p>Pushing it down would mean four predicates to keep in step, and the one that gets forgotten
+     * silently shows somebody else's work on a personal board — a leak of attention rather than of
+     * data, which is why nothing would ever fail. It is also what lets the cross-project board reuse
+     * the project board's assembly unchanged.
+     */
+    private static List<WorkItemView> present(List<WorkItemView> cards, UUID userId, boolean mine) {
+        if (!mine) {
+            return sorted(cards);
+        }
+        return sorted(cards.stream()
+                .filter(card -> card.assignee() != null && card.assignee().id().equals(userId))
+                .toList());
     }
 
     /**
@@ -236,11 +281,30 @@ public class BoardService {
     // Assembly
     // =====================================================================
 
-    private List<WorkItemView> assemble(Project project) {
-        List<WorkItem> stored = tasks.findLiveInProject(project.getId());
-        List<BoardFacts.AssignedExecution> executions = facts.assignedExecutions(project.getId());
-        List<BoardFacts.FlaggedCase> flagged = facts.casesNeedingAttention(project.getId());
-        List<BoardFacts.PendingReview> reviews = facts.pendingReviews(project.getId());
+    /**
+     * Every card in a set of <strong>already-gated</strong> projects.
+     *
+     * <p>One query per source over all of them, never one per project: the personal board of somebody
+     * on six projects is 4 statements rather than 24, which is the difference between a view people
+     * keep open all day and one they stop opening. Each card takes its project from the row's own
+     * {@code projectId} rather than from a request parameter, which is what the four sources have
+     * carried since §53 and what only now has a second reader.
+     */
+    private List<WorkItemView> assemble(List<Project> visible) {
+        if (visible.isEmpty()) {
+            // Before any query, because an empty collection bound into `IN ()` is a syntax error
+            // rather than a predicate matching nothing (BoardFacts' header). A company member with
+            // no project grants is the ordinary caller here, not an edge case.
+            return List.of();
+        }
+        Map<UUID, Project> byId = visible.stream()
+                .collect(Collectors.toMap(Project::getId, project -> project));
+        Set<UUID> projectIds = byId.keySet();
+
+        List<WorkItem> stored = tasks.findLiveInProjects(projectIds);
+        List<BoardFacts.AssignedExecution> executions = facts.assignedExecutions(projectIds);
+        List<BoardFacts.FlaggedCase> flagged = facts.casesNeedingAttention(projectIds);
+        List<BoardFacts.PendingReview> reviews = facts.pendingReviews(projectIds);
 
         // One resolution for the whole board, across all four sources — see BoardPeople on why
         // this is not done per card. A review contributes TWO ids, the reviewer and whoever asked
@@ -259,16 +323,16 @@ public class BoardService {
 
         List<WorkItemView> cards = new ArrayList<>();
         for (WorkItem task : stored) {
-            cards.add(viewOf(task, project, resolved));
+            cards.add(viewOf(task, byId.get(task.getProjectId()), resolved));
         }
         for (BoardFacts.AssignedExecution execution : executions) {
-            cards.add(cardFor(execution, project, resolved));
+            cards.add(cardFor(execution, byId.get(execution.projectId()), resolved));
         }
         for (BoardFacts.FlaggedCase flag : flagged) {
-            cards.add(cardFor(flag, project, resolved));
+            cards.add(cardFor(flag, byId.get(flag.projectId()), resolved));
         }
         for (BoardFacts.PendingReview review : reviews) {
-            cards.add(cardFor(review, project, resolved));
+            cards.add(cardFor(review, byId.get(review.projectId()), resolved));
         }
         return cards;
     }

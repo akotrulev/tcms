@@ -1026,3 +1026,47 @@ to close a plan first.
 | **Check** | `V26` and the policy count |
 | **Mutation** | — |
 | **Must show** | **58 policies, unchanged** — `V26` adds two columns and no table, so `SchemaConventionTest`'s count must not move. Confirm on a **migrated** database rather than a fresh Testcontainer: `V26` is an `ALTER`, and `NOT NULL DEFAULT false` on a populated `project_settings` is the one shape a fresh container cannot tell apart from a `CREATE`. |
+
+---
+
+## §83 — the cross-project "My Work" board (frontend half)
+
+Five rows, **all frontend** — the backend half of §83 queues its own rows above/below with the
+backend slice. Every row here is about a rule that is **invisible on a project board**, because on
+one the route's project and the card's project are always the same value and the mock's fixtures put
+almost everything in one project. That equality is what hid the `linkFor` defect for two slices.
+
+| | |
+|---|---|
+| **File** | `frontend/src/features/board/BoardPage.tsx`, `linkFor` |
+| **Mutation** | take the board's project as a parameter again and use it instead of `item.projectId` (the pre-§83 signature) |
+| **Scope** | `npx vitest run src/features/board` |
+| **Must redden** | **exactly 1** — *links into the project the CARD belongs to, not the one the board opened on* (`MyWorkPage.test.tsx`). **Exactly one is the finding, not a shortfall**: all four of §81's link tests pass against the mutation, because their fixture card's `projectId` is the same `'p1'` the board was handed. That is precisely why the defect survived §81 — it is unobservable on every board that existed then. |
+
+| | |
+|---|---|
+| **File** | `frontend/src/api/queries/workItems.ts`, `useMyWork` |
+| **Mutation** | send `qs({ mine: 'true', projectId })` for some project — or drop `mine` entirely |
+| **Scope** | `npx vitest run src/features/board/MyWorkPage.test.tsx` |
+| **Must redden** | **exactly 2** — *asks for the personal board and names no project* and *never sends an empty projectId*. Both arms matter and they fail differently on a real server: a project sent renders **one** project's board under a title promising all of them (a silent wrong answer), while `mine` dropped is a **400** rendered as an error page on the screen §6l expects somebody to keep open all day. |
+
+| | |
+|---|---|
+| **File** | `frontend/src/mocks/db/workItems.ts`, `ownsTheRepository` |
+| **Mutation** | `const ownsTheRepository = true` (the pre-§83 behaviour) |
+| **Scope** | `npx vitest run src/mocks/db/workItems.test.ts` |
+| **Must redden** | **exactly 2** — *draws none of them on a project that does not own the repository* and *is the union of the per-project boards, filtered*. The mutation **is** the code as it stood from Phase 1 to §83: `db.runs` and `db.cases` carry no `projectId`, so every project's board drew the same executions and the same flagged cases, stamped with whichever project was asked for. On MOB's board that was already a card whose key 404s; on the cross-project board it is the same card twice with the **same React key**. |
+
+| | |
+|---|---|
+| **File** | `frontend/src/mocks/db/workItems.ts`, `personalBoard` |
+| **Mutation** | drop the `.filter((item) => item.assignee?.id === userId)` |
+| **Scope** | `npx vitest run src/mocks/db/workItems.test.ts` |
+| **Must redden** | **exactly 2** — *keeps only the caller's own cards* and *is the union of the per-project boards, filtered*. The filter is the entire difference between §6l's personal board and "everything happening in the company", which is the request the server answers **400** to rather than serving. A mock that served it would make the 400 look like a bug in the server. |
+
+| | |
+|---|---|
+| **File** | `frontend/src/mocks/handlers/workItems.ts`, `GET /work-items` |
+| **Mutation** | restore the `?? projects[0].id` fallback for an unknown `projectId` |
+| **Scope** | `npx vitest run src/features/board` |
+| **Must show** | **nothing reddens — which is the row's point.** No test covers it, because no component asks for a project it cannot see; it is caught only by driving a stale bookmark in the browser (queued as a browser row). Recorded so the absence is deliberate: the fallback made the mock render *another project's* board under the id in the URL, every key on it linking back into a project that does not contain them, where the server answers 404. |

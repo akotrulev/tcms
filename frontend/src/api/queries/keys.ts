@@ -66,6 +66,20 @@ export const keys = {
   roleAssignments: ['role-assignments'] as const,
   workItems: (p: string, mine: boolean) => ['work-items', p, mine] as const,
   /**
+   * §6l's cross-project personal board (§83) — **under the same `work-items` root as the project
+   * board, and that is the point.**
+   *
+   * The two boards show overlapping cards: a task assigned to me in this project is on both, and a
+   * review I owe is on both. So a move made on either has to refresh the other, and keeping one
+   * root lets `['work-items']` do it as a prefix — neither board has to name the other's key, which
+   * is how the invalidation would drift the first time a third board arrives.
+   *
+   * `'ALL'` sits where a project id goes and cannot collide with one: project ids are UUIDs.
+   * `true` is not a parameter — there is no unfiltered cross-project board. The server answers
+   * **400** for that request rather than narrowing it, so the key space has no entry for it either.
+   */
+  myWork: ['work-items', 'ALL', true] as const,
+  /**
    * The caller's permissions with **no project in the question** — a different answer from
    * `permissions(projectId)` and therefore a different key.
    *

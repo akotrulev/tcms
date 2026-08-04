@@ -3,7 +3,8 @@
 # be-java — orientation cache (TCMS)
 
 **Last verified:** 2026-08-04
-**Baseline commit:** `3d33ad6`
+**Baseline commit:** `1669074` (§83's backend edits are in the working tree, uncommitted — the
+frontend half lands in the same slice)
 **Fingerprint files:** `backend/build.gradle.kts`, `backend/gradle/libs.versions.toml`, `backend/gradle/wrapper/gradle-wrapper.properties`
 
 > Authoritative docs win over this file. `CLAUDE.md`, `docs/HANDOFF.md` (an index — sections live in
@@ -258,6 +259,35 @@ provisioning · auth · shared`.
   `review:{reviewId}:{userId}`, the one derived id that is not prefix-plus-one-UUID, so `isDerived`'s
   prefix check is the **only** guard on it. **No contract change** — `kind: REVIEW` has been in
   `openapi.yaml` since §53, ahead of its generator, deliberately. `#confirmed`
+- **The board is CROSS-PROJECT since §83, and `GET /work-items` with no `projectId` is the personal
+  one.** `ProjectService.readAllVisible(userId, Function<List<Project>,T>)` + private
+  `visibleProjects` (shared with `listVisible`), `WorkItemRepository.findLiveInProjects`, all three
+  `BoardFacts` generators taking `Collection<UUID> projectIds`, `BoardService.personalBoard` +
+  shared `present`. **No migration, no new table, no new permission key** — the gate is project
+  visibility, which the caller already had.
+  **`readAllVisible` is `readVisible`'s cross-project sibling and the product's first read that is
+  not about *a* project**: no `Optional`, so no 404 — the caller named nothing that could fail to
+  resolve, and a member with no grants gets `[]`. The read takes the **whole list** rather than being
+  applied per project, which is what lets the board answer in one statement per source instead of one
+  per project.
+  **The empty collection is the ordinary path, not an edge**: `IN ()` is a syntax error rather than a
+  predicate matching nothing, so `BoardService.assemble` returns before any query — the same guard
+  `ProjectService.listVisible` states at its grouped query, and a member holding no grants is exactly
+  who opens a personal board first. Every generator takes a **set** and there is deliberately **no
+  single-project overload** (§58's E1: the copy that drifts is whichever board does not use it).
+  **Each card is attributed by the ROW's `projectId`**, through a `Map<UUID,Project>` — the four
+  sources have carried their own project since §53 and only now have a second reader; a generator
+  reading the request's project would label every card with whichever project came first.
+  **Omitting `projectId` with `mine=false` is a 400, never a silent narrowing** — §6l's cross-project
+  board is the *personal* one, and forcing `mine` on would answer a request nobody made with a list
+  the client cannot tell apart from a company holding only its own work.
+  **Live trap for the next reader: the ANSWER is person-sized, the READ is not.** `present` filters
+  after `assemble`, so a caller visible on every project loads that company's whole live work set —
+  tasks, outstanding executions, flagged cases, open review requests, plus the people resolution —
+  and keeps their own. §6l's *"cap derived generation with sensible limits"* therefore still has
+  somewhere to land, on the generators rather than on the response. Not fixed in §83: pushing the
+  filter down is what `present` refuses by name, and it would change the project board too.
+  `#confirmed`
 - **`review_assignment` is NEW in §80 (`V25`) — the first review table not already in `V1`.** That
   absence is itself the finding: `V1` designed the record of what happened and never the worklist of
   what is outstanding. `ReviewAssignment` + `ReviewAssigneeEdit` + `ReviewAssignmentRepository` +
@@ -519,9 +549,11 @@ provisioning · auth · shared`.
   **§6g is now COMPLETE — every part of the workflow has an implementation.** Also still unbuilt and
   deliberately so: **the board's other two generators**
   (`DOC_UPDATE` needs §6i's stale-case flagging, which nothing computes; `DEFECT` needs the local
-  defect record, which nothing writes — a feature apiece, not a generator apiece), **§6l's
-  cross-project "My Work" board**, so the inbox is **per project**; **§6l's per-project generator
-  toggles**; and **notifications** — all four of §6g's events have a trigger and there is no channel. `#confirmed`
+  defect record, which nothing writes — a feature apiece, not a generator apiece); ~~**§6l's
+  cross-project "My Work" board**, so the inbox is **per project**~~ → **built in §83** (see the seam
+  above): the inbox is now **per project OR personal across every project the caller can see**, and
+  the endpoint did not move. **§6l's per-project generator toggles**; and **notifications** — all four
+  of §6g's events have a trigger and there is no channel — remain unbuilt. `#confirmed`
 
 - **`audit_event.target_type` is spelled two ways and nothing reads it yet.** Every service writes
   the snake_case table name (`test_run`, `test_case`, `test_plan`, `doc_page`, …) except
@@ -576,6 +608,22 @@ provisioning · auth · shared`.
   a caller may or may not see. `#confirmed`
 
 ## Session log
+
+- 2026-08-04 · EXTEND · §6l's cross-project "My Work" board (§83) — `GET /work-items` with the
+  project parameter left **off**, which is why §53 chose an instance-scoped path before the board
+  existed. New: `ProjectService.readAllVisible` + private `visibleProjects`,
+  `WorkItemRepository.findLiveInProjects`, set-taking `BoardFacts` generators,
+  `BoardService.personalBoard` + `present`, `WorkItemController.unscopedBoardProblem`.
+  **No migration (`V27` still free), no new key, no new table** — policy count unchanged at **58**.
+  **The refusal is the feature**: no project and `mine=false` is a **400**, not a silent narrowing.
+  **Two findings on review, neither a defect in behaviour**: the personal board's javadoc claimed a
+  bound the code does not have — the *answer* is person-sized, the *read* is the whole visible
+  company — corrected in `BoardService.personalBoard` and `WorkItemController.list` rather than
+  restructured, since pushing `mine` into the four sources is what `present` refuses by name; and
+  `visibleProjects` evaluates `canView` once per project in the company on every load. Backend
+  1505 → **1513** (8 in a new `BoardEndpointTest.MyWork`), 0 failures, 0 skipped. **Zero mutations
+  run inline** (policy). `frontend/src/api/schema.d.ts` is now **stale** — `openapi.yaml` changed and
+  `npm run gen:api` belongs to the frontend half of this slice.
 
 - 2026-08-04 · EXTEND · §6g's gating rules (§82) — the last unbuilt part of the review workflow, and
   a slice that built almost nothing new: **two boolean columns** (`V26`) and the two places that

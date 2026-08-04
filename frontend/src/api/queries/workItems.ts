@@ -13,7 +13,41 @@ export function useWorkItems(projectId: string, mine: boolean): UseQueryResult<W
   });
 }
 
-export function useMoveWorkItem(projectId: string, mine: boolean) {
+/**
+ * §6l's cross-project **My Work** board (§83) — everything assigned to the caller, in every project
+ * they can see.
+ *
+ * The same operation as {@link useWorkItems} with the project left off, which is why no path
+ * changed: `/work-items` has been instance-scoped since Phase 1 and the project has always been a
+ * query parameter. `qs` drops an `undefined`, so there is no `projectId=` on the wire to be read as
+ * an empty one.
+ *
+ * **`mine=true` is hard-coded rather than a parameter.** Omitting the project with `mine=false` is
+ * a **400** on the server ("Choose a board"), deliberately — there is no board that is every
+ * project's work unfiltered. A hook that could send it would exist only to produce that error.
+ *
+ * Left on the default `interactive` budget even though the read behind it is the company-sized one
+ * (`BoardService.personalBoard` says so in its own header): this is the screen §6l expects somebody
+ * to keep open all day, so a 60-second ceiling would mean a minute of spinner on the page a person
+ * looks at most. If it ever needs longer, the fix is the server's generators, not this number.
+ */
+export function useMyWork(): UseQueryResult<WorkItem[]> {
+  return useQuery({
+    queryKey: keys.myWork,
+    queryFn: ({ signal }) => api.get<WorkItem[]>(`/work-items${qs({ mine: 'true' })}`, { signal }),
+  });
+}
+
+/**
+ * Moves a card.
+ *
+ * Takes no board: `PATCH /work-items/{id}` names no project either — the card's own row carries it,
+ * which is what lets this one hook serve the project board and the personal one. The invalidation
+ * is the **root** rather than one board's key for the reason `keys.myWork` records: the same card
+ * appears on both, so refreshing only the board you happened to be looking at leaves the other
+ * holding a card in the column it just left.
+ */
+export function useMoveWorkItem() {
   const client = useQueryClient();
   return useMutation({
     // `status` is the contract's enum rather than a bare string. Until §53 it was `string` on both
@@ -24,11 +58,22 @@ export function useMoveWorkItem(projectId: string, mine: boolean) {
     // The board says which card failed to move and where it snapped back to; that is strictly
     // more useful than "couldn't save", so the global handler stays out.
     meta: { handled: true },
-    onSuccess: () => client.invalidateQueries({ queryKey: keys.workItems(projectId, mine) }),
+    onSuccess: () => client.invalidateQueries({ queryKey: WORK_ITEM_ROOT }),
   });
 }
 
-export function useCreateWorkItem(projectId: string, mine: boolean) {
+/** Every board's key starts here — see `keys.myWork` on why the two share a root. */
+const WORK_ITEM_ROOT = ['work-items'] as const;
+
+/**
+ * Creates a task.
+ *
+ * `mine` was a parameter until §83, only ever used to name the one board key to invalidate — which
+ * meant a task created while the "Everyone" chip was selected left the `mine=true` cache holding a
+ * board without it, and the personal board (§83) would have made that a third stale copy. The root
+ * invalidation covers every board at once; see `keys.myWork`.
+ */
+export function useCreateWorkItem(projectId: string) {
   const client = useQueryClient();
   /*
     One key per mounted dialog — that is, per user intent to add *this* task. It survives
@@ -49,6 +94,6 @@ export function useCreateWorkItem(projectId: string, mine: boolean) {
     // could not have compiled against a real payload.
     mutationFn: (input: Omit<WorkItemInput, 'projectId'>) =>
       api.post<WorkItem>('/work-items', { ...input, projectId }, { idempotencyKey: intentKey.current }),
-    onSuccess: () => client.invalidateQueries({ queryKey: keys.workItems(projectId, mine) }),
+    onSuccess: () => client.invalidateQueries({ queryKey: WORK_ITEM_ROOT }),
   });
 }

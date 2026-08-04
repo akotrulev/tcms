@@ -684,3 +684,35 @@ one on at `/projects/:projectId/settings/review`. That is also row 1.
 | 13 | Turn a gate on for project A only, then repeat row 4 in project B | Project B is unaffected. Per-project settings, and the read is `useProjectSettings(projectId)` — a cache keyed too broadly would leak A's policy into B. | mock |
 | 14 | After an override, check the audit trail | `approvalGateOverridden` is on the row — and is **absent** on an ordinary run created with the gate off. **No audit screen exists** (`audit:view` has no consumer), so this is a `psql` read against `audit_event.changes`, not a UI check. | **live only** |
 | 15 | With gating on, create a run through the dialog while the project has **no** unapproved cases | Created normally with no mention of the gate anywhere. A gate that announces itself when it is satisfied is the noise that makes people turn it off. | mock |
+
+## §83 — §6l's cross-project "My Work" board
+
+The seventeenth slice in this queue, and the first screen in the product that is **not** inside the
+project frame. Most of these rows exist because mock mode's fixtures are dense in one project and
+thin in the other: almost every defect this slice repaired is one where the route's project and the
+card's project happened to be the same value, so a row that only looks at OLB proves nothing.
+
+The fixture now seeds **one task in MOB assigned to the signed-in user** for exactly that reason —
+without it, My Work in mock mode is byte-identical to OLB's personal board.
+
+| # | Flow | What must be true | Mode |
+|---|---|---|---|
+| 1 | `npm run dev`, look at the rail before touching anything | **My work** sits **above** the project switcher, with a divider between them. Below it is the frame the switcher sets; a personal board listed inside that frame tells the reader that switching projects changes it, which is the same misstatement the `Teams & roles` grouping made one level further out. | mock |
+| 2 | Click **My work**, then switch projects in the rail's switcher | The board **does not change**, and the browser tab title stays "My work". If the content moves, something is reading a project this screen does not have. | mock |
+| 3 | On My Work, read the cards | Cards from **both OLB and MOB** are present, each stamped with its own project key. One project only means either the fixture lost its MOB task or the aggregate quietly became one project's board — and every unit test would still pass. | mock |
+| 4 | Click the key on a **MOB** card | Lands on a MOB URL that resolves. **This is the row the slice's main repair exists for**: before §83 the link took the board's project, so this card would have gone to `/projects/{OLB}/…` and 404'd. Check the address bar, not just that a page rendered. | mock |
+| 5 | Click the key on an **OLB** review card (a case, then the plan one) | Case → case detail with §6g's panel; plan → plan detail. §81's routing still holds when the project comes from the card rather than from the route. | mock |
+| 6 | Drag a **task** card on My Work to another column, then open that project's own board | The card is in the new column **on both boards**. The move invalidates the shared `work-items` root; keying it to one board leaves the other showing a card in the column it just left, and neither screen would look wrong on its own. | mock |
+| 7 | Drag a **derived** card (an execution or a review) on My Work | Refused in place, with the sentence naming what to update. Identical to the project board — this is one component, and a difference here means a second board has grown. | mock |
+| 8 | Look for an "Everyone" / "Assigned to me" chip pair, and for **New task** | **Neither is present.** The chips would produce a 400 the server sends deliberately ("Choose a board"); the button would need a project this screen does not have. An affordance whose only outcome is an error is `ui-rules` §4's render-then-reject. | mock |
+| 9 | `tcmsFaults.hang()`, then reload `/my-work` | The region shows its loading state and then **fails on the timeout budget** rather than spinning for ever. The header stays on screen throughout — the page's chrome is not inside the region. | mock |
+| 10 | `tcmsFaults.status(503, 30)`, reload, then `tcmsFaults.off()` and press **Try again** | The failed state offers a retry and the retry works. A personal board is the screen somebody has open when the network blips; a dead end here is the one they will report. | mock |
+| 11 | Load My Work, then `tcmsFaults.status(500)` and let it refetch | The board **keeps its cards** and marks them stale rather than blanking. A failed *refetch* that empties this screen reads as "your queue is clear", which is the worst possible wrong answer on this particular page. | mock |
+| 12 | `tcmsFaults.expire()`, then reload My Work | The session recovers **in place** and the board loads. This screen is a bookmark people open cold in the morning, which is exactly when a token has expired. | mock |
+| 13 | Edit the URL to `/projects/<a-uuid-that-does-not-exist>/board` | **A not-found / error state, not another project's board.** The mock used to fall back to the first project for any unknown id, so a stale bookmark rendered OLB's cards under a foreign id and every key linked into a project that does not contain them. No unit test covers this — the handler branch is only reachable by typing a URL. | mock |
+| 14 | Sign in and go straight to `/my-work` **before** visiting any project | The screen renders. It must not depend on `useProjects` having answered or on a project being resolved — a member holding no grants at all has this board and nothing else. | mock |
+| 15 | Keyboard only: Tab from the top of the page | The skip link, then **My work** as the first rail item, then the switcher. Its active state is marked by the indicator bar and weight, not colour alone, when you are on it. | mock |
+| 16 | Narrow the window below `md`, open the hamburger | **My work** is in the drawer, in the same position, and tapping it closes the drawer. The rail and the drawer render the same content — a row that is in one and not the other means the drawer took a different path. | mock |
+| 17 | `VITE_API_MODE=live`, sign in as a user with **grants on two projects**, open My Work | Cards from both. The mock has no per-project grant data (`projectMembers` records the same limit), so the "projects you can **see**" half of the aggregate is only genuinely exercised against a real server. | **live only** |
+| 18 | Live, as a user with **no project grants at all** | **`200 []`** rendered as the empty state — never a 404 and never an error. The personal board names no project, so nothing can fail to resolve; this is the first screen a newly added member sees and it must read as an empty queue rather than as a broken product. | **live only** |
+| 19 | Live, hit `GET /api/v1/work-items` directly with no parameters | **400, "Choose a board"**, with the sentence naming both requests that do work. The SPA never sends it; this row confirms the refusal the SPA's shape is built around actually exists. | **live only** |

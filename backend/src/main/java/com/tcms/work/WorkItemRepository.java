@@ -1,5 +1,6 @@
 package com.tcms.work;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -23,7 +24,14 @@ import org.springframework.transaction.annotation.Transactional;
 public interface WorkItemRepository extends JpaRepository<WorkItem, UUID> {
 
     /**
-     * A project's live tasks.
+     * The live tasks in a set of projects.
+     *
+     * <p><strong>A set rather than one project, and there is deliberately no single-project
+     * overload.</strong> §83's cross-project board reads the tasks of every project the caller can
+     * see, and the project board is the one-element case — two methods would be two queries to keep
+     * in step, and the one that drifts is whichever the newer board does not use (§58's E1). The
+     * caller must not pass an empty collection: {@code IN ()} is a syntax error, and
+     * {@code BoardService} answers an empty board before it gets here.
      *
      * <p>Unordered here on purpose. The board groups by column and then sorts within it by overdue,
      * priority and id — a sort that spans <em>derived and stored cards together</em> and therefore
@@ -31,8 +39,8 @@ public interface WorkItemRepository extends JpaRepository<WorkItem, UUID> {
      * the service immediately discards, and the next reader would reasonably assume it was the one
      * in effect.
      */
-    @Query("SELECT w FROM WorkItem w WHERE w.projectId = :projectId AND w.deletedAt IS NULL")
-    List<WorkItem> findLiveInProject(@Param("projectId") UUID projectId);
+    @Query("SELECT w FROM WorkItem w WHERE w.projectId IN :projectIds AND w.deletedAt IS NULL")
+    List<WorkItem> findLiveInProjects(@Param("projectIds") Collection<UUID> projectIds);
 
     /**
      * One live task, anywhere in the caller's company.

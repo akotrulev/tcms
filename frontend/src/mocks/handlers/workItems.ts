@@ -1,10 +1,10 @@
 /** The kanban board's cards, including the refusal a derived card must answer with. */
 import { HttpResponse, delay, http } from 'msw';
 import type { WorkItem } from '../../api/types';
-import { addWorkItem, db, newId, workItems } from '../db';
+import { addWorkItem, db, newId, personalBoard, workItems } from '../db';
 import { currentUser, projects } from '../fixtures/core';
 import { workItemColumns } from '../../lib/labels';
-import { API, LATENCY, problem, projectMembers } from './shared';
+import { API, LATENCY, notFound, problem, projectMembers } from './shared';
 
 /**
  * Which task each `Idempotency-Key` created, so a retry can be recognised.
@@ -18,12 +18,41 @@ import { API, LATENCY, problem, projectMembers } from './shared';
 const createdByIntent = new Map<string, string>();
 
 export const workItemHandlers = [
+  /*
+    One project's board — or, with no `projectId`, §6l's cross-project personal board (§83).
+
+    **Both of the parameter's absent cases are the server's, not the client's** (§52):
+
+      - **No `projectId` and no `mine`** is a **400**, not a defaulted project and not a silently
+        narrowed personal board. §6l describes three boards and the cross-project one is the
+        *personal* one; there is no board that is every project's work unfiltered, and answering
+        that request anyway would hand back a list the client cannot tell apart from a company that
+        only has the caller's work in it. The title and sentence are `WorkItemController`'s verbatim,
+        so the refusal reads identically in both modes.
+      - **A `projectId` nobody can see** is a **404**. This handler used to fall back to
+        `projects[0]` for any unknown id, which is the mock proving reachability the server refuses:
+        a stale bookmark or a mistyped uuid rendered *another project's* board under the id in the
+        URL, and every key on it linked back into a project that does not contain them.
+  */
   http.get(`${API}/work-items`, async ({ request }) => {
     await delay(LATENCY);
     const url = new URL(request.url);
-    const projectId = url.searchParams.get('projectId') ?? projects[0].id;
-    const project = projects.find((p) => p.id === projectId) ?? projects[0];
+    const projectId = url.searchParams.get('projectId');
     const mine = url.searchParams.get('mine') === 'true';
+
+    if (!projectId) {
+      if (!mine) {
+        return problem(
+          400,
+          'Choose a board',
+          "Ask for a project's board with projectId, or your own work across every project with mine=true.",
+        );
+      }
+      return HttpResponse.json(personalBoard(currentUser.id));
+    }
+
+    const project = db.projects.find((p) => p.id === projectId);
+    if (!project) return notFound('That project');
 
     let items = workItems(project.id, project.key);
     if (mine) items = items.filter((w) => w.assignee?.id === currentUser.id);

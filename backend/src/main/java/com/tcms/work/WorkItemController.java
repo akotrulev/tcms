@@ -34,9 +34,11 @@ import org.springframework.web.bind.annotation.RestController;
  * <h2>Instance-scoped paths, not project-scoped ones</h2>
  *
  * <p>{@code /work-items}, not {@code /projects/{projectId}/work-items} — the shape the SPA has
- * called since Phase 1 and the shape §6l's cross-project "My Work" board eventually needs. The
- * project therefore arrives as a required query parameter on the read and in the body on the create,
- * and the gate is applied to <em>that</em> project rather than to a path segment.
+ * called since Phase 1 and the shape §6l's cross-project "My Work" board needs, which is why it was
+ * chosen before that board existed. <strong>§83 is where the decision paid</strong>: the personal
+ * board is this same operation with the parameter left off, and no path had to change. The project
+ * therefore arrives as an <em>optional</em> query parameter on the read and in the body on the
+ * create, and the gate is applied to <em>that</em> project rather than to a path segment.
  *
  * <p>{@code PATCH /work-items/{id}} has no project at all: the task's own {@code project_id} is what
  * its permission is checked against, which {@code BoardService.move} does after reading the row. RLS
@@ -53,21 +55,44 @@ public class WorkItemController {
     }
 
     /**
-     * One project's board.
+     * One project's board — or, with no {@code projectId}, §6l's cross-project "My Work" board.
      *
      * <p>{@code []} is a valid answer and means the project is reachable with nothing on its board —
      * the state of every freshly provisioned project. 404 means the project is not reachable, and
      * the two must not be conflated: an empty board for a project you cannot see would tell you it
      * exists.
+     *
+     * <h2>Omitting {@code projectId} requires {@code mine=true}, and the 400 is the feature</h2>
+     *
+     * <p>§6l describes three boards — personal, team and project — and the cross-project one is the
+     * <em>personal</em> one: "everything assigned to me across all projects I can see". There is no
+     * board that is every project's work unfiltered, and answering that request anyway would be the
+     * one <em>response</em> in the product whose size is the company's rather than a project's or a
+     * person's. It bounds the answer and not the work: {@code BoardService.personalBoard} assembles
+     * the same rows either way and filters afterwards, which its own header records as the cost.
+     *
+     * <p>So it is refused rather than <em>narrowed</em>: forcing {@code mine} on silently would hand
+     * back a list that is not what was asked for, and the client would have no way to tell that from
+     * a company with only its caller's work in it. The sentence names the two requests that do work
+     * (§53's rule for {@code unknownStatusProblem} one method down).
      */
     @GetMapping
-    public ResponseEntity<List<WorkItemView>> list(
+    public ResponseEntity<Object> list(
             @AuthenticationPrincipal Jwt jwt,
-            @RequestParam(name = "projectId") UUID projectId,
+            @RequestParam(name = "projectId", required = false) UUID projectId,
             @RequestParam(name = "mine", required = false, defaultValue = "false") boolean mine) {
 
-        return board.board(UUID.fromString(jwt.getSubject()), projectId, mine)
-                .map(ResponseEntity::ok)
+        UUID userId = UUID.fromString(jwt.getSubject());
+
+        if (projectId == null) {
+            if (!mine) {
+                return ResponseEntity.badRequest().body(unscopedBoardProblem());
+            }
+            return ResponseEntity.ok(board.personalBoard(userId));
+        }
+
+        return board.board(userId, projectId, mine)
+                .<ResponseEntity<Object>>map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
@@ -167,6 +192,20 @@ public class WorkItemController {
         problem.setDetail("This card mirrors an execution or a case rather than being a task of its "
                 + "own, so its column comes from the thing it mirrors. Update that, and the card "
                 + "follows.");
+        return problem;
+    }
+
+    /**
+     * The refusal for a board request that names neither a project nor a person.
+     *
+     * <p>400 rather than 404: nothing failed to resolve, and the caller is entitled to both of the
+     * requests this sentence names — what they sent is simply not one of them.
+     */
+    private static ProblemDetail unscopedBoardProblem() {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        problem.setTitle("Choose a board");
+        problem.setDetail("Ask for a project's board with projectId, or your own work across every "
+                + "project with mine=true.");
         return problem;
     }
 

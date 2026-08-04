@@ -81,9 +81,7 @@ public class ProjectService {
     public List<ProjectView> listVisible(UUID userId) {
         UUID companyId = CompanyContext.require();
 
-        List<Project> visible = projects.findAllByOrderByNameAsc().stream()
-                .filter(project -> access.canView(userId, project.getId()))
-                .toList();
+        List<Project> visible = visibleProjects(userId);
         if (visible.isEmpty()) {
             // Not merely an optimization: an empty collection bound into SQL `IN ()` is a
             // syntax error, so the grouped query below must not run. A member with no grants
@@ -145,6 +143,30 @@ public class ProjectService {
     @Transactional(readOnly = true)
     public <T> Optional<T> readVisible(UUID userId, UUID projectId, Function<Project, T> read) {
         return visibleProject(userId, projectId).map(read);
+    }
+
+    /**
+     * <strong>The read gate for a cross-project read</strong> — {@code readVisible} with no project
+     * named. Runs {@code read} against every project in the active company this caller may see.
+     *
+     * <p>Added for §6l's cross-project "My Work" board (§83), which is the first read in the product
+     * that is not about <em>a</em> project. There is no 404 to answer here and that is the shape's
+     * whole difference: an empty list is the honest answer for a member holding no grants, where
+     * {@link #readVisible} has to distinguish "not reachable" from "reachable and empty" because the
+     * caller named something.
+     *
+     * <p>The read takes the <strong>whole list</strong> rather than being applied per project, so a
+     * caller can answer in one query per fact instead of one per project — the N+1 the board would
+     * otherwise have across four generators. It is the same reason {@link #listVisible} fetches its
+     * case counts in one grouped query; what stays per project is the permission evaluation, which
+     * this class's header accepts with its ceiling stated.
+     *
+     * @param read applied to the gated projects, for {@link #readVisible}'s reason: nothing
+     *             downstream should accept a project it has not had gated
+     */
+    @Transactional(readOnly = true)
+    public <T> T readAllVisible(UUID userId, Function<List<Project>, T> read) {
+        return read.apply(visibleProjects(userId));
     }
 
     /**
@@ -470,6 +492,20 @@ public class ProjectService {
     private Optional<Project> visibleProject(UUID userId, UUID projectId) {
         return projects.findScopedById(projectId)
                 .filter(project -> access.canView(userId, project.getId()));
+    }
+
+    /**
+     * The plural form of the same gate — every project in the company this caller may see, by name.
+     *
+     * <p>Private and shared by {@link #listVisible} and {@link #readAllVisible} rather than written
+     * out at both, because the two lines it consists of <em>are</em> the visibility rule: the day a
+     * third condition joins it, a second copy is the one that keeps answering the old question. §58's
+     * E1, and the reason {@link #visibleProject} is a method rather than a convention one line up.
+     */
+    private List<Project> visibleProjects(UUID userId) {
+        return projects.findAllByOrderByNameAsc().stream()
+                .filter(project -> access.canView(userId, project.getId()))
+                .toList();
     }
 
     private ProjectView view(

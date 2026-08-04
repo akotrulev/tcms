@@ -15,7 +15,28 @@ export function workItems(projectId: string, projectKey: string): WorkItem[] {
     avatarUrl: null,
   };
 
-  const fromExecutions: WorkItem[] = db.runs
+  /*
+    Two of the three generators below read fixtures that carry **no project of their own**, and §83
+    is where that stopped being harmless.
+
+    `db.runs`, `db.cases` and `db.plans` are seeded as one project's repository — the contract puts
+    the project in the *path* for every one of those endpoints, so the wire shapes have no
+    `projectId` field to filter on and none of the fixtures has one. Until §83 the generators
+    therefore drew every run's executions and every flagged case onto **whichever project's board
+    was asked for**, stamped with that project's id and key. On the MOB project's board that was
+    already wrong and silently so: a card keyed `TC-3` linking to `/projects/{MOB}/cases/{an OLB
+    case}`, which 404s. On the cross-project board it becomes visible instead of merely wrong —
+    the same execution would be drawn once per project, with the **same derived id** each time, so
+    React would see duplicate keys and the reader would see the same card twice.
+
+    So the repository belongs to the project that seeds it, stated once here rather than inferred
+    per generator. `db.reviews` needs no such treatment: review rows carry a real `projectId`, and
+    `db.workItems` (typed tasks) carry one too — which is why those two already filtered and these
+    two could not.
+  */
+  const ownsTheRepository = projectId === db.projects[0]?.id;
+
+  const fromExecutions: WorkItem[] = (ownsTheRepository ? db.runs : [])
     .filter((r) => r.status === 'IN_PROGRESS')
     .flatMap((run) =>
       runExecutions(run.id)
@@ -48,7 +69,7 @@ export function workItems(projectId: string, projectKey: string): WorkItem[] {
 
   const fromReviews: WorkItem[] = reviewCards(projectId, projectKey);
 
-  const fromStale: WorkItem[] = db.cases
+  const fromStale: WorkItem[] = (ownsTheRepository ? db.cases : [])
     .filter((c) => c.healthSignals.includes('OUTDATED_SPEC_CHANGED') || c.healthSignals.includes('STALE_AUTOMATION'))
     .map((c) => ({
       id: `derived-maint-${c.id}`,
@@ -169,6 +190,34 @@ function subjectOf(
   }
   const found = db.plans.find((p) => p.id === subjectId);
   return found && { key: found.key, title: found.name };
+}
+
+/**
+ * §6l's cross-project **personal board** (§83) — `BoardService.personalBoard`, spelled in TypeScript.
+ *
+ * Three properties are mirrored from the server rather than from what the SPA happens to send,
+ * which is §52's rule and the one §81 paid for in this very file:
+ *
+ *  1. **It spans the projects the caller can SEE**, not the project the client asked about — there
+ *     is no project in the request at all. `db.projects` is that set: it is the exact list
+ *     `GET /projects` answers, read from the same store, so the mock cannot show a board with work
+ *     from a project whose name the switcher will not offer. *What the fixture cannot express:* it
+ *     carries no project the caller is barred from, so the exclusion is structural here rather than
+ *     demonstrated — the same honest limit `projectMembers` records about per-project grants.
+ *  2. **The personal filter runs AFTER assembly**, not inside each generator — the server's
+ *     `present()` and its reason: four predicates kept in step is three chances to leak somebody
+ *     else's work onto a personal board, silently, with nothing failing.
+ *  3. **A person with no projects gets `[]`, never an error.** The caller named nothing, so nothing
+ *     can fail to resolve; this board has no 404 to give.
+ *
+ * Not merged into {@link workItems}: that function answers *one project's* board and this one has
+ * no project, and a single function taking `projectId | null` would put the branch inside the
+ * generator loop where the personal filter must not be.
+ */
+export function personalBoard(userId: string): WorkItem[] {
+  return db.projects
+    .flatMap((project) => workItems(project.id, project.key))
+    .filter((item) => item.assignee?.id === userId);
 }
 
 export function addWorkItem(item: WorkItem): WorkItem {

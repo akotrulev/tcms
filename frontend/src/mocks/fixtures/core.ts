@@ -28,6 +28,7 @@ import type {
   TestPlan,
   TestRun,
   User,
+  WorkItem,
 } from '../../api/types';
 
 export const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
@@ -851,6 +852,48 @@ export const runs: TestRun[] = [
   { id: uid(2, 'k'), key: 'TR-417', name: 'Nightly regression #417', planId: plans[0].id, planKey: 'TP-1', configuration: configurations[0], status: 'COMPLETED', releaseVersion: '4.3.0', buildNumber: '#4470', source: 'INGESTED', startedAt: '2026-07-29T02:00:00Z', completedAt: '2026-07-29T02:38:00Z', counts: { passed: 39, failed: 2, blocked: 1, skipped: 0, notRun: 0, total: 42 } },
   { id: uid(3, 'k'), key: 'TR-416', name: 'Safari sweep', planId: plans[0].id, planKey: 'TP-1', configuration: configurations[1], status: 'IN_PROGRESS', releaseVersion: '4.3.0', buildNumber: '#4471', source: 'MANUAL', startedAt: '2026-07-30T09:15:00Z', completedAt: null, counts: { passed: 12, failed: 3, blocked: 0, skipped: 0, notRun: 27, total: 42 } },
   { id: uid(4, 'k'), key: 'TR-402', name: 'Release 4.2 sign-off run', planId: plans[1].id, planKey: 'TP-2', configuration: configurations[0], status: 'COMPLETED', releaseVersion: '4.2.1', buildNumber: '#4390', source: 'MANUAL', startedAt: '2026-07-25T09:00:00Z', completedAt: '2026-07-25T16:20:00Z', counts: { passed: 38, failed: 0, blocked: 0, skipped: 0, notRun: 0, total: 38 } },
+];
+
+/**
+ * The board's typed tasks — the one card kind that is stored rather than derived.
+ *
+ * `db.workItems` was seeded **empty** until §83, which was fine while every board was one
+ * project's: the derived generators filled it, and a create through the dialog landed a real row.
+ * §6l's cross-project board makes the emptiness a fixture defect instead. Every derived card in
+ * this fixture set comes from the OLB repository (see `db/workItems.ts` on why), so with no stored
+ * task anywhere else, **My Work in mock mode would be identical to OLB's personal board** — and the
+ * single property §83 adds, that the board spans projects, would be unexercised in the only mode
+ * anybody drives. §72's rule: if a screen has two shapes, the fixture carries both.
+ *
+ * So: one task, in the *second* project, assigned to the signed-in user. `MOB` has no cases, runs
+ * or reviews in this fixture set, so a task is the only card it can contribute — which is also a
+ * fair picture of a real second project somebody is only lightly involved in.
+ */
+export const workItems: WorkItem[] = [
+  {
+    id: uid(1, 'j'),
+    derived: false,
+    sourceType: null,
+    sourceId: null,
+    kind: 'TASK',
+    title: 'Draft the card-controls test charter',
+    description: 'Before the 2.1 freeze.',
+    status: 'IN_PROGRESS',
+    priority: 'HIGH',
+    dueDate: '2026-08-07',
+    overdue: false,
+    assignee: {
+      id: users[0].id,
+      displayName: users[0].displayName,
+      email: users[0].email,
+      avatarUrl: null,
+    },
+    projectId: PROJECT_ID_2,
+    projectKey: 'MOB',
+    // A stored task may move anywhere but the column it is in — the same rule the create handler
+    // applies, spelled from the contract's enum rather than as a literal list.
+    allowedTransitions: ['TODO', 'BLOCKED', 'IN_REVIEW', 'DONE'],
+  },
 ];
 
 export { uid };
