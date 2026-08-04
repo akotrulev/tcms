@@ -40,6 +40,11 @@ import { inputTestId, selectTestId } from '../../lib/muiTestIds';
  * - **the edit-after-approval mode**, whose Retain half `ReviewPanel` has rendered as a stale
  *   marker since §76 while the Re-review half did not exist.
  *
+ * §82 added a third panel for §6g's two **gating** rules, and they are deliberately not review
+ * settings: they bind on a project with review switched off, because §6g's opt-in suppresses the
+ * reviewer apparatus and not the status ladder. Grouping them under "Where review applies" would
+ * tell an admin the opposite in the one place they decide whether to turn them on.
+ *
  * ## Read by everyone, written by an admin
  *
  * The `GET` is gated on project visibility alone and the `PUT` on `project:settings`, which is not
@@ -132,11 +137,21 @@ function ReviewSettingsForm({
   const reviewOn =
     draft.reviewEnabledCase || draft.reviewEnabledSuite || draft.reviewEnabledPlan;
 
+  const gatingOn = draft.requireApprovedCaseForRun || draft.requireApprovedPlanToStart;
+
   return (
     <Stack sx={{ gap: 3 }} component="form" data-testid="ReviewSettings.Form"
       onSubmit={(event) => {
         event.preventDefault();
         if (!peersInvalid) {
+          /*
+            EVERY field, and the two gating ones are why this is worth a comment. The endpoint is a
+            PUT of the whole value and the server reads an absent boolean as `false` — so a field
+            listed on the type and omitted here would not fail to save, it would silently switch
+            the setting OFF on every save of this form. That is `ui-rules`' highest-severity form
+            defect (an edit that shows success and discards a value), and for a gating rule it means
+            an admin fixing a typo in the peer-review count quietly reopens the gate.
+          */
           save.mutate({
             reviewEnabledCase: draft.reviewEnabledCase,
             reviewEnabledSuite: draft.reviewEnabledSuite,
@@ -144,6 +159,8 @@ function ReviewSettingsForm({
             requiredPeerReviews: draft.requiredPeerReviews,
             authorMayApproveOwnWork: draft.authorMayApproveOwnWork,
             editAfterApproval: draft.editAfterApproval,
+            requireApprovedCaseForRun: draft.requireApprovedCaseForRun,
+            requireApprovedPlanToStart: draft.requireApprovedPlanToStart,
           });
         }
       }}
@@ -291,6 +308,69 @@ function ReviewSettingsForm({
             </Alert>
           )}
         </Stack>
+      </Panel>
+
+      {/*
+        A THIRD panel rather than two more switches in "Where review applies", because these are not
+        review settings — they are the only settings on this screen that bind on a project with
+        review switched off. §6g's opt-in suppresses the reviewer apparatus; these read the status
+        ladder, which every project has. Putting them under the opt-ins would say the opposite, in
+        the one place an admin decides whether to turn them on.
+      */}
+      <Panel title="Approval required before work starts" testId="ReviewSettings.Gating">
+        <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
+          These apply whether or not review is switched on above — they read the Draft / In review /
+          Approved status, not the review process. A test lead can override either one when a
+          release cannot wait.
+        </Typography>
+
+        <Stack>
+          {(
+            [
+              [
+                'requireApprovedCaseForRun',
+                'Only approved test cases can go into a run',
+                'A run is refused if anything in it is not approved — including cases pulled in through a plan’s scope.',
+              ],
+              [
+                'requireApprovedPlanToStart',
+                'Only approved plans can be started',
+                'A draft plan cannot be started. Reopening a closed plan is unaffected.',
+              ],
+            ] as const
+          ).map(([field, label, help]) => (
+            <FormControlLabel
+              key={field}
+              sx={{ alignItems: 'flex-start', mb: 1.5 }}
+              control={
+                <Switch
+                  checked={draft[field]}
+                  disabled={!canEdit}
+                  onChange={(event) =>
+                    setDraft((d) => ({ ...d, [field]: event.target.checked }))
+                  }
+                  slotProps={inputTestId(`ReviewSettings.${field}`)}
+                />
+              }
+              label={
+                <Box sx={{ pt: 0.75 }}>
+                  <Typography variant="body2">{label}</Typography>
+                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                    {help}
+                  </Typography>
+                </Box>
+              }
+            />
+          ))}
+        </Stack>
+
+        {gatingOn && (
+          <Alert severity="warning" sx={{ mt: 1 }} data-testid="ReviewSettings.GatingWarning">
+            This stops work that is already under way. Nobody can start a run or a release until
+            somebody with approval rights has signed the content off — plan §6g calls this
+            &ldquo;powerful and genuinely obstructive&rdquo;, which is why it is off by default.
+          </Alert>
+        )}
       </Panel>
 
       {save.isError && (

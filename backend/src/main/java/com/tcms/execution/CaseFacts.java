@@ -69,6 +69,12 @@ import org.springframework.stereotype.Component;
  *   <li><strong>When each version of a suite was authored</strong> — {@link #suiteVersionMarkers},
  *       {@link #versionMarkers}' counterpart over {@code suite_version}, so a suite timeline can say
  *       <em>"the membership changed here"</em> beside the pass rate that moved (plan §6p).</li>
+ *   <li><strong>Which of a run's cases are not approved</strong> — {@link #unapprovedCases}, §6g's
+ *       gating rule (§82). {@code test_case.lifecycle_status} is a {@code repository} fact and the
+ *       run that must not materialise the case is this module's, so the predicate can only be asked
+ *       here. It returns the offending cases' <em>keys</em> rather than a count or a boolean,
+ *       because the refusal has to name them: "three of these are not approved" sends somebody to
+ *       compare two lists of two hundred by eye.</li>
  * </ol>
  *
  * <p>Items 5–6 are new in M2 slice 2, 7–8 in M1 slice 15 and 9–10 in M1 slice 16, and they are
@@ -369,6 +375,53 @@ class CaseFacts {
     /** Of {@code ids}, those naming a live case in this project. See {@link #liveSuiteIds}. */
     Set<UUID> liveCaseIds(UUID projectId, Collection<UUID> ids) {
         return liveIds("test_case", projectId, ids);
+    }
+
+    /**
+     * Of {@code caseIds}, the display keys of those that are <strong>not</strong> {@code APPROVED} —
+     * §6g's gating rule for runs (§82), asked only on a project that turned it on.
+     *
+     * <h2>Not approved, rather than in some named status</h2>
+     *
+     * <p>The predicate is {@code <> 'APPROVED'} and not {@code IN ('DRAFT','IN_REVIEW')}, so the
+     * fourth value is covered without being mentioned: a {@code DEPRECATED} case is retired content
+     * and putting it into a release run is exactly the mistake this rule exists to catch, but an
+     * enumeration of the statuses to refuse would have had to remember it — and a fifth status,
+     * should the ladder ever grow one, would default to <em>allowed</em>. Refusing everything that
+     * is not the one approved state is the reading that cannot silently widen.
+     *
+     * <p>Read <strong>live</strong>, which is the opposite of {@link #pinnedCases} and correct for
+     * the opposite reason: this is a question about whether work may start, not a record of what was
+     * agreed, so it must see the case's status as it is at the moment the run is created. A run
+     * created a second after a lead approves the last case must succeed.
+     *
+     * <p>Ordered by {@code key_seq} — the refusal quotes the first few keys and the caller caps the
+     * list, so the order has to be the one the case grid and the run's own checklist use, or two
+     * screens name different examples of the same problem.
+     *
+     * @return keys only, and empty when everything is approved — which is the common case on a
+     *         gated project and the cheap one to check. A case id naming nothing is simply absent:
+     *         it cannot be materialised either, and {@code RunEdit} has already refused the request
+     *         for that separately.
+     */
+    List<String> unapprovedCases(UUID projectId, Collection<UUID> caseIds) {
+        if (caseIds.isEmpty()) {
+            return List.of();
+        }
+        @SuppressWarnings("unchecked")
+        List<String> keys = entities.createNativeQuery("""
+                        SELECT c.key
+                        FROM test_case c
+                        WHERE c.project_id = :projectId
+                          AND c.deleted_at IS NULL
+                          AND c.id IN (:caseIds)
+                          AND c.lifecycle_status <> 'APPROVED'
+                        ORDER BY c.key_seq
+                        """)
+                .setParameter("projectId", projectId)
+                .setParameter("caseIds", caseIds)
+                .getResultList();
+        return List.copyOf(keys);
     }
 
     /**

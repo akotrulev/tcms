@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '../../api/client'
 import { TestProviders } from '../../test/TestProviders'
+import { heldPermissions } from '../../test/permissions'
 import { createTestQueryClient } from '../../test/queryClient'
 import { RunCreateDialog } from './RunCreateDialog'
 
@@ -47,11 +48,29 @@ const plans = [
   },
 ]
 
-function mockPlans(rows: unknown[]) {
+function mockPlans(rows: unknown[], held: string[] = []) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.includes('/plans')) return rows
+    // §82. Answered explicitly rather than through the `[]` fallthrough, because the override
+    // affordance is `PermissionGate`d: a bare `[]` reads as "holds nothing", which is a real
+    // persona (the engineer) but makes the enabled case unreachable — and a gate asserted only in
+    // its disabled state passes with no gate in the code at all (§66).
+    if (path.includes('/me/permissions')) return heldPermissions(held, {}, PROJECT)
     return []
   }) as unknown as typeof api.get)
+}
+
+/** §6g's gating refusal, as `RunController.gatedProblem` sends it — a 409 with no `errors` map. */
+function gateRefusal() {
+  return new ApiError(
+    409,
+    'This project only runs approved test cases. 2 of the 2 in this run are not approved: ' +
+      'TC-4, TC-9.',
+    null,
+    null,
+    null,
+    'This run needs approved cases',
+  )
 }
 
 /**
@@ -160,5 +179,115 @@ describe('RunCreateDialog', () => {
 
     expect(await screen.findByText('Enter a run name.')).toBeInTheDocument()
     expect(screen.queryByTestId('Runs.Create.Error')).not.toBeInTheDocument()
+  })
+
+  /**
+   * §6g's gating rule and its lead override (§82).
+   *
+   * The failures these catch are all invisible to `tsc` and to the runner without them:
+   *
+   *   1. **A 409 that offers no way out.** The refusal names the unapproved cases and there is a
+   *      documented override for exactly this situation; an error naming an action the UI does not
+   *      offer is a design bug (`ui-rules`), and nothing else in this file exercises a 409 at all.
+   *   2. **An override the caller cannot use, hidden rather than disabled.** §31's rule and the
+   *      reason it matters here: a Test Engineer needs to learn that the way forward exists and is
+   *      somebody else's to take.
+   *   3. **The retry sending the same body as the first attempt** — which would produce the same
+   *      409 and read as a dead button.
+   *   4. **The flag leaking onto an ordinary create.** It must be absent unless the override was
+   *      taken, or every run in the product claims an override it did not make.
+   */
+  describe('§6g gating', () => {
+    async function fillAndSubmit() {
+      await screen.findByTestId('Runs.Create.Name')
+      await userEvent.type(screen.getByTestId('Runs.Create.Name'), 'Hotfix 4.3.1')
+      await choosePlan()
+      await userEvent.click(screen.getByTestId('Runs.Create.Submit'))
+    }
+
+    it('does not send overrideApprovalGate on an ordinary create', async () => {
+      mockPlans(plans, ['case:approve'])
+      const post = vi.spyOn(api, 'post').mockResolvedValue({ id: 'run-1' } as never)
+
+      render(
+        <TestProviders client={createTestQueryClient()}>
+          <RunCreateDialog projectId={PROJECT} open onClose={() => {}} onCreated={() => {}} />
+        </TestProviders>,
+      )
+      await fillAndSubmit()
+
+      await waitFor(() => expect(post).toHaveBeenCalled())
+      const [, body] = post.mock.calls[0] as [string, Record<string, unknown>]
+      expect(body).not.toHaveProperty('overrideApprovalGate')
+    })
+
+    it('shows the refusal and offers the override to a caller holding case:approve', async () => {
+      mockPlans(plans, ['case:approve'])
+      vi.spyOn(api, 'post').mockRejectedValue(gateRefusal())
+
+      render(
+        <TestProviders client={createTestQueryClient()}>
+          <RunCreateDialog projectId={PROJECT} open onClose={() => {}} onCreated={() => {}} />
+        </TestProviders>,
+      )
+      await fillAndSubmit()
+
+      expect(await screen.findByTestId('Runs.Create.Error')).toHaveTextContent('TC-4, TC-9')
+      // Re-queried inside waitFor: `PermissionGate` swaps the DOM node between its denied
+      // (tooltip-wrapped) and allowed branches, so a reference held from before the gate resolved
+      // never becomes enabled (§64's harness trap).
+      await waitFor(() =>
+        expect(screen.getByTestId('Runs.Create.OverrideGate')).toBeEnabled(),
+      )
+    })
+
+    it('disables the override for a caller without case:approve, rather than hiding it', async () => {
+      mockPlans(plans, ['run:create'])
+      vi.spyOn(api, 'post').mockRejectedValue(gateRefusal())
+
+      render(
+        <TestProviders client={createTestQueryClient()}>
+          <RunCreateDialog projectId={PROJECT} open onClose={() => {}} onCreated={() => {}} />
+        </TestProviders>,
+      )
+      await fillAndSubmit()
+
+      // Present — §31, so the way out is discoverable by the person who has to go and ask for it.
+      expect(await screen.findByTestId('Runs.Create.OverrideGate')).toBeInTheDocument()
+      // Paired with the enabling assertion in the test above, or this passes with no gate at all:
+      // `useCan` is fail-closed while pending (§66).
+      await waitFor(() =>
+        expect(screen.getByTestId('Runs.Create.OverrideGate')).toBeDisabled(),
+      )
+    })
+
+    it('retries with the flag and the CURRENT form values, and creates the run', async () => {
+      mockPlans(plans, ['case:approve'])
+      const post = vi
+        .spyOn(api, 'post')
+        .mockRejectedValueOnce(gateRefusal())
+        .mockResolvedValue({ id: 'run-1' } as never)
+      const onCreated = vi.fn()
+
+      render(
+        <TestProviders client={createTestQueryClient()}>
+          <RunCreateDialog projectId={PROJECT} open onClose={() => {}} onCreated={onCreated} />
+        </TestProviders>,
+      )
+      await fillAndSubmit()
+
+      await waitFor(() =>
+        expect(screen.getByTestId('Runs.Create.OverrideGate')).toBeEnabled(),
+      )
+      await userEvent.click(screen.getByTestId('Runs.Create.OverrideGate'))
+
+      await waitFor(() => expect(post).toHaveBeenCalledTimes(2))
+      const [, retried] = post.mock.calls[1] as [string, Record<string, unknown>]
+      expect(retried.overrideApprovalGate).toBe(true)
+      // The name is re-read from the form rather than replayed, so an edit between the refusal and
+      // the override is the run that gets created.
+      expect(retried.name).toBe('Hotfix 4.3.1')
+      await waitFor(() => expect(onCreated).toHaveBeenCalled())
+    })
   })
 })

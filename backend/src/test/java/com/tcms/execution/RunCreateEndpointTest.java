@@ -707,6 +707,212 @@ class RunCreateEndpointTest extends IntegrationTestBase {
     }
 
     // =====================================================================
+    // §6g's gating rule
+    // =====================================================================
+
+    /**
+     * §6g: <em>"a project may require APPROVED status before a case can be added to a run … Powerful
+     * and genuinely obstructive — must be an explicit choice, with a documented lead override for
+     * the 2am release."</em> (§82.)
+     *
+     * <p>The cases in this class's fixture are authored through the real {@code POST /cases}, so
+     * they are {@code DRAFT} — which is what every case on a real instance is when it is created,
+     * and the state §72's rule says a fixture must be able to sit in. Approving one is therefore two
+     * real bulk operations, and {@link #approve} does them rather than writing the column.
+     *
+     * <p><strong>The two personas discriminate.</strong> {@code V3} gives Test Lead
+     * {@code case:approve} and withholds it from Test Engineer, who holds {@code run:create} — so
+     * the engineer is refused and cannot override while the lead can.
+     */
+    @Nested
+    @DisplayName("§6g's gating rule — a gated project runs approved cases, on the RESOLVED set")
+    class Gating {
+
+        @Test
+        @DisplayName("with gating ON, a run of draft cases is refused — 409 naming them, nothing written")
+        void draftCasesAreRefused() throws Exception {
+            gating(ACME_BANKING, true);
+
+            MvcResult refused = post(ENGINEER, ACME, ACME_BANKING,
+                    onCases("Regression", List.of(caseA, caseB)), null);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(409);
+            assertThat(detailOf(refused))
+                    .contains("only runs approved test cases")
+                    // Both numbers, because "2 of 2" and "2 of 200" are the same message and two
+                    // completely different next actions.
+                    .contains("2 of the 2")
+                    .contains(keyOf(caseA))
+                    .contains(keyOf(caseB));
+            assertThat(runCount(ACME)).isZero();
+            assertThat(executionCount(ACME)).isZero();
+        }
+
+        @Test
+        @DisplayName("approve them all and the same run is created")
+        void approvedCasesRunNormally() throws Exception {
+            approve(List.of(caseA, caseB));
+            gating(ACME_BANKING, true);
+
+            MvcResult created = post(ENGINEER, ACME, ACME_BANKING,
+                    onCases("Regression", List.of(caseA, caseB)), null);
+
+            assertThat(created.getResponse().getStatus()).isEqualTo(201);
+            assertThat(caseIdsOf(UUID.fromString(body(created).get("id").asText())))
+                    .containsExactlyInAnyOrder(caseA, caseB);
+        }
+
+        /**
+         * THE test of this half. A run names its cases one of two ways and the plan's scope is the
+         * one that gets forgotten — so a rule bound to {@code caseIds} would leave "create the run
+         * from the plan instead" as a bypass that costs no permission and leaves no trace, on the
+         * very path a release run is most likely to take.
+         */
+        @Test
+        @DisplayName("and a run from a PLAN is gated too — the resolved set, or the plan is the bypass")
+        void thePlansScopeIsGatedAsWell() throws Exception {
+            gating(ACME_BANKING, true);
+
+            MvcResult refused = post(ENGINEER, ACME, ACME_BANKING, fromPlan("Regression"), null);
+
+            assertThat(refused.getResponse().getStatus())
+                    .as("the plan's scope expands to draft cases; naming the plan must not "
+                            + "launder them past the gate")
+                    .isEqualTo(409);
+            assertThat(runCount(ACME)).isZero();
+        }
+
+        /**
+         * The whole run, never a trimmed one — this class's own header argues it for a different
+         * cause: a checklist quietly shorter than the one that was asked for is indistinguishable
+         * from a run whose scope was smaller, and reports a pass rate over a denominator nobody
+         * chose.
+         */
+        @Test
+        @DisplayName("one unapproved case refuses the WHOLE run — it is not trimmed to the approved ones")
+        void oneUnapprovedCaseRefusesTheWholeRun() throws Exception {
+            approve(List.of(caseA));
+            gating(ACME_BANKING, true);
+
+            MvcResult refused = post(ENGINEER, ACME, ACME_BANKING,
+                    onCases("Regression", List.of(caseA, caseB)), null);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(409);
+            assertThat(detailOf(refused))
+                    .contains("1 of the 2")
+                    .contains(keyOf(caseB))
+                    .doesNotContain(keyOf(caseA));
+            assertThat(runCount(ACME)).isZero();
+        }
+
+        @Test
+        @DisplayName("a lead overrides it explicitly, and the audit row is where 'documented' happens")
+        void theLeadOverrides() throws Exception {
+            gating(ACME_BANKING, true);
+
+            Map<String, Object> payload = onCases("Hotfix at 2am", List.of(caseA, caseB));
+            payload.put("overrideApprovalGate", true);
+            MvcResult created = post(LEAD, ACME, ACME_BANKING, payload, null);
+
+            assertThat(created.getResponse().getStatus()).isEqualTo(201);
+            assertThat(executionCount(ACME)).isEqualTo(2);
+
+            JsonNode row = json.readTree(auditActions(ACME).get("run.created"));
+            assertThat(row.get("approvalGateOverridden").asBoolean())
+                    .as("§6g asks for a DOCUMENTED override, and this row is the documentation")
+                    .isTrue();
+            assertThat(lifecycleOf(caseA))
+                    .as("and the cases are left honestly unapproved — the workaround this replaces "
+                            + "writes a sign-off nobody performed into the approval history")
+                    .isEqualTo("DRAFT");
+        }
+
+        /**
+         * The flag cannot widen anybody's reach. A Test Engineer holds {@code run:create} — enough
+         * to make this exact run on an ungated project — and does not hold {@code case:approve}.
+         *
+         * <p>409 rather than 403, deliberately: they are authorized to create runs and are simply
+         * not authorized to ignore the project's policy, so the policy's own sentence is the honest
+         * answer. A 403 would say "you may not create runs here", which is false.
+         */
+        @Test
+        @DisplayName("an engineer asking to override is refused all the same — the flag grants nothing")
+        void theFlagGrantsNothing() throws Exception {
+            gating(ACME_BANKING, true);
+
+            Map<String, Object> payload = onCases("Hotfix", List.of(caseA));
+            payload.put("overrideApprovalGate", true);
+
+            assertThat(post(ENGINEER, ACME, ACME_BANKING, payload, null)
+                    .getResponse().getStatus()).isEqualTo(409);
+            assertThat(runCount(ACME)).isZero();
+        }
+
+        /**
+         * "Overridden" means the gate <em>fired</em> and was overridden, which is narrower than "the
+         * flag was sent" — auditing a flag that changed nothing records somebody bypassing a policy
+         * they in fact complied with.
+         */
+        @Test
+        @DisplayName("the flag on an UNGATED project is not an override, and writes nothing")
+        void theFlagIsNotAnOverrideWhereNothingGates() throws Exception {
+            Map<String, Object> payload = onCases("Regression", List.of(caseA));
+            payload.put("overrideApprovalGate", true);
+
+            assertThat(post(LEAD, ACME, ACME_BANKING, payload, null)
+                    .getResponse().getStatus()).isEqualTo(201);
+            assertThat(json.readTree(auditActions(ACME).get("run.created"))
+                    .has("approvalGateOverridden")).isFalse();
+        }
+
+        /**
+         * The gate is the LAST refusal, so a request that is both malformed and gated gets the field
+         * errors — those are the ones the caller can act on, where "these cases are not approved"
+         * about a list that also names a sibling project's case sends them to fix the wrong thing.
+         */
+        @Test
+        @DisplayName("a bad payload still wins over the gate — the field error is the actionable one")
+        void validationIsReportedBeforeTheGate() throws Exception {
+            gating(ACME_BANKING, true);
+
+            MvcResult refused = post(ENGINEER, ACME, ACME_BANKING,
+                    onCases("Regression", List.of(caseA, umbraCase)), null);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(refused)).containsKey("caseIds");
+        }
+
+        /**
+         * §77's rule — <em>"off" is narrow: it suppresses the reviewer apparatus and not the status
+         * ladder</em> — one setting over. ANDing the gate with {@code reviewEnabledCase} would
+         * disable it on every project that never turned peer review on.
+         */
+        @Test
+        @DisplayName("gating binds with review switched OFF — it reads the ladder, not the apparatus")
+        void gatingIsIndependentOfTheReviewOptIn() throws Exception {
+            gating(ACME_BANKING, true);
+
+            assertThat(body(get(LEAD, ACME, "/projects/" + ACME_BANKING + "/settings"))
+                    .get("reviewEnabledCase").asBoolean())
+                    .as("the fixture must actually be in the state this test is about")
+                    .isFalse();
+            assertThat(post(ENGINEER, ACME, ACME_BANKING,
+                    onCases("Regression", List.of(caseA)), null)
+                    .getResponse().getStatus()).isEqualTo(409);
+        }
+
+        @Test
+        @DisplayName("a sibling project's setting does not gate this one")
+        void theSettingIsPerProject() throws Exception {
+            gating(ACME_MOBILE, true);
+
+            assertThat(post(ENGINEER, ACME, ACME_BANKING,
+                    onCases("Regression", List.of(caseA)), null)
+                    .getResponse().getStatus()).isEqualTo(201);
+        }
+    }
+
+    // =====================================================================
     // helpers — requests
     // =====================================================================
 
@@ -766,6 +972,93 @@ class RunCreateEndpointTest extends IntegrationTestBase {
         String executionId = detail.get("executions").get(0).get("id").asText();
         return body(get(LEAD, ACME, "/projects/" + ACME_BANKING + "/runs/" + runId
                 + "/executions/" + executionId));
+    }
+
+    private String detailOf(MvcResult result) throws Exception {
+        return body(result).get("detail").asText();
+    }
+
+    /**
+     * Turns §6g's case gating rule on, <strong>through the real settings endpoint</strong> — the
+     * reason is on {@code PlanLifecycleEndpointTest#gating}, and so is the reason the review opt-ins
+     * are deliberately left off.
+     */
+    private void gating(UUID projectId, boolean requireApprovedCaseForRun) throws Exception {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("requiredPeerReviews", 0);
+        payload.put("editAfterApproval", "RETAIN");
+        payload.put("requireApprovedCaseForRun", requireApprovedCaseForRun);
+
+        MvcResult saved = mvc.perform(MockMvcRequestBuilders
+                        .put("/api/v1/projects/" + projectId + "/settings")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(LEAD, ACME))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(payload)))
+                .andReturn();
+
+        assertThat(saved.getResponse().getStatus())
+                .as("the fixture depends on the real settings endpoint; %s",
+                        saved.getResponse().getContentAsString())
+                .isEqualTo(200);
+    }
+
+    /**
+     * Walks cases to {@code APPROVED} <strong>through the real bulk endpoint</strong>, two moves at
+     * a time because the ladder allows no short cut: {@code APPROVED} is reachable only from
+     * {@code IN_REVIEW} (§62's call, re-derived in §75).
+     *
+     * <p>Not a SQL update, and the difference matters here more than usual: the state this fixture
+     * has to produce is the one §6g's gate reads, so producing it the way the product does is what
+     * makes the test evidence about the product rather than about the column. It also means these
+     * tests would notice the day the two halves stop agreeing on what "approved" is.
+     */
+    private void approve(List<UUID> caseIds) throws Exception {
+        for (String status : List.of("IN_REVIEW", "APPROVED")) {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("action", "SET_STATUS");
+            payload.put("caseIds", caseIds.stream().map(UUID::toString).toList());
+            payload.put("dryRun", false);
+            payload.put("payload", Map.of("lifecycleStatus", status));
+
+            MvcResult applied = mvc.perform(MockMvcRequestBuilders
+                            .post("/api/v1/projects/" + ACME_BANKING + "/cases/bulk")
+                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(LEAD, ACME))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .accept(MediaType.APPLICATION_JSON)
+                            .content(json.writeValueAsString(payload)))
+                    .andReturn();
+
+            assertThat(applied.getResponse().getStatus())
+                    .as("the fixture depends on the real bulk endpoint; %s",
+                            applied.getResponse().getContentAsString())
+                    .isEqualTo(200);
+        }
+        for (UUID caseId : caseIds) {
+            assertThat(lifecycleOf(caseId))
+                    .as("and the fixture must actually have got there")
+                    .isEqualTo("APPROVED");
+        }
+    }
+
+    private String keyOf(UUID caseId) throws SQLException {
+        return caseColumn(caseId, "key");
+    }
+
+    private String lifecycleOf(UUID caseId) throws SQLException {
+        return caseColumn(caseId, "lifecycle_status");
+    }
+
+    private String caseColumn(UUID caseId, String column) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+             var statement = connection.prepareStatement(
+                     "SELECT " + column + " FROM test_case WHERE id = CAST(? AS uuid)")) {
+            statement.setString(1, caseId.toString());
+            try (ResultSet rows = statement.executeQuery()) {
+                assertThat(rows.next()).isTrue();
+                return rows.getString(1);
+            }
+        }
     }
 
     private Map<String, List<String>> errorsOf(MvcResult result) throws Exception {
@@ -944,6 +1237,11 @@ class RunCreateEndpointTest extends IntegrationTestBase {
                 execute(connection, "DELETE FROM test_case");
                 execute(connection, "DELETE FROM suite_version");
                 execute(connection, "DELETE FROM suite");
+                // §82. Written by the Gating class's helper and by nothing else, so leaving it lets
+                // one test turn the gate on for every test that runs after it. The identical
+                // omission in PlanLifecycleEndpointTest reddened five tests on its first run, three
+                // of them written before the slice existed.
+                execute(connection, "DELETE FROM project_settings");
                 execute(connection, "UPDATE key_sequence SET next_value = 1");
             }
         }

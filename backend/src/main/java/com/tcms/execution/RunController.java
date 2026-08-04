@@ -85,7 +85,26 @@ public class RunController {
                     ResponseEntity.status(HttpStatus.FORBIDDEN).body(createForbiddenProblem());
             case RunCreateService.Outcome.Invalid invalid ->
                     ResponseEntity.badRequest().body(validationProblem(invalid.errors()));
+            // §6g's gating rule (§82). A 409 with its own title, not refusedProblem's: that one
+            // says "this run cannot change that way" and there is no run yet — what is refused is
+            // the project's policy on what may go into one.
+            case RunCreateService.Outcome.Refused refused ->
+                    ResponseEntity.status(HttpStatus.CONFLICT)
+                            .body(gatedProblem(refused.message()));
         };
+    }
+
+    /**
+     * §6g's approval gate refusing a run before it exists.
+     *
+     * <p>The sentence is the domain's, as on every other 409 here — {@code RunCreateService} names
+     * the cases, and it is the only thing that can.
+     */
+    private static ProblemDetail gatedProblem(String message) {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        problem.setTitle("This run needs approved cases");
+        problem.setDetail(message);
+        return problem;
     }
 
     /** Worded for the action, naming no permission key — §32, as on {@code PlanController}. */

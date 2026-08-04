@@ -2,8 +2,8 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-03
-**Baseline commit:** `93444b2`
+**Last verified:** 2026-08-04
+**Baseline commit:** `3d33ad6`
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
 `frontend/vite.config.ts`
 
@@ -25,7 +25,7 @@
 - **`npm run build` is THE gate** (`tsc -b` + vite build). **Do not trust `tsc --noEmit`** — it has
   reported 0 errors while the build failed with nine (working agreement). `#confirmed`
 - `npm run lint` — oxlint, must stay at **0 warnings**; it prints nothing when clean.
-- `npm run test:run` — Vitest + RTL. **640/640** at this baseline (§80). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
+- `npm run test:run` — Vitest + RTL. **662/662** at this baseline (§82). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
 - `npm run gen:api` — regenerate `src/api/schema.d.ts` after **any** `openapi.yaml` change. Runs
   through `npx` on purpose (the scaffold pins TS 6, the tool peer-requires 5.x); do not "fix" it.
 - **Live mode:** `VITE_API_MODE=live` in `.env.local` proxies `/api` to `localhost:8080`.
@@ -93,6 +93,28 @@
   **While the settings are pending the panel renders nothing** — deliberately *not* §65's
   "not yet is not no" rule, which is about permissions: a panel that flashes in and vanishes is worse
   than one arriving a beat late, and a failed settings read is not evidence review is on. `#confirmed`
+- **§6g's GATING rules are a THIRD panel on `ReviewSettingsPage`, and deliberately not two more
+  switches under "Where review applies" (§82).** They bind on a project with review switched off,
+  because §6g's opt-in suppresses the reviewer apparatus and not the status ladder — grouping them
+  with the opt-ins would tell an admin the opposite in the one place they decide whether to turn
+  them on. **The save is the risk, not the switches**: the endpoint is a `PUT` of all eight values
+  onto a server that reads an absent boolean as `false`, so a field listed on `ProjectSettings` and
+  omitted from the submit does not fail — it **switches that setting off on the next save of the
+  form**, with a success message. `ReviewSettingsPage.test.tsx` (**new in §82; §77 shipped the
+  screen with no test file at all**) asserts the body as an **exact object**, because
+  `toMatchObject` passes with a field silently dropped. The mock's `saveProjectSettings` takes the
+  whole value, which is how `npm run build` caught the handler forgetting both. `#confirmed`
+- **A gating refusal is a 409 that must OFFER THE WAY OUT (§82).** `RunCreateDialog` and
+  `PlanStatisticsPage` each render the server's sentence in place and put §6g's lead override beside
+  it — `ui-rules`: an error naming an action the UI does not offer is a design bug. **Offered only
+  AFTER the refusal, never on the happy path**, so a standing "ignore the approval rules" checkbox
+  does not normalize the exception §6g wants to stay exceptional. **Disabled, not hidden** (§31) for
+  a caller without `case:approve`/`plan:approve`, so the person who has to go and ask can see the
+  way out exists. The run dialog keys on **`error.status === 409`** (the only 409 that endpoint
+  answers — everything else there is a field error); the plan page keys on **the requested target**
+  being `ACTIVE`, never on matching the server's sentence, which would be a second copy of the rule
+  in a string. The retry **re-validates the form** rather than replaying the first attempt's values.
+  `#confirmed`
 - **The status ladders and the review apparatus are separate on the client too.** Turning review off
   hides the panel and changes **nothing** about the Draft/In review/Approved controls on the suite
   tree, plan header or bulk dialog. `#confirmed`
@@ -215,6 +237,19 @@
   with the reasoning recorded in `vite.config.ts`.
 
 ## Session log
+
+- 2026-08-04 · EXTEND · §6g's gating rules (§82) — the two approval gates get a settings panel and
+  two override affordances. New: the `ReviewSettings.Gating` panel + its warning,
+  `Runs.Create.OverrideGate`, `PlanStats.OverrideGate`, `SetPlanStatus` (the hook now takes
+  `{status, overrideApprovalGate}`), `overrideApprovalGate` on `TestRunInput`, both rules in the
+  mock (`handlers/runs.ts`, `handlers/plans.ts`) mirrored from the server including the
+  resolved-set, refuse-the-whole-run, after-validation and not-ANDed-with-the-opt-in properties, and
+  **`ReviewSettingsPage.test.tsx`, which did not exist** — §77 shipped that screen untested.
+  **`npm run build` caught the mock's settings handler dropping both new fields**, which is the same
+  silent-discard class the form itself carries. Gating stays **off in the mock's fixtures**: turning
+  it on would make every run and plan start in mock mode fail until somebody approved the fixtures,
+  which demos the refusal rather than the product. 13 tests written; 649 → **662**. **0 mutations
+  run inline** (policy); 15 browser rows queued, three of them live-only.
 
 - 2026-08-03 · EXTEND · The reviewer's inbox (§81) — §6l's review card lands on the board, so a
   request finally surfaces outside `ReviewPanel`. Frontend work was **three repairs, not a feature**:

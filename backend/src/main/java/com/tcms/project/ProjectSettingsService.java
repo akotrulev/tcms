@@ -189,7 +189,9 @@ public class ProjectSettingsService {
                         Boolean.TRUE.equals(req.reviewEnabledPlan()),
                         peers,
                         Boolean.TRUE.equals(req.authorMayApproveOwnWork()),
-                        mode),
+                        mode,
+                        Boolean.TRUE.equals(req.requireApprovedCaseForRun()),
+                        Boolean.TRUE.equals(req.requireApprovedPlanToStart())),
                 userId,
                 now);
         settings.saveAndFlush(row);

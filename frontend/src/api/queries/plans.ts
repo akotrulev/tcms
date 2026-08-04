@@ -146,11 +146,26 @@ export function useUpdatePlan(projectId: string, planId: string) {
  * server's question (`PlanLifecycle`), and a second copy of that ladder here would be one applied
  * to a `status` the cache may hold one save out of date.
  */
+/** The argument to {@link useSetPlanStatus} — the target, plus §6g's opt-in override (§82). */
+export interface SetPlanStatus {
+  status: PlanStatus;
+  overrideApprovalGate?: boolean;
+}
+
 export function useSetPlanStatus(projectId: string, planId: string) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (status: PlanStatus) =>
-      api.put<TestPlan>(`${base(projectId)}/plans/${planId}/status`, { status }),
+    /*
+      `overrideApprovalGate` (§82) is meaningful on exactly one move — starting a plan on a project
+      that requires approved plans — and is read-and-ignored on the other four. Sent as an optional
+      second argument rather than a second hook, so the ladder's buttons keep one call site and no
+      caller has to hold a copy of which edge the rule binds on.
+    */
+    mutationFn: ({ status, overrideApprovalGate }: SetPlanStatus) =>
+      api.put<TestPlan>(`${base(projectId)}/plans/${planId}/status`, {
+        status,
+        ...(overrideApprovalGate ? { overrideApprovalGate: true } : {}),
+      }),
     meta: { handled: true },
     onSuccess: (updated) => {
       client.setQueryData(keys.plan(projectId, planId), updated);

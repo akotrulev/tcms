@@ -2,6 +2,7 @@ package com.tcms.execution;
 
 import com.tcms.project.GateResult;
 import com.tcms.project.ProjectService;
+import com.tcms.project.ProjectSettingsService;
 import com.tcms.project.ReviewService;
 import com.tcms.project.ReviewSubjectType;
 import com.tcms.tenancy.AuditEvent;
@@ -11,6 +12,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,6 +56,19 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>{@link RunStatusService}'s reason, unchanged: the request names an absolute target state rather
  * than a delta against something the client read, so there is no lost update to protect. Two leads
  * both pressing Approve want the same outcome and get it.
+ *
+ * <h2>§6g's gating rule, added in §82 — and this class's own header predicted it</h2>
+ *
+ * <p>{@link PlanLifecycle}'s header says {@code DRAFT → ACTIVE} must be legal <em>"because review is
+ * optional … and the per-project setting does not exist yet"</em>. It exists now (§77's row, §82's
+ * two columns), so a project may close that edge: {@code requireApprovedPlanToStart} refuses
+ * starting a plan nobody signed off.
+ *
+ * <p>It binds on <strong>that one edge</strong> and not on the target — the argument, including why
+ * a target-keyed reading would make every closed plan on a gated project permanently un-reopenable,
+ * is on {@link PlanLifecycle#startsWithoutApproval}. The override is {@code plan:approve}, which is
+ * <em>derived</em> rather than chosen: its holder can start this plan today by approving it first,
+ * so the override widens nothing and changes only what the record says afterwards.
  */
 @Service
 public class PlanStatusService {
@@ -61,14 +76,17 @@ public class PlanStatusService {
     private static final String AUDIT_TARGET = "test_plan";
 
     private final ProjectService projects;
+    private final ProjectSettingsService settings;
     private final TestPlanRepository plans;
     private final PlanService views;
     private final ReviewService reviews;
     private final AuditEventRepository auditEvents;
     private final Clock clock;
 
+    @SuppressWarnings("checkstyle:ParameterNumber")
     public PlanStatusService(
             ProjectService projects,
+            ProjectSettingsService settings,
             TestPlanRepository plans,
             PlanService views,
             ReviewService reviews,
@@ -76,6 +94,7 @@ public class PlanStatusService {
             Clock clock) {
 
         this.projects = projects;
+        this.settings = settings;
         this.plans = plans;
         this.views = views;
         this.reviews = reviews;
@@ -119,7 +138,12 @@ public class PlanStatusService {
                         requested == null
                                 ? PlanLifecycle.EDIT_PLAN
                                 : PlanLifecycle.permissionFor(plan.getStatus(), requested)),
-                (project, plan) -> apply(userId, project.getId(), plan, requested));
+                (project, plan) -> apply(
+                        userId,
+                        project.getId(),
+                        plan,
+                        requested,
+                        request != null && Boolean.TRUE.equals(request.overrideApprovalGate())));
 
         return switch (gated) {
             case GateResult.Unreachable<Outcome> ignored -> new Outcome.NotFound();
@@ -128,7 +152,13 @@ public class PlanStatusService {
         };
     }
 
-    private Outcome apply(UUID userId, UUID projectId, TestPlan plan, PlanStatus requested) {
+    private Outcome apply(
+            UUID userId,
+            UUID projectId,
+            TestPlan plan,
+            PlanStatus requested,
+            boolean overrideRequested) {
+
         if (requested == null) {
             return new Outcome.Invalid(Map.of("status", List.of(
                     "Choose a status: DRAFT, IN_REVIEW, APPROVED, ACTIVE or CLOSED.")));
@@ -139,20 +169,79 @@ public class PlanStatusService {
             // 200 with the plan and nothing written — no timestamp re-stamped, no audit row. See
             // Decision.Unchanged: a repeated click must not bury the change that happened.
             case PlanLifecycle.Decision.Unchanged ignored -> new Outcome.Updated(views.viewOf(plan));
-            // §6g's review policy gets its say AFTER the ladder has agreed the move exists and
-            // BEFORE anything is written — SuiteStatusService's placement, for its reason.
-            case PlanLifecycle.Decision.Move move -> reviews.refuses(
-                            projectId,
-                            ReviewSubjectType.PLAN,
-                            plan.getId(),
-                            PlanLifecycle.standingOf(move.target()),
-                            userId)
-                    .<Outcome>map(Outcome.Refused::new)
-                    .orElseGet(() -> move(userId, projectId, plan, move.target()));
+            case PlanLifecycle.Decision.Move move ->
+                    moving(userId, projectId, plan, move.target(), overrideRequested);
         };
     }
 
-    private Outcome move(UUID userId, UUID projectId, TestPlan plan, PlanStatus target) {
+    /**
+     * The two policy questions between "the ladder allows this move" and anything being written.
+     *
+     * <p>Both refuse with a 409 and they are <strong>disjoint by construction</strong>: §6g's review
+     * policy binds only on a move to {@code APPROVED} ({@code ReviewService#refuses} returns empty
+     * for every other standing) and §6g's gating rule binds only on {@code DRAFT → ACTIVE}. So the
+     * order between them decides nothing today — it is written review-first because that is the one
+     * §77 established, and because a target that ever became subject to both would be a plan being
+     * approved and started in one move, which the ladder does not have.
+     *
+     * <p>Placement is {@code SuiteStatusService}'s and its reason: <em>after</em> the ladder has
+     * agreed the move exists, so a caller asking for an impossible transition is told that rather
+     * than told about a policy that would not have applied, and <em>before</em> anything is written.
+     */
+    private Outcome moving(
+            UUID userId,
+            UUID projectId,
+            TestPlan plan,
+            PlanStatus target,
+            boolean overrideRequested) {
+
+        Optional<String> reviewPolicy = reviews.refuses(
+                projectId,
+                ReviewSubjectType.PLAN,
+                plan.getId(),
+                PlanLifecycle.standingOf(target),
+                userId);
+        if (reviewPolicy.isPresent()) {
+            return new Outcome.Refused(reviewPolicy.get());
+        }
+
+        ApprovalGating.Verdict gate = gate(userId, projectId, plan, target, overrideRequested);
+        if (gate.refusal() != null) {
+            return new Outcome.Refused(gate.refusal());
+        }
+        return move(userId, projectId, plan, target, gate.overridden());
+    }
+
+    /**
+     * §6g's gating rule for starting a plan (§82) — the edge is {@link
+     * PlanLifecycle#startsWithoutApproval}'s and the answer is {@link ApprovalGating.Verdict}'s.
+     *
+     * <p>The edge is asked about <strong>before</strong> the setting, which is the opposite order
+     * from {@code RunCreateService} and correct in both places: there, the cheap question is the
+     * setting and the expensive one is a query over up to four hundred cases; here the edge is two
+     * enum comparisons and the setting is a read, so the four transitions out of five that the rule
+     * cannot touch cost nothing at all.
+     */
+    private ApprovalGating.Verdict gate(
+            UUID userId,
+            UUID projectId,
+            TestPlan plan,
+            PlanStatus target,
+            boolean overrideRequested) {
+
+        if (!PlanLifecycle.startsWithoutApproval(plan.getStatus(), target)
+                || !settings.effective(projectId).requireApprovedPlanToStart()) {
+
+            return ApprovalGating.Verdict.PROCEED;
+        }
+        return ApprovalGating.Verdict.fired(
+                overrideRequested
+                        && projects.holds(userId, projectId, PlanLifecycle.APPROVE_PLAN),
+                PlanLifecycle.APPROVAL_REQUIRED_MESSAGE);
+    }
+
+    private Outcome move(
+            UUID userId, UUID projectId, TestPlan plan, PlanStatus target, boolean overridden) {
         Instant now = clock.instant();
         PlanStatus previous = plan.getStatus();
 
@@ -185,6 +274,12 @@ public class PlanStatusService {
                 "{\"key\":" + AuditEvent.jsonString(plan.getKey())
                         + ",\"from\":" + AuditEvent.jsonString(previous.name())
                         + ",\"to\":" + AuditEvent.jsonString(target.name())
+                        // §6g's "documented" override, written only when the gate actually fired —
+                        // RunCreateService's field and its reason. Not a distinct verb: the act is
+                        // still plan.started, and the two ends of the move are already on the row,
+                        // so a reader asking "which releases were started unapproved" filters on
+                        // this key rather than learning a sixth verb.
+                        + (overridden ? ",\"approvalGateOverridden\":true" : "")
                         + "}",
                 now));
 

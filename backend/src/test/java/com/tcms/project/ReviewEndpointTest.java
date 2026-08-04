@@ -229,9 +229,13 @@ class ReviewEndpointTest extends IntegrationTestBase {
             ProjectSettings row = projectSettings.findForProject(projectId)
                     .orElseGet(() -> ProjectSettings.initial(companyId, projectId, at));
             row.apply(
+                    // §6g's two GATING rules stay off here, and that is the fixture asserting
+                    // something: they are deliberately not governed by the review opt-in this
+                    // helper turns on (see ReviewSettings), so a helper that switched them on
+                    // alongside would hide exactly the coupling §82 refused to create.
                     new ReviewSettings(
                             true, true, true, requiredPeers, authorMayApprove,
-                            EditAfterApproval.RETAIN),
+                            EditAfterApproval.RETAIN, false, false),
                     null,
                     at);
             projectSettings.saveAndFlush(row);

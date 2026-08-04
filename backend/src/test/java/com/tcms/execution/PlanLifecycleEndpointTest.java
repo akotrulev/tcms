@@ -454,6 +454,179 @@ class PlanLifecycleEndpointTest extends IntegrationTestBase {
     }
 
     // =====================================================================
+    // §6g's gating rule
+    // =====================================================================
+
+    /**
+     * §6g: <em>"a project may require APPROVED status … before a plan can be started. Powerful and
+     * genuinely obstructive — must be an explicit choice, with a documented lead override for the
+     * 2am release."</em> (§82.)
+     *
+     * <p>This class's {@code Ladder} nested class asserts {@code DRAFT → ACTIVE} is legal <em>"because
+     * review is optional and off by default"</em>, and {@link PlanLifecycle}'s header says the same
+     * with the words <em>"the per-project setting does not exist yet"</em>. It exists now, and these
+     * are the tests that it closes exactly one edge and no others.
+     *
+     * <p><strong>The two personas discriminate.</strong> {@code V3} gives Test Lead
+     * {@code plan:approve} and {@code project:settings} and withholds both from Test Engineer, who
+     * holds {@code plan:edit} — so the engineer is refused and cannot override while the lead can,
+     * which is the property §71 had to record its own gate could not achieve.
+     */
+    @Nested
+    @DisplayName("§6g's gating rule — a plan is started from APPROVED, on the one edge that means")
+    class Gating {
+
+        @Test
+        @DisplayName("with gating ON, a Test Engineer cannot start a draft plan — 409, nothing written")
+        void aDraftPlanIsRefused() throws Exception {
+            UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3");
+            gating(ACME_BANKING, true);
+            clearAudit(ACME);
+
+            MvcResult refused = setStatus(ENGINEER, ACME, ACME_BANKING, plan, "ACTIVE");
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(409);
+            assertThat(detailOf(refused)).contains("only starts approved plans");
+            assertThat(statusOf(plan)).isEqualTo("DRAFT");
+            assertThat(auditActions(ACME)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("and an APPROVED plan starts normally — the rule satisfied, not an exception to it")
+        void anApprovedPlanStarts() throws Exception {
+            UUID plan = approvedPlan();
+            gating(ACME_BANKING, true);
+
+            assertThat(setStatus(ENGINEER, ACME, ACME_BANKING, plan, "ACTIVE")
+                    .getResponse().getStatus()).isEqualTo(200);
+            assertThat(statusOf(plan)).isEqualTo("ACTIVE");
+        }
+
+        /**
+         * THE test of this slice, and the one a target-keyed reading of §6g fails.
+         *
+         * <p>A closed plan's status is {@code CLOSED}. No legal move takes it back to
+         * {@code APPROVED} — {@code CLOSED → DRAFT} is refused outright and {@code APPROVED} is
+         * reachable only from {@code IN_REVIEW}. So a rule that read "the target is ACTIVE,
+         * therefore the plan must be APPROVED" would make every closed plan on a gated project
+         * <strong>permanently un-reopenable</strong>, by anybody, for ever.
+         */
+        @Test
+        @DisplayName("but a CLOSED plan still REOPENS — the rule is the edge, or a closed plan is stuck for ever")
+        void aClosedPlanStillReopens() throws Exception {
+            UUID plan = approvedPlan();
+            setStatus(LEAD, ACME, ACME_BANKING, plan, "ACTIVE");
+            setStatus(LEAD, ACME, ACME_BANKING, plan, "CLOSED");
+            gating(ACME_BANKING, true);
+            clearAudit(ACME);
+
+            // A LEAD, and that is the ladder's rule rather than the gate's: reopening is a move DOWN
+            // from CLOSED, so permissionFor answers plan:approve — "leaving an approval is an
+            // approval act" (§73), and un-closing a release is one. An engineer is refused here with
+            // 403 whatever the gate says, which is why this test cannot be written with the persona
+            // the others use.
+            assertThat(setStatus(LEAD, ACME, ACME_BANKING, plan, "ACTIVE")
+                    .getResponse().getStatus()).isEqualTo(200);
+            assertThat(statusOf(plan)).isEqualTo("ACTIVE");
+            assertThat(auditActions(ACME))
+                    .as("and it is still a reopen, which is the act the gate reads to tell them apart")
+                    .containsOnlyKeys("plan.reopened");
+        }
+
+        @Test
+        @DisplayName("a lead overrides it explicitly, and the audit row is where 'documented' happens")
+        void theLeadOverrides() throws Exception {
+            UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3");
+            gating(ACME_BANKING, true);
+            clearAudit(ACME);
+
+            assertThat(setStatus(LEAD, ACME, ACME_BANKING, plan, "ACTIVE", true)
+                    .getResponse().getStatus()).isEqualTo(200);
+            assertThat(statusOf(plan)).isEqualTo("ACTIVE");
+
+            JsonNode started = json.readTree(auditActions(ACME).get("plan.started"));
+            assertThat(started.get("approvalGateOverridden").asBoolean())
+                    .as("§6g asks for a DOCUMENTED override, and this row is the documentation")
+                    .isTrue();
+            assertThat(statusOf(plan))
+                    .as("and the plan was NOT approved on the way — which is the point: the "
+                            + "workaround this replaces launders a sign-off nobody performed")
+                    .isEqualTo("ACTIVE");
+        }
+
+        /**
+         * The flag cannot widen anybody's reach, and this is the test that says so. A Test Engineer
+         * holds {@code plan:edit} — enough to start a plan on an ungated project — and does not hold
+         * {@code plan:approve}, so the override is not theirs to ask for.
+         *
+         * <p>409 and not 403, deliberately: they <em>are</em> authorized to make this request and
+         * are simply not authorized to ignore the project's policy, so the policy's own sentence is
+         * the honest answer. A 403 would say "you may not change this plan's status", which is false
+         * and would send them to an administrator about a grant they already hold.
+         */
+        @Test
+        @DisplayName("an engineer asking to override is refused all the same — the flag grants nothing")
+        void theFlagGrantsNothing() throws Exception {
+            UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3");
+            gating(ACME_BANKING, true);
+
+            MvcResult refused = setStatus(ENGINEER, ACME, ACME_BANKING, plan, "ACTIVE", true);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(409);
+            assertThat(statusOf(plan)).isEqualTo("DRAFT");
+        }
+
+        /**
+         * "Overridden" means the gate <em>fired</em> and was overridden, which is narrower than "the
+         * flag was sent". Auditing a flag that changed nothing would put a line in the record saying
+         * somebody bypassed a policy they had in fact complied with — and on a project with gating
+         * off there is no policy to bypass.
+         */
+        @Test
+        @DisplayName("the flag on an UNGATED project is not an override, and writes nothing")
+        void theFlagIsNotAnOverrideWhereNothingGates() throws Exception {
+            UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3");
+            clearAudit(ACME);
+
+            assertThat(setStatus(LEAD, ACME, ACME_BANKING, plan, "ACTIVE", true)
+                    .getResponse().getStatus()).isEqualTo(200);
+
+            JsonNode started = json.readTree(auditActions(ACME).get("plan.started"));
+            assertThat(started.has("approvalGateOverridden")).isFalse();
+        }
+
+        /**
+         * §77's rule — <em>"off" is narrow: it suppresses the reviewer apparatus and not the status
+         * ladder</em> — applied one setting over. A consumer that ANDed the gate with
+         * {@code reviewEnabledPlan} would disable it on every project that never turned peer review
+         * on, which is most of them and includes every project that enabled gating for the reason it
+         * exists.
+         */
+        @Test
+        @DisplayName("gating binds with review switched OFF — it reads the ladder, not the apparatus")
+        void gatingIsIndependentOfTheReviewOptIn() throws Exception {
+            UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3");
+            gating(ACME_BANKING, true);
+
+            assertThat(reviewEnabledPlanOf(ACME_BANKING))
+                    .as("the fixture must actually be in the state this test is about")
+                    .isFalse();
+            assertThat(setStatus(ENGINEER, ACME, ACME_BANKING, plan, "ACTIVE")
+                    .getResponse().getStatus()).isEqualTo(409);
+        }
+
+        @Test
+        @DisplayName("a sibling project's setting does not gate this one")
+        void theSettingIsPerProject() throws Exception {
+            UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3");
+            gating(ACME_MOBILE, true);
+
+            assertThat(setStatus(ENGINEER, ACME, ACME_BANKING, plan, "ACTIVE")
+                    .getResponse().getStatus()).isEqualTo(200);
+        }
+    }
+
+    // =====================================================================
     // The delete
     // =====================================================================
 
@@ -580,8 +753,23 @@ class PlanLifecycleEndpointTest extends IntegrationTestBase {
             UUID userId, UUID companyId, UUID projectId, UUID planId, String status)
             throws Exception {
 
+        return setStatus(userId, companyId, projectId, planId, status, null);
+    }
+
+    /**
+     * @param overrideApprovalGate null means the field is <strong>absent</strong> rather than false,
+     *                             which is the shape every existing caller sends and therefore the
+     *                             one the gating tests must be measured against
+     */
+    private MvcResult setStatus(
+            UUID userId, UUID companyId, UUID projectId, UUID planId, String status,
+            Boolean overrideApprovalGate) throws Exception {
+
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("status", status);
+        if (overrideApprovalGate != null) {
+            payload.put("overrideApprovalGate", overrideApprovalGate);
+        }
 
         return mvc.perform(MockMvcRequestBuilders
                         .put("/api/v1/projects/" + projectId + "/plans/" + planId + "/status")
@@ -620,6 +808,47 @@ class PlanLifecycleEndpointTest extends IntegrationTestBase {
 
     private String detailOf(MvcResult result) throws Exception {
         return body(result).get("detail").asText();
+    }
+
+    /**
+     * Turns §6g's plan gating rule on or off, <strong>through the real settings endpoint</strong>
+     * rather than by writing the column.
+     *
+     * <p>Deliberately: the endpoint is a {@code PUT} of the whole value, so a fixture that wrote one
+     * column would not notice the day the write path stops carrying the other seven — and it is the
+     * write path §82 added two properties to. It also proves the two settings are reachable by the
+     * persona that is meant to configure them, since {@code project:settings} is Test Lead's.
+     *
+     * <p>Everything else is left at {@code V23}'s defaults on purpose, and the review opt-ins in
+     * particular stay <strong>off</strong>: {@code gatingIsIndependentOfTheReviewOptIn} is the test
+     * that would silently stop meaning anything if this helper switched them on for convenience.
+     */
+    private void gating(UUID projectId, boolean requireApprovedPlanToStart) throws Exception {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("requiredPeerReviews", 0);
+        payload.put("editAfterApproval", "RETAIN");
+        payload.put("requireApprovedPlanToStart", requireApprovedPlanToStart);
+
+        MvcResult saved = mvc.perform(MockMvcRequestBuilders
+                        .put("/api/v1/projects/" + projectId + "/settings")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(LEAD, ACME))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(payload)))
+                .andReturn();
+
+        assertThat(saved.getResponse().getStatus())
+                .as("the fixture depends on the real settings endpoint; %s",
+                        saved.getResponse().getContentAsString())
+                .isEqualTo(200);
+        assertThat(body(saved).get("requireApprovedPlanToStart").asBoolean())
+                .isEqualTo(requireApprovedPlanToStart);
+    }
+
+    /** Read back through the endpoint, so the assertion is about what a consumer would see. */
+    private boolean reviewEnabledPlanOf(UUID projectId) throws Exception {
+        return body(get(LEAD, ACME, "/projects/" + projectId + "/settings"))
+                .get("reviewEnabledPlan").asBoolean();
     }
 
     // =====================================================================
@@ -746,6 +975,12 @@ class PlanLifecycleEndpointTest extends IntegrationTestBase {
                 execute(connection, "DELETE FROM plan_scope_item");
                 execute(connection, "DELETE FROM test_plan_version");
                 execute(connection, "DELETE FROM test_plan");
+                // §82. The settings row is written by the Gating class's own helper and by nothing
+                // else here, so leaving it would let ONE test turn the gate on for every test that
+                // ran after it — which is exactly what happened on the first run: five tests went
+                // red, three of them written before this slice existed and none of them about
+                // gating. A per-project policy row is mutable state and belongs on this list.
+                execute(connection, "DELETE FROM project_settings");
                 execute(connection, "UPDATE key_sequence SET next_value = 1");
             }
         }

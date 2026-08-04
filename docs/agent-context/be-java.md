@@ -2,8 +2,8 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-03
-**Baseline commit:** `93444b2`
+**Last verified:** 2026-08-04
+**Baseline commit:** `3d33ad6`
 **Fingerprint files:** `backend/build.gradle.kts`, `backend/gradle/libs.versions.toml`, `backend/gradle/wrapper/gradle-wrapper.properties`
 
 > Authoritative docs win over this file. `CLAUDE.md`, `docs/HANDOFF.md` (an index — sections live in
@@ -63,7 +63,7 @@ provisioning · auth · shared`.
   return zero rows, fail-closed and silent. `RepositoryTransactionTest` derives the repository list
   from the live context, so a new repository that forgets fails the build. `#confirmed`
 - **Flyway owns all DDL**; `hibernate.ddl-auto: validate`, `baseline-on-migrate: false`. Migrations
-  at `src/main/resources/db/migration`. **Head is `V25`; `V26` is the next free number.** Booting the
+  at `src/main/resources/db/migration`. **Head is `V26`; `V27` is the next free number.** Booting the
   real context in a test is itself a schema-drift gate. `#confirmed`
   **`V23` is the first migration since `V1` to CREATE A TABLE**, which makes two things live that no
   previous migration had to think about: a new table's RLS policy must be written with **`V4`'s
@@ -283,6 +283,35 @@ provisioning · auth · shared`.
   Uniqueness is **two partial indexes**, because a plain four-column UNIQUE enforces nothing —
   every team row has a NULL user and NULL ≠ NULL. Policy count **57 → 58**;
   `ix_review_assignment_assignee_user` is added **before its query**, for §6l's queue. `#confirmed`
+- **§6g's GATING RULES are the last part of the review workflow, and they live in `execution` (§82).**
+  `V26` adds `require_approved_case_for_run` / `require_approved_plan_to_start` to
+  `project_settings` (two columns, **no table — the policy count stays 58**), `ReviewSettings` gains
+  two components, and the two readers are `RunCreateService.gate` and `PlanStatusService.gate`.
+  **The plan rule binds on ONE EDGE, `DRAFT → ACTIVE`** — `PlanLifecycle.startsWithoutApproval` —
+  and the target-keyed reading is a live trap: `ACTIVE` is also reached from `APPROVED` (the rule
+  satisfied) and from `CLOSED` (**a reopen**), and refusing that makes every closed plan on a gated
+  project **permanently un-reopenable**, since `CLOSED` has no legal move back to `APPROVED`. §72's
+  `plan.reopened` / `plan.started` audit split had already defined *started* one slice before the
+  gate needed it. **The case rule binds on the RESOLVED set** (`edit.caseIds()`, after the plan's
+  scope is expanded) or naming a plan is a bypass costing no permission and leaving no trace, and
+  **the whole run is refused, never trimmed** (this class's own partial-materialisation argument).
+  **Neither is ANDed with `reviewEnabledFor`** — §77's "off is narrow" applies: gating reads the
+  status ladder, which a project with review off still has, so it is its own opt-in and turning
+  review off does not turn gating off. **The override invents NO KEY**: `case:approve`/`plan:approve`
+  are *derived*, since their holder can reach the same state by approving first — so it widens
+  nobody's reach and only changes the record (`approvalGateOverridden` on the audit row, written
+  **only when the gate fired**). Explicit flag on the request, consulted only on the refusal path;
+  a caller without the key gets the **same 409, not a 403**. `ApprovalGating.Verdict` shares the
+  vocabulary and deliberately not the rule. **`CaseFacts.unapprovedCases` is the 11th crossing** and
+  uses `<> 'APPROVED'`, not an enumeration — with **no test covering `DEPRECATED`**, which the
+  mutation queue records. `#confirmed`
+- **`ProjectService.holds` is the ONE "does this caller hold key K here" question (§82)** — not a
+  gate, for the callers that ask a *second* permission after their own gate has passed, to shape a
+  response rather than to authorise it. Three call sites: `CaseBulkService` (which refusal sentence)
+  and the two §82 gates (may this request override). It was §75's private helper in
+  `CaseBulkService`; §82 moved it up rather than let it become three byte-identical copies — §58's
+  E1, prevented instead of mourned as it was for `PeopleDirectory` in §76. `false` for an
+  unreachable project as well as a held-nothing caller, which is correct at all three. `#confirmed`
 - **`TeamDirectory` is the THIRD port in `project` (§80)**, after `ProjectAccess` and
   `PeopleDirectory`, implemented by `identity.IdentityTeamDirectory`. Not a method on
   `PeopleDirectory`: that port's one rule is §6u's company-membership naming, for which a team has no
@@ -486,9 +515,9 @@ provisioning · auth · shared`.
   **board generator** rather than as anything in `project` (see the seam above), which is the second
   of the three options and the only one that needed nothing new built; `ix_review_assignment_assignee_user`
   was added one slice ahead for exactly this query, so `V26` is still free. What is now true instead:
-  **the last unbuilt half of §6g is the GATING RULES** — require APPROVED before a case joins a run
-  or a plan starts — which §6g itself calls *"powerful and genuinely obstructive"* and which now has
-  everything it needs. Also still unbuilt and deliberately so: **the board's other two generators**
+  ~~**the last unbuilt half of §6g is the GATING RULES**~~ → **built in §82** (see the seam above);
+  **§6g is now COMPLETE — every part of the workflow has an implementation.** Also still unbuilt and
+  deliberately so: **the board's other two generators**
   (`DOC_UPDATE` needs §6i's stale-case flagging, which nothing computes; `DEFECT` needs the local
   defect record, which nothing writes — a feature apiece, not a generator apiece), **§6l's
   cross-project "My Work" board**, so the inbox is **per project**; **§6l's per-project generator
@@ -547,6 +576,21 @@ provisioning · auth · shared`.
   a caller may or may not see. `#confirmed`
 
 ## Session log
+
+- 2026-08-04 · EXTEND · §6g's gating rules (§82) — the last unbuilt part of the review workflow, and
+  a slice that built almost nothing new: **two boolean columns** (`V26`) and the two places that
+  read them. New: `ApprovalGating`, `PlanLifecycle.startsWithoutApproval` +
+  `APPROVAL_REQUIRED_MESSAGE`, `CaseFacts.unapprovedCases`, `ProjectService.holds`,
+  `RunCreateService.Outcome.Refused` + `gate`, `PlanStatusService.moving` + `gate`,
+  `overrideApprovalGate` on `TestRunInput`/`PlanStatusInput`. **The plan rule is an EDGE and the
+  target-keyed reading strands every closed plan for ever**; **the case rule binds on the resolved
+  set or the plan is the bypass**; **the override invents no key and is derived** (its holder can
+  approve first, so it widens nothing and only changes the record). **Not ANDed with the review
+  opt-in** — §77's "off is narrow". **Five backend tests red on the first run, four of them a
+  fixture leak**: `project_settings` was not on `clearMutableRows`, so one test turned the gate on
+  for every test after it and **three casualties predate the slice**. Policy count unchanged at
+  **58**; `V27` is the next free number. Backend 1487 → **1505**. **Zero mutations run inline**
+  (policy); ten queued, fifteen browser rows.
 
 - 2026-08-03 · EXTEND · The reviewer's inbox (§81) — §6l's `REVIEW` generator, absent since §53,
   built in **`work`** because **no other module may write its query** (four tables, three modules).

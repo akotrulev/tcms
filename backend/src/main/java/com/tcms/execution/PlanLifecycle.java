@@ -78,6 +78,18 @@ final class PlanLifecycle {
      */
     static final String APPROVE_PLAN = "plan:approve";
 
+    /**
+     * §6g's gating refusal for a plan (§82) — see {@link #startsWithoutApproval}.
+     *
+     * <p>A constant rather than a sentence built at the call site, for the reason
+     * {@code RunLifecycle.CLOSED_MESSAGE} gives: one rule must not be described two ways. Unlike a
+     * run's refusal there is nothing to interpolate — a plan is one row, so there is no list of
+     * offenders to name, which is also why the run's sentence could not be a constant.
+     */
+    static final String APPROVAL_REQUIRED_MESSAGE =
+            "This project only starts approved plans. Submit this plan for review and have it "
+                    + "approved before starting it.";
+
     /** What the request does to the plan. Sealed, so the caller's switch is exhaustive. */
     sealed interface Decision {
 
@@ -108,6 +120,45 @@ final class PlanLifecycle {
     /** Whether the plan is over. One terminal value, unlike a run's pair. */
     static boolean isClosed(PlanStatus status) {
         return status == PlanStatus.CLOSED;
+    }
+
+    /**
+     * Whether this move is <strong>starting a plan that has not been approved</strong> — the edge
+     * §6g's gating rule refuses on a project that turned {@code requireApprovedPlanToStart} on
+     * (§82).
+     *
+     * <p>Here rather than in {@link PlanStatusService} because it is a property of two statuses and
+     * nothing else, which is what this class is for — and because getting it wrong is invisible in
+     * a service and obvious beside the table above.
+     *
+     * <h2>ONE EDGE, not one target, and that is the whole of the rule</h2>
+     *
+     * <p>{@link #decide} reaches {@code ACTIVE} from three places, and only one of them is somebody
+     * starting an unreviewed plan:
+     *
+     * <ul>
+     *   <li>{@code DRAFT → ACTIVE} — the move §6g's ladder allows precisely <em>because</em> review
+     *       is optional (see this class's header), and therefore the one a project turning gating on
+     *       is asking to close;</li>
+     *   <li>{@code APPROVED → ACTIVE} — starting a signed-off plan, which is the rule being
+     *       satisfied rather than an exception to it;</li>
+     *   <li><strong>{@code CLOSED → ACTIVE} — a REOPEN, and refusing it would be a defect.</strong>
+     *       A closed plan's status is {@code CLOSED}; no legal move takes it back to
+     *       {@code APPROVED}, and {@code CLOSED → DRAFT} is refused outright. So a target-keyed rule
+     *       would make every closed plan on a gated project <em>permanently un-reopenable</em>,
+     *       whatever anybody's permissions — a dead end reachable by ordinary use, which is the
+     *       bound §68 and §69 each drew from the other side. {@code PlanStatusService} had already
+     *       named this edge as a distinct act before there was a rule about it: it audits this one
+     *       as {@code plan.reopened} and the other two as {@code plan.started}, so §6g's word
+     *       <em>started</em> was defined in the code before the gate needed it.</li>
+     * </ul>
+     *
+     * <p>{@code IN_REVIEW → ACTIVE} never reaches this method: {@link #decide} refuses it first, and
+     * with a better sentence — the plan is <em>in</em> review, so "approve it or return it to draft"
+     * names the two ways out, where the gate's sentence would say only that it is not approved.
+     */
+    static boolean startsWithoutApproval(PlanStatus current, PlanStatus target) {
+        return target == PlanStatus.ACTIVE && current == PlanStatus.DRAFT;
     }
 
     /**

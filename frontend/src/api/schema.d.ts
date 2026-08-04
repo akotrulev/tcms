@@ -922,9 +922,10 @@ export interface paths {
          *     held who **spoke** (`participations`) and never who was **asked**, so the workflow
          *     had no inbox and §6l's board could not draw a card for a request nothing stored.
          *
-         *     **This costs `*:review`, the subject's own key.** The roles spec is explicit that
-         *     there is *no key* for review requests, so nothing new is seeded and the question is
-         *     which existing one this is. Asking somebody to look at an artifact is a statement
+         *     **This costs `*:review`, the subject's own key.** No new key was invented — one
+         *     seeded to nobody is a 403 no administrator can grant their way out of, the standing
+         *     argument against `evidence:read` and `suite:comment` — so the question is which
+         *     existing key this is. Asking somebody to look at an artifact is a statement
          *     about the review's progress — §79's argument for resolving a thread. Both cheaper
          *     readings were refused: `case:comment` would let a Viewer, often the client
          *     themselves, put work on a contributor's queue, which is the one thing the bottom
@@ -2284,7 +2285,11 @@ export interface paths {
          *       Engineer do it by asking for `DRAFT`.
          *
          *     **Review is optional** (plan §6g), so `DRAFT → ACTIVE` is legal: a project that never turns
-         *     review on must still be able to start a plan.
+         *     review on must still be able to start a plan — **unless it turned §6g's gating rule on**
+         *     (`requireApprovedPlanToStart`, §82), which closes exactly that edge with a `409`.
+         *     `APPROVED → ACTIVE` and `CLOSED → ACTIVE` are untouched by it: the first is the rule being
+         *     satisfied, and the second is a *reopen*, which a target-keyed rule would make impossible
+         *     for ever. A holder of `plan:approve` may pass `overrideApprovalGate`.
          *
          *     Two moves are refused with `409` because the ladder does not have them: `APPROVED` is
          *     reachable only from `IN_REVIEW` (approval must not be reachable without review), and
@@ -2438,6 +2443,13 @@ export interface paths {
          *
          *     `configurationId` defaults to the project's default configuration — every project is
          *     seeded with one, so the field is optional and the column stays `NOT NULL`.
+         *
+         *     **§6g's gating rule (§82).** On a project with `requireApprovedCaseForRun` on, a run
+         *     whose resolved case set contains anything that is not `APPROVED` is a `409` naming the
+         *     offending keys — the *resolved* set, so naming a plan instead of the cases is not a way
+         *     round it, and the whole run rather than a trimmed one, because a checklist quietly
+         *     shorter than the one that was asked for reports a pass rate over a denominator nobody
+         *     chose. A holder of `case:approve` may pass `overrideApprovalGate`.
          */
         post: {
             parameters: {
@@ -2491,6 +2503,7 @@ export interface paths {
                 400: components["responses"]["BadRequest"];
                 403: components["responses"]["Forbidden"];
                 404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
             };
         };
         delete?: never;
@@ -4514,16 +4527,51 @@ export interface components {
              */
             authorMayApproveOwnWork: boolean;
             editAfterApproval: components["schemas"]["EditAfterApproval"];
+            /**
+             * @description §6g's gating rule for cases — "a project may require APPROVED status before a case
+             *     can be added to a run". **Opt-in and off by default**; §6g calls gating "powerful
+             *     and genuinely obstructive".
+             *
+             *     Enforced on the run's **resolved** case set, whether it came from an explicit
+             *     `caseIds` list or from the expansion of a plan's scope — otherwise creating the run
+             *     from the plan is a bypass that costs no permission. The whole run is refused with
+             *     409 naming the offending keys, never trimmed to the approved ones: a checklist
+             *     quietly shorter than the one that was asked for reports a pass rate over a
+             *     denominator nobody chose.
+             *
+             *     **Independent of `reviewEnabledCase`.** Switching review off suppresses the
+             *     reviewer apparatus and not the status ladder, so a project can want approved-only
+             *     runs without ever running a peer review — and ANDing the two would disable the gate
+             *     on exactly the projects that enabled it.
+             *
+             *     Overridable per request (`TestRunInput.overrideApprovalGate`) by a holder of
+             *     `case:approve`, who could reach the same state by approving the cases first.
+             */
+            requireApprovedCaseForRun: boolean;
+            /**
+             * @description §6g's gating rule for plans — "before a plan can be started". Opt-in, off by
+             *     default, and independent of `reviewEnabledPlan` for the reason above.
+             *
+             *     Binds on the `DRAFT → ACTIVE` **edge**, not on the target. `ACTIVE` is also reached
+             *     from `APPROVED` (the rule being satisfied) and from `CLOSED` (a **reopen**) — and
+             *     refusing the reopen would make every closed plan on a gated project permanently
+             *     un-reopenable, since no legal move takes `CLOSED` back to `APPROVED`.
+             *
+             *     Overridable per request (`PlanStatusInput.overrideApprovalGate`) by a holder of
+             *     `plan:approve`.
+             */
+            requireApprovedPlanToStart: boolean;
             /** @description Null for a project nobody has configured — which is most of them. */
             updatedBy?: components["schemas"]["UserRef"] | null;
             /** Format: date-time */
             updatedAt?: string | null;
         };
         /**
-         * @description A full replacement. The three `reviewEnabled*` switches default to **false** when
-         *     omitted — an absent switch is "off", which is both §6g's default and the safe reading —
-         *     while `requiredPeerReviews` and `editAfterApproval` are **required**, because 0 and
-         *     RETAIN are meaningful values a dropped field would silently assert.
+         * @description A full replacement. Every boolean defaults to **false** when omitted — an absent switch
+         *     is "off", which is both §6g's default and the safe reading, and for the two gating
+         *     switches it is the only safe reading, since a dropped field that turned a gate ON could
+         *     stop a release. `requiredPeerReviews` and `editAfterApproval` are **required**, because
+         *     0 and RETAIN are meaningful values a dropped field would silently assert.
          */
         ProjectSettingsUpdate: {
             /** @default false */
@@ -4536,6 +4584,10 @@ export interface components {
             /** @default false */
             authorMayApproveOwnWork: boolean;
             editAfterApproval: components["schemas"]["EditAfterApproval"];
+            /** @default false */
+            requireApprovedCaseForRun: boolean;
+            /** @default false */
+            requireApprovedPlanToStart: boolean;
         };
         /** @enum {string} */
         LifecycleStatus: "DRAFT" | "IN_REVIEW" | "APPROVED" | "DEPRECATED";
@@ -5197,6 +5249,25 @@ export interface components {
         PlanStatusInput: {
             /** @enum {string} */
             status: "DRAFT" | "IN_REVIEW" | "APPROVED" | "ACTIVE" | "CLOSED";
+            /**
+             * @description §6g's "documented lead override for the 2am release" (§82). Meaningful on exactly
+             *     one move — `DRAFT → ACTIVE` on a project with `requireApprovedPlanToStart` on —
+             *     and read-and-ignored on every other, so a client never has to hold a copy of which
+             *     edge the rule binds on.
+             *
+             *     **It nominates no permission and can never widen reach.** It is consulted only
+             *     where the gate would otherwise refuse, and only for a caller already holding
+             *     `plan:approve` — who could reach the same state by approving the plan first. A
+             *     caller who sets it without that key gets the same 409 as one who did not set it,
+             *     not a 403: they are authorized to make this request and simply not authorized to
+             *     ignore the project's policy.
+             *
+             *     **Explicit rather than automatic**, which is what §6g's word "documented" is for: a
+             *     lead silently exempted never learns their own project turned the policy on, and the
+             *     audit row records `approvalGateOverridden` only when the gate actually fired.
+             * @default false
+             */
+            overrideApprovalGate: boolean;
         };
         /** @description Machine-evaluable so the plan page is a gate, not prose (plan §6p). */
         Criterion: {
@@ -5252,6 +5323,19 @@ export interface components {
             caseIds?: string[];
             /** Format: uuid */
             assigneeId?: string | null;
+            /**
+             * @description §6g's "documented lead override for the 2am release" (§82) — the one property here
+             *     that is not a property of the run. It is a statement about this request, so nothing
+             *     on the run stores it and the audit row does.
+             *
+             *     Consulted only where `requireApprovedCaseForRun` would otherwise refuse the create,
+             *     and only for a caller already holding `case:approve` — who could reach this exact
+             *     run today by approving the cases first, which is why no new permission key was
+             *     invented for it. It can never widen reach and never turns an acceptable request
+             *     into a refused one; a caller who sets it without the key gets the same 409.
+             * @default false
+             */
+            overrideApprovalGate: boolean;
         };
         TestRunDetail: components["schemas"]["TestRun"] & {
             executions: components["schemas"]["TestExecutionSummary"][];

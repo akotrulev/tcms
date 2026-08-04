@@ -1,7 +1,7 @@
 package com.tcms.project;
 
 /**
- * The settings form's submission — a full replacement of all six values.
+ * The settings form's submission — a full replacement of all eight values.
  *
  * <p><strong>Boxed types, so "not sent" and "sent false" are distinguishable in this class</strong>
  * even though the service goes on to treat them alike. A primitive {@code boolean} field would make
@@ -17,6 +17,11 @@ package com.tcms.project;
  *
  * <p>A {@code PUT}, so §74's absent/null/empty rules do not apply. Nothing here is a list and
  * nothing here is clearable, so "leave this one alone" has no meaning a user could ask for.
+ *
+ * <p>The two gating switches collapse the same way the three opt-ins do, and for a stronger reason:
+ * §6g calls gating <em>"powerful and genuinely obstructive"</em> and requires it to be an explicit
+ * choice, so a client that dropped the field must land on <em>off</em>. An absent switch that turned
+ * a gate <em>on</em> would be the one reading of a missing field that can stop a release.
  */
 public record ProjectSettingsRequest(
         Boolean reviewEnabledCase,
@@ -24,5 +29,7 @@ public record ProjectSettingsRequest(
         Boolean reviewEnabledPlan,
         Integer requiredPeerReviews,
         Boolean authorMayApproveOwnWork,
-        String editAfterApproval) {
+        String editAfterApproval,
+        Boolean requireApprovedCaseForRun,
+        Boolean requireApprovedPlanToStart) {
 }

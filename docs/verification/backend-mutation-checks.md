@@ -947,3 +947,82 @@ and six of the seven backend mutations are one predicate removed from it.
 | **Check** | no migration |
 | **Mutation** | — |
 | **Must show** | **`V26` is still free.** The inbox needed no schema: §80 added `ix_review_assignment_assignee_user` one slice ahead of its query, for this query. Confirm it is the index the plan actually uses on a populated database (`EXPLAIN` the generated statement), because an index added before its consumer is an index nobody has ever seen chosen. |
+
+## §82 — §6g's gating rules: the last unbuilt half of the review workflow
+
+The two rules that close §6g's mechanics list. Both are **opt-in and off by default**, so every
+mutation below needs the fixture to turn the setting on first — which is itself the first thing to
+check, because a mutation measured on a project with the gate off reddens nothing and reads as
+"the rule is not enforced" when it means "the rule was never asked".
+
+**The first one to run is the plan edge.** It is the mutation an ordinary reading of §6g produces,
+it looks like a simplification, and its consequence is unreachable by any test that does not think
+to close a plan first.
+
+| | |
+|---|---|
+| **File** | `execution/PlanLifecycle.java`, `startsWithoutApproval` |
+| **Mutation** | drop the `current == DRAFT` half — `return target == PlanStatus.ACTIVE` |
+| **Scope** | `com.tcms.execution.PlanLifecycleEndpointTest` |
+| **Must redden** | **exactly 1** — *but a CLOSED plan still REOPENS*. This is the target-keyed reading of §6g and it is what somebody writes first: it passes the draft test, the approved test, both override tests and the independence test, and it makes **every closed plan on a gated project permanently un-reopenable by anybody**, because no legal move takes `CLOSED` back to `APPROVED`. The single reddened test is the whole guard. |
+
+| | |
+|---|---|
+| **File** | `execution/RunCreateService.java`, `gate` |
+| **Mutation** | ask `cases.unapprovedCases(projectId, request.caseIds())` instead of `edit.caseIds()` |
+| **Scope** | `com.tcms.execution.RunCreateEndpointTest` |
+| **Must redden** | **exactly 1** — *a run from a PLAN is gated too*. The explicit-list tests all still pass, so the gate looks enforced; what is gone is the rule on the path a release run actually takes. Nothing in the response distinguishes the two, and the bypass costs no permission and leaves no audit row. |
+
+| | |
+|---|---|
+| **File** | `execution/RunCreateService.java`, `gate` |
+| **Mutation** | drop the unapproved cases from `edit.caseIds()` and proceed, instead of refusing |
+| **Scope** | `com.tcms.execution.RunCreateEndpointTest` |
+| **Must redden** | **at least 3** — the refusal tests. Run it anyway for what it *doesn't* break: the trimmed run is created successfully, with a shorter checklist and a pass rate over a denominator nobody chose, which is `RunCreateService`'s own partial-materialisation argument arriving through a door it did not expect. |
+
+| | |
+|---|---|
+| **File** | `execution/CaseFacts.java`, `unapprovedCases` |
+| **Mutation** | `c.lifecycle_status IN ('DRAFT','IN_REVIEW')` instead of `<> 'APPROVED'` |
+| **Scope** | `com.tcms.execution.RunCreateEndpointTest` |
+| **Must redden** | **0 — and that is the finding to record.** No test seeds a `DEPRECATED` case into a gated run, so the enumeration passes the whole suite while letting **retired content into a release run**, which is exactly what the gate exists to stop. Either write that test while the mutation is applied, or accept that the `<> 'APPROVED'` spelling is held by a comment. Do not skip this row because it reddens nothing; that is what it is reporting. |
+
+| | |
+|---|---|
+| **File** | `execution/ApprovalGating.java`, `Verdict.fired` |
+| **Mutation** | `return new Verdict(null, true)` unconditionally |
+| **Scope** | `com.tcms.execution.RunCreateEndpointTest`, `PlanLifecycleEndpointTest` |
+| **Must redden** | **exactly 2** — one per aggregate (*an engineer asking to override is refused all the same*). Two, not one, is the evidence the shared record really is shared: a single red test would mean one of the two services had quietly grown its own copy of the rule. |
+
+| | |
+|---|---|
+| **File** | `execution/RunCreateService.java` / `PlanStatusService.java`, the audit payload |
+| **Mutation** | write `approvalGateOverridden` unconditionally rather than only when `overridden` |
+| **Scope** | both endpoint tests |
+| **Must redden** | **exactly 2** — *the flag on an UNGATED project is not an override*. The mutation is the tidier-looking code, and it records every ordinary run and every ordinary plan start as a policy bypass, which is precisely the signal §6g's word *documented* exists to keep meaningful. |
+
+| | |
+|---|---|
+| **File** | `project/ReviewSettings.java` consumers — `RunCreateService.gate`, `PlanStatusService.gate` |
+| **Mutation** | AND each gate with `reviewEnabledFor(...)` |
+| **Scope** | both endpoint tests |
+| **Must redden** | **exactly 2** — *gating binds with review switched OFF*. This is the §82 decision under test and the mutation is the intuitive reading (gating is part of §6g, review is off, therefore inert). It disables the gate on every project that never turned peer review on — most of them, and including every project that enabled gating for the reason it exists. |
+
+| | |
+|---|---|
+| **File** | `project/ProjectService.java`, `holds` |
+| **Mutation** | `return true` |
+| **Scope** | `com.tcms.repository.CaseBulkEndpointTest`, both execution endpoint tests |
+| **Must redden** | **at least 3**, spanning **two modules** — the two override-refusal tests plus `CaseBulkService`'s refusal wording. Worth running for the span rather than the count: §82 moved this method out of `CaseBulkService`, and the reason to keep it in one place is that three call sites depend on it answering the same question. |
+
+| | |
+|---|---|
+| **Check** | the fixture's approve path |
+| **Mutation** | in `RunCreateEndpointTest.approve`, set `lifecycle_status` by SQL instead of walking the bulk endpoint |
+| **Must show** | **nothing reddens — which is why the SQL version must not be used.** The tests would then assert the gate against a column this fixture wrote, not against the state the product produces. Recorded so the shortcut is refused deliberately rather than found convenient later. |
+
+| | |
+|---|---|
+| **Check** | `V26` and the policy count |
+| **Mutation** | — |
+| **Must show** | **58 policies, unchanged** — `V26` adds two columns and no table, so `SchemaConventionTest`'s count must not move. Confirm on a **migrated** database rather than a fresh Testcontainer: `V26` is an `ALTER`, and `NOT NULL DEFAULT false` on a populated `project_settings` is the one shape a fresh container cannot tell apart from a `CREATE`. |

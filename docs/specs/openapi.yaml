@@ -1663,7 +1663,11 @@ paths:
           Engineer do it by asking for `DRAFT`.
 
         **Review is optional** (plan §6g), so `DRAFT → ACTIVE` is legal: a project that never turns
-        review on must still be able to start a plan.
+        review on must still be able to start a plan — **unless it turned §6g's gating rule on**
+        (`requireApprovedPlanToStart`, §82), which closes exactly that edge with a `409`.
+        `APPROVED → ACTIVE` and `CLOSED → ACTIVE` are untouched by it: the first is the rule being
+        satisfied, and the second is a *reopen*, which a target-keyed rule would make impossible
+        for ever. A holder of `plan:approve` may pass `overrideApprovalGate`.
 
         Two moves are refused with `409` because the ladder does not have them: `APPROVED` is
         reachable only from `IN_REVIEW` (approval must not be reachable without review), and
@@ -1787,6 +1791,13 @@ paths:
 
         `configurationId` defaults to the project's default configuration — every project is
         seeded with one, so the field is optional and the column stays `NOT NULL`.
+
+        **§6g's gating rule (§82).** On a project with `requireApprovedCaseForRun` on, a run
+        whose resolved case set contains anything that is not `APPROVED` is a `409` naming the
+        offending keys — the *resolved* set, so naming a plan instead of the cases is not a way
+        round it, and the whole run rather than a trimmed one, because a checklist quietly
+        shorter than the one that was asked for reports a pass rate over a denominator nobody
+        chose. A holder of `case:approve` may pass `overrideApprovalGate`.
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody:
         required: true
@@ -1814,6 +1825,10 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        # §6g's gating rule. The FIRST 409 on this operation: everything else wrong with a
+        # create is a field error, and this one is not — every id names a live case and the
+        # permission is held, it is the project's own policy that refuses.
+        '409': { $ref: '#/components/responses/Conflict' }
 
   /projects/{projectId}/runs/{runId}:
     parameters:
@@ -3422,6 +3437,8 @@ components:
         - requiredPeerReviews
         - authorMayApproveOwnWork
         - editAfterApproval
+        - requireApprovedCaseForRun
+        - requireApprovedPlanToStart
       properties:
         projectId: { type: string, format: uuid }
         reviewEnabledCase:
@@ -3456,6 +3473,40 @@ components:
             A review whose submitter is unattributable does not bind the rule, or the artifact
             could never be approved by anyone.
         editAfterApproval: { $ref: '#/components/schemas/EditAfterApproval' }
+        requireApprovedCaseForRun:
+          type: boolean
+          description: |
+            §6g's gating rule for cases — "a project may require APPROVED status before a case
+            can be added to a run". **Opt-in and off by default**; §6g calls gating "powerful
+            and genuinely obstructive".
+
+            Enforced on the run's **resolved** case set, whether it came from an explicit
+            `caseIds` list or from the expansion of a plan's scope — otherwise creating the run
+            from the plan is a bypass that costs no permission. The whole run is refused with
+            409 naming the offending keys, never trimmed to the approved ones: a checklist
+            quietly shorter than the one that was asked for reports a pass rate over a
+            denominator nobody chose.
+
+            **Independent of `reviewEnabledCase`.** Switching review off suppresses the
+            reviewer apparatus and not the status ladder, so a project can want approved-only
+            runs without ever running a peer review — and ANDing the two would disable the gate
+            on exactly the projects that enabled it.
+
+            Overridable per request (`TestRunInput.overrideApprovalGate`) by a holder of
+            `case:approve`, who could reach the same state by approving the cases first.
+        requireApprovedPlanToStart:
+          type: boolean
+          description: |
+            §6g's gating rule for plans — "before a plan can be started". Opt-in, off by
+            default, and independent of `reviewEnabledPlan` for the reason above.
+
+            Binds on the `DRAFT → ACTIVE` **edge**, not on the target. `ACTIVE` is also reached
+            from `APPROVED` (the rule being satisfied) and from `CLOSED` (a **reopen**) — and
+            refusing the reopen would make every closed plan on a gated project permanently
+            un-reopenable, since no legal move takes `CLOSED` back to `APPROVED`.
+
+            Overridable per request (`PlanStatusInput.overrideApprovalGate`) by a holder of
+            `plan:approve`.
         updatedBy:
           allOf: [{ $ref: '#/components/schemas/UserRef' }]
           nullable: true
@@ -3465,10 +3516,11 @@ components:
     ProjectSettingsUpdate:
       type: object
       description: |
-        A full replacement. The three `reviewEnabled*` switches default to **false** when
-        omitted — an absent switch is "off", which is both §6g's default and the safe reading —
-        while `requiredPeerReviews` and `editAfterApproval` are **required**, because 0 and
-        RETAIN are meaningful values a dropped field would silently assert.
+        A full replacement. Every boolean defaults to **false** when omitted — an absent switch
+        is "off", which is both §6g's default and the safe reading, and for the two gating
+        switches it is the only safe reading, since a dropped field that turned a gate ON could
+        stop a release. `requiredPeerReviews` and `editAfterApproval` are **required**, because
+        0 and RETAIN are meaningful values a dropped field would silently assert.
       required:
         - requiredPeerReviews
         - editAfterApproval
@@ -3479,6 +3531,8 @@ components:
         requiredPeerReviews: { type: integer, minimum: 0, maximum: 20 }
         authorMayApproveOwnWork: { type: boolean, default: false }
         editAfterApproval: { $ref: '#/components/schemas/EditAfterApproval' }
+        requireApprovedCaseForRun: { type: boolean, default: false }
+        requireApprovedPlanToStart: { type: boolean, default: false }
 
     # -------------------------------------------------------------- enums ---
     LifecycleStatus:
@@ -4441,6 +4495,25 @@ components:
         # ladder — and reopening a closed plan is spelled ACTIVE, not CLOSED, which is exactly the
         # kind of rule that does not survive being written down twice.
         status: { type: string, enum: [DRAFT, IN_REVIEW, APPROVED, ACTIVE, CLOSED] }
+        overrideApprovalGate:
+          type: boolean
+          default: false
+          description: |
+            §6g's "documented lead override for the 2am release" (§82). Meaningful on exactly
+            one move — `DRAFT → ACTIVE` on a project with `requireApprovedPlanToStart` on —
+            and read-and-ignored on every other, so a client never has to hold a copy of which
+            edge the rule binds on.
+
+            **It nominates no permission and can never widen reach.** It is consulted only
+            where the gate would otherwise refuse, and only for a caller already holding
+            `plan:approve` — who could reach the same state by approving the plan first. A
+            caller who sets it without that key gets the same 409 as one who did not set it,
+            not a 403: they are authorized to make this request and simply not authorized to
+            ignore the project's policy.
+
+            **Explicit rather than automatic**, which is what §6g's word "documented" is for: a
+            lead silently exempted never learns their own project turned the policy on, and the
+            audit row records `approvalGateOverridden` only when the gate actually fired.
 
     Criterion:
       type: object
@@ -4496,6 +4569,19 @@ components:
           type: array
           items: { type: string, format: uuid }
         assigneeId: { type: string, format: uuid, nullable: true }
+        overrideApprovalGate:
+          type: boolean
+          default: false
+          description: |
+            §6g's "documented lead override for the 2am release" (§82) — the one property here
+            that is not a property of the run. It is a statement about this request, so nothing
+            on the run stores it and the audit row does.
+
+            Consulted only where `requireApprovedCaseForRun` would otherwise refuse the create,
+            and only for a caller already holding `case:approve` — who could reach this exact
+            run today by approving the cases first, which is why no new permission key was
+            invented for it. It can never widen reach and never turns an acceptable request
+            into a refused one; a caller who sets it without the key gets the same 409.
 
     TestRunDetail:
       allOf:

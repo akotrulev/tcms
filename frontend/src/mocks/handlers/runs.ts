@@ -9,6 +9,7 @@ import {
   planScopeCaseIds,
   recountRun,
   runExecutions,
+  settingsForProject,
 } from '../db';
 import { currentUser } from '../fixtures/core';
 import { API, LATENCY, holdsOn, notFound, problem, qualifierOn, userRef } from './shared';
@@ -98,6 +99,43 @@ export const runHandlers = [
           'This run would have nothing to execute. Choose cases, or a plan whose scope still has some.',
         ],
       });
+    }
+
+    /*
+      §6g's gating rule (§82), mirrored from the server in all four of the ways it can be got wrong:
+
+        1. it binds on the RESOLVED set (`caseIds` above already folds in the plan's scope), so
+           naming a plan is not a way round it;
+        2. the whole run is refused, never trimmed to the approved cases;
+        3. it is asked AFTER validation, so a payload that is both malformed and gated gets the
+           field errors — the ones the caller can act on;
+        4. it is NOT conditioned on `reviewEnabledCase`. Off is narrow: it suppresses the reviewer
+           apparatus, not the status ladder, and a mock that ANDed them would show the gate doing
+           nothing on exactly the projects that turn it on.
+    */
+    const gating = settingsForProject(projectId);
+    if (gating.requireApprovedCaseForRun) {
+      const unapproved = caseIds
+        .map((id) => db.cases.find((c) => c.id === id))
+        .filter((c) => c && c.lifecycleStatus !== 'APPROVED')
+        .map((c) => c!.key);
+
+      // The override is consulted only here, and only for a holder of `case:approve` — so a caller
+      // who sends the flag without the key gets the same refusal as one who did not send it, which
+      // is the server's answer and the reason the flag can never widen reach.
+      const mayOverride = body.overrideApprovalGate === true && holdsOn(projectId, 'case:approve');
+
+      if (unapproved.length > 0 && !mayOverride) {
+        const quoted = unapproved.slice(0, 5);
+        const rest = unapproved.length > quoted.length ? ` and ${unapproved.length - quoted.length} more` : '';
+        return problem(
+          409,
+          'This run needs approved cases',
+          `This project only runs approved test cases. ${unapproved.length} of the ` +
+            `${caseIds.length} in this run ${unapproved.length === 1 ? 'is' : 'are'} not ` +
+            `approved: ${quoted.join(', ')}${rest}.`,
+        );
+      }
     }
 
     const { key } = allocateRunKey();

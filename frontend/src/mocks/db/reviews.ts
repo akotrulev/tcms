@@ -270,6 +270,13 @@ export function defaultProjectSettings(projectId: string): ProjectSettings {
     requiredPeerReviews: 0,
     authorMayApproveOwnWork: false,
     editAfterApproval: 'RETAIN',
+    // §6g's gating rules (§82). Off by default like everything else here, and — unlike the three
+    // above — NOT switched on for the demo project by `settingsForProject`. Turning them on would
+    // make every run and every plan start in mock mode fail until somebody approved the fixtures,
+    // which is a demo of the refusal rather than of the product. The state is reachable in one
+    // click on the settings screen, which is where somebody exploring the feature will be.
+    requireApprovedCaseForRun: false,
+    requireApprovedPlanToStart: false,
     updatedBy: null,
     updatedAt: null,
   };

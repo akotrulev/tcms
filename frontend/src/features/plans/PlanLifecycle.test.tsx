@@ -194,6 +194,91 @@ describe('PlanStatisticsPage — the plan lifecycle controls', () => {
     await waitFor(() => expect(screen.getByTestId('PlanStats.StatusError')).toBeInTheDocument())
   })
 
+  /**
+   * §6g's gating rule and its lead override (§82).
+   *
+   * The refusal is a 409 like the ladder's above, and everything that distinguishes it is in what
+   * the screen does *next*. Three failures, none of them visible to `tsc`:
+   *
+   *   1. **A refusal with no way out.** §6g mandates a documented lead override for exactly this;
+   *      an error naming an action the UI does not offer is a design bug (`ui-rules`).
+   *   2. **The override offered on the wrong refusal.** The gate can only refuse a *start*, so a
+   *      ladder refusal on any other target must not sprout an override button — which would put
+   *      "Start it anyway" under a sentence about approving a plan.
+   *   3. **The retry not carrying the flag**, which would produce the same 409 and read as a dead
+   *      button.
+   */
+  describe('§6g gating', () => {
+    function gateRefusal() {
+      return new ApiError(
+        409,
+        'This project only starts approved plans. Submit this plan for review and have it ' +
+          'approved before starting it.',
+        null,
+        null,
+        null,
+        'This plan needs approval',
+      )
+    }
+
+    it('offers the override after a refused start, and sends the flag on the retry', async () => {
+      mockReads('DRAFT')
+      const put = vi
+        .spyOn(api, 'put')
+        .mockRejectedValueOnce(gateRefusal())
+        .mockResolvedValue(planBody('ACTIVE') as never)
+      renderPage()
+      await enabled('PlanStats.Move.ACTIVE')
+
+      await userEvent.click(screen.getByTestId('PlanStats.Move.ACTIVE'))
+
+      // Re-queried inside waitFor: `PermissionGate` swaps the DOM node between its denied
+      // (tooltip-wrapped) and allowed branches (§64's harness trap).
+      await waitFor(() => expect(screen.getByTestId('PlanStats.OverrideGate')).toBeEnabled())
+      await userEvent.click(screen.getByTestId('PlanStats.OverrideGate'))
+
+      await waitFor(() => expect(put).toHaveBeenCalledTimes(2))
+      expect(put.mock.calls[1][1]).toEqual({ status: 'ACTIVE', overrideApprovalGate: true })
+    })
+
+    it('disables the override for a caller without plan:approve, rather than hiding it', async () => {
+      mockReads('DRAFT', ['project:read', 'plan:edit'])
+      vi.spyOn(api, 'put').mockRejectedValue(gateRefusal())
+      renderPage()
+      await enabled('PlanStats.Move.ACTIVE')
+
+      await userEvent.click(screen.getByTestId('PlanStats.Move.ACTIVE'))
+
+      // Present — §31, so the person who has to go and ask can see the way out exists. Paired with
+      // the enabling assertion above, or this passes with no gate in the code at all (§66).
+      expect(await screen.findByTestId('PlanStats.OverrideGate')).toBeInTheDocument()
+      await waitFor(() => expect(screen.getByTestId('PlanStats.OverrideGate')).toBeDisabled())
+    })
+
+    it('does NOT offer it on a refusal the gate cannot have caused', async () => {
+      mockReads('DRAFT')
+      vi.spyOn(api, 'put').mockRejectedValue(
+        new ApiError(
+          409,
+          'Only a draft plan can be submitted for review. Return this plan to draft first.',
+          null,
+          null,
+          null,
+          'Not possible right now',
+        ),
+      )
+      renderPage()
+      await enabled('PlanStats.Move.IN_REVIEW')
+
+      // IN_REVIEW rather than APPROVED, and the reason is the rule in test 1 of this file: the
+      // controls swap on the plan's state, so a draft plan offers no Approve button to click.
+      await userEvent.click(screen.getByTestId('PlanStats.Move.IN_REVIEW'))
+
+      await waitFor(() => expect(screen.getByTestId('PlanStats.StatusError')).toBeInTheDocument())
+      expect(screen.queryByTestId('PlanStats.OverrideGate')).toBeNull()
+    })
+  })
+
   it('renders the delete refusal inside the dialog, which stays open', async () => {
     // The 409 the client cannot predict: nothing on this screen knows the plan's run count, so
     // unlike a permission this refusal has no gate that could have disabled the control.

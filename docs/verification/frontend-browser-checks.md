@@ -656,3 +656,31 @@ the automated half of this is genuinely covered and row 3 is the part a human mu
 | 2 | `VITE_APP_VERSION=9.9.9 npm run build && npm run preview` | Footer reads **`TCMS 9.9.9`**. Proves the `define` reaches the emitted bundle and not just the dev server. | mock |
 | 3 | After a real `gh workflow run deploy.yml -f version=<v>`, hard-reload the deployed site | Footer reads **`TCMS <v>`**, matching the dispatched input and the GHCR image tag. **This is the check the whole change exists for** — the previous release passed every gate and still showed the wrong number. | **live only** — needs a real dispatch |
 | 4 | Deploy a second version, then reload | The number **changes**. One correct reading is consistent with a literal that happens to match; two are not. | **live only** — needs two dispatches |
+
+## §82 — §6g's gating rules: the refusal that has to offer a way out
+
+The sixteenth slice in this queue. §6g calls gating *"powerful and genuinely obstructive"*, which
+makes this the one feature here whose **failure mode is a person who cannot start work and is not
+told what to do about it** — so most of these rows are about the sentence and the affordance beside
+it rather than about whether the rule fires.
+
+**Both switches are off in the mock's fixtures on purpose**, so every row below opens by turning
+one on at `/projects/:projectId/settings/review`. That is also row 1.
+
+| # | Flow | What must be true | Mode |
+|---|---|---|---|
+| 1 | Settings → Review, toggle **Only approved test cases can go into a run**, Save, reload | The switch is still on after the reload. The **whole-body save** is the risk: this form `PUT`s all eight settings and the server reads an absent boolean as `false`, so a field dropped anywhere between the draft, the submit and the mock handler switches the gate off with a success message. A unit test asserts the body; this asserts the round trip. | mock |
+| 2 | With gating on, change **only** the peer-review number and Save, then reload | The two gating switches are **still on**. The silent-discard defect in the form it would actually take — an admin editing an unrelated field quietly reopens the gate. Nothing on screen would say so. | mock |
+| 3 | Turn a gate on and confirm the warning; turn both off | The amber warning appears while either is on and disappears when both are off. §6g requires this to be an explicit choice; the warning is where "explicit" lives. | mock |
+| 4 | With cases gating on, start a run from a plan whose cases are drafts | **409 rendered in the dialog's banner**, naming the count and the first few keys — not a corner toast, and not a silent no-op submit. Read the sentence as somebody who did not configure this: does it say what to do next? | mock |
+| 5 | Same, as a caller **holding `case:approve`** | **Create it anyway** appears under the refusal, enabled. Click it: the run is created, the dialog closes, and the run's checklist is the full one. This is §6g's documented override and the whole reason a 409 here is not a dead end. | mock |
+| 6 | Same, as a caller **without** `case:approve` (a Test Engineer persona) | The button is **present and disabled**, with the gate's why-tooltip on hover (§31). Hidden instead of disabled is the defect: the person who has to go and ask would not know the way out exists. **Mock mode signs in as one persona holding every key**, so this row is **live only**. | **live only** |
+| 7 | Edit the run name *after* the refusal, then click **Create it anyway** | The run is created with the **edited** name. The retry re-reads the form rather than replaying the first attempt's values — a replay would create a run the user is not looking at. | mock |
+| 8 | With plan gating on, open a draft plan and press **Start** | 409 beside the buttons, and **Start it anyway** appears next to it. Check the sentence names review as the way forward. | mock |
+| 9 | Same plan, press **Submit for review** and let it be refused for a ladder reason | **No override button.** The gate can only refuse a start, so an override under a sentence about submitting for review would offer to bypass something that is not blocking. | mock |
+| 10 | Approve a plan properly, then Start it | Starts normally, no refusal, no override affordance. The rule satisfied must look like nothing happened. | mock |
+| 11 | Start a plan, Close it, then **Reopen** it — with plan gating **on** | **It reopens.** This is the row the whole slice turns on: a target-keyed reading of §6g makes every closed plan permanently un-reopenable, and the screen would show a Reopen button that 409s for ever with a message about approving a plan that cannot be approved. | mock |
+| 12 | Switch **all three review opt-ins off** while leaving a gate on, then repeat rows 4 and 8 | The gates **still fire**, and no review panel is rendered anywhere. §82's decision made visible: gating reads the status ladder, review's opt-in suppresses the apparatus. A build where these are coupled looks identical until this row. | mock |
+| 13 | Turn a gate on for project A only, then repeat row 4 in project B | Project B is unaffected. Per-project settings, and the read is `useProjectSettings(projectId)` — a cache keyed too broadly would leak A's policy into B. | mock |
+| 14 | After an override, check the audit trail | `approvalGateOverridden` is on the row — and is **absent** on an ordinary run created with the gate off. **No audit screen exists** (`audit:view` has no consumer), so this is a `psql` read against `audit_event.changes`, not a UI check. | **live only** |
+| 15 | With gating on, create a run through the dialog while the project has **no** unapproved cases | Created normally with no mention of the gate anywhere. A gate that announces itself when it is satisfied is the noise that makes people turn it off. | mock |

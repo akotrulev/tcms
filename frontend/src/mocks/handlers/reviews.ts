@@ -94,6 +94,13 @@ export const reviewHandlers = [
           requiredPeerReviews: peers as number,
           authorMayApproveOwnWork: body.authorMayApproveOwnWork === true,
           editAfterApproval: body.editAfterApproval as 'RETAIN' | 'RE_REVIEW',
+          // §6g's gating rules (§82), read the same way as the switches above: `=== true`, so an
+          // absent field is OFF. That is the server's reading and the only safe one here — a
+          // dropped field that turned a gate ON is the one reading of an omission that can stop a
+          // release. `saveProjectSettings` takes the whole value, so the compiler refuses a
+          // handler that forgets one, which is how this omission was caught rather than shipped.
+          requireApprovedCaseForRun: body.requireApprovedCaseForRun === true,
+          requireApprovedPlanToStart: body.requireApprovedPlanToStart === true,
         },
         meRef(),
       ),

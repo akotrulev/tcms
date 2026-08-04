@@ -77,6 +77,17 @@ public class ProjectSettings {
     @Column(name = "edit_after_approval", nullable = false)
     private EditAfterApproval editAfterApproval;
 
+    /**
+     * §6g's two gating rules ({@code V26}), and the reason they sit beside the review columns
+     * without being governed by them is on {@link ReviewSettings} and in {@code V26}'s own comment:
+     * they read the status ladder, which switching review off does not take away.
+     */
+    @Column(name = "require_approved_case_for_run", nullable = false)
+    private boolean requireApprovedCaseForRun;
+
+    @Column(name = "require_approved_plan_to_start", nullable = false)
+    private boolean requireApprovedPlanToStart;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -109,7 +120,8 @@ public class ProjectSettings {
      * a caller that saves it is going through {@link #initial} instead.
      */
     static ReviewSettings defaults() {
-        return new ReviewSettings(false, false, false, 0, false, EditAfterApproval.RETAIN);
+        return new ReviewSettings(
+                false, false, false, 0, false, EditAfterApproval.RETAIN, false, false);
     }
 
     /** The row a newly created project gets — {@link #defaults}, persisted. */
@@ -127,9 +139,9 @@ public class ProjectSettings {
      * Replaces every setting at once.
      *
      * <p>A {@code PUT} rather than a {@code PATCH}, so this takes the whole value: the form shows
-     * all six controls and submits all six, and a partial update would need §74's absent/null/empty
-     * rules for a shape where "leave this one alone" has no user-facing meaning — nothing here is a
-     * list and nothing here is clearable.
+     * all eight controls and submits all eight, and a partial update would need §74's
+     * absent/null/empty rules for a shape where "leave this one alone" has no user-facing meaning —
+     * nothing here is a list and nothing here is clearable.
      */
     void apply(ReviewSettings settings, UUID actorId, Instant now) {
         this.reviewEnabledCase = settings.reviewEnabledCase();
@@ -138,6 +150,8 @@ public class ProjectSettings {
         this.requiredPeerReviews = settings.requiredPeerReviews();
         this.authorMayApproveOwnWork = settings.authorMayApproveOwnWork();
         this.editAfterApproval = settings.editAfterApproval();
+        this.requireApprovedCaseForRun = settings.requireApprovedCaseForRun();
+        this.requireApprovedPlanToStart = settings.requireApprovedPlanToStart();
         this.updatedBy = actorId;
         this.updatedAt = now;
     }
@@ -150,7 +164,9 @@ public class ProjectSettings {
                 reviewEnabledPlan,
                 requiredPeerReviews,
                 authorMayApproveOwnWork,
-                editAfterApproval);
+                editAfterApproval,
+                requireApprovedCaseForRun,
+                requireApprovedPlanToStart);
     }
 
     public UUID getProjectId() {

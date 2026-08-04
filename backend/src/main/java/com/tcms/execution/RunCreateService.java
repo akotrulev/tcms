@@ -3,6 +3,7 @@ package com.tcms.execution;
 import com.tcms.project.GateResult;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectService;
+import com.tcms.project.ProjectSettingsService;
 import com.tcms.tenancy.AuditEvent;
 import com.tcms.tenancy.AuditEventRepository;
 import com.tcms.tenancy.CompanyContext;
@@ -55,6 +56,32 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>The counter increment, the run row, every execution and the audit row are one transaction. A
  * partially materialised run — some of its checklist missing, no error anywhere — is the failure
  * this rules out, and it is indistinguishable by inspection from a run whose scope was smaller.
+ *
+ * <h2>§6g's gating rule, added in §82</h2>
+ *
+ * <p>A project may require every case in a run to be {@code APPROVED}. Three things about how that
+ * is applied here are decisions rather than mechanics:
+ *
+ * <p><strong>It binds on the RESOLVED set, not on {@code caseIds}.</strong> A run names its cases
+ * one of two ways and the plan's scope is the one that gets forgotten: gating only the explicit list
+ * would leave "create the run from the plan instead" as a bypass that costs no permission and leaves
+ * no trace, on the very path a release run is most likely to take.
+ *
+ * <p><strong>The whole run is refused, never trimmed.</strong> Dropping the unapproved cases and
+ * materialising the rest is the shape {@code CaseBulkService} uses for a filtered selection and it
+ * is wrong here for the reason this class's own header already gives about partial materialisation:
+ * a checklist that is quietly shorter than the one the tester asked for is indistinguishable from a
+ * run whose scope was smaller, and its pass rate is computed over a denominator nobody chose. So
+ * this is a 409 naming the offending keys.
+ *
+ * <p><strong>The override is {@code case:approve} and is asked for only on the refusal
+ * path.</strong> §6g asks for "a documented lead override for the 2am release" and no key is
+ * invented for it (§67's argument, via §79 and §80): a key {@code V3} seeds to nobody is a 403
+ * nobody can grant their way out of. {@code case:approve} is <em>derived</em> — its holder can reach
+ * this exact run today by approving the cases first, so the override widens nothing. What it changes
+ * is the record it leaves: the cases stay honestly unapproved and the audit row says the gate was
+ * overridden, where the workaround it replaces writes approvals nobody performed into the very
+ * history §6g exists to keep honest.
  */
 @Service
 public class RunCreateService {
@@ -62,13 +89,31 @@ public class RunCreateService {
     /** Roles spec §A4. Held by every role except Viewer — see the class header. */
     private static final String CREATE_RUN = "run:create";
 
+    /**
+     * §6g's gating override (§82). Spelled out here rather than imported: the constant lives on
+     * {@code repository.LifecycleLadder.Keys}, and this module may not depend on {@code repository}
+     * (plan §3). A second spelling of one key is a real cost and the alternative is worse — a port
+     * in {@code project} whose only job is to hand back a string literal — so it is written once
+     * with its reason, and {@code SeedDataTest} is what asserts the catalogue still contains it.
+     */
+    private static final String APPROVE_CASE = "case:approve";
+
     private static final String AUDIT_ACTION = "run.created";
     private static final String AUDIT_TARGET = "test_run";
 
     /** {@code CaseCreateService}'s cap, for its reason. */
     private static final int MAX_IDEMPOTENCY_KEY = 200;
 
+    /**
+     * How many keys the refusal quotes before it stops counting. A gated project rejecting a
+     * two-hundred-case run must not answer with a two-hundred-key sentence — and the first few in
+     * key order are enough to find the problem, because the caller is looking at the same list in
+     * the same order.
+     */
+    private static final int REFUSAL_KEYS_QUOTED = 5;
+
     private final ProjectService projects;
+    private final ProjectSettingsService settings;
     private final TestRunRepository runs;
     private final TestPlanRepository plans;
     private final TestExecutionRepository executions;
@@ -83,6 +128,7 @@ public class RunCreateService {
     @SuppressWarnings("checkstyle:ParameterNumber")
     public RunCreateService(
             ProjectService projects,
+            ProjectSettingsService settings,
             TestRunRepository runs,
             TestPlanRepository plans,
             TestExecutionRepository executions,
@@ -95,6 +141,7 @@ public class RunCreateService {
             Clock clock) {
 
         this.projects = projects;
+        this.settings = settings;
         this.runs = runs;
         this.plans = plans;
         this.executions = executions;
@@ -117,6 +164,15 @@ public class RunCreateService {
         }
 
         record Invalid(Map<String, List<String>> errors) implements Outcome {
+        }
+
+        /**
+         * §6g's gating rule refuses this run. A <strong>409</strong>, not a 400: every id in the
+         * request names a live case in this project and the permission is held — it is the
+         * project's own policy that refuses, which is the same distinction {@code PlanLifecycle}
+         * draws for a move the ladder does not have.
+         */
+        record Refused(String message) implements Outcome {
         }
 
         /** A new run, with its executions. 201. */
@@ -209,6 +265,21 @@ public class RunCreateService {
                     List.of("That configuration is not in this project.")));
         }
 
+        // §6g's gating rule, LAST of the refusals and BEFORE the key is allocated.
+        //
+        // Last, because a request that is both malformed and gated must get the field errors: those
+        // are the ones the caller can act on, where "these cases are not approved" about a case list
+        // that also names a deleted id sends them to fix the wrong thing. Before the allocation for
+        // §29's reason, one line down — a refused run burns no key.
+        //
+        // On edit.caseIds() and not request.caseIds(): the resolved set is what would actually be
+        // materialised, which is the whole difference between gating a run and gating a form.
+        ApprovalGating.Verdict gate = gate(
+                userId, project.getId(), edit.caseIds(), request.overrideApprovalGate());
+        if (gate.refusal() != null) {
+            return new Outcome.Refused(gate.refusal());
+        }
+
         // AFTER validation, so a rejected payload burns no key — §29's rule, and here a run that
         // named a plan with an empty scope is a mistake somebody makes twice in a row.
         DisplayKeys.Allocation allocated = displayKeys.allocate(DisplayKeys.EntityType.RUN, 1);
@@ -257,10 +328,63 @@ public class RunCreateService {
                         + ",\"executions\":" + checklist.size()
                         + ",\"planId\":" + (edit.planId() == null
                                 ? "null" : AuditEvent.jsonString(edit.planId().toString()))
+                        // §6g's "documented" override, and this is where it is documented. Written
+                        // only when the gate actually fired, so the field's presence means somebody
+                        // started a run of unapproved cases against their project's own policy —
+                        // where writing false on every run would bury that in noise. A payload key
+                        // rather than a distinct audit verb (run.created_with_override): overriding
+                        // is not a different act, it is the same act performed against the policy,
+                        // and RunStatusService's argument for distinct verbs is about acts.
+                        + (gate.overridden() ? ",\"approvalGateOverridden\":true" : "")
                         + "}",
                 now));
 
         return new Outcome.Created(views.viewOf(created));
+    }
+
+    /**
+     * §6g's gating rule for this run — see the class header for why it binds where it does, and
+     * {@link ApprovalGating.Verdict} for what the answer means.
+     *
+     * <p>Two early exits before either question is asked, and they are the ordinary path: a project
+     * that never turned gating on pays one settings read, and a gated project whose cases are all
+     * approved pays one more. Neither asks a permission, which is what keeps the override incapable
+     * of narrowing anybody's reach — a request that was never going to be refused never has a
+     * second permission asked of it at all.
+     */
+    private ApprovalGating.Verdict gate(
+            UUID userId, UUID projectId, List<UUID> caseIds, Boolean overrideRequested) {
+
+        if (!settings.effective(projectId).requireApprovedCaseForRun()) {
+            return ApprovalGating.Verdict.PROCEED;
+        }
+        List<String> unapproved = cases.unapprovedCases(projectId, caseIds);
+        if (unapproved.isEmpty()) {
+            return ApprovalGating.Verdict.PROCEED;
+        }
+        return ApprovalGating.Verdict.fired(
+                Boolean.TRUE.equals(overrideRequested)
+                        && projects.holds(userId, projectId, APPROVE_CASE),
+                refusal(unapproved, caseIds.size()));
+    }
+
+    /**
+     * The refusal, naming the first few offenders in key order.
+     *
+     * <p>Both numbers are in it on purpose. "3 of 4" tells somebody the run is nearly ready and
+     * "180 of 200" tells them the project turned this on yesterday and nobody has been through the
+     * library yet — the same message, and two completely different next actions.
+     */
+    private static String refusal(List<String> unapproved, int total) {
+        List<String> quoted = unapproved.stream().limit(REFUSAL_KEYS_QUOTED).toList();
+        String rest = unapproved.size() > quoted.size()
+                ? " and " + (unapproved.size() - quoted.size()) + " more"
+                : "";
+
+        return "This project only runs approved test cases. "
+                + unapproved.size() + " of the " + total + " in this run "
+                + (unapproved.size() == 1 ? "is" : "are") + " not approved: "
+                + String.join(", ", quoted) + rest + ".";
     }
 
     /**

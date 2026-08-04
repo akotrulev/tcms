@@ -1,6 +1,62 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-03 (latest section: **§81, the reviewer's inbox** — §80 ended by naming it and
+**Date:** 2026-08-04 (latest section: **§82, §6g's gating rules** — the last line of §6g's mechanics
+list, unimplemented since the plan was written, and the slice that built **almost nothing new**:
+the ladders (§73/§75), the record (§76), the settings row (§77) and the board (§81) were all
+already there, so what was missing was **two boolean columns and the two places that read them**.
+**The slice is two decisions and both are about where a rule binds.** *(1)* **The plan rule is an
+EDGE, not a target.** `PlanLifecycle` reaches `ACTIVE` from three states and only one is somebody
+starting an unreviewed plan — the obvious *"target is ACTIVE ⇒ must be APPROVED"* reading compiles,
+passes the draft test, the approved test, both override tests and the independence test, and makes
+**every closed plan on a gated project permanently un-reopenable, by anybody, for ever**, because
+`CLOSED` has no legal move back to `APPROVED` and `CLOSED → DRAFT` is refused outright. §68's and
+§69's dead-end bound from a third direction, and **the code had drawn the line one slice before it
+needed it**: §72 made `PlanStatusService` audit `CLOSED → ACTIVE` as `plan.reopened` and the others
+as `plan.started`, so §6g's word *started* was already a defined term and `startsWithoutApproval`
+re-uses it rather than forming a second opinion. Dropping the `current == DRAFT` half reddens
+**exactly 1**. *(2)* **The case rule binds on the RESOLVED set**, or "create the run from the plan
+instead" is a bypass that **costs no permission and leaves no trace**, on the path a release run is
+most likely to take — and **the whole run is refused, never trimmed**, because a checklist quietly
+shorter than the one asked for reports a pass rate over a denominator nobody chose
+(`RunCreateService`'s own partial-materialisation argument, arriving through a door it did not
+expect). **The override needed NO NEW KEY and the key is DERIVED rather than chosen**: §67's
+`evidence:read`, §79's `suite:comment` and §80's assignment argument for the fourth time — a key
+`V3` seeds to nobody is a 403 nobody can grant out of — so it costs the artifact's own
+`case:approve`/`plan:approve`, whose holder **can reach the identical end state today by approving
+first**. The override therefore widens nobody's reach; what it changes is the record, leaving the
+cases honestly unapproved with `approvalGateOverridden` on the audit row where the workaround it
+replaces **launders a sign-off nobody performed** into the history §6g exists to keep honest.
+**Explicit, never automatic** (a lead silently exempted never learns their own project turned the
+policy on), consulted **only where the gate would otherwise refuse**, so the flag can neither widen
+reach nor turn an acceptable request into a refused one — and a caller sending it without the key
+gets **the same 409, not a 403**, because they are authorized to make the request and merely not to
+ignore the policy. **`ApprovalGating.Verdict` shares the VOCABULARY and deliberately not the rule**:
+the two computations have nothing in common, and `overridden` means the gate **fired and was
+overridden**, narrower than "the flag was sent" — writing it unconditionally records every ordinary
+run as a policy bypass. **GATING IS NOT GOVERNED BY THE REVIEW OPT-IN, and that is §77's own rule
+applied**: *"off" is narrow — it suppresses the apparatus and NOT the status ladder* — so a project
+with review off still has the four statuses and can want approved-only runs without ever running a
+peer review; ANDing them would disable the gate on exactly the projects that enabled it. Stated
+rather than discovered: **turning review off does not turn gating off.** **`npm run build` caught
+the mock dropping both fields**, and the same class is live in the form: the settings screen `PUT`s
+all eight values onto a server that reads an absent boolean as `false`, so a field omitted from the
+submit **switches that setting off on the next save** — an admin correcting the peer-review count
+quietly reopens the gate, with a success message. **Five backend tests went red on the first run and
+only one was about the code**: four were a fixture leak (`project_settings` was not on
+`clearMutableRows`, so one test turned the gate on for every test after it — **three casualties
+predate this slice and none is about gating**), the fifth a wrong persona (reopening is a move
+*down*, so it costs `plan:approve`). **`ReviewSettingsPage` had NO TEST FILE AT ALL** — shipped that
+way in §77, found while adding to it — and its load-bearing new test asserts the save body as an
+**exact object**, because `toMatchObject` passes with a field silently dropped. **Found and not
+fixed**: `TestRunInput` is hand-written rather than derived from the contract, so nothing
+mechanically checks the request body; and `unapprovedCases` uses `<> 'APPROVED'` with **no test
+covering `DEPRECATED`**, so the `IN ('DRAFT','IN_REVIEW')` enumeration passes the whole suite while
+letting **retired content into a release run** — the mutation row says not to skip it for reddening
+nothing, since that is what it reports. **`V26`; policy count unchanged at 58.** **Zero mutations
+run inline; ten queued, fifteen browser rows.** **§6g is now COMPLETE** — every part of the workflow
+has an implementation. Named next, and none of it review work: the **two remaining board
+generators** (a feature apiece, not a generator apiece), **§6l's cross-project "My Work" board**,
+and **`/reports`/M2.5**. Before that: **§81, the reviewer's inbox** — §80 ended by naming it and
 §6l has named it since the plan was written (*"Review requested → card for each reviewer"*), while
 `ReviewController` refuses the queue from the middle because it needs the subject **expanded**.
 **The whole slice is where that expansion turned out to belong, and it was decided three slices
@@ -1001,3 +1057,4 @@ See [`docs/plans/2026-07-31-parallel-execution-rework.md`](plans/2026-07-31-para
 | [§79](handoff/79-review-comments.md) | Review comments — the one comment key where there are three review keys, and the resolution that named nobody |
 | [§80](handoff/80-reviewer-assignment.md) | Reviewer assignment — the request nothing recorded, and the table that is not part of the record |
 | [§81](handoff/81-the-reviewers-inbox.md) | The reviewer's inbox — the query no module could write, and the mock that invented the feature |
+| [§82](handoff/82-the-gating-rules.md) | §6g's gating rules — the edge that is not a target, and the override nobody had to invent |

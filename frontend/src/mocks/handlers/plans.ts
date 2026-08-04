@@ -1,7 +1,15 @@
 /** Test plans and the plan statistics report. */
 import { HttpResponse, delay, http } from 'msw';
 import type { PlanStatus, TestPlan } from '../../api/types';
-import { allocatePlanKey, db, newId, planScopeCaseIds, reporting, reviewMoved } from '../db';
+import {
+  allocatePlanKey,
+  db,
+  newId,
+  planScopeCaseIds,
+  reporting,
+  reviewMoved,
+  settingsForProject,
+} from '../db';
 import type { ReviewStanding } from '../db';
 import { API, LATENCY, holdsOn, meRef, notFound, problem } from './shared';
 
@@ -284,7 +292,10 @@ export const planHandlers = [
     const plan = db.plans.find((p) => p.id === params.planId);
     if (!plan) return notFound('That test plan');
 
-    const body = (await request.json()) as { status?: PlanStatus };
+    const body = (await request.json()) as {
+      status?: PlanStatus;
+      overrideApprovalGate?: boolean;
+    };
     const target = body.status;
     const known: PlanStatus[] = ['DRAFT', 'IN_REVIEW', 'APPROVED', 'ACTIVE', 'CLOSED'];
 
@@ -309,6 +320,29 @@ export const planHandlers = [
 
     const refusal = planMoveRefusal(plan.status, target);
     if (refusal) return problem(409, 'Not possible right now', refusal);
+
+    /*
+      §6g's gating rule (§82), after the ladder has agreed the move exists and before anything is
+      written — the server's placement. It binds on ONE EDGE, `DRAFT → ACTIVE`, and not on the
+      target: `ACTIVE` is also reached from `APPROVED` (the rule satisfied) and from `CLOSED` (a
+      reopen), and a mock keyed on the target would refuse a reopen the server allows — leaving
+      every closed plan looking permanently stuck in mock mode.
+
+      Not conditioned on `reviewEnabledPlan`, for the reason on the run handler.
+    */
+    if (
+      target === 'ACTIVE' &&
+      plan.status === 'DRAFT' &&
+      settingsForProject(projectId).requireApprovedPlanToStart &&
+      !(body.overrideApprovalGate === true && holdsOn(projectId, 'plan:approve'))
+    ) {
+      return problem(
+        409,
+        'This plan needs approval',
+        'This project only starts approved plans. Submit this plan for review and have it ' +
+          'approved before starting it.',
+      );
+    }
 
     plan.status = target;
     // The review record moves with the status, inside the same handler the server writes it in the

@@ -20,7 +20,14 @@ export function useRun(projectId: string, runId: string | undefined): UseQueryRe
   });
 }
 
-/** The body of `POST /runs` — `TestRunInput`. */
+/**
+ * The body of `POST /runs` — `TestRunInput`.
+ *
+ * Hand-written rather than `S['TestRunInput']`, which predates this slice and is a divergence
+ * risk worth naming: nothing mechanically checks it against the contract, so a property added to
+ * the spec is invisible here until somebody notices. Left as it is (a minimal change), recorded as
+ * a follow-up in the handoff.
+ */
 export interface TestRunInput {
   name: string;
   planId?: string | null;
@@ -29,6 +36,13 @@ export interface TestRunInput {
   buildNumber?: string | null;
   caseIds?: string[];
   assigneeId?: string | null;
+  /**
+   * §6g's lead override (§82) — sent only by the affordance the refusal itself offers, never on a
+   * first attempt. It is not a permission the client claims: the server consults it only where the
+   * approval gate would otherwise refuse, and only for a caller holding `case:approve`, so sending
+   * it can neither widen reach nor turn an acceptable request into a refused one.
+   */
+  overrideApprovalGate?: boolean;
 }
 
 /**

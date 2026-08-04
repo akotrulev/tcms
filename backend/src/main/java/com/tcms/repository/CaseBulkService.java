@@ -220,15 +220,16 @@ public class CaseBulkService {
     }
 
     /**
-     * One project-scope permission question, answered without writing anything.
+     * One project-scope permission question — {@link ProjectService#holds}, which this method was
+     * the first and for a long time the only caller of.
      *
-     * <p>{@code false} for an unreachable project as well as for a held-nothing caller, which is
-     * correct at both call sites: the refusal wording and the per-row edge rule are each choosing
-     * how much a caller may do, and "the project does not resolve" is not more than nothing.
+     * <p>It moved there in §82 when a second and a third caller appeared in {@code execution} for
+     * §6g's gating override. Kept as a one-line delegation rather than inlined at the two sites
+     * above, because {@code holdsEdit} reads as the question it is asking and
+     * {@code projects.holds(userId, projectId, EDIT_CASE)} reads as plumbing.
      */
     private boolean holds(UUID userId, UUID projectId, String permission) {
-        return projects.writeGranted(userId, projectId, permission, project -> true)
-                instanceof GateResult.Allowed<Boolean> allowed && allowed.value();
+        return projects.holds(userId, projectId, permission);
     }
 
     private Outcome apply(

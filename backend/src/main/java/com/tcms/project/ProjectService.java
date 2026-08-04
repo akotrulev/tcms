@@ -190,6 +190,44 @@ public class ProjectService {
     }
 
     /**
+     * <strong>One project-scope permission question, answered without writing anything.</strong>
+     *
+     * <p>Not a gate — nothing runs behind it and nothing is refused by it. This is for the callers
+     * that must ask a <em>second</em> permission after their own gate has already let them through,
+     * in order to decide something other than whether the request proceeds. There are three, and
+     * none of them could use {@link #writeGranted}, because in each the answer changes the shape of
+     * a response rather than authorising it:
+     *
+     * <ul>
+     *   <li>{@code CaseBulkService} — which of two refusal sentences an already-failing request
+     *       gets, since an engineer missing only {@code case:approve} and a Viewer missing
+     *       everything need opposite advice;</li>
+     *   <li>{@code RunCreateService} and {@code PlanStatusService} (§82) — whether §6g's gating
+     *       rules may be overridden on this request, which is a capability the caller opted into
+     *       and not a permission the endpoint requires of everybody.</li>
+     * </ul>
+     *
+     * <p>It lives here rather than as a private helper in each because §75 already generalised
+     * {@code CaseBulkService}'s copy from {@code holdsEdit} to a keyed method, and the two §82
+     * callers would have made it three byte-identical copies of the same delegation under three
+     * comments saying the same thing — §58's E1, and the shape {@code PeopleDirectory} was extracted
+     * from in §76 after exactly two copies had been allowed to exist.
+     *
+     * <p><strong>{@code false} for an unreachable project as well as for a held-nothing
+     * caller</strong>, which is correct at all three sites: each is asking how much a caller may do,
+     * and "the project does not resolve" is not more than nothing. A caller that needs to tell those
+     * two apart is asking a gate's question and should be calling a gate.
+     *
+     * @param permission a constant at the call site, as in {@link #writeGranted} — this method is
+     *                   just as unfit to be handed a key named by the request
+     */
+    @Transactional(readOnly = true)
+    public boolean holds(UUID userId, UUID projectId, String permission) {
+        return writeGranted(userId, projectId, permission, project -> true)
+                instanceof GateResult.Allowed<Boolean> allowed && allowed.value();
+    }
+
+    /**
      * <strong>The gate for a write whose permission is {@code OWN}-qualified for some role.</strong>
      * Runs {@code write} when the caller may see the project and holds {@code permission} on it in
      * <em>any</em> form — and hands it an {@link AuthorshipGate} for the second half of the question,

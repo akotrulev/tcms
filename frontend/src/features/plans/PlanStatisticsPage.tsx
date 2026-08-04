@@ -214,9 +214,37 @@ function PlanLifecycleActions({ projectId, plan }: { projectId: string; plan: Te
   const [editing, setEditing] = useState(false);
   const navigate = useNavigate();
 
-  const move = (target: PlanStatus) => {
+  /*
+    §82. A refused start is the one failure here that names a follow-up the user can actually take —
+    §6g's "documented lead override" — so the refusal is held with the target that produced it and
+    the affordance is offered beside it. `ui-rules`: every backend-mandated follow-up has a UI
+    affordance, and an error naming an action the UI does not offer is a design bug.
+
+    Offered only AFTER the refusal, never on the happy path: a standing "ignore the approval rules"
+    checkbox on every status button normalizes the exception §6g wants to stay exceptional, and it
+    would be visible on the four transitions the rule cannot touch.
+  */
+  const [refusedTarget, setRefusedTarget] = useState<PlanStatus | null>(null);
+
+  const move = (target: PlanStatus, overrideApprovalGate?: boolean) => {
     setError(null);
-    setStatus.mutate(target, { onError: (failure) => setError(describeError(failure).body) });
+    setRefusedTarget(null);
+    setStatus.mutate(
+      { status: target, overrideApprovalGate },
+      {
+        onError: (failure) => {
+          setError(describeError(failure).body);
+          /*
+            Keyed on the target rather than on the message: matching the server's sentence would put
+            a second copy of the rule here, in a string, which is the drift `lib/labels.ts`'s header
+            warns about. ACTIVE is the only target the gate can refuse, and an override on any other
+            refusal is read and ignored by the server anyway — so the worst case of getting this
+            wrong is an affordance that changes nothing, not one that bypasses something.
+          */
+          setRefusedTarget(target === 'ACTIVE' && !overrideApprovalGate ? target : null);
+        },
+      },
+    );
   };
 
   return (
@@ -276,6 +304,28 @@ function PlanLifecycleActions({ projectId, plan }: { projectId: string; plan: Te
         <Typography variant="caption" sx={{ color: 'var(--color-failed)' }} data-testid="PlanStats.StatusError">
           {error}
         </Typography>
+      )}
+      {/*
+        §6g's lead override. Disabled rather than hidden for a caller without `plan:approve` (§31),
+        so the way out is discoverable by the person who has to go and ask for it — and the tooltip
+        `PermissionGate` supplies is what tells them who to ask. The server refuses this caller
+        identically with or without the flag, so a disabled control here mirrors the gate rather
+        than guessing at it.
+      */}
+      {refusedTarget && (
+        <PermissionGate projectId={projectId} permission="plan:approve">
+          {({ allowed }) => (
+            <Button
+              size="small"
+              color="warning"
+              data-testid="PlanStats.OverrideGate"
+              disabled={!allowed || setStatus.isPending}
+              onClick={() => move(refusedTarget, true)}
+            >
+              Start it anyway
+            </Button>
+          )}
+        </PermissionGate>
       )}
       {/* Mounted only while open, so every control is seeded from the plan as it stands now. */}
       {editing && (

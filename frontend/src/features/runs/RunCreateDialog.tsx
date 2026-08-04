@@ -11,12 +11,13 @@ import {
   Typography,
 } from '@mui/material';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { ApiError } from '../../api/client';
 import { useCreateRun, usePlans } from '../../api/queries';
 import type { TestRun } from '../../api/types';
+import { PermissionGate } from '../../components/PermissionGate';
 import { describeError } from '../../lib/describeError';
 import { formatCount } from '../../lib/format';
 
@@ -120,7 +121,20 @@ export function RunCreateDialog({
     if (open) setFocus('name');
   }, [open, setFocus]);
 
-  const submit = handleSubmit(async (values) => {
+  /*
+    §82. §6g's gating rule refuses a run whose cases are not approved, and it is the ONLY 409 this
+    endpoint answers — every other refusal here is a field error. So the status alone identifies it,
+    and the client never has to hold a copy of the rule or match the server's sentence.
+
+    The refusal itself lands in the root alert through `applyServerError` (a 409 carries no `errors`
+    map), which is where the server's list of unapproved keys is read. This flag only decides
+    whether the follow-up affordance appears beside it — `ui-rules`: an error naming an action the
+    UI does not offer is a design bug.
+  */
+  const [gateRefused, setGateRefused] = useState(false);
+
+  const createRun = async (values: RunFormInput, overrideApprovalGate: boolean) => {
+    setGateRefused(false);
     try {
       const created = await create.mutateAsync({
         name: values.name.trim(),
@@ -131,13 +145,28 @@ export function RunCreateDialog({
         buildNumber: values.buildNumber?.trim() || null,
         caseIds: [],
         assigneeId: null,
+        // Omitted rather than sent false, so an ordinary create is byte-identical to what every
+        // caller sent before this slice.
+        ...(overrideApprovalGate ? { overrideApprovalGate: true } : {}),
       });
       onCreated(created);
       onClose();
     } catch (error) {
       applyServerError(error, (field, message) => setError(field, { type: 'server', message }));
+      // Not re-offered after an override that was itself refused: the caller lacks `case:approve`,
+      // and a button that produces the same refusal twice is an affordance the product does not
+      // have. The disabled control below is what tells them so the first time.
+      setGateRefused(!overrideApprovalGate && error instanceof ApiError && error.status === 409);
     }
-  });
+  };
+
+  const submit = handleSubmit((values) => createRun(values, false));
+
+  /*
+    Re-validates before retrying rather than reusing the values the first attempt sent — the form is
+    still open and editable, so the run created by "create it anyway" must be the one on screen now.
+  */
+  const submitWithOverride = handleSubmit((values) => createRun(values, true));
 
   const available = plans.data ?? [];
 
@@ -150,6 +179,29 @@ export function RunCreateDialog({
             {errors.root && (
               <Alert severity="error" role="alert" data-testid={`${TestId}.Error`}>
                 {errors.root.message}
+                {/*
+                  §6g's lead override, offered only where the gate actually refused. Disabled rather
+                  than hidden for a caller without `case:approve` (§31), so the way out is
+                  discoverable by the person who has to go and ask for it — and the gate's tooltip
+                  is what names who to ask. Inside the alert because it is the answer to this
+                  sentence, not a second action on the dialog.
+                */}
+                {gateRefused && (
+                  <PermissionGate projectId={projectId} permission="case:approve">
+                    {({ allowed }) => (
+                      <Button
+                        size="small"
+                        color="warning"
+                        sx={{ mt: 1, display: 'block' }}
+                        disabled={!allowed || create.isPending}
+                        data-testid={`${TestId}.OverrideGate`}
+                        onClick={() => void submitWithOverride()}
+                      >
+                        Create it anyway
+                      </Button>
+                    )}
+                  </PermissionGate>
+                )}
               </Alert>
             )}
             {plans.isSuccess && available.length === 0 && (
