@@ -141,6 +141,12 @@ public abstract class IntegrationTestBase {
         registry.add("tcms.storage.evidence.root",
                 () -> System.getProperty("java.io.tmpdir") + "/tcms-evidence-test");
 
+        // The same, for report bytes (§87) — a second root because the product has two, and
+        // pointing the suite's two at one directory would be the one configuration no deployment
+        // is obliged to use and every test would then depend on.
+        registry.add("tcms.storage.reports.root",
+                () -> System.getProperty("java.io.tmpdir") + "/tcms-reports-test");
+
         // Production sizes this at 20. The suite must not.
         //
         // Spring caches one context per distinct configuration, and this suite now has

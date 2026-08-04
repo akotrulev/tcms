@@ -100,6 +100,21 @@ tcms:
       # forged session nothing ever fails on.
       root: ${TCMS_EVIDENCE_ROOT:/var/lib/tcms/evidence}
 
+    reports:
+      # Where generated report bytes land (§87). A root of its own rather than a subdirectory of
+      # the evidence one: the two have different retention and different loss consequences, and a
+      # deployment that wants one volume can point both here.
+      #
+      # NOT backup-critical, which is the one way it differs from evidence above. Every report is
+      # regenerable from execution_fact, and what makes a report interpretable months later —
+      # report_artifact.filter_snapshot, §6e's determinism requirement — is in Postgres. Losing
+      # this directory costs re-running jobs, not history.
+      #
+      # NOTHING EVER DELETES FROM IT IN v1. That is a decision on the record (2026-08-04, and
+      # V27's header carries it): no expires_at, no sweep, unbounded growth in the number of
+      # reports a company generates. §6n is the section that will eventually govern retention.
+      root: ${TCMS_REPORTS_ROOT:/var/lib/tcms/reports}
+
   invitation:
     # The SPA's public origin — what an invitee's browser can reach, NOT what the container
     # sees. Behind Caddy the app only ever knows localhost:8080, and a link built from the
