@@ -1070,3 +1070,52 @@ almost everything in one project. That equality is what hid the `linkFor` defect
 | **Mutation** | restore the `?? projects[0].id` fallback for an unknown `projectId` |
 | **Scope** | `npx vitest run src/features/board` |
 | **Must show** | **nothing reddens — which is the row's point.** No test covers it, because no component asks for a project it cannot see; it is caught only by driving a stale bookmark in the browser (queued as a browser row). Recorded so the absence is deliberate: the fallback made the mock render *another project's* board under the id in the URL, every key on it linking back into a project that does not contain them, where the server answers 404. |
+
+---
+
+## §84 — the team board
+
+Five rows. The first is the security row and it is the one to run first: §84's whole risk is a board
+bounded by the **team's** project visibility instead of the **caller's**, which is a leak that renders
+perfectly and that only the assignee-versus-reader asymmetry in the fixture can expose.
+
+| | |
+|---|---|
+| **File** | `project/ProjectService.java`, `visibleProjects` |
+| **Mutation** | drop the `.filter(project -> access.canView(userId, project.getId()))` |
+| **Scope** | `--tests 'com.tcms.work.BoardEndpointTest'` |
+| **Must redden** | **exactly 7 in this class** — `MyWork` › *aggregates the caller's work across every project they can see*, *work in a project the caller was never granted stays off it*, *each card names its own project…*; `TeamBoard` › *a team-mate's work in a project the CALLER cannot open stays off it*, *the same team, two readers, two different boards*, *the whole set, per kind*, *the personal and project boards did not change shape*. Scoped to this class deliberately: this is §83's security row and it also reddens the project-list tests, and the crisp count is what says the team board is bounded by the same one seam rather than by a second copy of the rule. **Nothing in `Gates` or `narrowsToOneProject` moves**, because a *named* project goes through `readVisible`, which has its own filter — worth noticing, since it means the two boards are not protected by the same line. |
+
+| | |
+|---|---|
+| **File** | `work/BoardService.java`, `teamBoard` |
+| **Mutation** | `Set<UUID> members = facts.teamMembers(teamId);` → `Set<UUID> members = Set.of(userId);` (the team board silently becomes the personal board) |
+| **Scope** | `--tests 'com.tcms.work.BoardEndpointTest'` |
+| **Must redden** | **exactly 5** — `TeamBoard` › *shows a team-mate's work…*, *the same team, two readers, two different boards*, *the whole set, per kind*, *a team with no members is a reachable, empty board*, *a team whose members have no visible work is the same 200 []*. The last two are the interesting pair: with the expansion gone, an **empty** team answers with the caller's own cards, so the board that should be empty is the one that is full. Note what does **not** redden — *every card belongs to a member* and *bounded by the caller's visibility* both pass, because the caller is a member: a defect that shows you only your own work looks entirely correct to the person who introduced it. |
+
+| | |
+|---|---|
+| **File** | `work/WorkItemController.java`, `list` |
+| **Mutation** | delete the `if (mine) { return ResponseEntity.badRequest().body(twoBoardsProblem()); }` guard, so `mine` is ignored when `teamId` is present |
+| **Scope** | `--tests 'com.tcms.work.BoardEndpointTest$TeamBoard'` |
+| **Must redden** | **exactly 1** — *teamId with mine=true is refused*. One is right and the shortfall is the point: the mutation is **unobservable in the response body for a caller who is on the team**, since their own cards are a subset of the team's. It is only visible as a status code, which is why the refusal has a test of its own and not an assertion inside another. |
+
+| | |
+|---|---|
+| **File** | `work/BoardService.java`, `teamBoard` |
+| **Mutation** | delete the `if (teams.find(CompanyContext.require(), teamId).isEmpty()) return Optional.empty();` early return |
+| **Scope** | `--tests 'com.tcms.work.BoardEndpointTest$TeamBoard'` |
+| **Must redden** | **exactly 2** — *a team that does not exist is 404* and *another company's team is the same 404*. Both become `200 []`, which is the §6t defect in its quietest form: the endpoint would still return no data, and would still tell any session holder whether a guessed UUID names a team in some other client's company by the difference between 200 and 404. |
+
+| | |
+|---|---|
+| **File** | `work/BoardService.java`, `teamBoard` / `forAssignees` |
+| **Mutation** | hoist the `if (assignees.isEmpty()) return List.of();` out of `forAssignees` and into `teamBoard`, above the `projectId` branch |
+| **Scope** | `--tests 'com.tcms.work.BoardEndpointTest$TeamBoard'` |
+| **Must redden** | **exactly 1** — *an empty team plus an unreachable project is still 404, not an empty board*. The mutation is the obvious optimisation (there is nothing to assemble either way) and it converts a 404 into a 200 that confirms a project the caller holds no grant on exists. |
+
+| | |
+|---|---|
+| **Check** | `V27` and the policy count |
+| **Mutation** | — |
+| **Must show** | **`V27` is still the next free Flyway version and `SchemaConventionTest`'s policy count is still 58.** §84 adds no table, no column and no migration: the team board is a third selector on an existing operation, reading `team_membership` — a table `V1` created and §81 already queried. If either number has moved, something in this slice created state it said it did not. |

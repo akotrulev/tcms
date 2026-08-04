@@ -2862,6 +2862,18 @@ paths:
         assigned to the caller across every project they can see, in one company. It is
         the same operation because it is the same list; a card carries `projectId` and
         `projectKey`, which is how the SPA groups an aggregate it did not have before.
+
+        **With a `teamId` this is §6l's team board (§84)** — the same list kept for the
+        team's members instead of for the caller. All three of §6l's boards are this one
+        operation, because they differ only in which cards are kept: `projectId` narrows
+        *where*, `teamId` and `mine` narrow *whose*, and the response shape and sort are
+        identical in every case.
+
+        **A team board is bounded by the CALLER's project visibility, never by the team's.**
+        Two people asking for the same team's board can legitimately receive different
+        boards. That is the design, not a defect: a board built from "everything assigned
+        to this team" would render the case keys, titles and project names of every project
+        any member was granted, to a reader granted none of them.
       parameters:
         # projectId is OPTIONAL since §83, and its absence is a DIFFERENT BOARD rather than
         # an unfiltered one — see the 400. It was declared required until then, deliberately,
@@ -2871,35 +2883,68 @@ paths:
           in: query
           required: false
           schema: { type: string, format: uuid }
+        # teamId arrives in §84, and it needed no migration, no table and no permission key —
+        # the gate is the project visibility the caller already had, and every card it can
+        # return is one they could already see on a project board. A key invented for it would
+        # be seeded to nobody and so a 403 no administrator could grant their way out of
+        # (§67/§79/§80).
+        - name: teamId
+          in: query
+          description: |
+            §6l's **team board** — items assigned to any member of this team.
+
+            Membership is expanded **on every read**, never stored: somebody who joins the
+            team today finds the team's work today, and somebody who leaves stops seeing it.
+            Direct members only — a parent team does not inherit its children's members.
+
+            **Bounded by the caller's own project visibility.** Cards from projects the
+            caller holds no grant on are absent, whatever the team was assigned.
+
+            **Combinable with `projectId`** (the team's work within one project — §6l's
+            "swimlanes by member"), and **refused together with `mine=true`**: they select
+            two different boards.
+          required: false
+          schema: { type: string, format: uuid }
         - name: mine
           in: query
           description: |
             Restrict to items assigned to the caller — the personal board.
 
-            **Required when `projectId` is omitted.** §6l's cross-project board is the
-            *personal* one; there is no board that is every project's work unfiltered, and
-            silently forcing this on would answer a request nobody made with a list the
-            client cannot tell apart from a company that only has the caller's work in it.
+            **Required when `projectId` is omitted** and no `teamId` is given. §6l's
+            cross-project board is the *personal* one; there is no board that is every
+            project's work unfiltered, and silently forcing this on would answer a request
+            nobody made with a list the client cannot tell apart from a company that only
+            has the caller's work in it.
           schema: { type: boolean }
       responses:
         '200':
-          description: Work items
+          description: |
+            Work items. **An empty array is a reachable board with nothing on it** — for a
+            team board that means either a team with no members or members with no work the
+            caller can see, and the two are deliberately indistinguishable on the wire: both
+            are "this team has nothing for you", and a client able to tell them apart would
+            be reading team membership out of a board.
           content:
             application/json:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/WorkItem' }
         '400':
-          # Neither a project nor a person: no projectId and mine=false. Not a 404 — nothing
-          # failed to resolve, and the caller may make either of the two requests the message
-          # names. The personal board itself never 404s: it names nothing that could be missing,
-          # and a member with no grants at all gets an empty array.
+          # Two shapes, one status, and both are refusals to GUESS which board was meant:
+          #  - neither a project nor a person: no projectId, no teamId, mine=false;
+          #  - two boards at once: teamId together with mine=true.
+          # Not a 404 — nothing failed to resolve, and the caller may make any of the requests
+          # the message names. The personal board itself never 404s: it names nothing that
+          # could be missing, and a member with no grants at all gets an empty array.
           $ref: '#/components/responses/BadRequest'
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404':
-          # The project read gate. An absent project, one in another company, and one in
-          # this company the caller holds no grant on are one answer — distinct from a 200
-          # with an empty array, which means the board is reachable and has nothing on it.
+          # Two gates, one answer. The project read gate: an absent project, one in another
+          # company, and one in this company the caller holds no grant on are indistinguishable
+          # — and distinct from a 200 with an empty array, which means the board is reachable
+          # and has nothing on it. And the team: an absent teamId and one belonging to another
+          # company are the same 404, or this operation becomes a company-wide team-existence
+          # oracle answerable by anybody with a session and a guessed UUID (§6t).
           $ref: '#/components/responses/NotFound'
     post:
       tags: [work]

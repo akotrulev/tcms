@@ -62,6 +62,13 @@ import org.springframework.transaction.support.TransactionTemplate;
  *       request bounds it — the bound has to be the set of projects it assembles from. Built from
  *       "cards assigned to me" instead, it renders the case key, the title and the project name of a
  *       client nobody granted, and the assignee is the only person who ever sees it.</li>
+ *   <li><strong>A team board bounded by the TEAM's visibility rather than the caller's (§84).</strong>
+ *       Defect 6 one step further out, and the more inviting mistake, because "everything assigned to
+ *       this team" is one query and reads correctly — it renders the case key, the title and the
+ *       project name of every project any member was granted, to a reader granted none of them. It
+ *       needs a team-mate who can see a project the caller cannot ({@code TEAMMATE} on
+ *       {@code OTHER_PROJECT}) or the two bounds agree on every row in this fixture and the test
+ *       passes against the leak.</li>
  *   <li><strong>The read gate used as the write gate.</strong> Every role holds {@code project:read};
  *       {@code workitem:manage} is held by four of the six (roles spec §A6). A Viewer must be able to
  *       look at the board and unable to change it.</li>
@@ -112,6 +119,18 @@ class BoardEndpointTest extends IntegrationTestBase {
     private static final UUID VIEWER = UUID.fromString("b0003000-0000-4000-8000-000000000002");
     /** ACTIVE member of Acme holding nothing at all. Persona 3. */
     private static final UUID NO_GRANT = UUID.fromString("b0003000-0000-4000-8000-000000000003");
+
+    /**
+     * On {@code DEV_TEAM} with LEAD, and granted on {@code OTHER_PROJECT} — which LEAD is not.
+     *
+     * <p>The persona §84's bound needs and no earlier slice did: a <em>team-mate</em> who can see a
+     * project the caller cannot. Without them, "bounded by the caller's visibility" and "bounded by
+     * the team's" answer identically on every row in this fixture, and the security test passes
+     * against the leak.
+     */
+    private static final UUID TEAMMATE = UUID.fromString("b0003000-0000-4000-8000-000000000004");
+    /** An Acme member granted on PROJECT and on NO team — the negative half of the expansion. */
+    private static final UUID OUTSIDER = UUID.fromString("b0003000-0000-4000-8000-000000000005");
 
     private static final UUID LIVE_RUN = UUID.fromString("b0004000-0000-4000-8000-000000000001");
     private static final UUID CLOSED_RUN = UUID.fromString("b0004000-0000-4000-8000-000000000002");
@@ -176,6 +195,34 @@ class BoardEndpointTest extends IntegrationTestBase {
     /** VIEWER and LEAD both belong to it; the suite review is asked of the team. */
     private static final UUID TEAM = UUID.fromString("b0007000-0000-4000-8000-000000000001");
 
+    // §84's team-board fixture. DEV_TEAM is deliberately a SECOND team rather than more members on
+    // TEAM: §81's `oneCardPerReviewer` asserts the exact set of reviewers on the suite review, so
+    // adding TEAMMATE to the team that review was asked of would have reddened a passing test for a
+    // reason that has nothing to do with reviewers.
+
+    /** LEAD (the caller), VIEWER (a member who is not the caller) and TEAMMATE. */
+    private static final UUID DEV_TEAM = UUID.fromString("b0007000-0000-4000-8000-000000000002");
+    /** One member, NO_GRANT, who can see nothing — a reachable team with an empty board. */
+    private static final UUID QUIET_TEAM = UUID.fromString("b0007000-0000-4000-8000-000000000003");
+    /** No members at all — the other empty board, and the one answered before any query. */
+    private static final UUID LONELY_TEAM = UUID.fromString("b0007000-0000-4000-8000-000000000004");
+    /** Umbra's own team. Must be a 404 to an Acme caller, exactly like an id that names nothing. */
+    private static final UUID UMBRA_TEAM = UUID.fromString("b0007000-0000-4000-8000-000000000005");
+    /** Names no team anywhere. */
+    private static final UUID UNKNOWN_TEAM = UUID.fromString("b0007000-0000-4000-8000-0000000000ff");
+
+    /**
+     * Outstanding in OTHER_PROJECT and assigned to TEAMMATE, who <em>is</em> granted there.
+     *
+     * <p>{@link #UNREACHABLE} is the same shape from the personal board's angle — work the assignee
+     * cannot open. This is the team board's own: work a team-mate legitimately owns, in a project the
+     * <em>reader</em> was never granted. A team board bounded by the team rather than by the caller
+     * renders its key, its title and the project's name, and the only assertion that can catch it is
+     * one where the two bounds disagree.
+     */
+    private static final UUID TEAM_ELSEWHERE =
+            UUID.fromString("b0005000-0000-4000-8000-00000000000c");
+
     @Autowired
     private MockMvc mvc;
 
@@ -213,6 +260,8 @@ class BoardEndpointTest extends IntegrationTestBase {
             activeUser(LEAD, "lead@board-acme.test", "Leonora Lead", now);
             activeUser(VIEWER, "viewer@board-acme.test", "V. Viewer", now);
             activeUser(NO_GRANT, "nogrant@board-acme.test", "N. Grant", now);
+            activeUser(TEAMMATE, "teammate@board-acme.test", "T. Mate", now);
+            activeUser(OUTSIDER, "outsider@board-acme.test", "O. Sider", now);
         });
 
         inCompany(ACME, () -> tx.executeWithoutResult(status -> {
@@ -222,11 +271,17 @@ class BoardEndpointTest extends IntegrationTestBase {
             member(ACME, LEAD, "L. Lead (Acme)", now);
             member(ACME, VIEWER, "V. Viewer (Acme)", now);
             member(ACME, NO_GRANT, "N. Grant", now);
+            member(ACME, TEAMMATE, "T. Mate (Acme)", now);
+            member(ACME, OUTSIDER, "O. Sider (Acme)", now);
             grantOnProject("lead", ACME, Role.TEST_LEAD_ID, LEAD, PROJECT, now);
             grantOnProject("viewer", ACME, Role.VIEWER_ID, VIEWER, PROJECT, now);
             // LEAD on the second project and deliberately NOT on OTHER_PROJECT, which stays the
             // sibling nobody granted — the two halves of §83's bound need both to exist at once.
             grantOnProject("lead-second", ACME, Role.TEST_LEAD_ID, LEAD, SECOND_PROJECT, now);
+            // §84: TEAMMATE is granted where LEAD is not, which is the only configuration in which
+            // "the caller's visibility" and "the team's visibility" give different answers.
+            grantOnProject("teammate-other", ACME, Role.TEST_LEAD_ID, TEAMMATE, OTHER_PROJECT, now);
+            grantOnProject("outsider", ACME, Role.VIEWER_ID, OUTSIDER, PROJECT, now);
         }));
 
         inCompany(UMBRA, () -> tx.executeWithoutResult(status ->
@@ -264,6 +319,18 @@ class BoardEndpointTest extends IntegrationTestBase {
             teamMember(acme, ACME, TEAM, VIEWER);
             teamMember(acme, ACME, TEAM, LEAD);
 
+            // §84's three teams. QUIET_TEAM and LONELY_TEAM are the two ways a board can be
+            // reachable and empty, and they must be told apart from a team that does not exist.
+            team(acme, DEV_TEAM, ACME, "Delivery");
+            teamMember(acme, ACME, DEV_TEAM, LEAD);
+            teamMember(acme, ACME, DEV_TEAM, VIEWER);
+            teamMember(acme, ACME, DEV_TEAM, TEAMMATE);
+
+            team(acme, QUIET_TEAM, ACME, "Quiet");
+            teamMember(acme, ACME, QUIET_TEAM, NO_GRANT);
+
+            team(acme, LONELY_TEAM, ACME, "Nobody");
+
             review(acme, REVIEW_OPEN, ACME, PROJECT, "CASE", UNDER_REVIEW, "IN_REVIEW");
             askUser(acme, ACME, REVIEW_OPEN, LEAD, VIEWER);
 
@@ -297,6 +364,11 @@ class BoardEndpointTest extends IntegrationTestBase {
             testCase(acme, UNREACHABLE, ACME, OTHER_PROJECT, SIBLING_SUITE, "TC-9", 9, LEAD);
             run(acme, SIBLING_RUN, ACME, OTHER_PROJECT, "TR-4", 4, "IN_PROGRESS");
             execution(acme, ACME, OTHER_PROJECT, SIBLING_RUN, UNREACHABLE, false, LEAD);
+
+            // §84: the same project, work owned by somebody who CAN see it and shares a team with
+            // somebody who cannot. This row is the entire difference between the two bounds.
+            testCase(acme, TEAM_ELSEWHERE, ACME, OTHER_PROJECT, SIBLING_SUITE, "TC-11", 11, TEAMMATE);
+            execution(acme, ACME, OTHER_PROJECT, SIBLING_RUN, TEAM_ELSEWHERE, false, TEAMMATE);
         }
 
         try (Connection umbra = appConnection(UMBRA)) {
@@ -306,6 +378,12 @@ class BoardEndpointTest extends IntegrationTestBase {
 
             review(umbra, REVIEW_FOREIGN, UMBRA, UMBRA_PROJECT, "CASE", FOREIGN, "IN_REVIEW");
             askUser(umbra, UMBRA, REVIEW_FOREIGN, LEAD, null);
+
+            // Umbra's team, with LEAD in it. team_membership.user_id references instance-level
+            // app_user, so this inserts happily — §71's invisible-grant family — and what must keep
+            // Acme's caller out is the company scoping on the lookup, not anybody's membership.
+            team(umbra, UMBRA_TEAM, UMBRA, "Umbra Delivery");
+            teamMember(umbra, UMBRA, UMBRA_TEAM, LEAD);
         }
     }
 
@@ -986,9 +1064,232 @@ class BoardEndpointTest extends IntegrationTestBase {
         }
     }
 
+    @Nested
+    @DisplayName("The team board — the third of §6l's three, and the last one without an endpoint")
+    class TeamBoard {
+
+        @Test
+        @DisplayName("shows a team-mate's work, which is what read-time expansion means")
+        void expandsTheTeam() throws Exception {
+            // VIEWER is on DEV_TEAM and is not the caller. Their suite-review card is the fixture's
+            // own proof: nothing in this test writes a membership row, so an implementation that
+            // materialised the team at any earlier moment cannot produce it.
+            createAs(LEAD, """
+                    {"projectId":"%s","title":"Viewer's task","assigneeId":"%s"}"""
+                    .formatted(PROJECT, VIEWER), 201);
+
+            assertThat(titlesOf(teamBoard(LEAD, DEV_TEAM))).contains("Viewer's task");
+        }
+
+        @Test
+        @DisplayName("a person outside the team contributes nothing, however visible their work")
+        void nonMembersAreNotOnIt() throws Exception {
+            // OUTSIDER holds a grant on PROJECT, so this card is on the project board and on
+            // OUTSIDER's own. A team board that filtered on "anything in the projects the team can
+            // see" rather than on the members themselves would carry it.
+            createAs(LEAD, """
+                    {"projectId":"%s","title":"Outsider's task","assigneeId":"%s"}"""
+                    .formatted(PROJECT, OUTSIDER), 201);
+
+            assertThat(titlesOf(teamBoard(LEAD, DEV_TEAM))).doesNotContain("Outsider's task");
+        }
+
+        @Test
+        @DisplayName("a team-mate's work in a project the CALLER cannot open stays off it")
+        void boundedByTheCallersVisibility() throws Exception {
+            // THE test of this slice. TC-11 is TEAMMATE's outstanding execution in OTHER_PROJECT:
+            // TEAMMATE is granted there, is on DEV_TEAM, and the run is live — everything a team
+            // board built from "cards assigned to this team's members" needs to render it, and LEAD
+            // holds no grant on that project at all. §83's leak one step out, and the one an
+            // implementation reaching for a single query lands on.
+            assertThat(keysOfKind(teamBoard(LEAD, DEV_TEAM), "EXECUTION"))
+                    .as("TC-11 is a team-mate's, in a project the reader was never granted")
+                    .containsExactlyInAnyOrder("TC-1", "TC-10");
+            assertThat(projectKeysOf(teamBoard(LEAD, DEV_TEAM)))
+                    .as("BRDB is the sibling project nobody granted LEAD")
+                    .doesNotContain("BRDB");
+        }
+
+        @Test
+        @DisplayName("the same team, two readers, two different boards — and that is the design")
+        void theBoardIsTheReadersNotTheTeams() throws Exception {
+            // The other half of the test above, and what stops it being vacuous: TC-11 is a real,
+            // renderable card that the bound is hiding rather than a row that does not exist.
+            // TEAMMATE sees OTHER_PROJECT and nothing else, so their view of DEV_TEAM is exactly
+            // the two cards LEAD's view cannot contain — TC-9 among them, because LEAD is a member
+            // of the team and has work in a project only TEAMMATE can open.
+            assertThat(keysOfKind(teamBoard(TEAMMATE, DEV_TEAM), "EXECUTION"))
+                    .containsExactlyInAnyOrder("TC-9", "TC-11");
+        }
+
+        @Test
+        @DisplayName("the whole set, per kind — an aggregate of the team's work across two projects")
+        void theWholeSet() throws Exception {
+            JsonNode board = teamBoard(LEAD, DEV_TEAM);
+
+            // Exact sets rather than absences, for §81's reason: the failure this class is most
+            // exposed to is a card with no key and no title, which every doesNotContain passes.
+            assertThat(keysOfKind(board, "EXECUTION")).containsExactlyInAnyOrder("TC-1", "TC-10");
+            assertThat(keysOfKind(board, "CASE_MAINTENANCE")).containsExactly("TC-4");
+            assertThat(keysOfKind(board, "REVIEW"))
+                    .as("TC-5 is LEAD's; TS-1 was asked of a team LEAD and VIEWER are both on, and "
+                            + "one card per reviewer means it appears twice")
+                    .containsExactlyInAnyOrder("TC-5", "TS-1", "TS-1");
+        }
+
+        @Test
+        @DisplayName("every card belongs to a member — nobody else's work rides along")
+        void everyCardBelongsToAMember() throws Exception {
+            JsonNode board = teamBoard(LEAD, DEV_TEAM);
+
+            assertThat(board).isNotEmpty();
+            for (JsonNode card : board) {
+                assertThat(card.get("assignee").get("id").asText())
+                        .isIn(LEAD.toString(), VIEWER.toString(), TEAMMATE.toString());
+            }
+        }
+
+        @Test
+        @DisplayName("with a projectId it narrows to that project — §6l's swimlanes-by-member board")
+        void narrowsToOneProject() throws Exception {
+            // The two parameters bound different axes, who and where, so their conjunction is a
+            // request with an obvious answer rather than two boards ANDed together.
+            assertThat(keysOfKind(teamBoard(LEAD, DEV_TEAM, PROJECT), "EXECUTION"))
+                    .containsExactly("TC-1");
+        }
+
+        @Test
+        @DisplayName("a project the caller cannot reach is still 404, team or no team")
+        void theProjectGateStillApplies() throws Exception {
+            // TEAMMATE can see OTHER_PROJECT and is on the team; that must not turn LEAD's request
+            // for it into a 200. The team narrows the answer, it never widens the gate.
+            assertThat(statusOf(request(LEAD, DEV_TEAM, OTHER_PROJECT, null))).isEqualTo(404);
+        }
+
+        @Test
+        @DisplayName("a team that does not exist is 404")
+        void unknownTeamsAreNotFound() throws Exception {
+            assertThat(statusOf(request(LEAD, UNKNOWN_TEAM, null, null))).isEqualTo(404);
+        }
+
+        @Test
+        @DisplayName("another company's team is the same 404 — not an existence oracle")
+        void otherCompaniesTeamsAreNotFound() throws Exception {
+            // LEAD is even a member of UMBRA_TEAM at the instance level (team_membership.user_id
+            // references app_user). If this answered anything but 404, the endpoint would let any
+            // session confirm whether a guessed UUID names a team in some other client's company —
+            // §6t's rule, and the reason the lookup is company-scoped rather than by id alone.
+            assertThat(statusOf(request(LEAD, UMBRA_TEAM, null, null))).isEqualTo(404);
+        }
+
+        @Test
+        @DisplayName("a team with no members is a reachable, empty board — 200 [], never 404")
+        void emptyTeamsAreReachable() throws Exception {
+            var response = request(LEAD, LONELY_TEAM, null, null);
+
+            assertThat(statusOf(response)).isEqualTo(200);
+            assertThat(json.readTree(response.getContentAsString())).isEmpty();
+        }
+
+        @Test
+        @DisplayName("an empty team plus an unreachable project is still 404, not an empty board")
+        void theEmptyShortcutCannotSwallowThe404() throws Exception {
+            // The ordering trap. Answering an empty team before the project gate runs is the
+            // obvious optimisation — there is nothing to assemble either way — and it turns this
+            // request into a 200 that confirms OTHER_PROJECT exists, to a caller with no grant on
+            // it. Hence the shortcut lives inside the gated read rather than in front of it.
+            assertThat(statusOf(request(LEAD, LONELY_TEAM, OTHER_PROJECT, null))).isEqualTo(404);
+        }
+
+        @Test
+        @DisplayName("a team whose members have no visible work is the same 200 []")
+        void membersWithNoWorkAreTheSameAnswer() throws Exception {
+            // Indistinguishable from the row above on purpose: both are "this team has nothing for
+            // you", and a client able to tell them apart would be reading team membership out of a
+            // board it was never granted.
+            var response = request(LEAD, QUIET_TEAM, null, null);
+
+            assertThat(statusOf(response)).isEqualTo(200);
+            assertThat(json.readTree(response.getContentAsString())).isEmpty();
+        }
+
+        @Test
+        @DisplayName("teamId with mine=true is refused — they select two different boards")
+        void twoBoardsAtOnceAreRefused() throws Exception {
+            var response = request(LEAD, DEV_TEAM, null, true);
+
+            assertThat(statusOf(response)).isEqualTo(400);
+            assertThat(response.getContentAsString())
+                    .as("the message must name both, and say the two do not combine")
+                    .contains("teamId")
+                    .contains("mine=true");
+        }
+
+        @Test
+        @DisplayName("a Viewer may open a team board — reading it needs no key nobody holds")
+        void readingNeedsNoNewPermission() throws Exception {
+            // No permission key was invented for this board and none is asked for: every card on it
+            // is one the caller could already see on a project board. A key seeded to nobody would
+            // be a 403 no administrator could grant their way out of (§67/§79/§80).
+            assertThat(statusOf(request(VIEWER, DEV_TEAM, null, null))).isEqualTo(200);
+        }
+
+        @Test
+        @DisplayName("a caller outside the team may still open its board")
+        void membershipIsNotRequiredToRead() throws Exception {
+            // §6k: the org chart is readable by any member of the company. A team board its lead's
+            // manager cannot open is a board for nobody — and the work on it is bounded by the
+            // reader's own grants either way, which is what makes this safe rather than lax.
+            var response = request(OUTSIDER, DEV_TEAM, null, null);
+
+            assertThat(statusOf(response)).isEqualTo(200);
+        }
+
+        @Test
+        @DisplayName("the personal and project boards did not change shape")
+        void theOtherTwoBoardsAreUntouched() throws Exception {
+            // The regression a shared filter invites: `present` now takes a set, and the personal
+            // board is the one-element case of it.
+            assertThat(keysOfKind(myWork(LEAD), "EXECUTION"))
+                    .containsExactlyInAnyOrder("TC-1", "TC-10");
+            assertThat(keysOfKind(boardAs(LEAD, PROJECT), "EXECUTION")).containsExactly("TC-1");
+        }
+    }
+
     // =====================================================================
     // Request plumbing
     // =====================================================================
+
+    private JsonNode teamBoard(UUID userId, UUID teamId) throws Exception {
+        return teamBoard(userId, teamId, null);
+    }
+
+    private JsonNode teamBoard(UUID userId, UUID teamId, UUID projectId) throws Exception {
+        var response = request(userId, teamId, projectId, null);
+        assertThat(statusOf(response)).isEqualTo(200);
+        return json.readTree(response.getContentAsString());
+    }
+
+    private org.springframework.mock.web.MockHttpServletResponse request(
+            UUID userId, UUID teamId, UUID projectId, Boolean mine) throws Exception {
+
+        var request = MockMvcRequestBuilders.get("/api/v1/work-items")
+                .header("Authorization", "Bearer " + tokenFor(userId, ACME));
+        if (teamId != null) {
+            request = request.param("teamId", teamId.toString());
+        }
+        if (projectId != null) {
+            request = request.param("projectId", projectId.toString());
+        }
+        if (mine != null) {
+            request = request.param("mine", String.valueOf(mine));
+        }
+        return mvc.perform(request).andReturn().getResponse();
+    }
+
+    private static int statusOf(org.springframework.mock.web.MockHttpServletResponse response) {
+        return response.getStatus();
+    }
 
     private JsonNode myWork(UUID userId) throws Exception {
         String body = mvc.perform(MockMvcRequestBuilders.get("/api/v1/work-items")

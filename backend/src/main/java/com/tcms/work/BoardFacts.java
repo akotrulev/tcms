@@ -3,6 +3,7 @@ package com.tcms.work;
 import jakarta.persistence.EntityManager;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 
@@ -35,6 +36,12 @@ import org.springframework.stereotype.Component;
  *       is here rather than in {@code project}, whose {@code allowedDependencies} is
  *       {@code tenancy} alone.</li>
  * </ol>
+ *
+ * <p>A fourth crossing since §84, and it is not a generator: {@link #teamMembers} reads
+ * {@code team_membership} ({@code identity}) on its own, for §6l's <strong>team board</strong>. It
+ * produces no cards — it produces the set of people whose cards are kept — which is why it sits
+ * beside the generators rather than among them. Its header records why the expansion belongs here
+ * and not behind {@code project.TeamDirectory}.
  *
  * <h2>Every generator takes a SET of projects, and the project board is the one-element case</h2>
  *
@@ -270,6 +277,56 @@ class BoardFacts {
                         (UUID) row[6],
                         (UUID) row[7]))
                 .toList();
+    }
+
+    /**
+     * The members of one team — §6l's <strong>team board</strong> expanded at read time (§84).
+     *
+     * <h2>Why the expansion is here rather than behind {@code project.TeamDirectory}</h2>
+     *
+     * <p>That port's header forbids it in terms: it answers <em>"what team is this"</em> and never
+     * <em>"who may"</em>, because §6g's "any member of the team can action it" is the permission
+     * evaluator's question and a second expansion of a team into user ids, sitting in the module
+     * least entitled to hold one, is plan §6b's second authorization path. <strong>This expansion is
+     * not that question.</strong> Nothing here decides what anybody may do — the caller's own project
+     * visibility has already bounded the board before this set is applied — so what a team is expanded
+     * <em>for</em> is which cards to keep, exactly as {@link #pendingReviews} expands one to decide
+     * whose inbox a request is on. Both live in this file, which is where this module's crossings are
+     * concentrated, and neither widens the port.
+     *
+     * <p><strong>Read time, never write time</strong> — §80's rule and its stated reason, membership
+     * moves. A team board is recomputed on every load, so somebody who joined this morning sees the
+     * team's work this morning; a materialised member list would be a snapshot of who was on the team
+     * the day the board was first opened.
+     *
+     * <p><strong>Direct membership only, no hierarchy.</strong> {@code team} has a parent edge (§6k),
+     * and a board that walked it would show a parent team every child team's work — which is a
+     * different board, and one §6l does not describe. {@link #pendingReviews} joins
+     * {@code team_membership} the same flat way, so a review asked of a parent team already reaches
+     * its direct members alone; two different readings of "on the team" in one file would be the
+     * worse outcome than either reading. Named here rather than left implicit, because it is the
+     * first thing somebody will ask for.
+     *
+     * <p>An empty result is a real answer, not a failure: a team that exists and has nobody in it is
+     * a board with nothing on it, and the caller must be able to tell that from a team that does not
+     * exist — which is why existence is asked of {@code TeamDirectory} and never inferred from this.
+     *
+     * <p>RLS bounds this to the caller's company, and {@code team_membership} carries {@code
+     * company_id} like every other company-owned table (ERD §0.1). The team id has additionally been
+     * resolved in this company before this is called, so a foreign team reaches here never — and
+     * would return nothing if it did.
+     */
+    Set<UUID> teamMembers(UUID teamId) {
+        @SuppressWarnings("unchecked")
+        List<UUID> rows = entities.createNativeQuery("""
+                SELECT m.user_id
+                  FROM team_membership m
+                 WHERE m.team_id = :teamId
+                """)
+                .setParameter("teamId", teamId)
+                .getResultList();
+
+        return Set.copyOf(rows);
     }
 
     /**

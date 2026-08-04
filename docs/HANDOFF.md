@@ -1,6 +1,51 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-04 (latest section: **§83, the cross-project board** — §6l's *"My Work"*, the view
+**Date:** 2026-08-04 (latest section: **§84, the team board** — the last of §6l's three boards to
+have no way of being asked for, and the slice that **completes them**: `GET /work-items?teamId=…`,
+a **third selector on the operation that already serves the other two**, because §6l's three boards
+differ in *which cards are kept* and in nothing else — same assembly, same shape, same sort, so a
+`/teams/{id}/work-items` route would be a second door onto one read model with the difference
+maintained by hand for ever. Like §83: **no migration (`V27` still free), no table, no permission
+key, no new route** — the key is *derived*, for the seventh time, because one seeded to nobody is a
+403 no administrator can grant out of, and there is nothing for it to protect: every card this board
+returns is one the caller could already see on a project board. **The slice is one decision — the
+bound is the CALLER's project visibility and never the team's.** *"Cards assigned to members of team
+T"* is one query, reads correctly, and renders the **case key, title and project name of every
+project any member was granted, to a reader granted none of them**: §83's leak one step out and
+strictly worse, because there the leaked-to party was the assignee of their own work and here it is
+a reader who need not be on the team, need hold no grant, and need only guess a UUID. So the projects
+come from `readAllVisible` exactly as the personal board's do and the team contributes **nothing but
+a set of assignees** — from which follows the sentence now in the contract: **two people asking for
+the same team's board receive different boards, and that is the design.** **§83's fixture could not
+have proved it**: in every row of it the assignee *is* the caller, so "bounded by the caller" and
+"bounded by the team" answer identically and the leak passes every assertion. §84 adds a **team-mate
+who can see a project the caller cannot** (`TEAMMATE`, granted where LEAD is not) and asserts it as a
+**pair** — LEAD's view of the team is exactly `{TC-1, TC-10}`, `TEAMMATE`'s view of the *same team*
+is exactly `{TC-9, TC-11}`, which is what stops the first from passing because a fixture row silently
+failed to insert. **The expansion is at READ time in `work`** (§81's precedent, §80's reason —
+membership moves) and **`TeamDirectory` was NOT widened**: its header forbids it answering *who may*,
+and this is not that question — the caller's visibility has already bounded the board before the set
+is applied. Its `find` gets a **second consumer** for existence instead, which is what makes an
+unknown team and another company's team **one 404** rather than a company-wide team-existence oracle
+(§6t) — the fixture puts LEAD in an *Umbra* team to prove membership is not what keeps them out.
+**Four answers that look alike and are four things**: unknown team 404 · unreachable project 404 · a
+team with no members `200 []` · members with no visible work `200 []`, the last two deliberately
+indistinguishable. **And their ordering is a trap with a test**: answering an empty team *before* the
+project gate is the obvious optimisation and turns "empty team + unreachable project" into a **200
+that confirms the project exists**, so the shortcut lives inside the gated read. **`teamId` +
+`mine=true` is a 400** (`twoBoardsProblem`, `unscopedBoardProblem`'s exact inverse) and the queue
+records why it needs a test of its own: for a caller on the team the mutation is **unobservable in
+the body**, since their cards are a subset of the team's. **`teamId` + `projectId` is legal** — §6l's
+*"swimlanes by member"*, two axes (who, where) rather than two boards. `present` now filters over a
+**set** with the personal board as the one-element case, still **after** `assemble`, so §83's
+recorded cost is inherited unchanged. **Nothing was overturned**; three things were checked rather
+than assumed, including that **`work_item.assignee_id` REFERENCES `app_user`** — §6l's team assignee
+for the unclaimed pool **does not exist**, named as not-built rather than scoped out. Found and not
+fixed: **the two boards are not protected by the same line** — dropping the grant filter from
+`visibleProjects` leaves every `Gates` test green, because a *named* project goes through
+`visibleProject`'s own copy. **Zero mutations run inline; six queued.** §6l's three boards are now
+complete; what is left there is the **two remaining generators**, the **per-project toggles**, the
+**cap**, and **notifications**. Before that: **§83, the cross-project board** — §6l's *"My Work"*, the view
 it calls the one most people keep open all day, and the slice whose entire path work was **leaving a
 parameter off**: §81 had already recorded that `/work-items?projectId=…` *"is the shape that
 eventually drops the parameter"*, so there is no new route, no table, no key and **no migration —
@@ -1102,3 +1147,4 @@ See [`docs/plans/2026-07-31-parallel-execution-rework.md`](plans/2026-07-31-para
 | [§81](handoff/81-the-reviewers-inbox.md) | The reviewer's inbox — the query no module could write, and the mock that invented the feature |
 | [§82](handoff/82-the-gating-rules.md) | §6g's gating rules — the edge that is not a target, and the override nobody had to invent |
 | [§83](handoff/83-the-cross-project-board.md) | The cross-project board — the parameter that was left off, and the mock that had been showing the wrong project since Phase 1 |
+| [§84](handoff/84-the-team-board.md) | The team board — the bound that is the reader's, and the third selector on one operation |

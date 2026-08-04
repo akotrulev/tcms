@@ -3,6 +3,7 @@ package com.tcms.work;
 import com.tcms.project.GateResult;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectService;
+import com.tcms.project.TeamDirectory;
 import com.tcms.tenancy.CompanyContext;
 import java.time.Clock;
 import java.time.LocalDate;
@@ -75,6 +76,7 @@ public class BoardService {
     private final WorkItemRepository tasks;
     private final BoardFacts facts;
     private final BoardPeople people;
+    private final TeamDirectory teams;
     private final Clock clock;
 
     BoardService(
@@ -82,12 +84,14 @@ public class BoardService {
             WorkItemRepository tasks,
             BoardFacts facts,
             BoardPeople people,
+            TeamDirectory teams,
             Clock clock) {
 
         this.projects = projects;
         this.tasks = tasks;
         this.facts = facts;
         this.people = people;
+        this.teams = teams;
         this.clock = clock;
     }
 
@@ -144,19 +148,113 @@ public class BoardService {
     }
 
     /**
+     * §6l's <strong>team board</strong> — one team's work, across every project the caller can see,
+     * or within one named project (§84). Empty when the team does not exist in this company, or when
+     * a named project is not reachable.
+     *
+     * <h2>The bound is the CALLER's visibility, and never the team's</h2>
+     *
+     * <p>This is the whole risk of the shape and the only thing the implementation could get
+     * catastrophically wrong. A team board built from <em>"cards assigned to members of team T"</em>
+     * is one query and reads correctly; what it renders is the case key, the title and the project
+     * name of every project any member was granted — including the ones the person looking at the
+     * board was not. §83's bound, one step out: there the assignee could be somebody with no grant on
+     * their own work's project, and here the <em>reader</em> is. So the projects come from
+     * {@link ProjectService#readAllVisible} exactly as the personal board's do, and the team
+     * contributes nothing but a set of assignees.
+     *
+     * <p>Consequence, stated rather than discovered: <strong>two people looking at the same team's
+     * board see different boards.</strong> That is correct and is not a bug to report — a team board
+     * is "this team's work, as much of it as you are entitled to see", and the alternative is a
+     * cross-project leak with a team id for a key.
+     *
+     * <h2>Three refusals and one empty answer, and they are four different things</h2>
+     *
+     * <ul>
+     *   <li><strong>An unknown or another company's team → empty, rendered 404.</strong> Resolved
+     *       through {@link TeamDirectory#find}, which is company-scoped, so the two are one answer —
+     *       or this endpoint becomes a company-wide team-existence oracle (§6t), answerable by
+     *       anybody with a session and a guessed UUID.</li>
+     *   <li><strong>A named project the caller cannot reach → empty, rendered 404</strong>, by
+     *       {@link ProjectService#readVisible} unchanged. Note the ordering: the project gate runs
+     *       <em>before</em> the empty-team shortcut below, so an empty team plus an unreachable
+     *       project is still a 404 rather than a 200 that confirms the project exists.</li>
+     *   <li><strong>A team with no members → {@code 200 []}.</strong> Reachable, and empty. Answered
+     *       before any board query is issued: assembling a company's whole live work set in order to
+     *       keep none of it is the one call whose answer is knowable in advance. Not §83's
+     *       {@code IN ()} hazard — this filter runs in Java over the assembled cards, not in SQL —
+     *       but the same instinct, and a newly created team is the ordinary first caller here just as
+     *       a grantless member is there.</li>
+     *   <li><strong>Members with no work the caller can see → {@code 200 []}</strong>, by the filter
+     *       finding nothing. Indistinguishable from the row above on the wire, deliberately: both are
+     *       "this team has nothing for you", and a client that could tell them apart would be reading
+     *       team membership out of a board.</li>
+     * </ul>
+     *
+     * <h2>No new permission key, and no membership requirement</h2>
+     *
+     * <p>Nothing here asks for anything the caller did not already hold. A key invented for this
+     * would be seeded to nobody and therefore a 403 no administrator could grant their way out of
+     * (§67's {@code evidence:read}, §79's {@code suite:comment}, §80's assignment gate) — and there
+     * is nothing for it to protect: every card on this board is one the caller could already see on
+     * a project board. Nor must the caller <em>belong</em> to the team, for §6k's reason: the org
+     * chart is readable by any member of the company, and a team board somebody outside the team
+     * cannot open is a lead unable to look at their own reports' work.
+     */
+    @Transactional(readOnly = true)
+    public Optional<List<WorkItemView>> teamBoard(UUID userId, UUID teamId, UUID projectId) {
+        if (teams.find(CompanyContext.require(), teamId).isEmpty()) {
+            return Optional.empty();
+        }
+        Set<UUID> members = facts.teamMembers(teamId);
+
+        if (projectId == null) {
+            return Optional.of(projects.readAllVisible(
+                    userId, visible -> forAssignees(visible, members)));
+        }
+        return projects.readVisible(
+                userId, projectId, project -> forAssignees(List.of(project), members));
+    }
+
+    /**
+     * Assemble the gated projects and keep the cards belonging to these people.
+     *
+     * <p>The empty check is inside here rather than at the top of {@link #teamBoard} on purpose: by
+     * the time this runs the project gate has already been applied, so an empty team can shortcut
+     * without the shortcut being able to swallow a 404.
+     */
+    private List<WorkItemView> forAssignees(List<Project> visible, Set<UUID> assignees) {
+        if (assignees.isEmpty()) {
+            return List.of();
+        }
+        return present(assemble(visible), assignees);
+    }
+
+    /**
      * The personal filter, applied <strong>after</strong> assembly rather than inside each generator.
      *
      * <p>Pushing it down would mean four predicates to keep in step, and the one that gets forgotten
      * silently shows somebody else's work on a personal board — a leak of attention rather than of
      * data, which is why nothing would ever fail. It is also what lets the cross-project board reuse
      * the project board's assembly unchanged.
+     *
+     * <p>Since §84 the filter is over a <strong>set</strong> of assignees and the personal board is
+     * the one-element case, which is {@code BoardFacts}' project-set decision said about people: a
+     * second predicate for "is this one of the team's" would be the copy that drifts, and it would
+     * drift in the direction nobody tests, since only one board would exercise each. The argument
+     * above is unchanged by the generalisation — the filter is still applied after assembly, and the
+     * team board inherits both the reuse and the cost {@link #personalBoard} records.
      */
     private static List<WorkItemView> present(List<WorkItemView> cards, UUID userId, boolean mine) {
         if (!mine) {
             return sorted(cards);
         }
+        return present(cards, Set.of(userId));
+    }
+
+    private static List<WorkItemView> present(List<WorkItemView> cards, Set<UUID> assignees) {
         return sorted(cards.stream()
-                .filter(card -> card.assignee() != null && card.assignee().id().equals(userId))
+                .filter(card -> card.assignee() != null && assignees.contains(card.assignee().id()))
                 .toList());
     }
 

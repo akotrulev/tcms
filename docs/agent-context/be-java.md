@@ -3,8 +3,8 @@
 # be-java — orientation cache (TCMS)
 
 **Last verified:** 2026-08-04
-**Baseline commit:** `1669074` (§83's backend edits are in the working tree, uncommitted — the
-frontend half lands in the same slice)
+**Baseline commit:** `74d21e0` (§84's backend edits are in the working tree, landing in this slice's
+own commit; the frontend half of §84 — `npm run gen:api` and the team-board screen — is not written)
 **Fingerprint files:** `backend/build.gradle.kts`, `backend/gradle/libs.versions.toml`, `backend/gradle/wrapper/gradle-wrapper.properties`
 
 > Authoritative docs win over this file. `CLAUDE.md`, `docs/HANDOFF.md` (an index — sections live in
@@ -288,6 +288,40 @@ provisioning · auth · shared`.
   somewhere to land, on the generators rather than on the response. Not fixed in §83: pushing the
   filter down is what `present` refuses by name, and it would change the project board too.
   `#confirmed`
+- **The board is §6l's THIRD one since §84, and `GET /work-items?teamId=…` is a third SELECTOR on
+  one operation.** `BoardFacts.teamMembers`, `BoardService.teamBoard` + `forAssignees` +
+  `present(cards, Set<UUID>)`, `WorkItemController.twoBoardsProblem`. **No migration (`V27` still
+  free), no table, no key** — derived for the seventh time, and there is nothing for a key to protect
+  since every card is one the caller could already see on a project board. §6l's three boards differ
+  in *which cards are kept* and in nothing else, which is why a `/teams/{id}/work-items` route was
+  refused.
+  **THE decision: the bound is the CALLER's project visibility, never the team's.** Projects come
+  from `readAllVisible` exactly as the personal board's do and the team contributes **only a set of
+  assignees** — so *two people asking for the same team's board receive different boards*, stated in
+  the contract as the design. *"Cards assigned to members of team T"* is one query, reads correctly,
+  and renders another client's case key, title and project name to a reader who need not be on the
+  team, need hold no grant, and need only guess a UUID. **§83's fixture cannot prove this** (its
+  assignee is always the caller, so both bounds agree on every row); §84 adds `TEAMMATE`, granted
+  where LEAD is not, and asserts a **pair** — LEAD's view is exactly `{TC-1,TC-10}`, TEAMMATE's view
+  of the *same team* exactly `{TC-9,TC-11}` — the second half being what stops the first from passing
+  because a fixture row silently failed to insert.
+  **The expansion is at READ time and `TeamDirectory` was NOT widened.** §81's precedent, §80's
+  reason (membership moves). The port's header forbids it answering *who may*; this is not that
+  question, because visibility has already bounded the board before the set is applied. Its **`find`
+  gets a second consumer** for existence — which is what makes an unknown team and another company's
+  team **one 404** instead of a company-wide team-existence oracle (§6t). **Direct membership only,
+  no hierarchy**, matching `pendingReviews`' flat join.
+  **Four answers, two of them deliberately indistinguishable**: unknown team 404 · unreachable
+  project 404 · no members `200 []` · members with no visible work `200 []`. **Their ordering is a
+  trap with a test**: the empty-team shortcut lives INSIDE `forAssignees` (after the project gate),
+  because hoisting it turns "empty team + unreachable project" into a 200 confirming the project
+  exists. **`teamId`+`mine` is a 400** and **`teamId`+`projectId` is legal** (two axes, who and
+  where — §6l's swimlanes-by-member). `present` filters over a **set** with the personal board as the
+  one-element case, still **after** `assemble`, so §83's cost note is inherited unchanged.
+  **`work_item.assignee_id` REFERENCES `app_user`** — §6l's team assignee for the unclaimed pool does
+  not exist and is named not-built. **Live trap: the two boards are not protected by the same line** —
+  dropping the grant filter from `ProjectService.visibleProjects` leaves every `Gates` test green,
+  because a *named* project goes through `visibleProject`'s own copy of it. `#confirmed`
 - **`review_assignment` is NEW in §80 (`V25`) — the first review table not already in `V1`.** That
   absence is itself the finding: `V1` designed the record of what happened and never the worklist of
   what is outstanding. `ReviewAssignment` + `ReviewAssigneeEdit` + `ReviewAssignmentRepository` +
@@ -351,7 +385,10 @@ provisioning · auth · shared`.
   and check the map" is how a validation stops looking like one. It must never answer **membership**:
   §6g's "any member can action it" is `PermissionEvaluator`'s question (§71), and a team is
   deliberately not expanded into per-member rows at assignment time, because membership moves.
-  `#confirmed`
+  **`find` has a SECOND consumer since §84** — `work.BoardService.teamBoard`, for existence, which is
+  what makes an unknown team and another company's team one 404 rather than an existence oracle. The
+  membership rule held under pressure: §84's team board expands in `BoardFacts.teamMembers`, not in a
+  third method here.
   `#confirmed`
 - **`project.PeopleDirectory` is the ONE resolution of "what is this person called" (§76).** Port in
   `project` (which may depend on `tenancy` only — its package comment prescribes exactly this),
@@ -552,8 +589,13 @@ provisioning · auth · shared`.
   defect record, which nothing writes — a feature apiece, not a generator apiece); ~~**§6l's
   cross-project "My Work" board**, so the inbox is **per project**~~ → **built in §83** (see the seam
   above): the inbox is now **per project OR personal across every project the caller can see**, and
-  the endpoint did not move. **§6l's per-project generator toggles**; and **notifications** — all four
-  of §6g's events have a trigger and there is no channel — remain unbuilt. `#confirmed`
+  the endpoint did not move. ~~**§6l's TEAM board — the only one of its three with no endpoint**~~ →
+  **built in §84** (see the seam above), which **completes §6l's three boards**: one operation, three
+  selectors, and the endpoint did not move again. **§6l's per-project generator toggles**; **WIP
+  limits and configurable columns**; **§6l's cap on derived generation** (located three times now, on
+  the generators, built zero); **a team assignee for §6l's unclaimed pool** (no such column —
+  `work_item.assignee_id` references `app_user`, §84); and **notifications** — all four of §6g's
+  events have a trigger and there is no channel — remain unbuilt. `#confirmed`
 
 - **`audit_event.target_type` is spelled two ways and nothing reads it yet.** Every service writes
   the snake_case table name (`test_run`, `test_case`, `test_plan`, `doc_page`, …) except
@@ -608,6 +650,28 @@ provisioning · auth · shared`.
   a caller may or may not see. `#confirmed`
 
 ## Session log
+
+- 2026-08-04 · EXTEND · §6l's team board (§84) — the last of its three with no way of being asked
+  for, and a **third selector** on the operation that already serves the other two:
+  `GET /work-items?teamId=…`. New: `BoardFacts.teamMembers`, `BoardService.teamBoard` +
+  `forAssignees` + `present(cards, Set<UUID>)`, `WorkItemController.twoBoardsProblem`.
+  **No migration (`V27` still free), no table, no key** — policy count unchanged at **58**.
+  **The slice is one decision: the bound is the CALLER's project visibility, never the team's** —
+  *"cards assigned to the team's members"* is one query, reads correctly, and renders another
+  client's case key, title and project name to a reader who need not be on the team and need only
+  guess a UUID. **§83's fixture could not have proved it** (its assignee is always the caller, so
+  both bounds agree on every row), so §84 adds `TEAMMATE` — granted where LEAD is not — and asserts
+  it as a **pair**, the second half being what stops the first from passing on a fixture row that
+  silently failed to insert. `TeamDirectory` was **not** widened: its `find` gets a second consumer
+  for existence, and the expansion is `BoardFacts.teamMembers`, at read time. **Nothing overturned**;
+  three things checked rather than assumed, including that `work_item.assignee_id` references
+  `app_user`, so §6l's team assignee for the unclaimed pool **does not exist** and is named not-built.
+  Found and not fixed: **the two boards are not protected by the same line** — dropping the grant
+  filter from `visibleProjects` leaves every `Gates` test green, because a named project goes through
+  `visibleProject`'s own copy. All tests green on the first run. Backend 1513 → **1530** (17 in a new
+  `BoardEndpointTest.TeamBoard`), 0 failures, 0 skipped. **Zero mutations run inline** (policy); six
+  queued. `frontend/src/api/schema.d.ts` is **stale** — `openapi.yaml` changed and `npm run gen:api`
+  belongs to the frontend half.
 
 - 2026-08-04 · EXTEND · §6l's cross-project "My Work" board (§83) — `GET /work-items` with the
   project parameter left **off**, which is why §53 chose an instance-scoped path before the board
