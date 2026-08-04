@@ -70,6 +70,9 @@ const DocsPage = lazy(() => import('../features/docs/DocsPage').then((m) => ({ d
 const DocPageEditorPage = lazy(() =>
   import('../features/docs/DocPageEditorPage').then((m) => ({ default: m.DocPageEditorPage })),
 );
+const ReportsPage = lazy(() =>
+  import('../features/reports/ReportsPage').then((m) => ({ default: m.ReportsPage })),
+);
 const ArtifactsPage = lazy(() =>
   import('../features/artifacts/ArtifactsPage').then((m) => ({ default: m.ArtifactsPage })),
 );
@@ -370,6 +373,21 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <ReviewSettingsPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            §6e's reports (§89). Under the project segment, unlike the two boards outside it: a
+            report is computed over one project's facts and says so in its own header — "this
+            report covers <project> in full and no other project" — so switching projects genuinely
+            changes what this screen is about, which is the test the rail's own headings apply.
+          */}
+          <Route
+            path="/projects/:projectId/reports"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <ReportsPage />
               </Suspense>
             }
           />

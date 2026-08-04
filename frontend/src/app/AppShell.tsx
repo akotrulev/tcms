@@ -16,6 +16,7 @@ import {
 } from '@mui/material';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import AssignmentIndOutlinedIcon from '@mui/icons-material/AssignmentIndOutlined';
+import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
 import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
@@ -100,6 +101,20 @@ function projectNav(projectId: string): { heading: string; items: NavItem[] }[] 
         { label: 'Test plans', to: `${p}/plans`, icon: <AssignmentOutlinedIcon fontSize="small" /> },
         { label: 'Test runs', to: `${p}/runs`, icon: <PlaylistAddCheckOutlinedIcon fontSize="small" /> },
         { label: 'Board', to: `${p}/board`, icon: <ViewKanbanOutlinedIcon fontSize="small" /> },
+        /*
+          §6e's reports (§89). Execution rather than Project, because what a report is *of* is
+          execution results — the only one that exists today summarises a run, and every one §6e
+          names is computed over the fact log. Filing it under Project would put it beside the
+          administration screens, which is where people would stop looking for it.
+
+          **Ungated, like every other item in this rail.** The plan's F1 line asked for a gate on
+          `report:view`; the `Review` item above records the argument against it, and it applies
+          more strongly here — `V3` grants `report:view` to five of the six built-in roles, and the
+          sixth is Automation Service, which is API-token only and never renders a rail. So the gate
+          would hide the entry from nobody who can reach it, while teaching that rail items come
+          and go by permission, which is the opposite of §31's disable-don't-hide.
+        */
+        { label: 'Reports', to: `${p}/reports`, icon: <AssessmentOutlinedIcon fontSize="small" /> },
       ],
     },
     {

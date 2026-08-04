@@ -1,5 +1,5 @@
 /** The repository status dashboard, and §6e's report pipeline (§87/§88's backend, F1's client). */
-import { useMutation, useQuery, type UseQueryResult } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { TIMEOUTS, api } from '../client';
 import type { ReportDefinition, ReportJob, ReportJobStatus, RepositoryDashboard } from '../types';
 import { base, keys } from './keys';
@@ -64,10 +64,16 @@ export function useReportDefinitions(projectId: string): UseQueryResult<ReportDe
  * long budget belongs on the download, where the bytes actually travel.
  */
 export function useGenerateReport(projectId: string) {
+  const client = useQueryClient();
   return useMutation({
     mutationFn: (input: { type: string; format: string; parameters: Record<string, unknown> }) =>
       api.post<ReportJob>(`${base(projectId)}/reports/generate`, input),
     meta: { handled: true },
+    // The 202 body IS the job's first state, so it is seeded rather than thrown away and re-asked
+    // for. Without this the card that appears on submit renders a loading skeleton — for a row the
+    // client is already holding — until the first poll lands a second or two later, which reads as
+    // the request not having been accepted.
+    onSuccess: (job) => client.setQueryData(keys.reportJob(projectId, job.jobId), job),
   });
 }
 
