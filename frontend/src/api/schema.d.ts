@@ -2925,13 +2925,12 @@ export interface paths {
         };
         /**
          * Page with blocks and per-block coverage
-         * @description Each block carries the cases linked to it and their latest results — the
-         *     inline coverage marker that makes people maintain links (plan §6i).
+         * @description Each block carries the cases linked to it — plan §6i's inline traceability marker.
          *
-         *     `coverage` is **absent** until something can create a `doc_link`. Nothing can yet, so no
-         *     block has one, and serializing a zeroed marker would say "nothing verifies this" when the
-         *     truthful statement is that the question has not been asked. Same call, for the same reason,
-         *     as `TestCase.relatedDocuments`.
+         *     ~~`coverage` is **absent** until something can create a `doc_link`. Nothing can yet~~ →
+         *     **superseded**: `POST .../blocks/{blockId}/links` creates them, and each block now serves
+         *     `links`. `coverage` is still absent, for a different reason that is stated on the field
+         *     itself: this module can see *which* cases claim a statement but not how they are **doing**.
          */
         get: {
             parameters: {
@@ -3082,6 +3081,272 @@ export interface paths {
                 };
             };
         };
+        trace?: never;
+    };
+    "/projects/{projectId}/doc-pages/{pageId}/blocks/{blockId}/links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                pageId: string;
+                blockId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Link a case or suite to a block
+         * @description Records that a test case (or a whole suite) verifies this statement. Requires `doc:edit` —
+         *     the link is a property of the documentation, and its holder is everyone who writes docs.
+         *
+         *     **This is the first writer `doc_link` has ever had.** Two read paths have been specified and
+         *     unserved since the mock era waiting for it: `TestCase.relatedDocuments` and `DocBlock.links`.
+         *     A third, `DocBlock.coverage`, stays absent — see its own description for why building this
+         *     did not unblock it.
+         *
+         *     Two protections that already existed become reachable on the same day: the page `PATCH` and
+         *     the page `DELETE` both answer `409` rather than cascading a link away, because a link is
+         *     somebody's traceability record and not the request's business.
+         *
+         *     **Linking the same source to the same block twice writes nothing and answers `200`** with
+         *     the existing link, rather than a second row or a conflict. Re-asserting a fact that is
+         *     already recorded is not an error, and a duplicate would double every count drawn off this
+         *     table.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                    pageId: string;
+                    blockId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BlockLinkInput"];
+                };
+            };
+            responses: {
+                /** @description The link already existed. Nothing was written. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BlockLink"];
+                    };
+                };
+                /** @description Linked */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BlockLink"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                /**
+                 * @description The project, the page, the block, or the source is not visible here. One response for
+                 *     all four (§6t) — the source check is against **this project**, not merely this company,
+                 *     so a sibling project's case lands here rather than being accepted.
+                 */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/doc-pages/{pageId}/links/{linkId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                pageId: string;
+                linkId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a link from a block
+         * @description Requires `doc:edit`. **A hard delete**, unlike a page's: the link is an assertion somebody
+         *     made and has now withdrawn, and a tombstoned assertion still reads as one to every count
+         *     drawn off this table. `ReviewAssignment` made the same call for the same reason, against
+         *     `ReviewComment`'s opposite one.
+         *
+         *     Deleting a link that does not exist is a `404`, not an idempotent `204`: unlike the `POST`,
+         *     there is no fact here that is already true — the caller named a row, and naming one that is
+         *     not there is a mistake worth reporting.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                    pageId: string;
+                    linkId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Removed. No body. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/plans/{planId}/document": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                planId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * The plan's document
+         * @description A test plan's narrative half — business requirements, test artefacts, scope, out of scope,
+         *     and the test-scenario outline. The plan row holds the *executable* half: the milestone, the
+         *     entry and exit criteria, and the suites and cases in scope.
+         *
+         *     **It is an ordinary `DocPage`**, living in the project's documentation space and reachable at
+         *     `/doc-pages/{pageId}` like any other, with `subjectType: TEST_PLAN` naming the plan it is
+         *     about. That is why editing it is `PATCH /doc-pages/{pageId}` and costs `doc:edit`, not
+         *     `plan:edit`: it is documentation, it versions as documentation, and it is found by everyone
+         *     who searches the documentation. This endpoint only *resolves* the plan to it.
+         *
+         *     `404` when the plan has no document yet — a plan is created long before anybody writes one,
+         *     so this is the ordinary first answer and not an error state. `POST` creates it.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                    planId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The document */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DocPage"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                /** @description The project or plan is not visible, or the plan has no document yet. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Start the plan's document from the template
+         * @description Creates the page and fills it with the standard test-plan skeleton — the five headed
+         *     sections, each with a prompt describing what belongs in it. Requires `doc:edit`.
+         *
+         *     **The template is seeded here and nowhere else.** There is deliberately no "reset to
+         *     template": a second application would overwrite whatever had been written under those
+         *     headings, and the request that did it would look identical to the one that created an empty
+         *     document. Calling this again is a `409`.
+         *
+         *     The prompts are prompts, not content — every one is a `paragraph` the author is expected to
+         *     replace, so a document nobody has touched reads as an empty form rather than as a plan
+         *     asserting things about a product.
+         *
+         *     **Test artefacts records identifiers, never secrets.** Its prompt asks for the environment,
+         *     the account, and *where the credential lives*; the product stores no password, and an
+         *     example plan that lists them in prose is the practice this section exists to replace.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                    planId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        /** @description The created page's own URL under `/doc-pages`. */
+                        Location?: string;
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DocPage"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                /** @description The plan already has a document. `detail` names it. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/projects/{projectId}/doc-pages/{pageId}/status": {
@@ -5927,6 +6192,10 @@ export interface components {
             status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
             /** Format: date-time */
             updatedAt: string;
+            /** @enum {string|null} */
+            subjectType?: "TEST_PLAN" | null;
+            /** Format: uuid */
+            subjectId?: string | null;
         };
         DocPage: components["schemas"]["DocPageSummary"] & {
             blocks: components["schemas"]["DocBlock"][];
@@ -5943,9 +6212,29 @@ export interface components {
             position: number;
             /** @enum {string} */
             blockType: "heading" | "paragraph" | "list" | "code" | "table" | "image";
+            /** @description Heading depth on a `heading`; **indent depth on a `list`**; null on every other type. */
             level?: number | null;
             text: string;
-            /** @description Inline coverage marker — what makes people maintain links (plan §6i). */
+            /**
+             * @description What is linked to this block — the reverse of `TestCase.relatedDocuments`, read from the
+             *     same `doc_link` rows.
+             *
+             *     Present and possibly empty, unlike `coverage`. The distinction is deliberate: this array
+             *     says *which cases claim to verify this statement*, which the server knows exactly, and an
+             *     empty one truthfully means nobody has claimed it. `coverage` would say how those cases
+             *     are **doing**, which the server cannot answer here — see below.
+             */
+            links?: components["schemas"]["BlockLink"][];
+            /**
+             * @description Inline coverage marker — what makes people maintain links (plan §6i).
+             *
+             *     **Still absent, and the reason has moved.** Until links could be created, no block had
+             *     one to price. Now they can be, and the obstacle is the other half: `passed` / `failed` /
+             *     `notRun` are `test_execution` joined to `test_case` — two modules `documentation` may not
+             *     name — while `linkedCases` and `caseKeys` are answerable and are served on `links`
+             *     instead. All five fields are required here, so a partial object is not available, and a
+             *     zeroed one would print "Not tested" against a statement whose cases may all be green.
+             */
             coverage?: {
                 linkedCases: number;
                 passed: number;
@@ -5988,7 +6277,18 @@ export interface components {
             id?: string | null;
             /** @enum {string} */
             blockType: "heading" | "paragraph" | "list" | "code" | "table" | "image";
-            /** @description Heading depth. Required for `heading`, refused on every other type. */
+            /**
+             * @description Depth. **Three arms, not two** — required for `heading`, where it is the heading level;
+             *     optional for `list`, where it is the bullet's indent depth and defaults to `1`; refused
+             *     on every other type, because a level on a paragraph means the client believes it is
+             *     sending something else.
+             *
+             *     A list's depth is a field rather than markers typed into `text` (`1.` / `a.` / `i.`)
+             *     because a nested test-scenario outline is the shape a test plan is mostly made of, and
+             *     an outline encoded in prose cannot be indented, renumbered, or — the reason that
+             *     settles it — **linked**: a `doc_link` targets a block, so a scenario a case can verify
+             *     has to be its own block rather than a line inside one.
+             */
             level?: number | null;
             text: string;
         };
@@ -5999,6 +6299,46 @@ export interface components {
         RunStatusInput: {
             /** @enum {string} */
             status: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "ABORTED";
+        };
+        /**
+         * @description One `doc_link` seen from the **block** end: what claims to verify this statement.
+         *
+         *     `DocLink` is the same row seen from the case end, and the two are not merged. Each names the
+         *     thing at the *other* end and omits the thing the reader already has — a case's view carries
+         *     the page and block, a block's view carries the case — so a merged schema would be half-null
+         *     in both directions and would let a client read the field that happens to be populated
+         *     without noticing which end it is standing at.
+         */
+        BlockLink: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            sourceType: "TEST_CASE" | "SUITE";
+            /** Format: uuid */
+            sourceId: string;
+            /** @example TC-42 */
+            sourceKey: string;
+            sourceTitle: string;
+            /** @enum {string} */
+            relationship: "VERIFIES" | "DERIVED_FROM" | "REFERENCES";
+        };
+        BlockLinkInput: {
+            /** @enum {string} */
+            sourceType: "TEST_CASE" | "SUITE";
+            /**
+             * Format: uuid
+             * @description A case or suite **of this project**. One belonging to a sibling project is a `404`, not a
+             *     `400`: the row is reachable within the company, so a distinguishing error would answer
+             *     "that case exists, elsewhere" to somebody who cannot see it.
+             */
+            sourceId: string;
+            /**
+             * @description Defaults to `VERIFIES`, which is what a test case linked to a scenario means and what
+             *     the column already defaults to.
+             * @default VERIFIES
+             * @enum {string}
+             */
+            relationship: "VERIFIES" | "DERIVED_FROM" | "REFERENCES";
         };
         DocLink: {
             /** Format: uuid */
