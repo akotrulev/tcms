@@ -3,7 +3,7 @@
 # fe-react — orientation cache (TCMS)
 
 **Last verified:** 2026-08-04
-**Baseline commit:** `9f01798` (+ §90 phase 3, this commit)
+**Baseline commit:** `6980bfb` (+ §91, this commit)
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
 `frontend/vite.config.ts`
 
@@ -46,12 +46,37 @@ says *"covers X in full and no other project"*, so switching projects changes wh
 dialog because a report is read and referred back to, and because a job id in the address bar is the
 only durable handle a report has while nothing lists jobs.
 
+**`/` finally has an affordance (§91).** It is where sign-in lands and where an unreachable project
+falls back to, and until §91 **nothing in the app linked to it** — the one screen every session
+starts on and no screen pointed at. It now has a rail item (`ALL_PROJECTS`, in the ungrouped block
+directly above the switcher) and the wordmark links there too.
+
 > **⚠ This file went FIVE SLICES STALE (§72–§76) and was repaired in §77.** Only the backend half of
 > the update-the-cache habit had stuck. If you are reading this and the baseline lags HEAD by more
 > than a slice, the seam list below is a lead and not evidence — re-grep anything that decides your
 > slice's shape. `docs/handoff/00-plugin-skills-are-mandatory.md` step 0 now states the protocol.
 
 ## Seams to reuse
+
+- **THE PLAN DOCUMENT TAB (§93).** `features/plans/PlanDocumentPanel.tsx` +
+  `usePlanDocument`/`useStartPlanDocument`/`useLinkBlock`/`useUnlinkBlock` +
+  `useCreateDraftCase` + `keys.planDocument`; `PlanStatisticsPage` gained **Tabs** with the selection
+  in the URL (`?tab=document`), the two halves **unmounted rather than hidden**.
+  **`usePlanDocument` turns the server's 404 into `null`** — a plan with no document is the ordinary
+  first state, and letting it reach the query client raises a global "Something didn't load" on a
+  screen whose correct rendering is an invitation.
+  **`blocksOf` is the ONE place an edit payload is built**, because the field that must never be
+  dropped is `id`: a block sent without one is deleted and recreated and every link to it is
+  destroyed silently.
+  **`useCreateDraftCase` exists because `useCreateCase` holds ONE idempotency key per mount.** That
+  is right for an editor (one intent, one case) and catastrophic for a bar somebody adds ten cases
+  from — every case after the first would come back as the first, silently. A key per **submit**.
+  **The "Test cases" section is found by HEADING TEXT** (`CASE_SECTION`), the screen's known weak
+  point; renaming it moves new cases to the end of the document with an info alert rather than
+  losing them.
+  **Adding a case is THREE requests and the order is load-bearing**: case, bullet, link — the case
+  first because it is the durable half, and the failure message says the case may exist anyway.
+  **No component tests.** `#confirmed`
 
 - **`ReviewPanel` carries TWO permission tiers and they are different keys (§79).** The comment box
   and Reply ask **`case:comment`** for *every* subject type — the catalogue has one comment key where
@@ -390,6 +415,24 @@ only durable handle a report has while nothing lists jobs.
   whole category going missing, which is exactly what happened. `#confirmed`
 - **Fault injection** (dev only, browser console): `tcmsFaults.status/hang/expire/drift/only/off`.
   Faults live in module state, so arm them *after* load.
+- **The rail has TWO widths since §91, and the drawer has only one.** `RailContent` takes
+  `collapsed` + `onToggleCollapse`; the permanent rail (232px ↔ **64px**, `RAIL_WIDTH_COLLAPSED`)
+  passes both, the small-screen `Drawer` passes **neither** and is always expanded — collapsing a
+  temporary drawer saves nothing and takes the labels from the users with the least room to guess at
+  icons. Collapsed, `RailLink` drops the label text and **must** carry `aria-label` (an icon-only
+  link with no name is announced as its href; the `Tooltip` is a hover affordance and reaches no
+  screen reader), group headings become `<Divider>`s, and the switcher becomes an `IconButton`
+  showing the project's **key** plus a `Menu` — the key, not a folder icon, because *which project
+  am I in* is what a 64px rail is likeliest to drop. The preference is `safeStorage`
+  (`tcms.nav.railCollapsed`), read in the **initial `useState`** and not an effect, or the rail
+  renders expanded for one frame and snaps shut on every page load. `Nav.Rail` carries
+  `data-collapsed`. `#confirmed`
+- **`AppShell.test.tsx` exists as of §91 — the shell's first test file.** Rendering the shell needs
+  `TestProviders` with a **`userId`** (the `TopBar` calls `useAuth`, which throws without a
+  provider), and — the trap — a `waitFor` on the **project group** (`Nav.Link.Testcases`), never on
+  `Nav.ProjectSwitcher` or the ungrouped items: those three render *before* `/projects` answers, so
+  waiting on one returns while `groups` is still `[]` and every project-scoped assertion fails on a
+  rail that was merely early. `#confirmed`
 
 ## Conventions observed
 
@@ -618,3 +661,13 @@ only durable handle a report has while nothing lists jobs.
   `features/artifacts/ArtifactDialogs.tsx` (scope × kind cross-field form) + its 6 tests, the MSW
   `POST /artifacts` handler mirroring the PLAN_SCOPE qualifier, and the `docPageId` link that makes a
   documentation artifact reachable. Cache created this run.
+- 2026-08-04 · EXTEND · §91 — gave `/` a way in and the rail a way closed. `ALL_PROJECTS` rail item
+  + linked wordmark (the picker had **no affordance at all** since the app began: sign-in lands
+  there, an unreachable project falls back there, and nothing linked to it), and an icon-only
+  collapsed rail persisted through `safeStorage`. Extracted `ProjectSwitcher` out of `RailContent`
+  to carry both widths. Added `AppShell.test.tsx`, the shell's first tests (5). Gate: build clean,
+  lint 0, **770/770 across 52 files**. **A comment was written wrong and corrected before landing**:
+  it claimed `end: true` on a `to="/"` item is load-bearing against a prefix match on every route —
+  `NavLink` already refuses that case, the test stays green without it, and the comment and the test
+  doc now both say so rather than implying a guard that is not there. Browser rows 34–39 queued,
+  **not run** (§65).

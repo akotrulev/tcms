@@ -1574,3 +1574,52 @@ them stand for defects that pass every *other* assertion in the class.
 | **Check** | the policy count and the module declaration are UNCHANGED |
 | **Mutation** | — |
 | **Must show** | `SchemaConventionTest` still asserts **59** policies (V28 adds no table), `V28__report_artifact_definition_on_delete.sql` is the head with `V29` free, and `reporting/package-info.java` still declares `{"tenancy", "project", "identity"}` — R5 reads `PeopleDirectory` and `ProjectService` (project) and nothing new. If any moved, this slice needed a dependency it did not argue for. |
+
+## §93 — the plan document
+
+~~**§93 has no tests**, so every row below is a test to WRITE~~ → **superseded within the slice**:
+`PlanDocumentEndpointTest` was written before landing and its 19 tests are green. So these are
+ordinary mutation rows again — each names a line to break and what must redden.
+
+**One of them found a live defect rather than confirming a design.** `editRefusesToBreakALink`
+asserts the page's TITLE as well as the 409, and the title had changed: `page.retitle(...)` ran
+before the link guard, `Outcome.WouldBreak` is a returned value rather than an exception, and a
+`@Transactional` method that returns normally **commits** — so the client was told the edit was
+refused and the page came back renamed. Unreachable until this slice, because nothing could create
+the link the guard counts. Fixed in `DocPageWriteService.edit`; the rule is written at the fix.
+
+| | |
+|---|---|
+| **File** | `documentation/DocPage.java` — make `uq_doc_page_subject` non-partial in `V29` |
+| **Scope** | `--tests 'com.tcms.documentation.PlanDocumentEndpointTest$Lifecycle'` |
+| **Must redden** | **exactly 1** — *deleting the document releases the slot*. Everything else passes, and the product loses the ability to re-document any plan whose document was ever deleted. Asserted by: `POST .../plans/{id}/document` twice: **201** then **409** naming the page's key. Then soft-delete the page and `POST` a third time: **201 again**, which is what the partial unique index on `deleted_at IS NULL` buys. A plain unique index makes the third call a 500 nobody can act on. |
+
+| | |
+|---|---|
+| **Write** | `PlanDocumentEndpointTest` — the subject is checked against the PROJECT |
+| **Assert** | A plan of a **sibling project in the same company** answers **404**, not 201. RLS scopes to the company and only `PlanFacts`' project predicate refuses this; without it, project A's plan gets a document filed under project B, visible to neither. |
+
+| | |
+|---|---|
+| **Write** | `BlockLinkEndpointTest` — re-linking writes nothing |
+| **Assert** | The same source to the same block twice: **201 then 200**, one row in `doc_link`, and **no second audit row**. §79's re-stamp defect is this exact shape and it shipped broken once. |
+
+| | |
+|---|---|
+| **Write** | `BlockLinkEndpointTest` — a sibling project's case is a 404 |
+| **Assert** | Linking a case of another project in the same company: **404**, no row. Then delete a linked case and read the page: the link is **absent from `links`**, not present with nulls — `BlockLinks` drops what it cannot name, and the row survives for the restore. |
+
+| | |
+|---|---|
+| **Write** | `DocPageEndpointTest` — the two 409s, now reachable for the first time |
+| **Assert** | With a real link in place: `PATCH` removing the linked block is **409**, and `DELETE` on its page is **409**. Both existed since §55 and could not fire. **Assert the counts in `detail`**, because the message is the only thing that tells the user what to remove. |
+
+| | |
+|---|---|
+| **Write** | `DocPageEndpointTest` — `level`'s three arms |
+| **Assert** | `heading` without a level **400s**; `list` with level 3 **201s and reads back 3**; `list` without a level is accepted; `paragraph` with a level **400s** with the message naming heading *and* list. The middle two are what the whole outline rests on, and a server that silently dropped a list's level would render every plan flat with nothing failing. |
+
+| | |
+|---|---|
+| **Check** | policy count and module declarations UNCHANGED |
+| **Must show** | `SchemaConventionTest` still asserts **59** policies (`V29` adds no table), `V29__doc_page_subject.sql` is head with **`V30` free**, and `documentation/package-info.java` still declares `{"tenancy", "project", "identity"}` — `CatalogueFacts` reads `repository` through native SQL, which is the `PlanFacts` pattern and not a dependency. If ArchUnit went green on a widened declaration instead, this slice took a boundary change it did not argue for. |

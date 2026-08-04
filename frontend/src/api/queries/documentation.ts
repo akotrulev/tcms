@@ -1,9 +1,11 @@
 /** The documentation space and the artifact register. */
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
-import { api, qs } from '../client';
+import { ApiError, api, qs } from '../client';
 import type {
   Artifact,
   ArtifactInput,
+  BlockLink,
+  BlockLinkInput,
   DocPage,
   DocPageInput,
   DocPageStatus,
@@ -156,4 +158,107 @@ export function useCreateArtifact(projectId: string) {
     onSuccess: () =>
       client.invalidateQueries({ queryKey: ['projects', projectId, 'artifacts'] }),
   });
+}
+
+/**
+ * A plan's document, or `null` when it has not been started.
+ *
+ * **`null` rather than an error**, which is the whole reason this hook exists rather than
+ * `useDocPage` with a resolved id. The server answers 404 for a plan with no document — the
+ * ordinary first state, since a plan is created long before anybody writes one — and letting that
+ * reach the query client would raise a global "Something didn't load" on a screen whose correct
+ * rendering is an invitation to start writing.
+ *
+ * Every other 404 (unreachable project, unknown plan) reaches the same `null`, and that is
+ * acceptable here for the reason the server gives them one status: the caller reached this screen
+ * through the plan, so it already knows the plan resolves.
+ */
+export function usePlanDocument(
+  projectId: string,
+  planId: string,
+): UseQueryResult<DocPage | null> {
+  return useQuery({
+    queryKey: keys.planDocument(projectId, planId),
+    queryFn: ({ signal }) =>
+      api
+        .get<DocPage>(`${base(projectId)}/plans/${planId}/document`, { signal })
+        .catch((error: unknown) => {
+          if (error instanceof ApiError && error.status === 404) return null;
+          throw error;
+        }),
+  });
+}
+
+/**
+ * Starts the plan's document from the server's template.
+ *
+ * Writes into **both** keys the page now answers to. It is one page reached two ways — by plan and
+ * by page id — and seeding only the plan key leaves the documentation tree showing a space that is
+ * one page short until something else invalidates it.
+ */
+export function useStartPlanDocument(projectId: string, planId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<DocPage>(`${base(projectId)}/plans/${planId}/document`, {}),
+    // The 409 says the document already exists and names it — a message the screen shows in place,
+    // beside the tab it is about.
+    meta: { handled: true },
+    onSuccess: (page) => {
+      client.setQueryData(keys.planDocument(projectId, planId), page);
+      client.setQueryData(keys.docPage(projectId, page.id), page);
+      void client.invalidateQueries({ queryKey: keys.docPages(projectId) });
+    },
+  });
+}
+
+/**
+ * Links a test case or suite to one block.
+ *
+ * Invalidates the page rather than patching the block in place. The response is one link and the
+ * screen renders a block's whole list, so merging it here would be a second assembly of a shape the
+ * server already sends — and the server is the only side that knows whether the link was created or
+ * had been there all along.
+ */
+export function useLinkBlock(projectId: string, pageId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ blockId, ...input }: BlockLinkInput & { blockId: string }) =>
+      api.post<BlockLink>(
+        `${base(projectId)}/doc-pages/${pageId}/blocks/${blockId}/links`,
+        input,
+      ),
+    meta: { handled: true },
+    onSuccess: () => invalidatePageEverywhere(client, projectId, pageId),
+  });
+}
+
+/** Removes a link. Hard delete on the server — the claim is withdrawn, not tombstoned. */
+export function useUnlinkBlock(projectId: string, pageId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (linkId: string) =>
+      api.del<void>(`${base(projectId)}/doc-pages/${pageId}/links/${linkId}`),
+    meta: { handled: true },
+    onSuccess: () => invalidatePageEverywhere(client, projectId, pageId),
+  });
+}
+
+/**
+ * Invalidates a page under every key that serves it.
+ *
+ * One page, two keys — its own and, when it documents a plan, that plan's. A link written from the
+ * plan's document tab must not leave the same page stale on the documentation screen, and neither
+ * mutation above knows which of the two the caller is looking at.
+ *
+ * The plan key is invalidated by **prefix**, because this function has the page id and not the plan
+ * id. That is broader than necessary and it is the cheap direction: the alternative is threading a
+ * plan id through two hooks that are also used from a screen where there is no plan.
+ */
+function invalidatePageEverywhere(
+  client: ReturnType<typeof useQueryClient>,
+  projectId: string,
+  pageId: string,
+) {
+  void client.invalidateQueries({ queryKey: keys.docPage(projectId, pageId) });
+  void client.invalidateQueries({ queryKey: ['projects', projectId, 'plans'] });
 }

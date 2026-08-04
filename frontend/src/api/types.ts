@@ -158,6 +158,10 @@ export type DocPageInput = S['DocPageInput'];
 export type DocBlockInput = S['DocBlockInput'];
 export type DocPageStatus = S['DocPageSummary']['status'];
 export type DocBlockType = S['DocBlock']['blockType'];
+export type BlockLink = S['BlockLink'];
+export type BlockLinkInput = S['BlockLinkInput'];
+/** What a page documents, when it documents anything. Null on nearly every page. */
+export type DocSubjectType = NonNullable<S['DocPageSummary']['subjectType']>;
 export type DocLink = S['DocLink'];
 export type Artifact = S['Artifact'];
 export type ArtifactInput = S['ArtifactInput'];

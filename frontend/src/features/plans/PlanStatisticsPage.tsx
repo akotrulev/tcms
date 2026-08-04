@@ -6,11 +6,13 @@ import {
   MenuItem,
   Select,
   Stack,
+  Tab,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
+  Tabs,
   Tooltip,
   Typography,
 } from '@mui/material';
@@ -24,6 +26,7 @@ import { usePlan, usePlanStatistics, useProject, useSetPlanStatus } from '../../
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
+import { PlanDocumentPanel } from './PlanDocumentPanel';
 import { ReviewPanel } from '../review/ReviewPanel';
 import { PermissionGate } from '../../components/PermissionGate';
 import { DenominatorToggle, PassRateSummary, ResultBar, ResultCountsCell } from '../../components/ResultBar';
@@ -63,6 +66,22 @@ export function PlanStatisticsPage() {
   // The policy lives in the URL: a plan report sent to a release meeting must arrive with
   // the arithmetic it was read under, not reset to the default for the next reader.
   const aggregation = (params.get('aggregation') ?? 'LATEST') as AggregationPolicy;
+
+  /*
+    Which half of the plan is on screen, in the URL for the reason every other filter on this
+    product is: a plan's document is what gets pasted into a release thread, and a link that opens
+    on the progress numbers instead is a link that failed to say what it was about.
+
+    `progress` is the default because this route was the statistics page before it had a document,
+    and every link to it that already exists means the numbers.
+  */
+  const tab = params.get('tab') === 'document' ? 'document' : 'progress';
+  const selectTab = (next: string) => {
+    const updated = new URLSearchParams(params);
+    if (next === 'progress') updated.delete('tab');
+    else updated.set('tab', next);
+    setParams(updated, { replace: true });
+  };
 
   const project = useProject(projectId);
   const plan = usePlan(projectId, planId);
@@ -105,7 +124,7 @@ export function PlanStatisticsPage() {
             {plan.data && (
               <PlanLifecycleActions projectId={projectId} plan={plan.data} />
             )}
-            <Box sx={{ minWidth: 260 }}>
+            <Box sx={{ minWidth: 260, display: tab === 'progress' ? 'block' : 'none' }}>
               <Select
                 size="small"
                 fullWidth
@@ -129,9 +148,29 @@ export function PlanStatisticsPage() {
         }
       />
 
-      <DataRegion testId="PlanStats.Content" state={{ ...statistics, refetch: () => void statistics.refetch() }}>
-        {(data) => <StatisticsBody data={data} projectId={projectId} aggregation={aggregation} />}
-      </DataRegion>
+      <Tabs
+        value={tab}
+        onChange={(_event, next: string) => selectTab(next)}
+        sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
+        data-testid="PlanStats.Tabs"
+      >
+        <Tab value="progress" label="Progress" data-testid="PlanStats.Tab.Progress" />
+        <Tab value="document" label="Document" data-testid="PlanStats.Tab.Document" />
+      </Tabs>
+
+      {/*
+        Unmounted rather than hidden. The document tab holds unsaved text in per-block field state
+        and the progress tab holds a query per aggregation policy; keeping both mounted would mean
+        a screen that refetches statistics nobody is looking at, and a draft that survives a tab
+        switch the author cannot see they made.
+      */}
+      {tab === 'progress' ? (
+        <DataRegion testId="PlanStats.Content" state={{ ...statistics, refetch: () => void statistics.refetch() }}>
+          {(data) => <StatisticsBody data={data} projectId={projectId} aggregation={aggregation} />}
+        </DataRegion>
+      ) : (
+        <PlanDocumentPanel projectId={projectId} planId={planId} />
+      )}
 
       {/*
         Below the report rather than above it. A plan's sign-off is the release-readiness signature

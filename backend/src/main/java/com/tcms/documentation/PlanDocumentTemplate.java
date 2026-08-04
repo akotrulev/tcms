@@ -21,12 +21,15 @@ import java.util.List;
  * would overwrite whatever had been written under those headings, and the request that destroyed a
  * quarter's work would be indistinguishable from the one that set up an empty document.
  *
- * <h2>The scenario outline is the reason `level` exists on a list</h2>
+ * <h2>The case outline is the reason `level` exists on a list</h2>
  *
- * <p>The last section's prompts are indented bullets, because that is the shape a test plan's
- * scenarios take — an area, its checks, and the variations under each check. One bullet is one
- * block, so a case can be linked to the exact scenario it verifies rather than to the section
- * containing it.
+ * <p>The last section's prompts are indented bullets, because that is the shape a test plan's case
+ * list takes — an area, its cases, and the variations under each. One bullet is one block, so a
+ * bullet can <em>be</em> a case: the SPA creates a draft {@code test_case} from the title and links
+ * it to the block. That is why the section is called <strong>Test cases</strong> and not "Test
+ * scenarios" — a plan is written by somebody listing what needs testing far faster than they can
+ * write any of it up, and a draft the repository already holds is what makes that list worth more
+ * than a note.
  *
  * <h2>Test artefacts records identifiers and never secrets</h2>
  *
@@ -85,14 +88,14 @@ final class PlanDocumentTemplate {
                 + "found later.");
         bullet(blocks, 1, "Something this plan will not verify.");
 
-        heading(blocks, 1, "Test scenarios");
-        paragraph(blocks, "The plan's scenarios, grouped by area. Indent a bullet to put it under "
-                + "the one above. Each bullet is its own item, so a test case can be linked to the "
-                + "exact scenario it verifies.");
+        heading(blocks, 1, "Test cases");
+        paragraph(blocks, "The plan's test cases, grouped by area. Add one by title as you think "
+                + "of it — each is created as a draft in the case repository and can be written up "
+                + "properly later. Indent a bullet to put it under the one above.");
         heading(blocks, 2, "Area");
-        bullet(blocks, 1, "A check to perform in this area.");
-        bullet(blocks, 2, "A variation of the check above.");
-        bullet(blocks, 3, "A case within that variation.");
+        bullet(blocks, 1, "A case to run in this area.");
+        bullet(blocks, 2, "A variation of the case above.");
+        bullet(blocks, 3, "A specific condition within that variation.");
 
         return blocks;
     }

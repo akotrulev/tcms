@@ -275,11 +275,11 @@ public class DocPageWriteService {
             PageContent.Outcome.Valid valid = (PageContent.Outcome.Valid) validated;
 
             Instant now = clock.instant();
-            page.retitle(valid.title(), userId, now);
 
             List<DocBlock> content = existing;
+            PageContent.Reconciliation plan = null;
             if (valid.blocks() != null) {
-                PageContent.Reconciliation plan = PageContent.reconcile(existing, valid.blocks());
+                plan = PageContent.reconcile(existing, valid.blocks());
 
                 // BEFORE any write. A 409 raised after the rewrites have been flushed is a refusal
                 // whose correctness depends on the rollback actually happening, and the reader of
@@ -290,6 +290,26 @@ public class DocPageWriteService {
                         return new Outcome.WouldBreak(0, links);
                     }
                 }
+            }
+
+            /*
+              THE RETITLE BELONGS HERE, BELOW THE GUARD, AND IT WAS ABOVE IT UNTIL §93.
+
+              `Outcome.WouldBreak` is a RETURN, not an exception, and this method is
+              `@Transactional` — so a normal return COMMITS. A `retitle` applied before the refusal
+              leaves the entity dirty, and Hibernate flushes it on the way out: the client received
+              a 409 saying the edit was refused, and the page came back renamed.
+
+              It was unreachable until this slice, because nothing could create the `doc_link` the
+              guard counts. `PlanDocumentEndpointTest.editRefusesToBreakALink` asserts the title as
+              well as the status for exactly this reason — the status alone passed throughout.
+
+              The general rule, which the comment above states for the blocks and did not enforce
+              for the title: in a method whose refusals are returned values, *nothing* may be
+              mutated before the last refusal.
+            */
+            page.retitle(valid.title(), userId, now);
+            if (plan != null) {
                 content = applyContent(page, existing, plan);
             }
 

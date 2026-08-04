@@ -211,7 +211,7 @@ final class PageContent {
 
             // THREE ARMS, NOT TWO — required on a heading, optional on a list, refused on the rest.
             //
-            // The middle arm is §92's change. A test plan is mostly a nested scenario outline, three
+            // The middle arm is §93's change. A test plan is mostly a nested scenario outline, three
             // levels deep on most of the handed-over example's pages, and the alternative to a depth
             // field is markers typed into the text ("1." / "a." / "i."). Those cannot be indented,
             // cannot be renumbered, and — the reason that settles it — cannot be LINKED: a doc_link

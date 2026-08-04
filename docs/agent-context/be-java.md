@@ -55,6 +55,32 @@ exist**, and the slice plan's decision E declines to create it for two storage p
 
 ## Seams to reuse
 
+- **THE PLAN'S DOCUMENT, AND `doc_link`'S FIRST WRITER (§93).** `V29__doc_page_subject.sql` (**head;
+  `V30` next free; NO new table, so the policy count stays 59**) + `DocSubject`/`DocSubjectType` +
+  `PlanDocumentService`/`PlanDocumentController`/`PlanDocumentTemplate` + `DocLink`/`DocLinkRepository`
+  + `LinkSourceType`/`LinkRelationship` + `BlockLinks`/`BlockLinkService`/`BlockLinkView`/`BlockLinkInput`
+  + `CatalogueFacts`. **NO TESTS — the largest gap in the module**; the mutation queue's §93 section
+  is a list of tests to *write*, not of mutations to run.
+  **The reference is on `doc_page`, opaque, because NEITHER side may hold a key**: `execution` and
+  `documentation` may each depend only on tenancy/identity/project, so `test_plan.doc_page_id` is not
+  a column anybody may add. §76's Review subject a second time. **The unique index is PARTIAL on
+  `deleted_at IS NULL`** — a page's delete is soft, so a plain one makes a deleted document block its
+  plan for ever, as a duplicate-key 500 naming an invisible row.
+  **`doc_link` had no writer since `V1`, and three specified reads were waiting on it** —
+  `DocBlockView`'s header said so in as many words, and `DocPageWriteService`'s two traceability
+  `409`s **could not fire on any real request**. Both are live now. `DocBlock.links` is served;
+  **`coverage` is still absent and its reason MOVED** (nothing here can *price* a link:
+  `passed`/`failed`/`notRun` are two modules away and all five fields are required).
+  **`CatalogueFacts` is `PlanFacts`' sibling** — one file per foreign module's tables, named after
+  what it reads (`repository`: `test_case`, `suite`). Both layer a **project predicate over RLS**,
+  which only scopes to the company; without it a sibling project's case links successfully.
+  **`level` grew a THIRD ARM** — required on `heading`, optional on `list` (indent depth), refused on
+  the rest. Forced by the outline: a `doc_link` targets a *block*, so a scenario a case can verify
+  must BE a block, so one bullet is one block, so depth is a field.
+  **`LinkSourceType` is narrower than the column on purpose** (`DEFECT`/`DOC_PAGE` have no writer);
+  the `CHECK` stays wide, because one tightened and loosened again is a constraint nobody trusts.
+  `#confirmed`
+
 - **SAVED REPORT DEFINITIONS SINCE §92 (R5).** `ReportDefinitionRepository` +
   `ReportDefinitionService`/`ReportDefinitionController`/`ReportDefinitionView` + `ReportTypes`,
   and `ReportDefinition` gained a `create` factory. **`V28__report_artifact_definition_on_delete.sql`
@@ -221,7 +247,7 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   return zero rows, fail-closed and silent. `RepositoryTransactionTest` derives the repository list
   from the live context, so a new repository that forgets fails the build. `#confirmed`
 - **Flyway owns all DDL**; `hibernate.ddl-auto: validate`, `baseline-on-migrate: false`. Migrations
-  at `src/main/resources/db/migration`. **Head is `V27__report_job.sql` (§87); `V28` is the next free
+  at `src/main/resources/db/migration`. ~~**Head is `V27__report_job.sql` (§87)**~~ → **head is `V29__doc_page_subject.sql` (§93); `V30` is the next free
   number**, and `SchemaConventionTest`'s policy count is **59** (`SchemaConventionTest.java:262`).
   Booting the
   real context in a test is itself a schema-drift gate. `#confirmed`

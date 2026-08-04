@@ -18,7 +18,7 @@ import org.hibernate.annotations.Filter;
  * <p>{@code V1} designed this table and shipped it with no writer. {@link DocBlockRepository} said
  * so at its {@code countLinksTargeting} query — <em>"there is no {@code DocLink} entity — nothing
  * reads links yet"</em> — and both {@code TestCase.relatedDocuments} and {@code DocBlock.coverage}
- * were specified against a table that could only ever be empty. §92 is where that stops.
+ * were specified against a table that could only ever be empty. §93 is where that stops.
  *
  * <h2>The source is an unresolvable id, and the target is a block</h2>
  *

@@ -60,6 +60,7 @@ export {
   useCaseVersions,
   useCases,
   useCreateCase,
+  useCreateDraftCase,
   useDeleteCase,
   useUpdateCase,
   type BulkInput,
@@ -108,7 +109,11 @@ export {
   useDeleteDocPage,
   useDocPage,
   useDocPages,
+  useLinkBlock,
+  usePlanDocument,
   useSetDocPageStatus,
+  useStartPlanDocument,
+  useUnlinkBlock,
   useUpdateDocPage,
 } from './documentation';
 export {

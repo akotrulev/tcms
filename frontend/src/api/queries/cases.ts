@@ -238,3 +238,35 @@ export function useCaseHistory(
     enabled: !!caseId,
   });
 }
+
+/**
+ * Creates a draft case from a title alone — the plan document's "Add case".
+ *
+ * ## Why this is not `useCreateCase`
+ *
+ * The idempotency key. `useCreateCase` holds ONE key for the lifetime of the mounted editor,
+ * because an editor is one user intent to create one case and retrying after a timeout must not
+ * produce two. This caller is the opposite shape: one mounted bar, from which somebody adds ten
+ * cases in a row as they think of them. Reusing that hook would send the same key every time, and
+ * the server would recognise every case after the first as a replay and return the first one — so
+ * the second title typed would silently become a duplicate chip pointing at the first case.
+ *
+ * A key per **submit**, therefore, which is still a key per intent; the intent here is just
+ * smaller. A retry of one failed add is not protected, and that is the accepted cost: the failure
+ * is visible in the bar, the duplicate would be visible in the list beside its twin, and the
+ * alternative is a key that makes the tenth case impossible to create.
+ */
+export function useCreateDraftCase(projectId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { title: string; suiteId: string }) =>
+      api.post<TestCase>(`${base(projectId)}/cases`, input, { idempotencyKey: newIntentKey() }),
+    // The bar renders the failure in place, and says the case may exist anyway.
+    meta: { handled: true },
+    onSuccess: (created) => {
+      client.setQueryData(keys.case(projectId, created.id), created);
+      void client.invalidateQueries({ queryKey: ['projects', projectId, 'cases'] });
+      void client.invalidateQueries({ queryKey: keys.suites(projectId) });
+    },
+  });
+}

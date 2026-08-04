@@ -48,6 +48,17 @@ export const keys = {
     ['projects', p, 'runs', runId, 'executions', id] as const,
   docPages: (p: string) => ['projects', p, 'doc-pages'] as const,
   docPage: (p: string, id: string) => ['projects', p, 'doc-pages', id] as const,
+  /*
+    A plan's document.
+
+    Deliberately NOT nested under `docPage`, even though it resolves to one. The plan id is what
+    the caller has; the page id is what the answer contains, and it does not exist until somebody
+    starts the document. A key derived from the page id could not be built before the first fetch.
+
+    The consequence is two keys for one page once it exists, so the mutations that write a page
+    invalidate both — see `useStartPlanDocument`.
+  */
+  planDocument: (p: string, planId: string) => ['projects', p, 'plans', planId, 'document'] as const,
   artifacts: (p: string, scope?: string, planId?: string) =>
     ['projects', p, 'artifacts', scope ?? 'ALL', planId ?? 'NONE'] as const,
   dashboard: (p: string) => ['projects', p, 'dashboard'] as const,

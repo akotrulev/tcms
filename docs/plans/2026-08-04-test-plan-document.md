@@ -1,9 +1,9 @@
-# The test plan document — slice plan (§92)
+# The test plan document — slice plan (§93)
 
 **Date:** 2026-08-04
 **Source:** `docs/Easy leave test plan.pdf`, handed over as *"an example of how a test plan should be
 structured — I want the same in our system (ui+be)"*.
-**Status:** planned, not started.
+**Status:** built and unverified — both queues hold its rows and neither has been run (§65).
 
 ---
 
@@ -97,8 +97,10 @@ its pages.
 4. `level` on `list` blocks — contract, validation, storage, rendering.
 5. The `doc_link` writer and its delete, gated on `doc:edit`, with the source validated against the
    project through a new `CatalogueFacts` (reads `repository`, sibling to `PlanFacts`).
-6. `TestCase.relatedDocuments` served for the first time.
-7. Frontend: a **Document** tab on the plan page — read view rendering the outline, and an editor.
+6. Frontend: a **Document** tab on the plan page — the outline rendered and edited in place.
+7. **Adding a test case from the document** (added mid-slice at the user's request): a title and a
+   suite create a `DRAFT` case, a bullet, and the link between them. The section is named
+   **Test cases**, not "Test scenarios", because a bullet in it *is* a case.
 8. The two verification queue rows (§65 standing policy), the handoff section, and both orientation
    caches.
 
@@ -115,8 +117,16 @@ its pages.
   page; `test_plan_version` does not learn about it. This is the divergence the storage decision was
   taken with eyes open about, and it is recorded here so the next reader does not think it was
   missed.
+- **`TestCase.relatedDocuments` is still not served.** It was in scope and was cut when the
+  case-creation request arrived: serving it needs a fourth `*Facts` seam in the opposite direction
+  (`repository` reading `doc_link` + `doc_page` + `doc_block`), which is a slice of its own and not
+  the deliverable the plan document is. The links are now real, so the read has something to return
+  the day it is written — which it did not before.
 - **Export.** §88's `HtmlReportRenderer` is the obvious future home for "print this plan as the
   PDF" and this slice does not build it.
+- **No test coverage for the new endpoints.** `PlanDocumentEndpointTest` and the link tests are not
+  written. The full suite is green, which means nothing about this slice's own behaviour, and the
+  mutation queue's rows are what say so.
 
 ## 6. Phases
 

@@ -9,7 +9,7 @@ import java.util.UUID;
  * <h2>{@code links} is served and {@code coverage} still is not, and the difference is the point</h2>
  *
  * <p>~~The inline coverage marker is sourced from {@code doc_link} … and <strong>nothing can create a
- * {@code doc_link}</strong>~~ → <strong>superseded (§92)</strong>. {@code BlockLinkService} creates
+ * {@code doc_link}</strong>~~ → <strong>superseded (§93)</strong>. {@code BlockLinkService} creates
  * them, so {@link #links} is real: it says <em>which cases claim to verify this statement</em>, which
  * this module knows exactly, and an empty list truthfully means nobody has claimed it.
  *
