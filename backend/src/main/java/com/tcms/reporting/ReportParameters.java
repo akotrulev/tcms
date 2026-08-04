@@ -1,0 +1,89 @@
+package com.tcms.reporting;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
+import java.util.Optional;
+import java.util.UUID;
+
+/**
+ * The {@code parameters} JSONB a report was asked for, and the one place a bad one is refused.
+ *
+ * <h2>Why a type rather than a {@code JsonNode} passed around</h2>
+ *
+ * <p>Every report in §6e's catalogue takes different parameters — a run id here, a milestone plus a
+ * date range plus an aggregation policy in R6 — so the column is deliberately untyped and the
+ * checking has to live somewhere. Putting it here rather than in each report means one wording for
+ * "you did not send a run id" and one for "what you sent is not a uuid", which matters because these
+ * messages are what a client sees on a 400 and a product whose refusals are each phrased differently
+ * reads as several products.
+ *
+ * <h2>{@link IllegalArgumentException}, and the layer that turns it into a 400</h2>
+ *
+ * <p>This module computes; it does not know about HTTP. R3 phase 5's controller is what maps these
+ * to a problem response, and the message is written to be shown: it names the parameter, not the
+ * JSON path, and never echoes the whole body back.
+ *
+ * <p>The mapper is private and read-only. It is not {@link JsonReportRenderer}'s — that one is
+ * configured for the bytes of a stored artifact and this one only ever parses — and it is not the
+ * web layer's, for the reason that file states at length.
+ */
+record ReportParameters(JsonNode node) {
+
+    private static final ObjectMapper MAPPER = JsonMapper.builder().build();
+
+    /**
+     * Parses the raw JSONB text stored on the job row.
+     *
+     * @throws IllegalArgumentException if it is not a JSON object. {@code V27} defaults the column
+     *     to {@code '{}'} and its CHECK does not constrain the shape, so an array or a bare string
+     *     is storable — and a report reading fields off one would find none of them and compute a
+     *     report of nothing rather than refusing.
+     */
+    static ReportParameters parse(String json) {
+        try {
+            JsonNode parsed = MAPPER.readTree(json == null || json.isBlank() ? "{}" : json);
+            if (!parsed.isObject()) {
+                throw new IllegalArgumentException(
+                        "Report parameters must be a JSON object, not " + parsed.getNodeType());
+            }
+            return new ReportParameters(parsed);
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("Report parameters are not valid JSON", e);
+        }
+    }
+
+    /** For tests and for a report that takes none. */
+    static ReportParameters none() {
+        return new ReportParameters(MAPPER.createObjectNode());
+    }
+
+    /**
+     * A required id.
+     *
+     * <p>Absent, null and non-textual are one refusal on purpose: from the caller's side they are
+     * the same mistake — the parameter is not there in a usable form — and three different messages
+     * would suggest three different fixes.
+     */
+    UUID requireUuid(String name) {
+        JsonNode value = node.get(name);
+        if (value == null || value.isNull() || !value.isTextual()) {
+            throw new IllegalArgumentException("This report needs a '" + name + "' parameter");
+        }
+        try {
+            return UUID.fromString(value.asText());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("'" + name + "' is not a valid id", e);
+        }
+    }
+
+    /** An optional string parameter, empty when absent, null or blank. */
+    Optional<String> optionalText(String name) {
+        JsonNode value = node.get(name);
+        if (value == null || value.isNull() || !value.isTextual() || value.asText().isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.of(value.asText());
+    }
+}

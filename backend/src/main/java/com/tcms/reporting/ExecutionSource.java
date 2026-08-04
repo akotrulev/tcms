@@ -2,6 +2,9 @@ package com.tcms.reporting;
 
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.springframework.stereotype.Component;
 
 /**
@@ -260,6 +263,56 @@ class ExecutionSource {
      *               apart from "nothing is wrong" (see {@code CaseHealth}'s header)
      * @return how many cases were re-derived
      */
+    /**
+     * The key and name of one run, or empty when this project has no such run.
+     *
+     * <h2>Why a seam method exists for two strings</h2>
+     *
+     * <p>{@code execution_fact} carries {@code run_id} and nothing else about the run, so a run
+     * summary computed from the fact log alone can only title itself with a UUID — and, far worse,
+     * <strong>cannot tell a mistyped run id from a run nobody has recorded a result for</strong>.
+     * Both produce zero fact rows, and a report reading "0 executions" for a run that does not exist
+     * is this repository's most-repeated defect shape: a claim with no evidence behind it renders
+     * identically to a true one (§47, §53, §72, §81). One existence check turns it into a refusal.
+     *
+     * <p>It is here rather than in {@link RunSummaryReport} because this class's header states the
+     * rule: this is the one file in the module that names a table another module owns. Reporting may
+     * not depend on {@code execution} at any width of {@code allowedDependencies} that plan §3
+     * permits, so the alternative was not a nicer import — it was a second file with the same
+     * problem.
+     *
+     * <h2>A soft-deleted run is still reported on</h2>
+     *
+     * <p>No {@code deleted_at} predicate, which is {@link #projectRecordedExecutions()}'s call
+     * rather than a second opinion: deleting a run does not un-run it, its results are already in
+     * the fact log by that argument, and a report that named the run yesterday and refuses it today
+     * would make a signed-off release document unreproducible — the one property §6e's determinism
+     * bullet asks for by name.
+     *
+     * @param projectId bounds the lookup, so a run in a sibling project of the same company reads as
+     *     absent rather than as somebody else's title on this project's report
+     */
+    Optional<RunHeader> findRun(UUID projectId, UUID runId) {
+        List<?> rows = entities.createNativeQuery("""
+                SELECT r.key, r.name
+                  FROM test_run r
+                 WHERE r.id = :runId
+                   AND r.project_id = :projectId
+                """)
+                .setParameter("runId", runId)
+                .setParameter("projectId", projectId)
+                .getResultList();
+
+        if (rows.isEmpty()) {
+            return Optional.empty();
+        }
+        Object[] row = (Object[]) rows.get(0);
+        return Optional.of(new RunHeader((String) row[0], (String) row[1]));
+    }
+
+    /** What a report may say about a run without leaving the fact log for anything else. */
+    record RunHeader(String key, String name) {}
+
     int recomputeFailingRepeatedly(int window, Instant now) {
         return entities.createNativeQuery("""
                 INSERT INTO case_health (
