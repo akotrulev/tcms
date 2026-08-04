@@ -1623,3 +1623,26 @@ the link the guard counts. Fixed in `DocPageWriteService.edit`; the rule is writ
 |---|---|
 | **Check** | policy count and module declarations UNCHANGED |
 | **Must show** | `SchemaConventionTest` still asserts **59** policies (`V29` adds no table), `V29__doc_page_subject.sql` is head with **`V30` free**, and `documentation/package-info.java` still declares `{"tenancy", "project", "identity"}` — `CatalogueFacts` reads `repository` through native SQL, which is the `PlanFacts` pattern and not a dependency. If ArchUnit went green on a widened declaration instead, this slice took a boundary change it did not argue for. |
+
+---
+
+## §94 phase 1 — the step corpus (`GET /projects/{projectId}/step-suggestions`)
+
+Built and unverified. Rows written per §65; **none of them run.**
+
+| | |
+|---|---|
+| **Check** | `V30`'s index is actually consulted — the whole reason it exists |
+| **Must show** | `EXPLAIN (ANALYZE)` on the suggestion query with a `q` shows a **bitmap index scan on `test_step_action_trgm_idx`**, not a sequential scan on `test_step`. This is the one thing the test suite structurally cannot catch: the query is *correct* either way, and Testcontainers' tables are small enough that the planner would choose a seq scan regardless. **If it shows a seq scan on a populated table, the index is spelled on the wrong expression** — `GIN (action …)` instead of `GIN (lower(action) …)` — which is the exact failure `V30`'s header documents and which its two V1 siblings have today. |
+| **Write** | `StepSuggestionEndpointTest` — the corpus under a real keystroke load |
+| **Assert** | A project with **~5k steps across ~800 cases** answers a 3-character `q` in a time a typeahead can use. The endpoint runs per keystroke; every other library read in this module is bounded to hundreds of curated rows and this one is bounded only by how much the project has written. |
+
+| | |
+|---|---|
+| **Check** | policy count and Flyway head UNCHANGED in kind |
+| **Must show** | `SchemaConventionTest` still asserts **59** policies — `V30` adds an index and **no table**, so a changed count means something else landed. `V30__test_step_action_trgm.sql` is head with **`V31` free**. |
+
+| | |
+|---|---|
+| **Write** | `StepSuggestionEndpointTest` — the corpus after a case is edited |
+| **Assert** | Editing a case's step text and re-reading the corpus shows the **new** text and drops the old one when no other case used it. The corpus is derived, so it has no invalidation step and nothing would report one being needed — but that also means a stale read here is a caching bug introduced later, not a defect in this slice. Establishes the baseline. |

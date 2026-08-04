@@ -55,6 +55,31 @@ exist**, and the slice plan's decision E declines to create it for two storage p
 
 ## Seams to reuse
 
+- **THE STEP CORPUS (§94 phase 1).** `V30__test_step_action_trgm.sql` (**head; `V31` next free; NO
+  new table, so the policy count stays 59**) + `StepSuggestionController`/`StepSuggestionService`/
+  `StepSuggestionQuery`/`StepSuggestionView` + `TestStepRepository.findSuggestions` +
+  `StepSuggestionEndpointTest` (fixture prefix **`c4`**).
+  **`GET /projects/{projectId}/step-suggestions` is the editor's autocomplete corpus, and it is
+  DERIVED, not curated** — a `GROUP BY (action, test_data, expected_result)` over the project's live
+  cases, ranked by `COUNT(DISTINCT case_id)`. That is the deliberate correction to `shared_step`,
+  which stayed empty because somebody had to populate it. **The two libraries now differ in kind:**
+  a suggestion is **text copied** into the author's step and carries **no id at all**, so editing it
+  later touches one case; a condition is **attached by id** and an edit propagates everywhere. The
+  missing id is load-bearing and `StepSuggestionEndpointTest` asserts the exact field set to keep it
+  missing.
+  **`V30`'s index is on the EXPRESSION `lower(action)`, not on the column.** Postgres consults a
+  functional index only for the expression it was built on, so `GIN (action gin_trgm_ops)` would be
+  built, maintained on every write, and **never used** by the `LOWER(action) LIKE` predicate.
+  **`shared_step_title_trgm_idx` and `condition_title_trgm_idx` (both V1) have exactly that gap
+  today** — plain-column indexes under `LOWER(title)` queries — and were deliberately left alone;
+  they are bounded to hundreds of curated rows, this corpus is not. `#confirmed`
+  **Reuses rather than duplicates:** `ProjectService.readVisible` for the two-gate 404-never-403
+  read (the corpus leaks *more* than a curated library, because nobody chose what went in), and
+  `SharedStepRepository.countUsage`'s distinct-case aggregate shape. **HQL, never native** — a
+  native query drops the Hibernate company filter, the constraint every library read here records.
+  **`StepSuggestionQuery` is the FOURTH copy of `escapeLike`** (`ConditionQuery`, `SharedStepQuery`,
+  `CaseSpecifications`); the fifth should extract it. `#confirmed`
+
 - **THE PLAN'S DOCUMENT, AND `doc_link`'S FIRST WRITER (§93).** `V29__doc_page_subject.sql` (**head;
   `V30` next free; NO new table, so the policy count stays 59**) + `DocSubject`/`DocSubjectType` +
   `PlanDocumentService`/`PlanDocumentController`/`PlanDocumentTemplate` + `DocLink`/`DocLinkRepository`
@@ -884,6 +909,21 @@ exist**, and the slice plan's decision E declines to create it for two storage p
 
 ## Session log
 
+- 2026-08-05 · EXTEND · The step corpus (§94 phase 1) — backend 1649 → **1681** (+13, all in
+  `StepSuggestionEndpointTest`, prefix `c4`). New: `V30__test_step_action_trgm.sql` (**head**, `V31`
+  next free, **policy count still 59** — an index, no table), `StepSuggestionController`/`Service`/
+  `Query`/`View`, `TestStepRepository.findSuggestions`. The editor's autocomplete corpus, **derived
+  from every live step in the project rather than curated** — the correction to `shared_step`, which
+  stayed empty because it needed populating. **Serves no id**: a suggestion is text copied, not an
+  entity referenced, and the test pins the exact field set so it stays that way.
+  **Finding, recorded and NOT fixed:** `V30` indexes the expression `lower(action)` because Postgres
+  consults a functional index only for the expression it was built on — and `shared_step_title_trgm_idx`
+  / `condition_title_trgm_idx` (V1) are both spelled on the bare column under `LOWER(title)` queries,
+  so **neither is ever used**. Silent: right answers, maintained on every write, same seq scan.
+  **Process error worth not repeating:** a second `./gradlew build` started while the first was in
+  flight; both wrote `backend/build/` and the `Could not write XML test results` failures read as
+  test failures. CLAUDE.md's one-build-one-daemon rule, hit directly.
+  **Zero mutations run inline; 4 backend rows queued — built and unverified.**
 - 2026-08-04 · EXTEND · The HTML renderer and the report header (§88) — **R4**, three phases, three
   commits, backend 1615 → **1628** (320 classes), frontend 705/705. New: `ReportHeader`,
   `ReportDocument`, `ReportHeaders`, `HtmlReportRenderer`; `ReportRenderer.render` takes a document;

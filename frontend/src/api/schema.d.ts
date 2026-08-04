@@ -2067,6 +2067,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/step-suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * What the step editor completes from
+         * @description Every distinct step the project already uses, most-used first, narrowed by an optional
+         *     fragment of the action — the corpus the case editor's action field autocompletes against,
+         *     the way a Cucumber feature file completes from the step definitions already defined.
+         *
+         *     **The corpus is derived, not curated.** It is computed from every step written in the
+         *     project's live cases, so it is populated as soon as the project has a case and needs no
+         *     maintenance to stay that way. That is the correction to `/shared-steps`, whose failure was
+         *     that somebody had to remember to put things in it: a library nobody populates ranks nothing
+         *     and its picker opens empty forever.
+         *
+         *     **A suggestion is text to copy, not an entity to reference.** Picking one fills `action`,
+         *     `testData` and `expectedResult` into the author's step and creates **no link** — the step
+         *     belongs to that case, and editing it afterwards changes that case and nothing else. This is
+         *     deliberately the opposite of `/conditions`, where a case attaches a library entry by id and
+         *     an edit to the entry propagates to every case using it. The difference is intended: a shared
+         *     precondition is a fact about the system, a step is a sentence somebody wrote. **No id is
+         *     served here**, so the distinction is enforced by the payload's shape rather than by a
+         *     convention a later consumer can drift away from.
+         *
+         *     The whole triple is completed and the whole triple is the grouping key. Completing only the
+         *     action would leave exactly the two fields that differ between two similar steps blank, and
+         *     the author would fill them from memory — which is the divergence this endpoint exists to
+         *     stop. Two steps sharing an action but not an expected result are two suggestions.
+         *
+         *     **`useCount` counts distinct live cases**, not step rows — the §6e rule, and the same one
+         *     `SharedStep.usageCount` follows. A case that repeats a step twice is one case using it;
+         *     counting rows would let a single loop-heavy case out-rank a step forty cases share.
+         *     Soft-deleted cases are excluded, so the ranking reflects current practice rather than
+         *     history.
+         *
+         *     Capped at 50 server-side. There is no `limit` parameter: a typeahead renders a dozen rows
+         *     and a mature project's corpus is thousands, so an unbounded read is a payload nobody
+         *     displays.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /**
+                     * @description A fragment of the step's action, matched case-insensitively as a substring. Absent or
+                     *     blank means the whole corpus, most-used first.
+                     */
+                    q?: string;
+                };
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /**
+                 * @description Step suggestions, most-used first. `[]` means nothing matched — the state of a project
+                 *     whose cases have no steps yet, and of any typeahead narrowed past the corpus. It is not
+                 *     an error: an author who gets no suggestions can still write the step by hand.
+                 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StepSuggestion"][];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/plans": {
         parameters: {
             query?: never;
@@ -5387,6 +5474,24 @@ export interface components {
              *     and the value came from a picker the message can land on.
              */
             sharedStepId?: string | null;
+        };
+        StepSuggestion: {
+            action: string;
+            /**
+             * @description Required in the schema sense — the property is always present — but nullable, because a
+             *     step legitimately has no test data. Listed in `required` so a consumer can rely on the
+             *     key existing and fill the field with `null` rather than skipping it; a pick must clear
+             *     the author's field when the suggestion has no value, not leave the previous one behind.
+             */
+            testData: string | null;
+            /** @description As `testData` — always present, sometimes null, and a pick clears the field. */
+            expectedResult: string | null;
+            /**
+             * @description Distinct live cases using this exact triple. The ranking signal; also shown next to the
+             *     suggestion, because "used by 412 cases" is what tells an author they are about to write
+             *     the project's twenty-first wording of a step it already has.
+             */
+            useCount: number;
         };
         Condition: {
             /** Format: uuid */

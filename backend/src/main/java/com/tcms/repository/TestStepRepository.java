@@ -2,6 +2,7 @@ package com.tcms.repository;
 
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -53,4 +54,64 @@ public interface TestStepRepository extends JpaRepository<TestStep, UUID> {
              ORDER BY s.position ASC, s.id ASC
             """)
     List<TestStep> findForCase(@Param("caseId") UUID caseId);
+
+    /**
+     * The project's step corpus — every distinct step it already uses, most-used first.
+     *
+     * <p>This is what the editor's action field completes from. The corpus is <strong>derived, not
+     * curated</strong>: it is every step written in the project, so it needs no maintenance and is
+     * never empty in a project that has cases. That is the correction to {@code shared_step}, whose
+     * whole failure was that somebody had to remember to put things in it — a library nobody
+     * populates ranks nothing, and the picker built on it opens empty forever.
+     *
+     * <h2>Grouped on the triple, counted on distinct cases</h2>
+     *
+     * <p>{@code (action, testData, expectedResult)} is the group key because the whole triple is
+     * what a pick fills in — see {@link StepSuggestionView}. {@code COUNT(DISTINCT caseId)} and not
+     * {@code COUNT(*)} for §6e's reason and {@link SharedStepRepository#countUsage}'s: a case that
+     * repeats a step is one case using it, and counting rows lets one loop-heavy case out-rank a
+     * step forty cases share.
+     *
+     * <p>{@code c.deletedAt IS NULL} is what makes the number mean "in use". Cases are soft-deleted
+     * because executions reference them, so without it the corpus ranks by history — and worse,
+     * keeps offering the step text of a case somebody deliberately retired.
+     *
+     * <h2>Gherkin steps are in the corpus, deliberately</h2>
+     *
+     * <p>No predicate on {@code keyword}. A Gherkin step's {@code action} is the step text without
+     * its keyword, which is an ordinary sentence describing an action and is exactly as reusable as
+     * a structured one — the two formats are one table for the same reason {@code V1}'s comment
+     * gives. Excluding them would hide the corpus of any project that writes Gherkin from the
+     * project's own authors.
+     *
+     * <h2>HQL, not native, and that is a constraint rather than a preference</h2>
+     *
+     * <p>A native query would drop the Hibernate company filter — the same constraint the condition
+     * library, the shared-step library and the case list's free text all record. The filter on
+     * {@link TestStep} and {@link TestCase} is what keeps this scoped to the caller's company;
+     * RLS is the backstop underneath, not the mechanism.
+     *
+     * <p>The fragment match is {@code LOWER(action) LIKE}, served by {@code V30}'s index — which is
+     * built on the {@code lower(action)} expression precisely so this predicate can use it.
+     *
+     * @param needle always bound and never null — {@code '%'} when the caller asked nothing, which
+     *               matches every row since {@code action} is {@code NOT NULL}. Resolved once by
+     *               {@link StepSuggestionQuery} rather than re-decided per call site.
+     * @param limit  caps the response. The corpus of a mature project is thousands of distinct
+     *               steps and a typeahead renders a dozen; the cap is applied in SQL so the
+     *               unbounded set is never materialised.
+     */
+    @Query("""
+            SELECT new com.tcms.repository.StepSuggestionView(
+                       t.action, t.testData, t.expectedResult, COUNT(DISTINCT t.caseId))
+              FROM TestStep t, TestCase c
+             WHERE t.caseId = c.id
+               AND c.projectId = :projectId
+               AND c.deletedAt IS NULL
+               AND LOWER(t.action) LIKE :needle ESCAPE '\\'
+             GROUP BY t.action, t.testData, t.expectedResult
+             ORDER BY COUNT(DISTINCT t.caseId) DESC, t.action ASC
+            """)
+    List<StepSuggestionView> findSuggestions(
+            @Param("projectId") UUID projectId, @Param("needle") String needle, Limit limit);
 }
