@@ -34,21 +34,22 @@
  *
  * <h2>Allowed dependencies</h2>
  *
- * <p><strong>{@code tenancy} alone.</strong> Narrower than {@code repository}, {@code execution} and
- * {@code work}, which all declare {@code tenancy · project · identity}, and narrower than this
- * module will stay: nothing here is reached through an endpoint yet, so there is no project gate to
- * ask for and no person to name. {@code documentation} is the precedent for declaring the true set
- * and widening it deliberately — it declared {@code tenancy · project} and its package comment said
- * "nothing in it renders a person" until §61's artifact register made that false, at which point the
- * list and the comment were corrected together. The alternative — declaring the three this module
- * will eventually want — makes the declaration a forecast rather than a fact, and a forecast cannot
- * fail the build when it stops being true.
+ * <p><strong>{@code tenancy · project · identity}</strong> — the same three {@code repository},
+ * {@code execution} and {@code work} declare. It was {@code tenancy} alone from §86 until §87, and
+ * the history is the point rather than a footnote: nothing in R1/R2 was reached through an endpoint,
+ * so there was no project gate to ask for and no person to name, and declaring the three this module
+ * <em>would eventually want</em> would have made the declaration a forecast rather than a fact — a
+ * forecast cannot fail the build when it stops being true. {@code documentation} is the precedent in
+ * both directions: it declared {@code tenancy · project} and its package comment said "nothing in it
+ * renders a person" until §61's artifact register made that false, at which point the list and the
+ * comment were corrected together.
  *
- * <p>So the widening is named rather than pre-approved: <strong>the first endpoint here needs
- * {@code project}</strong>, because {@code report:view} / {@code report:export} are resolved through
- * {@link com.tcms.project.ProjectService}, and rendering who generated a report needs
- * {@code identity} through {@code project.PeopleDirectory}. Whoever lands that widens this line and
- * this paragraph in the same commit.
+ * <p>§86 named exactly what would widen it and §87's report pipeline is that thing, arriving with
+ * both halves at once: {@code project}, because {@code report:view} / {@code report:export} are
+ * resolved through {@link com.tcms.project.ProjectService} on all three report endpoints, and
+ * {@code identity}, because {@code report_job.requested_by} is a person a rendered report names.
+ * The rule survives the widening — the next entry added here must be a fact about code that exists
+ * in the same commit.
  *
  * <p>Everything else crosses through {@link com.tcms.reporting.ExecutionSource} — the one class in
  * this package that may name a table another module owns, in the shape
@@ -68,5 +69,5 @@
  * plan-version value object and has nothing whatever to do with the {@code plan_snapshot} table in
  * this section. A writer for that table must not be called {@code PlanSnapshot}.
  */
-@org.springframework.modulith.ApplicationModule(allowedDependencies = {"tenancy"})
+@org.springframework.modulith.ApplicationModule(allowedDependencies = {"tenancy", "project", "identity"})
 package com.tcms.reporting;

@@ -79,12 +79,15 @@ class ModuleStructureTest {
                         arrived with `updatedBy` in the contract's required array and made that false; \
                         it now takes `identity` for display names only, and reaches `test_plan` \
                         through `documentation.PlanFacts` rather than depending on `execution`. \
-                        `reporting` is the narrowest of the lot: `tenancy` ALONE, because nothing in \
-                        it is reached through an endpoint yet, so there is no project gate to ask \
-                        for and no person to name. Its package comment names what widens the list \
-                        (the first report endpoint needs `project`, and a generated-by line needs \
-                        `identity`) so the declaration stays a fact rather than a forecast — a \
-                        forecast cannot fail the build when it stops being true.""")
+                        `reporting` was the narrowest of the lot for exactly one slice: `tenancy` \
+                        ALONE in §86, because nothing in it was reached through an endpoint, so \
+                        there was no project gate to ask for and no person to name. §87's report \
+                        pipeline is the widening its package comment named in advance — `project` \
+                        for the gate on all three report endpoints, `identity` for the person a job \
+                        records as having requested it — and the reason the narrow declaration was \
+                        right in the meantime is the rule this list runs on: a declaration is a \
+                        fact about code that exists, never a forecast of what the module will want, \
+                        because a forecast cannot fail the build when it stops being true.""")
                 .containsExactly(
                         "auth", "documentation", "execution", "identity", "project", "provisioning",
                         "reporting", "repository", "tenancy", "work");
