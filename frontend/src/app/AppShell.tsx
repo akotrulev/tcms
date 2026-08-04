@@ -18,9 +18,12 @@ import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import AssignmentIndOutlinedIcon from '@mui/icons-material/AssignmentIndOutlined';
 import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
 import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
+import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined';
 import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
 import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
@@ -31,13 +34,15 @@ import MenuIcon from '@mui/icons-material/Menu';
 import PlaylistAddCheckOutlinedIcon from '@mui/icons-material/PlaylistAddCheckOutlined';
 import ViewKanbanOutlinedIcon from '@mui/icons-material/ViewKanbanOutlined';
 import { useState, type ReactNode } from 'react';
-import { NavLink, Outlet, useNavigate, useParams } from 'react-router-dom';
+import { Link as RouterLink, NavLink, Outlet, useNavigate, useParams } from 'react-router-dom';
 import { useProjects } from '../api/queries';
 import { useRouteFocus } from '../a11y/useRouteFocus';
 import { Identifier } from '../components/Identifier';
 import { RouteErrorBoundary } from '../components/ErrorBoundaries';
 import { SkipToContentLink } from '../components/SkipToContentLink';
 import { useAuth } from '../auth/useAuth';
+import { safeStorage } from '../lib/safeStorage';
+import type { Project } from '../api/types';
 
 /**
  * The persistent application shell: project rail on the left, content on the right.
@@ -54,6 +59,24 @@ import { useAuth } from '../auth/useAuth';
  */
 
 const RAIL_WIDTH = 232;
+
+/**
+ * Wide enough for a 40px touch target plus the rail's own padding, and narrow enough that the
+ * collapse is worth doing. The rail stays in the flex flow at both widths, so the content area
+ * reflows on its own — there is no width-dependent JS deciding the layout, which is the same
+ * rule the `md` visibility swap above follows.
+ */
+const RAIL_WIDTH_COLLAPSED = 64;
+
+/**
+ * The collapsed/expanded preference, remembered across sessions.
+ *
+ * A collapse that resets on every reload is not a preference, it is a gesture — and this one is
+ * made by people who want the extra 168px on every screen for the rest of the day. Written through
+ * `safeStorage` rather than `localStorage`, so Safari private mode and blocked third-party
+ * contexts degrade to in-memory instead of throwing inside a render.
+ */
+const RAIL_COLLAPSED_KEY = 'tcms.nav.railCollapsed';
 
 interface NavItem {
   label: string;
@@ -81,6 +104,36 @@ const MY_WORK: NavItem = {
   label: 'My work',
   to: '/my-work',
   icon: <AssignmentIndOutlinedIcon fontSize="small" />,
+  end: true,
+};
+
+/**
+ * The project picker (`/`), and the second rail item outside the project frame.
+ *
+ * It sits in the ungrouped block for exactly the reason `MY_WORK` states — everything below the
+ * switcher is scoped *by* the switcher, and this screen is the one that lists what the switcher
+ * chooses between — but it is placed **last in that block, directly above the switcher**, because
+ * the two are one thought: "all of them" and "this one". `MY_WORK` above it is personal and
+ * belongs to neither.
+ *
+ * Until this existed the picker had no affordance at all once you were inside a project. It is the
+ * route the app lands on after sign-in and the fallback when a URL names a project the caller
+ * cannot see, so it was reachable only by editing the address bar — the one screen in the app that
+ * every session starts on and no screen linked to. The wordmark above links here too, which is the
+ * convention every reader already has; this entry is the discoverable, labelled, active-marked one.
+ *
+ * `end` states the intent — this item is current on `/` and nowhere else — but it is **belt and
+ * braces rather than load-bearing**, which is worth recording because the opposite is the obvious
+ * assumption: `/` is a prefix of every route in the app, so a prefix match would light this item up
+ * on all of them. `NavLink` already refuses that specific case (it requires the next character of
+ * the location to be `/`, and for `to="/"` there is none), so removing `end` here changes nothing
+ * and the test below does not redden. Kept because relying on a special case in the router to make
+ * a nav item behave is a worse reason than saying what you meant.
+ */
+const ALL_PROJECTS: NavItem = {
+  label: 'All projects',
+  to: '/',
+  icon: <GridViewOutlinedIcon fontSize="small" />,
   end: true,
 };
 
@@ -180,6 +233,24 @@ function projectNav(projectId: string): { heading: string; items: NavItem[] }[] 
 export function AppShell() {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  /*
+    Read once on mount rather than in an effect: an effect would render the expanded rail first and
+    snap it closed on the next frame, which is a visible jump on every page load for the people who
+    chose the collapsed rail. `=== 'true'` rather than a truthiness check so a corrupt entry reads
+    as the default (expanded) instead of as collapsed.
+  */
+  const [railCollapsed, setRailCollapsed] = useState(
+    () => safeStorage.get(RAIL_COLLAPSED_KEY) === 'true',
+  );
+
+  const toggleRail = () => {
+    setRailCollapsed((collapsed) => {
+      const next = !collapsed;
+      safeStorage.set(RAIL_COLLAPSED_KEY, String(next));
+      return next;
+    });
+  };
+
   // Moves focus into the content area on every navigation after the first, so client-side
   // routing announces itself the way a real page load would.
   const mainRef = useRouteFocus<HTMLElement>();
@@ -195,12 +266,19 @@ export function AppShell() {
       {/* Desktop rail — shown wherever there is room for it. */}
       <Box
         component="nav"
+        id="nav-rail"
         aria-label="Main"
         data-testid="Nav.Rail"
+        /*
+          Read by the collapse toggle's own assertion, and by nothing else: `aria-expanded` on the
+          button names a state, and a screen reader needs the element that state is *about*. The
+          testid says which variant is showing; this says how wide it currently is.
+        */
+        data-collapsed={railCollapsed ? 'true' : 'false'}
         sx={{
           display: { xs: 'none', md: 'flex' },
           flexDirection: 'column',
-          width: RAIL_WIDTH,
+          width: railCollapsed ? RAIL_WIDTH_COLLAPSED : RAIL_WIDTH,
           flexShrink: 0,
           borderRight: '1px solid',
           borderColor: 'divider',
@@ -208,9 +286,13 @@ export function AppShell() {
           position: 'sticky',
           top: 0,
           height: '100vh',
+          // A width the user asked to change should be seen to change. Motion is opt-out at the
+          // theme level (`prefers-reduced-motion` is a hard floor), so this respects it.
+          transition: 'width 160ms ease',
+          '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
         }}
       >
-        <RailContent />
+        <RailContent collapsed={railCollapsed} onToggleCollapse={toggleRail} />
       </Box>
 
       {/* Small-screen drawer — the same content, mounted only while open. */}
@@ -267,9 +349,25 @@ export function AppShell() {
 
 // ---------------------------------------------------------------- rail content ----
 
-function RailContent({ onNavigate }: { onNavigate?: () => void }) {
+/**
+ * `collapsed` is the icon-only rail; `onToggleCollapse` is what renders the toggle at all.
+ *
+ * Both are optional and the **drawer passes neither**, which is the whole reason they are props
+ * rather than a hook read: a temporary drawer is already a deliberate reveal that costs a tap and
+ * covers the page, so collapsing it to icons would save nothing and remove the labels from the one
+ * variant whose users are on the smallest screens. The drawer is therefore always expanded, and
+ * has no toggle to mislead anyone into thinking otherwise.
+ */
+function RailContent({
+  onNavigate,
+  collapsed = false,
+  onToggleCollapse,
+}: {
+  onNavigate?: () => void;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
+}) {
   const { projectId } = useParams();
-  const navigate = useNavigate();
   const projects = useProjects();
 
   const activeProjectId = projectId ?? projects.data?.[0]?.id;
@@ -277,82 +375,237 @@ function RailContent({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <>
-      <Box sx={{ px: 2, py: 1.75, borderBottom: '1px solid', borderColor: 'divider' }}>
-        <Identifier variant="strong" sx={{ fontSize: '1rem', letterSpacing: '0.08em' }}>
-          TCMS
-        </Identifier>
+      {/*
+        The wordmark is a link to the picker, which is the convention every reader arrives with —
+        and the reason it can be one now is that `/` finally has a labelled entry below it. A logo
+        that is the *only* way home is a guess the user has to make; a logo that agrees with a
+        visible nav item is a shortcut.
+      */}
+      <Box
+        sx={{
+          px: collapsed ? 0 : 2,
+          py: 1.75,
+          display: 'flex',
+          justifyContent: collapsed ? 'center' : 'flex-start',
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+        }}
+      >
+        <RouterLink
+          to="/"
+          onClick={onNavigate}
+          aria-label="TCMS — all projects"
+          data-testid="Nav.Wordmark"
+          style={{ textDecoration: 'none' }}
+        >
+          <Identifier
+            variant="strong"
+            sx={{ fontSize: collapsed ? '0.8125rem' : '1rem', letterSpacing: collapsed ? 0 : '0.08em' }}
+          >
+            TCMS
+          </Identifier>
+        </RouterLink>
       </Box>
 
-      {/* Personal, and therefore outside the project frame below it. See `MY_WORK`. */}
+      {/*
+        Outside the project frame below it, both of them. `MY_WORK` is personal; `ALL_PROJECTS` is
+        what the switcher chooses between — see each one's own note.
+      */}
       <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, py: 1 }}>
         <li>
-          <RailLink item={MY_WORK} onNavigate={onNavigate} />
+          <RailLink item={MY_WORK} onNavigate={onNavigate} collapsed={collapsed} />
+        </li>
+        <li>
+          <RailLink item={ALL_PROJECTS} onNavigate={onNavigate} collapsed={collapsed} />
         </li>
       </Box>
 
       <Divider />
 
       {/* Project switcher: which project you're in is the frame for every key on screen. */}
-      <Box sx={{ px: 1.5, py: 1.5 }}>
-        <Typography
-          variant="caption"
-          component="label"
-          htmlFor="project-switcher"
-          sx={{ display: 'block', color: 'text.secondary', mb: 0.5 }}
-        >
-          Project
-        </Typography>
-        <Select
-          native
-          id="project-switcher"
-          size="small"
-          fullWidth
-          value={activeProjectId ?? ''}
-          onChange={(event) => {
-            navigate(`/projects/${event.target.value}`);
-            onNavigate?.();
-          }}
-          data-testid="Nav.ProjectSwitcher"
-        >
-          {(projects.data ?? []).map((project) => (
-            <option key={project.id} value={project.id}>
-              {project.name}
-            </option>
-          ))}
-        </Select>
-      </Box>
+      <ProjectSwitcher
+        projects={projects.data ?? []}
+        activeProjectId={activeProjectId}
+        collapsed={collapsed}
+        onNavigate={onNavigate}
+      />
 
       <Divider />
 
       <Box sx={{ flex: 1, overflowY: 'auto', py: 1 }}>
-        {groups.map((group) => (
+        {groups.map((group, index) => (
           <Box key={group.heading} sx={{ mb: 1.5 }}>
-            <Typography
-              variant="caption"
-              sx={{
-                display: 'block',
-                px: 2,
-                py: 0.5,
-                color: 'text.secondary',
-                textTransform: 'uppercase',
-                letterSpacing: '0.06em',
-                fontSize: '0.6875rem',
-                fontWeight: 600,
-              }}
-            >
-              {group.heading}
-            </Typography>
+            {/*
+              Collapsed, the heading is replaced by a rule rather than dropped. The grouping is the
+              only thing telling a reader that Reports is about execution and Classification is
+              about the project, and four icons in one undifferentiated column lose it entirely.
+              The first group needs no rule — there is already a divider above it.
+            */}
+            {collapsed ? (
+              index > 0 && <Divider sx={{ mx: 1.5, mb: 1 }} />
+            ) : (
+              <Typography
+                variant="caption"
+                sx={{
+                  display: 'block',
+                  px: 2,
+                  py: 0.5,
+                  color: 'text.secondary',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                  fontSize: '0.6875rem',
+                  fontWeight: 600,
+                }}
+              >
+                {group.heading}
+              </Typography>
+            )}
             <Stack component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
               {group.items.map((item) => (
                 <li key={item.to}>
-                  <RailLink item={item} onNavigate={onNavigate} />
+                  <RailLink item={item} onNavigate={onNavigate} collapsed={collapsed} />
                 </li>
               ))}
             </Stack>
           </Box>
         ))}
       </Box>
+
+      {/*
+        Bottom of the rail, below the scrolling nav list rather than inside it: it is a control on
+        the rail, not a destination in it, and a toggle that scrolls away with the links is one the
+        user cannot find to undo. Rendered only where it does something — the drawer omits it.
+      */}
+      {onToggleCollapse && (
+        <>
+          <Divider />
+          <Box sx={{ display: 'flex', justifyContent: collapsed ? 'center' : 'flex-end', px: 1, py: 0.75 }}>
+            <Tooltip title={collapsed ? 'Expand navigation' : 'Collapse navigation'} placement="right">
+              <IconButton
+                onClick={onToggleCollapse}
+                size="small"
+                /*
+                  The accessible name states the *action*, and `aria-expanded` states the current
+                  state of the thing it controls. Naming it "Navigation" and leaving the state to
+                  the attribute alone would read as a second way to open the drawer.
+                */
+                aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
+                aria-expanded={!collapsed}
+                aria-controls="nav-rail"
+                data-testid="Nav.CollapseToggle"
+              >
+                {collapsed ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
+              </IconButton>
+            </Tooltip>
+          </Box>
+        </>
+      )}
     </>
+  );
+}
+
+/**
+ * The switcher in both widths.
+ *
+ * Collapsed it becomes the project's **key** in a button — not a generic folder icon — because the
+ * one thing this control must answer at a glance is *which project am I in*, and that is the
+ * question a 64px rail is most likely to drop. The key is what the rest of the product identifies a
+ * project by, so it needs no legend.
+ *
+ * It renders even with no project to switch to, matching the expanded `Select`, which renders empty
+ * rather than disappearing: a member holding no project grants should see that the control exists
+ * and is empty, not conclude the app has no projects in it.
+ */
+function ProjectSwitcher({
+  projects,
+  activeProjectId,
+  collapsed,
+  onNavigate,
+}: {
+  projects: Project[];
+  activeProjectId: string | undefined;
+  collapsed: boolean;
+  onNavigate?: () => void;
+}) {
+  const navigate = useNavigate();
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+
+  const active = projects.find((project) => project.id === activeProjectId);
+
+  const go = (id: string) => {
+    navigate(`/projects/${id}`);
+    onNavigate?.();
+  };
+
+  if (collapsed) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 1.5 }}>
+        <Tooltip title={active ? `Project: ${active.name}` : 'Project'} placement="right">
+          <IconButton
+            onClick={(event) => setAnchor(event.currentTarget)}
+            size="small"
+            aria-label={active ? `Switch project — current project ${active.name}` : 'Switch project'}
+            aria-haspopup="menu"
+            aria-expanded={anchor ? 'true' : undefined}
+            data-testid="Nav.ProjectSwitcher"
+            sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, px: 1 }}
+          >
+            {active ? (
+              <Identifier variant="strong" sx={{ fontSize: '0.75rem' }}>
+                {active.key}
+              </Identifier>
+            ) : (
+              <FolderOutlinedIcon fontSize="small" />
+            )}
+          </IconButton>
+        </Tooltip>
+        <Menu anchorEl={anchor} open={!!anchor} onClose={() => setAnchor(null)}>
+          {projects.map((project) => (
+            <MenuItem
+              key={project.id}
+              selected={project.id === activeProjectId}
+              onClick={() => {
+                setAnchor(null);
+                go(project.id);
+              }}
+            >
+              <ListItemIcon>
+                <Identifier variant="muted">{project.key}</Identifier>
+              </ListItemIcon>
+              <ListItemText slotProps={{ primary: { variant: 'body2' } }}>{project.name}</ListItemText>
+            </MenuItem>
+          ))}
+        </Menu>
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ px: 1.5, py: 1.5 }}>
+      <Typography
+        variant="caption"
+        component="label"
+        htmlFor="project-switcher"
+        sx={{ display: 'block', color: 'text.secondary', mb: 0.5 }}
+      >
+        Project
+      </Typography>
+      <Select
+        native
+        id="project-switcher"
+        size="small"
+        fullWidth
+        value={activeProjectId ?? ''}
+        onChange={(event) => go(event.target.value)}
+        data-testid="Nav.ProjectSwitcher"
+      >
+        {projects.map((project) => (
+          <option key={project.id} value={project.id}>
+            {project.name}
+          </option>
+        ))}
+      </Select>
+    </Box>
   );
 }
 
@@ -360,12 +613,26 @@ function RailContent({ onNavigate }: { onNavigate?: () => void }) {
  * The active item is marked three ways at once — an indicator bar, heavier weight, and
  * `aria-current="page"` — so the current location is never communicated by colour alone.
  */
-function RailLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }) {
-  return (
+function RailLink({
+  item,
+  onNavigate,
+  collapsed = false,
+}: {
+  item: NavItem;
+  onNavigate?: () => void;
+  collapsed?: boolean;
+}) {
+  const link = (
     <NavLink
       to={item.to}
       end={item.end}
       onClick={onNavigate}
+      /*
+        Collapsed, the label is gone from the DOM, so the link needs its name back — an icon-only
+        link with no `aria-label` is announced as its href. The tooltip is not a substitute: it is
+        a hover affordance, and it never reaches a screen reader that is not hovering.
+      */
+      aria-label={collapsed ? item.label : undefined}
       data-testid={`Nav.Link.${item.label.replace(/[^A-Za-z]/g, '')}`}
       style={{ textDecoration: 'none' }}
     >
@@ -375,8 +642,9 @@ function RailLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => void
           sx={{
             display: 'flex',
             alignItems: 'center',
-            gap: 1.25,
-            px: 2,
+            justifyContent: collapsed ? 'center' : 'flex-start',
+            gap: collapsed ? 0 : 1.25,
+            px: collapsed ? 0 : 2,
             py: 0.875,
             position: 'relative',
             color: isActive ? 'primary.main' : 'text.primary',
@@ -399,10 +667,23 @@ function RailLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => void
           }}
         >
           <Box sx={{ display: 'flex', color: isActive ? 'primary.main' : 'text.secondary' }}>{item.icon}</Box>
-          {item.label}
+          {!collapsed && item.label}
         </Box>
       )}
     </NavLink>
+  );
+
+  /*
+    The tooltip is the collapsed rail's label, so it exists only there — wrapping the expanded link
+    too would put a tooltip on text that already says the same word, which is noise on every hover
+    across the whole rail.
+  */
+  return collapsed ? (
+    <Tooltip title={item.label} placement="right">
+      {link}
+    </Tooltip>
+  ) : (
+    link
   );
 }
 
