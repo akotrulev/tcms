@@ -1,6 +1,7 @@
 # R3 — the job record, the store, and the pipeline end to end: phase breakdown
 
-**Date:** 2026-08-04 · **Status:** proposed, unapproved · **Slice:** R3 of
+**Date:** 2026-08-04 · **Status:** **SHIPPED — all seven phases, see `docs/handoff/87-the-report-pipeline.md`**
+(the two the summary called most likely to be skipped, 6 and 7, both landed) · **Slice:** R3 of
 `docs/plans/2026-08-04-m2.5-reporting-slice-plan.md` · **Predecessor:** §86 (R1 + R2)
 
 The slice plan argues *what* R3 builds and *why*. This file is the execution order: seven phases,

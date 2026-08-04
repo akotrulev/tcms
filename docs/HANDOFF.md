@@ -1,6 +1,57 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-04 (latest section: **§86, the fact log gets a writer** — M2.5's reporting half
+**Date:** 2026-08-04 (latest section: **§87, the report pipeline** — R3 of the M2.5 plan and the
+largest slice in it: **seven phases, seven commits**, a request that writes a row, a worker that
+turns it into bytes, and three endpoints to ask, watch and take away. **`V27__report_job.sql`**,
+policy count **58 → 59**, contract **+2 operations**, **no new permission key** (`report:view` and
+`report:export` get their first consumer since M0), `V28` next free. **`V1` designed what to compute
+and what came out and never the record of a request in flight** — so `ReportJob.downloadUrl` was a
+required contract field nothing could fill. **A table and not an `@Async` dispatch**, because an
+in-JVM dispatch loses every in-flight job on a restart with no symptom but a spinner, giving back
+exactly what §6e's 202 bought. **The company loop is not an optimisation but the only way the worker
+sees a row at all**: `report_job` is under `FORCE ROW LEVEL SECURITY`, so a global "find all pending
+jobs" returns **zero rows** and the tick logs success having done nothing, for ever — asserted with
+two companies rather than trusted to a comment. **Bytes first, row second — the inverse of
+`EvidenceService` and argued in the code**, because here the job row already names the work so an
+orphan blob *is* findable, while a `COMPLETED` job whose download 404s is a client already told the
+report is ready. **§86's `{"tenancy"}`-alone declaration widens to `{"tenancy", "project",
+"identity"}`** — the widening §86 named rather than pre-approved, in **three places the compiler
+catches none of**: the annotation, the package comment and `ModuleStructureTest`'s rationale.
+**`ProjectService.readGranted` is the product's first read gated on a key beyond visibility**:
+visibility still answers 404, and what answers 403 is a feature of a project the caller is
+demonstrably looking at — telling them their own report request does not exist is false in the one
+direction a reporting pipeline must never be wrong. **THE SLICE'S FINDING IS PHASE 6, AND IT IS WHY
+IT WAS ITS OWN PHASE: until it landed both gates were decorative.** `V3` grants `report:view` and
+`report:export` **together** to four of the six built-ins, and the fifth — Automation Service — holds
+no `project:read`, so it 404s on visibility one step earlier and never reaches a permission check;
+**no persona the suite could build lacked either key**, so every available gate assertion was
+satisfied by an implementation with **no gate**. Hence the suite's **first custom roles, and there
+are two of them**: one holding `report:view` and **not** `report:export` (§6e's split made
+expressible — may read on screen, may not carry off), which is what makes the two keys
+**distinguishable** in both directions, and one holding **neither**, which is what keeps the *poll's*
+gate non-vacuous, since with only the first persona that check can be deleted outright and every
+assertion stays green. Both hold `project:read`, so their refusals are **403** where a member with no
+grant gets **404** — `readGranted`'s split asserted rather than described — and **the fixture proves
+itself**: the reader's 200 on the poll is the evidence the custom role confers visibility *and* the
+key. **The cleanup is load-bearing and has a mutation row of its own**: `SeedDataTest` asserts
+`SELECT name FROM role WHERE NOT built_in` is **empty**, so a leaked fixture role reddens an
+unrelated class **in the full suite only, at a position that moves** — §19's class through a
+mechanism **no UUID prefix protects against**, because the collision is with an assertion about
+*absence*. **The mock had shipped the feature wrong and nothing could see it**: `id` where the
+contract says `jobId`, a `requestedAt` the contract never declared, and **`QUEUED`, never one of the
+four values `status` has had** — §52's class and §81's finding, cheap only because it was corrected
+**before** a screen depended on it. Two scoping tests need a caller holding **both** projects, because
+`report_artifact` has no `project_id` and the job is the only row that scopes it: an id resolved
+alone is served through a gate that passed for a *different* project, the defect that survives an
+access-control test. **Found and not fixed**: the scheduler's company loop is asserted nowhere (§86's
+identical hole, read the two rows together), the bytes-first ordering is unobservable without a store
+that can fail, and `case_health` still has no index on `failing_repeatedly`. Gate: **BUILD
+SUCCESSFUL — 1615 tests across 318 classes, 0 failures, 0 skipped** (1553 → 1615), counted from the
+XML. **Phases 3, 4 and 6 each had every new test pass first time**, stated plainly rather than taken
+as evidence they can fail. **Zero mutations run inline**; **11 backend rows and 8 browser rows
+queued**, five of the browser rows console-driven because there is no screen yet. **Built and
+unverified.**
+Before that: **§86, the fact log gets a writer** — M2.5's reporting half
 begins, R1+R2 of the ten-slice plan. It ships the product's **tenth Modulith module**, the first
 writer `execution_fact` has ever had, and the third of `case_health`'s nine signals — **no
 migration (`V27` still free), no contract change, no new key, no new table, no new column**, policy
@@ -1250,3 +1301,4 @@ See [`docs/plans/2026-07-31-parallel-execution-rework.md`](plans/2026-07-31-para
 | [§84](handoff/84-the-team-board.md) | The team board — the bound that is the reader's, and the third selector on one operation |
 | [§85](handoff/85-the-team-board-screen.md) | The team board's screen — the route that is not administration, and the 404 the server refuses to word |
 | [§86](handoff/86-the-fact-log-gets-a-writer.md) | The fact log gets a writer — the module that had to exist first, and the dimensions that must not move |
+| [§87](handoff/87-the-report-pipeline.md) | The report pipeline — the job record, the second store, and the gates that could not fail |

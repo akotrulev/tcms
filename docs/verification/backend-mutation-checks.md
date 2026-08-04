@@ -1238,3 +1238,95 @@ code they replace, which is why they are the ones a future refactor will actuall
 | **Check** | `V27`, the policy count, and the module list |
 | **Mutation** | — |
 | **Must show** | **`V27` is still the next free Flyway version and `SchemaConventionTest`'s policy count is still 58.** §86 creates no table and no column: `execution_fact` and `case_health` are both `V1` tables, both already on `V1`'s `company_owned` RLS array, and `case_health.failing_repeatedly` is a `V1` column with `DEFAULT false` that has never been written. Verified by listing the migration folder before any SQL was written, per the slice plan. If either number has moved, something in this slice created state it said it did not. Also: `ModuleStructureTest` must name **ten** modules, and `reporting` must declare **`{"tenancy"}`** and nothing more. |
+
+---
+
+## §87 — the report pipeline end to end (R3)
+
+**Eleven rows, and the first six are the ones the slice is worth least without.** Phase 6 exists
+because until it landed **no persona the suite could build lacked either report key** — `V3` grants
+`report:view` and `report:export` together to four of the six built-ins, and the fifth (Automation
+Service) holds no `project:read`, so it 404s on visibility a step earlier and never reaches a
+permission check. Every gate assertion available before phase 6 was satisfied by an implementation
+with **no gate at all**, and these rows would all have reddened **0**.
+
+`ReportEndpointTest` inserts **two custom PROJECT-scope roles** — the suite's first — precisely so
+the two keys are distinguishable: *Report Reader* holds `report:view` and not `report:export`,
+*Report Blind* holds neither, and both hold `project:read` so their refusals are 403 rather than the
+404 a caller with no grant gets. Rows 1–4 are what that fixture buys; **run them first**.
+
+| | |
+|---|---|
+| **File** | `reporting/ReportJobService.java`, `EXPORT_REPORT` |
+| **Mutation** | `"report:export"` → `"report:view"` (generate asks for the wrong one of the two keys) |
+| **Scope** | `--tests 'com.tcms.reporting.ReportEndpointTest$Generating'` |
+| **Must redden** | **exactly 1** — *report:view is not enough — the screen-only role gets 403, not a job*. One, and that is the whole argument for a second custom role: *Report Blind* holds neither key, so their 403 is unmoved, and a fixture with only that persona would report **0** here while the endpoint let a read-only role queue work on the server. |
+
+| | |
+|---|---|
+| **File** | `reporting/ReportReadService.java`, `poll` |
+| **Mutation** | `VIEW_REPORT` → `EXPORT_REPORT` (the poll asks for the export key) |
+| **Scope** | `--tests 'com.tcms.reporting.ReportEndpointTest$Polling'` |
+| **Must redden** | **exactly 1** — *the screen-only role may watch a job it could not have asked for*. The mirror of the row above: this is the direction that proves the catalogue's two keys are not one key spelled twice. A caller who may read on screen and not carry off is exactly who §6e's split is for. |
+
+| | |
+|---|---|
+| **File** | `reporting/ReportReadService.java`, `poll` |
+| **Mutation** | `projects.readGranted(userId, projectId, VIEW_REPORT, …)` → `projects.readVisible(userId, projectId, …)` mapped to the same outcome (the gate deleted outright, visibility only) |
+| **Scope** | `--tests 'com.tcms.reporting.ReportEndpointTest$Polling'` |
+| **Must redden** | **exactly 1** — *a role holding neither key gets 403 from the poll*. This is the row *Report Blind* exists for: with only the screen-only persona, deleting the poll's permission check entirely leaves every assertion in the class green, because that persona holds the key either way. |
+
+| | |
+|---|---|
+| **File** | `reporting/ReportReadService.java`, `open` |
+| **Mutation** | `EXPORT_REPORT` → `VIEW_REPORT` (the download asks for the view key) |
+| **Scope** | `--tests 'com.tcms.reporting.ReportEndpointTest$Downloading'` |
+| **Must redden** | **exactly 1** — *report:view is not enough — the screen-only role gets 403 with no body*. Fetching the file is precisely what "export" names; if this reddens 0, a Viewer-shaped role that may not export can export. |
+
+| | |
+|---|---|
+| **File** | `reporting/ReportReadService.java`, `poll` |
+| **Mutation** | `jobs.findByIdAndProjectId(jobId, project.getId())` → `jobs.findById(jobId)` |
+| **Scope** | `--tests 'com.tcms.reporting.ReportEndpointTest$Polling'` |
+| **Must redden** | **exactly 1** — *a sibling project's job is 404 even though the caller holds both projects*. The defect that **survives** an access-control test: the gate ran, and ran on a different project than the row belongs to. It needs a caller holding *both* projects to be visible at all, which is why the fixture grants LEAD two. |
+
+| | |
+|---|---|
+| **File** | `reporting/ReportReadService.java`, `locate` |
+| **Mutation** | drop the `jobs.findByArtifact(projectId, artifactId)` lookup and resolve `artifacts.findById(artifactId)` alone |
+| **Scope** | `--tests 'com.tcms.reporting.ReportEndpointTest$Downloading'` |
+| **Must redden** | **exactly 1** — *a sibling project's artifact is 404 through this project's path*. `report_artifact` carries **no `project_id`** (`V1` scoped it by company and definition), so the job is the only row that scopes it. Company isolation still holds here through RLS — what this mutation opens is one of a client's projects reading another **of their own** projects' reports through a path they hold. |
+
+| | |
+|---|---|
+| **File** | `reporting/ReportJobRunner.java`, the completion step |
+| **Mutation** | invert the ordering — write the `COMPLETED` row and its artifact rows **before** the bytes reach the store |
+| **Scope** | `--tests 'com.tcms.reporting.ReportJobPipelineTest$Pipeline'` and `--tests 'com.tcms.reporting.ReportEndpointTest$Downloading'` |
+| **Must redden** | **this row is a question.** The inversion is only *observable* if the store write then fails, and nothing in the suite makes it fail — so the honest expectation is **0**, and 0 is the finding: the ordering is argued in `ReportJobRunner`'s header (against `EvidenceService`'s opposite call, §67) and asserted nowhere. What *is* covered is the end state — *a COMPLETED job has bytes for both artifacts* and *a lead gets the bytes* both open the store. Record the real number; if it is 0, the follow-up is a store adapter that can be made to fail, not a rewrite of the ordering. |
+
+| | |
+|---|---|
+| **File** | `reporting/ReportJobScheduler.java` |
+| **Mutation** | delete the company loop — one un-scoped `runner.runPendingJobs()` with no `CompanyContext.open` |
+| **Scope** | `--tests 'com.tcms.reporting.ReportJobPipelineTest$Isolation'` |
+| **Must redden** | **exactly 0, and unlike §86's identical row this one has a positive half.** Nothing drives the *scheduler* (`tcms.reporting.enabled=false` in `IntegrationTestBase`, for §19's reason), so the loop's necessity is still asserted nowhere. What the suite *does* cover is that the failure is **loud**: *a worker with no company open refuses rather than claiming nothing quietly* — `CompanyContext.require()` throws where the silent version would log a successful tick for ever while every client polls a job that never moves. Read this row together with §86's; they are the same unclosed hole in two schedulers. |
+
+| | |
+|---|---|
+| **File** | `reporting/ReportJobService.java`, the format parse |
+| **Mutation** | remove the PDF refusal — accept `PDF` and let the job be written |
+| **Scope** | `--tests 'com.tcms.reporting.ReportJobPipelineTest$Requesting'` and `--tests 'com.tcms.reporting.ReportEndpointTest$Generating'` |
+| **Must redden** | **exactly 2, one per class** — *refuses PDF at request time, and says it is not installed* and *PDF is a 400 at request time, naming the renderer as not installed*. The pair is the point: the service-level test proves no row is written, the endpoint test proves the client sees a 400 rather than a job that goes `FAILED` half a minute later — which a client cannot tell apart from a broken server. |
+
+| | |
+|---|---|
+| **File** | `reporting/ReportEndpointTest.java`, `dropTheCustomRoles` |
+| **Mutation** | delete the `@AfterAll` (leave the two custom roles in the database) |
+| **Scope** | **the full suite** — `./gradlew build`. This is the one row that cannot be run in a narrow scope, because the whole claim is about another class. |
+| **Must redden** | **exactly 1, in a class that has nothing to do with reporting** — `SeedDataTest.sixBuiltInRoles`, whose second assertion is that `SELECT name FROM role WHERE NOT built_in` is **empty**. It reddens only when `ReportEndpointTest` has already run, so it is a suite-order-dependent failure in a file nobody would connect to this slice: §19's fixture-collision class through a mechanism **no UUID prefix protects against**, since the collision is with an assertion about *absence* rather than with another fixture's id. If it reddens 0, the ordering happened to be favourable — rerun rather than concluding the cleanup is unnecessary. |
+
+| | |
+|---|---|
+| **Check** | `V27`, the policy count, the module declaration, and the next free number |
+| **Mutation** | — |
+| **Must show** | **`V27__report_job.sql` is the head migration, `SchemaConventionTest`'s policy count is 59** (`SchemaConventionTest.java:262`), **`V28` is the next free number**, and `reporting/package-info.java` declares **`{"tenancy", "project", "identity"}`** — widened from §86's `{"tenancy"}` alone, with the package comment and `ModuleStructureTest`'s `@DisplayName` rationale moved in the same commit, because prose does not fail `-Werror`. `ModuleStructureTest` still names **ten** modules. If the policy count did not move with `V27`, the predicate assertion is passing on 58 of 59 tables and the new one is unchecked. |

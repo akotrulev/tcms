@@ -787,3 +787,34 @@ tick or restart the container after seeding.
 | 6 | **Live.** Two companies, both with a failing-repeatedly case. Sign in as a member of one. | The dashboard counts **only** that company's case. The projection carries no company predicate — `FORCE ROW LEVEL SECURITY` is the entire mechanism on both the `SELECT` and the `INSERT` — and this is the on-screen half of a property the backend asserts with two companies. | **live only** |
 | 7 | **Live.** Soft-delete a flagged case, wait a tick, reload the dashboard. | The tile count drops and the case is gone. `case_health` rows are derived for live cases only, while the **fact log deliberately keeps the deleted case's results** — the two opposite calls in one slice, and the screen is where their consistency is legible: no orphan chip, and no report row lost. | **live only** |
 | 8 | **Live, and this one is about cost rather than correctness.** With a project of a few hundred cases, watch the dashboard's response time before and after a tick has populated `failing_repeatedly`. | No visible regression. **`V1` ships four partial indexes on `case_health` — `outdated_spec_changed`, `stale_approval`, `never_executed`, `unlinked` — and none on `failing_repeatedly`**, so this signal's tile is the first that has to scan. Found while reading the DDL for this slice and deliberately **not fixed**: adding an index is a migration, and §86 states it has none. If this row shows a real cost, the index belongs in R3's `V27` alongside the job table. | **live only** |
+
+---
+
+## §87 — the report pipeline (R3)
+
+**There is no screen yet, and that is what these rows are for.** F1/F2 (the request form and the
+on-screen report view) are later slices; what §87 shipped on the frontend is the corrected mock
+handler for three operations nothing calls. Every row below is therefore driven **from the browser
+console** with `fetch`, not by clicking — which is the honest way to record a check on a handler
+that has no UI, rather than deferring the whole thing until a screen exists and inheriting whatever
+the mock happens to do by then.
+
+**What was wrong until this slice** is the reason the rows exist at all: the handler answered
+`{ id, status: 'QUEUED', format: 'PDF', requestedAt }` — `id` where the contract says `jobId`, a
+`requestedAt` the contract never declared, and `QUEUED`, **never one of the four values
+`ReportJob.status` has had**. §52's "the mock agrees with an idea of the feature", §81's finding one
+slice earlier, and cheap only because it is being corrected before a screen depends on it.
+
+Run these in mock mode (`npm run dev`, default) from the console on any signed-in page. `P` is a
+project id from the URL.
+
+| # | Drive | Expect | Mode |
+|---|---|---|---|
+| 1 | **Mock.** `await (await fetch(`/api/v1/projects/${P}/reports/generate`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({type:'run_summary', format:'MD'})})).json()` | **202**, and a body carrying **all seven** contract-required fields: `jobId` (not `id`), `type`, `status: 'PENDING'`, `format`, `downloadUrl: null`, `modelUrl: null`, `error: null`. No `requestedAt`. A `Location` header pointing at `…/reports/jobs/{jobId}`. | mock |
+| 2 | **Mock.** Poll `…/reports/jobs/{jobId}` **three times** in a row. | `PENDING` → `RUNNING` → `COMPLETED`, one state per poll. **The intermediate states are the point** — a mock that completed on the first poll would leave the two states a real client spends its whole loading life in unreachable in dev, so the polling UI would be developed against a state machine with one state. | mock |
+| 3 | **Mock.** On the `COMPLETED` job, follow `downloadUrl` and `modelUrl`. | Both resolve — Markdown and JSON respectively. `modelUrl` is decision F's other half: the on-screen view (F2) reads the same artifact the export was rendered from, so a null here is a screen that cannot be built without a second computation. | mock |
+| 4 | **Mock.** Ask for `format: 'PDF'`, then for `format: 'DOCX'`, then for `type: 'quarterly_vanity_metrics'`. | **400 each**, with the error under `format`, `format` and `type`. The mock's refusals read its own `TYPES`/`FORMATS` registries rather than literals, mirroring the server — the same request must not be a 400 here and a 202 in live mode. | mock |
+| 5 | **Live.** Same as row 1 against a real backend, signed in as a Test Lead. Then poll. | **202**, then a job that reaches `COMPLETED` **without polling advancing it** — the real worker is on a `PT15M` schedule with a `PT3M` initial delay, so this either waits for a tick or follows a container restart. The difference from row 2 is the check: the mock's poll-driven clock must not be what a client depends on. | **live only** |
+| 6 | **Live.** Sign in as a persona holding `report:view` and **not** `report:export` (needs a grant edit — no built-in role has that shape), and `POST …/reports/generate`. | **403 with a problem body**, and a poll of an existing job **200**. **Unobservable in mock mode**, which signs in as one persona holding every key — the backend asserts this with two custom fixture roles (§87 phase 6) and the browser is where a client would meet it. | **live only** |
+| 7 | **Live.** The same persona follows a completed job's `downloadUrl`. | **403 with an empty body** — deliberately bodiless, unlike the other two refusals, because the response is typed to a binary resource and a JSON problem document under a status the client can already read tells it nothing. Worth seeing in a browser: confirm it does not render as a corrupted download. | **live only** |
+| 8 | **Live.** As a Test Lead, follow `downloadUrl` in the address bar. | The file **downloads** rather than rendering — `Content-Disposition: attachment`, named `run_summary-{artifactId}.md`. Evidence is served `inline` (a screenshot is shown beside the step it failed on); a report is a file somebody keeps. | **live only** |

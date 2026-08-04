@@ -3,7 +3,7 @@
 # be-java — orientation cache (TCMS)
 
 **Last verified:** 2026-08-04
-**Baseline commit:** `c71aea4` **+ §86, the commit this line ships in** (its own SHA cannot be
+**Baseline commit:** `edf676e` (§87 phase 6) **+ §87 phase 7, the commit this line ships in** (its own SHA cannot be
 written into itself; per `CLAUDE.md`, trust the body over the header and re-grep what a later commit
 could have moved). §86 created the `reporting` module; the planning pass that preceded it read the
 migration folder, the module tree, `V1`'s reporting section, `V3`'s report grants, `openapi.yaml`'s
@@ -55,6 +55,53 @@ exist**, and the slice plan's decision E declines to create it for two storage p
 
 ## Seams to reuse
 
+- **THE REPORT PIPELINE IS END TO END SINCE §87 (R3).** `V27__report_job.sql` (policy count
+  **58 → 59**, head migration, `V28` next free) + `ReportJob`/`ReportArtifact`/`ReportDefinition` +
+  `ReportJobRepository`/`ReportArtifactRepository` + `ReportStore`/`FilesystemReportStore` +
+  `ReportModel` + `MarkdownReportRenderer`/`JsonReportRenderer` + `ReportRenderers`/`ReportComputations`
+  + `RunSummaryReport` + `ReportJobService`/`ReportJobRunner`/`ReportJobScheduler`/`ReportReadService`
+  + `ReportController`. **`reporting` now declares `{"tenancy", "project", "identity"}`** — the
+  widening §86 named rather than pre-approved, made in **three places none of which the compiler
+  checks**: the annotation, the package comment and `ModuleStructureTest`'s `@DisplayName` rationale.
+  **A TABLE, NOT AN `@Async` DISPATCH** (decision B): an in-JVM dispatch loses every in-flight job on
+  a restart with no symptom but a spinner, which gives back exactly what §6e's 202 bought.
+  **The company loop is the only way the worker sees a row**: `report_job` is under
+  `FORCE ROW LEVEL SECURITY`, so a global "find all pending jobs" returns **zero rows** and the tick
+  logs success having done nothing, for ever. Three transactions per job (`TransactionTemplate`, not
+  three `@Transactional` methods — those are self-invocations the proxy never sees); `attempts` moves
+  on the **claim**, not on failure, or a process dying mid-run reads 0 for ever.
+  **BYTES FIRST, ROW SECOND — the inverse of `EvidenceService`/§67, argued in `ReportJobRunner`'s
+  header**: the job row already names the work so an orphan blob *is* findable, while a `COMPLETED`
+  job whose download 404s is a client already told the report is ready.
+  **`ReportStore` is `EvidenceStore` copied, with the debt named at BOTH ends** (decision C / §58 E1)
+  — `reporting` may not import `execution`, and a `shared` module for two interfaces and a record was
+  refused (decision E, §76's argument). Its root is a separate property: reports are the first
+  storage in the product that is **not backup-critical**, because every one is regenerable from
+  `execution_fact`.
+  **Every job writes TWO artifacts** (decision F) — what was asked for, and the JSON model the
+  on-screen view will read, so screen and export are one model rendered twice; a JSON request writes
+  **one** artifact with both columns naming it.
+  **Request-time refusals vs late ones**: an unknown type and an unrenderable format are **400s**
+  derived from the two registries (never a literal list); PDF says *"not installed on this server"*.
+  A report's **own** parameters stay late — an unknown `runId` is a `FAILED` job carrying the
+  computation's sentence. `#confirmed`
+- **`ProjectService.readGranted` (§87) — the product's first read gated on a permission key beyond
+  visibility.** Visibility still answers **404**; what answers **403** is a feature of a project the
+  caller is demonstrably looking at. A distinct method rather than a flag on `writeGranted`, which
+  would run a read in a read-write transaction and read as a write in the diff. `#confirmed`
+- **`report:view` / `report:export` got their FIRST consumer in §87 — no new key**, the eighth
+  instance of that shape. **And until §87 phase 6 both gates were DECORATIVE**: `V3` grants the two
+  together to four of the six built-ins, and Automation Service (the fifth) holds no `project:read`,
+  so it 404s on visibility one step earlier — **no persona the suite could build lacked either key**.
+  `ReportEndpointTest` therefore inserts the suite's **first custom roles, and there are two**: one
+  holding `report:view` and **not** `report:export` (which is what makes the two keys
+  *distinguishable*), one holding **neither** (which is what keeps the *poll's* gate non-vacuous).
+  Both hold `project:read`, so their refusals are 403 where a no-grant member gets 404.
+  **The `@AfterAll` that deletes them is load-bearing**: `SeedDataTest.sixBuiltInRoles` asserts
+  `SELECT name FROM role WHERE NOT built_in` is **empty**, so a leaked fixture role reddens an
+  unrelated class in the full suite only, at a moving position — §19's class through a mechanism **no
+  UUID prefix protects against**. Assignments delete first (`role_assignment.role_id` has no
+  `ON DELETE CASCADE`; `role_permission` does). `#confirmed`
 - **`execution_fact` HAS A WRITER since §86, and `reporting` is the module that had to exist for it.**
   `reporting/package-info.java` + `ExecutionSource` (the seam) + `ExecutionFactRefreshService` +
   `ExecutionFactScheduler` + `ReportingProperties`. **No migration (`V27` still free), no contract
@@ -71,8 +118,8 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   sibling: nothing here is reached through an endpoint, so there is no project gate and no person to
   name. `documentation`'s precedent in both directions — declaring the three it will eventually want
   makes the declaration a **forecast**, and a forecast cannot fail the build when it stops being
-  true. **R3 widens it** (`project` for `report:view`/`report:export`, `identity` for a generated-by
-  line) and the package comment + `ModuleStructureTest`'s rationale both say so.
+  true. ~~**R3 widens it**~~ → **widened in §87 to `{"tenancy", "project", "identity"}`**, and `V27`
+  is no longer free: see the §87 entry at the top of this list.
   **THE decision is the `ON CONFLICT` set-list: seven columns move, fifteen do not.** Move =
   `status_kind`, `counts_as_pass`, `executed_at`, `executed_by`, `duration_ms`, `release_version`,
   `release_sort_key` (an amended verdict is corrected). **Frozen** = `automation_status`,
@@ -139,7 +186,9 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   return zero rows, fail-closed and silent. `RepositoryTransactionTest` derives the repository list
   from the live context, so a new repository that forgets fails the build. `#confirmed`
 - **Flyway owns all DDL**; `hibernate.ddl-auto: validate`, `baseline-on-migrate: false`. Migrations
-  at `src/main/resources/db/migration`. **Head is `V26`; `V27` is the next free number.** Booting the
+  at `src/main/resources/db/migration`. **Head is `V27__report_job.sql` (§87); `V28` is the next free
+  number**, and `SchemaConventionTest`'s policy count is **59** (`SchemaConventionTest.java:262`).
+  Booting the
   real context in a test is itself a schema-drift gate. `#confirmed`
   **`V23` is the first migration since `V1` to CREATE A TABLE**, which makes two things live that no
   previous migration had to think about: a new table's RLS policy must be written with **`V4`'s
@@ -772,6 +821,17 @@ exist**, and the slice plan's decision E declines to create it for two storage p
 
 ## Session log
 
+- 2026-08-04 · EXTEND · The report pipeline (§87) — **R3**, seven phases, seven commits, backend
+  1553 → **1615**. New: `V27__report_job.sql` (policy count **58 → 59**, head migration, `V28` next
+  free), three entities + two repositories, `ReportStore`/`FilesystemReportStore`, `ReportModel` +
+  two renderers + two registries, `RunSummaryReport`, the service/runner/scheduler trio,
+  `ReportReadService`, `ReportController`, `ProjectService.readGranted`, `openapi.yaml` **+2
+  operations**, and the corrected reporting mock. `reporting` widened to
+  `{"tenancy", "project", "identity"}`. **No new permission key.**
+  **The finding is phase 6**: until it, both report gates were satisfied by an implementation with no
+  gate, because no persona the suite could build lacked either key — fixed with the suite's **first
+  two custom roles**, whose `@AfterAll` cleanup is itself load-bearing against `SeedDataTest`.
+  **Zero mutations run inline; 11 backend rows and 8 browser rows queued — built and unverified.**
 - 2026-08-04 · EXTEND · The fact log gets a writer (§86) — **R1+R2** of the M2.5 reporting plan, and
   the product's **tenth Modulith module**. New: `reporting/package-info.java`, `ExecutionSource`,
   `ExecutionFactRefreshService`, `ExecutionFactScheduler`, `ReportingProperties`;
