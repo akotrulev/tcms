@@ -1,6 +1,66 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-04 (latest section: **§87, the report pipeline** — R3 of the M2.5 plan and the
+**Date:** 2026-08-04 (latest section: **§88, the HTML renderer and the report header** — R4 of the
+M2.5 plan, **three phases, three commits**, and the two halves had to land together: §6e's primary
+format is the one a client is *sent*, so shipping it without the header §6e makes mandatory is the
+one combination that produces a document somebody forwards with no provenance on it. **No migration
+(`V27` still the head, `V28` still free), no table, no column, no key, policy count unchanged at 59;
+the contract change is PROSE ONLY** — two descriptions and a `gen:api`. **`ReportModel`'s own javadoc
+had already recorded what was missing and named this slice**, which is why the slice is *what the
+header is* rather than *whether to have one*. **The header is the JOB's knowledge, so a computation
+cannot be asked for it** — it does not know who requested the report, when the worker got to it, or
+which company the deployment serves, and a report type that forgot to hand those back would produce a
+**headerless document that renders perfectly**. Hence `ReportDocument(header, report)` and a renderer
+that takes *it*: the rejected shape is a second `render(model, header)` parameter, which works and
+leaves every renderer free to ignore it, where **one argument that IS the document makes "render the
+report" and "render the report without saying what it is of" the same call**. It is also what the
+`JSON` artifact stores, so F2 renders the header the export printed instead of assembling a second
+one from the job row. **The aggregation policy is deliberately NOT a header field** — it is the one
+item on §6e's header list only the report can answer (`run_summary` prints *"not applicable"* and
+says why; R6 takes it as a parameter), and a field would be a **second place to put it**, which is how
+one of the two comes to be blank; `ReportDocument.headerBlock()` is the single assembly — provenance,
+then selection, then the report's own metadata — so three formats cannot print three subsets.
+**The selection is what the CLIENT sent and never what the report understood**: a report ignores
+parameters it does not know, so a header built from what was *used* silently drops the filter the
+reader believes narrowed the numbers — indistinguishable today, because `run_summary` takes one
+parameter and uses it, which is why the argument is in the code and the mutation row says so rather
+than claiming a test. Entries are **prefixed**, because a parameter is named by the client and could
+be called `Company`. **§6u branding is a display name, stated rather than skipped**: `logo_storage_key`
+and the two colour columns are `V1` columns that are **unmapped and written by nothing** (branding is
+M6) and **a per-project override column does not exist at all**, so the alternative is inventing a
+migration for another milestone's feature. **Nothing in `ReportHeaders` can fail a report** — every
+lookup falls back to a printable value, because a `FAILED` job carrying *"could not read the company"*
+reads as the report itself being broken. **The HTML renderer is written by hand and NOT with
+Thymeleaf, which is a deviation from the plan and is recorded as one**: the escaping guarantee is
+available without the dependency because `text()` is the only way a string reaches the output and the
+test asserts that over a model whose every field is hostile — **a stronger statement than "a template
+engine was used"** — while the starter would install view resolution into a REST API that has never
+had any, for one template nothing type-checks. **The escaping test is a COUNT (19, one per
+interpolation)**, because `doesNotContain("<img")` passes cleanly against a renderer that escapes
+*some* positions. **Self-contained is a requirement with a test**: no `<script>`, no `<link>`, no
+`<img>`, no absolute URL — the reader is a client opening an attachment months later, possibly
+offline, and this same file is what the PDF slice will hand to a browser, where an asset that fails to
+load is a blank rectangle in a deliverable. Two chart calls with a defect apiece: a bar is scaled
+against **the largest value in its series and never a total** (a series need not be parts of a whole),
+and an **all-zero series draws no bar** rather than the full-width one `width: NaN%` renders as in
+most browsers — a chart saying everything happened on a report where nothing did. **The format became
+requestable because a bean exists**: nothing in the controller, the service or the validation was
+edited, and R3's own assertion that `supports(HTML)` was `false` *"changes with the renderer, which is
+the point"* is now `isTrue()` with the note kept. **The mock moved with the contract** — `FORMATS`
+gained `HTML` as a registry rather than a literal, each format carries its own media type and
+extension, HTML is served as a **whole document** rather than a fragment, and the model artifact
+answers `{ header, report }`, because a mock still answering a bare `{ title, sections }` is a shape
+F2 would be built against and the server does not serve (§81's and §87's finding, a third time).
+**One test failed on the first run and it was the assertion, not the code**: `onerror=alert(1)` as
+inert *text* is exactly what a report of a project somebody named that should show. Gate: **BUILD
+SUCCESSFUL — 1628 tests across 320 classes, 0 failures, 0 skipped** (1615 → 1628), counted from the
+XML; frontend 705/705, lint 0. **Found and not fixed**: `ReportHeaders` has no unit test of its own
+(covered end-to-end, because every field it fills is a database read), and §86/§87's three open rows
+are untouched — the unobservable bytes-first ordering, the two unasserted scheduler loops, and
+`case_health`'s missing index. **Zero mutations run inline**; **9 backend rows and 5 browser rows
+queued**, the browser ones including the check no unit test can make: open the saved HTML **with the
+network off**. **Built and unverified.**
+Before that: **§87, the report pipeline** — R3 of the M2.5 plan and the
 largest slice in it: **seven phases, seven commits**, a request that writes a row, a worker that
 turns it into bytes, and three endpoints to ask, watch and take away. **`V27__report_job.sql`**,
 policy count **58 → 59**, contract **+2 operations**, **no new permission key** (`report:view` and
@@ -1302,3 +1362,4 @@ See [`docs/plans/2026-07-31-parallel-execution-rework.md`](plans/2026-07-31-para
 | [§85](handoff/85-the-team-board-screen.md) | The team board's screen — the route that is not administration, and the 404 the server refuses to word |
 | [§86](handoff/86-the-fact-log-gets-a-writer.md) | The fact log gets a writer — the module that had to exist first, and the dimensions that must not move |
 | [§87](handoff/87-the-report-pipeline.md) | The report pipeline — the job record, the second store, and the gates that could not fail |
+| [§88](handoff/88-the-html-renderer-and-the-report-header.md) | The HTML renderer and the report header — the block a renderer cannot strip, and the template engine that was not taken |

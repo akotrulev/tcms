@@ -3,7 +3,7 @@
 # be-java — orientation cache (TCMS)
 
 **Last verified:** 2026-08-04
-**Baseline commit:** `edf676e` (§87 phase 6) **+ §87 phase 7, the commit this line ships in** (its own SHA cannot be
+**Baseline commit:** `2ad94f7` (§88 phase 2) **+ §88 phase 3, the commit this line ships in** (its own SHA cannot be
 written into itself; per `CLAUDE.md`, trust the body over the header and re-grep what a later commit
 could have moved). §86 created the `reporting` module; the planning pass that preceded it read the
 migration folder, the module tree, `V1`'s reporting section, `V3`'s report grants, `openapi.yaml`'s
@@ -85,6 +85,27 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   derived from the two registries (never a literal list); PDF says *"not installed on this server"*.
   A report's **own** parameters stay late — an unknown `runId` is a `FAILED` job carrying the
   computation's sentence. `#confirmed`
+- **THE REPORT HEADER, AND THE THIRD RENDERER (§88 / R4).** `ReportHeader` + `ReportDocument` +
+  `ReportHeaders` + `HtmlReportRenderer`; `ReportRenderer.render` now takes a **`ReportDocument`**,
+  never a bare model. **No migration (`V27` still head, `V28` free), no table, no column, no key,
+  policy count still 59; the contract change is prose only.** **The header is the JOB's knowledge**,
+  so a computation cannot be asked for it — a report type that forgot to hand it back would produce a
+  **headerless document that renders perfectly**; the pair is one argument so that "render the report
+  without saying what it is of" is not a call anybody can make. The `JSON` artifact stores the
+  document, so F2 renders the header the export printed. **`ReportDocument.headerBlock()` is the ONE
+  assembly** — provenance, then selection, then the report's own metadata — and **the aggregation
+  policy stays in the metadata deliberately**: only the report can answer it, and a header field
+  would be a second home. **The selection is read off the STORED parameters**, never off what the
+  computation used, or a filter the report ignored vanishes from the document; entries are prefixed,
+  because a client's parameter could be called `Company`. **§6u branding is a display name only** —
+  `logo_storage_key` and the two colour columns are unmapped `V1` columns with no writer (M6) and
+  **no per-project override column exists**. **`HtmlReportRenderer` is hand-written, NOT Thymeleaf**
+  (a recorded deviation from the plan): `text()` is the only path a string takes to the output and
+  the test counts **19** escaped positions, which is stronger than a template engine and avoids
+  installing view resolution into a REST API that has never had any. **Self-contained is asserted** —
+  no script, link, img or absolute URL; charts are CSS bars scaled against the series' own max, and
+  an all-zero series draws **no** bar (`width: NaN%` renders full-width). **HTML became requestable
+  because a bean exists** — nothing in the controller, service or validation was edited. `#confirmed`
 - **`ProjectService.readGranted` (§87) — the product's first read gated on a permission key beyond
   visibility.** Visibility still answers **404**; what answers **403** is a feature of a project the
   caller is demonstrably looking at. A distinct method rather than a flag on `writeGranted`, which
@@ -684,7 +705,7 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   Thymeleaf + headless-Chromium renderers, an async job pipeline, 7–8 weeks. Checked in §64 and
   deliberately not started. `#confirmed`
   **Decomposed 2026-08-04 into `docs/plans/2026-08-04-m2.5-reporting-slice-plan.md`** (10 slices,
-  one migration). **R1+R2 landed in §86; R3–R8, F1 and F2 remain, and `/reports` is still a dead
+  one migration). **R1+R2 landed in §86, R3 in §87, R4 in §88; R5–R8, F1 and F2 remain, and `/reports` (the saved-definition GET) is still a dead
   contract** — nothing in §86 is reached through an endpoint. Seven facts that pass verified against
   the code and that a reader should not re-derive (1, 2 and 6 have moved since; struck inline):
   1. ~~**There is no `com.tcms.reporting` package.**~~ → **created in §86** (see the seam above);
@@ -821,6 +842,15 @@ exist**, and the slice plan's decision E declines to create it for two storage p
 
 ## Session log
 
+- 2026-08-04 · EXTEND · The HTML renderer and the report header (§88) — **R4**, three phases, three
+  commits, backend 1615 → **1628** (320 classes), frontend 705/705. New: `ReportHeader`,
+  `ReportDocument`, `ReportHeaders`, `HtmlReportRenderer`; `ReportRenderer.render` takes a document;
+  `ReportParameters.entries()`; the reporting mock serves HTML and a `{ header, report }` model.
+  **No migration (`V27` still head), no table, no column, no key, policy count still 59, contract
+  prose only.** Two recorded deviations from the plan: **no Thymeleaf** (the escaping guarantee is a
+  counted test instead) and **no logo** (unmapped columns, no override column — branding is M6).
+  **The one test that failed first time was the assertion, not the code.**
+  **Zero mutations run inline; 9 backend rows and 5 browser rows queued — built and unverified.**
 - 2026-08-04 · EXTEND · The report pipeline (§87) — **R3**, seven phases, seven commits, backend
   1553 → **1615**. New: `V27__report_job.sql` (policy count **58 → 59**, head migration, `V28` next
   free), three entities + two repositories, `ReportStore`/`FilesystemReportStore`, `ReportModel` +

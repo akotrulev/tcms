@@ -48,7 +48,14 @@ interface MockJob {
  * because nothing would fail.
  */
 const TYPES = ['run_summary'];
-const FORMATS = ['MD'];
+const FORMATS = ['MD', 'HTML'];
+
+/** What each format is served as — the server takes both from the renderer that produced it. */
+const MEDIA: Record<string, { type: string; extension: string }> = {
+  MD: { type: 'text/markdown; charset=utf-8', extension: 'md' },
+  HTML: { type: 'text/html; charset=utf-8', extension: 'html' },
+  JSON: { type: 'application/json', extension: 'json' },
+};
 
 /** Resets on reload, like every other part of the mock store. */
 const jobs = new Map<string, MockJob>();
@@ -87,6 +94,81 @@ function advance(job: MockJob) {
     // fields name one artifact rather than two files that are equal only until they are not.
     job.modelArtifactId = job.format === 'JSON' ? job.artifactId : newId();
   }
+}
+
+/**
+ * The stored model, in the shape §88 gave it: `{ header, report }`.
+ *
+ * The header is not decoration and is not the screen's to assemble — §6e makes it mandatory on the
+ * output, and F2 must render the one the export printed rather than composing a second from the job
+ * row. A mock that answered a bare `{ title, sections }` would let that screen be built against a
+ * shape the server does not serve, which is §81's finding and §87's, one slice apart.
+ */
+function mockModel(job: MockJob) {
+  return {
+    header: {
+      reportType: job.type,
+      description: 'A single run: status breakdown, progress per tester, and results by suite.',
+      company: 'Northwind Trading',
+      projectScope: 'MOCK — Mock mode',
+      scopeNote:
+        'This report covers MOCK — Mock mode in full and no other project. A project grant is ' +
+        'all-or-nothing, so a reader with access to this project sees the same numbers as any ' +
+        'other; cross-project reports are not available in this version.',
+      generatedBy: 'Mock Mode',
+      generatedAt: '2026-08-04 12:00:00 UTC',
+      selection: [{ label: 'runId', value: job.jobId }],
+    },
+    report: {
+      title: 'Run summary — TR-1',
+      metadata: [{ label: 'Pass rate (of recorded)', value: '50.0%' }],
+      sections: [
+        {
+          heading: 'Results',
+          narrative: 'Shares are of the 2 executions recorded in this run.',
+          table: {
+            columns: ['Status', 'Executions', 'Share'],
+            rows: [
+              ['PASSED', '1', '50.0%'],
+              ['FAILED', '1', '50.0%'],
+            ],
+          },
+          series: [
+            {
+              name: 'Executions by status',
+              points: [
+                { label: 'PASSED', value: 1 },
+                { label: 'FAILED', value: 1 },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  };
+}
+
+/**
+ * The bytes of the requested format.
+ *
+ * HTML is a whole document rather than a fragment, because that is what the format IS (§88): one
+ * self-contained file with no network dependency. A mock serving a snippet would make a download
+ * look like it worked while producing something no browser opens as a report.
+ */
+function rendered(job: MockJob) {
+  if (job.format === 'HTML') {
+    return [
+      '<!DOCTYPE html>',
+      '<html lang="en">',
+      '<head><meta charset="utf-8"><title>Run summary — TR-1</title></head>',
+      '<body><h1>Run summary — TR-1</h1>',
+      `<p>Generated in mock mode for job ${job.jobId}.</p>`,
+      '</body>',
+      '</html>',
+      '',
+    ].join('\n');
+  }
+  return `# Run summary\n\nGenerated in mock mode for job ${job.jobId}.\n`;
 }
 
 /** The job an artifact belongs to — the server proves the project through this row, so this does. */
@@ -216,17 +298,17 @@ export const reportingHandlers = [
 
       await delay(LATENCY);
       const isModel = job.modelArtifactId === artifactId && job.artifactId !== artifactId;
-      const body = isModel
-        ? JSON.stringify({ title: 'Run summary', sections: [] }, null, 2)
-        : `# Run summary\n\nGenerated in mock mode for job ${job.jobId}.\n`;
+      const format = isModel ? 'JSON' : job.format;
+      const media = MEDIA[format] ?? MEDIA.MD;
+      const body = isModel ? JSON.stringify(mockModel(job), null, 2) : rendered(job);
 
       return new HttpResponse(body, {
         status: 200,
         headers: {
-          'Content-Type': isModel ? 'application/json' : 'text/markdown; charset=utf-8',
+          'Content-Type': media.type,
           // `attachment`, as the server serves it: a report is a file somebody keeps, where
           // evidence is `inline` so a screenshot renders beside the step it failed on.
-          'Content-Disposition': `attachment; filename="${job.type}-${artifactId}.${isModel ? 'json' : 'md'}"`,
+          'Content-Disposition': `attachment; filename="${job.type}-${artifactId}.${media.extension}"`,
         },
       });
     },

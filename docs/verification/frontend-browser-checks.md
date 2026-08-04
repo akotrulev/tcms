@@ -818,3 +818,20 @@ project id from the URL.
 | 6 | **Live.** Sign in as a persona holding `report:view` and **not** `report:export` (needs a grant edit — no built-in role has that shape), and `POST …/reports/generate`. | **403 with a problem body**, and a poll of an existing job **200**. **Unobservable in mock mode**, which signs in as one persona holding every key — the backend asserts this with two custom fixture roles (§87 phase 6) and the browser is where a client would meet it. | **live only** |
 | 7 | **Live.** The same persona follows a completed job's `downloadUrl`. | **403 with an empty body** — deliberately bodiless, unlike the other two refusals, because the response is typed to a binary resource and a JSON problem document under a status the client can already read tells it nothing. Worth seeing in a browser: confirm it does not render as a corrupted download. | **live only** |
 | 8 | **Live.** As a Test Lead, follow `downloadUrl` in the address bar. | The file **downloads** rather than rendering — `Content-Disposition: attachment`, named `run_summary-{artifactId}.md`. Evidence is served `inline` (a screenshot is shown beside the step it failed on); a report is a file somebody keeps. | **live only** |
+
+---
+
+## §88 — the report header and the HTML renderer (R4)
+
+Still no screen: F1 and F2 are later slices, so these are console-driven for §87's reason. What R4
+changed on this side is the **shape of the stored model** (`{ header, report }`) and the fact that
+`format: 'HTML'` is now a 202 rather than a 400 — both of which F2 and F1 will be built against, so
+they are worth seeing before the screens exist rather than inherited.
+
+| # | Drive | Expect | Mode |
+|---|---|---|---|
+| 9 | **Mock.** Generate with `format: 'HTML'`, poll to `COMPLETED`, then open `downloadUrl` in a tab. | **202** (not the 400 it was before R4 — the mock's `FORMATS` registry moved with the server's), and a page that renders as a **document**: a `<title>`, an `<h1>`, no broken frame. The mock serves a whole self-contained file rather than a fragment on purpose; a snippet would make the download look like it worked while producing something no browser opens as a report. | mock |
+| 10 | **Mock.** On the same job, `await (await fetch(modelUrl)).json()`. | `{ header, report }` — **both keys**. `header` carries `reportType`, `description`, `company`, `projectScope`, `scopeNote`, `generatedBy`, `generatedAt` and a `selection` array; `report` carries `title`, `metadata`, `sections`. A bare `{ title, sections }` here is the shape F2 would be built against and the server does not serve it — §81's and §87's finding, one slice apart. | mock |
+| 11 | **Live.** As a Test Lead, generate `format: 'HTML'` for a real run, wait for the tick, and open `downloadUrl`. | A rendered report with the **provenance block at the top**: company, project scope, the §390 scope sentence, who generated it, when, and `Selection — runId`. Then **turn the network off and reload the saved file** — it must render identically. That is the check §6e asks for: "a self-contained file that needs a CDN to draw its diagrams is not self-contained", and the unit test asserts the absence of URLs while only a browser proves it *looks* like a report without them. | **live only** |
+| 12 | **Live.** In the same document, read the bar chart, then use the browser's **Print preview**. | Bars drawn in CSS with the number printed beside each one, and a print preview where no table row is split across a page boundary (`break-inside: avoid`). This page is what the PDF slice will hand to a headless browser, so the print view is the deliverable's dry run — and the number beside each bar is what survives a mail client that strips the stylesheet. | **live only** |
+| 13 | **Live.** Name a project (or a run) with `<img src=x onerror=alert(1)>` in it, generate an HTML report, and open the file. | The text appears **as text**, no alert, no broken layout. Every value in a report is user-controlled; the renderer's escaping is asserted by a counted unit test, and this is the one place the claim is checked against a real browser's parser rather than against a string assertion. | **live only** |

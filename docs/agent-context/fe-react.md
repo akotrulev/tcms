@@ -306,9 +306,14 @@ subject is not a project does not live under one.
 ## Known unknowns
 
 - E2E / page objects are the `qa-ui-typescript` peer's; none exist here.
-- **`/reports` is the only dead contract left** — no hook at all, and it belongs to **M2.5**
-  (`ExecutionFact`, `ReportModel`, renderers, a job pipeline), so it is a milestone rather than a
-  slice. §64 built the step library and gave `useSharedSteps` its first caller.
+- **`/reports` is the only dead contract left on this side** — still **no hook and no screen**, but
+  the backend half is live (§87 the pipeline, §88 the HTML renderer + header) and
+  `mocks/handlers/reporting.ts` now implements all four operations statefully: jobs advance
+  **one state per poll** (PENDING → RUNNING → COMPLETED, so the client's loading states are
+  reachable in dev), `TYPES`/`FORMATS`/`MEDIA` are registries the refusals read rather than literals,
+  and the model artifact answers **`{ header, report }`** — the shape F2 must render rather than
+  compose. F1 (the Reports screen) and F2 (the on-screen view) are the outstanding slices and are
+  unblocked in full.
 - Lighthouse / Core-Web-Vitals never measured (handoff §5); `CaseListPage` is over its route budget
   with the reasoning recorded in `vite.config.ts`.
 

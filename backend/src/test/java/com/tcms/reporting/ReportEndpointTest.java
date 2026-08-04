@@ -447,6 +447,24 @@ class ReportEndpointTest extends IntegrationTestBase {
         }
 
         @Test
+        @DisplayName("HTML is served as HTML, named .html — the media type is the renderer's")
+        void anHtmlArtifactIsServedAsHtml() throws Exception {
+            // The one assertion that proves R4's renderer is reachable through the whole product
+            // rather than only from a unit test: nothing in the controller, the service or the
+            // validation was edited to admit HTML — a bean was added and the two registries
+            // answered differently. A media type or an extension hard-coded anywhere in that path
+            // would surface here as a .md called text/markdown holding a web page.
+            MvcResult result = download(LEAD, PROJECT, artifactOfACompletedJob(PROJECT, "HTML"));
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(200);
+            assertThat(result.getResponse().getContentType()).startsWith("text/html");
+            assertThat(result.getResponse().getHeader("Content-Disposition")).endsWith(".html\"");
+            assertThat(result.getResponse().getContentAsString())
+                    .startsWith("<!DOCTYPE html>")
+                    .contains("<h1>Run summary");
+        }
+
+        @Test
         @DisplayName("report:view is not enough — the screen-only role gets 403 with no body")
         void viewDoesNotDownload() throws Exception {
             UUID artifactId = artifactOfACompletedJob(PROJECT);
@@ -536,7 +554,11 @@ class ReportEndpointTest extends IntegrationTestBase {
 
     /** An accepted request, returning the job id the client would poll. */
     private UUID requestAs(UUID userId, UUID projectId) throws Exception {
-        String requestBody = "{\"type\":\"" + RUN_SUMMARY + "\",\"format\":\"MD\","
+        return requestAs(userId, projectId, "MD");
+    }
+
+    private UUID requestAs(UUID userId, UUID projectId, String format) throws Exception {
+        String requestBody = "{\"type\":\"" + RUN_SUMMARY + "\",\"format\":\"" + format + "\","
                 + "\"parameters\":{\"runId\":\"" + (projectId.equals(SIBLING) ? SIBLING_RUN : RUN)
                 + "\"}}";
 
@@ -550,7 +572,11 @@ class ReportEndpointTest extends IntegrationTestBase {
 
     /** Requests a report, runs the worker, and returns the id in the job's {@code downloadUrl}. */
     private UUID artifactOfACompletedJob(UUID projectId) throws Exception {
-        UUID jobId = requestAs(LEAD, projectId);
+        return artifactOfACompletedJob(projectId, "MD");
+    }
+
+    private UUID artifactOfACompletedJob(UUID projectId, String format) throws Exception {
+        UUID jobId = requestAs(LEAD, projectId, format);
         runWorker();
 
         JsonNode job = parse(poll(LEAD, projectId, jobId));

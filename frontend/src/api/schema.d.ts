@@ -5824,6 +5824,13 @@ export interface components {
              *     computations that can disagree (plan §6e: "the on-screen report view consumes the same
              *     model via JSON, so what you see is what exports"). When `format` is itself JSON both
              *     fields point at the same artifact.
+             *
+             *     **Shape (§88):** `{ header, report }`. `header` is the provenance block §6e makes
+             *     mandatory — report type, company, project scope and what that scope means for the
+             *     numbers, who generated it, when, and the complete selection as it was sent. `report` is
+             *     `{ title, metadata, sections }`. The on-screen view must render the header it finds here
+             *     rather than assembling one from the job row: two assemblies of one header is the drift
+             *     the single-model design exists to prevent.
              */
             modelUrl: string | null;
             /**
@@ -7022,8 +7029,10 @@ export interface operations {
                      *     request time rather than a job that goes FAILED an hour later, because a client
                      *     cannot tell an unsupported format from a broken server by watching a job die.
                      *
-                     *     Today only `MD` renders. `PDF` needs a headless browser that is not in the
-                     *     image and says so in the refusal; `HTML` is a later slice. The enum is *not*
+                     *     Today `MD` and `HTML` render (§88). `HTML` is one self-contained file — no CDN,
+                     *     no script, charts drawn in CSS — because the reader is often a client opening an
+                     *     attachment with no network. `PDF` needs a headless browser that is not in the
+                     *     image and says so in the refusal. The enum is *not*
                      *     narrowed to what is installed: what a deployment can render is a property of
                      *     that deployment, and the refusal names it.
                      * @enum {string}

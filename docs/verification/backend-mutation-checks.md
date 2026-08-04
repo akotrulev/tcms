@@ -1330,3 +1330,70 @@ the two keys are distinguishable: *Report Reader* holds `report:view` and not `r
 | **Check** | `V27`, the policy count, the module declaration, and the next free number |
 | **Mutation** | — |
 | **Must show** | **`V27__report_job.sql` is the head migration, `SchemaConventionTest`'s policy count is 59** (`SchemaConventionTest.java:262`), **`V28` is the next free number**, and `reporting/package-info.java` declares **`{"tenancy", "project", "identity"}`** — widened from §86's `{"tenancy"}` alone, with the package comment and `ModuleStructureTest`'s `@DisplayName` rationale moved in the same commit, because prose does not fail `-Werror`. `ModuleStructureTest` still names **ten** modules. If the policy count did not move with `V27`, the predicate assertion is passing on 58 of 59 tables and the new one is unchecked. |
+
+---
+
+## §88 — the report header and the HTML renderer (R4)
+
+| | |
+|---|---|
+| **File** | `reporting/HtmlReportRenderer.java`, `text(String)` |
+| **Mutation** | return `value` unchanged (escape nothing) |
+| **Scope** | `--tests 'com.tcms.reporting.ReportRenderingTest$Html'` |
+| **Must redden** | **exactly 1** — *nothing in the model can reach the output as markup*. One is the right number and the count inside it is what carries the weight: the assertion is that the hostile string appears escaped **19 times**, one per interpolation, so an escaper applied to some positions and not others reddens it too. This is the file's whole correctness surface — every value in a report is user-controlled. |
+| **Second half** | escape only in `text` but bypass it for **one** position (e.g. append `section.heading()` raw). Must redden the **same single test**, on the count rather than on the two `doesNotContain` assertions — which is the reason the count is there. |
+
+| | |
+|---|---|
+| **File** | `reporting/HtmlReportRenderer.java`, `chart` |
+| **Mutation** | drop the `max <= 0` guard and always divide |
+| **Scope** | `--tests 'com.tcms.reporting.ReportRenderingTest$Html'` |
+| **Must redden** | **exactly 1** — *an all-zero series draws no bar rather than a full one*. `0/0` is `NaN`, and `width: NaN%` is rendered by most browsers as a **full** bar: a chart saying everything happened on a report where nothing did, which no reader would question. |
+
+| | |
+|---|---|
+| **File** | `reporting/ReportDocument.java`, `headerBlock()` |
+| **Mutation** | drop the `"Selection — "` prefix and add the selection entries flat |
+| **Scope** | `--tests 'com.tcms.reporting.ReportRenderingTest$Header'` |
+| **Must redden** | **exactly 2** — *a caller's own parameter name cannot displace a provenance line* and *the block is provenance, then selection, then the report's own metadata*. A parameter is named by the client and could be called `Company`; merged flat, that row reads as the header's own and the document lies about itself. |
+
+| | |
+|---|---|
+| **File** | `reporting/ReportDocument.java`, `headerBlock()` |
+| **Mutation** | drop `report.metadata()` from the block |
+| **Scope** | `--tests 'com.tcms.reporting.ReportRenderingTest'` (the whole class) |
+| **Must redden** | **exactly 2** — *the block is provenance, then selection, then the report's own metadata* and Markdown's *headings, metadata and a narrative-only section all render*. This is the assertion that the **aggregation policy** reaches the output at all: it is deliberately not a header field (only the report can answer it), so the metadata being part of the header block is the whole of §6e's "the policy is printed" requirement. |
+
+| | |
+|---|---|
+| **File** | `reporting/ReportHeaders.java`, `requesterName` |
+| **Mutation** | return the raw `requestedBy` uuid instead of resolving through `PeopleDirectory` |
+| **Scope** | `--tests 'com.tcms.reporting.ReportJobPipelineTest$Pipeline'` |
+| **Must redden** | **exactly 1** — *the artifact carries the header §6e makes mandatory, filled from the job*. The same test's `doesNotContain("Lead Canonical")` is the other half and reddens under a different mutation: resolve through the **account's** canonical name rather than the company membership's (§6u's rule), which is the substitution that renders the name a colleague uses with a *different client* onto this client's report. |
+
+| | |
+|---|---|
+| **File** | `reporting/ReportHeaders.java`, `selection` |
+| **Mutation** | build the selection from what the computation read (e.g. only `runId` when the report asked for it) rather than from the stored node — or simpler, return `List.of()` unconditionally |
+| **Scope** | `--tests 'com.tcms.reporting.ReportJobPipelineTest$Pipeline'` and `--tests 'com.tcms.reporting.ReportRenderingTest$Header'` |
+| **Must redden** | **exactly 2**. The defect it stands for is not reachable from the fixture and must be read rather than measured: a report **ignores parameters it does not know**, so a header assembled from what was *used* silently drops the filter the reader believes narrowed the numbers. `run_summary` takes one parameter and uses it, so no fixture today can distinguish the two — which is why the argument is in the code and this row says so. |
+
+| | |
+|---|---|
+| **File** | `reporting/HtmlReportRenderer.java` |
+| **Mutation** | replace the inline `<style>` with `<link rel="stylesheet" href="https://cdn.example/report.css">` |
+| **Scope** | `--tests 'com.tcms.reporting.ReportRenderingTest$Html'` |
+| **Must redden** | **exactly 1** — *the file needs no network to render*. §6e: "a self-contained file that needs a CDN to draw its diagrams is not self-contained." The reader is a client opening an attachment months later, and this document is also what the PDF slice will hand to a browser, where an asset that fails to load is a blank rectangle in a deliverable. |
+
+| | |
+|---|---|
+| **File** | `reporting/HtmlReportRenderer.java` |
+| **Mutation** | delete the class (or its `@Component`) |
+| **Scope** | `--tests 'com.tcms.reporting.ReportEndpointTest$Downloading'` and `--tests 'com.tcms.reporting.ReportRenderingTest$Registries'` |
+| **Must redden** | **exactly 2** — *HTML is served as HTML, named .html* (a 400 at request time instead of a download) and *MD, HTML and JSON are supported*. The pair is what proves the format became requestable **because a bean exists** and not because a list was edited: nothing in the controller, the service or the validation was touched by R4. |
+
+| | |
+|---|---|
+| **Check** | the migration head and the module declaration are UNCHANGED |
+| **Mutation** | — |
+| **Must show** | **`V27__report_job.sql` is still the head** and `V28` still free (R4 adds no migration), the policy count is still **59**, and `reporting/package-info.java` still declares `{"tenancy", "project", "identity"}` — R4 reads `CompanyRepository` (tenancy), `ProjectRepository` and `PeopleDirectory` (project), all inside the bound §87 widened it to. If any of those moved, something in this slice needed a dependency it should have argued for. |
