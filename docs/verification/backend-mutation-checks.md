@@ -1498,3 +1498,79 @@ warned about: a check nothing can observe until a deployment misbehaves.
 | **Mutation** | pass `job.data?.downloadUrl` instead of `job.data?.modelUrl` |
 | **Scope** | `src/features/reports/ReportViewPage.test.tsx` |
 | **Must redden** | **exactly 1** — *renders the stored model, fetched from the URL the server composed*, on the URL assertion rather than on the rendering. In **mock mode this mutation is nearly invisible**: both URLs resolve, and the download artifact would be parsed as JSON and fail — the failure would read as a broken report rather than as the wrong file being asked for. That gap is why the assertion is on the URL and not on what came back. |
+
+---
+
+## §92 — saved report definitions get a server (R5)
+
+Ten rows. The first three are the ones to run first: they are the slice's access rule, and two of
+them stand for defects that pass every *other* assertion in the class.
+
+| | |
+|---|---|
+| **File** | `reporting/ReportDefinitionRepository.java` |
+| **Mutation** | add `findByProjectIdOrderByCreatedAtDesc` (no owner) and call it from `ReportDefinitionService#list` |
+| **Scope** | `--tests 'com.tcms.reporting.ReportEndpointTest$Definitions'` |
+| **Must redden** | **exactly 1** — *the list is the CALLER's, not the project's*. One is the right number and the fixture is what makes it possible: with only one person ever saving anything, "bounded by the caller" and "everything in the project" answer identically and this mutation reddens **nothing**. The test saves as two people and asserts two **exact** lists, because the defect is an extra row and every `contains` passes with one. |
+
+| | |
+|---|---|
+| **File** | `reporting/ReportDefinitionService.java`, `delete` |
+| **Mutation** | look the row up by id and project only, dropping `userId` |
+| **Scope** | `--tests 'com.tcms.reporting.ReportEndpointTest$Definitions'` |
+| **Must redden** | **exactly 1** — *somebody else's definition is 404, and survives the attempt*. This is the write half of the same rule: a caller who cannot list a row must not be able to delete it, and the second assertion (it is still in the owner's list) is what stops the test passing on a 404 that deleted the row anyway. |
+
+| | |
+|---|---|
+| **File** | `reporting/ReportDefinitionService.java` |
+| **Mutation** | change `VIEW_REPORT` to `"report:export"` |
+| **Scope** | `--tests 'com.tcms.reporting.ReportEndpointTest$Definitions'` |
+| **Must redden** | **exactly 1** — *report:view is enough to SAVE*. The whole point of the key decision, and only §87's custom roles make it observable: every built-in but Automation Service holds both keys, so against the six shipped personas this mutation reddens **zero**. |
+
+| | |
+|---|---|
+| **File** | `reporting/ReportParameters.java`, `merge` |
+| **Mutation** | return the override alone (`parse(override).node().toString()`) |
+| **Scope** | `--tests 'com.tcms.reporting.ReportEndpointTest$Regenerating'` |
+| **Must redden** | **exactly 1** — *the request overrides the definition key by key, and keeps the rest*, on the `runId` assertion. The defect it stands for is the expensive one: a report computed over **everything** while the client believes it named a run, which renders as a perfectly good report with the wrong denominator. |
+
+| | |
+|---|---|
+| **File** | `reporting/ReportParameters.java`, `merge` |
+| **Mutation** | return the **base** alone, ignoring the override |
+| **Scope** | `--tests 'com.tcms.reporting.ReportEndpointTest$Regenerating'` |
+| **Must redden** | **exactly 1** — the same test, on the `note` assertion. The pair is what makes the merge test non-vacuous in both directions: one assertion alone passes under one of the two mutations. |
+
+| | |
+|---|---|
+| **File** | `reporting/ReportJobService.java`, `validate` |
+| **Mutation** | drop the contradictory-type branch (accept the request and let `resolve` pick the definition's type) |
+| **Scope** | `--tests 'com.tcms.reporting.ReportEndpointTest$Regenerating'` |
+| **Must redden** | **exactly 1** — *a type that contradicts the saved one is refused rather than resolved*. Worth running because the mutated code is **not obviously wrong**: it generates the saved report, which is defensible right up to the moment a client holding a stale definition gets a report of something it did not ask for. |
+
+| | |
+|---|---|
+| **File** | `reporting/ReportJobService.java`, `accept` |
+| **Mutation** | resolve the definition with `definitions.findById(definitionId)` |
+| **Scope** | `--tests 'com.tcms.reporting.ReportEndpointTest$Regenerating'` |
+| **Must redden** | **exactly 2** — *somebody else's definition is a field error* and *a definition of a sibling project is refused through this project's path*. The second is the one that matters: the gate passed, for a project the definition does not belong to, which is the version of this defect that survives an access-control test. (The mutation needs a `findById` to exist — the repository deliberately has none, which is the finding this row stands for.) |
+
+| | |
+|---|---|
+| **File** | `backend/src/main/resources/db/migration/V28__report_artifact_definition_on_delete.sql` |
+| **Mutation** | delete the file (restore V1's `NO ACTION` foreign key) |
+| **Scope** | `--tests 'com.tcms.reporting.ReportEndpointTest$Regenerating'` |
+| **Must redden** | **exactly 1** — *deleting the definition leaves the artifact it produced*, as a **500 rather than an assertion failure**: the delete raises a foreign-key violation from inside the transaction. This is the row that proves the migration was necessary rather than tidy, and it is only reachable because §92 phase 2 made a job carry a definition at all. Note the test asserts the artifact carries the definition **before** the delete, so a green run cannot mean "nothing referenced it". |
+
+| | |
+|---|---|
+| **File** | `reporting/ReportDefinitionService.java`, `validate` |
+| **Mutation** | drop the `types.refusal(...)` call |
+| **Scope** | `--tests 'com.tcms.reporting.ReportEndpointTest$Definitions'` |
+| **Must redden** | **exactly 1** — *an unknown type and a blank name are both field errors, in one answer*. A saved report for a type nothing can compute is a button that fails every time it is pressed, and it fails at the moment it is **used**. |
+
+| | |
+|---|---|
+| **Check** | the policy count and the module declaration are UNCHANGED |
+| **Mutation** | — |
+| **Must show** | `SchemaConventionTest` still asserts **59** policies (V28 adds no table), `V28__report_artifact_definition_on_delete.sql` is the head with `V29` free, and `reporting/package-info.java` still declares `{"tenancy", "project", "identity"}` — R5 reads `PeopleDirectory` and `ProjectService` (project) and nothing new. If any moved, this slice needed a dependency it did not argue for. |

@@ -422,7 +422,7 @@ class ReportJobPipelineTest extends IntegrationTestBase {
         // request-time refusals, so an unrenderable format and an unspellable one are worded once.
         // These call sites keep the enum because they are all asking for a format that exists.
         // definitionId null: every request in this class is ad-hoc. Regenerating a saved one is
-        // ReportEndpointTest.Regenerating's subject, because what §91 added is decided before the
+        // ReportEndpointTest.Regenerating's subject, because what §92 added is decided before the
         // pipeline this class drives ever sees the job.
         return readIn(companyOf(projectId),
                 () -> requests.request(userId, projectId, null, type,

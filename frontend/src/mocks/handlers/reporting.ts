@@ -73,7 +73,7 @@ const MEDIA: Record<string, { type: string; extension: string }> = {
 const jobs = new Map<string, MockJob>();
 
 /**
- * A saved report — `report_definition`, and §91's writer for it.
+ * A saved report — `report_definition`, and §92's writer for it.
  *
  * Owner-scoped on the server: a definition belongs to the person who saved it and nobody else can
  * list, run or delete it. **Mock mode cannot show that**, because it signs in as one persona — so
@@ -292,7 +292,7 @@ export const reportingHandlers = [
     const projectId = String(params.projectId);
     if (!db.projects.some((p) => p.id === projectId)) return notFound('That project');
     // report:view, not report:export — saving is not carrying off, and the persona that may read a
-    // report on screen must be able to save the selection it reads (§91).
+    // report on screen must be able to save the selection it reads (§92).
     if (!holdsOn(projectId, 'report:view')) return forbiddenToView();
 
     const body = (await request.json()) as {
@@ -367,7 +367,7 @@ export const reportingHandlers = [
     };
     const errors: Record<string, string[]> = {};
 
-    // A named definition supplies the type and the base for the parameters (§91). Resolved before
+    // A named definition supplies the type and the base for the parameters (§92). Resolved before
     // the type is checked, because with one the type is the definition's and an absent `type` is no
     // longer a mistake.
     const saved = body.definitionId ? definitions.get(body.definitionId) : undefined;

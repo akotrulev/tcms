@@ -55,7 +55,7 @@ import org.springframework.transaction.annotation.Transactional;
  * <em>before</em> any permission is consulted and a 403 never tells a caller that a project they
  * cannot see exists (§6t).
  *
- * <h2>A saved definition is read here and never trusted as an authorization (§91)</h2>
+ * <h2>A saved definition is read here and never trusted as an authorization (§92)</h2>
  *
  * <p>{@code definitionId} names a row this caller owns in this project — the repository has no
  * method that could find any other kind — so regenerating a saved report needs the same
@@ -132,7 +132,7 @@ public class ReportJobService {
      *     format at all and one this deployment cannot render are the same mistake from the caller's
      *     side, and answering them in two places is how they end up worded two ways — one of them by
      *     Jackson, about deserialization, to a person who asked for a PDF.
-     * @param definitionId a saved report to regenerate (§91), or null for an ad-hoc request. It
+     * @param definitionId a saved report to regenerate (§92), or null for an ad-hoc request. It
      *     supplies the type and the <em>base</em> for the parameters; see {@link #resolve}.
      * @param parameters the raw JSON body of {@code parameters}. Stored verbatim for an ad-hoc
      *     request and as the <em>merge</em> when a definition was named — what has to be
@@ -190,7 +190,7 @@ public class ReportJobService {
         ReportJob job = ReportJob.request(
                 companyId,
                 project.getId(),
-                // Null for an ad-hoc request, which every job was before §91. The column is
+                // Null for an ad-hoc request, which every job was before §92. The column is
                 // nullable for exactly this.
                 definitionId,
                 resolved.type(),
@@ -277,7 +277,7 @@ public class ReportJobService {
                 types.refusal(saved).ifPresent(message -> errors.put("type", List.of(message)));
             }
         } else {
-            // The same refusal the save endpoint makes, in one place since §91 — see ReportTypes.
+            // The same refusal the save endpoint makes, in one place since §92 — see ReportTypes.
             types.refusal(type).ifPresent(message -> errors.put("type", List.of(message)));
         }
 

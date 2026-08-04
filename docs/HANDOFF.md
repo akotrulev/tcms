@@ -1,6 +1,60 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-04 (latest section: **§90, the on-screen report view** — F2 of the M2.5 plan,
+**Date:** 2026-08-04 (latest section: **§92, saved report definitions** — R5 of the M2.5 plan,
+**three phases, three commits**, and the slice that gives `report_definition` — a `V1` table — its
+first writer, serves the `GET` declared and unimplemented since M0, and makes a saved report
+*runnable*. **`V28`** (the plan said R5 needs no migration; it does — see below), contract **+2
+operations** and a changed generate body, **no new key**, **no new table**, policy count unchanged at
+**59**, `V29` next free. **IT IS §92 AND ITS FIRST TWO COMMITS SAY §91**: a concurrent strand claimed
+that number mid-slice and rewriting two published commits with another session live in the same tree
+is the operation the parallel-execution rework §0 blames for three silent losses of work — the § is
+not reserved until the handoff file exists, which is §10's lesson paid again. **THE FINDING IS THAT
+THE ROW IS ONE PERSON'S AND EVERY QUERY HAS TO SAY SO.** `V1` gave the table `owner_id` *and*
+`shared_with_team_id`, and those only make sense together: a definition readable by the whole project
+makes sharing it with a team meaningless. So sharing stays unmapped — it is the one part of this
+surface wanting a key the catalogue does not have (§67/§79/§80/§82) — v1 ships **owner-only**
+definitions, and the contract now states the consequence outright: **two people asking for the same
+project's saved reports receive different lists** (§84's sentence from a different direction). It is
+enforced by a repository that has **no method able to find a definition the caller does not own** —
+not `findById`, not `findByIdAndProjectId` — because resolve-then-check-the-owner is the shape that
+passes an access-control test one call site over. Hence **somebody else's definition is a 404 and
+never a 403** on the delete (§6t at row level) and a **400 field error** on generate, where the id is
+data in a body rather than the thing being addressed. **`report:view` FOR ALL THREE, INCLUDING THE
+TWO WRITES**: the row is its creator's, so saving writes to the caller's own workspace and not to
+project content — and requiring `report:export` would mean the persona §6e's split exists for, *may
+read on screen, may not carry off*, could not **save the selection it is allowed to read**. That
+persona is §87's custom test role, created because **no built-in lacks either key**, and this slice's
+gates are non-vacuous only because it exists: saving is allowed and running is refused, same person,
+same project. **THE MIGRATION THE PLAN SAID THIS SLICE WOULD NOT NEED**, found by reading two foreign
+keys rather than by running the delete: `report_job.definition_id` is `V27`'s `ON DELETE SET NULL`
+under a comment saying deleting a saved report must not delete the history of what it produced, while
+`report_artifact.definition_id` is `V1`'s with the default `NO ACTION` — and the runner copies the
+job's definition onto **every artifact it writes**, so from phase 2 onward deleting a *used*
+definition is a foreign-key violation surfacing as a **500 on a route whose contract says 204**, only
+ever for the definitions somebody actually used. `V28` puts the rule where its sibling already keeps
+it; the test asserts the artifact carries the definition **before** the delete, so a green run cannot
+mean "nothing referenced it". **THE MERGE IS SHALLOW AND THAT IS THE DECISION**: `parameters` is
+untyped by design, so nothing tells a deep merge whether a nested object is a set of filters to
+combine or one value to replace — and half-overriding a saved selection is invisible in the output,
+where the report renders and the numbers are wrong. The **merged** result is what the job stores and
+what `filter_snapshot` freezes, because what must be reproducible is what the report was computed
+over and not what the caller typed. A `type` **contradicting** the definition is refused rather than
+resolved (a stale client would otherwise get a perfect report of the wrong thing) while an absent one
+is no longer a mistake, so `required` drops to `[format]` with the rule in prose. The definition's
+type is re-checked **at generate time too** — a definition outlives its release, and a retired report
+would otherwise die in the worker with the registry's internal sentence — while `parameters` are
+deliberately **not** validated at save time, since a parameter that becomes required later would make
+an existing saved report unsaveable. `ReportTypes` is the one refusal for "this server has no report
+called that", extracted because save and generate now both make it. Gate: **1641 then 1649 tests
+across 322 classes, 0 failures** (1628 → 1641 → 1649); **all 21 new tests passed first run**, stated
+plainly. **The frontend gate is RED on `AppShell.test.tsx`, an untracked file of the concurrent
+strand** — two unused-variable errors, nothing in a file this slice touches, lint 0. **Found and not
+fixed**: §90's `report:export`-to-read-on-screen finding (the persona that may now save a report
+still cannot read one), `EvidencePanel`'s anchor, the missing job list, `schedule_cron` still written
+by nothing, and §86/§87's three open rows. **Zero mutations run inline**; **10 backend rows and 5
+browser rows (40–44)** queued, two of them live-only because mock mode has one persona and therefore
+cannot show an owner bound at all. **Built and unverified.**
+Before that: **§90, the on-screen report view** — F2 of the M2.5 plan,
 **three phases, three commits**, and the clause §6e states in one line: *"the on-screen report view
 consumes the same model via JSON, so what you see is what exports."* **No migration (`V27` still
 head, `V28` still free), no contract change, no `gen:api`, no new permission key, no backend file
@@ -1487,3 +1541,5 @@ See [`docs/plans/2026-07-31-parallel-execution-rework.md`](plans/2026-07-31-para
 | [§88](handoff/88-the-html-renderer-and-the-report-header.md) | The HTML renderer and the report header — the block a renderer cannot strip, and the template engine that was not taken |
 | [§89](handoff/89-the-reports-screen.md) | The Reports screen — the download an anchor cannot make, and the job list the server cannot give it |
 | [§90](handoff/90-the-on-screen-report-view.md) | The on-screen report view — the model with no generated type, and the permission that reads a report |
+| [§91](handoff/91-the-way-back-to-the-picker.md) | The way back to the picker — a screen every session starts on that no screen linked to, and the rail that collapses |
+| [§92](handoff/92-saved-report-definitions.md) | Saved report definitions — the row that is one person's, and the delete a foreign key would have refused |

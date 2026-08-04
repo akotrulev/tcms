@@ -3,11 +3,11 @@
 # be-java — orientation cache (TCMS)
 
 **Last verified:** 2026-08-04
-**Baseline commit:** `2ad94f7` (§88 phase 2) **+ §88 phase 3, the commit this line ships in** (its own SHA cannot be
-written into itself; per `CLAUDE.md`, trust the body over the header and re-grep what a later commit
-could have moved). §86 created the `reporting` module; the planning pass that preceded it read the
-migration folder, the module tree, `V1`'s reporting section, `V3`'s report grants, `openapi.yaml`'s
-`reporting` tag and the `execution_fact` column sources — see the Known-unknowns entry on `/reports`)
+**Baseline commit:** `cf60cbd` (§92 phase 2) **+ §92 phase 3, the commit this line ships in** (its own SHA
+cannot be written into itself; per `CLAUDE.md`, trust the body over the header and re-grep what a
+later commit could have moved). A **concurrent strand** is live in this tree as of 2026-08-04 22:30
+(the nav rail, §91, plus doc-page subjects in `openapi.yaml`) — its files are uncommitted, so a delta
+pass will see frontend paths this cache does not map.
 **Fingerprint files:** `backend/build.gradle.kts`, `backend/gradle/libs.versions.toml`, `backend/gradle/wrapper/gradle-wrapper.properties`
 
 > Authoritative docs win over this file. `CLAUDE.md`, `docs/HANDOFF.md` (an index — sections live in
@@ -55,8 +55,22 @@ exist**, and the slice plan's decision E declines to create it for two storage p
 
 ## Seams to reuse
 
+- **SAVED REPORT DEFINITIONS SINCE §92 (R5).** `ReportDefinitionRepository` +
+  `ReportDefinitionService`/`ReportDefinitionController`/`ReportDefinitionView` + `ReportTypes`,
+  and `ReportDefinition` gained a `create` factory. **`V28__report_artifact_definition_on_delete.sql`
+  is the head migration, `V29` next free**; policy count unchanged at **59** (no new table).
+  **Owner-only rows, and the repository is the enforcement**: it has *no* method able to find a
+  definition the caller does not own (no `findById`, no `findByIdAndProjectId`), because
+  resolve-then-check-the-owner is the shape that passes an access-control test one call site over.
+  Somebody else's definition ⇒ **404** on the delete, **400 field error** on generate. All three
+  operations cost **`report:view`** — including the two writes, because the row is the caller's own
+  workspace and `report:export` would stop §6e's read-on-screen persona saving its own selection.
+  `definitionId` on generate supplies the **type** and the **base** for `parameters`;
+  `ReportParameters.merge` is **shallow** and the merged result is what the job stores.
+  `ReportTypes` is the single "this server has no report called that" refusal, shared by save and
+  generate.
 - **THE REPORT PIPELINE IS END TO END SINCE §87 (R3).** `V27__report_job.sql` (policy count
-  **58 → 59**, head migration, `V28` next free) + `ReportJob`/`ReportArtifact`/`ReportDefinition` +
+  **58 → 59**, ~~head migration, `V28` next free~~ → **`V28` is the head since §92**) + `ReportJob`/`ReportArtifact`/`ReportDefinition` +
   `ReportJobRepository`/`ReportArtifactRepository` + `ReportStore`/`FilesystemReportStore` +
   `ReportModel` + `MarkdownReportRenderer`/`JsonReportRenderer` + `ReportRenderers`/`ReportComputations`
   + `RunSummaryReport` + `ReportJobService`/`ReportJobRunner`/`ReportJobScheduler`/`ReportReadService`
@@ -714,7 +728,9 @@ exist**, and the slice plan's decision E declines to create it for two storage p
      create it for two storage ports and an enum.
   2. **`suite_run_summary`, `plan_snapshot`, `report_definition` and `report_artifact` are in `V1`,
      RLS-forced, and have ZERO code** — no entity, no query, no writer. ~~`execution_fact` too~~ →
-     **it got its first writer in §86**; the other four are untouched. `case_health` is now written
+     **it got its first writer in §86**; ~~the other four are untouched~~ → **`report_artifact` got
+     one in §87 and `report_definition` a full CRUD surface in §92**, so what is left with zero code
+     is **`suite_run_summary` and `plan_snapshot`**. `case_health` is now written
      by **two** modules: `repository` owns `never_executed`/`long_unexecuted` (§53) and `reporting`
      owns `failing_repeatedly` (§86) — **3 of 9 signals**.
   3. **There is NO `report_job` table** — not in `V1`, not in the ERD. `report_artifact.storage_key`
@@ -851,6 +867,19 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   counted test instead) and **no logo** (unmapped columns, no override column — branding is M6).
   **The one test that failed first time was the assertion, not the code.**
   **Zero mutations run inline; 9 backend rows and 5 browser rows queued — built and unverified.**
+- 2026-08-04 · EXTEND · Saved report definitions (§92) — **R5**, three phases, backend
+  1628 → **1649**. New: `V28__report_artifact_definition_on_delete.sql` (**head**, `V29` next free,
+  policy count still 59), `ReportDefinitionRepository`/`Service`/`Controller`/`View`, `ReportTypes`,
+  `ReportDefinition.create`, `definitionId` on `ReportJobService.request` (**signature changed** —
+  `request(userId, projectId, definitionId, type, format, parameters)`), `ReportParameters.merge`,
+  `openapi.yaml` **+2 operations** and a changed generate body (`required` is now `[format]`).
+  **No new permission key, no new table, module declaration unmoved.**
+  **The plan said R5 needs no migration and was wrong**: `report_artifact.definition_id` is a `V1`
+  FK with the default `NO ACTION` while its `report_job` sibling is `ON DELETE SET NULL`, so deleting
+  a *used* definition was a 500 on a route whose contract says 204.
+  **Numbered §92 although its first two commits say §91** — a concurrent strand took the number
+  mid-slice; see `docs/handoff/92-*.md` §0.
+  **Zero mutations run inline; 10 backend rows and 5 browser rows queued — built and unverified.**
 - 2026-08-04 · EXTEND · The report pipeline (§87) — **R3**, seven phases, seven commits, backend
   1553 → **1615**. New: `V27__report_job.sql` (policy count **58 → 59**, head migration, `V28` next
   free), three entities + two repositories, `ReportStore`/`FilesystemReportStore`, `ReportModel` +

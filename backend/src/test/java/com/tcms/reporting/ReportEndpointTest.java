@@ -517,7 +517,7 @@ class ReportEndpointTest extends IntegrationTestBase {
     // ---------------------------------------------------------------- driving
 
     // =====================================================================
-    // GET / POST / DELETE /reports — saved definitions, report:view (§91)
+    // GET / POST / DELETE /reports — saved definitions, report:view (§92)
     // =====================================================================
 
     @Nested

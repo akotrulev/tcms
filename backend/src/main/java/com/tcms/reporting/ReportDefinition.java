@@ -12,7 +12,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 /**
- * A saved report — {@code V1}'s {@code report_definition}, and since §91 (R5) a row somebody can
+ * A saved report — {@code V1}'s {@code report_definition}, and since §92 (R5) a row somebody can
  * create, list and delete.
  *
  * <h2>What a definition is, and what it deliberately is not</h2>

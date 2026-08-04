@@ -887,3 +887,45 @@ glance is the whole of this screen's error design.
 | 31 | **Live.** Sign in as a persona holding `report:view` and **not** `report:export` (a grant edit — no built-in role has that shape). Open a completed job's report view URL. | The job renders (the poll needs only `report:view`), and the report is **refused with the worded 403**: *"You can watch this report being made, but not open it"*, naming `report:export`. **This is the finding, not the expected product behaviour** — §6e's split is "may read on screen, may not carry off", and today the screen costs the export key because the model is served through the download route. Record what it looks like; the fix is the server's. | **live only** |
 | 32 | **Live.** As a Test Lead, generate a report for a real run and open its view. | The header block carries the **real** company, the `KEY — Name` project scope, the §390 scope sentence, the signed-in person's display name and a **UTC-labelled** timestamp — all of them values only a live deployment can produce (the mock's are literals). Compare the `Generated at` against the run's own timestamps for a timezone that reads sensibly. | **live only** |
 | 33 | **Live.** With the report view open, use the browser's **Print preview**, then narrow the window to a phone width. | The tables scroll **inside their own container** rather than making the page scroll sideways (`ScrollX`), and the print view is legible. This screen is not the PDF deliverable — §88's HTML file is — but it is the one a lead will print from a laptop in a release meeting. | **live only** |
+
+---
+
+## §91 — the way back to the picker, and the rail that collapses
+
+**Six rows.** Row 34 is the one the slice exists for and takes four seconds; rows 36–37 are the ones
+worth the time, because they cover the two things a unit test cannot see — what an icon-only rail
+*looks* like when the labels are gone, and whether the collapsed width leaves the content area
+sensible on a real screen rather than in jsdom, which has no layout at all.
+
+Row 38 is the honest one: the rail is the app's most-shared component and it now has two widths, so
+every screen has a second appearance nothing has ever looked at.
+
+| # | Drive | Expect | Mode |
+|---|---|---|---|
+| 34 | **Mock.** Sign in, open a project, navigate two or three screens deep (a case detail). Then click **All projects** in the rail. Then do it again with the **TCMS** wordmark. | Both land on the picker with its cards. Before this slice neither existed and `/` was reachable only by editing the address bar. Confirm **All projects** is marked current there — indicator bar, heavier weight, `aria-current` — and marked on **no other screen**, which is the assertion the unit test pins but cannot show you. | mock |
+| 35 | **Mock.** On the picker, confirm the ordering in the rail's top block. | **My work**, then **All projects**, then the **Project** switcher — the last two adjacent on purpose ("all of them", then "this one"). If the switcher has drifted above them, the rail is telling the reader that switching projects changes what `All projects` shows, which is the §83 misstatement one level out. | mock |
+| 36 | **Mock.** Click the collapse chevron at the bottom of the rail. Then hover each icon in turn, and tab through the whole rail with the keyboard. | The rail narrows to 64px with the content reflowing beside it. Every icon shows a **tooltip on hover with the item's label**, and — the part that matters — the tooltip also appears **on keyboard focus**, not only on hover. The group dividers stand in for the Repository/Execution/Project headings, so four icons do not read as one undifferentiated column. The active item still carries its indicator bar. | mock |
+| 37 | **Mock.** Collapsed, click the project key button where the switcher was. Then reload the page. Then expand again and reload. | The menu lists every project with its key and name, the current one marked selected, and choosing one navigates. **The collapsed state survives the reload both ways** — this is the whole reason it is written to storage, and it is the one behaviour that is invisible in a single session. Confirm the rail does **not** render expanded for a frame and then snap shut (it is read during the initial state, not in an effect). | mock |
+| 38 | **Mock.** Collapsed, walk the app: case list, case detail, plan statistics, board, docs, reports. | **Nothing reflows badly at the wider content area** and no screen assumed a 232px rail. This is the row that justifies the slice's size: the rail is on every screen, so a second width is a second appearance for all of them, and the DataGrid pages are where a width change is most likely to show. | mock |
+| 39 | **Live.** Sign in as a member with **no project grants at all**. | The rail shows **My work** and **All projects** and an **empty** project switcher — not a missing control and not a broken rail. The picker itself says "You don't have access to any project yet". Collapse it: the switcher becomes a folder icon rather than a key, because there is no project to name. **Unobservable in mock mode**, whose fixture user holds everything. | **live only** |
+
+---
+
+## §92 — saved report definitions (R5, backend)
+
+**Five rows, and the numbering skips nothing** — §92's rows follow §91's because a concurrent strand
+took that number while this slice was in flight (see `docs/handoff/92-*.md` §0).
+
+**This slice has no screen.** R5 is a server surface and the Reports page still has a definitions
+panel with no Save control, so rows 40–42 are driven from the **browser console** in mock mode and
+rows 43–44 are live. They are queued rather than optional: the mock now stores definitions and the
+next frontend slice will be built against it, which is exactly the arrangement §81 and §87 both
+found wrong after the fact.
+
+| # | Drive | Expect | Mode |
+|---|---|---|---|
+| 40 | **Mock.** From the console on a project's Reports page: `POST`, then `GET`, then `POST /generate` with only the id and a format. <br>`const p = location.pathname.split('/')[2];`<br>`const h = {'Content-Type':'application/json', Authorization:'Bearer '+JSON.parse(localStorage.getItem('tcms.session')).token};`<br>`const d = await (await fetch(`/api/v1/projects/${p}/reports`,{method:'POST',headers:h,body:JSON.stringify({type:'run_summary',name:'Cycle',parameters:{runId:'<a run id>'}})})).json();`<br>`await (await fetch(`/api/v1/projects/${p}/reports`,{headers:h})).json();`<br>`await (await fetch(`/api/v1/projects/${p}/reports/generate`,{method:'POST',headers:h,body:JSON.stringify({definitionId:d.id,format:'MD'})})).json();` | The save answers **201** with `owner` filled; the list answers an array containing it; the generate answers **202** with `type: "run_summary"` — **without the request naming a type**, which is the whole of "one click". Poll the job to `COMPLETED` and download it: the report must be **of the saved run**, which is the evidence the parameters came from the definition and not from an empty object. | mock |
+| 41 | **Mock.** Repeat the generate with `{definitionId: d.id, format:'MD', parameters:{note:'this run'}}`, then read the job's `parameters` via the model artifact's header. | The header's **Selection** block lists **both** `runId` (from the definition) and `note` (from the request). A selection showing only `note` is the shallow merge having become a replacement — the defect that renders a perfect report over the wrong scope, and the reason it is worth seeing on a rendered document rather than in a JSON blob. | mock |
+| 42 | **Mock.** `DELETE /api/v1/projects/{p}/reports/{d.id}`, then re-poll the job from row 40 and follow its `downloadUrl`. | **204**, the definition is gone from the list, and **the report still downloads**. This is V28's behaviour end to end: deleting a saved report must not delete the history of what it produced. Then re-run the generate with the deleted id — a **400 with a field error on `definitionId`**, not a 404 and not a 500. | mock |
+| 43 | **Live.** As two different people on the same project, each save a definition, then each list. | **Each sees only their own.** This is the slice's access rule and it is **structurally unobservable in mock mode**, which signs in as one persona — so "mine" and "the project's" are the same set there and an implementation that dropped the owner filter would pass every mock check. Then have the second person try `DELETE` on the first's id: **404**, and the row survives. | **live only** |
+| 44 | **Live.** As a persona holding `report:view` and **not** `report:export` (a grant edit — no built-in role has that shape, and it is the role §87 created for the suite), save a definition, list it, delete it. Then try to generate from it. | The three definition operations **succeed** and the generate is **403**. That pair is the key decision made visible: saving a selection is not exporting a report, and the persona §6e's split exists for must be able to keep its selection. Note that this is the same persona row 31 records the on-screen-view finding against — the two rows read together are the whole state of that split. | **live only** |

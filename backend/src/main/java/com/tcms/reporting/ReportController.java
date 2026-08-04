@@ -68,7 +68,7 @@ class ReportController {
      *     this server can actually render — so the parse lives in {@link ReportJobService} beside
      *     the other two refusals, and an unparseable value takes the same path as an unrenderable
      *     one.
-     * @param definitionId a saved report to regenerate (§91), or absent for an ad-hoc request.
+     * @param definitionId a saved report to regenerate (§92), or absent for an ad-hoc request.
      *     Bound as a {@link UUID} where {@code type} and {@code format} are text, and the
      *     difference is not an inconsistency: those two are open sets whose refusals name what this
      *     server has, so the product must word them; an id that is not an id names nothing under
