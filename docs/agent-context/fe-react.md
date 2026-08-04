@@ -3,7 +3,7 @@
 # fe-react — orientation cache (TCMS)
 
 **Last verified:** 2026-08-04
-**Baseline commit:** `34426d8` (+ §89 phase 3, this commit)
+**Baseline commit:** `9f01798` (+ §90 phase 3, this commit)
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
 `frontend/vite.config.ts`
 
@@ -25,7 +25,7 @@
 - **`npm run build` is THE gate** (`tsc -b` + vite build). **Do not trust `tsc --noEmit`** — it has
   reported 0 errors while the build failed with nine (working agreement). `#confirmed`
 - `npm run lint` — oxlint, must stay at **0 warnings**; it prints nothing when clean.
-- `npm run test:run` — Vitest + RTL. **705/705** at this baseline (§85). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
+- `npm run test:run` — Vitest + RTL. **765/765** at this baseline (§90). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
 - `npm run gen:api` — regenerate `src/api/schema.d.ts` after **any** `openapi.yaml` change. Runs
   through `npx` on purpose (the scaffold pins TS 6, the tool peer-requires 5.x); do not "fix" it.
 - **Live mode:** `VITE_API_MODE=live` in `.env.local` proxies `/api` to `localhost:8080`.
@@ -42,6 +42,9 @@ cross-project personal board) and `/teams/:teamId/board` (§85, the team board).
 subject is not a project does not live under one. **`/projects/:projectId/reports` (§89) lands on
 the other side of that test**: a report is computed over one project's facts and its own header
 says *"covers X in full and no other project"*, so switching projects changes what it is about.
+**`/projects/:projectId/reports/jobs/:jobId` (§90) is the report itself** — a route rather than a
+dialog because a report is read and referred back to, and because a job id in the address bar is the
+only durable handle a report has while nothing lists jobs.
 
 > **⚠ This file went FIVE SLICES STALE (§72–§76) and was repaired in §77.** Only the backend half of
 > the update-the-cache habit had stuck. If you are reading this and the baseline lags HEAD by more
@@ -175,6 +178,46 @@ says *"covers X in full and no other project"*, so switching projects changes wh
   request count must *increase* over 1.5 intervals, a FAILED one whose count must *not* — with the
   interval named and the wait derived from it. Real time, not fake timers: TanStack's interval,
   `userEvent`'s advance-on-act and `waitFor`'s scheduler all read the same clock. `#confirmed`
+
+- **THE STORED REPORT MODEL IS THE ONE SHAPE IN THIS CLIENT WITH NO GENERATED TYPE (§90).** The
+  artifact route serves five formats' bytes and is declared **binary** in `openapi.yaml`, so
+  `schema.d.ts` cannot describe this body — the contract carries the shape in **prose** on
+  `ReportJob.modelUrl` and the authority is `ReportDocument.java` + `ReportModel.java`. It is
+  therefore **parsed with Zod in `lib/reportDocument.ts`, never cast**: a cast puts the drift three
+  components deep, where a half-recognised document renders as a report with **no sections** — which
+  is exactly what a selection that matched nothing looks like. The two directions are deliberate and
+  opposite: **unknown fields are dropped** (an artifact outlives the deployment that wrote it, so a
+  *newer* release's document must still open) and **missing or mistyped known fields throw**
+  (`data-fetching`: a parse failure is an error, never an emptiness). A cell arriving as a **number**
+  throws too — `ReportModel`'s "every cell is a STRING" held at the only place this client can hold
+  it. `headerBlock()` reassembles the server's provenance→selection→metadata block **as one
+  function**, because this screen is the fourth renderer of it and the furthest away; both tests over
+  it assert an **exact ordered list**, since `toContain` per label reddens nothing when a line goes
+  missing. `#confirmed`
+- **THE ON-SCREEN REPORT VIEW COSTS `report:export`, AND THAT IS A FINDING (§90).** The model is an
+  artifact, so it is served through the **download** route, which gates on `report:export` — while
+  §6e's split (and the custom role §87 built a whole phase to express) is *may read on screen, may
+  not carry off*. A `report:view`-only persona can watch a job reach `Ready` and be refused the
+  report it watched being made. **Not papered over**: `ReportViewPage` branches on `status === 403`
+  and says the on-screen view needs the download's key, because `describeError`'s generic 403 makes a
+  design defect read as an ordinary permission error. The fix is the **server's** — serve the `JSON`
+  artifact under `report:view`, or give the view its own route. Live-only (mock mode holds every
+  key); browser row 31. `#confirmed`
+- **`ReportView` computes NOTHING, a recorded departure from the plan's F2 line (§90).** It says to
+  reuse `lib/results.ts`; there is no arithmetic, because every cell and timestamp is pre-formatted
+  so that "what you see is what exports" is a property rather than a promise. **Do not add a
+  percentage to this screen** — it would be §65's "two contradictory percentages" across two formats
+  of one report, where nobody can see both at once to notice. The one number is the bar width
+  (`barPercents`), carrying `HtmlReportRenderer`'s two defects: scaled to the largest value in its
+  **own series** and never a total, and an **all-zero series draws no bar** rather than the
+  full-width one `width: NaN%` renders as. `#confirmed`
+- **`fetchArtifactJson` is the model's transport, beside `fetchArtifact`, through one
+  `artifactResponse` (§90).** The same-origin guard is why they share: it is the only thing between a
+  server-supplied string and the user's bearer token. **§89 shipped it untested and said so**;
+  `api/artifacts.test.ts` now drives **both** readers over five refused URL shapes, and the pair is
+  the point — a guard tested on one would leave the newer reader, the one that runs *without a
+  click*, unprotected. `DownloadReportButton` is the extracted download (one authenticated download,
+  two call sites — `ui-rules` §8); its failure testid is `<testId>.Error`. `#confirmed`
 
 - **TanStack Query owns all server state**; no server data in any client store. `src/api/queries/` is
   the data module — one `keys` factory (`queries/keys.ts`), per-endpoint timeout budgets. `#confirmed`
@@ -361,9 +404,8 @@ says *"covers X in full and no other project"*, so switching projects changes wh
 
 - E2E / page objects are the `qa-ui-typescript` peer's; none exist here.
 - ~~**`/reports` is the only dead contract left on this side**~~ → **built in §89 (F1).** The
-  screen, the generate dialog and the polling card exist; **F2 (the on-screen report view) is the
-  outstanding slice** and is unblocked in full — the job carries `modelUrl`, the artifact answers
-  `{ header, report }`, and F2 renders that rather than composing anything. **R5 has not built the
+  screen, the generate dialog and the polling card exist; ~~**F2 (the on-screen report view) is the
+  outstanding slice**~~ → **built in §90**, ahead of R6 rather than after it. **R5 has not built the
   definition writer**, so `GET /reports` answers `[]` on every deployment and the panel's empty
   state says so; there is deliberately **no Save control** (`ui-rules`: no Add button whose endpoint
   does not exist). **There is no operation that lists jobs**, which is the screen's largest
@@ -372,6 +414,19 @@ says *"covers X in full and no other project"*, so switching projects changes wh
   with the reasoning recorded in `vite.config.ts`.
 
 ## Session log
+
+- 2026-08-04 · EXTEND · §6e's **on-screen report view** (§90, F2) — the stored model rendered, so the
+  screen and the exported file are one computation twice. New:
+  `features/reports/{ReportViewPage,ReportView,DownloadReportButton}.tsx` + two test files, route
+  `/projects/:projectId/reports/jobs/:jobId`, `lib/reportDocument.ts` (Zod parse + `headerBlock` +
+  `barPercents`) + its test, `api/client.ts`'s `fetchArtifactJson`/`artifactResponse` +
+  `api/artifacts.test.ts`, `useReportModel` + `keys.reportModel`, and a **View report** link on the
+  job card. **No contract change, no `gen:api`, no new key, no backend file touched.** The finding is
+  a **permission**: reading a report on screen costs `report:export`, contradicting the split §87
+  built two custom roles for — worded on the page, fixed by nobody yet. See the seams above.
+  723 → 749 → **765/765**; build clean, lint 0. **Built and unverified** — 8 browser rows (26–33) and
+  6 frontend mutation rows queued, zero run inline; §89's untested-guard mutation row is struck
+  through, closed here.
 
 - 2026-08-04 · EXTEND · §6e's **Reports screen** (§89, F1) — the first client §87's pipeline has
   had. New: `features/reports/{ReportsPage,GenerateReportDialog,ReportJobCard}.tsx` + three test

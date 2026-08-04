@@ -1,6 +1,68 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-04 (latest section: **§89, the Reports screen** — F1 of the M2.5 plan,
+**Date:** 2026-08-04 (latest section: **§90, the on-screen report view** — F2 of the M2.5 plan,
+**three phases, three commits**, and the clause §6e states in one line: *"the on-screen report view
+consumes the same model via JSON, so what you see is what exports."* **No migration (`V27` still
+head, `V28` still free), no contract change, no `gen:api`, no new permission key, no backend file
+touched.** Shipped **before R6** rather than after it, as the plan's line proposed: everything it
+needs has existed since §88, and a `Ready` card that can only be downloaded is a screen with an
+obvious missing verb. **THE FINDING IS THAT READING A REPORT ON SCREEN COSTS THE PERMISSION FOR
+TAKING IT AWAY.** The stored model is an artifact like any other — `V27` widened
+`report_artifact.format` to admit `JSON` precisely so it would be — so it is served through the
+download route, which gates on **`report:export`**. §6e names two keys where one would do and the
+difference is *may read on screen* versus *may carry off*; **§87 spent a whole phase on that split**,
+building the suite's first two custom roles because no built-in persona lacked either key. The
+persona that role describes can watch a job go `Queued → Building → Ready` and then be refused the
+report it just watched being made: **the split works everywhere except the one screen it was written
+for.** Not fixed here (the fix is the server's — serve the `JSON` artifact under `report:view`, or
+give the view its own route) and deliberately **not papered over**: the page branches on 403 and says
+the on-screen view needs the download's key, where `describeError`'s generic *"ask a project lead"*
+would make a design defect read as an ordinary permission error. **THE MODEL IS THE ONE SHAPE IN THIS
+CLIENT WITH NO GENERATED TYPE BEHIND IT**, and that is forced rather than chosen: the artifact route
+is declared **binary** because it serves five formats' bytes, so a schema there would be a claim
+about four things it is not, and the contract carries the shape in **prose** on `modelUrl`. Hence
+**parsed, never cast** — a cast puts the drift three components deep, where a half-recognised
+document renders as a report with **no sections**, which is exactly what a selection that matched
+nothing looks like (§79's cast defect with nothing under the compiler's eye at all). The two
+behaviours point **opposite ways on purpose**: unknown fields are **dropped** so a *newer*
+deployment's artifact still opens (`JsonReportRenderer`'s own *"a file that outlives the deployment
+that wrote it"*), and missing or mistyped known fields **throw** — `data-fetching`'s rule verbatim,
+a parse failure is an error and never an emptiness. A table cell arriving as a **number** throws too,
+which is `ReportModel`'s "every cell is a string" held at the only place this client can hold it.
+**THE VIEW COMPUTES NOTHING, A RECORDED DEPARTURE FROM THE PLAN'S OWN F2 LINE**: it says to reuse
+`lib/results.ts` for the count arithmetic, and **there is no arithmetic** — every cell and every
+timestamp is pre-formatted, because formatting *once* is what makes "what you see is what exports" a
+property rather than a promise, and a percentage recomputed here (even correctly, even through the
+shared helper) is §65's "two contradictory percentages" across two formats of one report where
+nobody can see both at once. **The one number is the bar width**, carrying both defects
+`HtmlReportRenderer` fixed once — scaled to the largest value in its **series** and never a total (a
+series need not be parts of a whole), and an **all-zero series draws no bar** rather than the
+full-width one `width: NaN%` renders as. **The header block is reassembled ONCE and asserted as an
+exact ordered list**: this screen is the **fourth renderer** of a block `ReportDocument.headerBlock()`
+assembles so three formats cannot print three subsets, it is the one furthest from it, and the
+natural spelling — `toContain` per label — reddens **nothing** when a provenance line goes missing.
+**A ROUTE, NOT A DIALOG, AND IT IS NOT THE REGISTER §89 REFUSED**: `/projects/:projectId/reports/jobs/:jobId`
+is the only durable handle a report has while nothing lists jobs (the cards are lost on reload), it
+survives one and can be pasted to a colleague — and it names **one** job resolved by the server's own
+job-by-id operation, where §89's refusal was about inventing a *list* the server does not have (§81).
+The page is a **job first and a report second**: `useReportModel` is gated on `modelUrl`, so a
+running job shows the job running instead of the eternal skeleton `data-fetching` names, and
+`COMPLETED` with no model says so rather than spinning. **The download became a component** —
+`DownloadReportButton`, extracted because F2 made it a second call site and two authenticated
+downloads is two of everything (`ui-rules` §8) — and the card gained a **View report** `<Link>`,
+keyed on `modelUrl` for the same reason the download keys on its own URL. **§89's untested guard is
+closed**: F2 had to touch `fetchArtifact` anyway, so the shared half is `artifactResponse` and the
+new test drives **both** readers over five refused URL shapes — a guard tested on one of them would
+leave the newer reader, the one that runs **without a click**, unprotected. Gate: **build clean, lint
+0, 765/765 across 51 files** (723 → 749 → 765); **no contract-hygiene tests were generated**, which
+is a report about the checks rather than a gap, since `fetchArtifactJson` is not an `api.*` call
+site. **Two of phase 2's sixteen failed first run and both were the assertion, not the code**;
+phase 1's twenty-six all passed first time, stated plainly. **Found and not fixed**: the
+`report:export` gate above, `EvidencePanel`'s anchor (§89's, unswept), still no job list, and
+§86/§87's three open rows. **Zero mutations run inline**; **8 browser rows (26–33) and 6 frontend
+mutation rows queued**, and §89's untested-guard row is **struck through** because this slice closed
+it. **Built and unverified.**
+Before that: **§89, the Reports screen** — F1 of the M2.5 plan,
 **three phases, three commits**, and the first client §87's pipeline has ever had. **No migration
 (`V27` still head, `V28` still free), no contract change, no `gen:api`, no new permission key, and
 no backend file touched at all.** **THE FINDING IS THAT NEITHER OBVIOUS WAY TO DOWNLOAD WORKS AND
@@ -1424,3 +1486,4 @@ See [`docs/plans/2026-07-31-parallel-execution-rework.md`](plans/2026-07-31-para
 | [§87](handoff/87-the-report-pipeline.md) | The report pipeline — the job record, the second store, and the gates that could not fail |
 | [§88](handoff/88-the-html-renderer-and-the-report-header.md) | The HTML renderer and the report header — the block a renderer cannot strip, and the template engine that was not taken |
 | [§89](handoff/89-the-reports-screen.md) | The Reports screen — the download an anchor cannot make, and the job list the server cannot give it |
+| [§90](handoff/90-the-on-screen-report-view.md) | The on-screen report view — the model with no generated type, and the permission that reads a report |
