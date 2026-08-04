@@ -120,6 +120,15 @@ public abstract class IntegrationTestBase {
         // back on for its own context and otherwise drives the service directly.
         registry.add("tcms.case-health.enabled", () -> false);
 
+        // Off for the same reason, one module over: ExecutionFactScheduler is a WRITE on a timer
+        // over every company in the database. Left enabled it projects execution facts for
+        // whichever fixtures have seeded by the time it fires, and — because the fact log is
+        // append-only and its dimensions are frozen on insert — a row it writes early is not
+        // corrected by a later refresh, so the damage outlives the tick that caused it. That is
+        // strictly worse than the case-health case, where a rerun repairs everything.
+        // ExecutionFactRefreshTest drives the service directly.
+        registry.add("tcms.reporting.enabled", () -> false);
+
         // Evidence bytes land in a directory, not in Postgres — the one piece of product state
         // Testcontainers does not throw away for us. The production default is /var/lib/tcms,
         // which is not writable on a developer's machine, so the suite gets its own path under

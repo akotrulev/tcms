@@ -118,6 +118,24 @@ tcms:
     # than a decision that it never should. See CaseHealthProperties.
     long-unexecuted: ${TCMS_LONG_UNEXECUTED:P90D}
 
+  reporting:
+    # How many of a case's most recent recorded results must ALL be failures before
+    # FAILING_REPEATEDLY is raised. §6o words the signal as "failed the last N executions"
+    # and names no N.
+    #
+    # Three, and the bound below it is the one that matters: at 1 the signal restates the
+    # newest result, which the case grid, the run page and the dashboard's own counts all
+    # already say — a slower second copy of a fact the reader has. At 2 a flake plus a real
+    # failure raises it, which is the coincidence §6o's "decaying" severity exists to filter
+    # out. Above 3 the signal needs a history a young project does not have, and one that
+    # cannot fire in a project's first month is one nobody learns to trust.
+    # ReportingProperties refuses to start below 2.
+    #
+    # A COUNT, not a duration, unlike long-unexecuted above: a case run nightly and a case
+    # run quarterly are both failing repeatedly after three failures, and expressing this in
+    # time would silently mean something different per project.
+    failing-repeatedly-window: ${TCMS_FAILING_REPEATEDLY_WINDOW:3}
+
   # spring.mail.host is deliberately NOT defaulted. Boot only auto-configures a
   # JavaMailSender when it is set, and MailConfiguration turns its absence into a loud
   # warning rather than a startup failure — an install with no relay still works, it just

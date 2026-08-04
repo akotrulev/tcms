@@ -1,6 +1,58 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-04 (latest section: **§85, the team board's screen** — §84's frontend half, and
+**Date:** 2026-08-04 (latest section: **§86, the fact log gets a writer** — M2.5's reporting half
+begins, R1+R2 of the ten-slice plan. It ships the product's **tenth Modulith module**, the first
+writer `execution_fact` has ever had, and the third of `case_health`'s nine signals — **no
+migration (`V27` still free), no contract change, no new key, no new table, no new column**, policy
+count unchanged at **58**. **The `reporting` package did not exist**: `CLAUDE.md`, ERD §0.2 and the
+orientation cache have listed it since M0 and nine modules existed, so `ModuleStructureTest`'s
+hard-coded list moves 9 → 10 — the deliberate edit its own rationale asks for. It **had** to be
+created before anything could be written: the projection names `test_execution`/`test_run`,
+`test_case`/`suite` and `case_status`/`case_classification` — **three modules, and no existing module
+may write it** (§81's argument arriving at a module that did not exist yet), so `ExecutionSource` is
+the **fourth** `*Facts`-shaped seam. **The declaration is `{"tenancy"}` alone**, narrower than the
+plan proposed and narrower than every sibling: nothing here is reached through an endpoint, so there
+is no project gate to ask for and no person to name — `documentation`'s precedent, in both
+directions, because declaring the three this module will *eventually* want makes the declaration a
+**forecast**, and a forecast cannot fail the build when it stops being true (R3 widens it, and the
+package comment and the test rationale both say so). **The slice's central decision is which columns
+an `ON CONFLICT` may touch: seven move and fifteen do not.** The fact log is written by an
+**idempotent recompute and not by events**, because with zero `CompanyScopedEvent` implementations
+and no outbox consumer an event-only log has **no rebuild path** — and a short log renders
+identically to a correct one, which this project has paid for four times (§47, §53, §72, §81). Given
+a statement that reruns for ever, `EXCLUDED.*` everywhere is shorter, is what anybody would write,
+and **retroactively re-files last quarter's results under this quarter's taxonomy** — "failures by
+feature" would change its own history every fifteen minutes and nobody could name when. **`suite_id`
+/ `suite_path` are frozen too, which the plan did not say**: same argument, and the safe direction,
+since a frozen dimension that should have moved is one statement to change while the reverse has
+already destroyed the history it rewrote. **Two soft-delete calls point opposite ways and are
+consistent**: the fact log projects deleted cases and runs (`V1` calls it *append-only*, and
+filtering on insert while never deleting makes the log's contents a function of *when the job ran*),
+while `case_health` derives live cases only — history versus a worklist. **`failing_repeatedly` is
+`FAILED`, never `NOT counts_as_pass`**: the tempting column is right there in the fact row and
+`BLOCKED`/`SKIPPED`/`RETEST`/`UNTESTED` all satisfy it, so a case **blocked** three times running
+would be reported as a broken test and send the lead to fix the wrong thing. **The window must be
+FULL** (N=3, refusing to start below 2) — the *all of what we have* reading lights the tile on the
+first failure a young project records, so "Needs attention" reads as a crisis on the day the project
+was created. **It is the first time a second module writes `case_health`**, exercising a rule
+`ExecutionFacts` has prescribed since §53 and nothing could fail on; the clobber would surface an
+hour later as a bug in the *case-health* job, which would be innocent. **The company loop is not an
+optimisation** — a global "project everything" query sees **zero rows** under `V4`'s `nullif` and
+logs a successful tick having done nothing. Two things the gate caught that reading could not:
+**`max(uuid)` does not exist in Postgres**, and **a fixture UUID prefix must be hex** — `rf…` threw
+in the static initialiser and failed all eleven tests before one ran (§19's family, new mechanism).
+Found and **not** fixed: **`case_health` has no index on `failing_repeatedly`** while `V1` ships four
+partial indexes for other signals, so this is the first tile that scans — an index is a migration and
+this slice has none. **⚠ THE FULL GATE DID NOT COMPLETE ON THE CODE THAT LANDED**: the module's own
+suite is green (`--tests 'com.tcms.reporting.*'` → **23/23**, compiling under `-Werror`), but
+`./gradlew build` was never confirmed on the final state — the one full run that finished was
+pre-fix (1541/11 failed, all eleven this slice's, all the hex-prefix crash) and every later attempt
+died on Windows file-locks and daemon stops from concurrent `gradlew` invocations, **not on a test**.
+**1530 → 1553 is arithmetic, not an observation**, and the next session's first act must be one
+undisturbed `./gradlew build`. **Zero mutations run inline**; 9 backend rows and 8 browser rows
+queued, the browser ones **all live-only** because the mock invents its own health rows and has never
+been fed by a fact log.
+Before that: **§85, the team board's screen** — §84's frontend half, and
 §6l's three boards now have three screens. It needed **no key, no gate and no rail item**: one hook,
 one screen, one link. **The route decision is about `/admin`, not about projects.** Not under
 `/projects/:projectId` for §83's reason (with `projectId` omitted the cards span every project, so
@@ -1194,3 +1246,4 @@ See [`docs/plans/2026-07-31-parallel-execution-rework.md`](plans/2026-07-31-para
 | [§83](handoff/83-the-cross-project-board.md) | The cross-project board — the parameter that was left off, and the mock that had been showing the wrong project since Phase 1 |
 | [§84](handoff/84-the-team-board.md) | The team board — the bound that is the reader's, and the third selector on one operation |
 | [§85](handoff/85-the-team-board-screen.md) | The team board's screen — the route that is not administration, and the 404 the server refuses to word |
+| [§86](handoff/86-the-fact-log-gets-a-writer.md) | The fact log gets a writer — the module that had to exist first, and the dimensions that must not move |

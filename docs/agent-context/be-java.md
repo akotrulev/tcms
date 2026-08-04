@@ -3,8 +3,11 @@
 # be-java — orientation cache (TCMS)
 
 **Last verified:** 2026-08-04
-**Baseline commit:** `74d21e0` (§84's backend edits are in the working tree, landing in this slice's
-own commit; the frontend half of §84 — `npm run gen:api` and the team-board screen — is not written)
+**Baseline commit:** `c71aea4` **+ §86, the commit this line ships in** (its own SHA cannot be
+written into itself; per `CLAUDE.md`, trust the body over the header and re-grep what a later commit
+could have moved). §86 created the `reporting` module; the planning pass that preceded it read the
+migration folder, the module tree, `V1`'s reporting section, `V3`'s report grants, `openapi.yaml`'s
+`reporting` tag and the `execution_fact` column sources — see the Known-unknowns entry on `/reports`)
 **Fingerprint files:** `backend/build.gradle.kts`, `backend/gradle/libs.versions.toml`, `backend/gradle/wrapper/gradle-wrapper.properties`
 
 > Authoritative docs win over this file. `CLAUDE.md`, `docs/HANDOFF.md` (an index — sections live in
@@ -37,9 +40,11 @@ own commit; the frontend half of §84 — `npm run gen:api` and the team-board s
 
 ## Layout
 
-Spring Modulith **monolith**; modules are *packages* under `com.tcms`, not Gradle subprojects:
-`tenancy · identity · project · repository · execution · documentation · reporting · work ·
-provisioning · auth · shared`.
+Spring Modulith **monolith**; modules are *packages* under `com.tcms`, not Gradle subprojects. **Ten
+exist since §86**: `auth · documentation · execution · identity · project · provisioning · reporting ·
+repository · tenancy · work`. **`shared` is the only one on plan §3's list that still does not
+exist**, and the slice plan's decision E declines to create it for two storage ports and an enum.
+`ModuleStructureTest` hard-codes the ten, so an eleventh is a deliberate edit. `#confirmed`
 
 - Cross-module FKs allowed **only** toward `tenancy` / `identity` / `project`; everything else
   crosses via domain events. **Enforced by ArchUnit** (`src/test/java/com/tcms/architecture/`), so
@@ -50,6 +55,76 @@ provisioning · auth · shared`.
 
 ## Seams to reuse
 
+- **`execution_fact` HAS A WRITER since §86, and `reporting` is the module that had to exist for it.**
+  `reporting/package-info.java` + `ExecutionSource` (the seam) + `ExecutionFactRefreshService` +
+  `ExecutionFactScheduler` + `ReportingProperties`. **No migration (`V27` still free), no contract
+  change, no key, no table, no column** — policy count stays **58**; `execution_fact` and
+  `case_health` are both `V1` tables already on `V1`'s `company_owned` array.
+  **The module had to be created before anything could be written**: the projection names
+  `test_execution`/`test_run` (`execution`), `test_case`/`suite` (`repository`) and
+  `case_status`/`case_classification` — three modules, and no existing module may write it, which is
+  §81's argument arriving at a module that did not exist yet. `ExecutionSource` is the **fourth**
+  `*Facts`-shaped seam (`CaseFacts` · `ExecutionFacts` · `BoardFacts` · this); nothing else in the
+  package may name a foreign table. **The dashboard stays in `repository`** —
+  `DashboardController`'s header already argued why and §86 does not overturn it.
+  **`allowedDependencies = {"tenancy"}` ALONE**, narrower than the plan proposed and than every
+  sibling: nothing here is reached through an endpoint, so there is no project gate and no person to
+  name. `documentation`'s precedent in both directions — declaring the three it will eventually want
+  makes the declaration a **forecast**, and a forecast cannot fail the build when it stops being
+  true. **R3 widens it** (`project` for `report:view`/`report:export`, `identity` for a generated-by
+  line) and the package comment + `ModuleStructureTest`'s rationale both say so.
+  **THE decision is the `ON CONFLICT` set-list: seven columns move, fifteen do not.** Move =
+  `status_kind`, `counts_as_pass`, `executed_at`, `executed_by`, `duration_ms`, `release_version`,
+  `release_sort_key` (an amended verdict is corrected). **Frozen** = `automation_status`,
+  `test_type_id`, `test_level_id`, `feature_ids`, **and `suite_id`/`suite_path`, which the plan did
+  not name** — same argument, and freezing is the safe direction since a frozen dimension that should
+  have moved is one statement to change while the reverse has already destroyed the history it
+  rewrote. `EXCLUDED.*` everywhere is shorter, is what anybody would write, and re-files last
+  quarter's results under this quarter's taxonomy every fifteen minutes. Star schema: a fact's
+  dimensions are as-of the fact.
+  **Idempotent recompute, NOT events** — zero `CompanyScopedEvent` implementations and no outbox
+  consumer means an event-only log has **no rebuild path**, and a short log renders identically to a
+  correct one. Deliberately the shape an event handler would call, so landing `ResultRecorded` adds a
+  handler and changes nothing.
+  **"Recorded" is the INNER JOIN to `case_status`** — `execution_fact.status_kind` is `NOT NULL`
+  while `test_execution.status_id` is nullable, so the log structurally holds only recorded rows.
+  **Consequence for every report downstream: coverage / not-run denominators can NEVER come from this
+  table** (§46's finding arriving from the schema).
+  **Soft deletes: the fact log KEEPS them, `case_health` does not.** Opposite calls, consistent —
+  `V1` calls the log *append-only* and this writer never deletes, so filtering on insert would make
+  its contents a function of when the job ran relative to the delete. History versus a worklist.
+  **Live traps.** `max(uuid)` **does not exist in Postgres** (17 or otherwise) — the lateral uses
+  `(array_agg(… ORDER BY …) FILTER (…))[1]`, with the `ORDER BY` so a relaxed SINGLE-cardinality
+  trigger cannot make the statement non-idempotent. And **a fixture UUID prefix must be HEX**: `rf…`
+  threw in the static initialiser and failed all eleven tests before one ran (§19's family, new
+  mechanism). `#confirmed`
+- **`case_health.failing_repeatedly` has a writer since §86 — signal 3 of 9, and the FIRST column of
+  that table written by a module other than `repository`.** `ExecutionSource.recomputeFailingRepeatedly`,
+  wired into the same scheduler tick. **`ExecutionFacts`' rule finally has a test**: *"a signal's
+  owner writes its own column and no others; the row is shared, the columns are not"* — prescribed
+  since §53 and unexercised until a second writer existed. The clobber would surface an hour after
+  the slice ships, as a bug in `CaseHealthRecomputeService`, which would be innocent. `computed_at`
+  is shared by both writers deliberately: it means *somebody looked*.
+  **`status_kind = 'FAILED'`, NEVER `NOT counts_as_pass`** — `BLOCKED`/`SKIPPED`/`RETEST`/`UNTESTED`
+  all satisfy the tempting spelling, so a case nobody could *run* would be reported as a broken test.
+  **The window must be FULL** — compared to N, not to the rows found; the *all of what we have*
+  reading lights the tile on the first failure a young project records. **N = 3**
+  (`tcms.reporting.failing-repeatedly-window`), a COUNT not a `Duration`, and `ReportingProperties`
+  **refuses to start below 2**. **Found and NOT fixed: `case_health` has no index on
+  `failing_repeatedly`** while `V1` ships four partial indexes for other signals — the first tile
+  that scans; an index is a migration and §86 has none. `#confirmed`
+- **`ExecutionFactScheduler` is `CaseHealthScheduler`'s TWIN, and the company loop is not an
+  optimisation.** Two schedulers rather than one because they write read models owned by different
+  modules that may not call each other. A scheduled task starts with **no company**, so a global
+  "project every pending execution" query sees **zero rows** under `V4`'s `nullif` and **logs a
+  successful tick having done nothing** — invisible. `company` is not under RLS precisely so it can
+  be read first. One transaction per company; **facts before signals in that order**, since the
+  signal reads the log and reversing them makes it permanently one tick stale (and a stale boolean
+  renders like a fresh one). `PT3M`/`PT15M` rather than case-health's `PT2M`/`PT1H` — a fact is stale
+  the moment a result is recorded, and the offset keeps the two schedulers out of lockstep.
+  **`tcms.reporting.enabled=false` in `IntegrationTestBase`**, and it matters more than case-health's:
+  the log is append-only with frozen dimensions, so a row written early is **not** corrected by a
+  later refresh. `#confirmed`
 - **Tenancy is the invariant everything rests on.** `CompanyContext` is a `ThreadLocal` exposed only
   as a scope guard — `try (var ignored = CompanyContext.open(id))`, never a setter. Deliberately
   **not** `InheritableThreadLocal`. `#confirmed`
@@ -559,6 +634,52 @@ provisioning · auth · shared`.
   `cases/bulk`). It is **M2.5's**, not a slice's — `ExecutionFact` read model, `ReportModel`,
   Thymeleaf + headless-Chromium renderers, an async job pipeline, 7–8 weeks. Checked in §64 and
   deliberately not started. `#confirmed`
+  **Decomposed 2026-08-04 into `docs/plans/2026-08-04-m2.5-reporting-slice-plan.md`** (10 slices,
+  one migration). **R1+R2 landed in §86; R3–R8, F1 and F2 remain, and `/reports` is still a dead
+  contract** — nothing in §86 is reached through an endpoint. Seven facts that pass verified against
+  the code and that a reader should not re-derive (1, 2 and 6 have moved since; struck inline):
+  1. ~~**There is no `com.tcms.reporting` package.**~~ → **created in §86** (see the seam above);
+     ten modules now exist and `ModuleStructureTest` hard-codes them. What is now true instead:
+     **`shared` is the last of plan §3's modules that does not exist**, and decision E declines to
+     create it for two storage ports and an enum.
+  2. **`suite_run_summary`, `plan_snapshot`, `report_definition` and `report_artifact` are in `V1`,
+     RLS-forced, and have ZERO code** — no entity, no query, no writer. ~~`execution_fact` too~~ →
+     **it got its first writer in §86**; the other four are untouched. `case_health` is now written
+     by **two** modules: `repository` owns `never_executed`/`long_unexecuted` (§53) and `reporting`
+     owns `failing_repeatedly` (§86) — **3 of 9 signals**.
+  3. **There is NO `report_job` table** — not in `V1`, not in the ERD. `report_artifact.storage_key`
+     is `NOT NULL`, so an artifact row cannot precede its bytes and cannot serve as the job record.
+     The 202-and-poll contract therefore has no home in the schema; that is the plan's only migration.
+  4. **`ReportJob.downloadUrl` is required-and-nullable with no server, and there is no poll route
+     and no artifact-content route in `openapi.yaml`.** §67's `Evidence.url` finding, one module over:
+     the generate slice must land three operations or invent a URL.
+  5. **`report:view` / `report:export` are seeded by `V3` to five of six built-in roles** — all but
+     Automation Service — and have **zero Java consumers**. First-consumer pattern, 8th instance.
+     **But the gate cannot be shown to discriminate**: there is no API-token authentication
+     (`com.tcms.auth` never names `api_token`; that is M3), so no persona a test can build lacks
+     either key and a gate mutation reddens nothing. §71's `company:teams` coincidence in a worse
+     form. The way out is a custom `role` row — that table is instance-level with a global unique
+     name, so a fixture may insert one.
+  6. **`execution_fact.status_kind` is `NOT NULL` while `test_execution.status_id` is nullable**, so
+     the fact log can structurally hold only RECORDED executions. Coverage denominators can never
+     come from it — the §46 finding, arriving from the schema. **§86 made this the inner join to
+     `case_status`** rather than a separate predicate, and R6 must be written around it.
+     **Related, found in §86 and not built**: `execution_fact.executed_by` references `app_user`
+     only, while `test_execution` also has `executed_by_token`. Harmless while token auth is M3 and
+     nothing writes it — and the day it lands, every ingested result carries a null actor and §6e's
+     per-tester throughput section silently excludes CI.
+  7. **Naming collision, live**: `execution.PlanSnapshot` is §74's plan-version value object and has
+     nothing to do with the `plan_snapshot` reporting TABLE, which has no code. A writer for the
+     table must not reuse the name.
+  Also: `case_health` has **ten** boolean columns and `HealthSignal` **nine** members — `incomplete`
+  has no enum member and therefore no reader (unchanged by §86, which built `failing_repeatedly`).
+  And `V1` ships **four** partial indexes on `case_health` (`outdated_spec_changed`,
+  `stale_approval`, `never_executed`, `unlinked`) — **`failing_repeatedly` is the first signal with a
+  writer and no index**, found in §86 and deliberately not fixed there, since an index is a
+  migration and that slice has none. `doc_link` has no entity and no writer, which blocks
+  the coverage matrix and doc-structured reports. `frontend/src/mocks/handlers/reporting.ts` answers
+  `generate` with `id`/`requestedAt`/`status: 'QUEUED'` — three fields the contract does not declare,
+  the last not in its enum — with no consumer. `#confirmed`
 - **`ConditionRepository.findLibrary` orders by a column nothing maintains.** `usage_count` reads 0
   on every condition row, so its `ORDER BY usageCount DESC` has never ranked anything. §64 solved
   the same problem for shared steps by deriving the count; conditions were left alone because their
@@ -650,6 +771,59 @@ provisioning · auth · shared`.
   a caller may or may not see. `#confirmed`
 
 ## Session log
+
+- 2026-08-04 · EXTEND · The fact log gets a writer (§86) — **R1+R2** of the M2.5 reporting plan, and
+  the product's **tenth Modulith module**. New: `reporting/package-info.java`, `ExecutionSource`,
+  `ExecutionFactRefreshService`, `ExecutionFactScheduler`, `ReportingProperties`;
+  `ModuleStructureTest` 9 → 10 modules and its rationale rewritten; `IntegrationTestBase` gains
+  `tcms.reporting.enabled=false`. **No migration (`V27` still free), no contract change, no key, no
+  table, no column** — policy count unchanged at **58**, verified by listing the migration folder
+  before writing any SQL rather than by trusting a document.
+  **Three things the pass confirmed absent**: the `reporting` package (listed since M0, nine modules
+  existed), a writer for `execution_fact` (five indexes, zero rows since M0), and a writer for
+  `case_health.failing_repeatedly` (a tile since §47 and a board card since §53, both asserting
+  *nothing is failing* on every deployment).
+  **The slice is one decision — which columns an `ON CONFLICT` may touch.** Seven move, fifteen are
+  frozen dimensions, and **`suite_id`/`suite_path` were added to the frozen set beyond what the plan
+  named**, on the identical argument. **`allowedDependencies = {"tenancy"}` alone**, narrower than
+  the plan proposed: a declaration is a fact, not a forecast, and R3 is named as what widens it.
+  **`failing_repeatedly` is `FAILED`, not `NOT counts_as_pass`** (three BLOCKED runs are not a broken
+  test), and the window must be **full** (N=3, refusing to start below 2).
+  **Two defects the gate caught that reading could not**: `max(uuid)` does not exist in Postgres, and
+  a fixture UUID prefix must be **hex** — `rf…` threw in the static initialiser and failed all eleven
+  tests before one ran, §19's family with a new mechanism. **Found and not fixed**: `case_health` has
+  no index on `failing_repeatedly` while `V1` ships four for other signals — the first tile that
+  scans, and an index is a migration. Also named-not-built: `execution_fact.executed_by` cannot name
+  an `api_token`, so M3's ingested results will carry a null actor and §6e's per-tester throughput
+  will silently exclude CI. **⚠ Gate incomplete — `./gradlew build` was never confirmed green on the
+  code that landed.** `--tests 'com.tcms.reporting.*'` is **23/23** and compiles under `-Werror`; the
+  full suite's expected **1530 → 1553** is arithmetic. Every full run after the last edit died on
+  Windows file-locks / daemon stops from concurrent `gradlew` invocations, not on a test. **Run one
+  undisturbed `./gradlew build` first thing.** **Zero mutations run
+  inline** (policy); 9 queued and 8 browser rows, the browser ones **all live-only** — the mock
+  invents its own health rows and has never been fed by a fact log, so mock agreement is not evidence.
+
+- 2026-08-04 · PLAN · Decomposed M2.5's **reporting half** into
+  `docs/plans/2026-08-04-m2.5-reporting-slice-plan.md` — 10 slices (8 backend, 2 frontend), **one
+  migration (`V27`, policy count 58 → 59)**, **no new permission key anywhere**. No code written.
+  Seven verified state facts folded into Known unknowns above, of which three change what a reader
+  would assume: **the `reporting` package does not exist**, **there is no `report_job` table
+  anywhere**, and **the report gate cannot be made to discriminate without a custom test role**,
+  because the only built-in role withheld `report:view` is Automation Service and token auth is M3.
+  The plan's load-bearing decisions: `execution_fact` is written by an **idempotent recompute**
+  (`CaseHealthRecomputeService`'s shape) and not by events, because with zero `CompanyScopedEvent`
+  implementations and no outbox consumer an event-only fact log has **no rebuild path**; its
+  `ON CONFLICT DO UPDATE` names only the **result** columns, since re-running would otherwise re-file
+  historical results under the current taxonomy; the async worker is a **company loop over the
+  un-RLS'd `company` table** (a global "find pending jobs" query sees zero rows under `V4`'s
+  `nullif` and logs a successful tick having done nothing); output goes through a **second** storage
+  port because `execution.EvidenceStore` is unreachable, with the E1 debt named rather than a
+  `shared` module created; the aggregation **enum is duplicated and the algorithm is not**, with a
+  cross-check test pinning the report against `PlanStatisticsService` for a single-plan selection;
+  and the on-screen view reads a **stored `JSON` artifact** rather than a second preview code path.
+  PDF, S3, scheduled reports, notifications, Mermaid, the coverage matrix and the evidence bundle are
+  named as **not planned**, each with the missing infrastructure. Nothing in the codebase was
+  changed; `V27` is still free.
 
 - 2026-08-04 · EXTEND · §6l's team board (§84) — the last of its three with no way of being asked
   for, and a **third selector** on the operation that already serves the other two:

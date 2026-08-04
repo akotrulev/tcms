@@ -760,3 +760,30 @@ Payments Squad and a team board that ignored membership entirely would look righ
 **Highest-risk rows are 20 and 5.** Row 20 is the only place the reader-bound is observable at all;
 row 5 is the only place the team-bound is, and both are the kind of defect that looks completely
 correct to whoever wrote it, because their own board is right.
+
+---
+
+## §86 — `failing_repeatedly` lights a dashboard tile and a board card
+
+**Live only, all of them, and the reason is structural rather than incidental.** §86 touched no
+frontend file: `HealthSignal.FAILING_REPEATEDLY` has been in the contract since §47, labelled in
+`lib/labels.ts` and rendered by `DashboardPage`'s "Needs attention" panel and the board's
+`CASE_MAINTENANCE` card ever since. What changed is that a server now *asserts* it. **Mock mode
+cannot observe any of this** — `src/mocks/db.ts` invents its own health rows and has never been fed
+by a fact log — so every row below is `live`, and mock mode agreeing is not evidence.
+
+**Getting into the state at all takes a fixture and a wait**, which is what makes these rows worth
+writing down rather than assuming. The scheduler runs at `PT3M` after startup then every `PT15M`; a
+faster loop is `docker compose exec` nothing — there is no CLI verb for it — so either wait for the
+tick or restart the container after seeding.
+
+| # | Drive | Expect | Mode |
+|---|---|---|---|
+| 1 | **Live.** Provision a company, create a project, one case, and record **three** `Failed` results for it across three runs (the unique constraint forces one run each). Wait for the tick. Open `/projects/{id}/dashboard`. | The **"Needs attention"** panel shows a **Failing repeatedly** tile with count **1**, severity WARNING (amber, not red — §47's severity split puts this below "the case is now wrong"). Before this slice the tile could only ever read 0. | **live only** |
+| 2 | **Live.** Same case, now record a **fourth** result: `Passed`. Wait for the next tick. Reload the dashboard. | The tile drops back to **0** and the case's chip disappears. **This is the self-healing property §6o's whole design rests on** — "no 'mark as not-stale' button exists to lie with" is only true if the computation actually takes it back. A signal that latches on is indistinguishable, on screen, from one that is correct. | **live only** |
+| 3 | **Live.** Record **three `Blocked`** results for a *different* case. Wait for the tick. Reload. | That case is **not** listed under Failing repeatedly. The predicate is `status_kind = 'FAILED'`, not "did not pass" — a blocked case is an environment problem, and flagging it here sends the reader to fix the wrong thing. The backend has a test for this; the row exists because the *tile* is where somebody would notice it and misread it. | **live only** |
+| 4 | **Live.** With row 1's case flagged, open `/projects/{id}/board`. | A **`CASE_MAINTENANCE`** card for that case, naming the signal, in the right column. **Structurally empty since §53** — `BoardFacts` has read `case_health` since the board shipped and only two of nine signals had a writer, neither of which the card was built around. This is the first time the card can appear for this signal at all, and its `linkFor` must resolve (§81 and §83 each repaired a link that did not). | **live only** |
+| 5 | **Live.** Before any scheduler tick has run on a fresh company, open the dashboard. | The panel reads **"not computed yet"**, not an empty "nothing needs attention". `healthComputedAt` is what distinguishes them and `CaseHealth`'s header calls the distinction the reason the column is mapped at all. **§86 makes this harder to see, not easier**: reporting's refresh now stamps `computed_at` too, so the window in which it is null is the first three minutes of a deployment. Worth confirming it still exists. | **live only** |
+| 6 | **Live.** Two companies, both with a failing-repeatedly case. Sign in as a member of one. | The dashboard counts **only** that company's case. The projection carries no company predicate — `FORCE ROW LEVEL SECURITY` is the entire mechanism on both the `SELECT` and the `INSERT` — and this is the on-screen half of a property the backend asserts with two companies. | **live only** |
+| 7 | **Live.** Soft-delete a flagged case, wait a tick, reload the dashboard. | The tile count drops and the case is gone. `case_health` rows are derived for live cases only, while the **fact log deliberately keeps the deleted case's results** — the two opposite calls in one slice, and the screen is where their consistency is legible: no orphan chip, and no report row lost. | **live only** |
+| 8 | **Live, and this one is about cost rather than correctness.** With a project of a few hundred cases, watch the dashboard's response time before and after a tick has populated `failing_repeatedly`. | No visible regression. **`V1` ships four partial indexes on `case_health` — `outdated_spec_changed`, `stale_approval`, `never_executed`, `unlinked` — and none on `failing_repeatedly`**, so this signal's tile is the first that has to scan. Found while reading the DDL for this slice and deliberately **not fixed**: adding an index is a migration, and §86 states it has none. If this row shows a real cost, the index belongs in R3's `V27` alongside the job table. | **live only** |

@@ -63,10 +63,12 @@ class ModuleStructureTest {
 
         assertThat(detected)
                 .as("""
-                        The nine modules that exist today — `execution` joined them in backend M2 \
-                        slice 1, `work` in §53 and `documentation` in §57. Adding a module here is \
-                        expected as the plan's remaining modules land (reporting, shared) — but it \
-                        must be a deliberate edit, so that whoever adds one also reads the \
+                        The ten modules that exist today — `execution` joined them in backend M2 \
+                        slice 1, `work` in §53, `documentation` in §57 and `reporting` in §86. \
+                        Adding a module here is expected as the plan's remaining modules land \
+                        (`shared` is the last one, and the slice plan's decision E deliberately \
+                        declines to create it for two storage ports and an enum) — but it must be a \
+                        deliberate edit, so that whoever adds one also reads the \
                         allowedDependencies rule they are now subject to. In `execution`'s case that \
                         rule is the whole design: it may not depend on `repository`, and its package \
                         comment records what it does instead. `work` is the sharper case — it may \
@@ -76,10 +78,16 @@ class ModuleStructureTest {
                         only, "because nothing in it renders a person" — until the artifact register \
                         arrived with `updatedBy` in the contract's required array and made that false; \
                         it now takes `identity` for display names only, and reaches `test_plan` \
-                        through `documentation.PlanFacts` rather than depending on `execution`.""")
+                        through `documentation.PlanFacts` rather than depending on `execution`. \
+                        `reporting` is the narrowest of the lot: `tenancy` ALONE, because nothing in \
+                        it is reached through an endpoint yet, so there is no project gate to ask \
+                        for and no person to name. Its package comment names what widens the list \
+                        (the first report endpoint needs `project`, and a generated-by line needs \
+                        `identity`) so the declaration stays a fact rather than a forecast — a \
+                        forecast cannot fail the build when it stops being true.""")
                 .containsExactly(
                         "auth", "documentation", "execution", "identity", "project", "provisioning",
-                        "repository", "tenancy", "work");
+                        "reporting", "repository", "tenancy", "work");
     }
 
     @Test

@@ -1168,3 +1168,73 @@ wrong reason, which is the same structure §84's own fixture had to be given.
 | **Mutation** | move the Board `<Button>` inside the `PermissionGate` render prop and give it `disabled={!allowed}` |
 | **Scope** | `npx vitest run src/features/admin/TeamsPage.test.tsx` |
 | **Must redden** | **exactly 1** — *offers every team's board to a caller who may administer none of them*. It reddens only because the assertion sits **after** `permissionsResolved()`; without the barrier the gate is still pending, the link renders, and the mutation passes (§66, and §80's variant — an anchor is not a form element, so `toBeEnabled()` on it proves nothing at any moment). |
+
+---
+
+## §86 — the `reporting` module, the fact log, and `failing_repeatedly`
+
+Nine rows. **Zero run inline** (§65 policy, followed). Rows 1 and 2 are the slice's most important
+pair — each guards one half of an `ON CONFLICT` set-list, and both mutations are *tidier* than the
+code they replace, which is why they are the ones a future refactor will actually make.
+
+| | |
+|---|---|
+| **File** | `reporting/ExecutionSource.java`, `projectRecordedExecutions` |
+| **Mutation** | extend the `ON CONFLICT (execution_id) DO UPDATE` set-list to every column — add `suite_id = EXCLUDED.suite_id, suite_path = EXCLUDED.suite_path, automation_status = EXCLUDED.automation_status, test_type_id = EXCLUDED.test_type_id, test_level_id = EXCLUDED.test_level_id, feature_ids = EXCLUDED.feature_ids` |
+| **Scope** | `--tests 'com.tcms.reporting.ExecutionFactRefreshTest$FrozenDimensions'` |
+| **Must redden** | **exactly 1** — *the case's classification, automation status and suite are FROZEN at the fact*. One is right and it is the whole slice: the amended-result test in the same class must stay **green**, because widening the list does not stop the result columns updating. **This is the mutation to read first.** `EXCLUDED.*` everywhere is what anybody would write, it is shorter, and it silently re-files every historical result under the current taxonomy on every tick — so "failures by feature" for last quarter changes every fifteen minutes and nobody can name when. If this reddens 0, the frozen-dimension property has no test and the slice's central decision is unprotected. |
+
+| | |
+|---|---|
+| **File** | `reporting/ExecutionSource.java`, `recomputeFailingRepeatedly` |
+| **Mutation** | extend the `ON CONFLICT (case_id) DO UPDATE` set-list with `never_executed = EXCLUDED.never_executed, long_unexecuted = EXCLUDED.long_unexecuted` |
+| **Scope** | `--tests 'com.tcms.reporting.FailingRepeatedlyTest$Boundaries'` |
+| **Must redden** | **exactly 1** — *the signals repository owns survive a reporting refresh*. The first test in the product that can catch a **second module** blanking a first's columns; `repository.ExecutionFacts`' header has stated the rule since §53 and nothing exercised it, because `repository` was the only writer. The defect would present an hour after this ships, as a bug in `CaseHealthRecomputeService`, which would be innocent. |
+
+| | |
+|---|---|
+| **File** | `reporting/ExecutionSource.java`, `projectRecordedExecutions` |
+| **Mutation** | `JOIN case_status st ON st.id = e.status_id` → `LEFT JOIN case_status st ON st.id = e.status_id`, and `st.kind` → `COALESCE(st.kind, 'UNTESTED')`, `st.counts_as_pass` → `COALESCE(st.counts_as_pass, false)` |
+| **Scope** | `--tests 'com.tcms.reporting.ExecutionFactRefreshTest$WhatIsProjected'` |
+| **Must redden** | **exactly 2** — *an execution with no result is NOT a fact* and *a recorded execution becomes exactly one fact* (the second because `PLANNED` joins the set). Creating a run writes one empty execution per case in scope (§42), so this mutation makes the aggregate report's execution count rise the moment somebody plans work they have not done. The inner join *is* the `status_id IS NOT NULL` predicate; there is no second copy of it to keep it honest. |
+
+| | |
+|---|---|
+| **File** | `reporting/ExecutionSource.java`, `recomputeFailingRepeatedly` |
+| **Mutation** | `count(*) FILTER (WHERE f.status_kind = 'FAILED')` → `count(*) FILTER (WHERE NOT f.counts_as_pass)`, adding `counts_as_pass` to the inner `SELECT` |
+| **Scope** | `--tests 'com.tcms.reporting.FailingRepeatedlyTest$Meaning'` |
+| **Must redden** | **exactly 1** — *a case BLOCKED three times running is not failing — it is blocked*. The tempting spelling: `counts_as_pass` is the column the aggregate report's pass rate uses and it is right there. `BLOCKED`, `SKIPPED`, `RETEST` and `UNTESTED` all satisfy it, so a case nobody could run is reported as a broken test and the lead is sent to fix the case instead of the environment. |
+
+| | |
+|---|---|
+| **File** | `reporting/ExecutionSource.java`, `recomputeFailingRepeatedly` |
+| **Mutation** | `= CAST(:window AS bigint)` → `> 0` (raise it whenever anything in the window failed) |
+| **Scope** | `--tests 'com.tcms.reporting.FailingRepeatedlyTest$Meaning'` |
+| **Must redden** | **exactly 2** — *a shorter history than the window does NOT raise it* and *the NEWEST result breaks the streak, not any result*. Two, and the pair is the point: the first is the young-project defect (every case has one result, so the first failure anybody records lights the tile and the panel reads as a repository in crisis on the day it was created), the second is the "has ever failed" reading. A mutation reddening only one of them means the other boundary is fixture-dependent. |
+
+| | |
+|---|---|
+| **File** | `reporting/ExecutionSource.java`, `recomputeFailingRepeatedly` |
+| **Mutation** | delete the inner `LIMIT CAST(:window AS bigint)` (consider the whole history) |
+| **Scope** | `--tests 'com.tcms.reporting.FailingRepeatedlyTest$Meaning'` |
+| **Must redden** | **exactly 1** — *only the window is considered — an old pass does not rescue a failing case*. One, and the shortfall is worth reading rather than repairing: with the limit gone the count can never equal the window for a case with more than N results, so the signal fires for **nothing that has ever been run more than three times** — it goes quiet rather than loud, which is the failure mode this whole file exists for. `DEEP` is the only fixture case that can see it. |
+
+| | |
+|---|---|
+| **File** | `reporting/ExecutionFactRefreshService.java`, `refresh` |
+| **Mutation** | swap the two calls — `recomputeFailingRepeatedly` before `projectRecordedExecutions` |
+| **Scope** | `--tests 'com.tcms.reporting.FailingRepeatedlyTest'` |
+| **Must redden** | **this row is a question, not an assertion.** Every test that calls `refreshFor` exactly once should redden — the signal would be derived from a fact log that is still empty at that point — while every test that refreshes twice will not. **If it reddens 0, the ordering has no test at all**, and the staleness it prevents (a signal permanently one tick behind, which renders identically to a fresh one) is unprotected. Record the actual number when this is run; it is the only row here whose expected value was reasoned rather than observed. |
+
+| | |
+|---|---|
+| **File** | `reporting/ExecutionFactScheduler.java` |
+| **Mutation** | replace the company loop with a single un-scoped call — delete the `for` and call `refresh.refresh()` once with no `CompanyContext.open` |
+| **Scope** | `--tests 'com.tcms.reporting.ExecutionFactRefreshTest$Isolation'` |
+| **Must redden** | **exactly 0 — and that is the finding, not a pass.** Nothing in the suite drives the scheduler: `IntegrationTestBase` disables it (`tcms.reporting.enabled=false`) for the reason `ReportingProperties` records, and both reporting test classes drive the service directly. What *is* covered is the loud failure — *a refresh with no company open refuses loudly rather than writing nothing* — so the mutation would throw rather than silently no-op, which is the whole point of `CompanyContext.require()`. The loop's necessity is argued in a comment and asserted nowhere, the same shape as §67's rows-then-bytes ordering. Written down rather than closed, because closing it means a test that turns the scheduler on, which is precisely what §19's fixture-collision defect says not to do. |
+
+| | |
+|---|---|
+| **Check** | `V27`, the policy count, and the module list |
+| **Mutation** | — |
+| **Must show** | **`V27` is still the next free Flyway version and `SchemaConventionTest`'s policy count is still 58.** §86 creates no table and no column: `execution_fact` and `case_health` are both `V1` tables, both already on `V1`'s `company_owned` RLS array, and `case_health.failing_repeatedly` is a `V1` column with `DEFAULT false` that has never been written. Verified by listing the migration folder before any SQL was written, per the slice plan. If either number has moved, something in this slice created state it said it did not. Also: `ModuleStructureTest` must name **ten** modules, and `reporting` must declare **`{"tenancy"}`** and nothing more. |
