@@ -12,34 +12,37 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 /**
- * A saved report — {@code V1}'s {@code report_definition}, mapped here and <strong>written by
- * nothing yet</strong>.
+ * A saved report — {@code V1}'s {@code report_definition}, and since §91 (R5) a row somebody can
+ * create, list and delete.
  *
- * <h2>Why it is mapped in the slice that cannot create one</h2>
+ * <h2>What a definition is, and what it deliberately is not</h2>
  *
- * <p>{@code report_job.definition_id} references this table, and R5 is the slice that gives it a
- * writer, an endpoint and a schedule. Mapping it now is not speculation: the job's own read path
- * needs the name of the definition it ran from to render, and an entity added later would arrive
- * together with three other things, which is how a reader loses track of which part the defect is
- * in.
+ * <p>It is <strong>what to compute</strong>: a type and the parameters to compute it over. It is
+ * <em>not</em> what came out and not how it was rendered — {@code V1} gave this table no format
+ * column, so the same saved report is downloaded as Markdown today and HTML next release without
+ * being a different saved report. §6e's sentence is "the same cycle report regenerates next release
+ * with one click", and a format is not part of the cycle.
  *
- * <p>What is deliberately absent is any mutator. There is no {@code create}, no {@code applyEdit}
- * and no delete — the same shape {@code TestPlan} had between M2 slice 2 and §74, and for the same
- * stated reason: the writes are a separate permission and a separate slice. Anything that starts
- * writing here also owns {@link #scheduleCron}, which is a scheduler's input and not a form field.
+ * <h2>The row is its owner's, which is why there is no create-time gate on anything but the key</h2>
  *
- * <p><strong>There is deliberately no {@code ReportDefinitionRepository} either.</strong> The slice
- * plan lists one under R3; nothing in R3 reads a definition, because every job it can produce is
- * ad-hoc and carries {@code definition_id} null. A repository with no caller is dead code that reads
- * as a seam, and the next author extends it instead of asking whether it is the right shape. It
- * lands in R5 with the first query that needs it.
+ * <p>{@link #ownerId} is stamped from the session and {@link #sharedWithTeamId} is written by
+ * nothing: v1 has no way to share a definition, so a row is visible to, and deletable by, exactly
+ * one person. That is what makes {@code report:view} the right key for the writes — saving one is
+ * writing to your own workspace, not to project content — and it is why
+ * {@code ReportDefinitionService} scopes every lookup by owner rather than asking a second
+ * permission question about somebody else's row.
  *
- * <h2>{@code schedule_cron} is the one column with a trap in it</h2>
+ * <p>Sharing is the one part of this surface that would want a key the catalogue does not have, and
+ * a key {@code V3} seeds to nobody is a 403 no administrator can grant their way out of (§67, §79,
+ * §80, §82). It stays unmapped until there is a decision about that key.
+ *
+ * <h2>{@code schedule_cron} is the one column with a trap in it, and it is still unwritten</h2>
  *
  * <p>A definition with a cron expression is a report that generates itself, which means a job row
  * written by nobody, with {@code requested_by} null — a shape the job record already permits and
- * that no v1 code produces. R5 arrives at that; it is named here so it is not discovered by a
- * scheduler that quietly attributes scheduled runs to whoever saved the definition.
+ * that no v1 code produces. Scheduled reports are §6e phase 2; the column is deliberately absent
+ * from {@link #create} so a scheduler cannot arrive by accident and quietly attribute scheduled runs
+ * to whoever saved the definition.
  */
 @Entity
 @Table(name = "report_definition")
@@ -82,6 +85,38 @@ public class ReportDefinition {
 
     /** JPA only. */
     protected ReportDefinition() {
+    }
+
+    /**
+     * A new saved report, owned by the person saving it.
+     *
+     * <p>No {@code scheduleCron} and no {@code sharedWithTeamId} parameter — see the class header.
+     * A factory that took them would make both reachable from the endpoint the moment somebody
+     * added a field to the input record, which is the opposite of a decision.
+     *
+     * @param parameters the selection as JSON text, already checked for parseability by the service.
+     *     Stored verbatim, because it is what a later generate merges over and what
+     *     {@code report_artifact.filter_snapshot} is ultimately frozen from.
+     */
+    static ReportDefinition create(
+            UUID companyId,
+            UUID projectId,
+            String type,
+            String name,
+            String parameters,
+            UUID ownerId,
+            Instant now) {
+
+        ReportDefinition definition = new ReportDefinition();
+        definition.id = UUID.randomUUID();
+        definition.companyId = companyId;
+        definition.projectId = projectId;
+        definition.type = type;
+        definition.name = name;
+        definition.parameters = parameters;
+        definition.ownerId = ownerId;
+        definition.createdAt = now;
+        return definition;
     }
 
     UUID getId() {

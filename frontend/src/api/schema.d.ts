@@ -3308,34 +3308,84 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Saved report definitions */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    projectId: components["parameters"]["ProjectId"];
-                };
-                cookie?: never;
+        /**
+         * Saved report definitions
+         * @description **Yours, not the project's.** A definition is owned by the person who saved it
+         *     (`report_definition.owner_id`) and v1 has no way to share one, so two people asking for the
+         *     same project's saved reports receive different lists — the same design `GET /work-items`
+         *     states for the team board, and the reason it is stated here too is that a list endpoint
+         *     which quietly means "mine" is otherwise indistinguishable from one that means "everyone's"
+         *     on a project where only one person has ever saved anything.
+         *
+         *     `report_definition.shared_with_team_id` is `V1`'s answer to sharing and is **deliberately
+         *     unimplemented**: it is the only part of this surface that would want a permission key the
+         *     catalogue does not have, and a key `V3` seeds to nobody is a 403 no administrator can grant
+         *     their way out of.
+         *
+         *     Needs `report:view` — see `POST` below for why saving costs the *view* key and not
+         *     `report:export`.
+         */
+        get: operations["listReportDefinitions"];
+        put?: never;
+        /**
+         * Save a report so it can be regenerated
+         * @description §6e's *"saved as part of the `ReportDefinition` so the same cycle report regenerates next
+         *     release with one click"* — which is most of why the table exists. What is saved is **what to
+         *     compute** (`type` + `parameters`), never how to render it: `report_definition` has no format
+         *     column, because the format is chosen per download and a saved report is not the file it
+         *     produced.
+         *
+         *     **Needs `report:view`, not `report:export`, and that is a decision rather than an
+         *     oversight.** The row belongs to its creator and is visible to nobody else, so saving one
+         *     writes to the caller's own workspace and not to project content — while requiring the
+         *     export key would mean the persona §6e's two-key split exists for, *may read reports on
+         *     screen but may not carry them off*, could not save the report it is allowed to read.
+         *
+         *     A `type` this server cannot compute is a 400 naming what it can, in the same words
+         *     `generate` uses: a saved report for a type nothing can produce is a button that always
+         *     fails, and it fails at the moment it is *used* rather than at the moment it is wrong.
+         *
+         *     **Names are not unique.** Two definitions may share a name — the rows are one person's own,
+         *     a collision is theirs to notice, and a uniqueness constraint would be a migration adding a
+         *     rule §6e does not ask for.
+         */
+        post: operations["createReportDefinition"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/reports/{definitionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                definitionId: components["parameters"]["DefinitionId"];
             };
-            requestBody?: never;
-            responses: {
-                /** @description Definitions */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ReportDefinition"][];
-                    };
-                };
-                401: components["responses"]["Unauthorized"];
-                404: components["responses"]["NotFound"];
-            };
+            cookie?: never;
         };
+        get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete a saved report
+         * @description A **hard** delete. A definition authors nothing — it is a saved question — so there is
+         *     nothing for a soft delete to preserve.
+         *
+         *     **The reports it produced survive it.** `report_job.definition_id` and
+         *     `report_artifact.definition_id` are both `ON DELETE SET NULL`, so deleting a saved report
+         *     never deletes the history of what it generated: those jobs become indistinguishable from
+         *     ad-hoc ones, which is what they now are.
+         *
+         *     **A definition somebody else owns answers 404, not 403.** The caller cannot list it, so
+         *     telling them it exists would make this route an oracle over other people's saved reports —
+         *     §6t's argument at row level.
+         *
+         *     Needs `report:view`, for the reason `POST` above gives.
+         */
+        delete: operations["deleteReportDefinition"];
         options?: never;
         head?: never;
         patch?: never;
@@ -5797,6 +5847,26 @@ export interface components {
             };
             owner: components["schemas"]["UserRef"];
         };
+        ReportDefinitionInput: {
+            /**
+             * @description One of the types this server can compute — the same open set `generate` takes, checked
+             *     the same way and refused in the same words.
+             * @example run_summary
+             */
+            type: string;
+            /** @description What the person will recognise it by. Required, non-blank; not unique. */
+            name: string;
+            /**
+             * @description The saved selection, defaulting to `{}` when absent. **Not validated against the report
+             *     type**, deliberately: a definition is edited over several releases and a parameter that
+             *     becomes required later would make an existing saved report unsaveable, while the
+             *     *generate* it feeds refuses a bad selection with the report's own sentence at the
+             *     moment it is used.
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+        };
         ReportJob: {
             /** Format: uuid */
             jobId: string;
@@ -6432,6 +6502,7 @@ export interface components {
         EvidenceId: string;
         JobId: string;
         ArtifactId: string;
+        DefinitionId: string;
         Page: number;
         Size: number;
         /**
@@ -6999,6 +7070,89 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    listReportDefinitions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description The caller's own saved reports for this project, newest first. An empty array is the
+             *     ordinary answer: nothing seeds a definition, and a project where nobody has saved one
+             *     has none.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportDefinition"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createReportDefinition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportDefinitionInput"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportDefinition"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteReportDefinition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                definitionId: components["parameters"]["DefinitionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     generateReport: {
         parameters: {
             query?: never;
@@ -7012,6 +7166,25 @@ export interface operations {
             content: {
                 "application/json": {
                     /**
+                     * Format: uuid
+                     * @description Regenerate a saved report (§89's *"one click"*). The definition supplies the
+                     *     `type` and a **base** for `parameters`; anything sent in this request overrides
+                     *     it **key by key at the top level**, so "the same cycle report, but for last
+                     *     week" is one field rather than a re-sent copy of the whole selection.
+                     *
+                     *     The merge is deliberately **shallow**. `parameters` is untyped by design, so a
+                     *     deep merge would have no schema to decide whether a nested object should be
+                     *     combined or replaced, and half-overriding a saved selection is the kind of
+                     *     difference nobody sees in the output.
+                     *
+                     *     A definition **the caller does not own** is a field error rather than a 403,
+                     *     for the reason `DELETE` gives. `type` may be omitted when this is sent, and if
+                     *     both are sent they must agree — a request that names one report and a saved
+                     *     definition of another is a mistake in the client, and picking either one
+                     *     silently generates a report somebody did not ask for.
+                     */
+                    definitionId?: string;
+                    /**
                      * @description Which report. This is an open string rather than an enum because §6e's
                      *     catalogue names ten and the set a deployment can produce grows slice by slice —
                      *     an enum here would have to be edited in lockstep with the server, and a client
@@ -7020,9 +7193,13 @@ export interface operations {
                      *     A type this server cannot compute is a 400 naming what it can.
                      *     **`run_summary` is the only one today** (§87): one run's results, its pass rate
                      *     and its outstanding work.
+                     *
+                     *     **Required unless `definitionId` is sent** — which `required` cannot express
+                     *     here without splitting the body into a `oneOf` whose two arms differ by one
+                     *     optional field. Sending neither is a field error on `type`.
                      * @example run_summary
                      */
-                    type: string;
+                    type?: string;
                     /**
                      * @description The set a person downloads. **Not the set this server can render** — the two
                      *     are deliberately different, and asking for one it cannot produce is a 400 at
@@ -7045,6 +7222,11 @@ export interface operations {
                      *
                      *     Untyped because each report takes different ones. `run_summary` takes a single
                      *     required `runId` (uuid).
+                     *
+                     *     With `definitionId`, this is the **override** and the saved definition is the
+                     *     base — the stored `parameters` on the job (and therefore the artifact's
+                     *     `filter_snapshot`) is the merged result, because what a report was computed
+                     *     over is what has to be reproducible, not what the caller typed.
                      */
                     parameters?: {
                         [key: string]: unknown;

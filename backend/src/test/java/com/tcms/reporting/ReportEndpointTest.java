@@ -516,6 +516,217 @@ class ReportEndpointTest extends IntegrationTestBase {
 
     // ---------------------------------------------------------------- driving
 
+    // =====================================================================
+    // GET / POST / DELETE /reports — saved definitions, report:view (§91)
+    // =====================================================================
+
+    @Nested
+    @DisplayName("Saved definitions — report:view, and the row belongs to one person")
+    class Definitions {
+
+        @Test
+        @DisplayName("saving answers 201 with the row, and the owner is the caller")
+        void savedAndEchoed() throws Exception {
+            MvcResult result = save(LEAD, PROJECT, definition("Release 5.0 regression", RUN));
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(201);
+
+            JsonNode saved = parse(result);
+            assertThat(List.of("id", "type", "name", "parameters", "owner"))
+                    .allSatisfy(field -> assertThat(saved.has(field))
+                            .as("ReportDefinition.%s is required by openapi.yaml", field)
+                            .isTrue());
+            assertThat(saved.get("type").asText()).isEqualTo(RUN_SUMMARY);
+            assertThat(saved.get("name").asText()).isEqualTo("Release 5.0 regression");
+            // An object, not a re-encoded string: a client that has to parse the field it was
+            // handed is holding the shape §90 refused on the way in (openapi says `type: object`).
+            assertThat(saved.get("parameters").isObject()).isTrue();
+            assertThat(saved.get("parameters").get("runId").asText()).isEqualTo(RUN.toString());
+            assertThat(saved.get("owner").get("id").asText()).isEqualTo(LEAD.toString());
+        }
+
+        @Test
+        @DisplayName("the list is the CALLER's, not the project's — asserted as two exact sets")
+        void ownerScopedBothWays() throws Exception {
+            save(LEAD, PROJECT, definition("Lead's cycle report", RUN));
+            save(SCREEN_ONLY, PROJECT, definition("Screen-only's cycle report", RUN));
+
+            // A pair, and it is the whole point of the fixture: "bounded by the caller" and
+            // "everything in the project" answer identically as long as only one person has ever
+            // saved anything, so one list is not evidence. Exact sets rather than `contains`,
+            // because the defect this guards is an EXTRA row, which every contains() passes.
+            assertThat(names(LEAD, PROJECT)).containsExactly("Lead's cycle report");
+            assertThat(names(SCREEN_ONLY, PROJECT)).containsExactly("Screen-only's cycle report");
+        }
+
+        @Test
+        @DisplayName("report:view is enough to SAVE — the persona §87 built could not otherwise")
+        void viewSaves() throws Exception {
+            // The other direction from Generating.viewDoesNotGenerate, and the reason the writes
+            // here cost report:view: SCREEN_ONLY may read reports on screen and not carry them off,
+            // and a role that has to retype its selection every release is not that role.
+            assertThat(save(SCREEN_ONLY, PROJECT, definition("Mine", RUN))
+                    .getResponse().getStatus()).isEqualTo(201);
+        }
+
+        @Test
+        @DisplayName("a role holding neither key is refused all three operations")
+        void neitherKeyIsRefused() throws Exception {
+            UUID id = savedIdOf(LEAD, PROJECT, "Lead's");
+
+            assertThat(list(REPORT_BLIND, PROJECT).getResponse().getStatus()).isEqualTo(403);
+            assertThat(save(REPORT_BLIND, PROJECT, definition("Theirs", RUN))
+                    .getResponse().getStatus()).isEqualTo(403);
+            assertThat(delete(REPORT_BLIND, PROJECT, id).getResponse().getStatus()).isEqualTo(403);
+        }
+
+        @Test
+        @DisplayName("a member with no grant gets 404 rather than 403")
+        void noGrantIsNotFound() throws Exception {
+            assertThat(list(NO_GRANT, PROJECT).getResponse().getStatus()).isEqualTo(404);
+            assertThat(save(NO_GRANT, PROJECT, definition("Theirs", RUN))
+                    .getResponse().getStatus()).isEqualTo(404);
+        }
+
+        @Test
+        @DisplayName("another client's project is 404 for a lead who holds every key here")
+        void anotherCompanyIsNotFound() throws Exception {
+            assertThat(list(LEAD, UMBRA_PROJECT).getResponse().getStatus()).isEqualTo(404);
+            assertThat(save(LEAD, UMBRA_PROJECT, definition("Theirs", RUN))
+                    .getResponse().getStatus()).isEqualTo(404);
+        }
+
+        @Test
+        @DisplayName("an unknown type and a blank name are both field errors, in one answer")
+        void bothRefusalsAtOnce() throws Exception {
+            MvcResult result = save(LEAD, PROJECT,
+                    "{\"type\":\"trend\",\"name\":\"   \",\"parameters\":{}}");
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+
+            JsonNode errors = parse(result).get("errors");
+            // Collected rather than short-circuited: a form that reveals its next objection only
+            // after the first is fixed makes one mistake into two round trips.
+            assertThat(errors.has("type")).isTrue();
+            assertThat(errors.has("name")).isTrue();
+            assertThat(errors.get("type").get(0).asText())
+                    .as("the refusal must name what this server CAN produce")
+                    .contains(RUN_SUMMARY);
+        }
+
+        @Test
+        @DisplayName("parameters that are not a JSON object are refused on their own field")
+        void parametersMustBeAnObject() throws Exception {
+            MvcResult result = save(LEAD, PROJECT,
+                    "{\"type\":\"" + RUN_SUMMARY + "\",\"name\":\"Odd\",\"parameters\":\"runId\"}");
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(parse(result).get("errors").has("parameters")).isTrue();
+        }
+
+        @Test
+        @DisplayName("a definition with no parameters is saved with an empty object")
+        void parametersDefaultToEmpty() throws Exception {
+            MvcResult result = save(LEAD, PROJECT,
+                    "{\"type\":\"" + RUN_SUMMARY + "\",\"name\":\"Everything\"}");
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(201);
+            assertThat(parse(result).get("parameters").isObject()).isTrue();
+            assertThat(parse(result).get("parameters").isEmpty()).isTrue();
+        }
+
+        @Test
+        @DisplayName("deleting one answers 204 and it leaves the list")
+        void deleted() throws Exception {
+            UUID id = savedIdOf(LEAD, PROJECT, "Temporary");
+
+            assertThat(delete(LEAD, PROJECT, id).getResponse().getStatus()).isEqualTo(204);
+            assertThat(names(LEAD, PROJECT)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("somebody else's definition is 404, and survives the attempt")
+        void anotherPersonsIsNotFound() throws Exception {
+            UUID id = savedIdOf(LEAD, PROJECT, "Lead's");
+
+            // Not 403: SCREEN_ONLY cannot list this row, so an answer that distinguishes "not
+            // yours" from "no such thing" makes the route an oracle over other people's saved
+            // reports (§6t at row level).
+            assertThat(delete(SCREEN_ONLY, PROJECT, id).getResponse().getStatus()).isEqualTo(404);
+            assertThat(names(LEAD, PROJECT)).containsExactly("Lead's");
+        }
+
+        @Test
+        @DisplayName("a sibling project's definition is 404 through this project's path")
+        void wrongProjectPathIsNotFound() throws Exception {
+            UUID id = savedIdOf(LEAD, PROJECT, "Lead's");
+
+            // LEAD holds both projects, so the gate passes — against the wrong project. The id
+            // alone would resolve the row and delete it through a path that never named it.
+            assertThat(delete(LEAD, SIBLING, id).getResponse().getStatus()).isEqualTo(404);
+            assertThat(names(LEAD, PROJECT)).containsExactly("Lead's");
+        }
+
+        @Test
+        @DisplayName("a definition id that names nothing is 404")
+        void unknownIdIsNotFound() throws Exception {
+            assertThat(delete(LEAD, PROJECT, UUID.randomUUID()).getResponse().getStatus())
+                    .isEqualTo(404);
+        }
+    }
+
+    private MvcResult list(UUID userId, UUID projectId) throws Exception {
+        return mvc.perform(MockMvcRequestBuilders
+                        .get("/api/v1/projects/" + projectId + "/reports")
+                        .header("Authorization", "Bearer " + tokenFor(userId))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andReturn();
+    }
+
+    private MvcResult save(UUID userId, UUID projectId, String body) throws Exception {
+        return mvc.perform(MockMvcRequestBuilders
+                        .post("/api/v1/projects/" + projectId + "/reports")
+                        .header("Authorization", "Bearer " + tokenFor(userId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andReturn();
+    }
+
+    private MvcResult delete(UUID userId, UUID projectId, UUID definitionId) throws Exception {
+        return mvc.perform(MockMvcRequestBuilders
+                        .delete("/api/v1/projects/" + projectId + "/reports/" + definitionId)
+                        .header("Authorization", "Bearer " + tokenFor(userId)))
+                .andReturn();
+    }
+
+    private static String definition(String name, UUID runId) {
+        return "{\"type\":\"" + RUN_SUMMARY + "\",\"name\":\"" + name
+                + "\",\"parameters\":{\"runId\":\"" + runId + "\"}}";
+    }
+
+    /** The names in a caller's list, in the order the server returned them. */
+    private List<String> names(UUID userId, UUID projectId) throws Exception {
+        MvcResult result = list(userId, projectId);
+        assertThat(result.getResponse().getStatus())
+                .as("the fixture's own list must be served: %s",
+                        result.getResponse().getContentAsString())
+                .isEqualTo(200);
+
+        List<String> names = new java.util.ArrayList<>();
+        parse(result).forEach(row -> names.add(row.get("name").asText()));
+        return names;
+    }
+
+    /** Saves one and returns its id, asserting the fixture's own request was accepted. */
+    private UUID savedIdOf(UUID userId, UUID projectId, String name) throws Exception {
+        MvcResult result = save(userId, projectId, definition(name, RUN));
+        assertThat(result.getResponse().getStatus())
+                .as("the fixture's own save must be accepted: %s",
+                        result.getResponse().getContentAsString())
+                .isEqualTo(201);
+        return UUID.fromString(parse(result).get("id").asText());
+    }
+
     private MvcResult generate(UUID userId, UUID projectId, String body) throws Exception {
         return mvc.perform(MockMvcRequestBuilders
                         .post("/api/v1/projects/" + projectId + "/reports/generate")
@@ -746,14 +957,20 @@ class ReportEndpointTest extends IntegrationTestBase {
     }
 
     /**
-     * Jobs and artifacts, before every method.
+     * Jobs, artifacts and saved definitions, before every method.
      *
      * <p>A leftover {@code PENDING} row is claimed by the next method's tick, which is how a test
-     * asserting on "the completed job" ends up looking at a different one.
+     * asserting on "the completed job" ends up looking at a different one. A leftover definition is
+     * worse in a quieter way: every assertion in {@link Definitions} is an <em>exact</em> list, so
+     * one surviving row would redden whichever method happens to run second.
+     *
+     * <p>Order matters. {@code report_job.artifact_id} references the artifacts, and both jobs and
+     * artifacts reference the definitions — the latter two are {@code ON DELETE SET NULL} ({@code
+     * V27}, {@code V28}), so this order is what keeps the deletes from depending on that.
      */
     private void clearJobs() throws SQLException {
         try (Connection acme = appConnection(ACME)) {
-            for (String table : List.of("report_job", "report_artifact")) {
+            for (String table : List.of("report_job", "report_artifact", "report_definition")) {
                 try (PreparedStatement statement =
                         acme.prepareStatement("DELETE FROM " + table)) {
                     statement.executeUpdate();
