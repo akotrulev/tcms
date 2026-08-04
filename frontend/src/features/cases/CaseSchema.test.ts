@@ -84,8 +84,72 @@ describe('CaseSchema — STRUCTURED requires at least one step', () => {
     expect(pathsOf({ ...valid(), gherkinSource: null })).not.toContain('gherkinSource')
   })
 
-  it('still requires each step to describe an action', () => {
-    expect(pathsOf({ ...valid(), steps: [{ action: '' }] })).toContain('steps.0.action')
+  /**
+   * §94's auto-append is what these six exist for.
+   *
+   * The editor now keeps a blank row at the end of the step list at all times, so that typing into
+   * it appends the next one and adding a step is never a button press. That makes `steps.length`
+   * the wrong question in two directions at once, and both were live defects the moment the row
+   * became permanent:
+   *
+   *   - "at least one step" passes on a form nobody has written a step into, so an empty case
+   *     saves clean with a success toast and a version bump;
+   *   - `action.min(1)` fails on the blank row itself, so a perfectly good case cannot be saved
+   *     and the error points at a row the author never touched.
+   *
+   * The replacement is one idea — a row that carries nothing is not a step — applied twice.
+   */
+  it('ignores the trailing blank row the editor always renders', () => {
+    const input = { ...valid(), steps: [{ action: 'Refund it' }, { action: '' }] }
+    expect(CaseSchema.safeParse(input).success).toBe(true)
+  })
+
+  it('rejects a form whose ONLY step is the blank row — the defect auto-append introduces', () => {
+    const paths = pathsOf({ ...valid(), steps: [{ action: '' }] })
+    expect(paths).toContain('steps')
+    // And specifically NOT as a field error on the blank row, which is the other half: the row is
+    // an invitation, and an author who has written nothing has one problem, not two.
+    expect(paths).not.toContain('steps.0.action')
+  })
+
+  it('treats a whitespace-only row as blank in both directions', () => {
+    // Not a step, so it cannot satisfy "at least one step" …
+    expect(pathsOf({ ...valid(), steps: [{ action: '  ', testData: '\t', expectedResult: ' ' }] })).toContain(
+      'steps',
+    )
+    // … and it cannot fail the action rule either.
+    expect(pathsOf({ ...valid(), steps: [{ action: 'Refund it' }, { action: ' ' }] })).toEqual([])
+  })
+
+  it('still requires an action from a row that carries anything else', () => {
+    // Half a step: the author said what they expect and not what to do. The server refuses it, so
+    // the message has to land on the action of THAT row rather than in a banner.
+    const input = {
+      ...valid(),
+      steps: [{ action: '', testData: null, expectedResult: 'The refund is accepted' }],
+    }
+    expect(pathsOf(input)).toContain('steps.0.action')
+    expect(messageOn(input, 'steps.0.action')).toMatch(/describe the action/i)
+  })
+
+  it('points at the right row when a later one is half-written', () => {
+    const input = {
+      ...valid(),
+      steps: [{ action: 'Refund it' }, { action: '  ', testData: '120.00 EUR' }, { action: '' }],
+    }
+    expect(pathsOf(input)).toEqual(['steps.1.action'])
+  })
+
+  it('does not police step rows at all while the case is Gherkin', () => {
+    // The array is not submitted and not even rendered, so an error on it would be a refusal with
+    // nothing on screen to fix.
+    const input = {
+      ...valid(),
+      stepFormat: 'GHERKIN',
+      gherkinSource: 'Feature: x',
+      steps: [{ action: '', expectedResult: 'Something' }],
+    }
+    expect(CaseSchema.safeParse(input).success).toBe(true)
   })
 })
 

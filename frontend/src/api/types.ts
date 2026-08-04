@@ -49,6 +49,13 @@ export type TestStep = S['TestStep'];
 export type Condition = S['Condition'];
 export type CaseConditionRef = S['CaseConditionRef'];
 export type SharedStep = S['SharedStep'];
+/**
+ * One entry in the project's derived step corpus (§94).
+ *
+ * Carries no id, and that absence is the contract: a suggestion is text to copy into a step, not
+ * an entity to reference. See `/projects/{projectId}/step-suggestions` in `openapi.yaml`.
+ */
+export type StepSuggestion = S['StepSuggestion'];
 export type SharedStepInput = S['SharedStepInput'];
 export type BulkOperation = S['BulkOperation'];
 export type BulkPayload = S['BulkPayload'];

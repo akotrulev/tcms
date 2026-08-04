@@ -4,6 +4,7 @@ import {
   Button,
   Chip,
   IconButton,
+  Link as MuiLink,
   MenuItem,
   Stack,
   TextField,
@@ -374,12 +375,27 @@ function AddCaseBar({
   const [title, setTitle] = useState('');
   const [suiteId, setSuiteId] = useState('');
   const [failure, setFailure] = useState<string | null>(null);
+  /**
+   * The case this bar just made, so it can offer the way into writing it up (§94).
+   *
+   * This bar creates a title and a suite and nothing else — deliberately, because it is a place to
+   * capture intent while reading a plan, not a place to write a test. The steps are written in the
+   * **case editor**, which since §94 completes each action from the project's own corpus, appends
+   * rows as you type and reorders by drag. Growing a second step editor beside this bar would be a
+   * second implementation of all of it — `ui-rules` §8, and CLAUDE.md's "hundred slightly
+   * different pages" in one screen.
+   *
+   * Held rather than navigated to: the author is usually adding several cases in a row, and
+   * leaving the plan on the first one would make the bar's whole shape wrong.
+   */
+  const [written, setWritten] = useState<{ id: string; key: string } | null>(null);
 
   const busy = createCase.isPending || save.isPending || link.isPending;
   const ready = title.trim().length > 0 && suiteId.length > 0 && !busy;
 
   const add = async () => {
     setFailure(null);
+    setWritten(null);
     try {
       // 1. The durable half. DRAFT is the server's default and is not sent — a status an ordinary
       // create could set is an approval its author granted themselves (§6g).
@@ -410,6 +426,7 @@ function AddCaseBar({
         });
       }
       setTitle('');
+      setWritten({ id: created.id, key: created.key });
     } catch (error) {
       // Named in place, and it says what DID happen: the case may well exist even though the
       // document does not show it, and a bare "couldn't save" would send the author to create it
@@ -437,6 +454,19 @@ function AddCaseBar({
         {failure && (
           <Alert severity="error" data-testid="PlanDocument.AddCaseError">
             {failure}
+          </Alert>
+        )}
+        {written && (
+          <Alert severity="success" data-testid="PlanDocument.AddCaseWritten">
+            {written.key} is in the repository as a draft.{' '}
+            <MuiLink
+              component={RouterLink}
+              to={`/projects/${projectId}/cases/${written.id}/edit`}
+              data-testid="PlanDocument.AddCaseWrite"
+            >
+              Write the steps
+            </MuiLink>
+            .
           </Alert>
         )}
         <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ gap: 1 }}>

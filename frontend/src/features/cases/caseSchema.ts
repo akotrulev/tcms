@@ -25,11 +25,53 @@ import { z } from 'zod';
 export const StepSchema = z.object({
   id: z.string().nullable().optional(),
   keyword: z.string().nullable().optional(),
-  action: z.string().min(1, 'Describe the action.'),
+  /**
+   * Deliberately NOT `.min(1)` — the emptiness rules moved to the two checks below (§94).
+   *
+   * The editor keeps a blank row permanently at the end of the list so that typing appends the
+   * next one, which means "every row has an action" stopped being true of a correct form: the
+   * trailing row is an invitation, not a step, and a field-level `min(1)` on it would refuse
+   * every save with an error on a row the author never touched.
+   *
+   * What replaces it is narrower and lands in the same place: a row that carries *anything* must
+   * carry an action (the `superRefine` below, path `steps.N.action`), and a form must contain at
+   * least one row that carries something.
+   */
+  action: z.string(),
   testData: z.string().nullable().optional(),
   expectedResult: z.string().nullable().optional(),
   sharedStepId: z.string().nullable().optional(),
 });
+
+/** The three authored fields — the shape both emptiness helpers below read. */
+type StepLike = {
+  action?: string | null;
+  testData?: string | null;
+  expectedResult?: string | null;
+};
+
+const isBlank = (value: string | null | undefined) => (value ?? '').trim().length === 0;
+
+/**
+ * A row nobody has written anything into — including one holding only spaces.
+ *
+ * Whitespace counts as blank in **both** directions on purpose: it is what makes a row typed into
+ * and cleared again disappear at submit rather than reaching the API as a step whose action is
+ * `"  "`, and it is what stops such a row satisfying "at least one step".
+ */
+export const isBlankStep = (step: StepLike): boolean =>
+  isBlank(step.action) && isBlank(step.testData) && isBlank(step.expectedResult);
+
+/**
+ * The rows that are actually steps.
+ *
+ * **One definition, two consumers** — the schema's "at least one step" refine and the editor's
+ * submit — because they must agree exactly. A validator that counts rows the submit then drops
+ * saves an empty case; a submit that keeps rows the validator ignored posts a whitespace step. The
+ * two halves of that disagreement are individually invisible.
+ */
+export const liveSteps = <T extends StepLike>(steps: readonly T[]): T[] =>
+  steps.filter((step) => !isBlankStep(step));
 
 export const CaseSchema = z
   .object({
@@ -72,7 +114,16 @@ export const CaseSchema = z
     path: ['gherkinSource'],
     message: 'Write the scenario, or switch to structured steps.',
   })
-  .refine((data) => data.stepFormat !== 'STRUCTURED' || data.steps.length > 0, {
+  /*
+    NON-EMPTY steps, not `steps.length` — the defect §94's auto-append introduces.
+
+    The editor now keeps a blank row at the end of the list at all times, so `steps.length` is
+    never 0 on a structured case and this rule would pass on a form nobody has written a step
+    into: an empty case would save clean, with a success toast and a version bump. Counting the
+    rows that survive `liveSteps` is the same question asked of the rows that will actually be
+    sent.
+  */
+  .refine((data) => data.stepFormat !== 'STRUCTURED' || liveSteps(data.steps).length > 0, {
     path: ['steps'],
     message: 'Add at least one step, or switch to Gherkin.',
   })
@@ -83,6 +134,32 @@ export const CaseSchema = z
   .refine((data) => data.automationStatus !== 'AUTOMATED' || !!data.automationKey?.trim(), {
     path: ['automationKey'],
     message: 'Give the automated test that covers this case, so results can be matched to it.',
+  })
+  /*
+    "A step needs an action" — what `StepSchema.action.min(1)` used to say, restated as a rule
+    about the row rather than about the field.
+
+    It has to know about its neighbours to be right: the blank trailing row is exempt (it is not a
+    step yet), and a row carrying test data or an expected result is NOT (an author who filled in
+    what they expect and left the action blank has written half a step, and the server refuses it).
+    That is a cross-field question, so it lives here with the other four rather than on the field.
+
+    Structured only, matching the rule above: a Gherkin case sends no steps at all, and refusing a
+    half-written row in a list that is not submitted would be an error with nothing on screen to
+    fix — the array is not even rendered.
+  */
+  .superRefine((data, ctx) => {
+    if (data.stepFormat !== 'STRUCTURED') return;
+    data.steps.forEach((step, index) => {
+      if (isBlankStep(step)) return;
+      if ((step.action ?? '').trim().length === 0) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['steps', index, 'action'],
+          message: 'Describe the action.',
+        });
+      }
+    });
   });
 
 export type CaseInput = z.infer<typeof CaseSchema>;

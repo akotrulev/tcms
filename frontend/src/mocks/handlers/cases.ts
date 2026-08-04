@@ -11,6 +11,7 @@ import type {
   BulkResult,
   Facet,
   LifecycleStatus,
+  StepSuggestion,
   TestCase,
   TestCaseSummary,
   TestStep,
@@ -321,7 +322,73 @@ function bulkArgumentError(
   }
 }
 
+// ------------------------------------------------------- the step corpus (§94) ----
+
+/**
+ * The project's step corpus, derived the way the server derives it.
+ *
+ * Written from `StepSuggestionQuery`'s rules rather than from what the editor happens to send
+ * (§52), and the three that can be got wrong invisibly are:
+ *
+ *  - **The group key is the whole triple.** Grouping on the action alone would collapse two steps
+ *    that share a sentence and differ in what they expect, then hand the author one of the two
+ *    arbitrarily — a wrong expected result written into a field nobody re-reads.
+ *  - **`useCount` counts distinct CASES, not step rows.** A case repeating a step twice is one
+ *    case using it. Counting rows lets one loop-heavy case outrank a step forty cases share, and
+ *    both numbers look plausible.
+ *  - **Live cases only.** The mock has no soft-delete column — `DELETE` splices the row out of
+ *    `db.cases` — so this arm is structurally satisfied here and *is not demonstrated by mock
+ *    mode*. The server's `deleted_at IS NULL` is covered by `StepSuggestionEndpointTest`, which is
+ *    the only place it can be.
+ *
+ * Details are materialized lazily, so the steps come through `caseDetail` — a summary row carries
+ * no steps at all and iterating the summaries would answer an empty corpus forever. Same trap
+ * `usageOf` in `handlers/library.ts` documents.
+ */
+function stepCorpus(fragment: string | null): StepSuggestion[] {
+  // Keyed by the triple; the value counts distinct cases, so a case is added at most once.
+  const groups = new Map<string, { suggestion: StepSuggestion; cases: Set<string> }>();
+
+  for (const summary of db.cases) {
+    const detail = caseDetail(summary.id);
+    for (const step of detail?.steps ?? []) {
+      const action = step.action.trim();
+      if (!action) continue;
+      const testData = step.testData?.trim() || null;
+      const expectedResult = step.expectedResult?.trim() || null;
+      // `\u0000` cannot occur in any of the three, so the joined key cannot be forged by text
+      // that happens to contain the separator — two different triples reading as one group.
+      const key = [action, testData ?? '', expectedResult ?? ''].join('\u0000');
+      const existing = groups.get(key);
+      if (existing) existing.cases.add(summary.id);
+      else {
+        groups.set(key, {
+          suggestion: { action, testData, expectedResult, useCount: 0 },
+          cases: new Set([summary.id]),
+        });
+      }
+    }
+  }
+
+  const q = fragment?.trim().toLowerCase();
+  return [...groups.values()]
+    .map(({ suggestion, cases }) => ({ ...suggestion, useCount: cases.size }))
+    // The fragment matches the ACTION only, as the server's `LOWER(action) LIKE` does. Matching
+    // the whole triple here would offer rows whose action does not contain what was typed, which
+    // reads as the search being broken.
+    .filter((row) => !q || row.action.toLowerCase().includes(q))
+    .sort((a, b) => b.useCount - a.useCount || a.action.localeCompare(b.action))
+    .slice(0, 50);
+}
+
 export const caseHandlers = [
+  http.get(`${API}/projects/:projectId/step-suggestions`, async ({ request }) => {
+    const denied = requireAuth(request);
+    if (denied) return denied;
+    await delay(LATENCY);
+    return HttpResponse.json(stepCorpus(new URL(request.url).searchParams.get('q')));
+  }),
+
   http.get(`${API}/projects/:projectId/cases`, async ({ request }) => {
     const denied = requireAuth(request);
     if (denied) return denied;

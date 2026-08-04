@@ -32,6 +32,16 @@ export const keys = {
   conditions: (p: string, q: string, type?: string) => ['projects', p, 'conditions', q, type ?? 'ALL'] as const,
   sharedSteps: (p: string, q: string) => ['projects', p, 'shared-steps', q] as const,
   /**
+   * The derived step corpus (§94), keyed by the fragment it was narrowed with.
+   *
+   * `q` is in the key for the reason every search key carries its term: the case editor fires one
+   * of these per step row as the author types, so several are in flight at once and the answer to
+   * "refu" must not land in the list a row that now reads "refund" is showing. Two rows typing the
+   * same fragment share the entry, which is the other half of why the term rather than the row is
+   * what identifies it.
+   */
+  stepSuggestions: (p: string, q: string) => ['projects', p, 'step-suggestions', q] as const,
+  /**
    * A subject's reviews. Keyed by the subject *type* as well as its id, because the id spaces are
    * independent — a case and a suite may in principle carry the same uuid, and a key that dropped
    * the type would serve one artifact's review trail for another.
