@@ -1,7 +1,7 @@
 /** The kanban board's cards, including the refusal a derived card must answer with. */
 import { HttpResponse, delay, http } from 'msw';
 import type { WorkItem } from '../../api/types';
-import { addWorkItem, db, newId, personalBoard, workItems } from '../db';
+import { addWorkItem, db, newId, personalBoard, teamBoard, workItems } from '../db';
 import { currentUser, projects } from '../fixtures/core';
 import { workItemColumns } from '../../lib/labels';
 import { API, LATENCY, notFound, problem, projectMembers } from './shared';
@@ -38,7 +38,46 @@ export const workItemHandlers = [
     await delay(LATENCY);
     const url = new URL(request.url);
     const projectId = url.searchParams.get('projectId');
+    const teamId = url.searchParams.get('teamId');
     const mine = url.searchParams.get('mine') === 'true';
+
+    /*
+      §6l's THIRD board (§84), and the two refusals around it — both mirrored from
+      `WorkItemController` rather than from what the SPA sends (§52). `useTeamBoard` cannot produce
+      either of them, which is exactly why they belong here: the mock is written from the server's
+      rules, and a rule only the current client happens to respect is a rule the next client breaks.
+
+        - **`teamId` with `mine=true` is a 400.** They select two different boards, and their
+          intersection is a fourth nobody asked for — my own work minus anything the team does not
+          hold, which is my own work again if I am on the team and always empty if I am not. Note
+          that for a caller who *is* on the team the refusal is unobservable in the body, because
+          their cards are a subset of the team's; it exists only as a status.
+        - **`teamId` with `projectId` is LEGAL** — §6l's "swimlanes by member", a team's work inside
+          one project. The two narrow along different axes (who, and where) rather than naming two
+          boards. No screen sends it yet; the mock answers it anyway, because the day one does is
+          not the day to discover the mock guessed.
+
+      **The project gate runs BEFORE the team's empty-set shortcut**, which is the trap §84 named:
+      answering an empty team first — there is nothing to assemble either way — turns "empty team +
+      unreachable project" into a **200 that confirms the project exists**.
+    */
+    if (teamId) {
+      if (mine) {
+        return problem(
+          400,
+          'Choose one board',
+          'A team board and your own work are two different boards. Ask for one of them.',
+        );
+      }
+      if (projectId && !db.projects.some((p) => p.id === projectId)) return notFound('That project');
+
+      const board = teamBoard(teamId, projectId ?? undefined);
+      // Unknown team, another company's team — one answer, or this operation is a company-wide
+      // team-existence oracle answerable by anybody with a session and a guessed UUID (§6t).
+      // Distinct from `[]`, which is a reachable board with nothing on it.
+      if (!board) return notFound('That team');
+      return HttpResponse.json(board);
+    }
 
     if (!projectId) {
       if (!mine) {

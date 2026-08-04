@@ -1,6 +1,51 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-04 (latest section: **§84, the team board** — the last of §6l's three boards to
+**Date:** 2026-08-04 (latest section: **§85, the team board's screen** — §84's frontend half, and
+§6l's three boards now have three screens. It needed **no key, no gate and no rail item**: one hook,
+one screen, one link. **The route decision is about `/admin`, not about projects.** Not under
+`/projects/:projectId` for §83's reason (with `projectId` omitted the cards span every project, so
+any project in the URL is an arbitrary one) — but also **not under `/admin/teams`, which is the
+natural place and is wrong**: every affordance there is gated on `company:teams` and **this board is
+gated on nothing at all** (§6k: the org chart is readable by any member; §84 declined to invent a key
+for the seventh time). A screen every member may open, filed under a prefix reading *administration*,
+states the opposite of what is true — and the URL is the part people quote to each other. So
+**`/teams/:teamId/board`, beside `/admin/teams` and not beneath it**, which is *not* the collision §83
+refused for `/board`: a bare name for two scopes is ambiguous, a board named by its own subject
+segment is not. **No rail item** (a rail entry needs a team chosen before there is one) — the entry is
+a **Board** link per row on the team list, placed **outside** the `PermissionGate` wrapping
+Members/Edit/Delete rather than inside it as a fourth button, which is the whole gating decision in
+one line of JSX and the natural mistake. **What the screen may not say** is the other half: the cards
+are bounded by the *reader's* grants, so **there is no count of the team's work anywhere** — a number
+from a partial view reads as canonical and is wrong for everybody but its reader; the subtitle says
+whose view it is instead. **No filter chips** — the client *cannot* express `teamId`+`mine` at all, so
+there is no dead handling for the 400, and a chip would be worst for the person most likely to click
+it, since §84 records the refusal is **unobservable in the body** for a caller on the team. **No
+project narrowing**: `teamId`+`projectId` is legal and is §6l's *swimlanes by member*, which is a
+**layout**, not a filter — named as not built. **The one thing the client must word itself is the
+404**: the server's is empty-bodied on purpose (§6t), so `ApiError.detail` falls back to the status
+text and `describeError` would render **"Not found — Not Found"**. `TeamBoardPage` handles it above
+the region with a sentence and a **Back to teams** button, keyed on `status === 404` and never on a
+server sentence (§82's rule), which is safe *here* for an extra reason: **this hook sends no
+`projectId`**, so the other 404 arm is unreachable from the screen. It stays visibly distinct from
+`200 []`, which is one sentence for both of §84's empty cases without guessing between them. The
+team's **name** comes from `GET /teams` (no 403, readable by any member) and is deliberately **not**
+in a `DataRegion` — a board titled "Team board" because the org chart failed beats one that refuses
+to render. **`linkFor` was verified, not assumed** — the named risk, repaired in two consecutive
+slices, and correct here *because §83 removed the route parameter entirely*: with one, this screen
+would emit `/projects//cases/…`, having no project at all. **The mock's fixture had §84's own hole**:
+every card was assigned to `users[0]` or `users[1]`, **both in Payments Squad**, so Checkout Squad's
+board was empty and an implementation ignoring membership — or quietly answering the personal board —
+passed everything. One OLB task assigned to **Priya Nair** (Checkout Squad, not the signed-in user)
+turns it into a **pair**: Payments holds the caller's cards and not hers, Checkout holds hers and none
+of theirs. It also un-vacuumed `personalBoard`'s own filter test, which had no foreign stored task to
+exclude. `personalBoard` and `teamBoard` now share one `assemble()` — **the one place the visible
+project set is named** (§58's E1). **What mock mode structurally cannot prove is stated rather than
+inferred**: `db.projects` *is* the caller's visible set, so the reader-bound is structural there, and
+browser rows 20–22 are live-only. The **build**, not the runner, found the one defect: a helper's
+`map(item => item.assignee?.id)` gave a `Set<string | undefined>` comparing happily against a
+`string[]` — twelve green tests, two type errors. **705/705** (682 → 705, three generated unattended
+by §70's checks); **0 mutations run inline**, 25 browser rows and 6 frontend mutation rows queued.
+Before that: **§84, the team board** — the last of §6l's three boards to
 have no way of being asked for, and the slice that **completes them**: `GET /work-items?teamId=…`,
 a **third selector on the operation that already serves the other two**, because §6l's three boards
 differ in *which cards are kept* and in nothing else — same assembly, same shape, same sort, so a
@@ -1148,3 +1193,4 @@ See [`docs/plans/2026-07-31-parallel-execution-rework.md`](plans/2026-07-31-para
 | [§82](handoff/82-the-gating-rules.md) | §6g's gating rules — the edge that is not a target, and the override nobody had to invent |
 | [§83](handoff/83-the-cross-project-board.md) | The cross-project board — the parameter that was left off, and the mock that had been showing the wrong project since Phase 1 |
 | [§84](handoff/84-the-team-board.md) | The team board — the bound that is the reader's, and the third selector on one operation |
+| [§85](handoff/85-the-team-board-screen.md) | The team board's screen — the route that is not administration, and the 404 the server refuses to word |

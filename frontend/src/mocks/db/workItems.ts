@@ -215,9 +215,74 @@ function subjectOf(
  * generator loop where the personal filter must not be.
  */
 export function personalBoard(userId: string): WorkItem[] {
-  return db.projects
-    .flatMap((project) => workItems(project.id, project.key))
-    .filter((item) => item.assignee?.id === userId);
+  return assemble().filter((item) => item.assignee?.id === userId);
+}
+
+/**
+ * The cards, before anybody's filter — **the one place the visible project set is named** (§84).
+ *
+ * Extracted when the team board arrived, because it is the line that decides what a board may
+ * contain and there are now two callers of it. `db.projects` is the exact list `GET /projects`
+ * answers, read from the same store, so neither board can show work from a project the switcher
+ * will not offer; two copies of that expression is the one that drifts (§58's E1), and it drifts in
+ * the direction where a board quietly grows a project.
+ *
+ * `projectId` narrows *where* and is the third selector's legal conjunction (`teamId` + `projectId`,
+ * §6l's swimlanes). It is filtered from the same list rather than fetched separately, so a project
+ * outside the visible set cannot be reached by naming it.
+ *
+ * **The caller's own project visibility is what the mock cannot model**, and this is the honest
+ * limit §83 recorded for the personal board, restated because the team board makes it matter more:
+ * the fixture carries no project the signed-in user is barred from, so `db.projects` *is* their
+ * visible set, and the server's decision that a team board is bounded by the READER rather than by
+ * the team is structural here rather than demonstrated. What the fixture can and does prove is the
+ * other bound — the team's membership — and that the assembly reads no project outside this list.
+ */
+function assemble(projectId?: string): WorkItem[] {
+  const scope = projectId ? db.projects.filter((project) => project.id === projectId) : db.projects;
+  return scope.flatMap((project) => workItems(project.id, project.key));
+}
+
+/**
+ * §6l's **team board** (§84) — `BoardService.teamBoard`, spelled in TypeScript.
+ *
+ * Four properties are mirrored from the server rather than from what `useTeamBoard` happens to
+ * send, which is §52's rule and the one this module has now been caught breaking twice (§81's
+ * invented review generator, §83's project stamp):
+ *
+ *  1. **The team contributes nothing but a set of assignees.** The projects come from
+ *     {@link assemble} — the caller's visible set — exactly as the personal board's do. A board
+ *     built the other way round ("everything assigned to a member of team T") is one query, reads
+ *     correctly, and renders the case keys, titles and project names of every project any member
+ *     was granted, to a reader granted none of them.
+ *  2. **Membership is expanded at READ time, and direct members only.** §80 refused to expand a
+ *     team when a review request is *written* because a stored expansion is a snapshot of who was
+ *     on the team the day somebody clicked; the same fact makes expanding here correct. `team` has
+ *     a parent edge (§6k) and this deliberately does not walk it — a parent team inheriting every
+ *     child team's work is a different board, and one §6l does not describe.
+ *  3. **The filter runs AFTER assembly**, not inside each generator, for the reason `present`'s own
+ *     header gives: four predicates to keep in step is three chances to show somebody else's work,
+ *     silently, with nothing failing.
+ *  4. **An unknown team is `undefined` — a 404, never an empty board.** The handler turns it into
+ *     the status; the distinction lives here so it cannot be lost in a route. A team with **no
+ *     members** answers `[]` instead, and so does a team whose members have no visible work: the
+ *     two are deliberately the same answer, because a client able to tell them apart would be
+ *     reading team membership out of a board.
+ *
+ * The empty-member shortcut is inside this function and **after** the team has resolved, never in
+ * front of the project gate the handler applies — answering an empty team first turns "empty team +
+ * unreachable project" into a 200 that confirms the project exists.
+ */
+export function teamBoard(teamId: string, projectId?: string): WorkItem[] | undefined {
+  const team = db.teams.find((row) => row.id === teamId);
+  if (!team) return undefined;
+
+  const members = new Set(team.members.map((member) => member.id));
+  if (members.size === 0) return [];
+
+  // `item.assignee &&` first: an unassigned card belongs to no team, and `members.has(undefined)`
+  // would be a type error rather than the silent `false` it looks like.
+  return assemble(projectId).filter((item) => item.assignee !== undefined && members.has(item.assignee.id));
 }
 
 export function addWorkItem(item: WorkItem): WorkItem {

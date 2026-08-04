@@ -894,6 +894,53 @@ export const workItems: WorkItem[] = [
     // applies, spelled from the contract's enum rather than as a literal list.
     allowedTransitions: ['TODO', 'BLOCKED', 'IN_REVIEW', 'DONE'],
   },
+  /*
+   * §84's addition, and it is the row that makes the **team** board provable in mock mode.
+   *
+   * Every other card in this fixture set is assigned to `users[0]` — the signed-in user — or to
+   * `users[1]`, both of whom are in *Payments Squad*. So before this row, `Checkout Squad`'s board
+   * was empty, and an implementation that ignored team membership entirely (or that quietly
+   * answered the personal board) would have passed every assertion anybody thought to write: the
+   * team bound and the personal bound gave the same answer, which is precisely the vacuity §84's
+   * own backend fixture had to be extended to escape.
+   *
+   * So: a task assigned to **Priya Nair (`users[2]`), who is in Checkout Squad and not in Payments
+   * Squad and is not the signed-in user.** That turns the two boards into a *pair* — Payments
+   * Squad must contain the signed-in user's cards and not this one, Checkout Squad must contain
+   * this one and none of theirs — and neither half can pass for the wrong reason while the other
+   * holds. It also stops `personalBoard`'s "keeps only the caller's own cards" assertion from being
+   * vacuous over stored tasks, which it was: there was no foreign one.
+   *
+   * In OLB rather than MOB deliberately, so the team board is genuinely cross-project (Priya's card
+   * from OLB beside her colleagues' from anywhere) rather than one project's list under a new name.
+   *
+   * *What this fixture still cannot express:* a project the signed-in user is barred from.
+   * `db.projects` IS their visible set in mock mode, so the server's decision that a team board is
+   * bounded by the READER and not by the team is structural here rather than demonstrated — §83's
+   * recorded limit for the personal board, unchanged and now load-bearing for two screens.
+   */
+  {
+    id: uid(2, 'j'),
+    derived: false,
+    sourceType: null,
+    sourceId: null,
+    kind: 'TASK',
+    title: 'Re-baseline the checkout smoke pack',
+    description: 'Ahead of the cart rewrite.',
+    status: 'TODO',
+    priority: 'MEDIUM',
+    dueDate: null,
+    overdue: false,
+    assignee: {
+      id: users[2].id,
+      displayName: users[2].displayName,
+      email: users[2].email,
+      avatarUrl: null,
+    },
+    projectId: PROJECT_ID,
+    projectKey: 'OLB',
+    allowedTransitions: ['IN_PROGRESS', 'BLOCKED', 'IN_REVIEW', 'DONE'],
+  },
 ];
 
 export { uid };

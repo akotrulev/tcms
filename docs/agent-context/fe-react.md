@@ -3,7 +3,7 @@
 # fe-react — orientation cache (TCMS)
 
 **Last verified:** 2026-08-04
-**Baseline commit:** `1669074`
+**Baseline commit:** `d2958d9` (+ §85, this commit)
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
 `frontend/vite.config.ts`
 
@@ -25,7 +25,7 @@
 - **`npm run build` is THE gate** (`tsc -b` + vite build). **Do not trust `tsc --noEmit`** — it has
   reported 0 errors while the build failed with nine (working agreement). `#confirmed`
 - `npm run lint` — oxlint, must stay at **0 warnings**; it prints nothing when clean.
-- `npm run test:run` — Vitest + RTL. **682/682** at this baseline (§83). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
+- `npm run test:run` — Vitest + RTL. **705/705** at this baseline (§85). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
 - `npm run gen:api` — regenerate `src/api/schema.d.ts` after **any** `openapi.yaml` change. Runs
   through `npx` on purpose (the scaffold pins TS 6, the tool peer-requires 5.x); do not "fix" it.
 - **Live mode:** `VITE_API_MODE=live` in `.env.local` proxies `/api` to `localhost:8080`.
@@ -37,8 +37,9 @@
 
 `src/{api,app,auth,components,features,lib,mocks,notifications,a11y,test}`. Feature folders under
 `features/<area>/`; routes are project-scoped under `/projects/:projectId/*` (`app/router.tsx`, lazy).
-**Three routes are NOT** — `/` (project list), `/admin/teams` (company), and `/my-work` (§83, the
-cross-project personal board). A screen whose subject is not a project does not live under one.
+**Four routes are NOT** — `/` (project list), `/admin/teams` (company), `/my-work` (§83, the
+cross-project personal board) and `/teams/:teamId/board` (§85, the team board). A screen whose
+subject is not a project does not live under one.
 
 > **⚠ This file went FIVE SLICES STALE (§72–§76) and was repaired in §77.** Only the backend half of
 > the update-the-cache habit had stuck. If you are reading this and the baseline lags HEAD by more
@@ -211,7 +212,21 @@ cross-project personal board). A screen whose subject is not a project does not 
   `mine=false`, **404** for a project id nobody can see (it used to fall back to `projects[0]`, so a
   stale bookmark rendered another project's board under a foreign id). The fixture seeds **one task
   in the second project assigned to the current user**, without which My Work in mock mode is
-  byte-identical to the first project's personal board (§72's rule). `#confirmed`
+  byte-identical to the first project's personal board (§72's rule).
+  **And it caught the FIXTURE in §85, which is a third kind of finding from the same file.**
+  `teamBoard(teamId, projectId?)` mirrors the server (team contributes only a set of assignees;
+  membership expanded at read time, **direct members only**; filter after assembly; unknown team →
+  `undefined` = 404, no members → `[]`; the empty-member shortcut **inside** the resolved team and
+  **after** the handler's project gate, or "empty team + unreachable project" becomes a 200 that
+  confirms the project exists). `personalBoard` and `teamBoard` share one **`assemble()`** — the one
+  place the visible project set is named (§58's E1). The hole it exposed: every fixture card was
+  assigned to `users[0]` or `users[1]`, **both in Payments Squad**, so Checkout Squad's board was
+  empty and an implementation ignoring membership — or quietly answering the personal board — passed
+  everything. The fixture now seeds **one OLB task to Priya Nair (`users[2]`, Checkout Squad, not the
+  signed-in user)** and the assertions come as a **pair**, each half stopping the other being vacuous.
+  ***What mock mode structurally cannot prove:*** `db.projects` **is** the caller's visible set, so
+  the reader-bound — the whole of §84's decision — is structural here, not demonstrated. Live only.
+  `#confirmed`
 - **`BoardPage.linkFor` is where a card's key goes, and it keys on `sourceType` (§81) and on the
   CARD's project (§83).** Every card routed to a case search until the inbox drew the first cards
   about **suites and plans**; a review of `TP-5` sent there renders "no cases match", which reads as
@@ -231,6 +246,31 @@ cross-project personal board). A screen whose subject is not a project does not 
   **no New task** (a create needs a project it does not have). It never 404s; `[]` is the normal
   state of a member with no grants. Rail item sits **above the project switcher**, the only one that
   renders with no project resolved. `#confirmed`
+- **§6l's THREE boards are three screens over ONE `Board` and ONE operation (§85 completes them).**
+  `/projects/:projectId/board` (§53) · `/my-work` (§83) · **`/teams/:teamId/board` (§85)**.
+  `projectId` narrows *where*; `teamId` and `mine` narrow *whose*; the response shape and sort are
+  identical, which is why there is no second component and no second path. **The team board's route
+  is deliberately NOT under `/admin/teams`**: every affordance on that screen is gated on
+  `company:teams` and **the team board is gated on nothing at all** — §6k makes the org chart
+  readable by any company member, and §84 declined to invent a key (a key seeded to nobody is a 403
+  nobody can grant out of). Filing a screen every member may open under a prefix reading
+  "administration" states the opposite of what is true. Same reason the **Board** link on
+  `TeamsPage`'s rows sits **outside** the `PermissionGate` wrapping Members/Edit/Delete rather than
+  inside it as a fourth button — that one line of JSX *is* the gating decision, and the mistake
+  compiles and renders identically. **The cards are bounded by the READER's project grants, so two
+  people see different boards** — therefore **no count, capacity figure or percentage may be
+  rendered** on that screen; a number from a partial view reads as canonical and is wrong for
+  everybody but its reader. `useTeamBoard` sends **only** `teamId`: `teamId`+`mine=true` is a 400
+  (and is *unobservable in the body* for a caller on the team, so a chip would look like a filter
+  that silently did nothing), and `teamId`+`projectId` is legal — §6l's **swimlanes by member**,
+  a layout not a filter, answered by the mock and built by no screen. **The 404 is worded by the
+  CLIENT**: the server's is empty-bodied on purpose (§6t), so `ApiError.detail` falls back to the
+  status text and `describeError` renders "Not found — Not Found". `TeamBoardPage` keys on
+  `status === 404` above the region — safe *there* because the hook sends no `projectId`, so the
+  other 404 arm is unreachable — and keeps it visibly distinct from `200 []`, which is a reachable
+  empty board. The team **name** comes from `GET /teams` (declares no 403) and is **not** in a
+  `DataRegion`: a board titled "Team board" because the org chart failed beats one that will not
+  render. `#confirmed`
 - **Every board key shares the `work-items` root, and the move/create hooks invalidate the ROOT
   (§83).** The same card is on both boards, so keying an invalidation to the board you were looking
   at leaves the other holding a card in the column it just left. `useMoveWorkItem()` takes no
@@ -273,6 +313,24 @@ cross-project personal board). A screen whose subject is not a project does not 
   with the reasoning recorded in `vite.config.ts`.
 
 ## Session log
+
+- 2026-08-04 · EXTEND · §6l's **team board** screen (§85) — §84's frontend half, and the slice that
+  gives §6l's three boards three screens over one `Board` and one operation. New:
+  `features/board/TeamBoardPage.tsx` + its test, route **`/teams/:teamId/board`** (**beside**
+  `/admin/teams`, not beneath it — see the seam), the ungated **Board** link on every `TeamsPage`
+  row, `useTeamBoard` + `keys.teamBoard`, and the mock's `teamBoard` + both of §84's refusals.
+  `npm run gen:api` first — §84 moved `openapi.yaml` and left `schema.d.ts` stale.
+  **No new permission key, no gate, no rail item, no contract change.** `linkFor` was **verified,
+  not assumed** — the named risk of the slice, correct here precisely *because* §83 removed the route
+  parameter rather than passing the right one down (with one, this screen would emit
+  `/projects//cases/…`, having no project at all). The finding was the **fixture**: §84's own hole,
+  one layer up — see the mock seam. And `npm run build` caught what the runner could not: a helper's
+  `map(item => item.assignee?.id)` gave a `Set<string | undefined>` comparing happily against a
+  `string[]`, twelve green tests and two type errors. 20 tests written (12 `TeamBoardPage`, 7
+  `mocks/db/workItems`, 1 `TeamsPage`); 682 → **705**, the other 3 being §70's contract checks
+  generating cases for the new `api.get` call site unattended. **0 mutations run inline** (policy);
+  **25 browser rows** queued (six live-only — and the live-only ones are the ones that matter, since
+  the reader-bound is unreachable in mock mode by construction), **6 frontend mutation rows**.
 
 - 2026-08-04 · EXTEND · §6l's cross-project "My Work" board (§83) — the bound §81 named and left
   behind. New: `features/board/MyWorkPage.tsx` + its test, route `/my-work` (**outside the project

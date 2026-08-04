@@ -12,6 +12,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useMemo, useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../../auth/useAuth';
 import type { Team, User } from '../../api/types';
 import { useRoleAssignments, useRoles, useTeams, useUsers } from '../../api/queries';
@@ -432,13 +433,40 @@ function TeamTree({
             ))}
 
             {/*
+              §6l's team board (§84), and **the one affordance on this page with no gate around
+              it** — which is the reason it sits outside the `PermissionGate` below rather than
+              inside it as a fourth button.
+
+              There is no permission key for a team board and §84 declined to invent one: every card
+              it can return is one the reader could already see on a project board, and a key seeded
+              to nobody would be a 403 no administrator could grant their way out of. Nor must the
+              reader be *on* the team — §6k makes the org chart readable by any member of the
+              company, and a team board a lead's manager cannot open is a board for nobody. Wrapping
+              this in `company:teams` would hand a work view to the two roles that administer the
+              org chart, which is not who the board is for.
+
+              It is the entry point to that screen: `/teams/:teamId/board` has no rail item, because
+              a rail entry would need a team chosen before there is one, and this list is where a
+              team is chosen.
+            */}
+            <Button
+              component={RouterLink}
+              to={`/teams/${team.id}/board`}
+              size="small"
+              data-testid="Admin.Teams.Item.Board"
+              sx={{ ml: 'auto' }}
+            >
+              Board
+            </Button>
+
+            {/*
               One gate wrapping all three, rather than three: they answer to the same permission at
               the same scope, and a per-button copy is three places for the key to be mistyped.
               Pushed right so the tree still reads as a tree.
             */}
             <PermissionGate projectId="company" permission="company:teams">
               {({ allowed, reason }) => (
-                <Stack direction="row" sx={{ gap: 0.5, ml: 'auto' }}>
+                <Stack direction="row" sx={{ gap: 0.5 }}>
                   <Tooltip title={allowed ? '' : reason}>
                     <span>
                       <Button

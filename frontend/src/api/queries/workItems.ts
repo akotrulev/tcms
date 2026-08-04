@@ -39,6 +39,41 @@ export function useMyWork(): UseQueryResult<WorkItem[]> {
 }
 
 /**
+ * §6l's **team board** (§84) — one team's work, across every project the CALLER can see.
+ *
+ * The third selector on the same operation, which is why there is no new path here either:
+ * `projectId` narrows *where*, `teamId` and `mine` narrow *whose*, and the response shape and sort
+ * are identical in all three cases. A `/teams/{id}/work-items` route would be a second door onto
+ * one read model.
+ *
+ * **The bound is the caller's own project visibility, never the team's**, and that has a
+ * consequence this hook's callers must not design around: **two people asking for the same team's
+ * board legitimately receive different card sets.** So nothing built on this may present the answer
+ * as the team's canonical workload — no "the team has N items", no capacity arithmetic, no
+ * percentage of anything. What the reader is holding is *this team's work, as much of it as they
+ * are entitled to see*. The alternative the server refused is a cross-project leak with a team id
+ * for a key: the case keys, titles and project names of every project any member was granted,
+ * rendered to somebody granted none of them.
+ *
+ * **Neither `mine` nor `projectId` is a parameter**, and that is why this hook cannot produce the
+ * operation's second 400. `teamId` with `mine=true` selects two boards at once and is refused; a
+ * hook able to send it would exist only to make that error. The `projectId` conjunction is legal
+ * (§6l's "swimlanes by member") and is left unbuilt rather than half-built — see `TeamBoardPage`.
+ *
+ * **404 is a real answer here, unlike on the personal board**: this request names something that
+ * can fail to resolve. An unknown team, another company's team and a `projectId` the caller cannot
+ * reach are one indistinguishable, empty-bodied 404 on purpose, or the operation becomes a
+ * company-wide team-existence oracle answerable with a guessed UUID (§6t). `TeamBoardPage` supplies
+ * the sentence the server deliberately does not.
+ */
+export function useTeamBoard(teamId: string): UseQueryResult<WorkItem[]> {
+  return useQuery({
+    queryKey: keys.teamBoard(teamId),
+    queryFn: ({ signal }) => api.get<WorkItem[]>(`/work-items${qs({ teamId })}`, { signal }),
+  });
+}
+
+/**
  * Moves a card.
  *
  * Takes no board: `PATCH /work-items/{id}` names no project either — the card's own row carries it,

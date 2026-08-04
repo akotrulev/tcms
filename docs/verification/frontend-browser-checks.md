@@ -716,3 +716,47 @@ without it, My Work in mock mode is byte-identical to OLB's personal board.
 | 17 | `VITE_API_MODE=live`, sign in as a user with **grants on two projects**, open My Work | Cards from both. The mock has no per-project grant data (`projectMembers` records the same limit), so the "projects you can **see**" half of the aggregate is only genuinely exercised against a real server. | **live only** |
 | 18 | Live, as a user with **no project grants at all** | **`200 []`** rendered as the empty state — never a 404 and never an error. The personal board names no project, so nothing can fail to resolve; this is the first screen a newly added member sees and it must read as an empty queue rather than as a broken product. | **live only** |
 | 19 | Live, hit `GET /api/v1/work-items` directly with no parameters | **400, "Choose a board"**, with the sentence naming both requests that do work. The SPA never sends it; this row confirms the refusal the SPA's shape is built around actually exists. | **live only** |
+
+## §85 — §6l's team board
+
+The eighteenth slice in this queue, and the **second** screen outside the project frame. Two things
+make these rows different from §83's: the reader is looking at *other people's* work, and the answer
+is bounded by the reader's own grants — so several rows are only meaningful with two different
+sign-ins, and the ones that matter most are **live only**, because mock mode has no project anybody
+is barred from.
+
+The fixture now seeds **one OLB task assigned to Priya Nair** (Checkout Squad, not the signed-in
+user) for the same reason §83 seeded a MOB task: without it, every card in the store belongs to
+Payments Squad and a team board that ignored membership entirely would look right.
+
+| # | Flow | What must be true | Mode |
+|---|---|---|---|
+| 1 | `npm run dev`, open **Teams & roles**, look at any team row | A **Board** link is present on every row, and it is **not greyed out** — even when Edit / Members / Delete beside it are. It is the one affordance there with no permission behind it. | mock |
+| 2 | Sign in as a caller **without** `company:teams` (a Test Engineer), open Teams & roles | Same: the three admin buttons are disabled with a reason, **Board is live**. This is the row the slice's gating decision turns on — a Board button written as a fourth child of that gate looks identical until this sign-in. | **live only** |
+| 3 | Click **Board** on *Payments Squad* | Lands on `/teams/<uuid>/board` — check the address bar. The title reads "Payments Squad — board", the tab title "Board · Payments Squad". | mock |
+| 4 | Read the cards on that board | Cards assigned to **more than one person**, each card naming its assignee, and cards from **both OLB and MOB** each stamped with its own project key. One person or one project means either the fixture regressed or the board quietly became the personal one. | mock |
+| 5 | Go back and click **Board** on *Checkout Squad* | A **different set** — Priya's OLB task is here and the signed-in user's cards are not. Two teams showing the same board is the defect that passes every unit test written from one team. | mock |
+| 6 | Click the key on a card from **MOB** on a team board | Lands on a MOB URL that resolves. `linkFor` has needed repair in two consecutive slices (§81, §83); this is the second cross-project board and therefore the second screen that would expose the same class. Check the address bar, not that a page rendered. | mock |
+| 7 | Drag a **task** card on a team board to another column, then open that project's own board and My Work | The card is in the new column on **all three**. The move invalidates the shared `work-items` root; a third board is exactly the case §83's key comment predicted. | mock |
+| 8 | Drag a **derived** card on a team board | Refused in place with the sentence naming what to update — identical to both other boards. A difference here means a second board has grown. | mock |
+| 9 | Look for filter chips and for **New task** | **Neither is present.** `teamId` + `mine=true` is a 400 the client must not be able to send; a create needs a project this screen does not have. | mock |
+| 10 | Edit the URL to `/teams/<a-uuid-that-is-not-a-team>/board` | **"No such team"** with a *Back to teams* button that works — **not** an empty board, and not "Not found — Not Found". The server's 404 is empty-bodied, so the sentence is the client's; this row is the only place the copy is visible. | mock |
+| 11 | From row 10, press **Back to teams** | Lands on `/admin/teams`. A dead-end error page on a screen reached by a shared link is the failure this button exists for. | mock |
+| 12 | Open a team with **no members** (create one on Teams & roles, then open its board) | The **empty state**, worded as a reachable empty board — not the "No such team" error. The two must be visibly different; they are the two answers this screen exists to keep apart. | mock |
+| 13 | `tcmsFaults.hang()`, then reload a team board | Loading state, then **failure on the timeout budget** rather than an endless spinner. The header stays on screen throughout. | mock |
+| 14 | `tcmsFaults.status(503, 30)`, reload, then `tcmsFaults.off()` and press **Try again** | The failed state offers a retry and the retry works — and it must **not** read "No such team". A 503 wearing the 404's sentence sends the reader looking for a team that is still there. | mock |
+| 15 | Load a team board, then `tcmsFaults.status(500)` and let it refetch | The board **keeps its cards** and marks them stale rather than blanking. | mock |
+| 16 | `tcmsFaults.expire()`, then reload a team board | The session recovers **in place** and the board loads. | mock |
+| 17 | With the org chart failing (`tcmsFaults.only('/teams')` then `tcmsFaults.status(500)`), open a team board | The **board still renders**, under the fallback title "Team board". The name is chrome from a second read; gating the board on it would blank a board that loaded fine. | mock |
+| 18 | Keyboard only: Tab through a team row on Teams & roles | Board is reachable and activates on Enter as a link (not a button-that-navigates), and its focus ring is visible against the row. | mock |
+| 19 | Narrow the window below `md`, open a team board | The columns stack (`xs: 1fr`) and nothing scrolls the page horizontally. The board is the same component, so this is a regression check on the new frame around it. | mock |
+| 20 | **Live**, sign in as **user A** granted on two projects and open a team's board; note the cards. Then sign in as **user B**, granted on only one of them, and open **the same team's board** | **B sees strictly fewer cards** — the ones from the project they hold no grant on are absent, and no error is shown. This is §84's headline decision made visible, and it is *unreachable in mock mode*: the fixture has no project the caller is barred from, so this bound is structural there rather than demonstrated. | **live only** |
+| 21 | **Live**, as a member with **no project grants at all**, open any team's board | **`200 []`** rendered as the empty state — never a 404 and never an error. | **live only** |
+| 22 | **Live**, as a member who is **not on the team**, open its board | It renders. Membership is not a requirement (§6k) — a team board a lead's manager cannot open is a board for nobody. | **live only** |
+| 23 | **Live**, hit `GET /api/v1/work-items?teamId=<uuid>&mine=true` directly | **400, "Choose one board"**. The SPA cannot send it; this row confirms the refusal the SPA's shape is built around actually exists. Note it is *unobservable in the body* for a caller on the team, so the status code is the only evidence. | **live only** |
+| 24 | **Live**, hit `GET /api/v1/work-items?teamId=<a team in another company>` | **404, empty body** — identical to an unknown UUID. If the two differ in any way, the operation is a company-wide team-existence oracle (§6t). | **live only** |
+| 25 | **Live**, hit `GET /api/v1/work-items?teamId=<valid>&projectId=<valid>` | **200**, the team's work inside that one project. Legal (§6l's swimlanes) and no screen sends it yet — the mock answers it, so this row is what stops the mock's answer being the only definition. | **live only** |
+
+**Highest-risk rows are 20 and 5.** Row 20 is the only place the reader-bound is observable at all;
+row 5 is the only place the team-bound is, and both are the kind of defect that looks completely
+correct to whoever wrote it, because their own board is right.

@@ -80,6 +80,25 @@ export const keys = {
    */
   myWork: ['work-items', 'ALL', true] as const,
   /**
+   * §6l's **team board** (§84) — under the same `work-items` root, for `myWork`'s reason.
+   *
+   * A team board's cards overlap both other boards: an execution assigned to a colleague is on
+   * their My Work, on their project's board, and on every team board they are a member of. So a
+   * move made anywhere has to refresh this one too, which the root invalidation already does — a
+   * third board is exactly the case that comment predicted.
+   *
+   * `'TEAM'` sits where a project id goes and cannot collide with one (project ids are UUIDs), and
+   * the team id follows it rather than replacing it: two team boards are two caches, and keying
+   * only on `'TEAM'` would serve one team's cards under another team's name for as long as the
+   * entry stayed fresh.
+   *
+   * **No `mine` and no project**, because neither is a request this board can make: `teamId` with
+   * `mine=true` is a **400** (two boards at once), and the `projectId` conjunction §6l calls
+   * "swimlanes by member" is a layout nothing renders yet. Both would be key-space entries for
+   * requests no hook sends.
+   */
+  teamBoard: (teamId: string) => ['work-items', 'TEAM', teamId] as const,
+  /**
    * The caller's permissions with **no project in the question** — a different answer from
    * `permissions(projectId)` and therefore a different key.
    *

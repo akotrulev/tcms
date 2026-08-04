@@ -17,7 +17,7 @@ export {
 export { descendantSuiteIds, suiteCaseCount, suiteOwnCaseCount, suiteTree } from './suites';
 export { caseDetail, caseVersions, recordCaseVersion, writeCase } from './cases';
 export { materialiseRun, planScopeCaseIds, recountRun, runExecutions } from './executions';
-export { addWorkItem, personalBoard, workItems } from './workItems';
+export { addWorkItem, personalBoard, teamBoard, workItems } from './workItems';
 export {
   addComment,
   assignReviewer,

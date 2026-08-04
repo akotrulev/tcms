@@ -75,6 +75,9 @@ const ArtifactsPage = lazy(() =>
 );
 const BoardPage = lazy(() => import('../features/board/BoardPage').then((m) => ({ default: m.BoardPage })));
 const MyWorkPage = lazy(() => import('../features/board/MyWorkPage').then((m) => ({ default: m.MyWorkPage })));
+const TeamBoardPage = lazy(() =>
+  import('../features/board/TeamBoardPage').then((m) => ({ default: m.TeamBoardPage })),
+);
 const TeamsPage = lazy(() => import('../features/admin/TeamsPage').then((m) => ({ default: m.TeamsPage })));
 const ProjectAccessPage = lazy(() =>
   import('../features/admin/ProjectAccessPage').then((m) => ({ default: m.ProjectAccessPage })),
@@ -155,6 +158,30 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <MyWorkPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            §6l's team board (§84) — the second route outside the project segment, and for the
+            same reason: with no `projectId` its cards span every project the reader can open.
+
+            **Beside `/admin/teams`, not beneath it.** Every affordance on that screen is gated on
+            `company:teams`; this board is gated on nothing — any authenticated member of the
+            company may open any team's board (§6k), and §84 found there is no key to gate it on
+            that would not be a 403 nobody could grant their way out of. A screen every member may
+            open, filed under a prefix that reads "administration", teaches the opposite of what is
+            true.
+
+            `/teams/:teamId/board` mirrors `/projects/:projectId/board` deliberately. That is not
+            the collision `/my-work` refused: a bare `/board` would have been one name for two
+            scopes, while a board whose subject is named by its own segment is unambiguous at both.
+          */}
+          <Route
+            path="/teams/:teamId/board"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <TeamBoardPage />
               </Suspense>
             }
           />

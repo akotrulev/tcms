@@ -127,6 +127,34 @@ describe('TeamsPage — the org chart becomes editable', () => {
     expect(within(rows[0]).getByTestId('Admin.Teams.Item.Delete')).toBeDisabled()
   })
 
+  it('offers every team’s board to a caller who may administer none of them', async () => {
+    /*
+      §84's entry point, and the one affordance on this page with NO gate around it.
+
+      A team board needs no permission — §84 declined to invent a key for it, because every card it
+      can return is one the reader could already see on a project board, and a key seeded to nobody
+      is a 403 no administrator could grant their way out of. Nor must the reader be on the team
+      (§6k). So the natural mistake is to add it as a fourth button inside the `company:teams` gate
+      six lines below, where it compiles, renders identically, and hands a work view to the two
+      roles that administer the org chart.
+
+      **The barrier is the disabled Edit button, not the link.** §66's trap and §80's variant: an
+      anchor is not a form element, so `toBeEnabled()` on it passes instantly and would pass just
+      as well while `useCan` is still pending — that is, against a page where the Board link *is*
+      gated. Asserting the link's presence *at the moment the gate has resolved to "no"* is what
+      makes it non-vacuous, and the disabled sibling is what proves the gate resolved.
+    */
+    mockApi(['company:read', 'company:members'])
+    renderPage()
+    await permissionsResolved()
+
+    const rows = await screen.findAllByTestId('Admin.Teams.Item')
+    expect(within(rows[0]).getByTestId('Admin.Teams.Item.Edit')).toBeDisabled()
+    expect(within(rows[0]).getByTestId('Admin.Teams.Item.Board').getAttribute('href')).toBe(
+      `/teams/${QA.id}/board`,
+    )
+  })
+
   it('renders a team whose parent is missing, instead of dropping it', async () => {
     // §68's rule. A descent from the roots never reaches this team, and the tree is the only place
     // it could be deleted — so dropping it makes the broken row permanent and invisible.

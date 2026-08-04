@@ -4106,18 +4106,46 @@ export interface paths {
          *     assigned to the caller across every project they can see, in one company. It is
          *     the same operation because it is the same list; a card carries `projectId` and
          *     `projectKey`, which is how the SPA groups an aggregate it did not have before.
+         *
+         *     **With a `teamId` this is §6l's team board (§84)** — the same list kept for the
+         *     team's members instead of for the caller. All three of §6l's boards are this one
+         *     operation, because they differ only in which cards are kept: `projectId` narrows
+         *     *where*, `teamId` and `mine` narrow *whose*, and the response shape and sort are
+         *     identical in every case.
+         *
+         *     **A team board is bounded by the CALLER's project visibility, never by the team's.**
+         *     Two people asking for the same team's board can legitimately receive different
+         *     boards. That is the design, not a defect: a board built from "everything assigned
+         *     to this team" would render the case keys, titles and project names of every project
+         *     any member was granted, to a reader granted none of them.
          */
         get: {
             parameters: {
                 query?: {
                     projectId?: string;
                     /**
+                     * @description §6l's **team board** — items assigned to any member of this team.
+                     *
+                     *     Membership is expanded **on every read**, never stored: somebody who joins the
+                     *     team today finds the team's work today, and somebody who leaves stops seeing it.
+                     *     Direct members only — a parent team does not inherit its children's members.
+                     *
+                     *     **Bounded by the caller's own project visibility.** Cards from projects the
+                     *     caller holds no grant on are absent, whatever the team was assigned.
+                     *
+                     *     **Combinable with `projectId`** (the team's work within one project — §6l's
+                     *     "swimlanes by member"), and **refused together with `mine=true`**: they select
+                     *     two different boards.
+                     */
+                    teamId?: string;
+                    /**
                      * @description Restrict to items assigned to the caller — the personal board.
                      *
-                     *     **Required when `projectId` is omitted.** §6l's cross-project board is the
-                     *     *personal* one; there is no board that is every project's work unfiltered, and
-                     *     silently forcing this on would answer a request nobody made with a list the
-                     *     client cannot tell apart from a company that only has the caller's work in it.
+                     *     **Required when `projectId` is omitted** and no `teamId` is given. §6l's
+                     *     cross-project board is the *personal* one; there is no board that is every
+                     *     project's work unfiltered, and silently forcing this on would answer a request
+                     *     nobody made with a list the client cannot tell apart from a company that only
+                     *     has the caller's work in it.
                      */
                     mine?: boolean;
                 };
@@ -4127,7 +4155,13 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Work items */
+                /**
+                 * @description Work items. **An empty array is a reachable board with nothing on it** — for a
+                 *     team board that means either a team with no members or members with no work the
+                 *     caller can see, and the two are deliberately indistinguishable on the wire: both
+                 *     are "this team has nothing for you", and a client able to tell them apart would
+                 *     be reading team membership out of a board.
+                 */
                 200: {
                     headers: {
                         [name: string]: unknown;

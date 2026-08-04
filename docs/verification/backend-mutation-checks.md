@@ -1119,3 +1119,52 @@ perfectly and that only the assignee-versus-reader asymmetry in the fixture can 
 | **Check** | `V27` and the policy count |
 | **Mutation** | — |
 | **Must show** | **`V27` is still the next free Flyway version and `SchemaConventionTest`'s policy count is still 58.** §84 adds no table, no column and no migration: the team board is a third selector on an existing operation, reading `team_membership` — a table `V1` created and §81 already queried. If either number has moved, something in this slice created state it said it did not. |
+
+---
+
+## §85 — the team board's frontend half
+
+Six frontend rows. The first two are the pair: each is the half that stops the other passing for the
+wrong reason, which is the same structure §84's own fixture had to be given.
+
+| | |
+|---|---|
+| **File** | `frontend/src/mocks/db/workItems.ts`, `teamBoard` |
+| **Mutation** | `const members = new Set(team.members.map(m => m.id));` → `const members = new Set([currentUser.id]);` (the team board silently becomes the personal board) |
+| **Scope** | `npx vitest run src/mocks/db/workItems.test.ts` |
+| **Must redden** | **exactly 3** — *is a different board for a different team*, *is not the personal board wearing a team's name*, and *keeps only the work of the team's own members* (its non-empty guard survives, its outsider filter does not). Note what does **not** move: every assertion about the *signed-in user's own* team passes, because their cards are a subset either way. A defect that shows you only your own work looks entirely correct to the person who introduced it — §84's finding, one layer up. |
+
+| | |
+|---|---|
+| **File** | `frontend/src/mocks/fixtures/core.ts` |
+| **Mutation** | delete the second `workItems` entry (Priya Nair's OLB task) |
+| **Scope** | `npx vitest run src/mocks/db/workItems.test.ts` |
+| **Must redden** | **exactly 1** — *is a different board for a different team*. One is the point: with that row gone, Checkout Squad's board is empty and the team bound becomes untestable again, which is precisely the state the fixture was in before this slice. It also silently un-proves `personalBoard`'s *keeps only the caller's own cards*, which passes vacuously over stored tasks with no foreign one present. |
+
+| | |
+|---|---|
+| **File** | `frontend/src/mocks/db/workItems.ts`, `teamBoard` |
+| **Mutation** | `if (!team) return undefined;` → `if (!team) return [];` |
+| **Scope** | `npx vitest run src/mocks/db/workItems.test.ts src/features/board/TeamBoardPage.test.tsx` |
+| **Must redden** | **exactly 1** — *answers `undefined` for an unknown team*. The page test does **not** move, because it mocks `api.get` rather than driving the handler; that shortfall is the row's finding, and the browser queue's row 10 is where the pair is closed. |
+
+| | |
+|---|---|
+| **File** | `frontend/src/features/board/TeamBoardPage.tsx` |
+| **Mutation** | delete the `missing` branch, letting the 404 fall through to `DataRegion` |
+| **Scope** | `npx vitest run src/features/board/TeamBoardPage.test.tsx` |
+| **Must redden** | **exactly 1** — *reads a 404 as "no such team", with the way back*. The empty-board test must stay **green**: if it reddens too, the two states were never distinct and the mutation found a second defect. |
+
+| | |
+|---|---|
+| **File** | `frontend/src/api/queries/workItems.ts`, `useTeamBoard` |
+| **Mutation** | `qs({ teamId })` → `qs({ teamId, mine: 'true' })` |
+| **Scope** | `npx vitest run src/features/board/TeamBoardPage.test.tsx` |
+| **Must redden** | **exactly 1** — *names the team and nothing else*. The request would be a **400** in both modes, so every other assertion in the file still passes against a screen that cannot load at all: the spy answers regardless of the path. That is why the path is asserted as a whole string rather than with a containment check. |
+
+| | |
+|---|---|
+| **File** | `frontend/src/features/admin/TeamsPage.tsx` |
+| **Mutation** | move the Board `<Button>` inside the `PermissionGate` render prop and give it `disabled={!allowed}` |
+| **Scope** | `npx vitest run src/features/admin/TeamsPage.test.tsx` |
+| **Must redden** | **exactly 1** — *offers every team's board to a caller who may administer none of them*. It reddens only because the assertion sits **after** `permissionsResolved()`; without the barrier the gate is still pending, the link renders, and the mutation passes (§66, and §80's variant — an anchor is not a form element, so `toBeEnabled()` on it proves nothing at any moment). |

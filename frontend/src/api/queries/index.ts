@@ -127,4 +127,4 @@ export {
   useUpdateTeam,
   useUsers,
 } from './admin';
-export { useCreateWorkItem, useMoveWorkItem, useMyWork, useWorkItems } from './workItems';
+export { useCreateWorkItem, useMoveWorkItem, useMyWork, useTeamBoard, useWorkItems } from './workItems';
