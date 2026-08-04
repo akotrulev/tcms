@@ -1,5 +1,22 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifiers';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import {
   Alert,
   Autocomplete,
   Box,
@@ -17,10 +34,11 @@ import {
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import LibraryAddIcon from '@mui/icons-material/LibraryAddOutlined';
 import LinkOffIcon from '@mui/icons-material/LinkOffOutlined';
 import { useSnackbar } from 'notistack';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useUnsavedWork } from '../../auth/useSessionRecovery';
 import { Controller, useFieldArray, useForm, type Control } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -28,6 +46,7 @@ import { ApiError } from '../../api/client';
 import { CaseSchema, isBlankStep, liveSteps, type CaseInput } from './caseSchema';
 import { ClassificationPicker } from './ClassificationPicker';
 import { SharedStepPicker } from './SharedStepPicker';
+import { resolveStepMove } from './stepReorder';
 import {
   useCase,
   useClassification,
@@ -82,6 +101,52 @@ const GHERKIN_TEMPLATE = `Feature:
     Given
     When
     Then `;
+
+/**
+ * One draggable step row — the wrapper, not the row's content (§94).
+ *
+ * A render prop rather than a component holding the row's JSX: the row is three fields, a shared
+ * chip, three buttons and their comments, and moving all of it into a second component would have
+ * made a reordering change look like a rewrite of the step editor in the diff. This is the whole
+ * of what `useSortable` needs, and the row stays where it was.
+ *
+ * `id` is react-hook-form's field id, not the step's server id: a step created in this session has
+ * no server id at all, and `useSortable` needs one for every row from the moment it renders.
+ */
+function SortableStep({
+  id,
+  children,
+}: {
+  id: string;
+  children: (handle: {
+    attributes: ReturnType<typeof useSortable>['attributes'];
+    listeners: ReturnType<typeof useSortable>['listeners'];
+  }) => ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+
+  return (
+    <Box
+      ref={setNodeRef}
+      data-testid={`${TestIdPrefix}.Steps.Row`}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      sx={{
+        p: 1.5,
+        border: '1px solid',
+        borderColor: isDragging ? 'primary.main' : 'divider',
+        borderRadius: 1,
+        // The row being dragged is lifted rather than hidden: this list is the content the author
+        // is reading, and a gap where the step was makes the drop target ambiguous.
+        bgcolor: 'background.paper',
+        opacity: isDragging ? 0.85 : 1,
+        zIndex: isDragging ? 1 : undefined,
+        position: 'relative',
+      }}
+    >
+      {children({ attributes, listeners })}
+    </Box>
+  );
+}
 
 /**
  * One step's action, completing from the project's own step corpus (§94).
@@ -339,6 +404,33 @@ function CaseEditorForm({
     if (!last || !isBlankStep(last)) steps.append(BLANK_STEP, NO_FOCUS);
   };
 
+  /*
+    Pointer + keyboard, and the pointer one needs the 5px constraint: without it a click on the
+    handle is a zero-distance drag, so the button swallows the click and nothing else on the row
+    can be reached by a pointer that started there. The keyboard sensor makes the handle itself
+    operable (Space to lift, arrows to move) — the ▲▼ buttons remain the simpler keyboard path, and
+    a focusable handle that did nothing on Space would be worse than no handle.
+  */
+  const dragSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  /**
+   * A finished drag becomes the same `steps.move` the ▲▼ buttons call.
+   *
+   * The decision of where it lands — including the three ways a drag ends in nothing — is
+   * `resolveStepMove`'s, so that it can be tested without driving a pointer through jsdom.
+   */
+  const onStepDragEnd = ({ active, over }: DragEndEvent) => {
+    const move = resolveStepMove(
+      steps.fields.map((field) => field.id),
+      active.id,
+      over?.id,
+    );
+    if (move) steps.move(move.from, move.to);
+  };
+
   const [pickerOpen, setPickerOpen] = useState(false);
   const stepFormat = watch('stepFormat');
   const automationStatus = watch('automationStatus');
@@ -569,7 +661,7 @@ function CaseEditorForm({
                         setValue('gherkinSource', GHERKIN_TEMPLATE, { shouldDirty: true });
                       }
                       if (value === 'STRUCTURED' && steps.fields.length === 0) {
-                        steps.append({ action: '', testData: '', expectedResult: '' });
+                        steps.append(BLANK_STEP, NO_FOCUS);
                       }
                     }}
                     aria-label="Step format"
@@ -626,13 +718,43 @@ function CaseEditorForm({
                   </Alert>
                 )}
 
-                {steps.fields.map((field, index) => (
-                  <Box
-                    key={field.id}
-                    data-testid={`${TestIdPrefix}.Steps.Row`}
-                    sx={{ p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}
+                <DndContext
+                  sensors={dragSensors}
+                  collisionDetection={closestCenter}
+                  // Restricted to the vertical axis: the list is one column, so horizontal
+                  // movement is a drag drifting away from the drop it means rather than a
+                  // gesture with a meaning of its own.
+                  modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+                  onDragEnd={onStepDragEnd}
+                >
+                  <SortableContext
+                    items={steps.fields.map((field) => field.id)}
+                    strategy={verticalListSortingStrategy}
                   >
+                    <Stack sx={{ gap: 2 }}>
+                {steps.fields.map((field, index) => (
+                  <SortableStep key={field.id} id={field.id}>
+                    {(handle) => (
+                      <>
                     <Stack direction="row" sx={{ alignItems: 'center', gap: 1, mb: 1 }}>
+                      {/*
+                        The drag handle, and it is a handle rather than the whole row being
+                        draggable: every row is three text fields, and a draggable row makes
+                        selecting a word inside one of them start a drag instead.
+                      */}
+                      <Tooltip title="Drag to reorder. The arrows do the same thing from the keyboard.">
+                        <IconButton
+                          size="small"
+                          disableRipple
+                          {...handle.attributes}
+                          {...handle.listeners}
+                          aria-label={`Reorder step ${index + 1}`}
+                          data-testid={`${TestIdPrefix}.Steps.DragHandle`}
+                          sx={{ cursor: 'grab', touchAction: 'none' }}
+                        >
+                          <DragIndicatorIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
                       <Identifier variant="muted">Step {index + 1}</Identifier>
                       {/*
                         Read off `fields` rather than through `watch('steps')`: sharedStepId is
@@ -670,7 +792,13 @@ function CaseEditorForm({
                       {/*
                         Reordering is safe because a step keeps its stable id: results and
                         evidence anchor to the id, not the position, so moving a step never
-                        reassigns the evidence attached to it.
+                        reassigns the evidence attached to it. True of the drag handle above
+                        as well — both end in the same `steps.move`.
+
+                        KEPT after §94 added the drag, not superseded by it. These are the
+                        keyboard and screen-reader path, they are the only way to move a step by
+                        exactly one place deliberately, and they work on a touch screen where a
+                        long-press drag inside a scrolling form is a fight.
                       */}
                       <IconButton
                         size="small"
@@ -760,8 +888,13 @@ function CaseEditorForm({
                         />
                       </Stack>
                     </Stack>
-                  </Box>
+                      </>
+                    )}
+                  </SortableStep>
                 ))}
+                    </Stack>
+                  </SortableContext>
+                </DndContext>
 
                 {/*
                   There is no "Add step" button any more (§94). The last row is always blank and

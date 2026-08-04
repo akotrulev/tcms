@@ -2,8 +2,10 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-04
-**Baseline commit:** `6980bfb` (+ §91, this commit)
+**Last verified:** 2026-08-05
+**Baseline commit:** `fca7abf` (+ §94 phase 3, this commit). The header before this one said
+`6980bfb` while HEAD was three slices further on (§92, §93, §94 phase 1) — the drift the warning
+below describes, caught again.
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
 `frontend/vite.config.ts`
 
@@ -15,7 +17,15 @@
 
 - **React 19 + TypeScript strict**, **Vite 8** SPA. **No Next.js, no RSC** — so there is no
   `'use client'` boundary anywhere and the skills' RSC lane does not apply. `#confirmed`
-- **MUI v7** (with X DataGrid / TreeView), **React Router 7**, **TanStack Query v5**.
+- ~~**MUI v7**~~ → **MUI v9** (`@mui/material` 9.2.0, verified against `node_modules` in §94; both
+  this file and `CLAUDE.md` still said v7). The slot rules below are unchanged by the bump, and one
+  thing v9 makes concrete: `Autocomplete`'s `renderInput` params carry **`slotProps.htmlInput`**, so
+  a testid on the inner input is `slotProps={{ ...params.slotProps, htmlInput: {
+  ...params.slotProps.htmlInput, 'data-testid': … } }}` — spreading `params` alone lands nothing on
+  the element `userEvent.type` drives. With X DataGrid / TreeView, **React Router 7**,
+  **TanStack Query v5**.
+- **`@dnd-kit` since §94** (`core` 6.3 · `sortable` 10.0 · `utilities` 3.2 · `modifiers`) — the
+  first runtime dependency added since the scaffold. One consumer: the case editor's step list.
 - Package manager **npm**. `erasableSyntaxOnly` is on, which forbids TS constructor parameter
   properties — see `api/client.ts:35` for the recorded workaround. `#confirmed`
 
@@ -25,7 +35,8 @@
 - **`npm run build` is THE gate** (`tsc -b` + vite build). **Do not trust `tsc --noEmit`** — it has
   reported 0 errors while the build failed with nine (working agreement). `#confirmed`
 - `npm run lint` — oxlint, must stay at **0 warnings**; it prints nothing when clean.
-- `npm run test:run` — Vitest + RTL. **765/765** at this baseline (§90). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
+- `npm run test:run` — Vitest + RTL. **805/805** at this baseline (§94; 770 at §91, 783 before this
+  slice). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
 - `npm run gen:api` — regenerate `src/api/schema.d.ts` after **any** `openapi.yaml` change. Runs
   through `npx` on purpose (the scaffold pins TS 6, the tool peer-requires 5.x); do not "fix" it.
 - **Live mode:** `VITE_API_MODE=live` in `.env.local` proxies `/api` to `localhost:8080`.
@@ -58,6 +69,34 @@ directly above the switcher) and the wordmark links there too.
 
 ## Seams to reuse
 
+- **THE STEP EDITOR, AND THE RULE A PERMANENT BLANK ROW BREAKS (§94).**
+  `features/cases/CaseEditorPage.tsx` — the action field is an **`Autocomplete` (`freeSolo`)** over
+  `useStepSuggestions` (`api/queries/library.ts`, typeahead budget, `enabled` on a non-blank
+  fragment, debounced **250ms per row** in `StepActionField`, which exists as a component because a
+  hook cannot be called inside `steps.fields.map`). A pick **copies** the whole triple into action,
+  testData and expectedResult and creates **no link** — the endpoint serves no id, which is what
+  keeps it that way, and it is the deliberate opposite of `SharedStepPicker` beside it.
+  **Typing in the last row appends the next one, so `Steps.AddButton` is GONE** (a deleted locator,
+  not just a control). Three things follow and each was a live defect:
+  **(1)** `CaseSchema`'s "at least one step" counts **`liveSteps`**, never `steps.length` — the
+  trailing blank row satisfies the old rule, so an empty case saved clean with a success toast;
+  **(2)** `StepSchema.action` lost its `.min(1)`, which would have refused every save on that same
+  row, and became a cross-field rule at `steps.N.action` (*a row carrying anything must carry an
+  action*); **(3)** removing the trailing row was a **dead end** with no Add button —
+  `ensureTrailingBlank` holds the invariant and the shared-step insert lands *before* the blank.
+  **`liveSteps` has ONE definition and two consumers** (the refine, and the submit's trim-then-drop)
+  because the two halves of their disagreement are individually invisible.
+  **`errors.steps.root?.message`, not `errors.steps.message`** — a refinement whose `path` is a
+  field array lands on `.root`, and reading only `.message` had rendered the step panel's error as
+  nothing at all since Phase 4: the form did not respond to the button and said nothing.
+  Drag-and-drop is `DndContext` + `SortableContext` + a `SortableStep` **render-prop wrapper** (the
+  row's JSX stays put, so a reordering change does not read as a rewrite); **the ▲▼ buttons are
+  KEPT** as the keyboard/SR/touch path and both ends call the same `steps.move`.
+  **`stepReorder.ts` is its own module on purpose**: the three ways a drag ends in nothing (outside
+  the list, back where it started, on a stale id) are the only part of DnD that can be *wrong*, and
+  they are unreachable from a component test — `move(i, i)` marks the form dirty and offers a new
+  version of an unchanged case. Bundle cost measured, **+2.9% total and +0.03 kB on the entry
+  chunk**: all of it lands in the lazy route. `#confirmed`
 - **THE PLAN DOCUMENT TAB (§93).** `features/plans/PlanDocumentPanel.tsx` +
   `usePlanDocument`/`useStartPlanDocument`/`useLinkBlock`/`useUnlinkBlock` +
   `useCreateDraftCase` + `keys.planDocument`; `PlanStatisticsPage` gained **Tabs** with the selection
@@ -457,6 +496,21 @@ directly above the switcher) and the wordmark links there too.
   with the reasoning recorded in `vite.config.ts`.
 
 ## Session log
+
+- 2026-08-05 · EXTEND · **Writing steps** (§94 phases 2–3) — the case editor's step list reworked
+  around the corpus §94 phase 1 built. New: `CaseEditorPage.test.tsx` (**the screen's first test
+  file** after eight slices — 12 tests), `stepReorder.ts` + its 5, `useStepSuggestions` +
+  `keys.stepSuggestions`, `StepSuggestion` in `types.ts`, the mock's `stepCorpus`, and `@dnd-kit`.
+  **No contract change, no `gen:api`, no new permission key, no backend file touched.** The slice's
+  own risk was the schema and it was named in advance: auto-append makes a blank row permanent, so
+  "at least one step" had to stop counting `steps.length` in the *same commit* — see the seam.
+  **Two pre-existing defects fell out of writing the first test**: the step panel's error alert had
+  never rendered (`errors.steps.root`), and removing the trailing row became a dead end the moment
+  the Add button went. Bundle measured before and after per the working agreement: **+46.2 kB raw /
+  +14.8 kB gz (+2.9%), entirely in the lazy route chunk**, entry unchanged. Vitest 783 → **805**;
+  build clean, lint 0. **Built and unverified** — browser rows 51–61 queued, **zero run**, two of
+  them live-only and they are the ones that carry the corpus's real risk (mock fixtures give every
+  structured case the same four steps).
 
 - 2026-08-04 · EXTEND · §6e's **on-screen report view** (§90, F2) — the stored model rendered, so the
   screen and the exported file are one computation twice. New:

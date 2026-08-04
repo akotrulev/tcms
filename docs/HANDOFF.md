@@ -1544,4 +1544,4 @@ See [`docs/plans/2026-07-31-parallel-execution-rework.md`](plans/2026-07-31-para
 | [§91](handoff/91-the-way-back-to-the-picker.md) | The way back to the picker — a screen every session starts on that no screen linked to, and the rail that collapses |
 | [§92](handoff/92-saved-report-definitions.md) | Saved report definitions — the row that is one person's, and the delete a foreign key would have refused |
 | [§93](handoff/93-the-plan-document.md) | The test plan document — the half a plan is mostly made of, and the link four years of schema had no writer for |
-| [§94](handoff/94-writing-steps.md) | Writing steps — the corpus that needs no curating, and the index spelling that decides whether it works **(IN PROGRESS — phase 1 of 3)** |
+| [§94](handoff/94-writing-steps.md) | Writing steps — the corpus that needs no curating, the index spelling that decides whether it works, and the refine auto-append would have broken **(built and unverified — 11 browser rows, 4 mutation rows, none run)** |

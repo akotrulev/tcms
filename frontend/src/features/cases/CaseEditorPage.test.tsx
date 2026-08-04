@@ -174,6 +174,39 @@ describe('CaseEditorPage — the step list', () => {
   })
 })
 
+describe('CaseEditorPage — reordering', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('keeps the ▲▼ buttons after the drag handle arrives, and they still move a step', async () => {
+    const user = userEvent.setup()
+    mockReads()
+    renderEditor()
+
+    await user.type(actionFields()[0], 'First')
+    await waitFor(() => expect(screen.getAllByTestId('CaseEditor.Steps.Row')).toHaveLength(2))
+    await user.type(actionFields()[1], 'Second')
+    await waitFor(() => expect(screen.getAllByTestId('CaseEditor.Steps.Row')).toHaveLength(3))
+
+    // The keyboard and screen-reader path. §94 added a pointer gesture beside them and did not
+    // replace them, which is the kind of thing a later slice deletes as redundant.
+    await user.click(screen.getAllByTestId('CaseEditor.Steps.MoveDown')[0])
+
+    await waitFor(() => expect(actionFields()[0]).toHaveValue('Second'))
+    expect(actionFields()[1]).toHaveValue('First')
+  })
+
+  it('gives every row a labelled drag handle', () => {
+    mockReads()
+    renderEditor()
+    // Named rather than merely present: an icon-only control with no accessible name is announced
+    // as "button", which on a list of them says nothing about which step it moves.
+    expect(screen.getByLabelText('Reorder step 1')).toBeInTheDocument()
+    expect(screen.getAllByTestId('CaseEditor.Steps.DragHandle')).toHaveLength(1)
+  })
+})
+
 describe('CaseEditorPage — what reaches the API', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
