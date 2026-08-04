@@ -29,7 +29,10 @@ public enum ReportFormat {
     /** The first format with a renderer: no template engine, no CSS inlining, no browser (§87). */
     MD,
 
-    /** R4. */
+    /**
+     * §6e's primary format and the one a client is sent — one self-contained file, no CDN, no
+     * script, charts drawn in CSS (§88 / R4). Also what the PDF slice will hand to a browser.
+     */
     HTML,
 
     /** {@code V1}. No renderer, and no slice in the M2.5 plan builds one. */
