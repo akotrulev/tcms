@@ -675,6 +675,205 @@ class ReportEndpointTest extends IntegrationTestBase {
         }
     }
 
+    // =====================================================================
+    // POST /reports/generate with definitionId — regenerating a saved report
+    // =====================================================================
+
+    @Nested
+    @DisplayName("Regenerating a saved report — the definition supplies the type and the base")
+    class Regenerating {
+
+        @Test
+        @DisplayName("definitionId alone is enough: no type, and the job carries both")
+        void definitionSuppliesTheType() throws Exception {
+            UUID definitionId = savedIdOf(LEAD, PROJECT, "Release 5.0 regression");
+
+            MvcResult result = generate(LEAD, PROJECT,
+                    "{\"definitionId\":\"" + definitionId + "\",\"format\":\"MD\"}");
+
+            assertThat(result.getResponse().getStatus())
+                    .as("one click, one field: %s", result.getResponse().getContentAsString())
+                    .isEqualTo(202);
+            assertThat(parse(result).get("type").asText()).isEqualTo(RUN_SUMMARY);
+
+            UUID jobId = UUID.fromString(parse(result).get("jobId").asText());
+            assertThat(definitionOfJob(jobId))
+                    .as("the job must remember which saved report it came from")
+                    .isEqualTo(definitionId);
+            // The saved selection, not an empty one — the whole point of saving it.
+            assertThat(parametersOfJob(jobId)).contains(RUN.toString());
+        }
+
+        @Test
+        @DisplayName("the request overrides the definition key by key, and keeps the rest")
+        void mergedShallowly() throws Exception {
+            MvcResult saved = save(LEAD, PROJECT, "{\"type\":\"" + RUN_SUMMARY
+                    + "\",\"name\":\"Cycle\",\"parameters\":{\"runId\":\"" + RUN
+                    + "\",\"note\":\"as saved\"}}");
+            UUID definitionId = UUID.fromString(parse(saved).get("id").asText());
+
+            MvcResult result = generate(LEAD, PROJECT, "{\"definitionId\":\"" + definitionId
+                    + "\",\"format\":\"MD\",\"parameters\":{\"note\":\"this run\"}}");
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(202);
+
+            JsonNode stored = json.readTree(
+                    parametersOfJob(UUID.fromString(parse(result).get("jobId").asText())));
+            // Both halves, and the second is the one an override that REPLACES the object would
+            // lose — a report computed over everything while the client believes it named a run.
+            assertThat(stored.get("note").asText()).isEqualTo("this run");
+            assertThat(stored.get("runId").asText()).isEqualTo(RUN.toString());
+        }
+
+        @Test
+        @DisplayName("a type that contradicts the saved one is refused rather than resolved")
+        void contradictoryTypeIsRefused() throws Exception {
+            UUID definitionId = savedIdOf(LEAD, PROJECT, "Cycle");
+
+            MvcResult result = generate(LEAD, PROJECT, "{\"definitionId\":\"" + definitionId
+                    + "\",\"type\":\"trend\",\"format\":\"MD\"}");
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(parse(result).get("errors").has("type")).isTrue();
+            assertThat(jobCount()).isZero();
+        }
+
+        @Test
+        @DisplayName("somebody else's definition is a field error, and writes no job")
+        void anotherPersonsDefinition() throws Exception {
+            UUID definitionId = savedIdOf(SCREEN_ONLY, PROJECT, "Not the lead's");
+
+            MvcResult result = generate(LEAD, PROJECT,
+                    "{\"definitionId\":\"" + definitionId + "\",\"format\":\"MD\"}");
+
+            // 400 and not 404: the caller can see the project and named something in it. Gone and
+            // somebody-else's are deliberately the same answer, as on the delete.
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(parse(result).get("errors").has("definitionId")).isTrue();
+            assertThat(jobCount()).isZero();
+        }
+
+        @Test
+        @DisplayName("a definition of a sibling project is refused through this project's path")
+        void wrongProjectIsRefused() throws Exception {
+            UUID definitionId = savedIdOf(LEAD, SIBLING, "The other project's");
+
+            MvcResult result = generate(LEAD, PROJECT,
+                    "{\"definitionId\":\"" + definitionId + "\",\"format\":\"MD\"}");
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(parse(result).get("errors").has("definitionId")).isTrue();
+        }
+
+        @Test
+        @DisplayName("report:view still does not generate, saved report or not")
+        void savingIsNotGenerating() throws Exception {
+            // SCREEN_ONLY may SAVE a definition (Definitions.viewSaves) and may not run it. The
+            // two keys stay distinguishable on the path that reads a row the caller owns.
+            UUID definitionId = savedIdOf(SCREEN_ONLY, PROJECT, "Mine to save, not to run");
+
+            assertThat(generate(SCREEN_ONLY, PROJECT,
+                    "{\"definitionId\":\"" + definitionId + "\",\"format\":\"MD\"}")
+                    .getResponse().getStatus()).isEqualTo(403);
+        }
+
+        @Test
+        @DisplayName("neither type nor definitionId is still a field error on type")
+        void neitherIsRefused() throws Exception {
+            MvcResult result = generate(LEAD, PROJECT, "{\"format\":\"MD\"}");
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(parse(result).get("errors").get("type").get(0).asText())
+                    .contains(RUN_SUMMARY);
+        }
+
+        @Test
+        @DisplayName("deleting the definition leaves the artifact it produced — V28's whole reason")
+        void artifactSurvivesTheDefinition() throws Exception {
+            UUID definitionId = savedIdOf(LEAD, PROJECT, "Release 5.0 regression");
+
+            MvcResult accepted = generate(LEAD, PROJECT,
+                    "{\"definitionId\":\"" + definitionId + "\",\"format\":\"MD\"}");
+            assertThat(accepted.getResponse().getStatus()).isEqualTo(202);
+            runWorker();
+
+            UUID jobId = UUID.fromString(parse(accepted).get("jobId").asText());
+            assertThat(parse(poll(LEAD, PROJECT, jobId)).get("status").asText())
+                    .isEqualTo("COMPLETED");
+            assertThat(artifactsOf(definitionId))
+                    .as("the runner copies the job's definition onto every artifact it writes")
+                    .isPositive();
+
+            // Without V28 this is a foreign-key violation surfacing as a 500 — and only ever on a
+            // saved report somebody actually used, which is the version of the defect that reaches
+            // production.
+            assertThat(delete(LEAD, PROJECT, definitionId).getResponse().getStatus())
+                    .isEqualTo(204);
+
+            assertThat(artifactCount())
+                    .as("deleting a saved report must not delete the files it produced")
+                    .isPositive();
+            assertThat(artifactsOf(definitionId))
+                    .as("they become ad-hoc artifacts, which is what they now are")
+                    .isZero();
+            // And the download still resolves: the artifact's project is proved through the job,
+            // whose definition_id is now null too.
+            String url = parse(poll(LEAD, PROJECT, jobId)).get("downloadUrl").asText();
+            assertThat(status(LEAD, url)).isEqualTo(200);
+        }
+    }
+
+    private UUID definitionOfJob(UUID jobId) throws SQLException {
+        return uuidColumn("SELECT definition_id FROM report_job WHERE id = CAST(? AS uuid)", jobId);
+    }
+
+    private String parametersOfJob(UUID jobId) throws SQLException {
+        try (Connection acme = appConnection(ACME);
+                PreparedStatement statement = acme.prepareStatement(
+                        "SELECT parameters::text FROM report_job WHERE id = CAST(? AS uuid)")) {
+            statement.setString(1, jobId.toString());
+            try (var rows = statement.executeQuery()) {
+                assertThat(rows.next()).as("the job row must exist").isTrue();
+                return rows.getString(1);
+            }
+        }
+    }
+
+    private UUID uuidColumn(String sql, UUID id) throws SQLException {
+        try (Connection acme = appConnection(ACME);
+                PreparedStatement statement = acme.prepareStatement(sql)) {
+            statement.setString(1, id.toString());
+            try (var rows = statement.executeQuery()) {
+                assertThat(rows.next()).as("the row must exist").isTrue();
+                String value = rows.getString(1);
+                return value == null ? null : UUID.fromString(value);
+            }
+        }
+    }
+
+    private long artifactsOf(UUID definitionId) throws SQLException {
+        try (Connection acme = appConnection(ACME);
+                PreparedStatement statement = acme.prepareStatement(
+                        "SELECT count(*) FROM report_artifact "
+                                + "WHERE definition_id = CAST(? AS uuid)")) {
+            statement.setString(1, definitionId.toString());
+            try (var rows = statement.executeQuery()) {
+                rows.next();
+                return rows.getLong(1);
+            }
+        }
+    }
+
+    private long artifactCount() throws SQLException {
+        try (Connection acme = appConnection(ACME);
+                PreparedStatement statement =
+                        acme.prepareStatement("SELECT count(*) FROM report_artifact");
+                var rows = statement.executeQuery()) {
+            rows.next();
+            return rows.getLong(1);
+        }
+    }
+
     private MvcResult list(UUID userId, UUID projectId) throws Exception {
         return mvc.perform(MockMvcRequestBuilders
                         .get("/api/v1/projects/" + projectId + "/reports")

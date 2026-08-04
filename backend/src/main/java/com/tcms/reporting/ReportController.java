@@ -68,11 +68,20 @@ class ReportController {
      *     this server can actually render — so the parse lives in {@link ReportJobService} beside
      *     the other two refusals, and an unparseable value takes the same path as an unrenderable
      *     one.
+     * @param definitionId a saved report to regenerate (§91), or absent for an ad-hoc request.
+     *     Bound as a {@link UUID} where {@code type} and {@code format} are text, and the
+     *     difference is not an inconsistency: those two are open sets whose refusals name what this
+     *     server has, so the product must word them; an id that is not an id names nothing under
+     *     any deployment, and Jackson's refusal says exactly that.
      * @param parameters may be absent; {@code null} becomes {@code "{}"} in the service, which is
-     *     what {@code V27} defaults the column to
+     *     what {@code V27} defaults the column to — or the saved definition's parameters, when one
+     *     is named
      */
     record GenerateRequest(
-            String type, String format, com.fasterxml.jackson.databind.JsonNode parameters) {
+            UUID definitionId,
+            String type,
+            String format,
+            com.fasterxml.jackson.databind.JsonNode parameters) {
     }
 
     @PostMapping("/generate")
@@ -84,6 +93,7 @@ class ReportController {
         ReportJobService.Outcome outcome = jobs.request(
                 UUID.fromString(jwt.getSubject()),
                 projectId,
+                request.definitionId(),
                 request.type(),
                 request.format(),
                 request.parameters() == null ? null : request.parameters().toString());

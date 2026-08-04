@@ -30,7 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
  * shape that cannot be told apart from a broken server: the client watches a spinner, gets a
  * terminal state, and has to poll a second endpoint to read a message that was always available. So
  * both are {@code 400}s at request time, and both are decided by asking the registries what this
- * deployment actually has ({@link ReportComputations#find}, {@link ReportRenderers#supports}) rather
+ * deployment actually has ({@link ReportTypes#refusal}, {@link ReportRenderers#supports}) rather
  * than by a literal list beside the check — a list is correct today and silently wrong the day R4
  * lands the HTML renderer, because nothing would fail.
  *
@@ -54,6 +54,14 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>The gate is {@link ProjectService#writeGranted}, so an unreachable project is a bodiless 404
  * <em>before</em> any permission is consulted and a 403 never tells a caller that a project they
  * cannot see exists (§6t).
+ *
+ * <h2>A saved definition is read here and never trusted as an authorization (§91)</h2>
+ *
+ * <p>{@code definitionId} names a row this caller owns in this project — the repository has no
+ * method that could find any other kind — so regenerating a saved report needs the same
+ * {@code report:export} as an ad-hoc one and a definition cannot carry access to a project the
+ * caller was not already gated onto. What it carries is the report's <em>type</em> and the base for
+ * its parameters, which is why the gate runs first and the definition is resolved inside it.
  */
 @Service
 public class ReportJobService {
@@ -63,20 +71,23 @@ public class ReportJobService {
 
     private final ProjectService projects;
     private final ReportJobRepository jobs;
-    private final ReportComputations computations;
+    private final ReportDefinitionRepository definitions;
+    private final ReportTypes types;
     private final ReportRenderers renderers;
     private final Clock clock;
 
     public ReportJobService(
             ProjectService projects,
             ReportJobRepository jobs,
-            ReportComputations computations,
+            ReportDefinitionRepository definitions,
+            ReportTypes types,
             ReportRenderers renderers,
             Clock clock) {
 
         this.projects = projects;
         this.jobs = jobs;
-        this.computations = computations;
+        this.definitions = definitions;
+        this.types = types;
         this.renderers = renderers;
         this.clock = clock;
     }
@@ -121,19 +132,29 @@ public class ReportJobService {
      *     format at all and one this deployment cannot render are the same mistake from the caller's
      *     side, and answering them in two places is how they end up worded two ways — one of them by
      *     Jackson, about deserialization, to a person who asked for a PDF.
-     * @param parameters the raw JSON body of {@code parameters}, stored verbatim. It is what
+     * @param definitionId a saved report to regenerate (§91), or null for an ad-hoc request. It
+     *     supplies the type and the <em>base</em> for the parameters; see {@link #resolve}.
+     * @param parameters the raw JSON body of {@code parameters}. Stored verbatim for an ad-hoc
+     *     request and as the <em>merge</em> when a definition was named — what has to be
+     *     reproducible is what the report was computed over, not what the caller typed. It is what
      *     {@code report_artifact.filter_snapshot} is later set from, which is what makes a number
      *     read six months later explainable ({@code V1}: "a report you cannot reproduce is a report
      *     nobody trusts").
      */
     @Transactional
     public Outcome request(
-            UUID userId, UUID projectId, String type, String format, String parameters) {
+            UUID userId,
+            UUID projectId,
+            UUID definitionId,
+            String type,
+            String format,
+            String parameters) {
 
         UUID companyId = CompanyContext.require();
 
         GateResult<Outcome> gate = projects.writeGranted(userId, projectId, EXPORT_REPORT,
-                project -> accept(companyId, project, type, format, parameters, userId));
+                project -> accept(
+                        companyId, project, definitionId, type, format, parameters, userId));
 
         return switch (gate) {
             case GateResult.Allowed<Outcome> allowed -> allowed.value();
@@ -145,30 +166,38 @@ public class ReportJobService {
     private Outcome accept(
             UUID companyId,
             Project project,
+            UUID definitionId,
             String type,
             String format,
             String parameters,
             UUID userId) {
 
+        Optional<ReportDefinition> definition = definitionId == null
+                ? Optional.empty()
+                : definitions.findByIdAndProjectIdAndOwnerId(
+                        definitionId, project.getId(), userId);
+
         Optional<ReportFormat> parsed = parseFormat(format);
 
-        Map<String, List<String>> errors = validate(type, format, parsed, parameters);
+        Map<String, List<String>> errors =
+                validate(definitionId, definition, type, format, parsed, parameters);
         if (!errors.isEmpty()) {
             return new Outcome.Invalid(errors);
         }
 
+        Resolved resolved = resolve(definition, type, parameters);
+
         ReportJob job = ReportJob.request(
                 companyId,
                 project.getId(),
-                // R5's saved definitions do not exist yet, so every job in R3 is ad-hoc. The column
-                // is nullable for exactly this and the entity takes it rather than defaulting it,
-                // so the day a definition can be named there is one call site to change.
-                null,
-                type,
+                // Null for an ad-hoc request, which every job was before §91. The column is
+                // nullable for exactly this.
+                definitionId,
+                resolved.type(),
                 // Present: `validate` refused every other case above, and the job cannot be written
                 // without one.
                 parsed.orElseThrow(),
-                parameters == null || parameters.isBlank() ? "{}" : parameters,
+                resolved.parameters(),
                 userId,
                 clock.instant());
 
@@ -176,24 +205,80 @@ public class ReportJobService {
         return new Outcome.Accepted(ReportJobView.of(job));
     }
 
+    /** What the job is actually written with, once a saved definition has had its say. */
+    private record Resolved(String type, String parameters) {
+    }
+
     /**
-     * The three request-time refusals, collected rather than short-circuited.
+     * The saved definition's answer, overridden by the request's.
+     *
+     * <p>The type is the <em>definition's</em> whenever there is one — the request may repeat it and
+     * may not contradict it, which {@link #validate} refuses — because the alternative is a request
+     * that names one report and a saved definition of another, where picking either silently
+     * generates a report nobody asked for.
+     *
+     * <p>The parameters are merged rather than replaced, so "the same cycle report, but for last
+     * week" is one field instead of a re-sent copy of the whole selection.
+     * {@link ReportParameters#merge} states why the merge is shallow.
+     */
+    private Resolved resolve(
+            Optional<ReportDefinition> definition, String type, String parameters) {
+
+        return definition
+                .map(saved -> new Resolved(
+                        saved.getType(), ReportParameters.merge(saved.getParameters(), parameters)))
+                .orElseGet(() -> new Resolved(
+                        type, parameters == null || parameters.isBlank() ? "{}" : parameters));
+    }
+
+    /**
+     * The request-time refusals, collected rather than short-circuited.
      *
      * <p>All of them at once, because they are independent and a client that has sent both an
      * unknown type and an unrenderable format should learn both in one round trip — the alternative
      * is a form that reveals its next objection only after the first is fixed.
+     *
+     * <h2>A named definition changes what {@code type} means, and there are three cases</h2>
+     *
+     * <p>With a definition, the type is <strong>the definition's</strong>: an absent {@code type} is
+     * no longer a mistake (regenerating a saved report is one field), and a {@code type} that
+     * <em>disagrees</em> with it is refused rather than resolved — a client holding a stale copy of
+     * a definition it has since changed would otherwise get a report of the wrong thing, rendered
+     * perfectly. Without one, the type is required exactly as it has been since §87.
+     *
+     * <p>A {@code definitionId} that resolves to nothing is a <strong>field error, not a 404</strong>:
+     * the caller can see the project and asked for something in it, and the row they named is either
+     * gone or somebody else's — which they cannot be told apart, for {@code deleteReportDefinition}'s
+     * reason.
      */
     private Map<String, List<String>> validate(
-            String type, String format, Optional<ReportFormat> parsed, String parameters) {
+            UUID definitionId,
+            Optional<ReportDefinition> definition,
+            String type,
+            String format,
+            Optional<ReportFormat> parsed,
+            String parameters) {
 
         Map<String, List<String>> errors = new LinkedHashMap<>();
 
-        if (type == null || type.isBlank()) {
-            errors.put("type", List.of("Say which report to generate. This server can produce: "
-                    + String.join(", ", computations.supported()) + "."));
-        } else if (computations.find(type).isEmpty()) {
-            errors.put("type", List.of("This server has no report called '" + type
-                    + "'. It can produce: " + String.join(", ", computations.supported()) + "."));
+        if (definitionId != null && definition.isEmpty()) {
+            errors.put("definitionId", List.of(
+                    "You have no saved report with that id in this project."));
+        } else if (definition.isPresent()) {
+            String saved = definition.get().getType();
+            if (type != null && !type.isBlank() && !type.trim().equals(saved)) {
+                errors.put("type", List.of("This saved report is a '" + saved + "'. Ask for that, "
+                        + "or leave 'type' out and let the saved report say."));
+            } else {
+                // A definition outlives the release it was saved in, so its type is checked here
+                // as well as at save time: a report retired from a deployment leaves saved rows
+                // naming it, and without this the job is accepted and dies in the worker with the
+                // registry's internal sentence rather than the catalogue.
+                types.refusal(saved).ifPresent(message -> errors.put("type", List.of(message)));
+            }
+        } else {
+            // The same refusal the save endpoint makes, in one place since §91 — see ReportTypes.
+            types.refusal(type).ifPresent(message -> errors.put("type", List.of(message)));
         }
 
         if (format == null || format.isBlank()) {

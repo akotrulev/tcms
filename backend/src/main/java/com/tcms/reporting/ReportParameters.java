@@ -63,6 +63,33 @@ record ReportParameters(JsonNode node) {
     }
 
     /**
+     * A saved definition's parameters with a request's written over them, as the JSON text a job is
+     * stored with.
+     *
+     * <p><strong>Shallow, key by key at the top level</strong>, and that is a decision rather than
+     * the easy implementation. {@code parameters} is untyped by design — every report takes
+     * different ones — so a deep merge would have no schema to decide whether a nested object is a
+     * <em>set</em> of filters to combine or one value to replace, and it would guess differently per
+     * report. Half-overriding a saved selection is invisible in the output: the report renders, the
+     * numbers are wrong, and nothing says which half won.
+     *
+     * <p>The result is what the job stores and therefore what
+     * {@code report_artifact.filter_snapshot} freezes, because what has to be reproducible is what
+     * the report was computed over and not what the caller typed.
+     *
+     * @param override may be null or blank — regenerating a saved report unchanged is the ordinary
+     *     case, and it must not need an empty object sent to mean "as saved"
+     */
+    static String merge(String base, String override) {
+        JsonNode merged = parse(base).node().deepCopy();
+        for (Map.Entry<String, JsonNode> field : parse(override).node().properties()) {
+            ((com.fasterxml.jackson.databind.node.ObjectNode) merged)
+                    .set(field.getKey(), field.getValue());
+        }
+        return merged.toString();
+    }
+
+    /**
      * A required id.
      *
      * <p>Absent, null and non-textual are one refusal on purpose: from the caller's side they are

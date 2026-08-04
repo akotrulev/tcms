@@ -30,7 +30,7 @@
  */
 import { HttpResponse, delay, http } from 'msw';
 import { db, newId, reporting } from '../db';
-import { API, LATENCY, holdsOn, notFound, problem, requireAuth } from './shared';
+import { API, LATENCY, holdsOn, meRef, notFound, problem, requireAuth } from './shared';
 
 /** The four the contract declares. `QUEUED` was never one of them. */
 type JobStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
@@ -71,6 +71,25 @@ const MEDIA: Record<string, { type: string; extension: string }> = {
 
 /** Resets on reload, like every other part of the mock store. */
 const jobs = new Map<string, MockJob>();
+
+/**
+ * A saved report — `report_definition`, and §91's writer for it.
+ *
+ * Owner-scoped on the server: a definition belongs to the person who saved it and nobody else can
+ * list, run or delete it. **Mock mode cannot show that**, because it signs in as one persona — so
+ * "mine" and "every definition in this project" are the same set here, and the browser rows that
+ * prove the bound are live-only. Stated rather than left to be discovered by an implementation that
+ * drops the owner filter and passes everything the mock can check.
+ */
+interface MockDefinition {
+  id: string;
+  projectId: string;
+  type: string;
+  name: string;
+  parameters: Record<string, unknown>;
+}
+
+const definitions = new Map<string, MockDefinition>();
 
 const contentUrl = (projectId: string, artifactId: string) =>
   `${API}/projects/${projectId}/reports/artifacts/${artifactId}/content`;
@@ -216,6 +235,21 @@ function rendered(job: MockJob) {
   return `# Run summary\n\nGenerated in mock mode for job ${job.jobId}.\n`;
 }
 
+const definitionView = (definition: MockDefinition) => ({
+  id: definition.id,
+  type: definition.type,
+  name: definition.name,
+  parameters: definition.parameters,
+  owner: meRef(),
+});
+
+const forbiddenToView = () =>
+  problem(403, 'Not allowed', 'You do not have permission to view reports in this project.');
+
+/** The server's own sentence, in one place because three handlers now make the same refusal. */
+const unknownType = (type: string | undefined) =>
+  `This server has no report called '${type ?? ''}'. It can produce: ${TYPES.join(', ')}.`;
+
 /** The job an artifact belongs to — the server proves the project through this row, so this does. */
 function jobForArtifact(projectId: string, artifactId: string) {
   return [...jobs.values()].find(
@@ -233,12 +267,82 @@ export const reportingHandlers = [
     return HttpResponse.json({ ...reporting.dashboard, generatedAt: new Date().toISOString() });
   }),
 
-  // Saved definitions are R5. `[]` is the honest answer rather than a stub — nothing writes them.
-  http.get(`${API}/projects/:projectId/reports`, async ({ request }) => {
+  http.get(`${API}/projects/:projectId/reports`, async ({ request, params }) => {
     const denied = requireAuth(request);
     if (denied) return denied;
+
+    const projectId = String(params.projectId);
+    if (!db.projects.some((p) => p.id === projectId)) return notFound('That project');
+    if (!holdsOn(projectId, 'report:view')) return forbiddenToView();
+
     await delay(LATENCY);
-    return HttpResponse.json([]);
+    // Newest first, as the server orders it — the useful order on a list nobody has curated.
+    return HttpResponse.json(
+      [...definitions.values()]
+        .filter((definition) => definition.projectId === projectId)
+        .reverse()
+        .map(definitionView),
+    );
+  }),
+
+  http.post(`${API}/projects/:projectId/reports`, async ({ request, params }) => {
+    const denied = requireAuth(request);
+    if (denied) return denied;
+
+    const projectId = String(params.projectId);
+    if (!db.projects.some((p) => p.id === projectId)) return notFound('That project');
+    // report:view, not report:export — saving is not carrying off, and the persona that may read a
+    // report on screen must be able to save the selection it reads (§91).
+    if (!holdsOn(projectId, 'report:view')) return forbiddenToView();
+
+    const body = (await request.json()) as {
+      type?: string;
+      name?: string;
+      parameters?: Record<string, unknown>;
+    };
+    const errors: Record<string, string[]> = {};
+
+    if (!body.type || !TYPES.includes(body.type)) {
+      errors.type = [unknownType(body.type)];
+    }
+    if (!body.name || !body.name.trim()) {
+      errors.name = ['Give this saved report a name.'];
+    }
+
+    await delay(LATENCY);
+    if (Object.keys(errors).length > 0) {
+      return problem(400, 'Validation failed', 'Check the highlighted fields.', errors);
+    }
+
+    const definition: MockDefinition = {
+      id: newId(),
+      projectId,
+      type: body.type as string,
+      name: (body.name as string).trim(),
+      parameters: body.parameters ?? {},
+    };
+    definitions.set(definition.id, definition);
+    return HttpResponse.json(definitionView(definition), { status: 201 });
+  }),
+
+  http.delete(`${API}/projects/:projectId/reports/:definitionId`, async ({ request, params }) => {
+    const denied = requireAuth(request);
+    if (denied) return denied;
+
+    const projectId = String(params.projectId);
+    if (!db.projects.some((p) => p.id === projectId)) return notFound('That project');
+    if (!holdsOn(projectId, 'report:view')) return forbiddenToView();
+
+    const definition = definitions.get(String(params.definitionId));
+    // Scoped by the project too: an id from a sibling project is a 404 here, not a delete served
+    // through a gate that passed for a different project.
+    if (!definition || definition.projectId !== projectId) return notFound('That saved report');
+
+    await delay(LATENCY);
+    definitions.delete(definition.id);
+    // The jobs it produced keep working — ON DELETE SET NULL on both foreign keys (V27, V28), so
+    // deleting a saved report never deletes the history of what it generated.
+    return new HttpResponse(null, { status: 204 });
   }),
 
   http.post(`${API}/projects/:projectId/reports/generate`, async ({ request, params }) => {
@@ -256,19 +360,28 @@ export const reportingHandlers = [
     }
 
     const body = (await request.json()) as {
+      definitionId?: string;
       type?: string;
       format?: string;
       parameters?: Record<string, unknown>;
     };
     const errors: Record<string, string[]> = {};
 
-    // Both refusals are the server's, worded the same way and for the same reason: a job accepted
-    // for something nothing can produce is a row that goes FAILED later, which a client cannot
-    // tell apart from a broken server by watching it.
-    if (!body.type || !TYPES.includes(body.type)) {
+    // A named definition supplies the type and the base for the parameters (§91). Resolved before
+    // the type is checked, because with one the type is the definition's and an absent `type` is no
+    // longer a mistake.
+    const saved = body.definitionId ? definitions.get(body.definitionId) : undefined;
+    if (body.definitionId && (!saved || saved.projectId !== projectId)) {
+      errors.definitionId = ['You have no saved report with that id in this project.'];
+    } else if (saved && body.type && body.type !== saved.type) {
       errors.type = [
-        `This server has no report called '${body.type ?? ''}'. It can produce: ${TYPES.join(', ')}.`,
+        `This saved report is a '${saved.type}'. Ask for that, or leave 'type' out and let the saved report say.`,
       ];
+    } else if (!saved && (!body.type || !TYPES.includes(body.type))) {
+      // The server's refusal, worded the same way and for the same reason: a job accepted for
+      // something nothing can produce is a row that goes FAILED later, which a client cannot tell
+      // apart from a broken server by watching it.
+      errors.type = [unknownType(body.type)];
     }
     if (!body.format) {
       errors.format = [
@@ -292,10 +405,12 @@ export const reportingHandlers = [
     const job: MockJob = {
       jobId: newId(),
       projectId,
-      type: body.type as string,
+      type: saved ? saved.type : (body.type as string),
       status: 'PENDING',
       format: body.format as string,
-      parameters: body.parameters ?? {},
+      // Shallow, key by key at the top level — the server's merge, and the reason is the same: an
+      // untyped object has no schema to say whether a nested value should be combined or replaced.
+      parameters: saved ? { ...saved.parameters, ...(body.parameters ?? {}) } : (body.parameters ?? {}),
       artifactId: null,
       modelArtifactId: null,
       error: null,
