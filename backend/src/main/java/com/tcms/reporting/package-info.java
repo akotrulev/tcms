@@ -60,10 +60,12 @@
  *
  * <h2>What is deliberately not here yet</h2>
  *
- * <p>{@code suite_run_summary}, {@code plan_snapshot}, {@code report_definition} and
- * {@code report_artifact} are all {@code V1} tables with no code. So is the whole {@code ReportModel}
- * pipeline — the job record, the renderers, the storage port — which
- * {@code docs/plans/2026-08-04-m2.5-reporting-slice-plan.md} decomposes into R3–R8.
+ * <p>{@code suite_run_summary} and {@code plan_snapshot} are {@code V1} tables with no code.
+ * {@code report_definition} has an entity and no writer — saved definitions are R5, so every job in
+ * R3 is ad-hoc and {@code definition_id} is null on every row this module writes. §6e's catalogue
+ * names ten reports and {@link com.tcms.reporting.RunSummaryReport} is the first;
+ * {@code docs/plans/2026-08-04-m2.5-reporting-slice-plan.md} decomposes the rest into R4–R8, of
+ * which R4's HTML renderer is the one the format registry is already shaped for.
  *
  * <p><strong>Naming trap, live.</strong> {@code com.tcms.execution.PlanSnapshot} is §74's
  * plan-version value object and has nothing whatever to do with the {@code plan_snapshot} table in
