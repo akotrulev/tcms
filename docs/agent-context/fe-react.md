@@ -3,7 +3,7 @@
 # fe-react — orientation cache (TCMS)
 
 **Last verified:** 2026-08-04
-**Baseline commit:** `d2958d9` (+ §85, this commit)
+**Baseline commit:** `34426d8` (+ §89 phase 3, this commit)
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
 `frontend/vite.config.ts`
 
@@ -39,7 +39,9 @@
 `features/<area>/`; routes are project-scoped under `/projects/:projectId/*` (`app/router.tsx`, lazy).
 **Four routes are NOT** — `/` (project list), `/admin/teams` (company), `/my-work` (§83, the
 cross-project personal board) and `/teams/:teamId/board` (§85, the team board). A screen whose
-subject is not a project does not live under one.
+subject is not a project does not live under one. **`/projects/:projectId/reports` (§89) lands on
+the other side of that test**: a report is computed over one project's facts and its own header
+says *"covers X in full and no other project"*, so switching projects changes what it is about.
 
 > **⚠ This file went FIVE SLICES STALE (§72–§76) and was repaired in §77.** Only the backend half of
 > the update-the-cache habit had stuck. If you are reading this and the baseline lags HEAD by more
@@ -121,6 +123,58 @@ subject is not a project does not live under one.
 - **The status ladders and the review apparatus are separate on the client too.** Turning review off
   hides the panel and changes **nothing** about the Draft/In review/Approved controls on the suite
   tree, plan header or bulk dialog. `#confirmed`
+
+- **A FILE DOWNLOAD CANNOT BE AN `<a href>` IN THIS APP, AND THE FAILURE IS SILENT (§89).** The
+  session is a bearer token in a header — `SecurityConfiguration` is `STATELESS` with **no cookie
+  anywhere** — so an anchor pointed at `/api/v1/…` sends no credential and answers **401** while
+  rendering as a working link. `api.get` cannot take a server-supplied URL either: `request`
+  prepends `BASE` and `ReportJob.downloadUrl` already carries `/api/v1` (the **server** composes it,
+  so the client holds no second copy of the routing — §67 on `Evidence.url`), giving
+  `/api/v1/api/v1/…`; and `request` ends in `res.json()`, which parses a Markdown report as JSON.
+  **`api/client.ts`'s `fetchArtifact`** is the seam — URL verbatim, blob + `Content-Disposition`
+  filename, long budget — and **`lib/download.ts`** (`saveBlob`, `reportFilename`) is the DOM half,
+  split so the transport is testable without a document. Its **same-origin guard is not defensive
+  programming**: the URL is server data and the caller's token goes with it, so an absolute one
+  hands the token to another host — **and it has no test** (a queued mutation row says so). **The
+  sibling defect is live and unfixed**: `EvidencePanel` renders `Evidence.url` as a plain anchor,
+  so every evidence download is a 401 in live mode; the fix is a different rendering (evidence is
+  served `inline`, a report `attachment`), not this helper. `#confirmed`
+- **The reports screen shows what THIS TAB asked for, because nothing lists jobs (§89).** The
+  pipeline's whole surface is `POST /reports/generate` + `GET /reports/jobs/{jobId}`; job ids live
+  in `ReportsPage` component state and a reload loses the links while the reports and artifacts
+  still exist. **Do not "fix" this with job ids in the URL or in storage** — a list endpoint is the
+  server's, and a client-side register is a second drifting copy of a table that already exists
+  (§81). `useReportJob`'s `refetchInterval` returns **`false` on COMPLETED *or* FAILED**, through the
+  exported `isJobFinished` the cards read too: polling on `!== 'COMPLETED'` never stops on a failure
+  and renders as a report permanently about to be ready. `useGenerateReport` **seeds the 202 into
+  the cache** (`setQueryData`), so the new card shows `Queued` rather than a skeleton for a row the
+  client already holds. The download button keys on **`downloadUrl` being present, never on the
+  status** — they agree today, and the URL is the one that cannot produce a broken link. `#confirmed`
+- **The format picker offers PDF on purpose, and the type picker offers one report on purpose
+  (§89) — opposite reasons, both worth keeping.** `format` is a closed contract enum offered **in
+  full including the format every deployment refuses**, because *"the enum is not narrowed to what
+  is installed: what a deployment can render is a property of that deployment, and the refusal names
+  it"* — a client-side list of renderers is wrong in both directions, and the **400 field error was
+  engineered to land on the picker** naming what the server can produce. `type` is an **open string**
+  in the contract, so the dialog offers only the set it can **build a parameter form for**; the run
+  picker IS `run_summary`'s `parameters`, and `runId` is validated **inside the worker**, so omitting
+  it buys a job that spins and then fails. `parameters` is `additionalProperties: true`, which means
+  **neither the generated types nor the contract checks can see a `runId` sent at the top level** —
+  the dialog's test asserts the body with `toEqual`, not `toMatchObject`, for exactly that. Rail
+  item **ungated** (a recorded departure from the plan): `V3` grants `report:view` to five of six
+  built-ins and the sixth is API-token only, so the gate would refuse nobody. `#confirmed`
+- **The mock can now produce a FAILED job, and that is deliberate infrastructure (§89).**
+  `mocks/handlers/reporting.ts`'s `advance` resolves `parameters.runId` against `db.runs` and fails
+  with the worker's sentence when it cannot — the server's own arrangement (report parameters are
+  worker-validated), and the only way `FAILED` is reachable without a backend. Before it, the state
+  the M2.5 plan names as this screen's characteristic defect could only be seen in production.
+  *"Build the fault switch before the feature it proves"*, applied to a state machine. `#confirmed`
+- **A poll test is vacuous unless the wait exceeds the interval, and the pair is what proves it
+  (§89).** `ReportJobCard.test.tsx`'s first draft waited 250ms against a 2000ms interval and passed
+  against a poller that never stopped. It is now **one test with two halves** — a RUNNING job whose
+  request count must *increase* over 1.5 intervals, a FAILED one whose count must *not* — with the
+  interval named and the wait derived from it. Real time, not fake timers: TanStack's interval,
+  `userEvent`'s advance-on-act and `waitFor`'s scheduler all read the same clock. `#confirmed`
 
 - **TanStack Query owns all server state**; no server data in any client store. `src/api/queries/` is
   the data module — one `keys` factory (`queries/keys.ts`), per-endpoint timeout budgets. `#confirmed`
@@ -306,18 +360,29 @@ subject is not a project does not live under one.
 ## Known unknowns
 
 - E2E / page objects are the `qa-ui-typescript` peer's; none exist here.
-- **`/reports` is the only dead contract left on this side** — still **no hook and no screen**, but
-  the backend half is live (§87 the pipeline, §88 the HTML renderer + header) and
-  `mocks/handlers/reporting.ts` now implements all four operations statefully: jobs advance
-  **one state per poll** (PENDING → RUNNING → COMPLETED, so the client's loading states are
-  reachable in dev), `TYPES`/`FORMATS`/`MEDIA` are registries the refusals read rather than literals,
-  and the model artifact answers **`{ header, report }`** — the shape F2 must render rather than
-  compose. F1 (the Reports screen) and F2 (the on-screen view) are the outstanding slices and are
-  unblocked in full.
+- ~~**`/reports` is the only dead contract left on this side**~~ → **built in §89 (F1).** The
+  screen, the generate dialog and the polling card exist; **F2 (the on-screen report view) is the
+  outstanding slice** and is unblocked in full — the job carries `modelUrl`, the artifact answers
+  `{ header, report }`, and F2 renders that rather than composing anything. **R5 has not built the
+  definition writer**, so `GET /reports` answers `[]` on every deployment and the panel's empty
+  state says so; there is deliberately **no Save control** (`ui-rules`: no Add button whose endpoint
+  does not exist). **There is no operation that lists jobs**, which is the screen's largest
+  limitation — see the seam below.
 - Lighthouse / Core-Web-Vitals never measured (handoff §5); `CaseListPage` is over its route budget
   with the reasoning recorded in `vite.config.ts`.
 
 ## Session log
+
+- 2026-08-04 · EXTEND · §6e's **Reports screen** (§89, F1) — the first client §87's pipeline has
+  had. New: `features/reports/{ReportsPage,GenerateReportDialog,ReportJobCard}.tsx` + three test
+  files, route `/projects/:projectId/reports`, an **ungated** rail item under Execution,
+  `api/client.ts`'s `fetchArtifact`, `lib/download.ts`, three hooks + two keys in
+  `api/queries/reporting.ts`, `ReportFormat`/`ReportJob*` in `types.ts`, four label maps, and the
+  mock's FAILED path. **No contract change, no `gen:api`, no new key, no backend file touched.**
+  The slice's finding is that **neither an `<a href>` nor `api.get` can download an artifact**, and
+  both fail silently — see the first seam above. Two tests were repaired before they meant anything
+  (a vacuous poll wait, a one-directional gate). 705 → 711 → **723/723**; build clean, lint 0.
+  **Built and unverified** — 12 browser rows and 6 frontend mutation rows queued, zero run inline.
 
 - 2026-08-04 · EXTEND · §6l's **team board** screen (§85) — §84's frontend half, and the slice that
   gives §6l's three boards three screens over one `Board` and one operation. New:

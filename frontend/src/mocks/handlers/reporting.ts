@@ -17,6 +17,13 @@
  * demonstrate. Jobs are held in module state and advance one state per poll: PENDING → RUNNING →
  * COMPLETED, after which the artifact route serves the two files a completed job has.
  *
+ * **And PENDING → RUNNING → FAILED, added in §89 with the screen that renders it.** The report's
+ * own parameters are validated inside the worker rather than at the request (§87), so a job asked
+ * for with no resolvable `runId` fails carrying a sentence — which is the only way `FAILED` is
+ * reachable without a backend, and `FAILED` is the state the plan names as this screen's
+ * characteristic defect. A state that only ever appears in production is one nobody has seen the
+ * rendering of.
+ *
  * What mock mode structurally **cannot** prove is stated rather than inferred: it signs in as one
  * persona holding every key, so neither gate below can be observed to refuse anybody. The
  * verification queue's rows for `report:view` and `report:export` are therefore live-only.
@@ -34,6 +41,11 @@ interface MockJob {
   type: string;
   status: JobStatus;
   format: string;
+  /**
+   * Stored verbatim, exactly as the server freezes them onto the artifact — and read by `advance`,
+   * which is what makes a FAILED job reachable here at all (see below).
+   */
+  parameters: Record<string, unknown>;
   /** Set when the job completes — the client never composes a content URL itself. */
   artifactId: string | null;
   modelArtifactId: string | null;
@@ -87,6 +99,28 @@ function advance(job: MockJob) {
     return;
   }
   if (job.status === 'RUNNING') {
+    /*
+      **The report's own parameters are checked HERE, not at the request, and that is the server's
+      arrangement rather than a shortcut** (§87): a `runId` that is absent, or names a run in
+      another project, cannot be refused without a database read, and doing that on the request
+      path would mean a second copy of every report's rules. It surfaces as a FAILED job carrying
+      the sentence.
+
+      Reproducing it is what makes `FAILED` **reachable in mock mode at all**. §88's mock advanced
+      PENDING → RUNNING → COMPLETED unconditionally, so the one job state a client is most likely
+      to render wrong — the plan names it as F1's characteristic defect — could not be produced
+      without a backend. A state that only ever appears in production is one nobody has seen the
+      rendering of. This is the same call `tcmsFaults` exists for: build the switch before the
+      behaviour it proves.
+    */
+    const runId = job.parameters.runId;
+    if (typeof runId !== 'string' || !db.runs.some((run) => run.id === runId)) {
+      job.status = 'FAILED';
+      job.error =
+        'This report needs a run to compute over, and no run with that id belongs to this '
+        + 'project. Ask for it again naming a run from this project.';
+      return;
+    }
     job.status = 'COMPLETED';
     job.artifactId = newId();
     // Every completed job has a JSON model as well as what was asked for, so the screen and the
@@ -117,10 +151,15 @@ function mockModel(job: MockJob) {
         'other; cross-project reports are not available in this version.',
       generatedBy: 'Mock Mode',
       generatedAt: '2026-08-04 12:00:00 UTC',
-      selection: [{ label: 'runId', value: job.jobId }],
+      // The selection is what the CLIENT sent, never what the report understood (§88) — so it is
+      // read off the stored parameters rather than reconstructed from the job row.
+      selection: Object.entries(job.parameters).map(([label, value]) => ({
+        label,
+        value: String(value),
+      })),
     },
     report: {
-      title: 'Run summary — TR-1',
+      title: `Run summary — ${runKey(job)}`,
       metadata: [{ label: 'Pass rate (of recorded)', value: '50.0%' }],
       sections: [
         {
@@ -148,6 +187,12 @@ function mockModel(job: MockJob) {
   };
 }
 
+/** The key of the run a job was asked for, so the rendered title names the real subject. */
+function runKey(job: MockJob): string {
+  const run = db.runs.find((candidate) => candidate.id === job.parameters.runId);
+  return run?.key ?? 'unknown run';
+}
+
 /**
  * The bytes of the requested format.
  *
@@ -160,8 +205,8 @@ function rendered(job: MockJob) {
     return [
       '<!DOCTYPE html>',
       '<html lang="en">',
-      '<head><meta charset="utf-8"><title>Run summary — TR-1</title></head>',
-      '<body><h1>Run summary — TR-1</h1>',
+      `<head><meta charset="utf-8"><title>Run summary — ${runKey(job)}</title></head>`,
+      `<body><h1>Run summary — ${runKey(job)}</h1>`,
       `<p>Generated in mock mode for job ${job.jobId}.</p>`,
       '</body>',
       '</html>',
@@ -210,7 +255,11 @@ export const reportingHandlers = [
       );
     }
 
-    const body = (await request.json()) as { type?: string; format?: string };
+    const body = (await request.json()) as {
+      type?: string;
+      format?: string;
+      parameters?: Record<string, unknown>;
+    };
     const errors: Record<string, string[]> = {};
 
     // Both refusals are the server's, worded the same way and for the same reason: a job accepted
@@ -246,6 +295,7 @@ export const reportingHandlers = [
       type: body.type as string,
       status: 'PENDING',
       format: body.format as string,
+      parameters: body.parameters ?? {},
       artifactId: null,
       modelArtifactId: null,
       error: null,

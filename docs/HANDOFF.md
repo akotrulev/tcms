@@ -1,6 +1,66 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-04 (latest section: **§88, the HTML renderer and the report header** — R4 of the
+**Date:** 2026-08-04 (latest section: **§89, the Reports screen** — F1 of the M2.5 plan,
+**three phases, three commits**, and the first client §87's pipeline has ever had. **No migration
+(`V27` still head, `V28` still free), no contract change, no `gen:api`, no new permission key, and
+no backend file touched at all.** **THE FINDING IS THAT NEITHER OBVIOUS WAY TO DOWNLOAD WORKS AND
+BOTH FAIL SILENTLY.** The session is a bearer token in a header — `SecurityConfiguration` is
+`STATELESS` with no cookie anywhere, which its own comment says while explaining why CSRF is off —
+so an `<a href="/api/v1/…">` sends **no credential** and answers **401**, rendering as a working
+link; and `api.get` cannot take the URL either, because `request` prepends `BASE` while
+`ReportJob.downloadUrl` already carries `/api/v1` (**the server composes it**, so the client holds
+no second copy of the routing — §67 on `Evidence.url`), giving `/api/v1/api/v1/…` and a 404 that
+reads as a missing report, and because `request` ends in `res.json()`, which parses a Markdown
+report as JSON. Hence **`fetchArtifact`** (server's URL verbatim, blob + `Content-Disposition`) and
+**`lib/download.ts`** for the DOM half. **Its same-origin guard is not defensive programming**: the
+URL is data from the server and the caller's token goes with it, so an absolute one hands the token
+to another host — **and it has no test, which the queue records as a row rather than implying
+coverage**. **§87's browser row 8 is obsoleted by this** (*"follow `downloadUrl` in the address
+bar → the file downloads"* is false) and restated as row 22 — the pair, address bar versus button,
+is what makes the reason visible. **The sibling defect is named and not swept**: `EvidencePanel`
+renders `Evidence.url` as a plain anchor and every evidence download in the product is a 401 in
+live mode; its fix is a different rendering (evidence is `inline`, a report is `attachment`).
+**THE SCREEN HAS TO REMEMBER WHAT IT ASKED FOR, BECAUSE NOTHING ELSE DOES** — the pipeline's whole
+surface is POST-generate and GET-job-by-id, **there is no operation that lists jobs**, so the cards
+are what *this tab* created and a reload loses the links while the reports and artifacts still
+exist. Stated on the card, in the page comment and in a queue row rather than papered over, and
+deliberately **not** worked around with job ids in the URL or in storage: a list endpoint is the
+fix, it is the server's, and a client-side register is a second drifting copy of a table that
+exists (§81). **Two open-set fields close for opposite reasons**: the report **type** is an open
+string in the contract, so the dialog offers the set it can **build a parameter form for** — one —
+and never a claim about what the server can compute; the **format** is offered **in full, PDF
+included**, which looks like `ui-rules`' render-then-reject and is the contract's explicit design
+(*"the enum is not narrowed to what is installed"*), because a client-side list of renderers is
+wrong in **both** directions and the 400 field error was engineered to land on the picker naming
+what the server can produce. **The run picker IS this report's parameters** — `runId` is
+worker-validated, so omitting it buys a job that spins and then fails for a field the form could
+have required; a generic parameter form is **named as not built**. **The rail item is ungated, a
+deliberate departure from the plan's F1 line**: `V3` grants `report:view` to five of six built-ins
+and the sixth is API-token only, so the gate hides the entry from **nobody who can reach the page**
+while teaching that rail entries come and go by permission — the `Review` item's own argument.
+Generate asks `report:export`, **disabled-with-reason, never hidden** (§31); the definitions panel
+has **no Save control**, because R5 has not built the endpoint. **The mock gained a FAILURE, and
+that is what makes `FAILED` reachable**: §88's mock completed unconditionally, so the one state the
+plan names as this screen's characteristic defect could not be produced without a backend —
+`advance` now resolves `parameters.runId` against `db.runs` and fails with the worker's sentence,
+the server's own arrangement rather than an invention, and *"build the fault switch before the
+feature it proves"* applied to a state machine. **TWO TESTS HAD TO BE REPAIRED BEFORE THEY MEANT
+ANYTHING.** The poll test **was vacuous on its first draft** — it waited 250ms against a 2000ms
+interval, so a poller that never stopped would not have fired either; it is now a **pair in one
+test**, a RUNNING job whose request count must increase and a FAILED one whose count must not, the
+running half proving the clock runs and the failed half proving the check exists. And the gate test
+asserts **both directions** for §66's reason (§76's mutation that failed to redden, §80's four
+first-run failures): `useCan` is fail-closed while pending, so `toBeDisabled()` passes against a
+component with **no gate at all**, and the holder's `toBeEnabled()` is the barrier. Gate:
+**build clean, lint 0, 723/723 across 47 files** (705 → 711 → 723 — the +6 is two contract-hygiene
+checks over three new `api.*` call sites, which is the evidence they saw the new endpoints).
+**All twelve new tests passed first time**, stated plainly rather than taken as evidence they can
+fail — the poll test had also passed first time, in a form that could not fail. **Found and not
+fixed**: `EvidencePanel`'s anchor, the untested same-origin guard, the missing job list, and
+§86/§87's three open rows. **Zero mutations run inline**; **12 browser rows (14–25, the first in
+that file that drive a screen) and 6 frontend mutation rows queued**, two of the latter recorded as
+reddening **nothing**, which is the finding rather than a shortfall. **Built and unverified.**
+Before that: **§88, the HTML renderer and the report header** — R4 of the
 M2.5 plan, **three phases, three commits**, and the two halves had to land together: §6e's primary
 format is the one a client is *sent*, so shipping it without the header §6e makes mandatory is the
 one combination that produces a document somebody forwards with no provenance on it. **No migration
@@ -1363,3 +1423,4 @@ See [`docs/plans/2026-07-31-parallel-execution-rework.md`](plans/2026-07-31-para
 | [§86](handoff/86-the-fact-log-gets-a-writer.md) | The fact log gets a writer — the module that had to exist first, and the dimensions that must not move |
 | [§87](handoff/87-the-report-pipeline.md) | The report pipeline — the job record, the second store, and the gates that could not fail |
 | [§88](handoff/88-the-html-renderer-and-the-report-header.md) | The HTML renderer and the report header — the block a renderer cannot strip, and the template engine that was not taken |
+| [§89](handoff/89-the-reports-screen.md) | The Reports screen — the download an anchor cannot make, and the job list the server cannot give it |

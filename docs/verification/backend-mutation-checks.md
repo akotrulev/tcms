@@ -1397,3 +1397,54 @@ the two keys are distinguishable: *Report Reader* holds `report:view` and not `r
 | **Check** | the migration head and the module declaration are UNCHANGED |
 | **Mutation** | — |
 | **Must show** | **`V27__report_job.sql` is still the head** and `V28` still free (R4 adds no migration), the policy count is still **59**, and `reporting/package-info.java` still declares `{"tenancy", "project", "identity"}` — R4 reads `CompanyRepository` (tenancy), `ProjectRepository` and `PeopleDirectory` (project), all inside the bound §87 widened it to. If any of those moved, something in this slice needed a dependency it should have argued for. |
+
+---
+
+## §89 — the Reports screen (F1) · frontend mutations
+
+**No backend was touched**, so there is nothing to run against `./gradlew` for this slice; these are
+the frontend counterparts, run with `npx vitest run <file>`. They are queued and **not run inline**
+(§65, restated 2026-08-02). Rows 1 and 2 are the two to run first: the poll's terminal check is the
+one a reader is most likely to "simplify", and the gate pair is §66's defect in a new file.
+
+| | |
+|---|---|
+| **File** | `frontend/src/api/queries/reporting.ts`, `useReportJob`'s `refetchInterval` |
+| **Mutation** | replace `isJobFinished(status)` with `status === 'COMPLETED'` |
+| **Scope** | `src/features/reports/ReportJobCard.test.tsx` |
+| **Must redden** | **exactly 1** — *keeps polling a RUNNING job and stops on a FAILED one*. If it reddens **zero**, the wait in that test is shorter than the interval and the whole assertion is vacuous, which is what it was on its first draft. **The running half is the control**: mutate `refetchInterval` to `false` outright and the *same* test must also redden, proving the clock runs at all. Run both directions — one alone proves nothing. |
+
+| | |
+|---|---|
+| **File** | `frontend/src/features/reports/ReportsPage.tsx`, the `PermissionGate` around Generate |
+| **Mutation** | delete the gate and render the `Button` with `disabled={false}` |
+| **Scope** | `src/features/reports/ReportsPage.test.tsx` |
+| **Must redden** | **exactly 1** — *enables Generate for a holder … and disables it for everyone else*. §66's finding is that the **disabled** half alone passes against a gateless component, because `useCan` is fail-closed while pending; the enabled half is the barrier. Second mutation, the other direction: hard-code `disabled` to `true` — the same test must redden again. A gate asserted in only one direction is one that can be deleted with every assertion green. |
+
+| | |
+|---|---|
+| **File** | `frontend/src/features/reports/ReportJobCard.tsx`, the download button's condition |
+| **Mutation** | change `{downloadUrl && (` to `{job.status === 'COMPLETED' && (` and drop the local |
+| **Scope** | `src/features/reports/ReportJobCard.test.tsx` |
+| **Must redden** | **0, and that is the finding, not a shortfall.** The two conditions agree on every state the server produces, so no test can tell them apart — the reason to key on the URL is that it is the field that cannot produce a broken link if the server ever completes a job without an artifact, which is a state the contract permits and nothing generates. Recorded so a later reader does not "simplify" it back on the evidence that nothing failed. |
+
+| | |
+|---|---|
+| **File** | `frontend/src/features/reports/GenerateReportDialog.tsx`, the submitted body |
+| **Mutation** | send `{ type, format, runId: values.runId }` — the `runId` at the top level rather than inside `parameters` |
+| **Scope** | `src/features/reports/GenerateReportDialog.test.tsx` |
+| **Must redden** | **exactly 1** — *sends runId inside parameters, where the contract puts it*. This is the one shape the whole app cannot otherwise catch: `parameters` is `additionalProperties: true`, so **neither the generated types nor `ContractConventionTest` can see a `runId` in the wrong place**. The defect is a job that FAILS with "this report needs a run" from a request that looks correct in devtools. The assertion is `toEqual`, not `toMatchObject`, because a partial match passes against a body carrying it in *both* places. |
+
+| | |
+|---|---|
+| **File** | `frontend/src/api/client.ts`, `fetchArtifact`'s same-origin guard |
+| **Mutation** | delete the `startsWith(BASE)` check |
+| **Scope** | — **no test covers it, and that is queued work, not a claim** |
+| **Must redden** | **0 today.** The guard exists because the URL is data from the server and the caller's bearer token goes with it, so an absolute one hands the token to another host — and nothing in the suite passes it an absolute URL. **The row exists to say the check is untested**, not to report that it is fine; a unit test over `fetchArtifact` with `https://evil.test/…` is the smallest thing that would close it. |
+
+| | |
+|---|---|
+| **File** | `frontend/src/mocks/handlers/reporting.ts`, `advance`'s `runId` resolution |
+| **Mutation** | delete the failure branch, so every job completes as it did before §89 |
+| **Scope** | the browser queue's **row 19**, not a vitest file |
+| **Must show** | that `FAILED` becomes **unreachable in mock mode**. The card's own tests supply the state directly, so no unit test reddens — the branch exists so a developer can *see* the failed rendering without a backend, which is the reason `tcmsFaults` exists for the other resilience states. Confirming the mutation is invisible to the suite is the point of the row. |
