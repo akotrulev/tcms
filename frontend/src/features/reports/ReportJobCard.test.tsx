@@ -162,6 +162,42 @@ describe('ReportJobCard', () => {
     expect(filename).toMatch(/^run_summary-\d{4}-\d{2}-\d{2}\.html$/)
   })
 
+  /*
+    F2's affordance. It keys on `modelUrl` rather than on the status, for the same reason the
+    download keys on `downloadUrl`: the two URLs are what the *server* says exists, and a job from a
+    deployment older than §88's stored model would otherwise render a link to a page that can only
+    say the model is missing.
+
+    It is a real `<Link>`, asserted through its `href`: an `onClick` navigation would give up
+    middle-click, ⌘-click and copy-link, and copying that link is the one way a report outlives this
+    tab while nothing lists jobs.
+  */
+  it('offers the report view for a job with a stored model, as a real link', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue(
+      job({ status: 'COMPLETED', downloadUrl: CONTENT_URL, modelUrl: CONTENT_URL }) as never,
+    )
+
+    renderCard()
+
+    expect(await screen.findByTestId('Reports.Job.View')).toHaveAttribute(
+      'href',
+      `/projects/${PROJECT}/reports/jobs/${JOB}`,
+    )
+  })
+
+  it('offers no report view for a completed job with no stored model', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue(
+      job({ status: 'COMPLETED', downloadUrl: CONTENT_URL, modelUrl: null }) as never,
+    )
+
+    renderCard()
+
+    // The download still stands — it is a different artifact, and the pair is what stops one
+    // missing URL hiding the other affordance.
+    expect(await screen.findByTestId('Reports.Job.Download')).toBeInTheDocument()
+    expect(screen.queryByTestId('Reports.Job.View')).not.toBeInTheDocument()
+  })
+
   it('hands a failed download back beside the button, keeping the row', async () => {
     vi.spyOn(api, 'get').mockResolvedValue(
       job({ status: 'COMPLETED', downloadUrl: CONTENT_URL }) as never,
@@ -174,7 +210,9 @@ describe('ReportJobCard', () => {
 
     await userEvent.click(await screen.findByTestId('Reports.Job.Download'))
 
-    expect(await screen.findByTestId('Reports.Job.DownloadError')).toBeInTheDocument()
+    // `<testId>.Error`, composed by `DownloadReportButton` — F2 extracted the control so the card
+    // and the report view share one download, and the failure renders where the button is.
+    expect(await screen.findByTestId('Reports.Job.Download.Error')).toBeInTheDocument()
     // Still offered — the report exists and the next attempt may well work.
     expect(screen.getByTestId('Reports.Job.Download')).toBeEnabled()
   })

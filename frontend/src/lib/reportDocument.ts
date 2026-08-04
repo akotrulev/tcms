@@ -153,6 +153,29 @@ export function headerBlock(document: ReportDocument): ReportEntry[] {
 }
 
 /**
+ * The width of each bar in a series, as a percentage — the model's only arithmetic.
+ *
+ * **Both rules are `HtmlReportRenderer`'s, and each is a defect it already fixed once.** They are
+ * restated here rather than inherited, because the screen and the exported HTML are two renderers
+ * of one model in two languages and nothing can fail if they disagree:
+ *
+ *   - **A bar is scaled against the largest value in its own series, never against a total.** A
+ *     series need not be parts of a whole — "executions per tester" sums to something meaningless —
+ *     so dividing by the sum draws every bar too short and, on a two-point series, reads as though
+ *     everything happened half as much as it did.
+ *   - **An all-zero series draws NO bars**, rather than the full-width ones `width: NaN%` renders
+ *     as in most browsers. That is the failure worth the guard: a chart saying everything happened,
+ *     on a report where nothing did.
+ *
+ * Negative values are not special-cased because the model has none — the points are counts.
+ */
+export function barPercents(points: readonly { value: number }[]): number[] {
+  const largest = points.reduce((max, point) => Math.max(max, point.value), 0);
+  if (largest <= 0) return points.map(() => 0);
+  return points.map((point) => (point.value / largest) * 100);
+}
+
+/**
  * Parses a fetched artifact body into a document, or throws.
  *
  * The thrown message names the *file* rather than the field path alone, because the person who sees

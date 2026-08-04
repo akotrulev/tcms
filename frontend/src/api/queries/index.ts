@@ -118,6 +118,7 @@ export {
   useGenerateReport,
   useReportDefinitions,
   useReportJob,
+  useReportModel,
 } from './reporting';
 export {
   useGrantRole,

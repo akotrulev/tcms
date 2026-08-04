@@ -1,18 +1,16 @@
 import { Alert, Box, Button, Chip, CircularProgress, Stack, Typography } from '@mui/material';
-import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
-import { useState } from 'react';
-import { fetchArtifact } from '../../api/client';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
+import { Link as RouterLink } from 'react-router-dom';
 import { isJobFinished, useReportJob } from '../../api/queries';
 import type { ReportJob } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
-import { describeError } from '../../lib/describeError';
-import { reportFilename, saveBlob } from '../../lib/download';
 import {
   humanize,
   reportFormatLabels,
   reportJobStatusColors,
   reportJobStatusLabels,
 } from '../../lib/labels';
+import { DownloadReportButton } from './DownloadReportButton';
 
 /**
  * One generation request, watched to its end.
@@ -63,38 +61,14 @@ export function ReportJobCard({ projectId, jobId }: { projectId: string; jobId: 
         state={{ ...job, refetch: () => void job.refetch() }}
         skeleton={<Typography variant="body2">Requesting…</Typography>}
       >
-        {(row) => <JobBody job={row} />}
+        {(row) => <JobBody job={row} projectId={projectId} />}
       </DataRegion>
     </Box>
   );
 }
 
-function JobBody({ job }: { job: ReportJob }) {
-  const [downloadError, setDownloadError] = useState<string | null>(null);
-  const [downloading, setDownloading] = useState(false);
-
+function JobBody({ job, projectId }: { job: ReportJob; projectId: string }) {
   const running = !isJobFinished(job.status);
-  // Narrowed into a local rather than asserted at the call site: `downloadUrl` is nullable, and a
-  // cast there would survive the day the field stops being sent at all.
-  const downloadUrl = job.downloadUrl;
-
-  const download = async (url: string) => {
-    setDownloadError(null);
-    setDownloading(true);
-    try {
-      const { blob, filename } = await fetchArtifact(url);
-      // The response's own name when it sent one — it is the server that knows the artifact id.
-      // The fallback is composed from the job, never from the blob's media type: a deployment that
-      // adds a renderer serves a type this client has never heard of.
-      saveBlob(blob, filename ?? reportFilename(job.type, job.format));
-    } catch (error) {
-      // Handed back in place rather than raised as a notification: this failure is about the
-      // button that was just pressed, and the row is still on screen to press again.
-      setDownloadError(describeError(error).body);
-    } finally {
-      setDownloading(false);
-    }
-  };
 
   return (
     <Stack sx={{ gap: 1 }}>
@@ -139,30 +113,37 @@ function JobBody({ job }: { job: ReportJob }) {
         </Alert>
       )}
 
-      {downloadError && (
-        <Alert severity="error" role="alert" data-testid={`${TestId}.DownloadError`}>
-          {downloadError}
-        </Alert>
-      )}
-
       {/*
-        Keyed on the URL, never on the status — see the header. `report:export` is not gated here:
-        the caller already held it to reach the 202 that made this card, and a control disabled
-        for the person who created the thing it downloads teaches the wrong rule.
+        Two affordances on a finished report and each keys on its OWN url, never on the status:
+        `downloadUrl` is the format that was asked for, `modelUrl` is the stored model the screen
+        renders (§90/F2). They are written in the same instant by the same worker, so today they
+        appear together — and keying each on the URL it needs is what stops a deployment that
+        produced only one of the two from rendering a link to `undefined`.
+
+        The view is a real `<Link>`, not an `onClick` navigation: it earns middle-click, ⌘-click
+        and copy-link for free, and copying that link is the one way a report outlives this tab
+        while nothing lists jobs.
+
+        Neither is permission-gated. The caller held `report:export` to reach the 202 that made
+        this card, and a control disabled for the person who created the thing it opens teaches
+        the wrong rule — the refusal, if it somehow comes, is rendered where it is raised.
       */}
-      {downloadUrl && (
-        <Box>
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<DownloadOutlinedIcon />}
-            disabled={downloading}
-            onClick={() => void download(downloadUrl)}
-            data-testid={`${TestId}.Download`}
-          >
-            {downloading ? 'Downloading…' : `Download ${formatLabel(job.format)}`}
-          </Button>
-        </Box>
+      {(job.modelUrl || job.downloadUrl) && (
+        <Stack direction="row" sx={{ gap: 1, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          {job.modelUrl && (
+            <Button
+              component={RouterLink}
+              to={`/projects/${projectId}/reports/jobs/${job.jobId}`}
+              size="small"
+              variant="contained"
+              startIcon={<VisibilityOutlinedIcon />}
+              data-testid={`${TestId}.View`}
+            >
+              View report
+            </Button>
+          )}
+          <DownloadReportButton job={job} testId={`${TestId}.Download`} />
+        </Stack>
       )}
 
       {running && (

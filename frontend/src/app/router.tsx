@@ -73,6 +73,9 @@ const DocPageEditorPage = lazy(() =>
 const ReportsPage = lazy(() =>
   import('../features/reports/ReportsPage').then((m) => ({ default: m.ReportsPage })),
 );
+const ReportViewPage = lazy(() =>
+  import('../features/reports/ReportViewPage').then((m) => ({ default: m.ReportViewPage })),
+);
 const ArtifactsPage = lazy(() =>
   import('../features/artifacts/ArtifactsPage').then((m) => ({ default: m.ArtifactsPage })),
 );
@@ -388,6 +391,23 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <ReportsPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            One report on screen (§90, F2). A route rather than a dialog because a report is a
+            document somebody reads and refers back to — and because a job id in the address bar is
+            the only durable handle a report has while nothing lists jobs: the cards on the screen
+            above live in component state and a reload loses them, where this URL survives one and
+            can be sent to a colleague. It resolves through the server's own job-by-id operation, so
+            it is not the client-side register §89 refused.
+          */}
+          <Route
+            path="/projects/:projectId/reports/jobs/:jobId"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <ReportViewPage />
               </Suspense>
             }
           />
