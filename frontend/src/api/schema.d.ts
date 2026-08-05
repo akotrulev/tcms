@@ -3526,7 +3526,80 @@ export interface paths {
                 };
             };
         };
-        put?: never;
+        /**
+         * Link an existing page as the plan's document
+         * @description Adopts a page that already exists in the project's documentation space, rather than creating
+         *     one from the template. Requires `doc:edit`, the same key as `POST` and as editing the page,
+         *     because it is the same act seen from the other end: it writes the page's
+         *     `subjectType`/`subjectId` and nothing on the plan.
+         *
+         *     **A plan's document is often written before the plan row exists** — a specification drafted
+         *     in the documentation section, then adopted once the release it describes is scheduled. Until
+         *     this operation existed the only way there was to copy the prose into a fresh template page,
+         *     which loses the page's history, its `doc_link`s, and its place in the search index.
+         *
+         *     Three refusals, and they are three different things:
+         *
+         *     - The page is **already another plan's document** → `409`, `detail` naming that plan. One
+         *       page cannot be two plans' document; the partial unique index says so and this says why.
+         *     - **This plan already has one** → `409`. Relinking is `DELETE` then `PUT`, deliberately two
+         *       steps: a silent reassignment is how a plan comes to document a different release than its
+         *       reader believes, with nothing in either page's history recording the swap.
+         *     - The page belongs to a **sibling project** → `404`, never `409` or `400`. RLS scopes to the
+         *       *company*, so the row is reachable and only an explicit project predicate refuses it —
+         *       answering anything else tells a caller that a page they cannot see exists elsewhere.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                    planId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PlanDocumentLinkInput"];
+                };
+            };
+            responses: {
+                /** @description The linked page, as `GET` would now answer it. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DocPage"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                /** @description The project, plan or page is not visible. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Problem"];
+                    };
+                };
+                /**
+                 * @description The page is already another plan's document, or this plan already has one. `detail`
+                 *     names which, and the two sentences are different.
+                 */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
         /**
          * Start the plan's document from the template
          * @description Creates the page and fills it with the standard test-plan skeleton — the five headed
@@ -3582,7 +3655,50 @@ export interface paths {
                 };
             };
         };
-        delete?: never;
+        /**
+         * Unlink the plan's document
+         * @description Clears the page's `subjectType`/`subjectId` and **keeps the page**. This unlinks
+         *     documentation; it does not delete it — the page stays in the project's documentation space,
+         *     keeps its blocks, its history and its links, and can be linked to another plan or left as an
+         *     ordinary page. Deleting it is `DELETE /doc-pages/{pageId}`, a different act with a different
+         *     blast radius.
+         *
+         *     Requires `doc:edit`. Idempotent in the direction that matters: a plan with no document
+         *     answers `404`, the same answer `GET` gives, rather than a `204` that would tell a caller
+         *     their unlink succeeded when there was nothing to unlink.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                    planId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Unlinked. The page still exists. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                /** @description The project or plan is not visible, or the plan has no document. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
         options?: never;
         head?: never;
         patch?: never;
@@ -6699,6 +6815,15 @@ export interface components {
              */
             level?: number | null;
             text: string;
+        };
+        PlanDocumentLinkInput: {
+            /**
+             * Format: uuid
+             * @description A page **of this project**. One belonging to a sibling project is a `404` for
+             *     `BlockLinkInput.sourceId`'s reason — RLS reaches across the company, so the project
+             *     predicate is what refuses it, and a distinguishing error would confirm the page exists.
+             */
+            pageId: string;
         };
         DocPageStatusInput: {
             /** @enum {string} */
