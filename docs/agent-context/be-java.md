@@ -54,6 +54,22 @@ exist**, and the slice plan's decision E declines to create it for two storage p
 
 ## Seams to reuse
 
+- **A SUITE IS A RESOLVABLE COLLECTION SINCE §96 phase 1, AND A CASE MAY BE FILED NOWHERE.**
+  `V31__suite_membership.sql` (**head**, `V32` next free, **policy count 59 → 61**) creates
+  `suite_case` (added individually) and `suite_tag_rule` (matched by tag, **unioned never
+  intersected**), and relaxes `test_case.suite_id` to nullable — so membership is three arms:
+  filed ∪ added ∪ tagged. `TestCase.suiteId`'s mapping lost its `nullable = false`.
+  **THE LINE THAT IS SILENT WHEN WRONG IS `ExecutionSource`'s SUITE JOIN.** It is a `LEFT JOIN`
+  since this phase, and `execution_fact.suite_id`/`suite_path` are nullable to match. With the inner
+  spelling an unfiled case's **whole fact row** — not its suite columns — is never inserted: no
+  error, a tick that logs success, and every report over the log quietly short. `RunSummaryReport`
+  prints the NULL group as `RunSummaryReport.NOT_FILED` (`"(not filed)"`) rather than dropping it,
+  which would be the same defect one layer up.
+  `SuiteRepository.countLiveCasesBySuite` gained `AND tc.suite_id IS NOT NULL`: the tree counts what
+  is **filed**, and the other two arms are resolved separately rather than summed into that number.
+  Still true after this phase: **nothing can yet create an unfiled case through the API** —
+  `CaseEdit` still requires `suiteId` — so every consequence above is reachable only from a
+  fixture until the contract phase lands.
 - **THE CONDITION LIBRARY HAS WRITERS SINCE §95 phase 1, AND THE USAGE COUNT IS NOW TWO NUMBERS.**
   `ConditionService.create`/`update` + `POST`/`PUT /projects/{projectId}/conditions` +
   `ConditionEdit`/`ConditionWriteRequest`/`ConditionUsage` + `ConditionRepository.countCaseUsage`/
@@ -310,8 +326,11 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   return zero rows, fail-closed and silent. `RepositoryTransactionTest` derives the repository list
   from the live context, so a new repository that forgets fails the build. `#confirmed`
 - **Flyway owns all DDL**; `hibernate.ddl-auto: validate`, `baseline-on-migrate: false`. Migrations
-  at `src/main/resources/db/migration`. ~~**Head is `V27__report_job.sql` (§87)**~~ → **head is `V29__doc_page_subject.sql` (§93); `V30` is the next free
-  number**, and `SchemaConventionTest`'s policy count is **59** (`SchemaConventionTest.java:262`).
+  at `src/main/resources/db/migration`. ~~**Head is `V27__report_job.sql` (§87)**~~ ~~→ head is
+  `V29__doc_page_subject.sql` (§93); `V30` is the next free number~~ → **head is
+  `V31__suite_membership.sql` (§96 phase 1); `V32` is the next free number**, and
+  `SchemaConventionTest`'s policy count is **61** (`SchemaConventionTest.java:262`) — `V31` adds
+  `suite_case` and `suite_tag_rule`.
   Booting the
   real context in a test is itself a schema-drift gate. `#confirmed`
   **`V23` is the first migration since `V1` to CREATE A TABLE**, which makes two things live that no

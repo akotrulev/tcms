@@ -100,6 +100,15 @@ class ExecutionFactRefreshTest extends IntegrationTestBase {
     private static final UUID REMOVED = UUID.fromString("ef004000-0000-4000-8000-000000000005");
     /** Umbra's only case. Recorded, and must stay invisible to Acme's refresh. */
     private static final UUID FOREIGN = UUID.fromString("ef004000-0000-4000-8000-000000000006");
+    /**
+     * Filed in no suite at all ({@code suite_id IS NULL}, legal since {@code V31}), recorded.
+     *
+     * <p>The one row in this fixture that discriminates {@code LEFT JOIN suite} from {@code JOIN
+     * suite}: with the inner spelling its whole fact — not its suite columns, its <em>row</em> — is
+     * never inserted, the refresh reports success, and every report over this table is quietly
+     * short by however many unfiled cases the project has. §96.
+     */
+    private static final UUID UNFILED = UUID.fromString("ef004000-0000-4000-8000-000000000007");
 
     private static final UUID FEATURE_BILLING = UUID.fromString("ef005000-0000-4000-8000-000000000001");
     private static final UUID FEATURE_SEARCH = UUID.fromString("ef005000-0000-4000-8000-000000000002");
@@ -154,6 +163,7 @@ class ExecutionFactRefreshTest extends IntegrationTestBase {
             testCase(acme, MOVED, ACME, ACME_PROJECT, ACME_SUITE, "TC-3", 3, "MANUAL", false);
             testCase(acme, AMENDED, ACME, ACME_PROJECT, ACME_SUITE, "TC-4", 4, "MANUAL", false);
             testCase(acme, REMOVED, ACME, ACME_PROJECT, ACME_SUITE, "TC-5", 5, "MANUAL", false);
+            testCase(acme, UNFILED, ACME, ACME_PROJECT, null, "TC-6", 6, "MANUAL", false);
 
             // RICH carries one value on each of the three dimensions the report selects on, and
             // TWO features — a single-feature fixture cannot tell an array from a scalar.
@@ -170,6 +180,7 @@ class ExecutionFactRefreshTest extends IntegrationTestBase {
             execution(acme, ACME, ACME_PROJECT, ACME_RUN, MOVED, "Passed", EXECUTED_AT, null);
             execution(acme, ACME, ACME_PROJECT, ACME_RUN, AMENDED, "Passed", EXECUTED_AT, null);
             execution(acme, ACME, ACME_PROJECT, ACME_RUN, REMOVED, "Failed", EXECUTED_AT, null);
+            execution(acme, ACME, ACME_PROJECT, ACME_RUN, UNFILED, "Passed", EXECUTED_AT, null);
         }
 
         try (Connection umbra = appConnection(UMBRA)) {
@@ -193,7 +204,33 @@ class ExecutionFactRefreshTest extends IntegrationTestBase {
         void recordedExecutionsAreProjected() {
             refreshFor(ACME);
             assertThat(factCaseIds(ACME))
-                    .containsExactlyInAnyOrder(RICH, MOVED, AMENDED, REMOVED);
+                    .containsExactlyInAnyOrder(RICH, MOVED, AMENDED, REMOVED, UNFILED);
+        }
+
+        @Test
+        @DisplayName("a case filed in NO suite is still projected — the LEFT JOIN, and it is silent")
+        void anUnfiledCaseIsStillProjected() {
+            // §96. `test_case.suite_id` is nullable since V31, so `JOIN suite s ON s.id =
+            // c.suite_id` drops the ENTIRE fact row for an unfiled case: no error, no warning, a
+            // tick that logs success, and every report over this table smaller than the truth by
+            // however many unfiled cases the project has. Exactly the silently-short log this
+            // class's other tests exist for, arriving through a join nobody would look at twice.
+            //
+            // Asserted as a row AND as its two columns, because those fail for different reasons:
+            // the row is the join, the NULLs are V31's two DROP NOT NULLs. With the columns still
+            // NOT NULL the insert raises instead — loud, but only after somebody files nothing.
+            refreshFor(ACME);
+
+            Map<String, Object> fact = factFor(ACME, UNFILED);
+
+            assertThat(fact.get("status_kind"))
+                    .as("the execution happened; where the case is filed is not what makes it a "
+                            + "result")
+                    .isEqualTo("PASSED");
+            assertThat(fact.get("suite_id"))
+                    .as("NULL is the honest value — the case was filed nowhere when it ran")
+                    .isNull();
+            assertThat(fact.get("suite_path")).isNull();
         }
 
         @Test
@@ -684,7 +721,10 @@ class ExecutionFactRefreshTest extends IntegrationTestBase {
             statement.setString(1, id.toString());
             statement.setString(2, companyId.toString());
             statement.setString(3, projectId.toString());
-            statement.setString(4, suiteId.toString());
+            // Null since V31: an unfiled case. setString(null) is what makes the CAST(? AS uuid)
+            // land as NULL rather than as the string "null", which is a runtime error and not a
+            // silent one — but only if the caller is allowed to pass it in the first place.
+            statement.setString(4, suiteId == null ? null : suiteId.toString());
             statement.setString(5, key);
             statement.setLong(6, keySeq);
             statement.setString(7, "Case " + key);

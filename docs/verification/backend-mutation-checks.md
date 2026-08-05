@@ -1709,3 +1709,20 @@ Built and unverified. Rows written per §65; **none of them run.**
 | **Must show** | Swapping `usageCount` and `suiteUsageCount` in `impactSummary` reddens `lib/conditions.test.ts`. Expected to pass — the fixtures use 4 and 3 precisely so the two are distinguishable — but it is the assertion the whole "never add them" rule rests on. |
 | **Check** | the resolver query's gate |
 | **Must show** | Removing `value.length > 0` from `ConditionsPanel`'s resolver read makes `CaseEditorPage.test.tsx` slow enough to time out again (it did, at 640s on one test). Recorded because the gate reads like an optimization and is load-bearing for the suite. |
+
+---
+
+## §96 phase 1 — suite membership: the schema, and the join that shortens the log
+
+Built and unverified. Rows written per §65; **none of them run.**
+
+| | |
+|---|---|
+| **Check** | the fact log's suite join is the LEFT one |
+| **Must show** | Restoring `JOIN suite s ON s.id = c.suite_id` in `ExecutionSource.projectRecordedExecutions()` reddens `ExecutionFactRefreshTest.anUnfiledCaseIsStillProjected` **and** `recordedExecutionsAreProjected`. Two, deliberately: the first names the defect, the second is the one a reader would trust, and a fixture without an unfiled case would leave both green. This is the slice's most dangerous line — the inner spelling drops the whole fact row, not the suite columns, and reports nothing. |
+| **Check** | the nullable fact columns are not merely tolerated |
+| **Must show** | Reverting either `ALTER TABLE execution_fact ALTER COLUMN suite_id / suite_path DROP NOT NULL` in `V31` reddens the same test with a constraint violation rather than a missing row. The failure mode differs from the join's — loud instead of silent — and only one of the two is fixed by the other. |
+| **Check** | the "(not filed)" bucket is printed and not dropped |
+| **Must show** | Changing `suiteSection`'s `suite.path() == null ? NOT_FILED : suite.path()` back to `suite.path()` reddens `RunSummaryReportTest.theUnfiledBucket` — with an NPE from `List.of`, which is the honest outcome: a null cell in a report model whose every cell is a string. Filtering the row out instead would be the quiet version and reddens the same test. |
+| **Check** | the tree count excludes unfiled cases rather than grouping them under NULL |
+| **Must show** | Dropping `AND tc.suite_id IS NOT NULL` from `SuiteRepository.countLiveCasesBySuite` reddens **nothing today**, and that is the finding rather than a shortfall — the extra row is keyed `null` and every caller looks it up by a real suite id. It becomes reachable the moment the tree renders an "unfiled" node. **Write the test with that slice**, not before. |

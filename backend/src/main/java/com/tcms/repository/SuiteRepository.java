@@ -81,6 +81,14 @@ public interface SuiteRepository extends JpaRepository<Suite, UUID> {
      *
      * <p>{@code deleted_at IS NULL} for the same reason it is on the project count: a soft-deleted
      * case is gone from the case list, so counting it here makes the tree contradict the grid.
+     *
+     * <p><strong>{@code suite_id IS NOT NULL} is new in §96 and is not defensive.</strong> The column
+     * is nullable since {@code V31}, so without the predicate an unfiled case joins a {@code NULL}
+     * group — a {@code SuiteCaseCount} whose {@code suiteId} is null, which every caller then looks
+     * up by a suite id that cannot match it. Harmless today and exactly the kind of row that is
+     * later "fixed" by rendering it under whichever folder is first. Unfiled cases are counted by
+     * the grid, not by the tree; the tree counts what is <em>filed</em>, and this slice's other two
+     * membership arms are resolved separately rather than summed into this number.
      */
     @Query(nativeQuery = true, value = """
             SELECT tc.suite_id AS suiteId, COUNT(*) AS caseCount
@@ -88,6 +96,7 @@ public interface SuiteRepository extends JpaRepository<Suite, UUID> {
              WHERE tc.company_id = :companyId
                AND tc.project_id = :projectId
                AND tc.deleted_at IS NULL
+               AND tc.suite_id IS NOT NULL
              GROUP BY tc.suite_id
             """)
     List<SuiteCaseCount> countLiveCasesBySuite(

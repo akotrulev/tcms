@@ -84,8 +84,15 @@ public class TestCase {
     @Column(name = "project_id", nullable = false, updatable = false)
     private UUID projectId;
 
-    /** Never null — a case always lives in a folder. Its subtree is what {@code suiteId} filters. */
-    @Column(name = "suite_id", nullable = false)
+    /**
+     * The folder this case is <strong>filed</strong> in, or {@code null} for an unfiled case.
+     *
+     * <p>Nullable since {@code V31}. It used to be the whole of suite membership; it is now one of
+     * three arms — filed here, added individually ({@code suite_case}), or matched by tag
+     * ({@code suite_tag_rule}) — and a case may be created before anybody has decided where it
+     * lives. Its subtree is still what the grid's {@code suiteId} filter walks.
+     */
+    @Column(name = "suite_id")
     private UUID suiteId;
 
     /** {@code TC-1} — company-scoped, immutable, and display-only: never an API path (plan §6t). */

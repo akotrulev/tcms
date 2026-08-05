@@ -116,6 +116,21 @@ class ExecutionSource {
      * discovered in R6: <strong>coverage and not-run denominators can never come from this table.</strong>
      * They come from the plan's scope, exactly as §46 found for plan statistics.
      *
+     * <h2>The suite is LEFT joined, and the inner spelling was a silently short log (§96)</h2>
+     *
+     * <p>The suite join is the exact opposite case and reads identically. {@code test_case.suite_id}
+     * is nullable since {@code V31} — a suite is a resolvable collection and a case may be filed
+     * nowhere — so {@code JOIN suite s ON s.id = c.suite_id} <strong>drops the whole fact row</strong>
+     * for every unfiled case that ran. Not the {@code suite_id} column: the row. Nothing fails,
+     * nothing warns, the tick reports a successful run, and every report over this table is smaller
+     * than the truth by however many unfiled cases the project has.
+     *
+     * <p>So {@code execution_fact.suite_id} and {@code suite_path} are nullable too ({@code V31}) and
+     * this is a {@code LEFT JOIN}. NULL there is a <em>fact about the execution</em> — it was run
+     * against a case nobody had filed — and suite-grouped report sections carry an explicit
+     * "not filed" bucket ({@code RunSummaryReport}) rather than omitting those results, which would
+     * be the same short-log defect one layer up.
+     *
      * <h2>The classification lateral takes {@code array_agg(...)[1]} and NOT {@code max(...)}</h2>
      *
      * <p>Not a style choice: <strong>Postgres has no {@code max(uuid)} aggregate</strong>, in 17 or
@@ -170,7 +185,7 @@ class ExecutionSource {
                   FROM test_execution e
                   JOIN test_run     r  ON r.id  = e.run_id
                   JOIN test_case    c  ON c.id  = e.case_id
-                  JOIN suite        s  ON s.id  = c.suite_id
+                  LEFT JOIN suite   s  ON s.id  = c.suite_id
                   JOIN case_status  st ON st.id = e.status_id
                   LEFT JOIN LATERAL (
                            SELECT (array_agg(cc.value_id ORDER BY cc.value_id)

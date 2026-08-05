@@ -81,6 +81,14 @@ class RunSummaryReport implements ReportComputation {
     /** The wire identifier. Durable — a saved definition names this string, not this class. */
     static final String TYPE = "run_summary";
 
+    /**
+     * What a NULL {@code suite_path} prints as — a case that was filed nowhere when it ran (§96).
+     *
+     * <p>A label and not a blank cell: an empty first column reads as a rendering fault, and the
+     * one thing a reader must be able to tell is that these executions are counted.
+     */
+    static final String NOT_FILED = "(not filed)";
+
     private final EntityManager entities;
     private final ExecutionSource source;
     private final ProjectRepository projects;
@@ -239,6 +247,13 @@ class RunSummaryReport implements ReportComputation {
      * was filed <em>when it ran</em>. That is the property that makes last quarter's report still
      * say what it said after somebody reorganises the tree, and it is worth knowing before reading a
      * path that no longer exists as a surprise.
+     *
+     * <p><strong>A NULL path is a row and not an omission</strong> (§96). {@code suite_path} is
+     * nullable since {@code V31}, because a case may be filed nowhere and the alternative — an inner
+     * join in {@link ExecutionSource} — silently drops the execution from the log entirely. Its
+     * group is printed as {@value #NOT_FILED}: dropping it here would make this section's
+     * executions stop summing to the headline, in the one direction nobody checks, and a reader
+     * comparing the two would find the difference and not the reason.
      */
     private ReportModel.Section suiteSection(UUID projectId, UUID runId) {
         List<SuiteRow> suites = suites(projectId, runId);
@@ -250,7 +265,7 @@ class RunSummaryReport implements ReportComputation {
         List<List<String>> rows = new ArrayList<>();
         for (SuiteRow suite : suites) {
             rows.add(List.of(
-                    suite.path(),
+                    suite.path() == null ? NOT_FILED : suite.path(),
                     count(suite.executions()),
                     count(suite.passed()),
                     count(suite.failed())));

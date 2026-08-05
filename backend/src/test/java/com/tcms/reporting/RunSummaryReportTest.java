@@ -73,6 +73,8 @@ class RunSummaryReportTest extends IntegrationTestBase {
     /** In the run, with no result recorded. The denominator's whole proof. */
     private static final UUID UNRECORDED = UUID.fromString("bc004000-0000-4000-8000-000000000005");
     private static final UUID FOREIGN_CASE = UUID.fromString("bc004000-0000-4000-8000-000000000009");
+    /** Filed in no suite (legal since {@code V31}) — the "(not filed)" bucket's only occupant. */
+    private static final UUID UNFILED = UUID.fromString("bc004000-0000-4000-8000-000000000006");
 
     private static final UUID ALICE = UUID.fromString("bc005000-0000-4000-8000-000000000001");
     private static final UUID BOB = UUID.fromString("bc005000-0000-4000-8000-000000000002");
@@ -282,6 +284,33 @@ class RunSummaryReportTest extends IntegrationTestBase {
                             List.of("billing", "2", "2", "0"),
                             List.of("checkout", "2", "0", "1"));
         }
+
+        @Test
+        @DisplayName("a case filed nowhere gets its own bucket rather than being left out")
+        void theUnfiledBucket() throws SQLException {
+            // §96: suite_path is nullable, because the alternative (an inner join in
+            // ExecutionSource) drops the execution from the log entirely. A NULL group left
+            // unhandled here is the same defect one layer up — this section's executions would
+            // stop summing to the headline, in the direction nobody checks, and a reader
+            // comparing the two would find the difference and never the reason.
+            //
+            // Seeded inside the test rather than in the fixture: every other assertion in this
+            // class is over a headline the extra execution would move, and a fixture change that
+            // quietly re-baselines six numbers is not a good trade for one row.
+            try (Connection acme = appConnection(ACME)) {
+                testCase(acme, UNFILED, ACME, ACME_PROJECT, null, "TC-6", 6);
+                execution(acme, ACME, ACME_PROJECT, RUN, UNFILED, "Failed", ALICE, 300L,
+                        BASE.plusSeconds(240));
+            }
+            refreshFor(ACME);
+
+            assertThat(section(model(), "Results by suite").table().rows())
+                    .as("counted and labelled, never omitted")
+                    .containsExactly(
+                            List.of("billing", "2", "2", "0"),
+                            List.of("checkout", "2", "0", "1"),
+                            List.of(RunSummaryReport.NOT_FILED, "1", "0", "1"));
+        }
     }
 
     @Nested
@@ -479,7 +508,8 @@ class RunSummaryReportTest extends IntegrationTestBase {
             statement.setString(1, id.toString());
             statement.setString(2, companyId.toString());
             statement.setString(3, projectId.toString());
-            statement.setString(4, suiteId.toString());
+            // Null is an unfiled case, legal since V31 — see theUnfiledBucket.
+            statement.setString(4, suiteId == null ? null : suiteId.toString());
             statement.setString(5, key);
             statement.setLong(6, keySeq);
             statement.setString(7, "Case " + key);
