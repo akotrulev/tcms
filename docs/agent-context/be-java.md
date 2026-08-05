@@ -2,11 +2,10 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-05
-**Baseline commit:** `b3c7fa6` (§94 phase 3) **+ §95 phase 1, the commit this line ships in** (its own
-SHA cannot be written into itself; per `CLAUDE.md`, trust the body over the header and re-grep what a
-later commit could have moved). **The header had lagged four slices** — it read `cf60cbd` while the
-body already recorded §93 and §94 — which is the documented trust-the-body case and is repaired here.
+**Last verified:** 2026-08-05 (§96, all six phases)
+**Baseline commit:** `097f7a7` (§96 phase 6) **+ §96 phase 7, the commit this line ships in** (its
+own SHA cannot be written into itself; per `CLAUDE.md`, trust the body over the header and re-grep
+what a later commit could have moved).
 **Fingerprint files:** `backend/build.gradle.kts`, `backend/gradle/libs.versions.toml`, `backend/gradle/wrapper/gradle-wrapper.properties`
 
 > Authoritative docs win over this file. `CLAUDE.md`, `docs/HANDOFF.md` (an index — sections live in

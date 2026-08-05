@@ -68,14 +68,19 @@ on plan scope, no change to `ck_plan_scope_target`.
 
 ## Sequencing
 
-Three slices, continuing from §93. Flyway head is `V29`; **`V30` is next free.**
-Each phase gates and commits on its own.
+Three slices, continuing from §93. Flyway head was `V29`; **all three have shipped** and the head is
+now **`V31`** with `V32` next free. Each phase gated and committed on its own.
 
-| Slice | What | Size |
-|---|---|---|
-| **§94** | Writing steps — autocomplete, auto-append, trim, drag-reorder | medium |
-| **§95** | Conditions get a writer, and edits propagate | medium |
-| **§96** | Tags become real, and a suite resolves from them | large |
+**Two things §96 did that this plan did not say**, both recorded in its handoff section rather than
+retrofitted here: `tags` are **not** on `CaseEdit` (they are not authored content, so they must not
+enter the version hash), and the membership union exists **twice** — once per module — because
+ERD §0.2 forbids the cross-module call, with `SuiteScopeAgreementTest` keeping the copies honest.
+
+| Slice | What | Size | Status |
+|---|---|---|---|
+| **§94** | Writing steps — autocomplete, auto-append, trim, drag-reorder | medium | **SHIPPED** (`docs/handoff/94-writing-steps.md`) |
+| **§95** | Conditions get a writer, and edits propagate | medium | **SHIPPED** (`docs/handoff/95-conditions-get-a-writer.md`) |
+| **§96** | Tags become real, and a suite resolves from them | large | **SHIPPED**, six phases (`docs/handoff/96-tags-become-real.md`) — `V31`, policies 59 → 61 |
 
 ---
 

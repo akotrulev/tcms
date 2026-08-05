@@ -2,11 +2,10 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-05
-**Baseline commit:** `7f3f8c3` (§95 phase 3) **+ §95 phase 4, the commit this line ships in** (its
-own SHA cannot be written into itself; per `CLAUDE.md`, trust the body over the header). Two headers
-ago this read `6980bfb` while HEAD was three slices further on — the drift the warning below
-describes, and it has now been caught twice running.
+**Last verified:** 2026-08-05 (§96 phases 5–6)
+**Baseline commit:** `097f7a7` (§96 phase 6) **+ §96 phase 7, the commit this line ships in** (its
+own SHA cannot be written into itself; trust the body over the header and re-grep what a later
+commit could have moved).
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
 `frontend/vite.config.ts`
 

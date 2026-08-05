@@ -1,59 +1,55 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-04 (latest section: **§92, saved report definitions** — R5 of the M2.5 plan,
-**three phases, three commits**, and the slice that gives `report_definition` — a `V1` table — its
-first writer, serves the `GET` declared and unimplemented since M0, and makes a saved report
-*runnable*. **`V28`** (the plan said R5 needs no migration; it does — see below), contract **+2
-operations** and a changed generate body, **no new key**, **no new table**, policy count unchanged at
-**59**, `V29` next free. **IT IS §92 AND ITS FIRST TWO COMMITS SAY §91**: a concurrent strand claimed
-that number mid-slice and rewriting two published commits with another session live in the same tree
-is the operation the parallel-execution rework §0 blames for three silent losses of work — the § is
-not reserved until the handoff file exists, which is §10's lesson paid again. **THE FINDING IS THAT
-THE ROW IS ONE PERSON'S AND EVERY QUERY HAS TO SAY SO.** `V1` gave the table `owner_id` *and*
-`shared_with_team_id`, and those only make sense together: a definition readable by the whole project
-makes sharing it with a team meaningless. So sharing stays unmapped — it is the one part of this
-surface wanting a key the catalogue does not have (§67/§79/§80/§82) — v1 ships **owner-only**
-definitions, and the contract now states the consequence outright: **two people asking for the same
-project's saved reports receive different lists** (§84's sentence from a different direction). It is
-enforced by a repository that has **no method able to find a definition the caller does not own** —
-not `findById`, not `findByIdAndProjectId` — because resolve-then-check-the-owner is the shape that
-passes an access-control test one call site over. Hence **somebody else's definition is a 404 and
-never a 403** on the delete (§6t at row level) and a **400 field error** on generate, where the id is
-data in a body rather than the thing being addressed. **`report:view` FOR ALL THREE, INCLUDING THE
-TWO WRITES**: the row is its creator's, so saving writes to the caller's own workspace and not to
-project content — and requiring `report:export` would mean the persona §6e's split exists for, *may
-read on screen, may not carry off*, could not **save the selection it is allowed to read**. That
-persona is §87's custom test role, created because **no built-in lacks either key**, and this slice's
-gates are non-vacuous only because it exists: saving is allowed and running is refused, same person,
-same project. **THE MIGRATION THE PLAN SAID THIS SLICE WOULD NOT NEED**, found by reading two foreign
-keys rather than by running the delete: `report_job.definition_id` is `V27`'s `ON DELETE SET NULL`
-under a comment saying deleting a saved report must not delete the history of what it produced, while
-`report_artifact.definition_id` is `V1`'s with the default `NO ACTION` — and the runner copies the
-job's definition onto **every artifact it writes**, so from phase 2 onward deleting a *used*
-definition is a foreign-key violation surfacing as a **500 on a route whose contract says 204**, only
-ever for the definitions somebody actually used. `V28` puts the rule where its sibling already keeps
-it; the test asserts the artifact carries the definition **before** the delete, so a green run cannot
-mean "nothing referenced it". **THE MERGE IS SHALLOW AND THAT IS THE DECISION**: `parameters` is
-untyped by design, so nothing tells a deep merge whether a nested object is a set of filters to
-combine or one value to replace — and half-overriding a saved selection is invisible in the output,
-where the report renders and the numbers are wrong. The **merged** result is what the job stores and
-what `filter_snapshot` freezes, because what must be reproducible is what the report was computed
-over and not what the caller typed. A `type` **contradicting** the definition is refused rather than
-resolved (a stale client would otherwise get a perfect report of the wrong thing) while an absent one
-is no longer a mistake, so `required` drops to `[format]` with the rule in prose. The definition's
-type is re-checked **at generate time too** — a definition outlives its release, and a retired report
-would otherwise die in the worker with the registry's internal sentence — while `parameters` are
-deliberately **not** validated at save time, since a parameter that becomes required later would make
-an existing saved report unsaveable. `ReportTypes` is the one refusal for "this server has no report
-called that", extracted because save and generate now both make it. Gate: **1641 then 1649 tests
-across 322 classes, 0 failures** (1628 → 1641 → 1649); **all 21 new tests passed first run**, stated
-plainly. **The frontend gate is RED on `AppShell.test.tsx`, an untracked file of the concurrent
-strand** — two unused-variable errors, nothing in a file this slice touches, lint 0. **Found and not
-fixed**: §90's `report:export`-to-read-on-screen finding (the persona that may now save a report
-still cannot read one), `EvidencePanel`'s anchor, the missing job list, `schedule_cron` still written
-by nothing, and §86/§87's three open rows. **Zero mutations run inline**; **10 backend rows and 5
-browser rows (40–44)** queued, two of them live-only because mock mode has one persona and therefore
-cannot show an owner bound at all. **Built and unverified.**
+**Date:** 2026-08-05 (latest section: **§96, tags become real and a suite resolves from them** —
+the last of the authoring rework's three slices, **six phases, six commits**, and the structural
+one: a suite stops being a filing decision and becomes a **resolvable collection** — filed ∪ added ∪
+tagged, unioned and deduped — while a case may be created carrying no suite at all.
+**`V31__suite_membership.sql`** creates `suite_case` and `suite_tag_rule`, policy count **59 → 61**,
+`V32` next free; contract gains two required fields on `Suite`, two query parameters, and makes three
+shapes' suite fields **nullable in pairs**. **THE FINDING IS THAT A NULLABLE FOREIGN KEY DROPS ROWS
+IN FOUR PLACES AND EVERY ONE IS SILENT.** `ExecutionSource`'s `JOIN suite` never inserts the **whole
+fact row** for an unfiled case — not its suite columns, the row — so the log is short, the tick logs
+success and every report is smaller than the truth. `CaseSpecifications`' `IN (…)` is never true of
+NULL, so **every unfiled case is absent from the grid**, the one screen somebody would look for it
+on, with a total that still counts it. `ProjectRepository`'s inner join made the picker say **6 over
+a list of 7** — the very defect that method was written to fix, from the other side. And
+`CaseFacts.casesInPlanScope` is the one plan-scope query of three that joins the case's own folder,
+so a plan naming an unfiled case would count it and not list it. **The plan named the first; the
+other three were found by tests rather than by reading**, one of them by the single assertion that
+compares two screens' numbers — hence the standing rule now in the orientation cache: **grep for
+`JOIN suite` before adding one.** Every NULL group downstream is a **row, never an omission**:
+`(not filed)` in the report, three nulls together on `bySuite`, muted italic **Not filed** in the
+grid. **THE UNION IS WRITTEN TWICE ON PURPOSE** — `SuiteMembership` for the tree and the grid,
+`CaseFacts#inSubtreeOf` for plan scope and suite history — because ERD §0.2 lets `execution` read
+the repository's tables only through its one seam class, and calling across would trade a duplicated
+predicate for a dependency `ModuleStructureTest` refuses. **`SuiteScopeAgreementTest`** keeps them
+honest and pins the ONE intended disagreement (the seam includes soft-deleted cases; history must
+not shrink). Two repairs made that class non-vacuous: only **one of its four live members is filed**,
+and it runs inside a **`TransactionTemplate`** — a `CaseFacts` method called straight from a test
+runs outside any transaction, so `app.current_company` is unset and RLS answers zero rows, and the
+first draft compared an empty list to an empty list and reported agreement. **TAGS ARE NOT AUTHORED
+CONTENT, a recorded departure from the plan's own line**: they ride beside `CaseEdit` rather than on
+it, so `CaseVersions#hash` never sees one — labelling a case `sprint-42` must not write a version
+whose diff says nothing about the test changing (§6j), which `CaseBulkService.AddTags` had already
+said by refusing to stamp `updatedAt`; it also makes §95's bulk-hash trap **structurally
+unavailable**. **AND VERSUS OR POINTS OPPOSITE WAYS IN TWO PLACES AND BOTH ARE RIGHT**: the grid's
+`?tag=` ANDs (a list is narrowed), a suite's `tagRules` union (a collection is assembled) — a two-tag
+suite that silently held nothing would be indistinguishable from an empty project. **A suite may
+CLAIM a case and may never MOVE one**: filing belongs to the case's write path, or two screens write
+one column. **The counts stop summing to the project total** — a case can be in three folders — so
+the contract, the tooltip and the handoff all say so rather than let a reader find it by
+subtraction. **THE FRONTEND DEFECT THIS SLICE SHIPPED AND FIXED**: both tag controls replaced MUI's
+`slotProps` to add a testid, which drops the `input.startAdornment` the **chips** live in — every
+tag held, sent, and invisible, with build and lint green and the payload assertion passing; the fix
+is `...params.slotProps` first, which the step-action `Autocomplete` had right since §94.
+Gates: backend **1715 → 1741**, frontend **820 → 834** across 56 files, lint 0, bundle entry
+unchanged. **Zero verification run**: 14 browser rows (74–87) and 20 mutation rows queued, one
+naming a test that does not exist yet and two recording checks weaker than they look.
+**§97 is unblocked** — it sat behind this slice only for `test_case.suite_id` going nullable.
+**Built and unverified.**
+Before that: **§95, conditions get a writer** — the library nothing could fill, the edit that
+propagates everywhere with no prompt, and `usageCount` unmapped one slice before it became an impact
+warning. See `docs/handoff/95-conditions-get-a-writer.md`.
 Before that: **§90, the on-screen report view** — F2 of the M2.5 plan,
 **three phases, three commits**, and the clause §6e states in one line: *"the on-screen report view
 consumes the same model via JSON, so what you see is what exports."* **No migration (`V27` still
@@ -1546,3 +1542,4 @@ See [`docs/plans/2026-07-31-parallel-execution-rework.md`](plans/2026-07-31-para
 | [§93](handoff/93-the-plan-document.md) | The test plan document — the half a plan is mostly made of, and the link four years of schema had no writer for |
 | [§94](handoff/94-writing-steps.md) | Writing steps — the corpus that needs no curating, the index spelling that decides whether it works, and the refine auto-append would have broken **(built and unverified — 11 browser rows, 4 mutation rows, none run)** |
 | [§95](handoff/95-conditions-get-a-writer.md) | Conditions get a writer — the library nothing could fill, the edit that propagates, and the usage count that was always zero one slice before it became an impact warning **(built and unverified — 12 browser rows, 9 mutation rows, none run; 3 of them are tests not yet written)** |
+| [§96](handoff/96-tags-become-real.md) | Tags become real, and a suite resolves from them — the nullable key that drops rows in four places, the union written twice on purpose, and the tag that must not write a version **(built and unverified — 14 browser rows, 20 mutation rows, none run; one names a test not yet written, two record checks weaker than they look)** |

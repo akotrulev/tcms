@@ -3,8 +3,8 @@
 **Date:** 2026-08-05
 **Source:** review of §93 against `docs/Easy leave test plan.pdf`, and the four corrections that came
 out of it.
-**Status:** planned, not started.
-**Depends on §96** (`docs/plans/2026-08-04-test-case-authoring-rework.md`) — see §7.
+**Status:** planned, not started. **UNBLOCKED as of 2026-08-05** — §96 shipped and
+`test_case.suite_id` is nullable, which is the whole of the dependency (see §7).
 
 ---
 
@@ -184,7 +184,11 @@ The empty state gains a second control beside "Start the document": **link an ex
 a suite, and phase 4 below cannot be built as specified — only faked with a default suite, which is
 the thing the user explicitly rejected.
 
-Current position: §95 is **phase 1 of 4, in flight**. §96 is planned and not started.
+~~Current position: §95 is phase 1 of 4, in flight. §96 is planned and not started.~~ →
+**Both have shipped** (2026-08-05). `test_case.suite_id` is nullable, `TestCaseInput.suiteId` is
+optional, and the case grid can reach an unfiled case, so **phase 4 below can be built as
+specified** rather than faked with a default suite. Option **A** was taken and needs no further
+scheduling call.
 
 Two ways to run it, and it is a scheduling call rather than a technical one:
 
