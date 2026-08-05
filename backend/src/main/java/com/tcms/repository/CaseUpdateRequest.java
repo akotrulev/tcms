@@ -22,18 +22,24 @@ import java.util.UUID;
  * client. A caller wanting true partial-update semantics needs {@code JsonNullable} or a presence
  * map, which is a shape change on the contract and not something to infer from one field's absence.
  *
- * <h2>The five fields this endpoint refuses — it was six</h2>
+ * <h2>The three fields this endpoint refuses — it was six</h2>
  *
- * <p>{@code ownerId}, {@code tags}, {@code automationTags}, {@code preconditions} and
- * {@code postconditions} are on the contract's {@code TestCaseInput} and are <strong>rejected with a
- * 400 when present</strong> rather than ignored. Each needs a write path no slice has built yet —
- * the library-versus-inline shape for conditions, a membership check for the owner.
+ * <p>{@code ownerId}, {@code tags} and {@code automationTags} are on the contract's
+ * {@code TestCaseInput} and are <strong>rejected with a 400 when present</strong> rather than
+ * ignored. Each needs a write path no slice has built yet — a membership check for the owner, a
+ * {@code case_tag} reconcile for the other two (§96).
  *
- * <p><strong>{@code classificationValueIds} left this list</strong>, which is what the paragraph
- * below always said would happen to each of them in turn: it is accepted, validated against the
- * project's dimensions and persisted, and the boundary was deleted in the one place it was written.
- * The rules it is validated against live on {@link CaseEdit#validate}'s {@code vocabulary}
- * parameter, and the reconcile that applies them is {@link CaseClassifications}.
+ * <p><strong>{@code classificationValueIds} left this list in §68, and
+ * {@code preconditions}/{@code postconditions} left it in §95</strong> — which is what the
+ * paragraph below always said would happen to each of them in turn: the field is accepted,
+ * validated, and persisted, and the boundary is deleted in the one place it was written. The
+ * conditions are validated against {@link CaseEdit#validate}'s {@code acceptableConditionIds} — the
+ * same union rule §64 settled for a shared step — and the reconcile that applies them is
+ * {@link CaseConditions#reconcile}.
+ *
+ * <p><strong>Only the reference form is accepted.</strong> An inline body is still refused, and
+ * {@link CaseConditionInput} states why: nothing can render one, so storing it would be a
+ * successful save the author can never see again.
  *
  * <p>Accepting them and dropping them is the failure the SPA's own mock handler comments on: a save
  * that reports success and discards a value the user typed. The user then has no way to discover it
@@ -73,8 +79,14 @@ public record CaseUpdateRequest(
         UUID ownerId,
         List<String> tags,
         List<String> automationTags,
-        List<Object> preconditions,
-        List<Object> postconditions) {
+        // Absent (null) means "leave the conditions alone"; an empty list means "detach them all".
+        // The same split `classificationValueIds` above uses, and for the same reason: they are
+        // collections, so "not sent" and "sent empty" have different representations. The bulk
+        // actions reconstruct a request without touching conditions, and a null here is how they
+        // say so without carrying the case's stored attachments through code with no interest in
+        // them. See CaseEdit.of.
+        List<CaseConditionInput> preconditions,
+        List<CaseConditionInput> postconditions) {
 
     /**
      * {@code TestStepInput} — one step as submitted.

@@ -243,6 +243,11 @@ class CaseSharedStepReferenceTest {
                 // so an empty vocabulary is never consulted and cannot colour a refusal under test.
                 ClassificationVocabulary.none(),
                 Set.of(),
+                // This class is about step references too — the request sends no conditions, so an
+                // empty acceptable set and two empty stored lists are never consulted either.
+                Set.of(),
+                List.of(),
+                List.of(),
                 key -> false);
     }
 

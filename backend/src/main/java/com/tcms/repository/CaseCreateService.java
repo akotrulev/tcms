@@ -95,6 +95,8 @@ public class CaseCreateService {
     private final CaseSteps steps;
     private final SharedStepService sharedSteps;
     private final CaseClassifications classifications;
+    private final CaseConditions conditions;
+    private final ConditionService conditionLibrary;
     private final CaseRenderer renderer;
     private final CaseVersions versions;
     private final DisplayKeys displayKeys;
@@ -109,6 +111,8 @@ public class CaseCreateService {
             CaseSteps steps,
             SharedStepService sharedSteps,
             CaseClassifications classifications,
+            CaseConditions conditions,
+            ConditionService conditionLibrary,
             CaseRenderer renderer,
             CaseVersions versions,
             DisplayKeys displayKeys,
@@ -121,6 +125,8 @@ public class CaseCreateService {
         this.steps = steps;
         this.sharedSteps = sharedSteps;
         this.classifications = classifications;
+        this.conditions = conditions;
+        this.conditionLibrary = conditionLibrary;
         this.renderer = renderer;
         this.versions = versions;
         this.displayKeys = displayKeys;
@@ -235,6 +241,18 @@ public class CaseCreateService {
                 // is no classification to leave alone. A create that omits the field makes an
                 // unclassified case, which is the only thing "leave it alone" can mean here.
                 Set.of(),
+                // The live library alone again, with no stored half — a new case attaches nothing
+                // yet, so a retired entry is correctly refused here while an existing case attaching
+                // one keeps saving.
+                conditionLibrary.liveLibraryIds(
+                        project.getId(),
+                        CaseEdit.referencedConditionIds(
+                                request.preconditions(), request.postconditions())),
+                // Both empty, for the classification reason one line up: nothing is stored, so
+                // there are no attachments to leave alone, and a create that omits the fields makes
+                // a case with no conditions of its own.
+                List.of(),
+                List.of(),
                 cases::existsByAutomationKey);
 
         if (validated instanceof CaseEdit.Outcome.Invalid invalid) {
@@ -263,6 +281,8 @@ public class CaseCreateService {
         cases.saveAndFlush(created);
         steps.reconcile(created, edit.steps());
         classifications.reconcile(created, edit.classificationValueIds(), vocabulary, companyId);
+        conditions.reconcile(
+                created, edit.preconditionIds(), edit.postconditionIds(), companyId);
 
         CaseVersions.Decision decision = versions.initial(edit);
         TestCaseDetailView view = renderer.render(created, liveSuites, vocabularies, companyId);

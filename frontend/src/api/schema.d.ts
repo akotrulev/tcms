@@ -5696,9 +5696,29 @@ export interface components {
             /** @example Billing */
             inheritedFrom?: string | null;
         };
+        /**
+         * @description One condition attached to a case. **Only the reference form is accepted** as of §95:
+         *     `conditionId` names a live entry of this project's library and the attachment resolves
+         *     through it, so editing that entry propagates here with no prompt — the whole point of the
+         *     object, and the deliberate opposite of a step, which is text copied from `/step-suggestions`.
+         *
+         *     `inlineBody` is declared so it can be **refused with a field error** rather than silently
+         *     swallowed, which would be indistinguishable from a typo. It is not implemented because
+         *     **nothing can render one**: every `CaseConditionRef` requires a `title`, an inline row has no
+         *     column one could come from, and both readers exclude such rows at the query. Accepting it
+         *     would be a save that succeeds and a condition the author can never see again.
+         *
+         *     **Order is the content.** Position is assigned from the array's order and is never sent — a
+         *     client-supplied position can duplicate or skip and the table has no constraint that would
+         *     refuse it. The same rule `TestStepInput` follows.
+         *
+         *     The same entry may appear in **both** lists (setup that is also cleanup) but only once
+         *     within one list; a repeat inside one list is de-duplicated rather than refused.
+         */
         CaseConditionInput: {
             /** Format: uuid */
-            conditionId?: string | null;
+            conditionId: string;
+            /** @description Refused with a 400 when present — see above. */
             inlineBody?: string[];
         };
         SharedStep: {

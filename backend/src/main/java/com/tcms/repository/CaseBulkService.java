@@ -608,6 +608,8 @@ public class CaseBulkService {
                         stepRows.findForCase(row.getId()),
                         context.liveSuiteIds(),
                         context.classificationOf(row.getId()),
+                        context.conditionIdsOf(row.getId(), ConditionKind.PRE),
+                        context.conditionIdsOf(row.getId(), ConditionKind.POST),
                         key -> cases.existsByAutomationKeyOtherThan(key, row.getId()))
                 // evaluate() already refused every case loadContext could not reconstruct, and the
                 // only fields this class changes are ones validate accepts by construction — a
@@ -723,10 +725,51 @@ public class CaseBulkService {
             return classifications.getOrDefault(caseId, Set.of());
         }
 
+        /**
+         * The case's own attached condition ids, in the author's order, one list per kind.
+         *
+         * <p>Carried into the reconstructed edit for {@link #classificationOf}'s reason exactly: no
+         * bulk action changes a case's conditions, so an edit reconstructed without them hashes as
+         * though the case had none, and the next ordinary save would be credited with restoring
+         * attachments nobody touched.
+         *
+         * <p><strong>Reference rows only.</strong> {@code findForCases} deliberately includes inline
+         * attachments — it feeds a decision about positions — while {@link CaseEdit} carries library
+         * references, so the filter belongs here. Including an inline row would put a null into the
+         * id list and hash a case as attaching "nothing" in a position.
+         *
+         * <p>The rows arrive ordered by {@code (caseId, kind, position)}, so this is a filter and
+         * not a sort.
+         */
+        List<UUID> conditionIdsOf(UUID caseId, ConditionKind kind) {
+            return conditionIds(conditionsOf(caseId), kind);
+        }
+
         /** Whether a version row can be written for this case at all. */
         boolean reconstructable(UUID caseId) {
             return priorEdits.containsKey(caseId);
         }
+    }
+
+    /**
+     * The reference ids of one kind, in stored order — the projection both
+     * {@link Context#conditionIdsOf} and {@code loadContext} need, written once.
+     *
+     * <p>Static and null-tolerant because the two callers reach it from different sides: the record
+     * has a defaulted map, this one has a raw {@code get} that is legitimately absent for a case
+     * with no attachments.
+     */
+    private static List<UUID> conditionIds(List<CaseCondition> rows, ConditionKind kind) {
+        if (rows == null) {
+            return List.of();
+        }
+        List<UUID> ids = new ArrayList<>();
+        for (CaseCondition row : rows) {
+            if (row.getKind() == kind && row.getConditionId() != null) {
+                ids.add(row.getConditionId());
+            }
+        }
+        return ids;
     }
 
     private Context loadContext(
@@ -747,9 +790,16 @@ public class CaseBulkService {
             }
         }
 
+        // Loaded for the two condition commands, which act on these rows — AND for every AUTHORED
+        // command, which does not. The second half is §95's addition and it is the whole point:
+        // CaseEdit now carries the case's attachments, so an edit reconstructed without them hashes
+        // as though the case had none, and the next ordinary save would be credited with restoring
+        // attachments a MOVE_TO_SUITE never touched. Exactly the trap `classificationOf` describes,
+        // on a second field, and it would have been introduced by leaving this line alone.
         Map<UUID, List<CaseCondition>> byCase = new LinkedHashMap<>();
         if ((command instanceof BulkCommand.AttachCondition
-                || command instanceof BulkCommand.DetachCondition) && !found.isEmpty()) {
+                || command instanceof BulkCommand.DetachCondition
+                || authored) && !found.isEmpty()) {
             for (CaseCondition attachment
                     : caseConditions.findForCases(found.stream().map(TestCase::getId).toList())) {
                 byCase.computeIfAbsent(attachment.getCaseId(), key -> new ArrayList<>())
@@ -789,6 +839,8 @@ public class CaseBulkService {
                                 stepRows.findForCase(row.getId()),
                                 liveSuiteIds,
                                 classificationsByCase.getOrDefault(row.getId(), Set.of()),
+                                conditionIds(byCase.get(row.getId()), ConditionKind.PRE),
+                                conditionIds(byCase.get(row.getId()), ConditionKind.POST),
                                 key -> cases.existsByAutomationKeyOtherThan(key, row.getId()))
                         .ifPresent(edit -> priorEdits.put(row.getId(), edit));
             }

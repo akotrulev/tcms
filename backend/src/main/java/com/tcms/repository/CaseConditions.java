@@ -3,6 +3,7 @@ package com.tcms.repository;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -124,6 +125,150 @@ public class CaseConditions {
         return new Resolved(
                 list(ConditionKind.PRE, chain, inheritedRows, ownRows, resolved, suiteNames),
                 list(ConditionKind.POST, chain, inheritedRows, ownRows, resolved, suiteNames));
+    }
+
+    /**
+     * The case's OWN attachments of one kind, in order, restricted to library entries the project
+     * still offers — the <strong>one</strong> implementation of that filter, read by both places
+     * that need it.
+     *
+     * <p>{@link CaseClassifications#liveValueIdsOf}'s twin, and the bound is the same one for the
+     * same reason. A condition is retired by a soft delete because attachments to it survive, and
+     * {@link #forCase} above <em>drops</em> an attachment whose entry no longer resolves — so a
+     * client is never shown a retired attachment and therefore cannot resubmit one.
+     *
+     * <p>This feeds {@link CaseEdit#validate} as the value an edit carries when the request omits
+     * the field, and it must agree with what {@code GET} serves: two implementations would let the
+     * attachments a client is served differ from the ones a save preserves, which shows up as a
+     * condition that disappears on a save that did not mention it.
+     */
+    List<UUID> liveAttachedIdsOf(UUID caseId, ConditionKind kind) {
+        List<CaseCondition> rows = own.findForCase(caseId);
+        Set<UUID> live = liveLibraryIdsAmong(rows);
+
+        List<UUID> ids = new ArrayList<>();
+        for (CaseCondition row : rows) {
+            if (row.getKind() == kind && live.contains(row.getConditionId())) {
+                ids.add(row.getConditionId());
+            }
+        }
+        return ids;
+    }
+
+    /**
+     * Brings the case's own attachments in line with the two submitted lists, in the caller's
+     * transaction.
+     *
+     * <h2>The retired bound, which is the whole reason this is not a delete-all-and-reinsert</h2>
+     *
+     * <p>{@link CaseClassifications#reconcile}'s rule, transferred: only attachments whose library
+     * entry the project <em>still offers</em> are candidates for removal. Without it, the first save
+     * of any case attaching a since-retired condition would silently discard it — an attachment
+     * nobody chose to drop, removed by a save that never mentioned it, and invisible afterwards
+     * because the thing that would have shown it is the thing that was dropped.
+     *
+     * <p>The consequence is the same one stated there: a retired entry's attachment is
+     * <strong>immutable through this API</strong>. It cannot be added (validation refuses an entry
+     * the project does not offer) and cannot be removed (this does not reach it). It stops existing
+     * when the entry is restored and then detached, or when the case row is deleted.
+     *
+     * <h2>Rows are rewritten in place where they can be, because POSITION is the content</h2>
+     *
+     * <p>Unlike a classification assignment, these rows carry an order and that order is the
+     * procedure. A row already attaching the wanted entry keeps its identity and takes its new
+     * position; only genuinely new attachments are inserted and genuinely removed ones deleted.
+     *
+     * <p>Nothing references {@code case_condition.id} — {@code case_condition_optout} keys on
+     * {@code suite_condition_id}, not this table — so a delete-and-reinsert would in fact be
+     * <em>safe</em> here, unlike {@link CaseSteps} where results hang off the id. It is still not
+     * what happens, for the reason {@link CaseClassifications} gives about churn: rewriting every
+     * row of every case on every save makes the table's history unreadable and buys nothing.
+     *
+     * @param submitted one list per kind, already validated, in the author's order
+     * @param companyId written onto every new row — RLS refuses an insert whose value does not match
+     *                  {@code app.current_company} (ERD §0.1), so this is what makes the row
+     *                  readable again rather than one this connection can write once and never see
+     */
+    void reconcile(
+            TestCase testCase,
+            List<UUID> preconditions,
+            List<UUID> postconditions,
+            UUID companyId) {
+
+        List<CaseCondition> rows = own.findForCase(testCase.getId());
+        Set<UUID> live = liveLibraryIdsAmong(rows);
+
+        List<CaseCondition> stale = new ArrayList<>();
+        List<CaseCondition> added = new ArrayList<>();
+
+        for (ConditionKind kind : ConditionKind.values()) {
+            List<UUID> wanted = kind == ConditionKind.PRE ? preconditions : postconditions;
+
+            Map<UUID, CaseCondition> reusable = new LinkedHashMap<>();
+            for (CaseCondition row : rows) {
+                if (row.getKind() != kind) {
+                    continue;
+                }
+                if (!live.contains(row.getConditionId())) {
+                    // Retired since it was attached, or an inline row nothing renders. Not a
+                    // candidate for removal — see the header. Deliberately not reusable either: it
+                    // cannot be in `wanted`, because validation would have refused it.
+                    continue;
+                }
+                // First row wins for a duplicate attachment; the extra is stale, which is also how
+                // a list that used to carry the same entry twice collapses to one.
+                if (reusable.putIfAbsent(row.getConditionId(), row) != null) {
+                    stale.add(row);
+                }
+            }
+
+            int position = 0;
+            for (UUID conditionId : wanted) {
+                CaseCondition existing = reusable.remove(conditionId);
+                if (existing != null) {
+                    existing.moveTo(position);
+                } else {
+                    added.add(CaseCondition.of(
+                            testCase.getId(), conditionId, kind, position, companyId));
+                }
+                position++;
+            }
+            // Whatever is left was attached, is still offered, and was not resubmitted.
+            stale.addAll(reusable.values());
+        }
+
+        if (!stale.isEmpty()) {
+            own.deleteAll(stale);
+            own.flush();
+        }
+        if (!added.isEmpty()) {
+            own.saveAll(added);
+        }
+    }
+
+    /**
+     * Which of these rows' library entries are still live.
+     *
+     * <p>One query for the whole set. Inline rows carry a null {@code condition_id} and are
+     * therefore never in the result, which is what makes them fall on the protected side of the
+     * bound above — correct, since nothing renders them and so nothing can resubmit them either.
+     */
+    private Set<UUID> liveLibraryIdsAmong(List<CaseCondition> rows) {
+        Set<UUID> referenced = new HashSet<>();
+        for (CaseCondition row : rows) {
+            if (row.getConditionId() != null) {
+                referenced.add(row.getConditionId());
+            }
+        }
+        if (referenced.isEmpty()) {
+            // An empty IN () is a syntax error rather than an empty result.
+            return Set.of();
+        }
+        Set<UUID> live = new HashSet<>();
+        for (Condition condition : library.findLiveByIds(referenced)) {
+            live.add(condition.getId());
+        }
+        return live;
     }
 
     /** The two lists, in the shape {@link TestCaseDetailView} takes them. */

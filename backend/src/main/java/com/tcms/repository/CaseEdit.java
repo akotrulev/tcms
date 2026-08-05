@@ -58,6 +58,18 @@ record CaseEdit(
         // whose diff is empty. Canonicalising here means the ordering question is answered once,
         // before anything can observe it.
         List<UUID> classificationValueIds,
+        // The case's OWN attachments, in the author's order — position IS the content, so these are
+        // lists and never sets, and they are deliberately not sorted the way classification is.
+        //
+        // Being on this record means they are part of CaseVersions#hash, which is correct: a
+        // condition is authored content and V1's test_case_version snapshots it. It also has a
+        // ONE-TIME consequence worth stating rather than discovering — every stored hash was
+        // computed without these fields, so the first save of each existing case after §95 writes a
+        // version whose diff looks empty. That is the price of conditions joining the pinned
+        // content, it happens once per case, and it is the opposite of the recurring empty-diff
+        // defect the comment above warns about.
+        List<UUID> preconditionIds,
+        List<UUID> postconditionIds,
         String changeComment) {
 
     /** The longest title the SPA's editor accepts. The column itself is unbounded {@code TEXT}. */
@@ -161,6 +173,9 @@ record CaseEdit(
             Set<UUID> acceptableSharedStepIds,
             ClassificationVocabulary vocabulary,
             Set<UUID> storedClassificationValueIds,
+            Set<UUID> acceptableConditionIds,
+            List<UUID> storedPreconditionIds,
+            List<UUID> storedPostconditionIds,
             java.util.function.Predicate<String> automationKeyTaken) {
 
         Map<String, List<String>> errors = new LinkedHashMap<>();
@@ -169,6 +184,13 @@ record CaseEdit(
 
         List<UUID> classification = normalizeClassification(
                 request.classificationValueIds(), vocabulary, storedClassificationValueIds, errors);
+
+        List<UUID> preconditions = normalizeConditions(
+                request.preconditions(), "preconditions", acceptableConditionIds,
+                storedPreconditionIds, errors);
+        List<UUID> postconditions = normalizeConditions(
+                request.postconditions(), "postconditions", acceptableConditionIds,
+                storedPostconditionIds, errors);
 
         String title = trimToNull(request.title());
         if (title == null) {
@@ -272,6 +294,8 @@ record CaseEdit(
                 duration,
                 format == StepFormat.GHERKIN ? List.of() : steps,
                 classification,
+                preconditions,
+                postconditions,
                 trimToNull(request.changeComment())));
     }
 
@@ -316,6 +340,8 @@ record CaseEdit(
             List<TestStep> steps,
             Set<UUID> liveSuiteIds,
             Set<UUID> storedClassificationValueIds,
+            List<UUID> storedPreconditionIds,
+            List<UUID> storedPostconditionIds,
             java.util.function.Predicate<String> automationKeyTaken) {
 
         CaseUpdateRequest asRequest = new CaseUpdateRequest(
@@ -354,10 +380,18 @@ record CaseEdit(
                 null,
                 // See the header. Null, not a description of the bulk edit.
                 null,
-                // The refused five stay null: they are refused on the way IN, and this is a
+                // The refused three stay null: they are refused on the way IN, and this is a
                 // reconstruction of what is already stored, so passing any of them would make a
                 // stored row fail validation for a rule about requests.
-                null, null, null, null, null);
+                null, null, null,
+                // The two condition lists are null for the SAME reason classification is above —
+                // "leave them alone", which is exactly what all eight bulk actions do. The stored
+                // attachments are supplied separately, below, so the reconstructed edit still
+                // HASHES as the whole case. Passing them here instead would re-validate a stored
+                // attachment against the live library, and a case attaching a since-retired
+                // condition would fail to reconstruct and be skipped by a MOVE_TO_SUITE that has
+                // nothing to do with it. §64's argument, and §68's, for the third time.
+                null, null);
 
         Set<UUID> existingStepIds = new HashSet<>();
         Set<UUID> storedSharedStepIds = new HashSet<>();
@@ -386,6 +420,12 @@ record CaseEdit(
                 // reconstruct a field the bulk actions do not change.
                 ClassificationVocabulary.none(),
                 storedClassificationValueIds,
+                // Never consulted either, for the same reason: both condition lists are null on the
+                // request above, so nothing is checked against the library. An empty acceptable set
+                // is therefore correct AND keeps this a pure function with no query in it.
+                Set.of(),
+                storedPreconditionIds,
+                storedPostconditionIds,
                 automationKeyTaken);
         return outcome instanceof Outcome.Valid valid
                 ? Optional.of(valid.edit())
@@ -455,8 +495,98 @@ record CaseEdit(
     }
 
     /**
-     * Rejects the five contract fields this endpoint does not implement — see
+     * Normalizes one of the two condition lists.
+     *
+     * <h2>Absent means "leave it alone", and that is not the same as empty</h2>
+     *
+     * <p>{@link #normalizeClassification}'s rule, and it has to be: a bulk action reconstructs a
+     * request without touching conditions, so a null must resolve to what is already stored rather
+     * than to "detach everything". An empty list <em>is</em> "detach everything", which is a thing
+     * an author can legitimately ask for by removing the last row.
+     *
+     * <p>The stored value is taken verbatim and <strong>unvalidated</strong> when the field is
+     * absent, for {@link #validate}'s {@code storedClassificationValueIds} reason: it describes what
+     * is already on the row rather than something a caller asked for, so re-litigating it would let
+     * a library change refuse a save that does not touch conditions.
+     *
+     * <h2>The membership rule is §64's union, arrived at for the third time</h2>
+     *
+     * <p>{@code acceptableConditionIds} is <em>this project's live library entries, unioned with the
+     * ids this case already attaches</em>. Both halves are load-bearing and they fail in opposite
+     * directions. Without the library half, an id naming a sibling project's condition satisfies the
+     * foreign key and is stored, and every later read resolves a condition through a project the
+     * reader was never granted — the argument {@code suiteId} and {@code sharedStepId} each make on
+     * a column nobody made it for. Without the stored half, the day a condition is retired every
+     * case attaching it becomes unsaveable, and a title fix on an untouched case would be refused
+     * over an attachment the author never made and cannot see.
+     *
+     * <h2>Duplicates within one list are collapsed; the two lists are independent</h2>
+     *
+     * <p>Attaching the same condition twice as a precondition is a list with a repeated entry and no
+     * meaning, so it is de-duplicated rather than refused — {@link #normalizeClassification}'s
+     * argument, where asking the author to remove something they cannot see is worse than resolving
+     * it. Attaching it as <em>both</em> a pre- and a postcondition is legitimate and common ("reset
+     * the payment data" is setup and cleanup), so the two lists are normalized separately and never
+     * checked against each other.
+     *
+     * <p>Order is preserved and never sorted. Position is the content here, unlike classification,
+     * which is why these fields are {@code List} on a record whose hash is order-sensitive.
+     *
+     * @param field the name to report errors under, as spelled on {@code TestCaseInput}
+     */
+    private static List<UUID> normalizeConditions(
+            List<CaseConditionInput> submitted,
+            String field,
+            Set<UUID> acceptableConditionIds,
+            List<UUID> stored,
+            Map<String, List<String>> errors) {
+
+        if (submitted == null) {
+            return stored == null ? List.of() : List.copyOf(stored);
+        }
+
+        Set<UUID> distinct = new LinkedHashSet<>();
+        for (CaseConditionInput entry : submitted) {
+            if (entry == null) {
+                continue;
+            }
+            if (entry.inlineBody() != null) {
+                // Refused rather than ignored, and refused HERE rather than in refuseUnsupported,
+                // because it is a rule about one entry's shape. CaseConditionInput carries the
+                // reason: nothing renders an inline attachment, so accepting one would be a save
+                // that succeeds and a condition the author can never see again.
+                errors.computeIfAbsent(field, k -> new ArrayList<>())
+                        .add("Attach a condition from the library. Inline conditions are not "
+                                + "supported yet.");
+                continue;
+            }
+            if (entry.conditionId() == null) {
+                errors.computeIfAbsent(field, k -> new ArrayList<>())
+                        .add("Choose a condition.");
+                continue;
+            }
+            if (!acceptableConditionIds.contains(entry.conditionId())) {
+                // One message for three causes — retired, another project's, or nothing at all —
+                // on ClassificationVocabulary's terms: distinguishing them would confirm the
+                // existence of a condition the caller may not use.
+                errors.computeIfAbsent(field, k -> new ArrayList<>())
+                        .add("That condition is not one this project offers.");
+                continue;
+            }
+            distinct.add(entry.conditionId());
+        }
+
+        return List.copyOf(distinct);
+    }
+
+    /**
+     * Rejects the three contract fields this endpoint does not implement — see
      * {@link CaseUpdateRequest}'s header for why refusing beats ignoring.
+     *
+     * <p>It was five. {@code preconditions} and {@code postconditions} left in §95 and are
+     * validated by {@link #normalizeConditions} below; the inline half of each is still refused,
+     * but there rather than here, because it is a rule about an entry's shape and not about a field
+     * nothing implements.
      */
     private static void refuseUnsupported(
             CaseUpdateRequest request, Map<String, List<String>> errors) {
@@ -470,12 +600,6 @@ record CaseEdit(
         }
         if (request.automationTags() != null) {
             errors.computeIfAbsent("automationTags", k -> new ArrayList<>()).add(message);
-        }
-        if (request.preconditions() != null) {
-            errors.computeIfAbsent("preconditions", k -> new ArrayList<>()).add(message);
-        }
-        if (request.postconditions() != null) {
-            errors.computeIfAbsent("postconditions", k -> new ArrayList<>()).add(message);
         }
     }
 
@@ -537,6 +661,30 @@ record CaseEdit(
      * reference no library entry at all — is answered once. An empty result means the caller makes
      * no query.
      */
+    /**
+     * Every condition id the payload names, across both lists — what the caller resolves the live
+     * library half of {@code acceptableConditionIds} from.
+     *
+     * <p>{@link #referencedSharedStepIds}'s twin, and empty for most cases, which is what keeps the
+     * membership query from running at all on a save that attaches nothing.
+     */
+    static Set<UUID> referencedConditionIds(
+            List<CaseConditionInput> preconditions, List<CaseConditionInput> postconditions) {
+
+        Set<UUID> ids = new HashSet<>();
+        for (List<CaseConditionInput> list : java.util.Arrays.asList(preconditions, postconditions)) {
+            if (list == null) {
+                continue;
+            }
+            for (CaseConditionInput entry : list) {
+                if (entry != null && entry.conditionId() != null) {
+                    ids.add(entry.conditionId());
+                }
+            }
+        }
+        return ids;
+    }
+
     static Set<UUID> referencedSharedStepIds(List<CaseUpdateRequest.StepInput> submitted) {
         if (submitted == null || submitted.isEmpty()) {
             return Set.of();

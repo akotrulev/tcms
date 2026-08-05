@@ -98,6 +98,8 @@ public class CaseUpdateService {
     private final TestStepRepository stepRows;
     private final SharedStepService sharedSteps;
     private final CaseClassifications classifications;
+    private final CaseConditions conditions;
+    private final ConditionService conditionLibrary;
     private final CaseRenderer renderer;
     private final CaseVersions versions;
     private final ReviewService reviews;
@@ -112,6 +114,8 @@ public class CaseUpdateService {
             TestStepRepository stepRows,
             SharedStepService sharedSteps,
             CaseClassifications classifications,
+            CaseConditions conditions,
+            ConditionService conditionLibrary,
             CaseRenderer renderer,
             CaseVersions versions,
             ReviewService reviews,
@@ -125,6 +129,8 @@ public class CaseUpdateService {
         this.stepRows = stepRows;
         this.sharedSteps = sharedSteps;
         this.classifications = classifications;
+        this.conditions = conditions;
+        this.conditionLibrary = conditionLibrary;
         this.renderer = renderer;
         this.versions = versions;
         this.reviews = reviews;
@@ -236,6 +242,20 @@ public class CaseUpdateService {
                 renderer.vocabularies(userId, project.getId());
         ClassificationVocabulary vocabulary = ClassificationVocabulary.of(vocabularies);
 
+        // The same union, on the other library — this project's live entries plus what the case
+        // already attaches. Both halves fail in opposite directions and CaseEdit#normalizeConditions
+        // spells out which. Only the ids the payload names are looked up, so a case attaching no
+        // condition — most of them — costs no query.
+        Set<UUID> acceptableConditionIds = new HashSet<>(
+                conditionLibrary.liveLibraryIds(
+                        project.getId(),
+                        CaseEdit.referencedConditionIds(
+                                request.preconditions(), request.postconditions())));
+        acceptableConditionIds.addAll(
+                conditions.liveAttachedIdsOf(testCase.getId(), ConditionKind.PRE));
+        acceptableConditionIds.addAll(
+                conditions.liveAttachedIdsOf(testCase.getId(), ConditionKind.POST));
+
         CaseEdit.Outcome validated = CaseEdit.validate(
                 request,
                 liveSuiteIds,
@@ -243,6 +263,9 @@ public class CaseUpdateService {
                 acceptableSharedStepIds,
                 vocabulary,
                 classifications.liveValueIdsOf(testCase.getId(), vocabulary),
+                acceptableConditionIds,
+                conditions.liveAttachedIdsOf(testCase.getId(), ConditionKind.PRE),
+                conditions.liveAttachedIdsOf(testCase.getId(), ConditionKind.POST),
                 key -> cases.existsByAutomationKeyOtherThan(key, testCase.getId()));
 
         if (validated instanceof CaseEdit.Outcome.Invalid invalid) {
@@ -264,6 +287,10 @@ public class CaseUpdateService {
         // would report the classification the case had on the way in — so the row, the response and
         // the recorded history would each say something different about the save that just happened.
         classifications.reconcile(testCase, edit.classificationValueIds(), vocabulary, companyId);
+        // Before the render too, and for the identical reason: the response IS the version
+        // snapshot, so reconciling after it would report the conditions the case had on the way in.
+        conditions.reconcile(
+                testCase, edit.preconditionIds(), edit.postconditionIds(), companyId);
 
         // Applied BEFORE the render, so the response carries DRAFT rather than reporting the
         // approval the save just ended — the same ordering the classification reconcile above is

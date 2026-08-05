@@ -104,6 +104,9 @@ class ConditionWriteEndpointTest extends IntegrationTestBase {
     /** In MOBILE, which LEAD cannot reach. The sibling-project row. */
     private static final UUID FOREIGN = UUID.fromString("c9004000-0000-4000-8000-000000000003");
 
+    /** A second live entry, so ORDER is observable rather than a list of one. */
+    private static final UUID SECOND = UUID.fromString("c9004000-0000-4000-8000-000000000004");
+
     private static final UUID SUITE = UUID.fromString("c9005000-0000-4000-8000-000000000001");
     private static final UUID CASE = UUID.fromString("c9006000-0000-4000-8000-000000000001");
 
@@ -412,6 +415,118 @@ class ConditionWriteEndpointTest extends IntegrationTestBase {
         }
     }
 
+
+    // =====================================================================
+    // attaching — §95 phase 2
+    // =====================================================================
+
+    @Nested
+    @DisplayName("Attaching — the case editor's half, and the field that used to 400")
+    class Attaching {
+
+        @Test
+        @DisplayName("preconditions are accepted where they used to be refused with a 400")
+        void acceptsPreconditions() throws Exception {
+            JsonNode saved = patchCase(caseBody(List.of(ATTACHED), List.of()));
+
+            assertThat(refTitles(saved.get("preconditions")))
+                    .containsExactly("Log in as standard user");
+        }
+
+        @Test
+        @DisplayName("payload order is the stored order, and re-sending it reversed reorders them")
+        void payloadOrderIsTheOrder() throws Exception {
+            // Position is never sent — it is assigned from the array's order — so this is the only
+            // way an author can express a procedure, and the only thing that can prove it works.
+            patchCase(caseBody(List.of(ATTACHED, SECOND), List.of()));
+            assertThat(refTitles(caseDetail(LEAD, BANKING, CASE).get("preconditions")))
+                    .containsExactly("Log in as standard user", "Navigate to Billing");
+
+            patchCase(caseBody(List.of(SECOND, ATTACHED), List.of()));
+            assertThat(refTitles(caseDetail(LEAD, BANKING, CASE).get("preconditions")))
+                    .containsExactly("Navigate to Billing", "Log in as standard user");
+        }
+
+        @Test
+        @DisplayName("an empty list detaches everything; the field being ABSENT leaves it alone")
+        void absentAndEmptyAreDifferentInstructions() throws Exception {
+            patchCase(caseBody(List.of(ATTACHED), List.of()));
+
+            // Absent — the bulk actions' shape, and the one that must not be read as "detach".
+            JsonNode untouched = patchCase(caseBody(null, null));
+            assertThat(refTitles(untouched.get("preconditions")))
+                    .containsExactly("Log in as standard user");
+
+            // Empty — an author removing the last row.
+            JsonNode cleared = patchCase(caseBody(List.of(), List.of()));
+            assertThat(cleared.get("preconditions")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("the same entry may be BOTH a pre- and a postcondition")
+        void theSameEntryMayBeBothKinds() throws Exception {
+            // Setup that is also cleanup — "reset the payment data" is the canonical case. The two
+            // lists are normalized separately and never checked against each other.
+            JsonNode saved = patchCase(caseBody(List.of(ATTACHED), List.of(ATTACHED)));
+
+            assertThat(refTitles(saved.get("preconditions")))
+                    .containsExactly("Log in as standard user");
+            assertThat(refTitles(saved.get("postconditions")))
+                    .containsExactly("Log in as standard user");
+        }
+
+        @Test
+        @DisplayName("a repeat WITHIN one list is collapsed, not refused")
+        void repeatsWithinOneListCollapse() throws Exception {
+            JsonNode saved = patchCase(caseBody(List.of(ATTACHED, ATTACHED), List.of()));
+
+            assertThat(refTitles(saved.get("preconditions")))
+                    .containsExactly("Log in as standard user");
+        }
+
+        @Test
+        @DisplayName("a sibling project's condition is a field error — the FK would have taken it")
+        void refusesASiblingProjectsCondition() throws Exception {
+            // FOREIGN is in MOBILE, same company, so condition_id's foreign key is satisfied and
+            // nothing below the validator would have caught it. Stored, every later read of this
+            // case would resolve a condition through a project the reader holds no grant on.
+            mvc.perform(patch(caseBody(List.of(FOREIGN), List.of())))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errors.preconditions").exists());
+        }
+
+        @Test
+        @DisplayName("a retired condition cannot be newly attached")
+        void refusesARetiredCondition() throws Exception {
+            mvc.perform(patch(caseBody(List.of(RETIRED), List.of())))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errors.preconditions").exists());
+        }
+
+        @Test
+        @DisplayName("an inline body is refused rather than stored where nothing can render it")
+        void refusesAnInlineBody() throws Exception {
+            Map<String, Object> inline = new LinkedHashMap<>();
+            inline.put("inlineBody", List.of("Do it by hand"));
+
+            mvc.perform(patch(caseBodyRaw(List.of(inline), List.of())))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errors.preconditions").exists());
+        }
+
+        @Test
+        @DisplayName("attaching then editing the entry propagates — the two halves of §95 together")
+        void attachThenEditPropagates() throws Exception {
+            patchCase(caseBody(List.of(ATTACHED), List.of()));
+
+            ok(put(LEAD, BANKING, ATTACHED, 0L, body(
+                    "Log in as an auditor", "PRE", List.of("Open the console"))));
+
+            assertThat(refTitles(caseDetail(LEAD, BANKING, CASE).get("preconditions")))
+                    .containsExactly("Log in as an auditor");
+        }
+    }
+
     // =====================================================================
     // helpers — requests
     // =====================================================================
@@ -480,6 +595,69 @@ class ConditionWriteEndpointTest extends IntegrationTestBase {
      * Acme project in the path. That is what makes the cross-company 404 a real assertion rather
      * than a check that a UUID did not happen to match.
      */
+
+    /** A full editable case, since the endpoint requires the whole set on every save. */
+    private String caseBody(List<UUID> preconditions, List<UUID> postconditions) throws Exception {
+        return caseBodyRaw(refs(preconditions), refs(postconditions));
+    }
+
+    private static List<Map<String, Object>> refs(List<UUID> ids) {
+        if (ids == null) {
+            return null;
+        }
+        List<Map<String, Object>> entries = new ArrayList<>();
+        for (UUID id : ids) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("conditionId", id.toString());
+            entries.add(entry);
+        }
+        return entries;
+    }
+
+    private String caseBodyRaw(Object preconditions, Object postconditions) throws Exception {
+        Map<String, Object> step = new LinkedHashMap<>();
+        step.put("action", "Do the thing");
+        step.put("expectedResult", "It happened");
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("title", "Refund a settled payment");
+        payload.put("suiteId", SUITE.toString());
+        payload.put("stepFormat", "STRUCTURED");
+        // The endpoint requires the whole editable set on every save — absent and null are the same
+        // Java value here, so it cannot tell "leave it" from "clear it" and asks for all of them.
+        payload.put("priority", "MEDIUM");
+        payload.put("automationStatus", "MANUAL");
+        payload.put("steps", List.of(step));
+        if (preconditions != null) {
+            payload.put("preconditions", preconditions);
+        }
+        if (postconditions != null) {
+            payload.put("postconditions", postconditions);
+        }
+        return json.writeValueAsString(payload);
+    }
+
+    private MockHttpServletRequestBuilder patch(String payload) {
+        return MockMvcRequestBuilders
+                .patch("/api/v1/projects/{projectId}/cases/{caseId}", BANKING, CASE)
+                .header("Authorization", "Bearer " + token(LEAD))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(payload);
+    }
+
+    /** Saves and returns the case, failing loudly rather than letting a 400 read as an empty list. */
+    private JsonNode patchCase(String payload) throws Exception {
+        return json.readTree(mvc.perform(patch(payload))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+    }
+
+    private static List<String> refTitles(JsonNode array) {
+        List<String> titles = new ArrayList<>();
+        array.forEach(node -> titles.add(node.get("title").asText()));
+        return titles;
+    }
+
     private String token(UUID userId) {
         UUID companyId = userId.equals(OUTSIDER) ? UMBRA : ACME;
         return tx.execute(ignored -> tokens.issue(userId, companyId, 1, false).token());
@@ -579,6 +757,8 @@ class ConditionWriteEndpointTest extends IntegrationTestBase {
                     "[\"Open the legacy console\"]", 0, true);
             condition(connection, FOREIGN, MOBILE, ACME, "A sibling project's entry", "PRE",
                     "[\"Do something else\"]", 0, false);
+            condition(connection, SECOND, BANKING, ACME, "Navigate to Billing", "PRE",
+                    "[\"Open the account menu\"]", 0, false);
 
             suite(connection, SUITE, BANKING);
             testCase(connection, CASE, BANKING);

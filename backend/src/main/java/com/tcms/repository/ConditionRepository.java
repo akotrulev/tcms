@@ -104,6 +104,34 @@ public interface ConditionRepository extends JpaRepository<Condition, UUID> {
             @Param("projectId") UUID projectId, @Param("conditionId") UUID conditionId);
 
     /**
+     * Which of the given ids are live entries <strong>of this project</strong>.
+     *
+     * <p>{@link SharedStepRepository#findLiveIdsInProject}'s twin, and the {@code projectId}
+     * predicate carries the same weight: this resolves ids a caller <em>sent</em>, which proves
+     * nothing. Without it a case save could attach a sibling project's condition — the foreign key
+     * is satisfied, so nothing fails — and every later read of that case would resolve a condition
+     * through a project the reader holds no grant on. {@link #findLiveInProject} makes the same
+     * argument for the single-row case.
+     *
+     * <p>Returns ids rather than entities because the only question asked of it is membership, and
+     * a caller holding entities is a caller that will eventually render one it did not fetch for
+     * that purpose.
+     *
+     * @param conditionIds must be non-empty — an empty collection binds into SQL {@code IN ()},
+     *                     which is a syntax error rather than an empty result. The caller returns
+     *                     early instead.
+     */
+    @Query("""
+            SELECT c.id FROM Condition c
+             WHERE c.projectId = :projectId
+               AND c.deletedAt IS NULL
+               AND c.id IN :conditionIds
+            """)
+    List<UUID> findLiveIdsInProject(
+            @Param("projectId") UUID projectId,
+            @Param("conditionIds") Collection<UUID> conditionIds);
+
+    /**
      * How many distinct <strong>live cases</strong> attach each of the given entries directly.
      *
      * <p>{@link SharedStepRepository#countUsage}'s shape and its three rules, which transfer intact:

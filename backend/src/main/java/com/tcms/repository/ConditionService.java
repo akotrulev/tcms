@@ -11,9 +11,11 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
@@ -297,6 +299,30 @@ public class ConditionService {
                 });
 
         return collapse(result);
+    }
+
+    /**
+     * Which of the submitted ids a case in this project may attach.
+     *
+     * <p>{@link SharedStepService#liveLibraryIds}'s twin, and it answers only the <em>library</em>
+     * half of the rule — the ids are live entries of this project — never the second half, which is
+     * whether the case already attaches the id. That one is the caller's, because only the caller
+     * has the stored attachments, and folding it in here would mean this method silently approved
+     * an id no longer in the library depending on which case asked.
+     *
+     * <p>Not gated, deliberately: the caller has already passed the project's write gate before it
+     * gets here, and a second gate on a helper is a second place for the two to disagree.
+     *
+     * @param submitted the ids the payload references. Empty in the common case — most cases attach
+     *                  no condition at all — and then this makes no query, which is also what keeps
+     *                  {@code IN ()} from ever being bound
+     */
+    @Transactional(readOnly = true)
+    public Set<UUID> liveLibraryIds(UUID projectId, Set<UUID> submitted) {
+        if (submitted.isEmpty()) {
+            return Set.of();
+        }
+        return new HashSet<>(conditions.findLiveIdsInProject(projectId, submitted));
     }
 
     /** Zero when the entry is attached by nothing — a GROUP BY emits no row for it. */

@@ -88,6 +88,21 @@ public class CaseCondition {
         return row;
     }
 
+    /**
+     * Moves the row within its kind's list.
+     *
+     * <p>The only mutable thing about an attachment: which entry it names and which list it is in
+     * are its identity, so changing either is a different attachment and goes through
+     * {@link #of}. Position is the author's ordering and is assigned from payload order by
+     * {@link CaseConditions#reconcile}, never taken from the request — a client-supplied position
+     * can duplicate or skip and {@code case_condition} has no constraint that would refuse it, so
+     * two attachments could share position 3 and the case detail would order them arbitrarily.
+     * {@link CaseEdit}'s step rule, on the other ordered child table.
+     */
+    void moveTo(int newPosition) {
+        this.position = newPosition;
+    }
+
     public UUID getId() {
         return id;
     }
