@@ -224,12 +224,33 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   **`StepSuggestionQuery` is the FOURTH copy of `escapeLike`** (`ConditionQuery`, `SharedStepQuery`,
   `CaseSpecifications`); the fifth should extract it. `#confirmed`
 
-- **THE PLAN'S DOCUMENT, AND `doc_link`'S FIRST WRITER (§93).** `V29__doc_page_subject.sql` (**head;
-  `V30` next free; NO new table, so the policy count stays 59**) + `DocSubject`/`DocSubjectType` +
-  `PlanDocumentService`/`PlanDocumentController`/`PlanDocumentTemplate` + `DocLink`/`DocLinkRepository`
+- **THE PLAN'S DOCUMENT, AND `doc_link`'S FIRST WRITER (§93; adoption since §97 phase 3c).**
+  `V29__doc_page_subject.sql` (**NO new table, so the policy count is unaffected**) +
+  `DocSubject`/`DocSubjectType` + `PlanDocumentService`/`PlanDocumentController`/
+  `PlanDocumentLinkInput` + `DocLink`/`DocLinkRepository`
   + `LinkSourceType`/`LinkRelationship` + `BlockLinks`/`BlockLinkService`/`BlockLinkView`/`BlockLinkInput`
-  + `CatalogueFacts`. **NO TESTS — the largest gap in the module**; the mutation queue's §93 section
-  is a list of tests to *write*, not of mutations to run.
+  + `CatalogueFacts`. ~~**NO TESTS — the largest gap in the module**~~ → **closed**:
+  `PlanDocumentEndpointTest` covers adoption, links, the two traceability 409s and `level`'s three
+  arms.
+  **A PLAN ADOPTS A PAGE; NOTHING HERE CREATES ONE (§97).** `PlanDocumentTemplate` and its `POST`
+  are **deleted** — four of its five headings acquired real homes (this page, the `artifact`
+  register, `scope_text`/`out_of_scope_text`, the plan's sectioned scope items), which left it
+  seeding a document whose every section is authored elsewhere. `PUT` writes the page's
+  `subject_type`/`subject_id` and **nothing on the plan**, hence `doc:edit`; `DELETE` clears them and
+  **keeps the page**. So `DocPage.subjectType`/`subjectId` are **no longer `updatable = false`** —
+  restore that annotation and every link answers **200 with a rendered page while the row never
+  changes**, because Hibernate omits the columns from the UPDATE and the view is built from the
+  in-memory entity. The guarantee it used to buy lives in `DocPage.linkTo`, which refuses a page
+  that already has a subject: **re-pointing is unlink-then-link, two requests, two audit rows**
+  (`doc_page.subject_linked` / `.subject_unlinked`, each carrying the subject, read *before* the
+  columns are cleared on the unlink).
+  **TWO 409s AND THEY ARE TWO THINGS** — *this plan already has one* (resolve on your plan) and
+  *that page is another plan's* (resolve on the page) — checked in that order, because when both
+  hold the caller can only act on the first. The page-side one **has no index behind it**:
+  `uq_doc_page_subject` is on the *subject*, so a second plan adopting a taken page is a different
+  key and the database permits it. The service check is the whole protection.
+  `PlanFacts.findAnyPlanKeyInProject` is the one lookup here that does **not** filter `deleted_at`,
+  because a soft-deleted plan still holds its page's slot and the refusal has to be able to name it.
   **The reference is on `doc_page`, opaque, because NEITHER side may hold a key**: `execution` and
   `documentation` may each depend only on tenancy/identity/project, so `test_plan.doc_page_id` is not
   a column anybody may add. §76's Review subject a second time. **The unique index is PARTIAL on

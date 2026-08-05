@@ -1,15 +1,18 @@
 package com.tcms.documentation;
 
-import java.net.URI;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -25,9 +28,16 @@ import org.springframework.web.bind.annotation.RestController;
  * unaware — which is the same arrangement that lets a plan be deleted without this module being
  * consulted.
  *
- * <p>Two verbs and no more. Editing is {@code PATCH /doc-pages/{pageId}} and deleting is
- * {@code DELETE /doc-pages/{pageId}}, because the document is an ordinary page and a second write
- * path onto {@code doc_block} is the last thing this module needs — see {@link PlanDocumentService}.
+ * <p>Three verbs, and none of them touches content. {@code GET} resolves, {@code PUT} adopts a page
+ * that already exists and {@code DELETE} releases it; editing is {@code PATCH /doc-pages/{pageId}}
+ * and deleting the page itself is {@code DELETE /doc-pages/{pageId}}, because the document is an
+ * ordinary page and a second write path onto {@code doc_block} is the last thing this module needs —
+ * see {@link PlanDocumentService}.
+ *
+ * <p><s>{@code POST} starts the document from the five-section template.</s> → <strong>retired
+ * 2026-08-05 (§97)</strong>, with {@code PlanDocumentTemplate}. The reasoning is on
+ * {@link PlanDocumentService}; the shape of the replacement is that this module no longer creates
+ * anything, so {@code DELETE} here cannot destroy a page and says so in its own javadoc.
  */
 @RestController
 @RequestMapping("/api/v1/projects/{projectId}/plans/{planId}/document")
@@ -57,29 +67,73 @@ public class PlanDocumentController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    /** Starts the document from the template. */
-    @PostMapping
-    public ResponseEntity<Object> start(
+    /**
+     * Adopts an existing page as this plan's document.
+     *
+     * <p>{@code 200} and not {@code 201}: nothing was created. The body is the page as {@code GET}
+     * would now answer it, and there is no {@code Location} header, because the page already had a
+     * URL before this request and the client is usually holding it — it is what the picker chose.
+     */
+    @PutMapping
+    public ResponseEntity<Object> linkPage(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID planId,
+            @RequestBody(required = false) PlanDocumentLinkInput input) {
+
+        PlanDocumentService.Outcome outcome =
+                documents.link(UUID.fromString(jwt.getSubject()), projectId, planId, input);
+
+        return switch (outcome) {
+            case PlanDocumentService.Outcome.Linked linked -> ResponseEntity.ok(linked.view());
+            default -> problem(outcome);
+        };
+    }
+
+    /**
+     * Releases this plan's document.
+     *
+     * <p><strong>The page survives.</strong> This endpoint clears two columns; deleting the page is
+     * {@code DELETE /doc-pages/{pageId}}, a different act with a different blast radius, and the
+     * distinction is why the refusal for a plan with no document is a {@code 404} rather than a
+     * {@code 204} — a client told "done" by an unlink that unlinked nothing has no way to notice it
+     * was pointed at the wrong plan.
+     */
+    @DeleteMapping
+    public ResponseEntity<Object> unlinkPage(
             @AuthenticationPrincipal Jwt jwt,
             @PathVariable UUID projectId,
             @PathVariable UUID planId) {
 
         PlanDocumentService.Outcome outcome =
-                documents.create(UUID.fromString(jwt.getSubject()), projectId, planId);
+                documents.unlink(UUID.fromString(jwt.getSubject()), projectId, planId);
 
         return switch (outcome) {
-            case PlanDocumentService.Outcome.Created created -> ResponseEntity
-                    // The page's own URL, not this one: the client edits it as a page from here on,
-                    // and pointing Location back at this route would send it to a resolver it has
-                    // no further use for.
-                    .created(URI.create(
-                            "/api/v1/projects/" + projectId + "/doc-pages/" + created.view().id()))
-                    .body(created.view());
+            case PlanDocumentService.Outcome.Unlinked ignored -> ResponseEntity.noContent().build();
+            default -> problem(outcome);
+        };
+    }
+
+    /**
+     * Every refusal both writes can produce, in one place.
+     *
+     * <p>Exhaustive over the sealed interface rather than a {@code default}: a fourth refusal added
+     * to the service is a compile error here, which is what stops it reaching a client as a 500.
+     */
+    private static ResponseEntity<Object> problem(PlanDocumentService.Outcome outcome) {
+        return switch (outcome) {
             case PlanDocumentService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
             case PlanDocumentService.Outcome.Forbidden ignored ->
                     ResponseEntity.status(HttpStatus.FORBIDDEN).body(forbidden());
+            case PlanDocumentService.Outcome.Invalid invalid ->
+                    ResponseEntity.badRequest().body(validation(invalid.errors()));
             case PlanDocumentService.Outcome.AlreadyExists existing ->
                     ResponseEntity.status(HttpStatus.CONFLICT).body(alreadyExists(existing));
+            case PlanDocumentService.Outcome.TakenByAnotherPlan taken ->
+                    ResponseEntity.status(HttpStatus.CONFLICT).body(takenByAnotherPlan(taken));
+            case PlanDocumentService.Outcome.Linked linked -> ResponseEntity.ok(linked.view());
+            case PlanDocumentService.Outcome.Unlinked ignored ->
+                    ResponseEntity.noContent().build();
         };
     }
 
@@ -98,9 +152,34 @@ public class PlanDocumentController {
         // The key, because that is what the reader will see in the tree and in the tab they are
         // about to be sent to. The id is the machine-readable half and is a property rather than
         // prose.
-        problem.setDetail("This plan's document is " + existing.key() + ". Open it instead — "
-                + "starting a second one would replace what is already written.");
+        problem.setDetail("This plan's document is " + existing.key() + ". Unlink it first if you "
+                + "mean to point this plan at a different page — swapping it silently is how a plan "
+                + "comes to document a different release than its reader believes.");
         problem.setProperty("pageId", existing.pageId());
+        return problem;
+    }
+
+    private static ProblemDetail takenByAnotherPlan(
+            PlanDocumentService.Outcome.TakenByAnotherPlan taken) {
+
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        problem.setTitle("That page is already another plan's document");
+        // Named where it can be named. A plan that has since been deleted still holds the page's
+        // subject slot, and its key is still the most useful thing to say — but if the row cannot
+        // be read at all, the sentence says so rather than printing "null" at somebody.
+        problem.setDetail(taken.planKey() == null
+                ? "That page is already the document of another plan. Unlink it there first."
+                : "That page is already " + taken.planKey() + "'s document. Unlink it there first — "
+                        + "one page cannot be two plans' requirements.");
+        problem.setProperty("planId", taken.planId());
+        return problem;
+    }
+
+    private static ProblemDetail validation(Map<String, List<String>> errors) {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        problem.setTitle("Check the details");
+        problem.setDetail("Some of what was sent could not be accepted.");
+        problem.setProperty("errors", errors);
         return problem;
     }
 }

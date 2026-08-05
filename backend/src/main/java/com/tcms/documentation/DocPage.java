@@ -129,16 +129,24 @@ public class DocPage {
      * depends on which fields it happens to compare. Two columns and one accessor that assembles
      * them is the boring version, and it cannot be wrong.
      *
-     * <p><strong>Both are {@code updatable = false}.</strong> A page does not change what it is
+     * <p><s><strong>Both are {@code updatable = false}.</strong> A page does not change what it is
      * about: the edit path replaces title and blocks, and re-pointing a plan's document at a
      * different plan would silently move somebody's business requirements to another cycle while the
-     * partial unique index — which is on the live rows only — quietly allowed it.
+     * partial unique index — which is on the live rows only — quietly allowed it.</s>
+     * → <strong>superseded (§97).</strong> The template {@code POST} is retired and a plan now gets
+     * its document by <em>adopting</em> a page somebody already wrote — which is a write to these two
+     * columns and to nothing else, so the old rule made the feature unimplementable. The risk it
+     * guarded against is real and is now held where it belongs: {@link #linkTo} refuses a page that
+     * already has a subject, so re-pointing is {@link #unlinkSubject} and then {@link #linkTo} — two
+     * requests, two audit rows — and there is still no path that silently moves a document from one
+     * plan to another. The edit path is unaffected: nothing in {@link DocPageInput} names a subject,
+     * so a rewrite of title and blocks still cannot change what the page is about.
      */
     @Enumerated(EnumType.STRING)
-    @Column(name = "subject_type", updatable = false)
+    @Column(name = "subject_type")
     private DocSubjectType subjectType;
 
-    @Column(name = "subject_id", updatable = false)
+    @Column(name = "subject_id")
     private UUID subjectId;
 
     /** On the wire, because the SPA sends it back as {@code If-Match} (plan §6j). */
@@ -158,10 +166,12 @@ public class DocPage {
      * is held by everyone who writes while {@code doc:publish} is not.
      *
      * @param parentPath the parent's {@link #path}, or null for a root page
-     * @param subject    what the page documents, or null for a free-standing page — the ordinary
-     *                   case. Taken at construction and never afterwards, because
-     *                   {@link #subjectType} and {@link #subjectId} are {@code updatable = false}
-     *                   and the reason is on those fields.
+     * @param subject    what the page documents, or null for a free-standing page — which since §97
+     *                   is what every create passes, because the only writer that ever supplied one
+     *                   was the retired plan-document template. A page acquires its subject
+     *                   afterwards, through {@link #linkTo}. The parameter stays because the column
+     *                   pair is nullable as a unit and a page created already documenting something
+     *                   is a legitimate shape for the next subject type to want.
      */
     static DocPage create(
             UUID projectId,
@@ -258,6 +268,45 @@ public class DocPage {
      */
     void setStatus(DocPageStatus status, UUID actorId, Instant now) {
         this.status = status;
+        this.updatedAt = now;
+        this.updatedBy = actorId;
+    }
+
+    /**
+     * Adopts this page as the document of {@code subject}.
+     *
+     * <p>Refuses a page that already documents something, and the refusal is here rather than only
+     * in the service for the reason {@link #retitle} is a method rather than a setter: the
+     * invariant is the entity's, and a second caller — the next subject type — would otherwise have
+     * to remember it. The service checks first so the caller gets a {@code 409} naming the plan;
+     * this throw is what a caller who skipped that check gets, and it is a bug rather than a
+     * request.
+     *
+     * <p>Writes no version and does not touch {@link #currentVersionNo}: adopting a page changes
+     * nothing about what it says, and a history entry whose diff is empty is §96's rule for tags
+     * arriving at a second column.
+     */
+    void linkTo(DocSubject subject, UUID actorId, Instant now) {
+        if (this.subjectType != null) {
+            throw new IllegalStateException(
+                    "Page " + key + " already documents " + subjectType + " " + subjectId);
+        }
+        this.subjectType = subject.type();
+        this.subjectId = subject.id();
+        this.updatedAt = now;
+        this.updatedBy = actorId;
+    }
+
+    /**
+     * Releases this page's subject, keeping the page.
+     *
+     * <p>Both columns together, because {@code ck_doc_page_subject_paired} refuses a half-cleared
+     * row and {@link #getSubject} would read a type with no id as a page documenting nothing it can
+     * name.
+     */
+    void unlinkSubject(UUID actorId, Instant now) {
+        this.subjectType = null;
+        this.subjectId = null;
         this.updatedAt = now;
         this.updatedBy = actorId;
     }

@@ -5,6 +5,9 @@
 out of it. **Revised 2026-08-05 (second pass)** after the user restated what a test plan *is* — see
 §1a. That restatement retires three of the five original decisions; they are struck through in place
 rather than deleted, per the working agreement.
+**Status:** phases 1–3 shipped (the contract, the migration, the backend). **Phase 4 — the frontend
+form spine — is next.** Original status line follows.
+
 **Status:** phases 1–2 shipped (the contract, both halves). **Phase 3 split in three** — 3a (M7 + M9
 + `V32`) and **3b** (scope prose, sections, the tag arm, the tags endpoint) shipped; 3c (the plan
 document's link/unlink, the template deleted) next. Phases 4–7 not started.
@@ -331,7 +334,7 @@ none of them.
 | 2 | ✅ **shipped** — contract: scope texts, `PlanSection`, the tags endpoint, the template `POST` retired; `gen:api`; the mock moved with it (§88's rule) and `planScopeCaseIds` now unions every arm | `npm run build` + lint + `test:run` |
 | 3a | ✅ **shipped** — `V32` in full (scope texts, `section_name`/`ordinal`/`tag`, the widened CHECK, M7's status reduction and `closed_at` drop, M9's `WIP` seed) **plus the whole M7 backend reduction**: three plan states, §82's plan gate and its setting and request field retired, the closed-plan freeze gone, `PlanDeleteService`'s partition gone. Contract and frontend moved with the enum in the same commit, because a status the client still offers is a 400 nobody can act on | `./gradlew build` + both frontend gates |
 | 3b | ✅ **shipped** — scope texts and sectioned items on the plan `PATCH`, `CaseFacts.scopeMatch()` (the three-arm predicate, written once and interpolated four times) plus `caseCountsBySection`, the tags-in-use query and `GET /projects/{id}/tags`, `PlanSection.caseCount` (**a contract addition this phase**, so `gen:api` and the mock moved with it), and `PlanScopeConstraintTest`. The mock stopped **storing** both counts and now resolves them on the way out, which is what makes phase 2's browser row 90 true | `./gradlew build` + both frontend gates |
-| 3c | Backend: the plan document's link/unlink service and its three refusals, `PlanDocumentTemplate` deleted with its `POST` | `./gradlew build` |
+| 3c | ✅ **shipped** — `PUT`/`DELETE` on the plan document: `PlanDocumentService.link`/`unlink`, `PlanDocumentLinkInput`, `DocPage.linkTo`/`unlinkSubject` (the subject columns stop being `updatable = false`, and the reversal is recorded on the field), `DocPageWriteService.adoptPage`/`releasePage` with two audit verbs, `PlanFacts.findAnyPlanKeyInProject`. `PlanDocumentTemplate` **deleted** with its `POST`, and `PlanDocumentEndpointTest`'s whole first nest rewritten around adoption — **the three refusals are four**, because a body with no `pageId` is a field error and the two 409s needed a second plan in the fixture to be distinguishable | `./gradlew build` |
 | 4 | Frontend — the form spine: state above tabs, one Save, ordered writes, partial-failure reporting, dirty banner, `useUnsavedWork` | both |
 | 5 | Frontend — the seven tabs: Plan (replacing `PlanEditDialog`), business requirements, artefacts, the two texts | both |
 | 6 | Frontend — the Test cases tab: sections, four fill mechanisms, auto-append, deferred creation | both |

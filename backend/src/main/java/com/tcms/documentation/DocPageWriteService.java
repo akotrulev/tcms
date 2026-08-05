@@ -167,6 +167,50 @@ public class DocPageWriteService {
         return applyCreate(userId, project, input, subject);
     }
 
+    /**
+     * Adopts an existing page as {@code subject}'s document, and audits it.
+     *
+     * <p>Package-private, ungated and not {@code @Transactional} for {@link #writeSubjectPage}'s
+     * reason, and it is here rather than in {@link PlanDocumentService} for one of its own: the
+     * clock and the audit row are this class's, and a second writer stamping {@code doc_page} would
+     * be the second place a page's history is written.
+     *
+     * <p>The caller has established the permission, the subject, and that neither end is already
+     * taken. {@link DocPage#linkTo} throws if it was wrong about the last of those, which is
+     * deliberate — the alternative is a silent reassignment.
+     *
+     * <p>Flushed, so {@code uq_doc_page_subject} decides. The read the caller performed is a
+     * readable refusal in front of the index and never a replacement for it: two adoptions of one
+     * page in the same instant both pass that read, and only the unique index refuses the second.
+     */
+    void adoptPage(UUID userId, Project project, DocPage page, DocSubject subject) {
+        Instant now = clock.instant();
+        page.linkTo(subject, userId, now);
+        pages.saveAndFlush(page);
+
+        // No version row: nothing was authored. Same call PageVersions makes on a status change,
+        // and §96's on a tag — a history entry whose diff says nothing about the content changing
+        // is one that buries the entries that do.
+        auditSubject(project.getId(), userId, "doc_page.subject_linked", page, subject, now);
+    }
+
+    /**
+     * Releases a page's subject, keeping the page.
+     *
+     * <p>The audit row carries the subject the page <em>had</em>, read before the columns are
+     * cleared: afterwards there is nothing on the row that says which plan this page documented, so
+     * an audit trail assembled from the page alone could not answer the question the unlink exists
+     * to make answerable.
+     */
+    void releasePage(UUID userId, Project project, DocPage page) {
+        DocSubject released = page.getSubject();
+        Instant now = clock.instant();
+        page.unlinkSubject(userId, now);
+        pages.saveAndFlush(page);
+
+        auditSubject(project.getId(), userId, "doc_page.subject_unlinked", page, released, now);
+    }
+
     private Outcome applyCreate(
             UUID userId, Project project, DocPageInput input, DocSubject subject) {
         List<DocPage> live = pages.findLiveForProject(project.getId());
@@ -481,6 +525,28 @@ public class DocPageWriteService {
     }
 
     private void audit(UUID projectId, UUID userId, String action, DocPage page, Instant now) {
+        audit(projectId, userId, action, page, "", now);
+    }
+
+    /**
+     * The two subject rows, which say which artifact as well as which page.
+     *
+     * <p>Without the subject these two actions read as "somebody touched this page" — and a link
+     * and an unlink of two different plans produce identical rows, which is the history the
+     * contract's own argument for making relinking two steps says must exist.
+     */
+    private void auditSubject(
+            UUID projectId, UUID userId, String action, DocPage page, DocSubject subject,
+            Instant now) {
+
+        audit(projectId, userId, action, page,
+                ",\"subjectType\":\"" + subject.type() + "\",\"subjectId\":\"" + subject.id() + "\"",
+                now);
+    }
+
+    private void audit(
+            UUID projectId, UUID userId, String action, DocPage page, String extra, Instant now) {
+
         auditEvents.save(AuditEvent.record(
                 projectId,
                 userId,
@@ -493,7 +559,7 @@ public class DocPageWriteService {
                 // require; the status is what makes the publish action's row say what it did.
                 "{\"key\":\"" + page.getKey() + "\",\"title\":"
                         + AuditEvent.jsonString(page.getTitle())
-                        + ",\"status\":\"" + page.getStatus() + "\"}",
+                        + ",\"status\":\"" + page.getStatus() + "\"" + extra + "}",
                 now));
     }
 }

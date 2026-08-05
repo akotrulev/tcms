@@ -1865,3 +1865,28 @@ Built and unverified. Rows written per §65; **none of them run.**
 | **Must show** | Adding `scopeText` to `PlanSnapshot` must redden `Prose.proseIsNotScope`. A version per paragraph fills the history with rows whose snapshots differ in nothing that will ever be run. |
 | **Check** | the widened CHECK constraint |
 | **Must show** | Now covered — `PlanScopeConstraintTest` is written and green, and asserts both halves in both directions over plain JDBC rather than through `PlanScopeItem`'s factories (which would pass with the constraint dropped entirely). §97 phase 3a's row naming it as "not yet written" is **closed**. |
+
+## §97 phase 3c — adoption: the link, the unlink, and the two ends that can be taken
+
+Built and unverified. Rows written per §65; **none of them run.**
+
+| | |
+|---|---|
+| **Check** | the page-side 409 is checked at all |
+| **Must show** | Deleting the `taken != null` branch from `PlanDocumentService.link` must redden `PlanDocumentEndpointTest.Adoption.pageMayNotBeTwoPlansDocument` — **on its status assertion**, since without the branch the write proceeds and `uq_doc_page_subject` does not refuse it (that index is on the *subject*, and the second plan is a different subject; the page is what is being taken twice, and no constraint says so). This is the row that matters most in this phase: the database cannot catch this one. |
+| **Check** | the two 409s are two sentences |
+| **Must show** | Answering `AlreadyExists` in place of `TakenByAnotherPlan` must redden the `contains("TP-1")` assertion in the same test. It is the plan key that distinguishes them, and both refusals are otherwise a 409 with a page-shaped problem body — a client that renders one sentence for both sends the reader to a plan that has no document. |
+| **Check** | the refusal refuses *before* the write |
+| **Must show** | Moving `writes.adoptPage(…)` above the two conflict checks must redden `pageMayNotBeTwoPlansDocument`'s `subjectOf(pageId)` assertion and **not** its status assertion. That asymmetry is the finding: a service that reassigns and then answers 409 is indistinguishable from a correct one at the HTTP layer. |
+| **Check** | the page's project predicate, not RLS |
+| **Must show** | Replacing `pages.findLiveInProject(project.getId(), input.pageId())` with `pages.findById(input.pageId())` must redden `Adoption.pageMustBeInThisProject`. RLS scopes to the **company**, so a sibling project's page is readable and the predicate is the only thing refusing it — the same defect class as `PlanFacts`' plan predicate, on the other argument. |
+| **Check** | unlink releases rather than deletes |
+| **Must show** | Replacing `writes.releasePage(…)` with `writes.delete(…)`-equivalent behaviour (soft-deleting the page) must redden `Adoption.unlinkingKeepsThePage` on its `readPage` 200 and its four-block assertion. Both are needed: the 404-on-the-plan-document half passes either way, which is exactly how "unlink" comes to delete somebody's specification. |
+| **Check** | unlink on a plan with no document is a 404 |
+| **Must show** | Returning `Unlinked` instead of `NotFound` when `findLiveForSubject` is empty must redden the second half of `unlinkingKeepsThePage`. A 204 there tells a caller pointed at the wrong plan that their unlink worked. |
+| **Check** | the entity guard is not the only guard, and not dead either |
+| **Must show** | `DocPage.linkTo` throws when the page already has a subject. With the service's check in place nothing reaches it, so **this reddens nothing today** — recorded as a row rather than a test because that is the honest statement: it is a backstop for the next subject type, and the service's own check is what produces the 409. Do not delete it on the strength of the coverage report. |
+| **Check** | the subject columns are actually writable now |
+| **Must show** | Restoring `updatable = false` on `DocPage.subjectType` / `subjectId` must redden every test in `Adoption` that expects a link to land — Hibernate silently omits the columns from the UPDATE, so the request answers **200 with a rendered page** and the row never changes. `linkingAdoptsAnExistingPage`'s `document(…)` re-read is what catches it; the response-body assertions alone would pass, because the view is assembled from the in-memory entity. |
+| **Check** | the audit row names the plan |
+| **Must show** | Calling the plain `audit(…)` overload instead of `auditSubject(…)` must redden `Adoption.bothWritesAreAudited`. Without the subject, a link and an unlink of two different plans produce identical rows, which is the history the contract's own two-step-relink argument depends on. |

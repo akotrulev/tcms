@@ -118,7 +118,9 @@ the document with an info alert, rather than disappearing.
 ## 7. Files
 
 `V29__doc_page_subject.sql` · `DocSubject` · `DocSubjectType` · `PlanDocumentService` ·
-`PlanDocumentController` · `PlanDocumentTemplate` · `DocLink` · `DocLinkRepository` ·
+`PlanDocumentController` · ~~`PlanDocumentTemplate`~~ (**deleted by §97 phase 3c** — the template
+`POST` is retired and a plan now *adopts* a page that already exists; see
+`docs/plans/2026-08-05-test-plan-detail-rework.md` §1a) · `DocLink` · `DocLinkRepository` ·
 `LinkSourceType` · `LinkRelationship` · `BlockLinks` · `BlockLinkService` · `BlockLinkView` ·
 `BlockLinkInput` · `CatalogueFacts` · (edited) `DocPage` · `DocPageRepository` · `DocPageService` ·
 `DocPageWriteService` · `DocPageController` · `DocPageSummaryView` · `DocPageView` · `DocBlockView` ·

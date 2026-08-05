@@ -37,20 +37,29 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * A test plan's document, and the links a block can carry — §93 end to end.
+ * A test plan's document, and the links a block can carry — §93 end to end, and §97's adoption.
  *
  * <h2>The failures this class exists to catch</h2>
  *
  * <ol>
  *   <li><strong>A non-partial unique index on the subject.</strong> {@code uq_doc_page_subject} is
  *       {@code WHERE deleted_at IS NULL}, and a page's delete is soft. Drop the predicate and
- *       everything still passes except {@link Lifecycle#deletedDocumentReleasesTheSlot} — a plan
+ *       everything still passes except {@link Adoption#deletedDocumentReleasesTheSlot} — a plan
  *       whose document was deleted could never have another, surfacing as a duplicate-key 500
  *       naming a row nobody can see.</li>
  *   <li><strong>A subject check scoped to the company rather than the project.</strong> RLS scopes
  *       every statement to the company, so a sibling project's plan is <em>visible</em> and only
- *       {@link PlanFacts}' own predicate refuses it. Remove that predicate and the document is
- *       created against another project's plan — filed where neither project's screens look.</li>
+ *       {@link PlanFacts}' own predicate refuses it. Remove that predicate and a page is adopted by
+ *       another project's plan — filed where neither project's screens look.</li>
+ *   <li><strong>The two 409s answering as one.</strong> A plan that already has a document and a
+ *       page that is already taken are different refusals resolved in different places, and with a
+ *       single plan in the fixture they are indistinguishable — hence {@link #OTHER_PLAN}. The
+ *       write-side half is asserted from the database ({@code subjectOf}), because a refusal that
+ *       reassigned the page first passes every status assertion.</li>
+ *   <li><strong>Adoption implemented as a copy.</strong> The whole reason the template was retired
+ *       is that a page keeps its key, its history, its links and its place in the search index —
+ *       so {@link Adoption#linkingAdoptsAnExistingPage} asserts the id, the key, the title and the
+ *       version number are the ones the page already had.</li>
  *   <li><strong>A link write that is not idempotent.</strong> §79's re-stamp defect in the one place
  *       it recurs. There is no unique constraint behind it, so the read is the whole protection and
  *       a second row would double every count drawn off the table.</li>
@@ -95,6 +104,24 @@ class PlanDocumentEndpointTest extends IntegrationTestBase {
 
     private static final UUID PLAN = UUID.fromString("d1004000-0000-4000-8000-000000000001");
     private static final UUID SIBLING_PLAN = UUID.fromString("d1004000-0000-4000-8000-000000000002");
+
+    /**
+     * A second plan of the SAME project.
+     *
+     * <p>The fixture that makes "this page is already another plan's document" testable at all.
+     * With one plan the two 409s are indistinguishable, and an implementation that answered the
+     * wrong one — or checked only one end — would pass everything.
+     */
+    private static final UUID OTHER_PLAN = UUID.fromString("d1004000-0000-4000-8000-000000000003");
+
+    /** A page as somebody actually writes one, before any plan has adopted it. */
+    private static final String SPECIFICATION = """
+            {"title":"Release 24.1 — requirements","blocks":[
+              {"blockType":"heading","level":1,"text":"Business requirements"},
+              {"blockType":"list","level":1,"text":"A capability the product offers."},
+              {"blockType":"list","level":2,"text":"A variation of the capability above."},
+              {"blockType":"list","level":3,"text":"A specific condition within that variation."}]}
+            """;
 
     private static final UUID SUITE = UUID.fromString("d1005000-0000-4000-8000-000000000001");
     private static final UUID SIBLING_SUITE = UUID.fromString("d1005000-0000-4000-8000-000000000002");
@@ -172,12 +199,12 @@ class PlanDocumentEndpointTest extends IntegrationTestBase {
     }
 
     // =====================================================================
-    // Starting the document
+    // Adopting a page, and letting it go
     // =====================================================================
 
     @Nested
-    @DisplayName("Starting it — the template, and the one document a plan may have")
-    class Lifecycle {
+    @DisplayName("Adoption — the page a plan takes on, and the two ends that can already be taken")
+    class Adoption {
 
         @Test
         @DisplayName("a plan with no document answers 404, which is the ordinary first state")
@@ -186,55 +213,115 @@ class PlanDocumentEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("starting it seeds the five sections, in order, with the outline indented")
-        void templateSections() throws Exception {
-            MvcResult started = start(ENGINEER, BANKING, PLAN);
-            assertThat(started.getResponse().getStatus()).isEqualTo(201);
+        @DisplayName("linking adopts the page as it is — same id, same key, same history")
+        void linkingAdoptsAnExistingPage() throws Exception {
+            JsonNode written = body(create(ENGINEER, BANKING, SPECIFICATION));
+            UUID pageId = idOfPage(written);
 
-            JsonNode page = body(started);
-            // Titled after the plan, so the documentation tree is navigable by plan key.
-            assertThat(page.get("title").asText()).isEqualTo("TP-1 — Release 24.1");
+            MvcResult linked = linkPage(
+                    ENGINEER, BANKING, PLAN, "{\"pageId\":\"" + pageId + "\"}");
+
+            // 200, not 201: nothing was created, and a client that treats this as a create would
+            // look for a Location header naming a page it already has.
+            assertThat(linked.getResponse().getStatus()).isEqualTo(200);
+
+            JsonNode page = body(linked);
             assertThat(page.get("subjectType").asText()).isEqualTo("TEST_PLAN");
             assertThat(page.get("subjectId").asText()).isEqualTo(PLAN.toString());
 
-            List<String> topHeadings = headings(page, 1);
-            assertThat(topHeadings).containsExactly(
-                    "Business requirements", "Test artefacts", "Scope", "Out of scope",
-                    "Test cases");
+            // THE point of adoption over the retired template: the page keeps everything it had.
+            // A copy-into-a-fresh-page implementation passes the subject assertions above and
+            // fails every one of these.
+            assertThat(idOfPage(page)).isEqualTo(pageId);
+            assertThat(page.get("key").asText()).isEqualTo(written.get("key").asText());
+            assertThat(page.get("title").asText()).isEqualTo("Release 24.1 — requirements");
+            // No version was authored — adopting a page changes nothing about what it says.
+            assertThat(page.get("currentVersionNo").asInt())
+                    .isEqualTo(written.get("currentVersionNo").asInt());
 
-            // THE assertion that keeps `level`'s middle arm honest: three distinct bullet depths
-            // reached storage. A server that dropped a list's level renders every plan flat, and
-            // every other assertion in this class still passes.
+            // `level`'s middle arm, which the retired template used to be this class's only cover
+            // for: three distinct bullet depths survived the round trip. A server that dropped a
+            // list's level renders every requirements page flat with nothing else failing.
             assertThat(bulletDepths(page)).contains(1, 2, 3);
 
-            // Prompts, never content. A plan nobody has touched must read as an empty form.
-            assertThat(page.toString()).doesNotContain("Easy leave");
+            // And it is the plan's document from the other direction too.
+            assertThat(idOfPage(body(document(ENGINEER, BANKING, PLAN)))).isEqualTo(pageId);
+            assertThat(livePagesFor(PLAN)).isEqualTo(1);
         }
 
         @Test
-        @DisplayName("the account prompt asks where the secret lives, and never for the secret")
-        void artefactsAsksForNoPassword() throws Exception {
-            String text = body(start(ENGINEER, BANKING, PLAN)).toString();
-            assertThat(text).contains("where its secret is kept");
-            // Not a spelling check — it is the decision. Test plans in the wild list credentials in
-            // prose and the template is the one place this product says not to.
-            assertThat(text).contains("A password typed here is readable by everyone");
-        }
-
-        @Test
-        @DisplayName("a second start is a 409 naming the document, never a second page")
+        @DisplayName("a second link is a 409 naming the plan's document, and writes nothing")
         void onlyOneDocument() throws Exception {
             start(ENGINEER, BANKING, PLAN);
-            MvcResult again = start(ENGINEER, BANKING, PLAN);
+            UUID second = idOf(create(ENGINEER, BANKING, SPECIFICATION));
+
+            MvcResult again = linkPage(
+                    ENGINEER, BANKING, PLAN, "{\"pageId\":\"" + second + "\"}");
 
             assertThat(again.getResponse().getStatus()).isEqualTo(409);
             // The KEY, because that is what the reader will see in the tree they are being sent to.
             assertThat(again.getResponse().getContentAsString()).contains("DOC-1");
             assertThat(livePagesFor(PLAN)).isEqualTo(1);
+            assertThat(subjectOf(second)).isNull();
         }
 
         @Test
-        @DisplayName("deleting the document releases the slot — the index is partial for this")
+        @DisplayName("a page that is already another plan's document is a 409 naming that plan")
+        void pageMayNotBeTwoPlansDocument() throws Exception {
+            UUID pageId = idOf(start(ENGINEER, BANKING, PLAN));
+
+            MvcResult refused = linkPage(
+                    ENGINEER, BANKING, OTHER_PLAN, "{\"pageId\":\"" + pageId + "\"}");
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(409);
+            // The other PLAN's key, not the page's — the two 409s say different things and an
+            // implementation that answered "this plan already has a document" here would be
+            // telling the caller to look at a plan that has none.
+            assertThat(refused.getResponse().getContentAsString()).contains("TP-1");
+            // The row did not move. Without this, an unconditional write passes the status
+            // assertion above by refusing after having already reassigned the page.
+            assertThat(subjectOf(pageId)).isEqualTo(PLAN);
+            assertThat(livePagesFor(OTHER_PLAN)).isZero();
+        }
+
+        @Test
+        @DisplayName("unlinking then linking is how a page moves — two requests, never one")
+        void relinkingIsTwoSteps() throws Exception {
+            UUID pageId = idOf(start(ENGINEER, BANKING, PLAN));
+
+            assertThat(unlinkPage(ENGINEER, BANKING, PLAN).getResponse().getStatus())
+                    .isEqualTo(204);
+            assertThat(linkPage(ENGINEER, BANKING, OTHER_PLAN, "{\"pageId\":\"" + pageId + "\"}")
+                    .getResponse().getStatus()).isEqualTo(200);
+
+            assertThat(subjectOf(pageId)).isEqualTo(OTHER_PLAN);
+            // The page is one page throughout: the release did not delete it and the second link
+            // did not copy it.
+            assertThat(document(ENGINEER, BANKING, PLAN).getResponse().getStatus()).isEqualTo(404);
+        }
+
+        @Test
+        @DisplayName("unlinking keeps the page; unlinking twice is a 404, not a second 204")
+        void unlinkingKeepsThePage() throws Exception {
+            UUID pageId = idOf(start(ENGINEER, BANKING, PLAN));
+
+            assertThat(unlinkPage(ENGINEER, BANKING, PLAN).getResponse().getStatus())
+                    .isEqualTo(204);
+
+            // This unlinks documentation; it does not delete it. The page is still there, still
+            // readable, still carrying its blocks.
+            MvcResult asPage = readPage(ENGINEER, BANKING, pageId);
+            assertThat(asPage.getResponse().getStatus()).isEqualTo(200);
+            assertThat(body(asPage).get("blocks")).hasSize(4);
+            assertThat(body(asPage).get("subjectType").isNull()).isTrue();
+
+            // A 204 here would tell a caller pointed at the wrong plan that their unlink worked.
+            assertThat(unlinkPage(ENGINEER, BANKING, PLAN).getResponse().getStatus())
+                    .isEqualTo(404);
+        }
+
+        @Test
+        @DisplayName("deleting the page releases the slot — the index is partial for this")
         void deletedDocumentReleasesTheSlot() throws Exception {
             UUID pageId = idOf(start(ENGINEER, BANKING, PLAN));
 
@@ -244,25 +331,70 @@ class PlanDocumentEndpointTest extends IntegrationTestBase {
             // The whole point of `WHERE deleted_at IS NULL`. With a plain unique index this is a
             // duplicate-key 500 about a row the user cannot see, and the plan is documentless for
             // ever with no repair anybody can perform through the product.
-            assertThat(start(ENGINEER, BANKING, PLAN).getResponse().getStatus()).isEqualTo(201);
+            assertThat(start(ENGINEER, BANKING, PLAN).getResponse().getStatus()).isEqualTo(200);
         }
 
         @Test
         @DisplayName("a sibling project's plan is a 404 — RLS scopes to the COMPANY, not the project")
         void planMustBeInThisProject() throws Exception {
+            UUID pageId = idOf(create(ENGINEER, BANKING, SPECIFICATION));
+
             // The caller holds doc:edit on BOTH projects, so this cannot be the gate answering.
-            assertThat(start(ENGINEER, BANKING, SIBLING_PLAN).getResponse().getStatus())
-                    .isEqualTo(404);
+            assertThat(linkPage(ENGINEER, BANKING, SIBLING_PLAN, "{\"pageId\":\"" + pageId + "\"}")
+                    .getResponse().getStatus()).isEqualTo(404);
             assertThat(livePagesFor(SIBLING_PLAN)).isZero();
+            assertThat(subjectOf(pageId)).isNull();
         }
 
         @Test
-        @DisplayName("a Viewer may read the document and may not start one")
+        @DisplayName("a sibling project's page is a 404, never a 409 or a 400")
+        void pageMustBeInThisProject() throws Exception {
+            // Created in the SIBLING project, by a caller who may write documentation in both — so
+            // this is the project predicate answering and nothing else.
+            UUID foreign = idOf(create(ENGINEER, SIBLING, SPECIFICATION));
+
+            assertThat(linkPage(ENGINEER, BANKING, PLAN, "{\"pageId\":\"" + foreign + "\"}")
+                    .getResponse().getStatus()).isEqualTo(404);
+            assertThat(subjectOf(foreign)).isNull();
+        }
+
+        @Test
+        @DisplayName("a body with no pageId is a field error, not a 500 three statements later")
+        void pageIdIsRequired() throws Exception {
+            MvcResult refused = linkPage(ENGINEER, BANKING, PLAN, "{}");
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(refused.getResponse().getContentAsString()).contains("pageId");
+        }
+
+        @Test
+        @DisplayName("a Viewer may read the document and may neither link nor unlink one")
         void gate() throws Exception {
-            assertThat(start(VIEWER, BANKING, PLAN).getResponse().getStatus()).isEqualTo(403);
+            UUID pageId = idOf(create(ENGINEER, BANKING, SPECIFICATION));
+
+            assertThat(linkPage(VIEWER, BANKING, PLAN, "{\"pageId\":\"" + pageId + "\"}")
+                    .getResponse().getStatus()).isEqualTo(403);
 
             start(ENGINEER, BANKING, PLAN);
+            // Both directions in one test: the refusal above proves the gate exists, and the 200
+            // proves it is not refusing everybody — a read gated on doc:edit passes the first
+            // assertion on its own.
             assertThat(document(VIEWER, BANKING, PLAN).getResponse().getStatus()).isEqualTo(200);
+            assertThat(unlinkPage(VIEWER, BANKING, PLAN).getResponse().getStatus()).isEqualTo(403);
+        }
+
+        @Test
+        @DisplayName("both writes are audited, and the row names the plan")
+        void bothWritesAreAudited() throws Exception {
+            start(ENGINEER, BANKING, PLAN);
+            unlinkPage(ENGINEER, BANKING, PLAN);
+
+            // The contract's argument for making relinking two steps is that a swap must be in the
+            // history. A row per write that did not say WHICH plan would leave a link and an
+            // unlink of two different plans indistinguishable, which is the same as not recording
+            // them.
+            assertThat(auditDetails("doc_page.subject_linked")).contains(PLAN.toString());
+            assertThat(auditDetails("doc_page.subject_unlinked")).contains(PLAN.toString());
         }
 
         @Test
@@ -270,10 +402,7 @@ class PlanDocumentEndpointTest extends IntegrationTestBase {
         void itIsJustAPage() throws Exception {
             UUID pageId = idOf(start(ENGINEER, BANKING, PLAN));
 
-            MvcResult asPage = mvc.perform(MockMvcRequestBuilders
-                            .get("/api/v1/projects/" + BANKING + "/doc-pages/" + pageId)
-                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(ENGINEER, ACME)))
-                    .andReturn();
+            MvcResult asPage = readPage(ENGINEER, BANKING, pageId);
 
             assertThat(asPage.getResponse().getStatus()).isEqualTo(200);
             // One page, two routes. If these ever diverge, the plan tab and the docs space are
@@ -402,7 +531,7 @@ class PlanDocumentEndpointTest extends IntegrationTestBase {
             // only the status would pass on an implementation that flushed the rewrites first and
             // relied on a rollback the reader has to take on trust.
             assertThat(body(document(ENGINEER, BANKING, PLAN)).get("title").asText())
-                    .isEqualTo("TP-1 — Release 24.1");
+                    .isEqualTo("Release 24.1 — requirements");
         }
 
         @Test
@@ -486,9 +615,34 @@ class PlanDocumentEndpointTest extends IntegrationTestBase {
                 .andReturn();
     }
 
+    /**
+     * A page of this project, written the way anybody writes one, then adopted by the plan.
+     *
+     * <p>Two requests, because that is now the only way a plan gets a document — and the reason
+     * every test below still has a page with blocks to link cases to. The blocks are a heading and
+     * three bullets at three depths so {@code level}'s middle arm stays covered now that the
+     * template that used to cover it is gone.
+     */
     private MvcResult start(UUID userId, UUID projectId, UUID planId) throws Exception {
+        UUID pageId = idOf(create(userId, projectId, SPECIFICATION));
+        return linkPage(userId, projectId, planId, "{\"pageId\":\"" + pageId + "\"}");
+    }
+
+    private MvcResult linkPage(UUID userId, UUID projectId, UUID planId, String payload)
+            throws Exception {
+
         return mvc.perform(MockMvcRequestBuilders
-                        .post("/api/v1/projects/" + projectId + "/plans/" + planId + "/document")
+                        .put("/api/v1/projects/" + projectId + "/plans/" + planId + "/document")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, ACME))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andReturn();
+    }
+
+    private MvcResult unlinkPage(UUID userId, UUID projectId, UUID planId) throws Exception {
+        return mvc.perform(MockMvcRequestBuilders
+                        .delete("/api/v1/projects/" + projectId + "/plans/" + planId + "/document")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, ACME))
                         .accept(MediaType.APPLICATION_JSON))
                 .andReturn();
@@ -573,14 +727,6 @@ class PlanDocumentEndpointTest extends IntegrationTestBase {
         return UUID.fromString(page.get("id").asText());
     }
 
-    private static List<String> headings(JsonNode page, int level) {
-        return java.util.stream.StreamSupport
-                .stream(page.get("blocks").spliterator(), false)
-                .filter(block -> "heading".equals(block.get("blockType").asText()))
-                .filter(block -> block.get("level").asInt() == level)
-                .map(block -> block.get("text").asText())
-                .toList();
-    }
 
     private static List<Integer> bulletDepths(JsonNode page) {
         return java.util.stream.StreamSupport
@@ -649,6 +795,42 @@ class PlanDocumentEndpointTest extends IntegrationTestBase {
                 """, planId.toString());
     }
 
+    /**
+     * What the page row itself says it documents, or null.
+     *
+     * <p>Read from the database rather than from a response, because the assertions that need it
+     * are about a write that must <em>not</em> have happened: a refusal asserted only on its status
+     * code passes against an implementation that reassigned the page and then answered 409.
+     */
+    private UUID subjectOf(UUID pageId) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+             var statement = connection.prepareStatement(
+                     "SELECT subject_id FROM doc_page WHERE id = CAST(? AS uuid)")) {
+            statement.setString(1, pageId.toString());
+            try (ResultSet rows = statement.executeQuery()) {
+                rows.next();
+                String value = rows.getString(1);
+                return value == null ? null : UUID.fromString(value);
+            }
+        }
+    }
+
+    /** Every audit row's `changes` for one action, concatenated — the assertions ask "contains". */
+    private String auditDetails(String action) throws SQLException {
+        StringBuilder out = new StringBuilder();
+        try (Connection connection = appConnection(ACME);
+             var statement = connection.prepareStatement(
+                     "SELECT changes FROM audit_event WHERE action = ?")) {
+            statement.setString(1, action);
+            try (ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) {
+                    out.append(rows.getString(1));
+                }
+            }
+        }
+        return out.toString();
+    }
+
     private long linkCount(UUID blockId) throws SQLException {
         return scalarLong(ACME,
                 "SELECT COUNT(*) FROM doc_link WHERE target_block_id = CAST(? AS uuid)",
@@ -681,6 +863,7 @@ class PlanDocumentEndpointTest extends IntegrationTestBase {
         try (Connection connection = appConnection(ACME)) {
             plan(connection, PLAN, BANKING, "TP-1", 1, "Release 24.1");
             plan(connection, SIBLING_PLAN, SIBLING, "TP-2", 2, "Payments 24.1");
+            plan(connection, OTHER_PLAN, BANKING, "TP-3", 3, "Release 24.2");
 
             suite(connection, SUITE, BANKING, "D1OLB-S1", 1, "Sign in");
             suite(connection, SIBLING_SUITE, SIBLING, "D1SIB-S1", 1, "Cards");
