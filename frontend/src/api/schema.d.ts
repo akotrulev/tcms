@@ -1433,6 +1433,28 @@ export interface paths {
                     q?: string;
                     /** @description Includes descendant suites by default. */
                     suiteId?: string;
+                    /**
+                     * @description Cases carrying **every** tag listed — repeat the parameter to narrow. AND, not OR, and
+                     *     deliberately the opposite of `suite_tag_rule`, which unions: a suite claims everything
+                     *     tagged `smoke` *or* `payments`, while a person filtering a grid by two tags is looking
+                     *     for the intersection and an OR would widen the list they are trying to shorten.
+                     *
+                     *     Tags are free text and matched exactly. An unknown tag is `200 []`, never a 400 —
+                     *     there is no vocabulary to check it against, and a typo that refuses the request would
+                     *     be indistinguishable from a tag nobody has used yet.
+                     */
+                    tag?: string[];
+                    /**
+                     * @description `true` returns **only cases filed in no suite** (`suite_id IS NULL`, possible since the
+                     *     suite became a resolvable collection). The grid needs it because an unfiled case appears
+                     *     under no node of the tree, so without this filter the only way to find one is to page
+                     *     through every case in the project.
+                     *
+                     *     Ignored when `suiteId` is present — a case cannot be both in a folder's subtree and in
+                     *     no folder, and refusing the pair with a 400 would break the tree's own "clear the
+                     *     filter" affordance for no gain.
+                     */
+                    unfiled?: boolean;
                     /** @description Includes descendant features by default (plan §6q). */
                     featureId?: string;
                     testTypeId?: string;
@@ -5437,8 +5459,8 @@ export interface components {
             keySeq: number;
             title: string;
             /** Format: uuid */
-            suiteId: string;
-            suiteName: string;
+            suiteId: string | null;
+            suiteName: string | null;
             priority: components["schemas"]["Priority"];
             lifecycleStatus: components["schemas"]["LifecycleStatus"];
             automationStatus: components["schemas"]["AutomationStatus"];
@@ -5507,8 +5529,23 @@ export interface components {
         };
         TestCaseInput: {
             title: string;
-            /** Format: uuid */
-            suiteId: string;
+            /**
+             * Format: uuid
+             * @description The folder to **file** this case in, or null for an unfiled case. No longer required:
+             *     a suite is a resolvable collection — its members are the cases filed in it, the cases
+             *     added to it individually, and every case carrying any of its tags — so filing is one
+             *     way of belonging rather than a precondition for existing. A case may be written before
+             *     anybody has decided where it goes.
+             *
+             *     Must name a **live suite of this project**. A sibling project's suite is refused with a
+             *     field error: it belongs to the same company, so it satisfies the foreign key and the
+             *     company check, and every later read would resolve it through a project the reader was
+             *     never granted.
+             *
+             *     **Absent and null mean different things on `PATCH`**, as everywhere else on this shape:
+             *     omitting the key leaves the case where it is, sending null unfiles it.
+             */
+            suiteId?: string | null;
             description?: string | null;
             objective?: string | null;
             expectedOutcome?: string | null;
@@ -5551,6 +5588,22 @@ export interface components {
              *     discard classifications nobody chose to drop.
              */
             classificationValueIds?: string[];
+            /**
+             * @description The case's tags, as a **complete set** — every tag it should carry after this save.
+             *     Omitting the field leaves them alone; sending `[]` clears them. The same absent-versus-
+             *     empty rule as `classificationValueIds`, and it matters more here: a bulk action
+             *     reconstructs a request without mentioning tags, so reading absent as "clear" would have
+             *     every move quietly strip a case out of every tag-resolved suite it was in.
+             *
+             *     Free text, trimmed, deduplicated, and **matched exactly** where a suite's tag rules are
+             *     resolved — same spelling, same case. Duplicates after trimming are collapsed rather than
+             *     refused; `case_tag`'s primary key says a tag list is a set.
+             *
+             *     **Not `automationTags`**, which are the selection tags a CI runner filters on (plan
+             *     §6c). These are the organisational labels the grid shows and the ones a suite's tag
+             *     rules resolve against; merging the two would make "run the smoke suite" and "cases the
+             *     release manager flagged" the same query.
+             */
             tags?: string[];
             steps?: components["schemas"]["TestStepInput"][];
             preconditions?: components["schemas"]["CaseConditionInput"][];
@@ -6373,9 +6426,9 @@ export interface components {
             }[];
             bySuite: {
                 /** Format: uuid */
-                suiteId: string;
-                suiteKey: string;
-                suiteName: string;
+                suiteId: string | null;
+                suiteKey: string | null;
+                suiteName: string | null;
                 counts: components["schemas"]["ResultCounts"];
             }[];
             blockers: components["schemas"]["TestExecutionSummary"][];
@@ -6404,8 +6457,8 @@ export interface components {
             keySeq: number;
             title: string;
             /** Format: uuid */
-            suiteId: string;
-            suiteName: string;
+            suiteId: string | null;
+            suiteName: string | null;
         };
         ReportDefinition: {
             /** Format: uuid */

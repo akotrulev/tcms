@@ -75,6 +75,12 @@ record CaseEdit(
     /** The longest title the SPA's editor accepts. The column itself is unbounded {@code TEXT}. */
     private static final int MAX_TITLE = 300;
 
+    /**
+     * The longest tag. The column is unbounded {@code TEXT}; this is a bound on a label somebody
+     * types into a chip and later has to match exactly in a suite's tag rules.
+     */
+    private static final int MAX_TAG = 60;
+
     /** One step, normalized. {@code position} is assigned by payload order, never sent. */
     record StepEdit(
             UUID id,
@@ -96,7 +102,26 @@ record CaseEdit(
         record Invalid(Map<String, List<String>> errors) implements Outcome {
         }
 
-        record Valid(CaseEdit edit) implements Outcome {
+        /**
+         * @param edit the authored content — everything {@link CaseVersions#hash} digests
+         * @param tags the case's tags after this save, or <strong>null for "leave them alone"</strong>
+         *             (the request omitted the field). Beside the edit rather than on it, and that
+         *             is the slice's one deliberate departure from §96's plan line.
+         *
+         *             <p>A tag is not authored content. {@code CaseBulkService}'s {@code AddTags}
+         *             already says so in the only way that was observable before this slice — it
+         *             deliberately does not stamp {@code updatedAt}, because "a tag is not authored
+         *             content and moving the timestamp would make every 'edited recently' list a
+         *             list of who ran a bulk tag". Putting tags on {@link CaseEdit} would put them
+         *             in the content hash, so labelling a case {@code sprint-42} would write a new
+         *             version of the case whose diff shows nothing about the test changing — which
+         *             is precisely the empty-diff noise plan §6j added the hash to keep out.
+         *
+         *             <p>It also makes §95's bulk-hash trap structurally unavailable: a bulk action
+         *             reconstructs a request without mentioning tags, and since tags are not hashed
+         *             there is nothing for that omission to mis-hash.
+         */
+        record Valid(CaseEdit edit, List<String> tags) implements Outcome {
         }
     }
 
@@ -192,6 +217,8 @@ record CaseEdit(
                 request.postconditions(), "postconditions", acceptableConditionIds,
                 storedPostconditionIds, errors);
 
+        List<String> tags = normalizeTags(request.tags(), errors);
+
         String title = trimToNull(request.title());
         if (title == null) {
             errors.computeIfAbsent("title", k -> new ArrayList<>()).add("Enter a title.");
@@ -200,9 +227,12 @@ record CaseEdit(
                     .add("Keep the title under " + MAX_TITLE + " characters.");
         }
 
-        if (request.suiteId() == null) {
-            errors.computeIfAbsent("suiteId", k -> new ArrayList<>()).add("Choose a suite.");
-        } else if (!liveSuiteIds.contains(request.suiteId())) {
+        // A null suiteId is an UNFILED case since §96, not a missing field. A suite is a resolvable
+        // collection — filed ∪ added ∪ tagged — so filing is one way of belonging rather than a
+        // precondition for existing, and refusing the null here is what made a case impossible to
+        // write before anybody had decided where it goes. The check that remains is the one that
+        // was always the point: a suite id must name a live suite OF THIS PROJECT.
+        if (request.suiteId() != null && !liveSuiteIds.contains(request.suiteId())) {
             // Not 404: the case and project resolved fine, and the caller submitted a value this
             // project does not offer. Naming it as a field error puts the message on the picker.
             errors.computeIfAbsent("suiteId", k -> new ArrayList<>())
@@ -296,7 +326,58 @@ record CaseEdit(
                 classification,
                 preconditions,
                 postconditions,
-                trimToNull(request.changeComment())));
+                trimToNull(request.changeComment())),
+                tags);
+    }
+
+    /**
+     * Normalizes the submitted tags: trimmed, blanks dropped, duplicates collapsed, order kept.
+     *
+     * <p><strong>Null in, null out</strong> — "leave them alone", and the one instruction a reconcile
+     * must be able to tell from "clear them". Everywhere else on this record the two are the same
+     * Java value; here, as for classification and the conditions, the field is a collection and the
+     * difference survives.
+     *
+     * <p>Collapsed rather than refused, for {@link #normalizeClassification}'s reason:
+     * {@code case_tag}'s primary key is {@code (case_id, tag)}, so the schema says a tag list is a
+     * <em>set</em>, and sending one twice is not a mistake to report — it is the same request.
+     *
+     * <p>Order is the payload's and is not sorted, unlike classification. Classification is sorted
+     * because it is hashed and two orderings of one set must hash alike; tags are not hashed at all
+     * (see {@link Outcome.Valid}), and {@code case_tag} has no position column, so the reader sorts
+     * them alphabetically and nothing here needs an opinion.
+     *
+     * <p>A tag longer than {@value #MAX_TAG} is a field error rather than a truncation: a silently
+     * shortened tag stops matching the suite tag rule the author wrote it for, and the case
+     * disappears from a collection nobody can see it should be in.
+     */
+    private static List<String> normalizeTags(
+            List<String> submitted, Map<String, List<String>> errors) {
+
+        if (submitted == null) {
+            return null;
+        }
+
+        List<String> distinct = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (String raw : submitted) {
+            String tag = trimToNull(raw);
+            if (tag == null) {
+                // A blank is dropped rather than refused. The editor's tag input can hold an empty
+                // chip mid-typing, and refusing the save would report an error about a value the
+                // author does not think they entered.
+                continue;
+            }
+            if (tag.length() > MAX_TAG) {
+                errors.computeIfAbsent("tags", k -> new ArrayList<>())
+                        .add("Keep each tag under " + MAX_TAG + " characters.");
+                continue;
+            }
+            if (seen.add(tag)) {
+                distinct.add(tag);
+            }
+        }
+        return List.copyOf(distinct);
     }
 
     /**
@@ -380,10 +461,18 @@ record CaseEdit(
                 null,
                 // See the header. Null, not a description of the bulk edit.
                 null,
-                // The refused three stay null: they are refused on the way IN, and this is a
-                // reconstruction of what is already stored, so passing any of them would make a
+                // Tags null: "leave them alone", which is what all eight bulk actions do — AddTags
+                // writes case_tag directly rather than through this reconstruction. Unlike
+                // classification and the conditions above, the stored values are NOT supplied
+                // separately, and they do not have to be: tags are not on CaseEdit and therefore
+                // not in CaseVersions#hash, so a reconstruction that omits them still hashes as
+                // the whole case. That is §95's bulk-hash trap being structurally unavailable here
+                // rather than avoided by remembering a line.
+                null,
+                // The refused two stay null: they are refused on the way IN, and this is a
+                // reconstruction of what is already stored, so passing either would make a
                 // stored row fail validation for a rule about requests.
-                null, null, null,
+                null, null,
                 // The two condition lists are null for the SAME reason classification is above —
                 // "leave them alone", which is exactly what all eight bulk actions do. The stored
                 // attachments are supplied separately, below, so the reconstructed edit still
@@ -580,13 +669,17 @@ record CaseEdit(
     }
 
     /**
-     * Rejects the three contract fields this endpoint does not implement — see
+     * Rejects the two contract fields this endpoint does not implement — see
      * {@link CaseUpdateRequest}'s header for why refusing beats ignoring.
      *
      * <p>It was five. {@code preconditions} and {@code postconditions} left in §95 and are
      * validated by {@link #normalizeConditions} below; the inline half of each is still refused,
      * but there rather than here, because it is a rule about an entry's shape and not about a field
-     * nothing implements.
+     * nothing implements. {@code tags} left in §96 and is normalized by {@link #normalizeTags}.
+     *
+     * <p>{@code automationTags} stays, and its staying is the point: it is a different table
+     * ({@code case_automation_tag}) and a different job — the selection tags a CI runner filters on
+     * (plan §6c) — so accepting {@code tags} is not a reason to accept it.
      */
     private static void refuseUnsupported(
             CaseUpdateRequest request, Map<String, List<String>> errors) {
@@ -594,9 +687,6 @@ record CaseEdit(
         String message = "This field cannot be changed here yet.";
         if (request.ownerId() != null) {
             errors.computeIfAbsent("ownerId", k -> new ArrayList<>()).add(message);
-        }
-        if (request.tags() != null) {
-            errors.computeIfAbsent("tags", k -> new ArrayList<>()).add(message);
         }
         if (request.automationTags() != null) {
             errors.computeIfAbsent("automationTags", k -> new ArrayList<>()).add(message);

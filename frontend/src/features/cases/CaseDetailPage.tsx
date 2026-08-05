@@ -59,7 +59,15 @@ export function CaseDetailPage() {
               crumbs={[
                 { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
                 { label: 'Test cases', to: `/projects/${projectId}/cases` },
-                { label: data.suiteName, to: `/projects/${projectId}/cases?suiteId=${data.suiteId}` },
+                // An unfiled case has no folder to point at, so the crumb becomes the grid's own
+                // unfiled filter rather than a link to `?suiteId=null` — which would render every
+                // case in the project and read as the crumb being broken.
+                data.suiteId === null
+                  ? { label: 'Not filed', to: `/projects/${projectId}/cases?unfiled=true` }
+                  : {
+                      label: data.suiteName ?? '',
+                      to: `/projects/${projectId}/cases?suiteId=${data.suiteId}`,
+                    },
                 { label: data.key },
               ]}
               meta={

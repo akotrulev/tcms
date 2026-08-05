@@ -99,6 +99,7 @@ public class CaseUpdateService {
     private final SharedStepService sharedSteps;
     private final CaseClassifications classifications;
     private final CaseConditions conditions;
+    private final CaseTags tags;
     private final ConditionService conditionLibrary;
     private final CaseRenderer renderer;
     private final CaseVersions versions;
@@ -115,6 +116,7 @@ public class CaseUpdateService {
             SharedStepService sharedSteps,
             CaseClassifications classifications,
             CaseConditions conditions,
+            CaseTags tags,
             ConditionService conditionLibrary,
             CaseRenderer renderer,
             CaseVersions versions,
@@ -130,6 +132,7 @@ public class CaseUpdateService {
         this.sharedSteps = sharedSteps;
         this.classifications = classifications;
         this.conditions = conditions;
+        this.tags = tags;
         this.conditionLibrary = conditionLibrary;
         this.renderer = renderer;
         this.versions = versions;
@@ -271,7 +274,8 @@ public class CaseUpdateService {
         if (validated instanceof CaseEdit.Outcome.Invalid invalid) {
             return new Outcome.Invalid(invalid.errors());
         }
-        CaseEdit edit = ((CaseEdit.Outcome.Valid) validated).edit();
+        CaseEdit.Outcome.Valid accepted = (CaseEdit.Outcome.Valid) validated;
+        CaseEdit edit = accepted.edit();
 
         Instant now = clock.instant();
 
@@ -291,6 +295,12 @@ public class CaseUpdateService {
         // snapshot, so reconciling after it would report the conditions the case had on the way in.
         conditions.reconcile(
                 testCase, edit.preconditionIds(), edit.postconditionIds(), companyId);
+        // Beside those two and NOT inside `edit`, because a tag is not authored content and is not
+        // in CaseVersions#hash — see CaseEdit.Outcome.Valid. Before the render for the reason the
+        // other reconciles are: the response IS the version snapshot, so a save that retagged a
+        // case would otherwise report the tags it had on the way in. A null here is "the request
+        // did not mention tags", which reads nothing and writes nothing.
+        tags.reconcile(testCase, accepted.tags(), companyId);
 
         // Applied BEFORE the render, so the response carries DRAFT rather than reporting the
         // approval the save just ended — the same ordering the classification reconcile above is

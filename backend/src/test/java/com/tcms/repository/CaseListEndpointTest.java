@@ -190,7 +190,11 @@ class CaseListEndpointTest extends IntegrationTestBase {
         @DisplayName("live cases in live suites come back, and only those")
         void liveCasesOnly() throws Exception {
             assertThat(keysOf(itemsAs(LEAD, ACME, ACME_BANKING, "")))
-                    .containsExactlyInAnyOrder("TC-1", "TC-2", "TC-3", "TC-4", "TC-5", "TC-10");
+                    .as("TC-8 is filed in no suite and is still a live case of this project — "
+                            + "the `suite_id IN (…)` predicate is never true of NULL, so a grid "
+                            + "without an arm for it drops every unfiled case with no error")
+                    .containsExactlyInAnyOrder(
+                            "TC-1", "TC-2", "TC-3", "TC-4", "TC-5", "TC-8", "TC-10");
         }
 
         @Test
@@ -208,6 +212,19 @@ class CaseListEndpointTest extends IntegrationTestBase {
             // SuiteRepository's own comment states the intended semantics from the other side
             // ("its cases are already gone from the case list"); this is what makes that true.
             assertThat(keysOf(itemsAs(LEAD, ACME, ACME_BANKING, ""))).doesNotContain("TC-7");
+        }
+
+
+        @Test
+        @DisplayName("an unfiled case carries two nulls, never a null id beside an empty name")
+        void anUnfiledCaseSaysSo() throws Exception {
+            JsonNode row = byKey(itemsAs(LEAD, ACME, ACME_BANKING, ""), "TC-8");
+
+            // The contract marks the pair nullable TOGETHER. CaseSummaries reaches the wrong
+            // combination by default — a HashMap looks up a null key happily and answers the ""
+            // default — and "" is what the client would have to guess the meaning of.
+            assertThat(row.get("suiteId").isNull()).isTrue();
+            assertThat(row.get("suiteName").isNull()).isTrue();
         }
 
         @Test
@@ -288,9 +305,12 @@ class CaseListEndpointTest extends IntegrationTestBase {
 
             assertThat(fromPicker)
                     .as("the picker must not count TC-7, which is live inside a deleted folder "
-                            + "and therefore unreachable from the list")
+                            + "and therefore unreachable from the list — and it MUST count TC-8, "
+                            + "which is filed in no folder and IS in the list (§96). The two "
+                            + "screens are two queries, and this assertion is the only thing that "
+                            + "makes them one number")
                     .isEqualTo(bodyAs(LEAD, ACME, ACME_BANKING, "").get("total").asLong())
-                    .isEqualTo(6);
+                    .isEqualTo(7);
         }
 
         @Test
@@ -324,7 +344,7 @@ class CaseListEndpointTest extends IntegrationTestBase {
             // wrong, and invisible until a company writes its tenth case. The fixture has one for
             // exactly this assertion.
             assertThat(keysOf(itemsAs(LEAD, ACME, ACME_BANKING, "")))
-                    .containsExactly("TC-1", "TC-2", "TC-3", "TC-4", "TC-5", "TC-10");
+                    .containsExactly("TC-1", "TC-2", "TC-3", "TC-4", "TC-5", "TC-8", "TC-10");
         }
 
         @Test
@@ -334,14 +354,14 @@ class CaseListEndpointTest extends IntegrationTestBase {
             // HIGH, LOW, LOW, MEDIUM, MEDIUM: every value in a plausible place, nothing failing,
             // and the two least urgent cases at the top of the "most urgent first" column.
             assertThat(prioritiesOf(itemsAs(LEAD, ACME, ACME_BANKING, "&sort=priority,asc")))
-                    .containsExactly("CRITICAL", "HIGH", "MEDIUM", "MEDIUM", "LOW", "LOW");
+                    .containsExactly("CRITICAL", "HIGH", "MEDIUM", "MEDIUM", "MEDIUM", "LOW", "LOW");
         }
 
         @Test
         @DisplayName("descending reverses the meaning, not the spelling")
         void enumsSortByDeclaredOrderDescending() throws Exception {
             assertThat(prioritiesOf(itemsAs(LEAD, ACME, ACME_BANKING, "&sort=priority,desc")))
-                    .containsExactly("LOW", "LOW", "MEDIUM", "MEDIUM", "HIGH", "CRITICAL");
+                    .containsExactly("LOW", "LOW", "MEDIUM", "MEDIUM", "MEDIUM", "HIGH", "CRITICAL");
         }
 
         @Test
@@ -368,8 +388,11 @@ class CaseListEndpointTest extends IntegrationTestBase {
             // it would have required a mapped association — see TestCase's header for why there
             // isn't one.
             assertThat(suiteNamesOf(itemsAs(LEAD, ACME, ACME_BANKING, "&sort=suiteName,asc")))
+                    .as("the unfiled case sorts LAST and carries a null name — the subquery has no "
+                            + "suite row to take a name from, and Postgres orders NULL last "
+                            + "ascending, which is where a case that is in no folder belongs")
                     .containsExactly("Checkout", "Partial refunds",
-                            "Refunds", "Refunds", "Refunds", "Refunds");
+                            "Refunds", "Refunds", "Refunds", "Refunds", null);
         }
 
         @Test
@@ -379,11 +402,11 @@ class CaseListEndpointTest extends IntegrationTestBase {
             // would need identity's table inside this module's ORDER BY. A 400 on a header click
             // is a dead end the user cannot act on; the mock falls back the same way.
             assertThat(keysOf(itemsAs(LEAD, ACME, ACME_BANKING, "&sort=owner,asc")))
-                    .containsExactly("TC-1", "TC-2", "TC-3", "TC-4", "TC-5", "TC-10");
+                    .containsExactly("TC-1", "TC-2", "TC-3", "TC-4", "TC-5", "TC-8", "TC-10");
             assertThat(keysOf(itemsAs(LEAD, ACME, ACME_BANKING, "&sort=companyId,asc")))
                     .as("an attribute that exists on the entity is still not sortable — the "
                             + "allow-list is what stops user input naming a column")
-                    .containsExactly("TC-1", "TC-2", "TC-3", "TC-4", "TC-5", "TC-10");
+                    .containsExactly("TC-1", "TC-2", "TC-3", "TC-4", "TC-5", "TC-8", "TC-10");
         }
 
         @Test
@@ -397,7 +420,7 @@ class CaseListEndpointTest extends IntegrationTestBase {
             assertThat(first.get("total").asLong())
                     .as("the total counts MATCHING cases, not returned ones — a count over the "
                             + "page would say 2 and the pager would offer exactly one page")
-                    .isEqualTo(6);
+                    .isEqualTo(7);
             assertThat(first.get("page").asInt()).isZero();
             assertThat(first.get("size").asInt()).isEqualTo(2);
         }
@@ -419,7 +442,7 @@ class CaseListEndpointTest extends IntegrationTestBase {
             JsonNode body = bodyAs(LEAD, ACME, ACME_BANKING, "&page=9&size=2");
 
             assertThat(body.get("items")).isEmpty();
-            assertThat(body.get("total").asLong()).isEqualTo(6);
+            assertThat(body.get("total").asLong()).isEqualTo(7);
         }
     }
 
@@ -430,6 +453,57 @@ class CaseListEndpointTest extends IntegrationTestBase {
     @Nested
     @DisplayName("Filters — each one narrows, and none is silently dropped")
     class Filters {
+
+
+        @Test
+        @DisplayName("tag narrows, and two tags AND rather than OR")
+        void tagsNarrowByIntersection() throws Exception {
+            assertThat(keysOf(itemsAs(LEAD, ACME, ACME_BANKING, "&tag=smoke")))
+                    .containsExactlyInAnyOrder("TC-1", "TC-5", "TC-8");
+            // The rule, and it is the opposite of what a suite's tag rules do: a second chip
+            // narrows a grid (one case is being looked for) while a second rule widens a
+            // collection (one collection is being assembled). Under OR this answers three rows.
+            assertThat(keysOf(itemsAs(LEAD, ACME, ACME_BANKING, "&tag=smoke&tag=regression")))
+                    .containsExactly("TC-1");
+        }
+
+        @Test
+        @DisplayName("an unknown tag is an empty list, never an error")
+        void anUnknownTagMatchesNothing() throws Exception {
+            // There is no vocabulary to check a tag against — it is free text — so a typo and a tag
+            // nobody has used yet are the same request and must answer the same way.
+            assertThat(itemsAs(LEAD, ACME, ACME_BANKING, "&tag=nobody-uses-this")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("unfiled=true returns only the cases in no suite")
+        void unfiledNarrowsToTheUnfiled() throws Exception {
+            assertThat(keysOf(itemsAs(LEAD, ACME, ACME_BANKING, "&unfiled=true")))
+                    .containsExactly("TC-8");
+        }
+
+        @Test
+        @DisplayName("unfiled is IGNORED beside a suiteId rather than answering nothing")
+        void unfiledIsIgnoredBesideASuite() throws Exception {
+            // The pair is unsatisfiable — a case cannot be inside a subtree and outside every
+            // folder — and refusing it with a 400 would break the tree's own "clear the filter"
+            // affordance. It matters internally too: with the folder dropped AND unfiled cases
+            // excluded there would be no suite arm left, and an empty `IN ()` is a syntax error.
+            assertThat(keysOf(itemsAs(LEAD, ACME, ACME_BANKING, "&suiteId=" + REFUNDS + "&unfiled=true")))
+                    .as("the folder's subtree, exactly as though `unfiled` had not been sent — "
+                            + "and TC-8, which IS unfiled, is not in it")
+                    .containsExactlyInAnyOrder("TC-1", "TC-2", "TC-3", "TC-4", "TC-10");
+        }
+
+        @Test
+        @DisplayName("the filters compose — an unfiled case carrying a tag")
+        void unfiledAndTagCompose() throws Exception {
+            assertThat(keysOf(itemsAs(LEAD, ACME, ACME_BANKING, "&unfiled=true&tag=smoke")))
+                    .containsExactly("TC-8");
+            assertThat(itemsAs(LEAD, ACME, ACME_BANKING, "&unfiled=true&tag=regression"))
+                    .as("TC-8 carries smoke and not regression")
+                    .isEmpty();
+        }
 
         @Test
         @DisplayName("a case key short-circuits to an exact lookup, never a substring")
@@ -627,8 +701,11 @@ class CaseListEndpointTest extends IntegrationTestBase {
             JsonNode body = bodyAs(LEAD, ACME, ACME_BANKING, "");
 
             assertThat(facetCount(body, "lifecycleStatus", "APPROVED")).isEqualTo(2);
-            assertThat(facetCount(body, "lifecycleStatus", "DRAFT")).isEqualTo(2);
-            assertThat(facetCount(body, "priority", "MEDIUM")).isEqualTo(2);
+            // Three since §96: TC-2, TC-5 and the unfiled TC-8. A facet that disagreed with the
+            // grid beside it is this class's own defect statement — a chip promising 12 rows and
+            // delivering 9 — so the unfiled row must be in both or in neither.
+            assertThat(facetCount(body, "lifecycleStatus", "DRAFT")).isEqualTo(3);
+            assertThat(facetCount(body, "priority", "MEDIUM")).isEqualTo(3);
             assertThat(facetCount(body, "automationStatus", "AUTOMATED")).isEqualTo(1);
         }
 
@@ -1053,7 +1130,12 @@ class CaseListEndpointTest extends IntegrationTestBase {
     }
 
     private static List<String> suiteNamesOf(List<JsonNode> rows) {
-        return rows.stream().map(node -> node.get("suiteName").asText()).toList();
+        // asText() on a JSON null answers the STRING "null", which would make an unfiled case
+        // indistinguishable from a folder somebody named "null" — and, worse, would let the
+        // nullability assertion pass against a server that sent the four characters.
+        return rows.stream()
+                .map(node -> node.get("suiteName").isNull() ? null : node.get("suiteName").asText())
+                .toList();
     }
 
     private static List<String> keysIn(JsonNode array) {
@@ -1275,6 +1357,14 @@ class CaseListEndpointTest extends IntegrationTestBase {
             testCase(connection, caseId("tc7"), ACME_BANKING, RETIRED_SUITE, "TC-7", 7,
                     "Case in a retired folder", null, "HIGH", "APPROVED", "MANUAL",
                     "STRUCTURED", LEAD, LEAD, false);
+            // Filed in NO suite (§96) — legal since a suite became a resolvable collection. It is
+            // the row that separates "the grid lists every live case" from "the grid lists every
+            // case that happens to be in a folder": the suite predicate is `suite_id IN (…)`, which
+            // is never true of NULL, so without an arm for it this case is silently absent from the
+            // one screen somebody would look for it on.
+            testCase(connection, caseId("tc8"), ACME_BANKING, null, "TC-8", 8,
+                    "Unfiled draft", null, "MEDIUM", "DRAFT", "MANUAL",
+                    "STRUCTURED", LEAD, LEAD, false);
             testCase(connection, caseId("mob1"), ACME_MOBILE, mobileSuite(), "TC-20", 20,
                     "Mobile login", null, "HIGH", "APPROVED", "MANUAL", "STRUCTURED", LEAD,
                     LEAD, false);
@@ -1305,6 +1395,11 @@ class CaseListEndpointTest extends IntegrationTestBase {
 
             tag(connection, caseId("tc1"), "smoke");
             tag(connection, caseId("tc1"), "regression");
+            // A SECOND case carrying one of TC-1's two tags. Without it `?tag=smoke&tag=regression`
+            // answers the same rows under AND and under OR, and the filter's whole rule is
+            // unasserted. TC-8 is also the unfiled row, so the two §96 filters intersect on it.
+            tag(connection, caseId("tc5"), "smoke");
+            tag(connection, caseId("tc8"), "smoke");
         }
     }
 
@@ -1420,7 +1515,7 @@ class CaseListEndpointTest extends IntegrationTestBase {
             statement.setString(1, id.toString());
             statement.setString(2, companyId.toString());
             statement.setString(3, projectId.toString());
-            statement.setString(4, suiteId.toString());
+            statement.setString(4, suiteId == null ? null : suiteId.toString());
             statement.setString(5, key);
             statement.setLong(6, keySeq);
             statement.setString(7, title);

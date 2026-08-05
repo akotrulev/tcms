@@ -297,6 +297,14 @@ class CaseFacts {
      * @param suiteName the suite's own name, not its path. The panel renders it at the end of a row
      *                  as context for the title, and a six-level path there would be the widest
      *                  column on the screen carrying the least information.
+     *
+     *                  <p>All three suite members are <strong>null together</strong> for a case
+     *                  filed in no suite (§96). The join is a {@code LEFT JOIN} for that reason and
+     *                  it is not cosmetic: an inner join drops the case from this list while
+     *                  {@link #caseCountsByPlan} — which never joins the case's own suite — still
+     *                  counts it, so a plan naming an unfiled case directly would say "40 cases"
+     *                  over a list of 39. That is §32's two-numbers defect, arriving through the
+     *                  one query of the three that reads the case's own folder.
      */
     record ScopedCase(
             UUID id,
@@ -337,7 +345,7 @@ class CaseFacts {
                                     WHERE d.project_id = s.project_id
                                       AND d.deleted_at IS NULL
                                       AND d.path <@ s.path)) )
-                        JOIN suite cs ON cs.id = c.suite_id
+                        LEFT JOIN suite cs ON cs.id = c.suite_id
                         WHERE i.plan_id = :planId
                         ORDER BY c.key_seq
                         """)

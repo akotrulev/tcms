@@ -111,7 +111,17 @@ public class CaseSummaries {
                         // still reachable by a bookmarked link. Empty rather than a placeholder,
                         // because a name this endpoint could not resolve is not a name it should
                         // invent.
-                        suiteNames.getOrDefault(row.getSuiteId(), ""),
+                        //
+                        // NULL, though, for a case filed in no suite at all (§96) — a different
+                        // answer to a different question: "" is a folder this read could not name,
+                        // null is a case that has no folder, and the contract marks the id and the
+                        // name nullable together so the client can render its "unfiled" affordance
+                        // off the id. Without this branch a null id takes the getOrDefault path —
+                        // HashMap looks up a null key happily — and the case arrives unfiled with
+                        // a suite name of "", which is the one combination the contract forbids.
+                        row.getSuiteId() == null
+                                ? null
+                                : suiteNames.getOrDefault(row.getSuiteId(), ""),
                         row.getPriority(),
                         row.getLifecycleStatus(),
                         row.getAutomationStatus(),

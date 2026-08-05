@@ -67,9 +67,32 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   which would be the same defect one layer up.
   `SuiteRepository.countLiveCasesBySuite` gained `AND tc.suite_id IS NOT NULL`: the tree counts what
   is **filed**, and the other two arms are resolved separately rather than summed into that number.
-  Still true after this phase: **nothing can yet create an unfiled case through the API** —
-  `CaseEdit` still requires `suiteId` — so every consequence above is reachable only from a
-  fixture until the contract phase lands.
+  ~~Still true after this phase: nothing can yet create an unfiled case through the API~~ →
+  **phase 2 opened it.**
+- **THE CASE SIDE OF §96 (phase 2) — `suiteId` IS OPTIONAL AND `tags` ARE WRITABLE.**
+  `TestCaseInput.suiteId` is nullable (absent leaves the case where it is, **null unfiles it**);
+  `TestCaseSummary.suiteId`/`suiteName` are nullable **together**, as are `PlanCaseRef`'s and
+  `PlanStatistics.bySuite`'s three. `CaseUpdateRequest`'s refused list is down to **two** —
+  `ownerId` and `automationTags` — and `automationTags` staying is deliberate: `case_automation_tag`
+  is CI selection (§6c), a different table and a different job.
+  New: `CaseTags` (reconcile, `CaseClassifications`' shape **without** the vocabulary bound, because
+  a tag is free text and every tag a client omits is one it was shown), `CaseTagRepository.findForCase`,
+  `CaseEdit.normalizeTags`, `CaseQuery.tags`/`unfiled`, `CaseSpecifications.tags`,
+  `CaseScope.includeUnfiled`.
+  **TAGS ARE NOT ON `CaseEdit` AND NOT IN `CaseVersions#hash`** — the slice's recorded departure
+  from its plan line. `CaseEdit.Outcome.Valid` carries them **beside** the edit (null = "leave them
+  alone"). Labelling a case `sprint-42` must not write a version whose diff says nothing about the
+  test changing (§6j's empty-diff noise), and `CaseBulkService.AddTags` already said so by refusing
+  to stamp `updatedAt`. It also makes §95's bulk-hash trap structurally unavailable.
+  **TWO PLACES WHERE A NULLABLE `suite_id` SILENTLY DROPS ROWS, both fixed here and both found by a
+  test rather than by reading**: `CaseSpecifications.suiteScope` (`IN (…)` is never true of NULL, so
+  every unfiled case vanished from the grid) and `ProjectRepository.countLiveCasesByProject` (an
+  inner `JOIN suite`, so the picker said 6 over a list of 7 — the very defect that method was
+  written to fix, from the other side). `CaseFacts.casesInPlanScope` is a `LEFT JOIN` for the same
+  reason. **Grep for `JOIN suite` before adding one.**
+  Filters: `?tag=` repeats and **ANDs** (a grid narrows), which is deliberately the opposite of
+  `suite_tag_rule`'s union (a collection widens); `?unfiled=true` is **ignored** beside `suiteId`
+  rather than refused.
 - **THE CONDITION LIBRARY HAS WRITERS SINCE §95 phase 1, AND THE USAGE COUNT IS NOW TWO NUMBERS.**
   `ConditionService.create`/`update` + `POST`/`PUT /projects/{projectId}/conditions` +
   `ConditionEdit`/`ConditionWriteRequest`/`ConditionUsage` + `ConditionRepository.countCaseUsage`/

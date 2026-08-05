@@ -96,6 +96,7 @@ public class CaseCreateService {
     private final SharedStepService sharedSteps;
     private final CaseClassifications classifications;
     private final CaseConditions conditions;
+    private final CaseTags tags;
     private final ConditionService conditionLibrary;
     private final CaseRenderer renderer;
     private final CaseVersions versions;
@@ -112,6 +113,7 @@ public class CaseCreateService {
             SharedStepService sharedSteps,
             CaseClassifications classifications,
             CaseConditions conditions,
+            CaseTags tags,
             ConditionService conditionLibrary,
             CaseRenderer renderer,
             CaseVersions versions,
@@ -126,6 +128,7 @@ public class CaseCreateService {
         this.sharedSteps = sharedSteps;
         this.classifications = classifications;
         this.conditions = conditions;
+        this.tags = tags;
         this.conditionLibrary = conditionLibrary;
         this.renderer = renderer;
         this.versions = versions;
@@ -258,7 +261,8 @@ public class CaseCreateService {
         if (validated instanceof CaseEdit.Outcome.Invalid invalid) {
             return new Outcome.Invalid(invalid.errors());
         }
-        CaseEdit edit = ((CaseEdit.Outcome.Valid) validated).edit();
+        CaseEdit.Outcome.Valid accepted = (CaseEdit.Outcome.Valid) validated;
+        CaseEdit edit = accepted.edit();
 
         // AFTER validation, so a rejected payload does not burn a key. Numbers are not recycled — the
         // counter only moves forward — so a client fixing a blank title would otherwise leave a
@@ -283,6 +287,11 @@ public class CaseCreateService {
         classifications.reconcile(created, edit.classificationValueIds(), vocabulary, companyId);
         conditions.reconcile(
                 created, edit.preconditionIds(), edit.postconditionIds(), companyId);
+        // Beside the reconciles above and NOT inside `edit`: a tag is not authored content, so it
+        // is not in the version hash (CaseEdit.Outcome.Valid). Before the render, for the same
+        // reason as the other two — the response IS the version snapshot, and reconciling after it
+        // would report the tags the case did not have.
+        tags.reconcile(created, accepted.tags(), companyId);
 
         CaseVersions.Decision decision = versions.initial(edit);
         TestCaseDetailView view = renderer.render(created, liveSuites, vocabularies, companyId);

@@ -731,10 +731,10 @@ class CaseCreateEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("each of the four still-refused fields is refused by name, not silently dropped")
+        @DisplayName("each still-refused field is refused by name, not silently dropped")
         void theRefusedFieldsAreNamed() throws Exception {
-            // It was six. `classificationValueIds` left the list in §68 and
-            // `preconditions`/`postconditions` in §95 — each field leaving in turn is what
+            // It was six. `classificationValueIds` left the list in §68,
+            // `preconditions`/`postconditions` in §95 and `tags` in §96 — each field leaving in turn is what
             // CaseUpdateRequest's header says will happen, and the boundary is deleted in the one
             // place it was written. `classificationValueIds` stays HERE, but for a different
             // reason: it is accepted now and this random id is refused because the project does not
@@ -743,7 +743,6 @@ class CaseCreateEndpointTest extends IntegrationTestBase {
             Map<String, Object> values = new LinkedHashMap<>();
             values.put("ownerId", ENGINEER.toString());
             values.put("classificationValueIds", List.of(UUID.randomUUID().toString()));
-            values.put("tags", List.of("smoke"));
             values.put("automationTags", List.of("nightly"));
 
             for (Map.Entry<String, Object> field : values.entrySet()) {
@@ -758,7 +757,7 @@ class CaseCreateEndpointTest extends IntegrationTestBase {
             }
 
             assertThat(refused).containsOnlyKeys(
-                    "ownerId", "classificationValueIds", "tags", "automationTags");
+                    "ownerId", "classificationValueIds", "automationTags");
             assertThat(casesIn(ACME_BANKING)).isEmpty();
         }
 

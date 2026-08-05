@@ -87,15 +87,28 @@ public interface ProjectRepository extends JpaRepository<Project, UUID> {
      * contradicts what {@code SuiteRepository} already documents as the intent, and it would put a
      * case in the grid under a folder the tree refuses to show. If suite deletion later cascades
      * into its cases, this join becomes redundant rather than wrong.
+     *
+     * <h2>And an unfiled case is counted, which is why the join is now a LEFT one (§96)</h2>
+     *
+     * <p>{@code test_case.suite_id} is nullable since {@code V31}, so the inner join above dropped
+     * every case filed in no folder — and the grid lists those. <strong>The very same defect this
+     * method was written to fix, reintroduced from the other side</strong>: the picker would say
+     * "6 cases" over a list of 7, both plausible, neither identifiable as the wrong one. Caught by
+     * {@code CaseListEndpointTest.theTwoScreensAgree}, which exists because the first version of
+     * this was found by running the app.
+     *
+     * <p>The predicate is therefore "the case has no folder, or its folder is live" — not
+     * {@code s.deleted_at IS NULL}, which is false for a NULL row and would silently keep the inner
+     * join's behaviour behind a {@code LEFT} that looks correct.
      */
     @Query(nativeQuery = true, value = """
             SELECT tc.project_id AS projectId, COUNT(*) AS caseCount
               FROM test_case tc
-              JOIN suite s ON s.id = tc.suite_id
+              LEFT JOIN suite s ON s.id = tc.suite_id
              WHERE tc.company_id = :companyId
                AND tc.project_id IN (:projectIds)
                AND tc.deleted_at IS NULL
-               AND s.deleted_at IS NULL
+               AND (tc.suite_id IS NULL OR s.deleted_at IS NULL)
              GROUP BY tc.project_id
             """)
     List<ProjectCaseCount> countLiveCasesByProject(

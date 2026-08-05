@@ -15,7 +15,9 @@ import { db } from './store';
  */
 export function suiteCaseCount(suiteId: string): number {
   const descendants = descendantSuiteIds(suiteId);
-  return db.cases.filter((c) => descendants.has(c.suiteId)).length;
+  // `suiteId` is nullable on the wire — an unfiled case belongs to no folder, so it is in no
+  // subtree and can never keep one from being deleted.
+  return db.cases.filter((c) => c.suiteId !== null && descendants.has(c.suiteId)).length;
 }
 
 /**

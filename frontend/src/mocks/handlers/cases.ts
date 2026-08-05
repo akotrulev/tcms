@@ -197,7 +197,9 @@ function sortCases(rows: TestCaseSummary[], sort: string): TestCaseSummary[] {
         primary = a.lifecycleStatus.localeCompare(b.lifecycleStatus);
         break;
       case 'suiteName':
-        primary = a.suiteName.localeCompare(b.suiteName);
+        // Unfiled cases sort last, together — not first, which is where an empty string would put
+        // them and where they would look like rows whose suite failed to load.
+        primary = (a.suiteName ?? '\uffff').localeCompare(b.suiteName ?? '\uffff');
         break;
       default:
         // Order by keySeq, never the text key — TC-10000 sorts before TC-9999.
@@ -232,7 +234,18 @@ function filterCases(url: URL): TestCaseSummary[] {
   const suiteId = p.get('suiteId');
   if (suiteId) {
     const scope = descendantSuiteIds(suiteId);
-    rows = rows.filter((c) => scope.has(c.suiteId));
+    rows = rows.filter((c) => c.suiteId !== null && scope.has(c.suiteId));
+  } else if (p.get('unfiled') === 'true') {
+    // Only meaningful without a folder — a case cannot be both inside a subtree and outside every
+    // folder — and the server ignores the pair in exactly this direction rather than refusing it.
+    rows = rows.filter((c) => c.suiteId === null);
+  }
+
+  // AND across the repeated parameter, which is the opposite of what a suite's tag rules do: a
+  // second chip narrows a grid and widens a collection. Matched exactly, as the server matches it.
+  const tags = p.getAll('tag').filter((tag) => tag.trim() !== '');
+  if (tags.length > 0) {
+    rows = rows.filter((c) => tags.every((tag) => c.tags.includes(tag)));
   }
 
   const featureId = p.get('featureId');

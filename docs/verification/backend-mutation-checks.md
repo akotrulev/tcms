@@ -1726,3 +1726,24 @@ Built and unverified. Rows written per §65; **none of them run.**
 | **Must show** | Changing `suiteSection`'s `suite.path() == null ? NOT_FILED : suite.path()` back to `suite.path()` reddens `RunSummaryReportTest.theUnfiledBucket` — with an NPE from `List.of`, which is the honest outcome: a null cell in a report model whose every cell is a string. Filtering the row out instead would be the quiet version and reddens the same test. |
 | **Check** | the tree count excludes unfiled cases rather than grouping them under NULL |
 | **Must show** | Dropping `AND tc.suite_id IS NOT NULL` from `SuiteRepository.countLiveCasesBySuite` reddens **nothing today**, and that is the finding rather than a shortfall — the extra row is keyed `null` and every caller looks it up by a real suite id. It becomes reachable the moment the tree renders an "unfiled" node. **Write the test with that slice**, not before. |
+
+---
+
+## §96 phase 2 — the case side: tags, and a case that is filed nowhere
+
+Built and unverified. Rows written per §65; **none of them run.**
+
+| | |
+|---|---|
+| **Check** | the grid still lists a case with no folder |
+| **Must show** | Reverting `CaseSpecifications.suiteScope` to `suiteId.in(scope.liveSuiteIds())` reddens `CaseListEndpointTest.liveCasesOnly`, `anUnfiledCaseSaysSo`, `unfiledNarrowsToTheUnfiled` and `theTwoScreensAgree`. `IN (…)` is never true of NULL, so the old spelling drops every unfiled case from the one screen somebody would look for it on — silently, and with a total that still counts it. |
+| **Check** | the picker's count and the grid's total are one number |
+| **Must show** | Restoring `JOIN suite` (or spelling the predicate `s.deleted_at IS NULL` without the `tc.suite_id IS NULL` arm) in `ProjectRepository.countLiveCasesByProject` reddens `theTwoScreensAgree` **only** — which is the point: it is the one test comparing the two queries, and the defect it caught (picker 6, list 7) is the same one that method was originally written to fix, arriving from the other side. |
+| **Check** | tags are not authored content |
+| **Must show** | Moving `tags` onto `CaseEdit` (and therefore into `CaseVersions#hash`) reddens `CaseUpdateEndpointTest.tagsAreNotVersioned`. This is the slice's recorded departure from its own plan line, so the assertion is the record of the decision rather than a check on an accident. |
+| **Check** | absent tags are not "clear the tags" |
+| **Must show** | Changing `CaseTags.reconcile`'s `submitted == null` early return to treat null as an empty list reddens `absentAndEmptyAreDifferentInstructions`. **And it must NOT redden any bulk test** — the bulk path reconstructs a request with `tags = null`, and if no bulk assertion moves, nothing is proving that a `MOVE_TO_SUITE` leaves a case's tags alone. If the bulk suite stays green, that gap is the finding: write it. |
+| **Check** | the tag filter ANDs |
+| **Must show** | Changing `CaseSpecifications.tags` from `cb.and` to `cb.or` reddens `tagsNarrowByIntersection`'s second assertion. The fixture tags a second and a third case with `smoke` precisely so the two readings answer differently; with tags on one case only, both spellings pass. |
+| **Check** | a sibling project's suite is still refused |
+| **Must show** | Deleting the `!liveSuiteIds.contains(...)` arm in `CaseEdit.validate` — now that the null arm is gone, the whole check looks optional — reddens `Unfiled.aSiblingProjectsSuiteIsStillRefused`. That id satisfies the foreign key, the company column and RLS, so nothing else would refuse it. |

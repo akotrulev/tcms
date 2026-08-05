@@ -114,18 +114,33 @@ public class CaseService {
                 configuration.findClassification(userId, projectId).orElse(List.of());
 
         Collection<UUID> suiteIds = suiteScope(request, liveSuites);
-        if (suiteIds.isEmpty()) {
-            // Three ways to get here and all mean "no case can match": a project with no suites
-            // (the state of every freshly provisioned one), a suiteId naming a folder that is
-            // deleted or belongs elsewhere, and a subtree that is entirely deleted. An empty page
-            // answers all three — and the guard is not optional, because an empty collection bound
-            // into SQL `IN ()` is a syntax error rather than an empty result.
+        // Unfiled cases are in scope unless the request named a folder — a case cannot be both
+        // inside a subtree and outside every folder — and `unfiled=true` asks for them alone.
+        // Before §96 the suite scope WAS the bound, so an empty one meant "no case can match";
+        // now it means that only when unfiled cases are excluded too.
+        boolean includeUnfiled = request.suiteId() == null;
+        // `unfiled` is IGNORED when a folder is named, per the contract, rather than refused with a
+        // 400: the pair is unsatisfiable, and refusing it would break the tree's own "clear the
+        // filter" affordance. It matters here for a second reason — with the folder's subtree
+        // dropped AND unfiled cases excluded there would be no suite arm at all, and an empty
+        // `IN ()` is a syntax error.
+        boolean unfiledOnly = request.unfiled() && includeUnfiled;
+        if (suiteIds.isEmpty() && !includeUnfiled) {
+            // A suiteId naming a folder that is deleted or belongs elsewhere, or a subtree that is
+            // entirely deleted. Both mean "no case can match", identically — and the guard is not
+            // optional, because an empty collection bound into SQL `IN ()` is a syntax error rather
+            // than an empty result. A project with no suites at all used to land here and no longer
+            // does: since §96 it can hold cases, all of them unfiled, and answering an empty page
+            // would hide every case in a freshly provisioned project.
             return empty(request);
         }
 
         CaseScope scope = new CaseScope(
                 projectId,
-                suiteIds,
+                // Only the unfiled ones when the caller asked for those: the filter is a narrowing,
+                // so it drops the suite arm rather than adding to it.
+                unfiledOnly ? List.of() : suiteIds,
+                includeUnfiled,
                 subtreeOf(request.featureId(), DimensionKeys.FEATURE, vocabularies),
                 subtreeOf(request.testTypeId(), DimensionKeys.TEST_TYPE, vocabularies),
                 subtreeOf(request.testLevelId(), DimensionKeys.TEST_LEVEL, vocabularies));

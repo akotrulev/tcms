@@ -76,7 +76,9 @@ final class CaseSpecifications {
         // pin the version they ran, which is why the row survives at all.
         all.add(cb.isNull(root.get("deletedAt")));
 
-        all.add(suiteScope(scope.liveSuiteIds(), root));
+        all.add(suiteScope(scope, root, cb));
+
+        tags(request, root, query, cb).ifPresent(all::add);
 
         keyOrText(request, root, cb).ifPresent(all::add);
 
@@ -113,9 +115,70 @@ final class CaseSpecifications {
      * rather than through {@code ltree}'s {@code <@} operator, because the tree is folders — tens of
      * rows — and it is already being fetched for the suite names. A native {@code <@} query would
      * be one more query and would lose the Hibernate filter on the way.
+     *
+     * <h2>And a case may now be in no suite at all</h2>
+     *
+     * <p>{@code test_case.suite_id} is nullable since {@code V31}, and {@code IN (…)} is never true
+     * of NULL — so the spelling this method had until §96 made <strong>every unfiled case invisible
+     * to the grid</strong>, in the one place somebody would go looking for a case that belongs
+     * nowhere. {@link CaseScope#includeUnfiled()} is the arm that admits them, and it is off exactly
+     * when the request named a folder, because a case cannot be both inside a subtree and outside
+     * every folder.
+     *
+     * <p>When the scope is empty <em>and</em> unfiled cases are included, the {@code IN} is dropped
+     * rather than bound to nothing: an empty {@code IN ()} is a syntax error, and a project with no
+     * suites at all — the state of every freshly provisioned one — can now hold cases.
      */
-    private static Predicate suiteScope(Collection<UUID> liveSuiteIds, Root<TestCase> root) {
-        return root.get("suiteId").in(liveSuiteIds);
+    private static Predicate suiteScope(CaseScope scope, Root<TestCase> root, CriteriaBuilder cb) {
+        Path<UUID> suiteId = root.get("suiteId");
+        if (!scope.includeUnfiled()) {
+            return suiteId.in(scope.liveSuiteIds());
+        }
+        if (scope.liveSuiteIds().isEmpty()) {
+            return cb.isNull(suiteId);
+        }
+        return cb.or(suiteId.in(scope.liveSuiteIds()), cb.isNull(suiteId));
+    }
+
+    /**
+     * {@code tag} — cases carrying <strong>every</strong> tag named, one {@code EXISTS} per tag.
+     *
+     * <p>AND rather than OR, and deliberately the opposite of what a suite's tag rules do: a suite
+     * claims everything tagged {@code smoke} <em>or</em> {@code payments} (it is a collection being
+     * assembled), while a person adding a second chip to a grid is narrowing (they are looking for
+     * one case). An OR here would widen the list they are trying to shorten, which reads as the
+     * filter being broken rather than as a policy.
+     *
+     * <p>One correlated subquery per tag rather than {@code GROUP BY … HAVING COUNT(*) = n}: the
+     * subquery form composes with every other predicate here without changing the shape of the
+     * outer query, and the count form silently degrades to OR the moment the outer query grows a
+     * join that duplicates rows.
+     *
+     * <p>Matched exactly — same case, same spelling, the way {@code suite_tag_rule} resolves. A
+     * case-insensitive match here and an exact one there would put a case in the suite and leave it
+     * out of the filter that named the suite's own tag.
+     */
+    private static Optional<Predicate> tags(
+            CaseQuery request,
+            Root<TestCase> root,
+            AbstractQuery<?> query,
+            CriteriaBuilder cb) {
+
+        if (request.tags().isEmpty()) {
+            return Optional.empty();
+        }
+
+        List<Predicate> each = new ArrayList<>();
+        for (String tag : request.tags()) {
+            Subquery<UUID> carried = query.subquery(UUID.class);
+            Root<CaseTag> row = carried.from(CaseTag.class);
+            carried.select(row.get("caseId"))
+                    .where(cb.and(
+                            cb.equal(row.get("caseId"), root.get("id")),
+                            cb.equal(row.get("tag"), tag)));
+            each.add(cb.exists(carried));
+        }
+        return Optional.of(cb.and(each.toArray(Predicate[]::new)));
     }
 
     /**

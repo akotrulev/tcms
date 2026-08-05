@@ -28,6 +28,17 @@ import java.util.regex.Pattern;
  *                        opinion", never "match nothing" — an unset filter and an
  *                        explicitly-empty one arrive identically over HTTP, so they cannot be
  *                        told apart and the useful reading wins
+ * @param tags            every tag a case must carry — AND within the list, and deliberately the
+ *                        opposite of {@code suite_tag_rule}, which unions. A suite claims
+ *                        everything tagged {@code smoke} OR {@code payments}; a person narrowing a
+ *                        grid by two tags wants the intersection, and an OR would widen the list
+ *                        they are trying to shorten. Empty means "no opinion", on
+ *                        {@code lifecycleStatus}' terms
+ * @param unfiled         only cases filed in no suite — the grid's one way of reaching a case that
+ *                        appears under no node of the tree. Ignored when {@link #suiteId} is set:
+ *                        a case cannot be both inside a folder's subtree and outside every folder,
+ *                        and a 400 for the pair would break the tree's own "clear the filter"
+ *                        affordance for no gain
  * @param releaseVersion  cases executed in a release. <strong>Matches nothing today</strong> — see
  *                        {@link CaseSpecifications} for why that is the honest answer rather than
  *                        an ignored parameter
@@ -46,6 +57,8 @@ public record CaseQuery(
         List<AutomationStatus> automationStatus,
         List<Priority> priority,
         List<HealthSignal> healthSignal,
+        List<String> tags,
+        boolean unfiled,
         String releaseVersion,
         int page,
         int size,
@@ -74,6 +87,7 @@ public record CaseQuery(
         return new CaseQuery(
                 null, null, null, null, null, null,
                 List.of(), List.of(), List.of(), List.of(),
+                List.of(), false,
                 null, 0, DEFAULT_SIZE, null);
     }
 
@@ -94,6 +108,15 @@ public record CaseQuery(
         automationStatus = List.copyOf(automationStatus == null ? List.of() : automationStatus);
         priority = List.copyOf(priority == null ? List.of() : priority);
         healthSignal = List.copyOf(healthSignal == null ? List.of() : healthSignal);
+        // Trimmed and de-duplicated here rather than at the predicate, so `?tag=smoke&tag=smoke`
+        // is one condition instead of two identical EXISTS clauses. Blanks dropped: `?tag=` is a
+        // client clearing the filter, not a request for cases carrying an empty tag, and there
+        // are none of those — CaseEdit drops a blank before it is ever stored.
+        tags = tags == null ? List.of() : tags.stream()
+                .map(CaseQuery::blankToNull)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
         page = Math.max(0, page);
         size = Math.clamp(size <= 0 ? DEFAULT_SIZE : size, 1, MAX_SIZE);
     }

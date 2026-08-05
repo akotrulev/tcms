@@ -494,6 +494,12 @@ public class PlanStatisticsService {
         Map<UUID, List<Contribution>> suiteContributions = new HashMap<>();
         Map<UUID, Long> suiteUnexecuted = new HashMap<>();
 
+        // A null suiteId is a group like any other since §96 — the in-scope cases filed in no
+        // suite — and it is deliberately not filtered out. Dropping it would make this breakdown
+        // stop summing to the headline counts beside it, in the direction nobody checks, and the
+        // reader comparing the two would find the difference and never the reason. The maps below
+        // are HashMap/LinkedHashMap precisely because both accept the null key; the contract marks
+        // the row's three suite fields nullable together for it.
         for (ScopedCase scoped : scope) {
             suites.putIfAbsent(scoped.suiteId(), scoped);
             suiteContributions

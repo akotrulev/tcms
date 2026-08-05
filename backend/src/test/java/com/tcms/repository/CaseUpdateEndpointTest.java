@@ -1000,7 +1000,7 @@ class CaseUpdateEndpointTest extends IntegrationTestBase {
     }
 
     // =====================================================================
-    // The six refused fields
+    // The refused fields — six, then five, and two since §96
     // =====================================================================
 
     @Nested
@@ -1008,17 +1008,22 @@ class CaseUpdateEndpointTest extends IntegrationTestBase {
     class RefusedFields {
 
         @Test
-        @DisplayName("each of the five answers 400 keyed on its own name")
+        @DisplayName("each of the refused fields answers 400 keyed on its own name")
         void eachUnsupportedFieldIsRefused() throws Exception {
             // Accepting and ignoring them is a save that reports success and discards what the user
             // typed — the user then discovers it only by reloading, and retypes it.
             //
-            // classificationValueIds LEFT this list: it has a write path now, and its own nested
-            // class below. That is what the removal of a boundary looks like from a test — a field
-            // that moved from "refused" to "specified", not a line quietly deleted.
+            // classificationValueIds LEFT this list in §68, and `tags` in §96: each has a write
+            // path now, and its own nested class below. That is what the removal of a boundary
+            // looks like from a test — a field that moved from "refused" to "specified", not a
+            // line quietly deleted.
+            //
+            // automationTags STAYS, and its staying is the point: it is a different table
+            // (case_automation_tag) and a different job — CI selection tags (§6c) — so accepting
+            // `tags` is not a reason to accept it, and a test that dropped both at once would not
+            // have noticed the difference.
             Map<String, Object> values = new LinkedHashMap<>();
             values.put("ownerId", ENGINEER.toString());
-            values.put("tags", List.of("regression"));
             values.put("automationTags", List.of("@smoke"));
             values.put("preconditions", List.of(Map.of("conditionId", UUID.randomUUID().toString())));
             values.put("postconditions", List.of(Map.of("inlineBody", List.of("Clean up"))));
@@ -1044,6 +1049,130 @@ class CaseUpdateEndpointTest extends IntegrationTestBase {
             assertThat(patch(LEAD, ACME, ACME_BANKING, caseId("full"), edit("Renamed"), null)
                     .getResponse().getStatus())
                     .isEqualTo(200);
+        }
+    }
+
+
+    // =====================================================================
+    // Tags and the unfiled case — §96
+    // =====================================================================
+
+    @Nested
+    @DisplayName("Tags — a set, reconciled, and deliberately NOT authored content")
+    class Tags {
+
+        @Test
+        @DisplayName("tags are stored, trimmed and de-duplicated")
+        void tagsAreStored() throws Exception {
+            Map<String, Object> payload = edit("Renamed");
+            payload.put("tags", List.of("regression", "  smoke  ", "regression", "   "));
+
+            MvcResult result = patch(LEAD, ACME, ACME_BANKING, caseId("full"), payload, null);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(200);
+            // The blank is dropped rather than refused (the editor's chip input can hold one
+            // mid-typing) and the duplicate is collapsed rather than refused, because
+            // case_tag's (case_id, tag) key says a tag list is a set.
+            assertThat(storedTags(caseId("full"))).containsExactlyInAnyOrder("regression", "smoke");
+        }
+
+        @Test
+        @DisplayName("an empty list clears them; an ABSENT field leaves them alone")
+        void absentAndEmptyAreDifferentInstructions() throws Exception {
+            Map<String, Object> tagged = edit("Renamed");
+            tagged.put("tags", List.of("regression"));
+            patch(LEAD, ACME, ACME_BANKING, caseId("full"), tagged, null);
+
+            // Absent — the shape every bulk action reconstructs, and every save the editor made
+            // before this slice. Reading it as "clear them" would have every MOVE_TO_SUITE quietly
+            // strip a case out of every tag-resolved suite it was in.
+            patch(LEAD, ACME, ACME_BANKING, caseId("full"), edit("Renamed again"), null);
+            assertThat(storedTags(caseId("full")))
+                    .as("a save that never mentions tags must not remove them")
+                    .containsExactly("regression");
+
+            Map<String, Object> cleared = edit("Renamed once more");
+            cleared.put("tags", List.of());
+            patch(LEAD, ACME, ACME_BANKING, caseId("full"), cleared, null);
+            assertThat(storedTags(caseId("full"))).isEmpty();
+        }
+
+        @Test
+        @DisplayName("retagging a case writes NO version — a tag is not authored content")
+        void tagsAreNotVersioned() throws Exception {
+            // The slice's one deliberate departure from its plan line, asserted rather than
+            // described. Tags are not on CaseEdit and therefore not in CaseVersions#hash: labelling
+            // a case `sprint-42` must not write a version of the case whose diff says nothing about
+            // the test having changed, which is the empty-diff noise §6j added the hash to keep out.
+            // CaseBulkService already said so in the only way that was observable before now — its
+            // AddTags deliberately does not stamp updatedAt.
+            Map<String, Object> first = edit("Renamed");
+            patch(LEAD, ACME, ACME_BANKING, caseId("full"), first, null);
+            int versionsAfterEdit = versionsOf(caseId("full")).size();
+
+            Map<String, Object> retagged = edit("Renamed");
+            retagged.put("tags", List.of("sprint-42"));
+            MvcResult result = patch(LEAD, ACME, ACME_BANKING, caseId("full"), retagged, null);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(200);
+            assertThat(storedTags(caseId("full"))).containsExactly("sprint-42");
+            assertThat(versionsOf(caseId("full")))
+                    .as("the tag changed and the authored content did not")
+                    .hasSize(versionsAfterEdit);
+        }
+
+        @Test
+        @DisplayName("a tag longer than the cap is a field error, never a silent truncation")
+        void anOverlongTagIsRefused() throws Exception {
+            // Truncating would be worse than refusing: a shortened tag stops matching the suite tag
+            // rule the author wrote it for, and the case vanishes from a collection nobody can see
+            // it should be in.
+            Map<String, Object> payload = edit("Renamed");
+            payload.put("tags", List.of("x".repeat(61)));
+
+            MvcResult result = patch(LEAD, ACME, ACME_BANKING, caseId("full"), payload, null);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(result)).containsKey("tags");
+            assertThat(storedTags(caseId("full"))).isEmpty();
+        }
+    }
+
+    @Nested
+    @DisplayName("The unfiled case — suiteId is optional since a suite became a collection")
+    class Unfiled {
+
+        @Test
+        @DisplayName("a null suiteId unfiles the case, and the response says so with two nulls")
+        void aCaseCanBeUnfiled() throws Exception {
+            Map<String, Object> payload = edit("Renamed");
+            payload.put("suiteId", null);
+
+            MvcResult result = patch(LEAD, ACME, ACME_BANKING, caseId("full"), payload, null);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(200);
+            assertThat(storedSuiteId(caseId("full"))).isNull();
+            // Both, not just the id: the contract marks them nullable TOGETHER, and a null id
+            // beside a suiteName of "" is the one combination the server must never produce —
+            // CaseSummaries reaches it by default, since a HashMap looks up a null key happily.
+            assertThat(body(result).path("suiteId").isNull()).isTrue();
+            assertThat(body(result).path("suiteName").isNull()).isTrue();
+        }
+
+        @Test
+        @DisplayName("a suite from a SIBLING PROJECT is still refused")
+        void aSiblingProjectsSuiteIsStillRefused() throws Exception {
+            // The check that was always the point of the field, and the one the optional null must
+            // not take with it: that id satisfies the foreign key, the company column and RLS, so
+            // nothing below the validator would refuse it and the case would leave both trees.
+            Map<String, Object> payload = edit("Renamed");
+            payload.put("suiteId", MOBILE_SUITE.toString());
+
+            MvcResult result = patch(LEAD, ACME, ACME_BANKING, caseId("full"), payload, null);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(result)).containsKey("suiteId");
+            assertThat(storedSuiteId(caseId("full"))).isEqualTo(REFUNDS);
         }
     }
 
@@ -1839,6 +1968,34 @@ class CaseUpdateEndpointTest extends IntegrationTestBase {
     }
 
     /** The values a case carries in the database, whatever the API chooses to serve. */
+    private List<String> storedTags(UUID caseId) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+                var statement = connection.prepareStatement(
+                        "SELECT tag FROM case_tag WHERE case_id = CAST(? AS uuid) ORDER BY tag")) {
+            statement.setString(1, caseId.toString());
+            List<String> found = new ArrayList<>();
+            try (ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) {
+                    found.add(rows.getString(1));
+                }
+            }
+            return found;
+        }
+    }
+
+    private UUID storedSuiteId(UUID caseId) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+                var statement = connection.prepareStatement(
+                        "SELECT suite_id FROM test_case WHERE id = CAST(? AS uuid)")) {
+            statement.setString(1, caseId.toString());
+            try (ResultSet rows = statement.executeQuery()) {
+                assertThat(rows.next()).as("no case %s", caseId).isTrue();
+                String value = rows.getString(1);
+                return value == null ? null : UUID.fromString(value);
+            }
+        }
+    }
+
     private List<UUID> storedClassification(UUID caseId) throws SQLException {
         try (Connection connection = appConnection(ACME);
                 var statement = connection.prepareStatement(

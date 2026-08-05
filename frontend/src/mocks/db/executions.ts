@@ -149,7 +149,11 @@ export function planScopeCaseIds(planId: string): string[] {
   );
 
   return db.cases
-    .filter((row) => covered.has(row.suiteId) && row.lifecycleStatus !== 'DEPRECATED')
+    // An unfiled case is in no suite's subtree, so a suite-scoped plan never covers it. It
+    // reaches a run by being named directly, which is the case_id arm of plan scope.
+    .filter(
+      (row) => row.suiteId !== null && covered.has(row.suiteId) && row.lifecycleStatus !== 'DEPRECATED',
+    )
     .map((row) => row.id);
 }
 

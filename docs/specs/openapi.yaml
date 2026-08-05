@@ -1095,6 +1095,32 @@ paths:
           in: query
           description: Includes descendant suites by default.
           schema: { type: string, format: uuid }
+        - name: tag
+          in: query
+          description: |
+            Cases carrying **every** tag listed — repeat the parameter to narrow. AND, not OR, and
+            deliberately the opposite of `suite_tag_rule`, which unions: a suite claims everything
+            tagged `smoke` *or* `payments`, while a person filtering a grid by two tags is looking
+            for the intersection and an OR would widen the list they are trying to shorten.
+
+            Tags are free text and matched exactly. An unknown tag is `200 []`, never a 400 —
+            there is no vocabulary to check it against, and a typo that refuses the request would
+            be indistinguishable from a tag nobody has used yet.
+          schema:
+            type: array
+            items: { type: string }
+        - name: unfiled
+          in: query
+          description: |
+            `true` returns **only cases filed in no suite** (`suite_id IS NULL`, possible since the
+            suite became a resolvable collection). The grid needs it because an unfiled case appears
+            under no node of the tree, so without this filter the only way to find one is to page
+            through every case in the project.
+
+            Ignored when `suiteId` is present — a case cannot be both in a folder's subtree and in
+            no folder, and refusing the pair with a 400 would break the tree's own "clear the
+            filter" affordance for no gain.
+          schema: { type: boolean }
         - name: featureId
           in: query
           description: Includes descendant features by default (plan §6q).
@@ -4456,8 +4482,13 @@ components:
         key: { type: string, example: TC-1 }
         keySeq: { type: integer, description: Sort by this — text keys do not order correctly. }
         title: { type: string }
-        suiteId: { type: string, format: uuid }
-        suiteName: { type: string }
+        # Both nullable since a suite became a resolvable collection: a case may be filed in no
+        # folder at all. Still REQUIRED — an explicit null is what tells the grid to render the
+        # "unfiled" affordance, where an absent key would read as a field the server forgot. They
+        # are null together or set together; a case with a suite id and no name is not a state the
+        # server can produce.
+        suiteId: { type: string, format: uuid, nullable: true }
+        suiteName: { type: string, nullable: true }
         priority: { $ref: '#/components/schemas/Priority' }
         lifecycleStatus: { $ref: '#/components/schemas/LifecycleStatus' }
         automationStatus: { $ref: '#/components/schemas/AutomationStatus' }
@@ -4612,10 +4643,27 @@ components:
 
     TestCaseInput:
       type: object
-      required: [title, suiteId]
+      required: [title]
       properties:
         title: { type: string }
-        suiteId: { type: string, format: uuid }
+        suiteId:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            The folder to **file** this case in, or null for an unfiled case. No longer required:
+            a suite is a resolvable collection — its members are the cases filed in it, the cases
+            added to it individually, and every case carrying any of its tags — so filing is one
+            way of belonging rather than a precondition for existing. A case may be written before
+            anybody has decided where it goes.
+
+            Must name a **live suite of this project**. A sibling project's suite is refused with a
+            field error: it belongs to the same company, so it satisfies the foreign key and the
+            company check, and every later read would resolve it through a project the reader was
+            never granted.
+
+            **Absent and null mean different things on `PATCH`**, as everywhere else on this shape:
+            omitting the key leaves the case where it is, sending null unfiles it.
         description: { type: string, nullable: true }
         objective: { type: string, nullable: true }
         expectedOutcome: { type: string, nullable: true }
@@ -4663,6 +4711,21 @@ components:
         tags:
           type: array
           items: { type: string }
+          description: |
+            The case's tags, as a **complete set** — every tag it should carry after this save.
+            Omitting the field leaves them alone; sending `[]` clears them. The same absent-versus-
+            empty rule as `classificationValueIds`, and it matters more here: a bulk action
+            reconstructs a request without mentioning tags, so reading absent as "clear" would have
+            every move quietly strip a case out of every tag-resolved suite it was in.
+
+            Free text, trimmed, deduplicated, and **matched exactly** where a suite's tag rules are
+            resolved — same spelling, same case. Duplicates after trimming are collapsed rather than
+            refused; `case_tag`'s primary key says a tag list is a set.
+
+            **Not `automationTags`**, which are the selection tags a CI runner filters on (plan
+            §6c). These are the organisational labels the grid shows and the ones a suite's tag
+            rules resolve against; merging the two would make "run the smoke suite" and "cases the
+            release manager flagged" the same query.
         steps:
           type: array
           items: { $ref: '#/components/schemas/TestStepInput' }
@@ -5718,10 +5781,14 @@ components:
           items:
             type: object
             required: [suiteId, suiteKey, suiteName, counts]
+            # All three are nullable together: one row groups the in-scope cases filed in NO
+            # suite. Omitting that row instead would make this breakdown stop summing to the
+            # headline counts above it — two numbers on one screen with nothing to identify the
+            # wrong one, which is the defect this file already records on the suite tree.
             properties:
-              suiteId: { type: string, format: uuid }
-              suiteKey: { type: string }
-              suiteName: { type: string }
+              suiteId: { type: string, format: uuid, nullable: true }
+              suiteKey: { type: string, nullable: true }
+              suiteName: { type: string, nullable: true }
               counts: { $ref: '#/components/schemas/ResultCounts' }
         blockers:
           type: array
@@ -5764,8 +5831,10 @@ components:
           type: integer
           description: Sort by this — text keys do not order correctly (TC-10000 < TC-9999).
         title: { type: string }
-        suiteId: { type: string, format: uuid }
-        suiteName: { type: string }
+        # Nullable together — an in-scope case filed in no suite. Required still, because the
+        # panel renders a "not filed" label rather than a blank column.
+        suiteId: { type: string, format: uuid, nullable: true }
+        suiteName: { type: string, nullable: true }
 
     ReportDefinition:
       type: object

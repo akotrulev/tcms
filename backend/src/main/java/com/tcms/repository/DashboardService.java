@@ -120,18 +120,16 @@ public class DashboardService {
         Instant now = clock.instant();
         List<Suite> liveSuites = suites.findLiveForProject(projectId);
 
-        if (liveSuites.isEmpty()) {
-            // A freshly provisioned project, and the state every project passes through. Not an
-            // error and not a 404: the page must render, say zero everywhere, and let the user get
-            // on with creating a suite. The guard is also not optional — an empty collection bound
-            // into SQL `IN ()` is a syntax error, the same trap CaseService.page names.
-            return empty(now);
-        }
-
         CaseQuery unfiltered = CaseQuery.unfiltered();
         CaseScope scope = new CaseScope(
                 projectId,
                 liveSuites.stream().map(Suite::getId).toList(),
+                // Unfiled cases count on the dashboard, and NOT counting them is why the empty-tree
+                // guard that used to stand here is gone (§96). A project with no suites can hold
+                // cases now — all of them unfiled — so returning zeros for one would be a dashboard
+                // that says a project is empty while its grid lists forty cases. CaseScope tolerates
+                // an empty suite set exactly when this flag is on, which is the same condition.
+                true,
                 null,
                 null,
                 null);
@@ -149,27 +147,6 @@ public class DashboardService {
                 automation(search.tally(
                         unfiltered, scope, "automationStatus", AutomationStatus.class)),
                 activity(unfiltered, scope, now));
-    }
-
-    /**
-     * The response for a project with no suites, and therefore no cases.
-     *
-     * <p>Every collection is present and empty rather than omitted, and the activity series still
-     * carries its thirty days. The SPA draws an axis from the first and last point, so an empty array
-     * there is a chart with no axis rather than a flat line — a different shape for the empty case,
-     * which is the shape a consumer is least likely to have exercised. Same argument as
-     * {@code CaseService.empty}'s facets.
-     */
-    private DashboardView empty(Instant now) {
-        return new DashboardView(
-                now,
-                lifecycle(Map.of()),
-                List.of(),
-                null,
-                List.of(),
-                List.of(),
-                automation(Map.of()),
-                quietDays(now));
     }
 
     // =====================================================================

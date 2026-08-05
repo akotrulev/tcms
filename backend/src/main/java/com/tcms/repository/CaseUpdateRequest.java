@@ -22,15 +22,16 @@ import java.util.UUID;
  * client. A caller wanting true partial-update semantics needs {@code JsonNullable} or a presence
  * map, which is a shape change on the contract and not something to infer from one field's absence.
  *
- * <h2>The three fields this endpoint refuses — it was six</h2>
+ * <h2>The two fields this endpoint refuses — it was six</h2>
  *
- * <p>{@code ownerId}, {@code tags} and {@code automationTags} are on the contract's
- * {@code TestCaseInput} and are <strong>rejected with a 400 when present</strong> rather than
- * ignored. Each needs a write path no slice has built yet — a membership check for the owner, a
- * {@code case_tag} reconcile for the other two (§96).
+ * <p>{@code ownerId} and {@code automationTags} are on the contract's {@code TestCaseInput} and are
+ * <strong>rejected with a 400 when present</strong> rather than ignored. Each needs a write path no
+ * slice has built yet — a membership check for the owner, and a {@code case_automation_tag}
+ * reconcile for the selection tags, which are a different table and a different job from the
+ * organisational {@code tags} (plan §6c).
  *
- * <p><strong>{@code classificationValueIds} left this list in §68, and
- * {@code preconditions}/{@code postconditions} left it in §95</strong> — which is what the
+ * <p><strong>{@code classificationValueIds} left this list in §68,
+ * {@code preconditions}/{@code postconditions} in §95, and {@code tags} in §96</strong> — which is what the
  * paragraph below always said would happen to each of them in turn: the field is accepted,
  * validated, and persisted, and the boundary is deleted in the one place it was written. The
  * conditions are validated against {@link CaseEdit#validate}'s {@code acceptableConditionIds} — the
@@ -73,11 +74,19 @@ public record CaseUpdateRequest(
         // no interest in them.
         List<UUID> classificationValueIds,
 
-        // --- the refused five. Declared so they can be REJECTED rather than silently swallowed by
+        // Absent (null) means "leave the tags alone"; an empty list means "clear them". The same
+        // split classificationValueIds uses and it matters more here, because the bulk actions
+        // reconstruct a request without mentioning tags: reading absent as "clear" would have every
+        // MOVE_TO_SUITE quietly strip a case out of every tag-resolved suite it was in.
+        //
+        // NOT on CaseEdit, and therefore NOT in CaseVersions#hash — the one field this endpoint
+        // accepts that is deliberately not authored content. See CaseEdit.Outcome.Valid.
+        List<String> tags,
+
+        // --- the refused two. Declared so they can be REJECTED rather than silently swallowed by
         // Jackson's unknown-property handling, which would make them indistinguishable from a
         // typo and let the caller believe they were applied.
         UUID ownerId,
-        List<String> tags,
         List<String> automationTags,
         // Absent (null) means "leave the conditions alone"; an empty list means "detach them all".
         // The same split `classificationValueIds` above uses, and for the same reason: they are

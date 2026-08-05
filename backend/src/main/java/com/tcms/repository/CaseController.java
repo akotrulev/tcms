@@ -114,6 +114,8 @@ public class CaseController {
             @RequestParam(required = false) List<AutomationStatus> automationStatus,
             @RequestParam(required = false) List<Priority> priority,
             @RequestParam(required = false) List<HealthSignal> healthSignal,
+            @RequestParam(name = "tag", required = false) List<String> tags,
+            @RequestParam(required = false, defaultValue = "false") boolean unfiled,
             @RequestParam(required = false) String releaseVersion,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "" + CaseQuery.DEFAULT_SIZE) int size,
@@ -122,6 +124,10 @@ public class CaseController {
         CaseQuery request = new CaseQuery(
                 q, suiteId, featureId, testTypeId, testLevelId, ownerId,
                 lifecycleStatus, automationStatus, priority, healthSignal,
+                // `tag` on the wire, `tags` here: the parameter is repeated per value
+                // (`?tag=smoke&tag=slow`), which reads as one tag per occurrence at the call site
+                // and as a list at this one.
+                tags, unfiled,
                 releaseVersion, page, size, sort);
 
         return search.search(UUID.fromString(jwt.getSubject()), projectId, request)

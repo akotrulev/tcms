@@ -489,10 +489,17 @@ function StatisticsBody({
               <Panel title="By suite" testId="PlanStats.BySuite">
                 <BreakdownTable
                   rows={(data.bySuite ?? []).map((row) => ({
-                    id: row.suiteId,
-                    label: row.suiteName,
-                    identifier: row.suiteKey,
-                    href: `/projects/${projectId}/cases?suiteId=${row.suiteId}`,
+                    // All three suite fields are null together for the in-scope cases filed in no
+                    // suite. The row is rendered rather than dropped — dropping it would make this
+                    // panel stop summing to the counts above it, with nothing on screen to say why
+                    // — and its link is the grid's unfiled filter, which is where those cases are.
+                    id: row.suiteId ?? 'unfiled',
+                    label: row.suiteName ?? 'Not filed',
+                    identifier: row.suiteKey ?? undefined,
+                    href:
+                      row.suiteId === null
+                        ? `/projects/${projectId}/cases?unfiled=true`
+                        : `/projects/${projectId}/cases?suiteId=${row.suiteId}`,
                     counts: row.counts,
                   }))}
                   denominator={denominator}

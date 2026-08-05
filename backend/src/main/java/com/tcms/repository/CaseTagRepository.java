@@ -36,4 +36,22 @@ public interface CaseTagRepository extends JpaRepository<CaseTag, CaseTagId> {
              ORDER BY t.tag ASC
             """)
     List<CaseTag> findForCases(@Param("caseIds") Collection<UUID> caseIds);
+
+    /**
+     * One case's tags — what the reconcile compares against.
+     *
+     * <p>A separate method rather than {@link #findForCases} with a singleton list, for
+     * {@code CaseClassificationRepository#findForCase}'s reason: the batch method's contract is
+     * "never give me an empty collection", and a save path has no page to guard on.
+     *
+     * <p>Unfiltered and unbounded, unlike a classification read. There is no vocabulary a tag can
+     * be retired from — it is free text — so every stored tag is a candidate for removal and the
+     * bound that {@code CaseClassifications} needs has nothing to be here.
+     */
+    @Query("""
+            SELECT t FROM CaseTag t
+             WHERE t.caseId = :caseId
+             ORDER BY t.tag ASC
+            """)
+    List<CaseTag> findForCase(@Param("caseId") UUID caseId);
 }
