@@ -267,6 +267,29 @@ export function dirtyTabs(draft: PlanDraft, plan: TestPlan): PlanTabId[] {
   return dirty;
 }
 
+/**
+ * What this draft cannot be saved as, and which tab it is on.
+ *
+ * **Only refusals the client can know on its own.** The server is the authority on everything else
+ * and answers with a field error that lands on its control — a mirrored copy of its vocabulary here
+ * would be a second rule that drifts. What is here is the one the client is certain about, because
+ * `name` is the only required field on `TestPlanUpdateInput` and the payload always carries it: a
+ * blank name is a 400 on every press of Save.
+ *
+ * Returned rather than thrown, and rendered as **the disabled Save's reason** (§31): an author who
+ * cleared the name on the Plan tab and typed prose on Scope must be told which tab is stopping them,
+ * not met with a button that does nothing.
+ *
+ * `trim()` for §94's reason, its third home in this file — whitespace is not a name.
+ */
+export function planProblems(draft: PlanDraft): { tab: PlanTabId; message: string }[] {
+  const problems: { tab: PlanTabId; message: string }[] = [];
+  if (draft.name.trim() === '') {
+    problems.push({ tab: 'plan', message: 'The plan needs a name.' });
+  }
+  return problems;
+}
+
 /** A case this save created, paired back to the draft row that asked for it. */
 export interface CreatedCase {
   rowId: string;

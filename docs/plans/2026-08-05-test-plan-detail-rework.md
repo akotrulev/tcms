@@ -5,8 +5,11 @@
 out of it. **Revised 2026-08-05 (second pass)** after the user restated what a test plan *is* — see
 §1a. That restatement retires three of the five original decisions; they are struck through in place
 rather than deleted, per the working agreement.
-**Status:** phases 1–4 shipped (the contract, the migration, the backend, the form spine).
-**Phase 5 — the seven tabs' editors — is next.** Original status line follows.
+**Status:** phases 1–5 shipped (the contract, the migration, the backend, the form spine, the
+tabs' editors). **Phase 6 — the Test cases tab — is next**, and it is the last of the build:
+phase 5 deleted `PlanEditDialog` including its suite picker, so **a plan's suite scope has no
+on-screen editor until phase 6 lands** (recorded in §8 and in browser row M3-10). Original status
+line follows.
 
 **Status:** phases 1–2 shipped (the contract, both halves). **Phase 3 split in three** — 3a (M7 + M9
 + `V32`) and **3b** (scope prose, sections, the tag arm, the tags endpoint) shipped; 3c (the plan
@@ -336,7 +339,7 @@ none of them.
 | 3b | ✅ **shipped** — scope texts and sectioned items on the plan `PATCH`, `CaseFacts.scopeMatch()` (the three-arm predicate, written once and interpolated four times) plus `caseCountsBySection`, the tags-in-use query and `GET /projects/{id}/tags`, `PlanSection.caseCount` (**a contract addition this phase**, so `gen:api` and the mock moved with it), and `PlanScopeConstraintTest`. The mock stopped **storing** both counts and now resolves them on the way out, which is what makes phase 2's browser row 90 true | `./gradlew build` + both frontend gates |
 | 3c | ✅ **shipped** — `PUT`/`DELETE` on the plan document: `PlanDocumentService.link`/`unlink`, `PlanDocumentLinkInput`, `DocPage.linkTo`/`unlinkSubject` (the subject columns stop being `updatable = false`, and the reversal is recorded on the field), `DocPageWriteService.adoptPage`/`releasePage` with two audit verbs, `PlanFacts.findAnyPlanKeyInProject`. `PlanDocumentTemplate` **deleted** with its `POST`, and `PlanDocumentEndpointTest`'s whole first nest rewritten around adoption — **the three refusals are four**, because a body with no `pageId` is a field error and the two 409s needed a second plan in the fixture to be distinguishable | `./gradlew build` |
 | 4 | ✅ **shipped** — `planDraft.ts` (the draft, `dirtyTabs`, `planPayload`, the blank-row rule), `usePlanSave.ts` (the ordered pair and its three outcomes), `useCreatePlanCase` (**a key per ROW**, the third idempotency shape in `cases.ts`), and the page: seven fixed tabs, the draft above them, the banner naming dirty tabs, Save/Discard, `useUnsavedWork`, the per-step save report. **The two prose tabs ship here rather than in phase 5** — a recorded departure, because a Save nothing on screen can enable is a spine that cannot be driven. Plan/artefacts/cases render read-only from what phase 3 now serves; `ArtifactTable` extracted so both pages share one renderer | both |
-| 5 | Frontend — the seven tabs: Plan (replacing `PlanEditDialog`), business requirements, artefacts, the two texts | both |
+| 5 | ✅ **shipped** — the Plan tab (`PlanFieldsTab.tsx`, the fields and both criteria editors bound to the draft) with **`PlanEditDialog` deleted and the header's Edit button with it**; `planProblems` (the one refusal the client is certain about, disabling Save *with its reason*) and server `fieldErrors` landed on the controls they name; the Business requirements tab rewritten **read-only** over an adopted page, with the picker, `useLinkPlanDocument`/`useUnlinkPlanDocument` and the mock's `PUT`/`DELETE` including both 409s; the artefacts tab's **Register**, through the Artifacts page's own dialog with the plan pre-selected. `useCreateDraftCase` and the Add-a-case bar **retired with their argument recorded**. `PlanEdit.test.tsx` **rewritten rather than deleted** — every assertion in it is about the payload, which outlived the dialog | both |
 | 6 | Frontend — the Test cases tab: sections, four fill mechanisms, auto-append, deferred creation | both |
 | 7 | Handoff section, index row, both orientation caches, verification queue rows | both |
 
@@ -376,6 +379,11 @@ Both are in `docs/plans/2026-08-05-organization-model-restatement.md`. The filin
   gate still fires at run-create time, but the plan's own approval goes stale silently.
 - **The blank row must not satisfy a non-empty check** — §94's refine defect, same shape.
 - **Section counts do not sum to the plan's total** — §96's lesson, one slice later.
+- **Deleting `PlanEditDialog` takes the suite picker with it (phase 5), and the tab that replaces
+  it is phase 6.** In between, a plan's `suiteIds` can be read on the Test cases tab and changed
+  nowhere — the same shape as the document window above, and deliberate for the same reason: a
+  folder list on the *Plan* tab would be a second place to write one column, three days before the
+  tab that owns it lands.
 - **`PlanEditDialog` is deleted, not orphaned.** A dialog nobody opens that still compiles is the
   second implementation `ui-rules` §8 is about; `PlanLifecycle.test.tsx` and `PlanEdit.test.tsx` move
   with it. Same for `PlanDocumentTemplate` and its tests.

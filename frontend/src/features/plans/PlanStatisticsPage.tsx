@@ -23,24 +23,30 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlineOutlined';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutlineOutlined';
 import { useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { ApiError } from '../../api/client';
 import type { AggregationPolicy, Criterion, PlanStatistics, PlanStatus, TestPlan } from '../../api/types';
 import {
   useArtifacts,
+  useDocPages,
   usePlan,
+  usePlans,
   usePlanStatistics,
   useProject,
   useSetPlanStatus,
 } from '../../api/queries';
 import { useUnsavedWork } from '../../auth/useSessionRecovery';
 import { ArtifactTable } from '../artifacts/ArtifactTable';
+import { RegisterArtifactDialog } from '../artifacts/ArtifactDialogs';
 import {
   PLAN_TABS,
   draftFromPlan,
   dirtyTabs,
+  planProblems,
   planTabLabels,
   type PlanDraft,
   type PlanTabId,
 } from './planDraft';
+import { PlanFieldsTab } from './PlanFieldsTab';
 import { usePlanSave, type SaveOutcome } from './usePlanSave';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
@@ -60,7 +66,6 @@ import {
   planStatusLabels,
 } from '../../lib/labels';
 import { PlanDeleteDialog } from './PlanDeleteDialog';
-import { PlanEditDialog } from './PlanEditDialog';
 import { ScrollX } from '../../components/ScrollX';
 
 /**
@@ -265,6 +270,20 @@ function PlanForm({
   const { save, saving } = usePlanSave(projectId, planId);
 
   const dirty = dirtyTabs(draft, base);
+  const problems = planProblems(draft);
+
+  /*
+    The last save's refusals, keyed as the server keys them, so each one lands on the control it is
+    about. Cleared on every press rather than accumulated: a stale error under a field the author
+    has since corrected is a screen arguing with itself.
+
+    Only `planFailed` can carry them — the case step's failures are named by title in the report
+    above, because the row they belong to may not be on screen (§97's per-step reporting).
+  */
+  const fieldErrors =
+    outcome?.kind === 'planFailed' && outcome.error instanceof ApiError
+      ? (outcome.error.fieldErrors ?? {})
+      : {};
 
   /*
     Tells the app this surface is holding work a navigation or a reload would destroy: the
@@ -308,32 +327,52 @@ function PlanForm({
               {/* Disabled with a reason, never hidden (§31) — and the reason is the permission,
                   which is why the gate wraps the button rather than the banner. */}
               <PermissionGate projectId={projectId} permission="plan:edit">
-                {({ allowed }) => (
-                  <Tooltip title={allowed ? '' : 'You need plan:edit on this project.'}>
-                    <Box>
-                      <Button
-                        size="small"
-                        variant="contained"
-                        data-testid="PlanStats.Save"
-                        disabled={!allowed || saving}
-                        onClick={() => void submit()}
-                      >
-                        {saving ? 'Saving…' : 'Save'}
-                      </Button>
-                    </Box>
-                  </Tooltip>
-                )}
+                {({ allowed }) => {
+                  // Two reasons a Save can be refused before it is pressed, and they are told
+                  // apart: the permission is about the caller, the problem is about the draft and
+                  // names the tab holding it (§31 — disabled, never hidden, always with a reason).
+                  const reason = !allowed
+                    ? 'You need plan:edit on this project.'
+                    : problems.length > 0
+                      ? problems
+                          .map((problem) => `${problem.message} (${planTabLabels[problem.tab]})`)
+                          .join(' ')
+                      : '';
+                  return (
+                    <Tooltip title={reason}>
+                      <Box>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          data-testid="PlanStats.Save"
+                          disabled={!allowed || saving || problems.length > 0}
+                          onClick={() => void submit()}
+                        >
+                          {saving ? 'Saving…' : 'Save'}
+                        </Button>
+                      </Box>
+                    </Tooltip>
+                  );
+                }}
               </PermissionGate>
             </Stack>
           }
         >
           Unsaved changes in {dirty.map((id) => planTabLabels[id]).join(', ')}.
+          {problems.length > 0 && (
+            <Box component="span" data-testid="PlanStats.Blocked">
+              {' '}
+              {problems.map((problem) => problem.message).join(' ')}
+            </Box>
+          )}
         </Alert>
       )}
 
       {outcome && <SaveReport outcome={outcome} onDismiss={() => setOutcome(null)} />}
 
-      {tab === 'plan' && <PlanFieldsTab plan={base} />}
+      {tab === 'plan' && (
+        <PlanFieldsTab draft={draft} fieldErrors={fieldErrors} onChange={edit} />
+      )}
       {tab === 'requirements' && <PlanDocumentPanel projectId={projectId} planId={planId} />}
       {tab === 'artefacts' && <ArtefactsTab projectId={projectId} planId={planId} />}
       {tab === 'scope' && (
@@ -438,91 +477,61 @@ function ScopeTextTab({
 }
 
 /**
- * The Plan tab, **read-only in phase 4** — editing is still the header's dialog until phase 5 moves
- * these fields onto the page. It renders what the plan holds rather than a placeholder, because a
- * tab that says "coming soon" is one nobody opens twice.
+ * The plan's own register, through the same table the Artifacts page renders (`ui-rules` §8).
+ *
+ * **Registering happens here too**, through the same dialog the Artifacts page opens, with this
+ * plan pre-selected: somebody looking at Release 4.4's sign-off documents and pressing Register
+ * means Release 4.4. A second dialog for one pre-filled field is how two registers come to accept
+ * different things — the `FILE` kind in particular, which this product cannot store at all.
+ *
+ * It writes **outside the plan's Save**, which is why {@link dirtyTabs} can never name this tab:
+ * an artifact is its own row under `artifact:edit`, and a banner asking the author to press Save
+ * for something already written would be false.
  */
-function PlanFieldsTab({ plan }: { plan: TestPlan }) {
-  return (
-    <Stack sx={{ gap: 3 }}>
-      <Panel title="Plan" testId="PlanStats.PlanFields">
-        <Stack sx={{ gap: 1.5 }}>
-          <Field label="Name">{plan.name}</Field>
-          <Field label="Description">{plan.description || '—'}</Field>
-          <Field label="Milestone">
-            {plan.milestoneName || '—'}
-            {plan.milestoneDate && ` · due ${plan.milestoneDate}`}
-          </Field>
-        </Stack>
-      </Panel>
-      <CriteriaList title="Entry criteria" testId="PlanStats.EntryCriteria" criteria={plan.entryCriteria} />
-      <CriteriaList title="Exit criteria" testId="PlanStats.PlanExitCriteria" criteria={plan.exitCriteria} />
-    </Stack>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <Stack direction="row" sx={{ gap: 2, alignItems: 'baseline' }}>
-      <Typography variant="caption" sx={{ color: 'text.secondary', width: 110, flexShrink: 0 }}>
-        {label}
-      </Typography>
-      <Typography variant="body2" sx={{ minWidth: 0 }}>
-        {children}
-      </Typography>
-    </Stack>
-  );
-}
-
-/**
- * The authored gates, **without their verdicts**. The Progress tab evaluates the exit criteria
- * against real results; repeating a met/unmet mark here would be a second answer to one question,
- * computed from a different response, on a screen where nobody can see both at once.
- */
-function CriteriaList({
-  title,
-  testId,
-  criteria,
-}: {
-  title: string;
-  testId: string;
-  criteria: Criterion[];
-}) {
-  return (
-    <Panel title={title} testId={testId}>
-      {criteria.length === 0 ? (
-        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          None set.
-        </Typography>
-      ) : (
-        <Stack sx={{ gap: 0.75 }}>
-          {criteria.map((criterion, index) => (
-            <Stack
-              key={`${criterion.metric}-${index}`}
-              direction="row"
-              sx={{ gap: 1.5, alignItems: 'baseline' }}
-              data-testid={`${testId}.Item`}
-            >
-              <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }}>
-                {criterion.label}
-              </Typography>
-              <Identifier variant="muted">
-                {criterion.metric} {criterion.op} {criterion.value}
-              </Identifier>
-            </Stack>
-          ))}
-        </Stack>
-      )}
-    </Panel>
-  );
-}
-
-/** The plan's own register, through the same table the Artifacts page renders (`ui-rules` §8). */
 function ArtefactsTab({ projectId, planId }: { projectId: string; planId: string }) {
   const artifacts = useArtifacts(projectId, 'PLAN', planId);
+  const plans = usePlans(projectId);
+  // The dialog's documentation picker — the register is where a doc page becomes a plan asset.
+  const pages = useDocPages(projectId);
+  const [registering, setRegistering] = useState(false);
 
   return (
-    <Panel testId="PlanStats.Artefacts" dense>
+    <Panel
+      testId="PlanStats.Artefacts"
+      dense
+      actions={
+        /*
+          Enabled on the key alone, which is honest here in a way it is not on the Artifacts page:
+          `artifact:edit` is qualified by scope, and this tab can only ever register at PLAN scope
+          — the one scope every holder of the key has. The dialog still renders the scope-qualified
+          403 if a grant is revoked between opening it and pressing Register.
+        */
+        <PermissionGate projectId={projectId} permission="artifact:edit">
+          {({ allowed }) => (
+            <Button
+              size="small"
+              variant="outlined"
+              disabled={!allowed}
+              onClick={() => setRegistering(true)}
+              data-testid="PlanStats.Artefacts.Register"
+            >
+              Register
+            </Button>
+          )}
+        </PermissionGate>
+      }
+    >
+      {registering && (
+        <RegisterArtifactDialog
+          open
+          onClose={() => setRegistering(false)}
+          projectId={projectId}
+          plans={plans.data ?? []}
+          pages={pages.data ?? []}
+          defaultPlanId={planId}
+          onRegistered={() => setRegistering(false)}
+        />
+      )}
       <DataRegion
         testId="PlanStats.Artefacts.List"
         state={{ ...artifacts, refetch: () => void artifacts.refetch() }}
@@ -648,7 +657,6 @@ function PlanLifecycleActions({ projectId, plan }: { projectId: string; plan: Te
   const setStatus = useSetPlanStatus(projectId, planId);
   const [error, setError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [editing, setEditing] = useState(false);
   const navigate = useNavigate();
 
   /*
@@ -670,24 +678,13 @@ function PlanLifecycleActions({ projectId, plan }: { projectId: string; plan: Te
     <Stack sx={{ gap: 0.5, alignItems: 'flex-end' }}>
       <Stack direction="row" sx={{ gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
         {/*
-          No longer disabled by status: §97 (M7) removed CLOSED, so no plan is frozen against
-          editing. What still protects a sign-off is §6g's edit-after-approval rule, which the
-          server applies — editing an approved plan on a review-enabled project demotes it to DRAFT
-          rather than refusing the save.
+          ~~An Edit button opening `PlanEditDialog`.~~ → **removed in §97 phase 5.** Every field it
+          held is on the Plan tab, saved by the page's own Save, so a button here would open a
+          second editor for one row — and the dialog's `PATCH` ran on its own lock version, so the
+          two could disagree about which write won. What still protects a sign-off is §6g's
+          edit-after-approval rule, which the server applies: editing an approved plan on a
+          review-enabled project demotes it to DRAFT rather than refusing the save.
         */}
-        <PermissionGate projectId={projectId} permission="plan:edit">
-          {({ allowed }) => (
-            <Button
-              size="small"
-              variant="outlined"
-              data-testid="PlanStats.Edit"
-              disabled={!allowed}
-              onClick={() => setEditing(true)}
-            >
-              Edit
-            </Button>
-          )}
-        </PermissionGate>
         {planMoves[status].map((option) => (
           <PermissionGate key={option.target} projectId={projectId} permission={option.permission}>
             {({ allowed }) => (
@@ -722,15 +719,6 @@ function PlanLifecycleActions({ projectId, plan }: { projectId: string; plan: Te
         <Typography variant="caption" sx={{ color: 'var(--color-failed)' }} data-testid="PlanStats.StatusError">
           {error}
         </Typography>
-      )}
-      {/* Mounted only while open, so every control is seeded from the plan as it stands now. */}
-      {editing && (
-        <PlanEditDialog
-          open
-          projectId={projectId}
-          plan={plan}
-          onClose={() => setEditing(false)}
-        />
       )}
       {/* Mounted only while confirming, so its reset-on-open effect starts from a clean state. */}
       {confirmingDelete && (

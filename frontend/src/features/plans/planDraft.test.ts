@@ -6,6 +6,7 @@ import {
   draftFromPlan,
   liveCaseRows,
   planPayload,
+  planProblems,
   type PlanDraft,
 } from './planDraft'
 
@@ -208,5 +209,31 @@ describe('planPayload', () => {
     // would be handing the server its own arithmetic as an instruction.
     expect(body.sections?.[0]).not.toHaveProperty('caseCount')
     expect(body.sections?.[0].tags).toEqual(['smoke'])
+  })
+
+  /**
+   * The one refusal the client is certain about on its own (§97 phase 5).
+   *
+   * `name` is the only required field on `TestPlanUpdateInput` and the payload always carries it,
+   * so a blank one is a 400 on every press of Save — which makes it the one thing worth disabling
+   * the button for. Everything else is the server's, and a mirrored copy of its vocabulary here
+   * would be a second rule that drifts.
+   */
+  describe('planProblems', () => {
+    it('finds nothing wrong with an ordinary draft', () => {
+      expect(planProblems(draftFromPlan(planBody()))).toEqual([])
+    })
+
+    it('names the Plan tab when the name has been cleared', () => {
+      const draft = { ...draftFromPlan(planBody()), name: '' }
+      expect(planProblems(draft)).toEqual([{ tab: 'plan', message: 'The plan needs a name.' }])
+    })
+
+    it('does not accept whitespace as a name', () => {
+      // §94's trim defect, third home in this file: without the trim the server answers 400 for
+      // something the client could see, and the author is told by a round trip.
+      const draft = { ...draftFromPlan(planBody()), name: '   ' }
+      expect(planProblems(draft)).toHaveLength(1)
+    })
   })
 })

@@ -168,14 +168,15 @@ describe('PlanStatisticsPage — the plan lifecycle controls', () => {
     inReview.unmount()
 
     vi.restoreAllMocks()
-    mockReads('APPROVED', ['project:read', 'plan:edit'])
+    mockReads('APPROVED', ['project:read', 'plan:edit', 'plan:delete'])
     renderPage()
 
-    // The caller holds plan:edit, so Edit is enabled — which is also the barrier proving the
-    // permission answer has landed before the assertion below is trusted. It has to be a control
-    // OTHER than the one under test, or `useCan`'s fail-closed pending state passes this against a
-    // component with no gate at all (§66).
-    await enabled('PlanStats.Edit')
+    // The barrier proving the permission answer has landed before the assertion below is trusted.
+    // It has to be a control OTHER than the one under test, or `useCan`'s fail-closed pending state
+    // passes this against a component with no gate at all (§66) — and since §97 phase 5 deleted the
+    // Edit button (its fields are the Plan tab's, saved by the page's own Save, which only appears
+    // once something is dirty), the caller is given `plan:delete` so that Delete can be it.
+    await enabled('PlanStats.Delete')
     expect(screen.getByTestId('PlanStats.Move.DRAFT'))
       .toBeDisabled()
   })

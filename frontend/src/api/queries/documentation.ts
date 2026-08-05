@@ -205,6 +205,56 @@ export function usePlanDocument(
 */
 
 /**
+ * Adopts an existing page as the plan's business-requirements document (§97 D4′).
+ *
+ * **`doc:edit`, not `plan:edit`** — the write lands on the page's `subjectType`/`subjectId` and
+ * nothing on the plan, which is the same act as editing the page seen from the other end.
+ *
+ * Both keys are seeded, and the plan key by **prefix**: this page is reached as *the plan's
+ * document* and as an ordinary page, and a plan whose tab still says "no page is linked" after the
+ * adoption succeeded is the shape a second key is for. The doc-page tree moves too, because the
+ * summary now carries a subject.
+ *
+ * `handled` because two of its three refusals are 409s naming *which* plan already holds the page —
+ * a sentence about the row the author just clicked, which a corner toast detaches from it.
+ */
+export function useLinkPlanDocument(projectId: string, planId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (pageId: string) =>
+      api.put<DocPage>(`${base(projectId)}/plans/${planId}/document`, { pageId }),
+    meta: { handled: true },
+    onSuccess: (page) => {
+      client.setQueryData(keys.planDocument(projectId, planId), page);
+      client.setQueryData(keys.docPage(projectId, page.id), page);
+      void client.invalidateQueries({ queryKey: keys.docPages(projectId) });
+    },
+  });
+}
+
+/**
+ * Releases the plan's document. **The page survives** — this clears a link, and deleting the page
+ * is `DELETE /doc-pages/{pageId}`, a different act with a different blast radius. The control says
+ * so; this hook is the half that must not tidy up after it.
+ *
+ * The plan key is set to `null` rather than removed, which is `usePlanDocument`'s own answer for a
+ * plan with no document: `removeQueries` on a key with a mounted observer forces an immediate
+ * refetch, and the refetch is a 404 — the tab would render "Not found" a beat after an unlink that
+ * worked (`useDeleteDocPage` records the same trap from the other side).
+ */
+export function useUnlinkPlanDocument(projectId: string, planId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.del<void>(`${base(projectId)}/plans/${planId}/document`),
+    meta: { handled: true },
+    onSuccess: () => {
+      client.setQueryData(keys.planDocument(projectId, planId), null);
+      void client.invalidateQueries({ queryKey: keys.docPages(projectId) });
+    },
+  });
+}
+
+/**
  * Links a test case or suite to one block.
  *
  * Invalidates the page rather than patching the block in place. The response is one link and the

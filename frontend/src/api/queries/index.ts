@@ -60,7 +60,6 @@ export {
   useCaseVersions,
   useCases,
   useCreateCase,
-  useCreateDraftCase,
   useCreatePlanCase,
   useDeleteCase,
   useUpdateCase,
@@ -119,9 +118,11 @@ export {
   useDocPage,
   useDocPages,
   useLinkBlock,
+  useLinkPlanDocument,
   usePlanDocument,
   useSetDocPageStatus,
   useUnlinkBlock,
+  useUnlinkPlanDocument,
   useUpdateDocPage,
 } from './documentation';
 export {

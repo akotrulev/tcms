@@ -2,8 +2,8 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-05 (§97 phase 4)
-**Baseline commit:** `f0279de` (§97 phase 3c) **+ the doc commit this line ships in** (its own SHA
+**Last verified:** 2026-08-05 (§97 phase 5)
+**Baseline commit:** `4b582ec` (§97 phase 4) **+ the doc commit this line ships in** (its own SHA
 cannot be written into itself; trust the body over the header and re-grep what a later commit
 could have moved).
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
@@ -35,7 +35,7 @@ could have moved).
 - **`npm run build` is THE gate** (`tsc -b` + vite build). **Do not trust `tsc --noEmit`** — it has
   reported 0 errors while the build failed with nine (working agreement). `#confirmed`
 - `npm run lint` — oxlint, must stay at **0 warnings**; it prints nothing when clean.
-- `npm run test:run` — Vitest + RTL. **880/880** across 63 files at §97 phase 4 (849/60 at §100). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
+- `npm run test:run` — Vitest + RTL. **895/895** across 64 files at §97 phase 5 (880/63 at phase 4, 849/60 at §100). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
 - `npm run gen:api` — regenerate `src/api/schema.d.ts` after **any** `openapi.yaml` change. Runs
   through `npx` on purpose (the scaffold pins TS 6, the tool peer-requires 5.x); do not "fix" it.
 - **Live mode:** `VITE_API_MODE=live` in `.env.local` proxies `/api` to `localhost:8080`.
@@ -247,6 +247,21 @@ directly above the switcher) and the wordmark links there too.
   question goes through `liveCaseRows`, or the banner is up on every plan page ever rendered.
   **Three tabs can never be dirty** — Progress holds no draft, Business requirements is the linked
   page's own `PUT`/`DELETE`, Test artefacts writes itself.
+  **Phase 5 put the editors on the tabs and DELETED `PlanEditDialog` with the header's Edit button.**
+  `features/plans/PlanFieldsTab.tsx` is the Plan tab (fields + both `CriteriaEditor`s, bound to the
+  draft, no RHF and no Zod — the form owns no submit). Two refusal paths, and they are different
+  things: **`planProblems(draft)`** is what the *client* is certain about (only a blank or
+  whitespace-only `name`, because it is the one required field on `TestPlanUpdateInput`) and
+  disables Save **with its reason and the tab it is on**; everything else is the server's, arriving
+  as `ApiError.fieldErrors` and landed on the control it names — `entryCriteria`/`exitCriteria` have
+  no text field, so each list renders its own alert.
+  **`PlanEdit.test.tsx` was rewritten, not deleted**, because every assertion in it is about the
+  *payload* (`caseIds` absent not `[]`, no `met`/`actual`, the number coercion, the derived label),
+  and the payload outlived the dialog.
+  **A captured DOM node goes stale across a permission verdict** — `PermissionGate`'s denied branch
+  wraps the control in a tooltip span, so when the answer lands React mints a **new** button and
+  `waitFor(() => expect(captured).toBeEnabled())` waits for ever on a detached one. Re-query inside
+  `waitFor`. Cost an hour in phase 5; it reads as a permanently-pending gate.
   **A test rendering this page now needs `SessionRecoveryContext`** (`useUnsavedWork` throws
   without it, by design) — `PlanEdit`/`PlanLifecycle`/`PlanForm` tests all stub it the way
   `CaseEditorPage.test.tsx` does. And **`as unknown as TestPlan` fixtures hid four required
@@ -254,9 +269,23 @@ directly above the switcher) and the wordmark links there too.
   plan fixtures and the page crashed on mount reading them — §65's cast class, third sighting.
   `#confirmed`
 
-- **THE PLAN DOCUMENT TAB (§93).** `features/plans/PlanDocumentPanel.tsx` +
-  `usePlanDocument`/`useStartPlanDocument`/`useLinkBlock`/`useUnlinkBlock` +
-  `useCreateDraftCase` + `keys.planDocument`; `PlanStatisticsPage` gained **Tabs** with the selection
+- **THE BUSINESS REQUIREMENTS TAB — A PAGE THE PLAN *ADOPTS*, READ-ONLY (§97 phase 5, D4′).**
+  `features/plans/PlanDocumentPanel.tsx` is now three parts: the `DataRegion`, a **`LinkPagePanel`**
+  (a picker over `useDocPages`, where a page another plan documents is **offered and disabled** —
+  hidden, it reads as deleted) and a read-only **`DocumentBody`**. Writes are
+  **`useLinkPlanDocument`/`useUnlinkPlanDocument`** (`PUT`/`DELETE .../plans/{id}/document`, costing
+  **`doc:edit` and never `plan:edit`** — the write lands on the page's subject columns and nothing on
+  the plan), both outside the form's Save. The unlink **keeps the page and says so in its label**;
+  the mock's `DELETE` sets the subject to null rather than splicing the summary out, and its `PUT`
+  answers **two different 409s** (this plan already has one · that page is another plan's), because a
+  mock with one generic conflict lets a client ship one sentence for two situations.
+  **Everything §93 put here is gone**: the in-place block editor (one page, one writer — it is
+  `/docs/{pageId}/edit` under `doc:edit`), the Add-a-case bar, and `useCreateDraftCase` with it. The
+  ~~`CASE_SECTION` heading match~~ is gone too, so D1's stranded-control failure mode is removed by
+  removing the mechanism rather than by handling it.
+  Historical (§93), still true of the cache and the 404: `features/plans/PlanDocumentPanel.tsx` +
+  `usePlanDocument`/~~`useStartPlanDocument`~~/`useLinkBlock`/`useUnlinkBlock` +
+  ~~`useCreateDraftCase`~~ + `keys.planDocument`; `PlanStatisticsPage` gained **Tabs** with the selection
   in the URL (~~`?tab=document`~~ → **`?tab=requirements`, and seven of them, since §97 phase 4**),
   the two halves ~~**unmounted rather than hidden**~~ → **the form is mounted on every tab now; see
   the seam above for why that reversed**.
@@ -656,6 +685,18 @@ directly above the switcher) and the wordmark links there too.
 
 ## Session log
 
+- 2026-08-05 · EXTEND · **The plan detail's tabs get their editors** (§97 phase 5) — the Plan tab
+  (`features/plans/PlanFieldsTab.tsx`), the Business requirements tab rewritten read-only over an
+  adopted page (`PlanDocumentPanel.tsx`, `useLinkPlanDocument`/`useUnlinkPlanDocument`, the mock's
+  `PUT`/`DELETE`), and the artefacts tab's Register through the Artifacts page's own dialog.
+  **Deleted:** `PlanEditDialog.tsx`, the header's Edit button, `useCreateDraftCase` and the
+  Add-a-case bar — each with its argument struck through in place rather than removed. New test
+  file `PlanDocument.test.tsx` (7); `PlanEdit.test.tsx` rewritten against the tab (10);
+  `planProblems` unit-tested (3); two artefacts rows on `PlanForm.test.tsx`. No contract change, no
+  migration, no `gen:api`. **895/895 across 64 files, lint 0, build clean. Zero browser rows run;
+  12 M3 rows added or restated (M3-32…M3-40 new, M3-2/10/11/16/17/18/19/20 struck through or
+  restated).** Known window, deliberate: the suite picker went with the dialog and the Test cases
+  tab is phase 6, so a plan's suite scope has no on-screen editor in between.
 - 2026-08-05 · EXTEND · **The plan detail's form spine** (§97 phase 4) — state above the tabs, one
   Save, the ordered pair, the banner. New: `features/plans/{planDraft,usePlanSave}.ts` + three test
   files · `useCreatePlanCase` · `features/artifacts/ArtifactTable.tsx` (extracted so the plan's

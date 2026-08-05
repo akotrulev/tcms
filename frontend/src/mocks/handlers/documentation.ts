@@ -171,6 +171,17 @@ function validateArtifact(input: ArtifactRegistration) {
   return errors;
 }
 
+/**
+ * The page a plan has adopted, if any.
+ *
+ * One lookup for the three handlers that ask it, because the partial unique index it stands in for
+ * — one page per plan, one plan per page — is the whole of what `PUT` refuses, and two spellings of
+ * "is this plan documented" is how a mock comes to allow what the server forbids.
+ */
+function planDocumentOf(planId: string): DocPageSummary | undefined {
+  return db.docPages.find((p) => p.subjectType === 'TEST_PLAN' && p.subjectId === planId);
+}
+
 /** `doc:edit` / `doc:publish` on the project in the path — the gate the SPA's buttons mirror. */
 function gate(projectId: string, permission: string) {
   return holdsOn(projectId, permission)
@@ -512,12 +523,83 @@ export const documentationHandlers = [
   */
   http.get(`${API}/projects/:projectId/plans/:planId/document`, async ({ params }) => {
     await delay(LATENCY);
-    const summary = db.docPages.find(
-      (p) => p.subjectType === 'TEST_PLAN' && p.subjectId === String(params.planId),
-    );
+    const summary = planDocumentOf(String(params.planId));
     if (!summary) return notFound("That plan's document");
     const page = load(summary.id);
     return page ? HttpResponse.json(page) : notFound("That plan's document");
+  }),
+
+  /*
+    Adopts an existing page (§97 phase 3c's `PUT`).
+
+    **The two 409s are different sentences and the mock owes both of them**, because they are the
+    only reason this operation has an error path the SPA renders in place: a page already spoken for
+    names the plan holding it, and a plan that already has one says relinking is two steps. A mock
+    answering one generic conflict would let a client ship with one message for two situations, and
+    the client is written against the mock (§52, §81, §87 — three slices' worth of the same
+    finding).
+
+    The sibling-project 404 is not reproducible here: the mock's store is one project's worth of
+    pages, so there is no page that exists and is out of reach. Named rather than faked.
+  */
+  http.put(`${API}/projects/:projectId/plans/:planId/document`, async ({ params, request }) => {
+    await delay(LATENCY);
+    const refused = gate(String(params.projectId), 'doc:edit');
+    if (refused) return refused;
+
+    const planId = String(params.planId);
+    const body = (await request.json()) as { pageId?: string };
+    if (!body.pageId) {
+      return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+        pageId: ['Choose the page this plan documents.'],
+      });
+    }
+
+    const page = load(body.pageId);
+    if (!page) return notFound('That page');
+
+    const existing = planDocumentOf(planId);
+    if (existing) {
+      return problem(
+        409,
+        'Already documented',
+        `This plan already has a document (${existing.key}). Unlink it before linking another.`,
+      );
+    }
+    if (page.subjectType === 'TEST_PLAN' && page.subjectId !== planId) {
+      const holder = db.plans.find((p) => p.id === page.subjectId);
+      return problem(
+        409,
+        'Already linked',
+        `That page is already the document of ${holder ? holder.key : 'another plan'}. Unlink it there first.`,
+      );
+    }
+
+    return HttpResponse.json(
+      upsert({ ...page, subjectType: 'TEST_PLAN', subjectId: planId }),
+    );
+  }),
+
+  /*
+    Releases the page and KEEPS it — the mock has to be as careful as the server here, because a
+    handler that spliced the page out of `db.docPages` would make an unlink look like a delete in
+    the one environment the screen is developed in.
+
+    404 rather than a cheerful 204 when there is nothing linked: the same answer GET gives, so a
+    client cannot be told an unlink succeeded when there was nothing to unlink.
+  */
+  http.delete(`${API}/projects/:projectId/plans/:planId/document`, async ({ params }) => {
+    await delay(LATENCY);
+    const refused = gate(String(params.projectId), 'doc:edit');
+    if (refused) return refused;
+
+    const summary = planDocumentOf(String(params.planId));
+    if (!summary) return notFound("That plan's document");
+    const page = load(summary.id);
+    if (!page) return notFound("That plan's document");
+
+    upsert({ ...page, subjectType: null, subjectId: null });
+    return new HttpResponse(null, { status: 204 });
   }),
 
   /*

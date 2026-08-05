@@ -245,7 +245,8 @@ export function useCaseHistory(
  * ## The third shape, and the two it is not
  *
  * `useCreateCase` holds one key per mounted editor (one intent, one case). `useCreateDraftCase`
- * mints one per submit (many intents, one at a time, retries unprotected). This caller is neither:
+ * minted one per submit (many intents, one at a time, retries unprotected) — retired below, its
+ * argument kept because the shape recurs. This caller is neither of them:
  * §97's Save writes **N cases in one loop**, so a per-hook key would make the server read rows 2…N
  * as replays of row 1 and return the first case each time — five titles typed, one case created,
  * four scope entries pointing at it, and nothing on screen that looks wrong. A per-call
@@ -274,34 +275,16 @@ export function useCreatePlanCase(projectId: string) {
   });
 }
 
-/**
- * Creates a draft case from a title alone — the plan document's "Add case".
- *
- * ## Why this is not `useCreateCase`
- *
- * The idempotency key. `useCreateCase` holds ONE key for the lifetime of the mounted editor,
- * because an editor is one user intent to create one case and retrying after a timeout must not
- * produce two. This caller is the opposite shape: one mounted bar, from which somebody adds ten
- * cases in a row as they think of them. Reusing that hook would send the same key every time, and
- * the server would recognise every case after the first as a replay and return the first one — so
- * the second title typed would silently become a duplicate chip pointing at the first case.
- *
- * A key per **submit**, therefore, which is still a key per intent; the intent here is just
- * smaller. A retry of one failed add is not protected, and that is the accepted cost: the failure
- * is visible in the bar, the duplicate would be visible in the list beside its twin, and the
- * alternative is a key that makes the tenth case impossible to create.
- */
-export function useCreateDraftCase(projectId: string) {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: (input: { title: string; suiteId: string }) =>
-      api.post<TestCase>(`${base(projectId)}/cases`, input, { idempotencyKey: newIntentKey() }),
-    // The bar renders the failure in place, and says the case may exist anyway.
-    meta: { handled: true },
-    onSuccess: (created) => {
-      client.setQueryData(keys.case(projectId, created.id), created);
-      void client.invalidateQueries({ queryKey: ['projects', projectId, 'cases'] });
-      void client.invalidateQueries({ queryKey: keys.suites(projectId) });
-    },
-  });
-}
+/*
+  ~~`useCreateDraftCase` — creates a draft case from a title alone, one idempotency key per submit.~~
+  → **retired 2026-08-05 (§97 phase 5)** with its only caller, the plan document's *Add a test case*
+  bar. That bar contradicted three of this slice's decisions at once: it required a suite (D2 says
+  none), it created the case the moment the button was pressed (§5 says nothing is created until
+  Save), and it filed the plan's cases as bullets in a document rather than in the plan's own scope.
+
+  Its argument is kept because it is about **keys and not about that bar**, and the shape it names
+  will come back: a key per *submit* is right for a control from which somebody adds ten cases in a
+  row, where a key per mounted component would make the tenth case a replay of the first. §97's Save
+  is the third shape again — a key per ROW, see `useCreatePlanCase` above — because it writes N in
+  one loop and must survive being pressed twice.
+*/

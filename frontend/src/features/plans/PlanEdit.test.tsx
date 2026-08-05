@@ -13,13 +13,18 @@ import { PlanStatisticsPage } from './PlanStatisticsPage'
 /**
  * The plan editor — **the affordance behind two columns that had no writer at all until §74**.
  *
+ * **§97 phase 5 moved it out of a dialog and onto the Plan tab, and this file moved with it rather
+ * than being deleted.** Every assertion below is about the *payload*, and the payload is decided by
+ * `planDraft` now instead of by a dialog's submit handler — so deleting the file with
+ * `PlanEditDialog` would have retired six checks that still describe live behaviour, on the excuse
+ * that the control they drive has a different name.
+ *
  * What is locked here, none of it visible to `tsc` or oxlint:
  *
- *   1. **The payload omits `caseIds` and sends `suiteIds`.** The server reads an absent list as
- *      *leave it alone* and `[]` as *clear it*, so a dialog that spread an empty array for the half
- *      of the scope it cannot show would silently delete it on the first rename. There is no other
- *      check for this: the request succeeds either way and the loss is only visible in the
- *      database.
+ *   1. **A plan-field edit sends NEITHER scope list.** The server reads an absent list as *leave it
+ *      alone* and `[]` as *clear it*, so a form that spread its whole draft on every save would
+ *      delete the half of the scope it cannot show. The dialog omitted `caseIds` by hand; the form
+ *      omits both, by computation, because the Plan tab is not the tab that edits scope.
  *   2. **`met` and `actual` never travel back.** They are the server's own computed verdict; a form
  *      that round-tripped them would be asserting that a release gate had been met.
  *   3. **The threshold is sent as a number**, from a text input that has to hold "" while it is
@@ -28,8 +33,10 @@ import { PlanStatisticsPage } from './PlanStatisticsPage'
  *   4. **A derived label is not resubmitted as an authored one.** The server writes
  *      "pass_rate >= 95" when no label was given, so echoing it back would freeze that text over a
  *      threshold the next edit changes.
- *   5. **Edit is disabled on a CLOSED plan**, with the reason on the control rather than as a 409
- *      after the user has retyped the form.
+ *   5. **A blank name disables Save with its reason**, rather than buying a 400 for a field the
+ *      client already knew was empty.
+ *   6. **A field error lands on the control it names** — through the form's `fieldErrors`, which is
+ *      what replaces the dialog's `applyServerError`.
  */
 
 const PROJECT = 'p1'
@@ -72,8 +79,9 @@ function mockReads(plan: TestPlan, permissions: string[] = ['project:read', 'pla
         planKey: 'TP-4',
         planName: plan.name,
         aggregationPolicy: 'LATEST',
-        counts: { passed: 0, failed: 0, blocked: 0, skipped: 0, notRun: 0, total: 0 },
+        counts: { passed: 0, failed: 0, blocked: 0, skipped: 0, retest: 0, notRun: 0, total: 0 },
         coveragePercent: 0,
+        stale: false,
         byConfiguration: [],
         bySuite: [],
         blockers: [],
@@ -84,12 +92,6 @@ function mockReads(plan: TestPlan, permissions: string[] = ['project:read', 'pla
       }
     }
     if (path.includes(`/plans/${PLAN}`)) return plan
-    if (path.includes('/suites')) {
-      return [
-        { id: 'suite-1', key: 'TS-1', name: 'Payments', caseCount: 12, parentId: null },
-        { id: 'suite-2', key: 'TS-2', name: 'Login', caseCount: 3, parentId: null },
-      ]
-    }
     if (path.startsWith('/projects/')) return { id: PROJECT, name: 'Banking' }
     return []
   }) as never)
@@ -109,7 +111,10 @@ const sessionRecovery = {
 
 function renderPage() {
   return render(
-    <TestProviders client={createTestQueryClient()} route={`/projects/${PROJECT}/plans/${PLAN}`}>
+    <TestProviders
+      client={createTestQueryClient()}
+      route={`/projects/${PROJECT}/plans/${PLAN}?tab=plan`}
+    >
       <SessionRecoveryContext.Provider value={sessionRecovery}>
         <Routes>
           <Route path="/projects/:projectId/plans/:planId" element={<PlanStatisticsPage />} />
@@ -119,15 +124,16 @@ function renderPage() {
   )
 }
 
+/** The name box, once the plan has loaded — the tab's first control. */
+const nameBox = () => screen.findByTestId('PlanStats.Plan.Name')
+
 /**
- * Wait until the permission answer has landed — **without this every "disabled" assertion below
- * passes for the wrong reason**, because `useCan` is fail-closed while pending and a control that
- * has not been told anything yet is indistinguishable from one that was refused (§66).
+ * Presses Save, **after waiting for the permission answer to land**. Without the wait every press
+ * here would hit a button that is disabled for the pending reason rather than an enabled one (§66).
  */
-async function openEditor() {
-  await waitFor(() => expect(screen.getByTestId('PlanStats.Edit')).toBeEnabled())
-  await userEvent.click(screen.getByTestId('PlanStats.Edit'))
-  await screen.findByTestId('Plans.Edit')
+async function save() {
+  await waitFor(() => expect(screen.getByTestId('PlanStats.Save')).toBeEnabled())
+  await userEvent.click(screen.getByTestId('PlanStats.Save'))
 }
 
 /** The body of the single PATCH the test drove. */
@@ -136,47 +142,45 @@ function patchedBody(patch: ReturnType<typeof vi.spyOn>) {
   return (patch.mock.calls[0] as unknown[])[1] as Record<string, unknown>
 }
 
-describe('PlanEditDialog', () => {
+describe('the Plan tab', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
   })
 
-  it('seeds the form from the plan it was served, including the scope checkboxes', async () => {
-    mockReads(planBody())
+  it('seeds its fields from the plan it was served', async () => {
+    mockReads(planBody({ milestoneName: 'GA', description: 'The quarterly pass.' } as Partial<TestPlan>))
     renderPage()
-    await openEditor()
 
-    expect(screen.getByTestId('Plans.Edit.Name')).toHaveValue('Release 4.4 regression')
-    // The field the detail endpoint did not serve before this slice — `caseCount` is an expansion
-    // and could never have told the picker which folder was chosen.
-    expect(screen.getByTestId('Plans.Edit.Scope.TS-1')).toBeChecked()
-    expect(screen.getByTestId('Plans.Edit.Scope.TS-2')).not.toBeChecked()
+    expect(await nameBox()).toHaveValue('Release 4.4 regression')
+    expect(screen.getByTestId('PlanStats.Plan.Milestone')).toHaveValue('GA')
+    expect(screen.getByTestId('PlanStats.Plan.Description')).toHaveValue('The quarterly pass.')
   })
 
-  it('sends suiteIds and OMITS caseIds, so a rename cannot empty half the scope', async () => {
+  it('sends NEITHER suiteIds nor caseIds when only the plan fields changed', async () => {
     mockReads(planBody())
     const patch = vi.spyOn(api, 'patch').mockResolvedValue(planBody() as never)
     renderPage()
-    await openEditor()
 
-    await userEvent.click(screen.getByTestId('Plans.Edit.Scope.TS-2'))
-    await userEvent.click(screen.getByTestId('Plans.Edit.Submit'))
+    await userEvent.type(await nameBox(), ' (final)')
+    await save()
 
     await waitFor(() => expect(patch).toHaveBeenCalled())
     const body = patchedBody(patch)
-    expect(body.suiteIds).toEqual(['suite-1', 'suite-2'])
-    // Absent, NOT []. The plan carries `caseIds: ['case-9']` and this dialog cannot show it, so
-    // sending an empty array would delete it — the difference between "leave them alone" and
-    // "remove them" is the whole of the server's three-state rule.
+    expect(body.name).toBe('Release 4.4 regression (final)')
+    // Absent, NOT []. The plan carries a suite and a case this tab cannot show, and the difference
+    // between "leave them alone" and "remove them" is the whole of the server's three-state rule —
+    // the defect a whole-draft payload would ship silently.
     expect('caseIds' in body).toBe(false)
+    expect('suiteIds' in body).toBe(false)
   })
 
   it('sends the lockVersion it read as If-Match, never in the body', async () => {
     mockReads(planBody())
     const patch = vi.spyOn(api, 'patch').mockResolvedValue(planBody() as never)
     renderPage()
-    await openEditor()
-    await userEvent.click(screen.getByTestId('Plans.Edit.Submit'))
+
+    await userEvent.type(await nameBox(), '!')
+    await save()
 
     await waitFor(() => expect(patch).toHaveBeenCalled())
     const options = (patch.mock.calls[0] as unknown[])[2] as { headers: Record<string, string> }
@@ -188,11 +192,10 @@ describe('PlanEditDialog', () => {
     mockReads(planBody())
     const patch = vi.spyOn(api, 'patch').mockResolvedValue(planBody() as never)
     renderPage()
-    await openEditor()
 
-    await userEvent.click(screen.getByTestId('Plans.Edit.Exit.Add'))
-    await userEvent.type(screen.getByTestId('Plans.Edit.Exit.Value.0'), '95')
-    await userEvent.click(screen.getByTestId('Plans.Edit.Submit'))
+    await userEvent.click(await screen.findByTestId('PlanStats.Plan.Exit.Add'))
+    await userEvent.type(screen.getByTestId('PlanStats.Plan.Exit.Value.0'), '95')
+    await save()
 
     await waitFor(() => expect(patch).toHaveBeenCalled())
     const criteria = patchedBody(patch).exitCriteria as Record<string, unknown>[]
@@ -210,10 +213,10 @@ describe('PlanEditDialog', () => {
     mockReads(planBody())
     const patch = vi.spyOn(api, 'patch').mockResolvedValue(planBody() as never)
     renderPage()
-    await openEditor()
 
-    await userEvent.click(screen.getByTestId('Plans.Edit.Exit.Add'))
-    await userEvent.click(screen.getByTestId('Plans.Edit.Submit'))
+    // The added row is what makes the tab dirty, so Save is reachable with nothing typed in it.
+    await userEvent.click(await screen.findByTestId('PlanStats.Plan.Exit.Add'))
+    await save()
 
     await waitFor(() => expect(patch).toHaveBeenCalled())
     expect(patchedBody(patch).exitCriteria).toEqual([])
@@ -230,10 +233,10 @@ describe('PlanEditDialog', () => {
     )
     const patch = vi.spyOn(api, 'patch').mockResolvedValue(planBody() as never)
     renderPage()
-    await openEditor()
 
-    expect(screen.getByTestId('Plans.Edit.Exit.Label.0')).toHaveValue('')
-    await userEvent.click(screen.getByTestId('Plans.Edit.Submit'))
+    expect(await screen.findByTestId('PlanStats.Plan.Exit.Label.0')).toHaveValue('')
+    await userEvent.type(screen.getByTestId('PlanStats.Plan.Exit.Value.0'), '6')
+    await save()
 
     await waitFor(() => expect(patch).toHaveBeenCalled())
     const criteria = patchedBody(patch).exitCriteria as Record<string, unknown>[]
@@ -242,19 +245,49 @@ describe('PlanEditDialog', () => {
     expect(criteria[0].label).toBeNull()
   })
 
+  it('refuses to save a plan whose name has been cleared, and says which tab', async () => {
+    mockReads(planBody())
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue(planBody() as never)
+    renderPage()
+
+    await userEvent.clear(await nameBox())
+
+    // Disabled with the reason on the banner (§31), rather than a 400 for something the client
+    // already knew. The pair below is what keeps this non-vacuous: typing a name re-enables it.
+    await waitFor(() => expect(screen.getByTestId('PlanStats.Blocked')).toBeInTheDocument())
+    expect(screen.getByTestId('PlanStats.Save')).toBeDisabled()
+
+    await userEvent.type(screen.getByTestId('PlanStats.Plan.Name'), 'Release 4.5')
+    await waitFor(() => expect(screen.getByTestId('PlanStats.Save')).toBeEnabled())
+    expect(patch).not.toHaveBeenCalled()
+  })
+
+  it('does not count a whitespace-only name as a name', async () => {
+    mockReads(planBody())
+    renderPage()
+
+    await userEvent.clear(await nameBox())
+    await userEvent.type(screen.getByTestId('PlanStats.Plan.Name'), '   ')
+
+    // §94's trim defect, third home in this slice: a name of three spaces is not a name, and the
+    // server would answer 400 for a refusal the client is certain about.
+    await waitFor(() => expect(screen.getByTestId('PlanStats.Save')).toBeDisabled())
+  })
+
   it('renders a field error on the control it names', async () => {
     mockReads(planBody())
     vi.spyOn(api, 'patch').mockRejectedValue(
-      new ApiError(400, 'Check the highlighted fields.', { name: ['Enter a plan name.'] }, null, null, 'Validation failed'),
+      new ApiError(400, 'Check the highlighted fields.', { name: ['That name is already taken.'] }, null, null, 'Validation failed'),
     )
     renderPage()
-    await openEditor()
-    await userEvent.click(screen.getByTestId('Plans.Edit.Submit'))
 
-    expect(await screen.findByText('Enter a plan name.')).toBeInTheDocument()
+    await userEvent.type(await nameBox(), '!')
+    await save()
+
+    expect(await screen.findByText('That name is already taken.')).toBeInTheDocument()
   })
 
-  it('puts a refusal with no field of its own in the form-level alert', async () => {
+  it('puts a refusal with no text field of its own beside the list it is about', async () => {
     mockReads(planBody())
     vi.spyOn(api, 'patch').mockRejectedValue(
       new ApiError(
@@ -267,29 +300,23 @@ describe('PlanEditDialog', () => {
       ),
     )
     renderPage()
-    await openEditor()
-    await userEvent.click(screen.getByTestId('Plans.Edit.Submit'))
+
+    await userEvent.type(await nameBox(), '!')
+    await save()
 
     // `exitCriteria` has no TextField to land on, and a refusal the user cannot see is the failure
     // this whole error path exists to prevent.
-    const alert = await screen.findByTestId('Plans.Edit.Error')
+    const alert = await screen.findByTestId('PlanStats.Plan.Exit.Error')
     expect(within(alert).getByText(/is not a metric/)).toBeInTheDocument()
   })
 
   /*
-    'disables Edit on a CLOSED plan, and explains why on the control' lived here. §97 (M7) removed
-    CLOSED, so no plan is frozen against editing and there is no disabled-with-reason to assert.
-    What still protects a sign-off is the server's edit-after-approval rule, which demotes rather
-    than refuses — a different behaviour, tested on the backend where it is decided.
+    'disables Edit on a CLOSED plan' lived here. §97 (M7) removed CLOSED, so no plan is frozen
+    against editing and there is no disabled-with-reason to assert. What still protects a sign-off
+    is the server's edit-after-approval rule, which demotes rather than refuses — a different
+    behaviour, tested on the backend where it is decided.
+
+    'disables Edit for a caller without plan:edit' went with the Edit button in phase 5. The gate it
+    asserted is now the Save button's, and `PlanForm.test.tsx` drives it in both directions.
   */
-
-  it('disables Edit for a caller without plan:edit', async () => {
-    mockReads(planBody(), ['project:read'])
-    renderPage()
-
-    await waitFor(() => expect(screen.getByTestId('PlanStats.Edit')).toBeDisabled())
-    // The same barrier as above, from the other side: a control the caller DOES hold must become
-    // enabled, or "disabled" above is just the pending state.
-    mockReads(planBody(), ['project:read', 'plan:edit'])
-  })
 })

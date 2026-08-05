@@ -77,6 +77,13 @@ function mockReads(plan: TestPlan, permissions: string[] = ['project:read', 'pla
       }
     }
     if (path.includes(`/plans/${PLAN}`)) return plan
+    // Before the project fallthrough, or `/projects/p1/artifacts` resolves to the PROJECT and the
+    // table is handed an object where it expects rows — which surfaces as a region boundary and a
+    // disabled-looking control three assertions later, not as a fixture error.
+    // The plan LIST, for the register dialog's plan picker. A bare [] leaves the pre-selected
+    // plan out of range of its own select — MUI says so on stderr and the control renders empty.
+    if (path.endsWith('/plans')) return [{ id: PLAN, key: 'TP-4', name: plan.name }]
+    if (path.includes('/artifacts') || path.includes('/doc-pages')) return []
     if (path.startsWith('/projects/')) return { id: PROJECT, name: 'Banking' }
     return []
   }) as never)
@@ -211,6 +218,41 @@ describe('the plan detail form spine', () => {
     // The pair with the test above is what makes this non-vacuous: alone it passes against a page
     // with no gate at all, because `useCan` is fail-closed while the answer is pending.
     await waitFor(() => expect(screen.getByTestId('PlanStats.Save')).toBeDisabled())
+  })
+
+  /**
+   * The Test artefacts tab writes OUTSIDE this Save (§97 phase 5) — its own row, its own key — so
+   * the two assertions are a pair: the control is there, and pressing it must never make the plan's
+   * banner appear. A tab named in `dirtyTabs` would be asking the author to press Save for
+   * something already written.
+   */
+  it('offers Register on the artefacts tab without making the plan dirty', async () => {
+    mockReads(planBody(), ['project:read', 'plan:edit', 'artifact:edit'])
+    renderPage('artefacts')
+
+    /*
+      Re-queried inside `waitFor`, and holding the node from `findByTestId` instead is a trap that
+      cost this test an hour: `PermissionGate`'s denied branch wraps the control in a tooltip span,
+      so when the verdict lands React swaps one subtree for another and mints a NEW button. A
+      captured reference goes on pointing at the detached, permanently-disabled one.
+    */
+    await waitFor(() => expect(screen.getByTestId('PlanStats.Artefacts.Register')).toBeEnabled())
+    await userEvent.click(screen.getByTestId('PlanStats.Artefacts.Register'))
+
+    // The dialog opens with THIS plan pre-selected — continuing what the reader was doing rather
+    // than making them restate which cycle they are looking at.
+    await screen.findByTestId('Artifacts.Dialog.Title')
+    expect(screen.getByTestId('Artifacts.Dialog.Plan')).toHaveValue(PLAN)
+    expect(screen.queryByTestId('PlanStats.Dirty')).not.toBeInTheDocument()
+  })
+
+  it('disables Register for a caller without artifact:edit', async () => {
+    mockReads(planBody(), ['project:read', 'plan:edit'])
+    renderPage('artefacts')
+
+    // The pair with the test above: `useCan` is fail-closed while pending, so this alone passes
+    // against a control with no gate at all (§66).
+    await waitFor(() => expect(screen.getByTestId('PlanStats.Artefacts.Register')).toBeDisabled())
   })
 
   it('renders the Progress tab for a reader who can edit nothing', async () => {
