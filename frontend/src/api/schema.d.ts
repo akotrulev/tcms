@@ -1951,6 +1951,136 @@ export interface paths {
             };
         };
         put?: never;
+        /**
+         * Add an entry to the reusable condition library
+         * @description **`library:manage`** — the same gate as `POST /shared-steps`, and for the same reason:
+         *     creating an entry propagates nowhere, so the permission is the whole control on this path.
+         *
+         *     Until §95 this collection was a read of a table **nothing could write** — the mirror of the
+         *     gap `POST /shared-steps` closed, and the more consequential half, because conditions are the
+         *     product's one genuinely *shared* authoring object: a case attaches one **by id** and an edit
+         *     to it propagates everywhere it is used. See the `PUT`.
+         *
+         *     Conditions are **project-scoped**, so an entry is reachable only from the project it was
+         *     created in.
+         *
+         *     No `Idempotency-Key`, on `POST /shared-steps`' terms: a duplicate is visible in the picker
+         *     next to its twin the moment the create returns.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ConditionInput"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Condition"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/conditions/{conditionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                conditionId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Edit a library condition — the edit propagates
+         * @description **`library:manage`.** This is the operation the roles spec's note about library work being
+         *     *"gated by an impact modal, not by permission"* was actually about: the edit lands on every
+         *     case and suite attaching this entry, with **no prompt and no fork**. Attaching a condition
+         *     is a reference, not a copy — that is the whole point of the object, and the deliberate
+         *     opposite of `/step-suggestions`, where picking a suggestion copies text and creates no link.
+         *
+         *     **The client is expected to state the impact before submitting**, which is what `usageCount`
+         *     and `suiteUsageCount` are served for. Read both — the suite figure is not a case count and
+         *     must not be rendered as one.
+         *
+         *     **No fork-on-edit.** Offering "change everywhere / copy for this case" was considered and
+         *     refused: the fork is what turned `shared_step` into a library of near-duplicates nobody
+         *     could rank. An author who wants different text writes a different condition.
+         *
+         *     A `PUT` rather than a `PATCH` because the body is the entry's whole authored content — title,
+         *     type and body together — and there is no field on it a caller would legitimately omit.
+         *
+         *     **Retired entries are not editable**: a soft-deleted condition answers 404 here, the same
+         *     answer an id from another project gets, so this endpoint is not an existence oracle for a
+         *     library the caller cannot read.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: {
+                    /**
+                     * @description The `lockVersion` the client read, as a decimal string. Mismatch yields 409.
+                     *
+                     *     **The precondition travels in the header, never in the body.** A PATCH body states the
+                     *     desired state; the version the client happened to read is an assertion about the state it
+                     *     started from, and mixing the two means a field on the input schema that must never be
+                     *     persisted. Omitting the header skips the check — a last-write-wins save, which is correct
+                     *     for a caller that genuinely has no prior read (an importer) and wrong for an editor, so
+                     *     the SPA always sends it.
+                     */
+                    "If-Match"?: components["parameters"]["IfMatch"];
+                };
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                    conditionId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ConditionInput"];
+                };
+            };
+            responses: {
+                /** @description Updated */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Condition"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
+            };
+        };
         post?: never;
         delete?: never;
         options?: never;
@@ -5500,8 +5630,58 @@ export interface components {
             /** @enum {string} */
             type: "PRE" | "POST" | "BOTH";
             body: string[];
-            /** @description Drives typeahead ranking and the pre-edit impact warning (plan §6f/§6h). */
+            /**
+             * @description Distinct **live cases** attaching this entry **directly** (`case_condition`). Derived by
+             *     the query since §95, never read from `condition.usage_count` — that column stays at its
+             *     `DEFAULT 0` for `SharedStep.usageCount`'s reason: a denormalized counter has to be
+             *     maintained by every path that rewrites a case's condition list, a case edit replaces the
+             *     list wholesale, and a counter that drifts silently is worse than one computed.
+             *
+             *     Distinct *cases*, not attachment rows — a case may legitimately attach the same entry as
+             *     both a pre- and a postcondition.
+             */
             usageCount: number;
+            /**
+             * @description Suites attaching this entry (`suite_condition`). **A second number rather than a bigger
+             *     first one**, and that is the resolution of the design question `/shared-steps` posed:
+             *     a condition's usage spans two tables and the suite side propagates *by inheritance* down
+             *     the whole ancestor chain, so a suite attachment reaches every case beneath it — a figure
+             *     no join here can produce, since the walk is over `suite.path` (`ltree`) and this module's
+             *     library queries are HQL precisely so the Hibernate company filter survives.
+             *
+             *     Blending the two into one count would be a **guess presented as a measurement**, and it
+             *     would understate: the direction that matters, because this is what the pre-edit impact
+             *     warning is computed from (plan §6f) and an edit warned as touching 3 cases while touching
+             *     300 is the failure the warning exists to prevent. Two honest numbers instead, and the
+             *     client says "attached to N suites — every case beneath inherits it" rather than
+             *     inventing a case count for them.
+             */
+            suiteUsageCount: number;
+            /**
+             * Format: int64
+             * @description Send as `If-Match` on the `PUT`. Mapped with `@Version` from the writer's first day —
+             *     §74 found `lock_version` mapped *without* it on three entities, where the column reads
+             *     `0` for ever and the precondition therefore **cannot fail**, there being no such thing
+             *     as a stale `0`.
+             */
+            lockVersion: number;
+        };
+        /**
+         * @description `usageCount`, `suiteUsageCount` and `lockVersion` are absent by construction: the first two
+         *     are derived from the references to the entry, and the third is the server's. Offering any of
+         *     them would invite a value the server discards.
+         */
+        ConditionInput: {
+            /** @description Max 150 characters — one line of a picker row. */
+            title: string;
+            /** @enum {string} */
+            type: "PRE" | "POST" | "BOTH";
+            /**
+             * @description The ordered actions. Blank lines are dropped and an all-blank body is refused, on
+             *     `SharedStepInput`'s terms: a trailing empty row is what the editor appends, and storing
+             *     it puts a blank line into every case that attaches the entry.
+             */
+            body: string[];
         };
         CaseConditionRef: {
             /** Format: uuid */

@@ -58,22 +58,18 @@ public interface ConditionRepository extends JpaRepository<Condition, UUID> {
      * and it is a substring match rather than a stemmed one — "logging" does not find "log in".
      * Both close when the {@code @@} path lands.
      *
-     * <h2>Most-used first</h2>
+     * <h2>The ranking MOVED to the service in §95</h2>
      *
-     * <p>The point of a reusable-condition library is to surface the precondition four hundred
-     * cases already share, not the one written yesterday — so {@code usageCount} descending, which
-     * is what the SPA's mock does and what §6h specifies. {@code usage_count} reads 0 on every row
-     * until something maintains it, which makes today's effective order the title; {@code id}
-     * breaks the remaining ties so the list is stable between keystrokes rather than merely
-     * usually stable.
+     * <p>This used to {@code ORDER BY c.usageCount DESC} over the stored column. §95 unmapped that
+     * column — it read {@code 0} on every row for ever, and the slice that gives this library an
+     * impact warning cannot compute one from a permanent zero (see {@link Condition}) — so the
+     * counts are now derived from the referencing tables and the sort happens in
+     * {@link ConditionService#rank}, exactly as {@link SharedStepService#rank} does.
      *
-     * <p><strong>The {@code id} tie-breaker survives mutation, and structurally so</strong> — the
-     * remaining tie needs two entries with the same usage count <em>and</em> the same title in one
-     * project, and Postgres returns a small table in physical order, so a fixture cannot make the
-     * unstable query answer differently on two consecutive reads. It stays because the property it
-     * buys — the same list for the same keystroke — is not one the planner owes us once the table
-     * is large enough to be scanned in parallel, and by then nothing about the endpoint will have
-     * changed to make anyone look.
+     * <p>The order here is therefore the <em>tie-break</em> order only, and it still matters: the
+     * service's comparator ends in the same title-then-id fallback, so a stable order coming out of
+     * the database keeps the same keystroke returning the same list rather than merely usually
+     * doing so.
      */
     @Query("""
             SELECT c FROM Condition c
@@ -81,7 +77,7 @@ public interface ConditionRepository extends JpaRepository<Condition, UUID> {
                AND c.deletedAt IS NULL
                AND c.type IN :types
                AND LOWER(c.title) LIKE :needle ESCAPE '\\'
-             ORDER BY c.usageCount DESC, c.title ASC, c.id ASC
+             ORDER BY c.title ASC, c.id ASC
             """)
     List<Condition> findLibrary(
             @Param("projectId") UUID projectId,
@@ -106,4 +102,68 @@ public interface ConditionRepository extends JpaRepository<Condition, UUID> {
             """)
     Optional<Condition> findLiveInProject(
             @Param("projectId") UUID projectId, @Param("conditionId") UUID conditionId);
+
+    /**
+     * How many distinct <strong>live cases</strong> attach each of the given entries directly.
+     *
+     * <p>{@link SharedStepRepository#countUsage}'s shape and its three rules, which transfer intact:
+     * entries nothing references are <strong>absent from the result, not zero</strong> (a
+     * {@code GROUP BY} over the referencing table cannot emit a row for something nothing
+     * references, so the caller defaults them); {@code c.deletedAt IS NULL} is what makes the number
+     * mean "in use", since cases are soft-deleted and without it the library ranks by history; and
+     * the collection must be non-empty, because an empty one binds into SQL {@code IN ()}, which is
+     * a syntax error rather than an empty result.
+     *
+     * <p><strong>{@code COUNT(DISTINCT cc.caseId)}, not {@code COUNT(*)}.</strong> One case may
+     * attach the same entry twice — legitimately, as both a pre- and a postcondition — and counting
+     * attachment rows would report two cases where there is one. §94's step corpus records the same
+     * trap from the other side, and both numbers look plausible on sight, which is why the fixture
+     * makes them differ rather than trusting a reading of the query.
+     *
+     * @param conditionIds must be non-empty
+     */
+    @Query("""
+            SELECT new com.tcms.repository.ConditionUsage(
+                       cc.conditionId, COUNT(DISTINCT cc.caseId))
+              FROM CaseCondition cc, TestCase c
+             WHERE cc.caseId = c.id
+               AND c.deletedAt IS NULL
+               AND cc.conditionId IN :conditionIds
+             GROUP BY cc.conditionId
+            """)
+    List<ConditionUsage> countCaseUsage(@Param("conditionIds") Collection<UUID> conditionIds);
+
+    /**
+     * How many <strong>live suites</strong> attach each of the given entries.
+     *
+     * <p>A second query and a second number, never folded into {@link #countCaseUsage}'s. A suite
+     * attachment propagates <em>by inheritance</em> to every case beneath the suite — the walk
+     * {@link CaseConditions} does over {@code suite.path} — so this figure is not a case count and
+     * adding it to one would produce a number that is neither. The contract states the resolution on
+     * {@code Condition.suiteUsageCount}: two honest numbers rather than one blended guess, because
+     * the client renders this as a pre-edit impact warning and the failure mode of understating it
+     * is an author changing three hundred cases believing they changed three.
+     *
+     * <p>Counting the <em>cases</em> a suite attachment reaches is deliberately not attempted here.
+     * It needs the {@code ltree} subtree walk, which HQL cannot express; a native query would drop
+     * the Hibernate company filter, which is the constraint every library read in this module
+     * records. That is a real limitation and it is named in the contract rather than papered over
+     * with a number that happens to be computable.
+     *
+     * <p>{@code s.deletedAt IS NULL} for {@link #countCaseUsage}'s reason: a soft-deleted folder
+     * stops inheriting to the cases still beneath it ({@link CaseConditions} says so at the walk),
+     * so counting it would warn about propagation that no longer happens.
+     *
+     * @param conditionIds must be non-empty
+     */
+    @Query("""
+            SELECT new com.tcms.repository.ConditionUsage(
+                       sc.conditionId, COUNT(DISTINCT sc.suiteId))
+              FROM SuiteCondition sc, Suite s
+             WHERE sc.suiteId = s.id
+               AND s.deletedAt IS NULL
+               AND sc.conditionId IN :conditionIds
+             GROUP BY sc.conditionId
+            """)
+    List<ConditionUsage> countSuiteUsage(@Param("conditionIds") Collection<UUID> conditionIds);
 }

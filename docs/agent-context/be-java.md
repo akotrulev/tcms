@@ -2,12 +2,11 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-04
-**Baseline commit:** `cf60cbd` (§92 phase 2) **+ §92 phase 3, the commit this line ships in** (its own SHA
-cannot be written into itself; per `CLAUDE.md`, trust the body over the header and re-grep what a
-later commit could have moved). A **concurrent strand** is live in this tree as of 2026-08-04 22:30
-(the nav rail, §91, plus doc-page subjects in `openapi.yaml`) — its files are uncommitted, so a delta
-pass will see frontend paths this cache does not map.
+**Last verified:** 2026-08-05
+**Baseline commit:** `b3c7fa6` (§94 phase 3) **+ §95 phase 1, the commit this line ships in** (its own
+SHA cannot be written into itself; per `CLAUDE.md`, trust the body over the header and re-grep what a
+later commit could have moved). **The header had lagged four slices** — it read `cf60cbd` while the
+body already recorded §93 and §94 — which is the documented trust-the-body case and is repaired here.
 **Fingerprint files:** `backend/build.gradle.kts`, `backend/gradle/libs.versions.toml`, `backend/gradle/wrapper/gradle-wrapper.properties`
 
 > Authoritative docs win over this file. `CLAUDE.md`, `docs/HANDOFF.md` (an index — sections live in
@@ -54,6 +53,45 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   `<X>Controller` / `<X>Service` / `<X>Repository` inside each.
 
 ## Seams to reuse
+
+- **THE CONDITION LIBRARY HAS WRITERS SINCE §95 phase 1, AND THE USAGE COUNT IS NOW TWO NUMBERS.**
+  `ConditionService.create`/`update` + `POST`/`PUT /projects/{projectId}/conditions` +
+  `ConditionEdit`/`ConditionWriteRequest`/`ConditionUsage` + `ConditionRepository.countCaseUsage`/
+  `countSuiteUsage` + `ConditionWriteEndpointTest` (fixture prefix **`c9`**).
+  **NO migration, NO table, NO column, NO new key** — policy count stays **59**, `V30` still head
+  with `V31` free. `lock_version`, `created_by` and `updated_by` were all `V1` columns nobody had
+  mapped.
+  **This is the object §94 declined to make steps into.** A step is text *copied* from a corpus and
+  carries no id; a condition is attached **by id** and an edit propagates everywhere. Both libraries
+  now have writers and they are deliberately opposite in kind.
+  **`Condition.usage_count` is UNMAPPED and both counts are DERIVED**, `SharedStepService.rank`'s
+  shape with two count queries. The column read its `DEFAULT 0` on every row in every deployment,
+  which was defensible while nothing consumed it and became indefensible the moment §95 made it an
+  **impact warning**: a warning computed from a permanent zero is a confident wrong answer, not a
+  cautious one.
+  **THE decision is that it is TWO numbers that must never be added.** `usageCount` = distinct live
+  cases attaching directly; `suiteUsageCount` = live suites attaching. A suite attachment inherits
+  down the **whole ancestor chain** (`CaseConditions`' walk over `suite.path`), so its case reach is
+  not computable here — the walk is `ltree`, HQL cannot express it, and a native query would drop
+  the Hibernate company filter, the constraint every library read in this module records. Blending
+  them would be a guess presented as a measurement **and would understate**, which is the direction
+  an impact warning must never fail in. The contract had already posed this exact question on
+  `/shared-steps` ("a design question rather than a join") and §95 answers it.
+  **`lock_version` is mapped WITH `@Version`, from the entity's first writer** — §74's trap in its
+  preventable form. Its two tests are a **pair**: `theVersionMovesOnEveryEdit` is what makes
+  `aStaleIfMatchIsRefused` able to fail, since a version that never moves makes every `If-Match`
+  match. `ApiProblem.stale("condition")`, not `conflict(title, detail)` — a lost update, whose advice
+  ("reload and reapply") is the opposite of a state refusal's.
+  **`findLiveInProject`, never `findById`** — the sibling-project row is in the same company, so RLS
+  and the company filter both pass it; one test stands between a caller and editing a library they
+  hold no grant on. Validation is **one method for create and edit** on purpose: a rule relaxed on
+  the edit lets an entry reach, across every attached case, a state the create refused.
+  **Live trap in the tests: these WRITE, and nothing rolls back a MockMvc request.** `ON CONFLICT DO
+  NOTHING` left `lock_version` climbing across the class and six tests failed on legitimate 409s
+  unrelated to their assertions; the seed is `DO UPDATE SET … lock_version = 0`.
+  **Still owed (phases 2–4):** `CaseUpdateRequest` continues to **400 on `preconditions`/
+  `postconditions`**, so nothing can attach a condition through the API yet; there is **no delete**;
+  and the frontend has **no call site for the GET, POST or PUT**. `#confirmed`
 
 - **THE STEP CORPUS (§94 phase 1).** `V30__test_step_action_trgm.sql` (**head; `V31` next free; NO
   new table, so the policy count stays 59**) + `StepSuggestionController`/`StepSuggestionService`/
@@ -908,6 +946,23 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   a caller may or may not see. `#confirmed`
 
 ## Session log
+
+- 2026-08-05 · EXTEND · **Conditions get a writer** (§95 phase 1) — `POST` + `PUT
+  /projects/{projectId}/conditions`, both on `library:manage`, the `PUT` with `If-Match` and a 409.
+  New: `ConditionEdit`, `ConditionWriteRequest`, `ConditionUsage`, `ConditionWriteEndpointTest`
+  (20 tests, prefix `c9` — computed free against the whole test tree rather than guessed, §19's
+  defect having recurred five times); `Condition` gained a `create` factory, `applyEdit`, the four
+  audit columns and `@Version`; `ConditionRepository` gained both count queries;
+  `ConditionLibraryEndpointTest` gained 4 tests and had 2 reworked. **No migration, no table, no
+  column, no new permission key** — policy count still 59, `V30` still head.
+  **The finding is that `usageCount` was always zero and was one slice away from being an impact
+  warning** — the column is now unmapped and both counts derived, and the count is deliberately
+  **two numbers that must not be added** (see the seam). The contract had posed that exact question
+  on `/shared-steps` and left it open; this answers it.
+  `npm run gen:api` run and `npm run build` immediately caught the mock's condition fixtures missing
+  both new required fields — the payoff of §79's no-cast rule, one build error rather than a page of
+  runtime ones. Backend **1704/1704**, build clean; frontend build clean, lint 0, **805/805**.
+  **Built and unverified** — 6 mutation rows queued, **zero run** (§65).
 
 - 2026-08-05 · EXTEND · The step corpus (§94 phase 1) — backend 1649 → **1681** (+13, all in
   `StepSuggestionEndpointTest`, prefix `c4`). New: `V30__test_step_action_trgm.sql` (**head**, `V31`

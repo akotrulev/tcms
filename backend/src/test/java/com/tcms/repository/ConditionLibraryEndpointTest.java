@@ -105,6 +105,20 @@ class ConditionLibraryEndpointTest extends IntegrationTestBase {
     /** "user account" with a space — the row an unescaped {@code _} would wrongly sweep in. */
     private static final UUID SPACED = UUID.fromString("c0004000-0000-4000-8000-000000000009");
 
+    /** Holds the cases the attachments hang off, and attaches NAVIGATE itself. */
+    private static final UUID BANKING_SUITE =
+            UUID.fromString("c0005000-0000-4000-8000-000000000001");
+
+    /**
+     * Attaches LOG_IN <strong>twice</strong> — as a pre- and as a postcondition, which is legal and
+     * is what makes {@code COUNT(DISTINCT case_id)} distinguishable from {@code COUNT(*)}.
+     */
+    private static final UUID CASE_TWICE = UUID.fromString("c0006000-0000-4000-8000-000000000001");
+    /** Attaches LOG_IN once and LOG_OUT once. */
+    private static final UUID CASE_ONCE = UUID.fromString("c0006000-0000-4000-8000-000000000002");
+    /** Soft-deleted, and attaches LOG_IN — so a missing {@code deleted_at} filter counts 3, not 2. */
+    private static final UUID CASE_RETIRED = UUID.fromString("c0006000-0000-4000-8000-000000000003");
+
     @Autowired
     private MockMvc mvc;
 
@@ -206,16 +220,15 @@ class ConditionLibraryEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("most-used first, then title — the ordering the library exists for")
+        @DisplayName("most-used first — and the STORED count would order these two the other way")
         void orderedByUsageThenTitle() throws Exception {
-            // usage_count is 0 on every row until something maintains it, so the fixture sets it
-            // by hand: without a spread here the query's first ORDER BY term is untested and a
-            // mutation dropping it survives on the title tie-break alone.
+            // The fixture's stored usage_count ranks Log out (412) above Log in (203); the real
+            // attachments rank Log in (2 live cases) above Log out (1). The orders are opposites,
+            // so this assertion fails loudly if anything goes back to serving the column — which
+            // is the regression worth catching, since the column reads 0 in production and the
+            // resulting order would look merely alphabetical rather than wrong.
             assertThat(titlesOf(libraryAs(LEAD, ACME, ACME_BANKING, "q", "log")))
-                    .as("Log out (412) outranks Log in (203), and sorts AFTER it by title — "
-                            + "so a query that dropped usageCount would return these two in the "
-                            + "opposite order rather than in the same one")
-                    .containsExactly("Log out", "Log in as standard user");
+                    .containsExactly("Log in as standard user", "Log out");
         }
 
         @Test
@@ -224,13 +237,60 @@ class ConditionLibraryEndpointTest extends IntegrationTestBase {
             JsonNode entry = byTitle(
                     libraryAs(LEAD, ACME, ACME_BANKING), "Log in as standard user");
 
-            assertThat(List.of("id", "title", "type", "body", "usageCount"))
+            assertThat(List.of(
+                            "id", "title", "type", "body", "usageCount", "suiteUsageCount",
+                            "lockVersion"))
                     .allSatisfy(field -> assertThat(entry.has(field))
                             .as("Condition.%s is required by openapi.yaml", field)
                             .isTrue());
             assertThat(entry.get("id").asText()).isEqualTo(LOG_IN.toString());
             assertThat(entry.get("type").asText()).isEqualTo("PRE");
-            assertThat(entry.get("usageCount").asInt()).isEqualTo(203);
+        }
+
+        @Test
+        @DisplayName("usageCount counts distinct live CASES — not attachment rows, not the column")
+        void usageCountIsDistinctLiveCases() throws Exception {
+            JsonNode entry = byTitle(
+                    libraryAs(LEAD, ACME, ACME_BANKING), "Log in as standard user");
+
+            // Four attachment rows exist against LOG_IN: two on CASE_TWICE (pre and post), one on
+            // CASE_ONCE, one on the soft-deleted CASE_RETIRED. Each wrong reading lands on a
+            // different number, so this single assertion separates all four:
+            //   203 → the stored column is being served again
+            //     4 → neither DISTINCT nor the deleted filter
+            //     3 → COUNT(*) rather than COUNT(DISTINCT case_id)
+            //     3 → DISTINCT but counting the retired case
+            //     2 → correct
+            assertThat(entry.get("usageCount").asInt()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("a suite attachment is a SECOND number and never part of the case count")
+        void suiteUsageIsCountedSeparately() throws Exception {
+            // NAVIGATE is attached by one suite and by no case. Folding the two counts together —
+            // the tempting simplification, and the one the contract argues against on
+            // Condition.suiteUsageCount — makes this row report one case, which is a figure nothing
+            // in the database supports and which the client would render as an impact warning.
+            JsonNode entry = byTitle(libraryAs(LEAD, ACME, ACME_BANKING), "Navigate to Billing");
+
+            assertThat(entry.get("usageCount").asInt())
+                    .as("no case attaches this entry")
+                    .isZero();
+            assertThat(entry.get("suiteUsageCount").asInt())
+                    .as("one suite does, and every case beneath it inherits")
+                    .isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("an entry nothing attaches reports zero on both counts, not an absent field")
+        void anUnattachedEntryIsZeroAndNotAbsent() throws Exception {
+            // A GROUP BY cannot emit a row for something nothing references, so both counts come
+            // from the caller's default rather than from the query. This is the state of every
+            // entry the moment it is created, which makes it the common case rather than an edge.
+            JsonNode entry = byTitle(libraryAs(LEAD, ACME, ACME_BANKING), "Reset test payment data");
+
+            assertThat(entry.get("usageCount").asInt()).isZero();
+            assertThat(entry.get("suiteUsageCount").asInt()).isZero();
         }
 
         @Test
@@ -715,13 +775,17 @@ class ConditionLibraryEndpointTest extends IntegrationTestBase {
      * path production reads through, so a fixture that could not be written under RLS is a fixture
      * that is lying about what the endpoint will see.
      *
-     * <p><strong>The usage counts are deliberately at odds with the alphabet, and the first draft
-     * was not.</strong> "Log in" was seeded at 412 and "Log out" at 203 — which orders them the
-     * same way the title does, so the mutation that drops {@code usageCount} from the ORDER BY
-     * <em>survived</em>: the assertion could not distinguish the right query from the wrong one.
-     * They are now inverted, so ranking by usage and ranking by title disagree. Exactly §25's
-     * tie-breaker survivor one level up, where cases inserted in key order let a query with no
-     * tie-breaker come back correct by luck.
+     * <p><strong>The stored {@code usage_count} values are no longer served, and they stay here on
+     * purpose</strong> — §95 unmapped the column and derives both counts from the referencing
+     * tables ({@link #seedAttachments}). Keeping the hand-set numbers, and keeping them ranking the
+     * two "log" rows in the <em>opposite</em> order to the real attachments, turns a silent
+     * regression into a failing assertion: anything that goes back to reading the column reverses
+     * the list rather than merely making it look alphabetical.
+     *
+     * <p>They were originally seeded at odds with the alphabet for the same family of reason, and
+     * the first draft was not: "Log in" at 412 and "Log out" at 203 order the pair the way the title
+     * already does, so the mutation dropping {@code usageCount} from the ORDER BY <em>survived</em>.
+     * Exactly §25's tie-breaker survivor one level up.
      */
     private void seedLibraries() throws SQLException {
         try (Connection connection = appConnection(ACME)) {
@@ -758,6 +822,68 @@ class ConditionLibraryEndpointTest extends IntegrationTestBase {
                     UMBRA_BANKING, "Log in as standard user", "PRE", "[\"Open the portal\"]",
                     888, false);
         }
+        seedAttachments();
+    }
+
+    /**
+     * The rows the two usage counts are derived from — §95.
+     *
+     * <h2>The stored counts and the real ones deliberately DISAGREE, and they disagree in order</h2>
+     *
+     * <p>Every {@code condition} above carries a hand-set {@code usage_count} that this fixture
+     * leaves in place. It is no longer served — §95 unmapped the column, because it reads its
+     * {@code DEFAULT 0} in production for ever and an impact warning computed from a permanent zero
+     * is a confident wrong answer rather than a cautious one. Leaving the stored values here, and
+     * making them rank the two "log" rows in the <strong>opposite</strong> order to the real
+     * attachments, is what makes the derivation provable: stored says Log out (412) then Log in
+     * (203), the attachments say Log in (2 cases) then Log out (1). A regression that re-maps the
+     * column does not merely weaken the ordering assertion — it reverses it.
+     *
+     * <h2>Three properties, each with a row that can fail it</h2>
+     *
+     * <ul>
+     *   <li><strong>Distinct cases, not attachment rows.</strong> {@code CASE_TWICE} attaches
+     *       LOG_IN as both a pre- and a postcondition, so {@code COUNT(*)} answers 3 where
+     *       {@code COUNT(DISTINCT case_id)} answers 2. Both are plausible on sight, which is why
+     *       the fixture makes them differ rather than trusting a reading of the query.</li>
+     *   <li><strong>Soft-deleted cases do not count.</strong> {@code CASE_RETIRED} attaches LOG_IN
+     *       too, so a missing {@code deleted_at} filter answers 3 — the library would rank by
+     *       history rather than by current practice.</li>
+     *   <li><strong>Suites are a second number.</strong> NAVIGATE is attached by a suite and by no
+     *       case at all, so it is the row that fails if the two counts are folded together: its
+     *       honest answer is 0 cases and 1 suite, and any blend reports a case count nothing
+     *       supports.</li>
+     * </ul>
+     */
+    private void seedAttachments() throws SQLException {
+        try (Connection connection = appConnection(ACME)) {
+            suite(connection, BANKING_SUITE, ACME_BANKING, "CAOLB-S1", "Payments");
+
+            testCase(connection, CASE_TWICE, ACME_BANKING, "CAOLB-1", 1, "Refund a settled payment",
+                    false);
+            testCase(connection, CASE_ONCE, ACME_BANKING, "CAOLB-2", 2, "Sign in and sign out",
+                    false);
+            testCase(connection, CASE_RETIRED, ACME_BANKING, "CAOLB-3", 3, "An abandoned case",
+                    true);
+
+            // LOG_IN: two distinct LIVE cases, three live attachment rows, four rows in total.
+            caseCondition(connection, "c0007000-0000-4000-8000-000000000001", CASE_TWICE, LOG_IN,
+                    "PRE", 0);
+            caseCondition(connection, "c0007000-0000-4000-8000-000000000002", CASE_TWICE, LOG_IN,
+                    "POST", 0);
+            caseCondition(connection, "c0007000-0000-4000-8000-000000000003", CASE_ONCE, LOG_IN,
+                    "PRE", 0);
+            caseCondition(connection, "c0007000-0000-4000-8000-000000000004", CASE_RETIRED, LOG_IN,
+                    "PRE", 0);
+
+            // LOG_OUT: one case. Stored 412 — the higher number, and the lower real one.
+            caseCondition(connection, "c0007000-0000-4000-8000-000000000005", CASE_ONCE, LOG_OUT,
+                    "POST", 1);
+
+            // NAVIGATE: a suite and no case.
+            suiteCondition(connection, "c0008000-0000-4000-8000-000000000001", BANKING_SUITE,
+                    NAVIGATE, "PRE", 0);
+        }
     }
 
     /**
@@ -788,6 +914,102 @@ class ConditionLibraryEndpointTest extends IntegrationTestBase {
             // A fixed instant rather than now(): nothing asserts the value, and a deterministic
             // fixture is one less thing that can differ between runs.
             statement.setString(8, retired ? "2026-01-01T00:00:00Z" : null);
+            statement.executeUpdate();
+        }
+    }
+
+    /** One folder, only ever as somewhere for the fixture's cases to live. */
+    private void suite(Connection connection, UUID id, UUID projectId, String key, String name)
+            throws SQLException {
+
+        try (var statement = connection.prepareStatement("""
+                INSERT INTO suite (id, company_id, project_id, key, key_seq, path, name)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?,
+                        CAST(? AS ltree), ?)
+                ON CONFLICT (id) DO NOTHING
+                """)) {
+            statement.setString(1, id.toString());
+            statement.setString(2, ACME.toString());
+            statement.setString(3, projectId.toString());
+            statement.setString(4, key);
+            statement.setLong(5, 1L);
+            // The path is an ltree label, so it may carry only [A-Za-z0-9_] — a raw UUID with its
+            // hyphens is rejected at insert with a syntax error that reads like a schema fault.
+            statement.setString(6, id.toString().replace("-", ""));
+            statement.setString(7, name);
+            statement.executeUpdate();
+        }
+    }
+
+    /** One case, live or soft-deleted — the two states the usage counts must tell apart. */
+    private void testCase(
+            Connection connection, UUID id, UUID projectId, String key, long keySeq, String title,
+            boolean retired) throws SQLException {
+
+        try (var statement = connection.prepareStatement("""
+                INSERT INTO test_case
+                    (id, company_id, project_id, suite_id, key, key_seq, title, deleted_at)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?, ?,
+                        CAST(? AS timestamptz))
+                ON CONFLICT (id) DO NOTHING
+                """)) {
+            statement.setString(1, id.toString());
+            statement.setString(2, ACME.toString());
+            statement.setString(3, projectId.toString());
+            statement.setString(4, BANKING_SUITE.toString());
+            statement.setString(5, key);
+            statement.setLong(6, keySeq);
+            statement.setString(7, title);
+            statement.setString(8, retired ? "2026-01-01T00:00:00Z" : null);
+            statement.executeUpdate();
+        }
+    }
+
+    /**
+     * One case→condition attachment.
+     *
+     * <p>{@code inline_body} stays null because {@code ck_case_condition_source} is an XOR: a row
+     * carrying both a {@code condition_id} and an inline body is refused, and one carrying neither
+     * is too. Only the reference form counts toward a library entry's usage, which is the whole
+     * distinction the check constraint exists to keep.
+     */
+    private void caseCondition(
+            Connection connection, String id, UUID caseId, UUID conditionId, String kind,
+            int position) throws SQLException {
+
+        try (var statement = connection.prepareStatement("""
+                INSERT INTO case_condition
+                    (id, company_id, case_id, kind, position, condition_id)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?, CAST(? AS uuid))
+                ON CONFLICT (id) DO NOTHING
+                """)) {
+            statement.setString(1, id);
+            statement.setString(2, ACME.toString());
+            statement.setString(3, caseId.toString());
+            statement.setString(4, kind);
+            statement.setInt(5, position);
+            statement.setString(6, conditionId.toString());
+            statement.executeUpdate();
+        }
+    }
+
+    /** One suite→condition attachment — the second count, and never part of the first. */
+    private void suiteCondition(
+            Connection connection, String id, UUID suiteId, UUID conditionId, String kind,
+            int position) throws SQLException {
+
+        try (var statement = connection.prepareStatement("""
+                INSERT INTO suite_condition
+                    (id, company_id, suite_id, kind, position, condition_id)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?, CAST(? AS uuid))
+                ON CONFLICT (id) DO NOTHING
+                """)) {
+            statement.setString(1, id);
+            statement.setString(2, ACME.toString());
+            statement.setString(3, suiteId.toString());
+            statement.setString(4, kind);
+            statement.setInt(5, position);
+            statement.setString(6, conditionId.toString());
             statement.executeUpdate();
         }
     }

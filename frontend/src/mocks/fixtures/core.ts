@@ -532,17 +532,17 @@ export const suites: Suite[] = [
 // ---------------------------------------------------------------- conditions ----
 
 export const conditions: Condition[] = [
-  { id: uid(1, 'n'), title: 'Log in as standard user', type: 'PRE', body: ['Open the application', 'Enter valid credentials', 'Confirm the dashboard is shown'], usageCount: 412 },
-  { id: uid(2, 'n'), title: 'Log in as administrator', type: 'PRE', body: ['Open the application', 'Enter administrator credentials', 'Confirm the admin console is shown'], usageCount: 87 },
-  { id: uid(3, 'n'), title: 'Navigate to Billing', type: 'PRE', body: ['Open the account menu', 'Select Billing'], usageCount: 156 },
-  { id: uid(4, 'n'), title: 'A settled card payment exists', type: 'PRE', body: ['Seed a captured payment of 120.00 EUR', 'Wait for settlement to complete'], usageCount: 64 },
-  { id: uid(5, 'n'), title: 'Reset test payment data', type: 'POST', body: ['Void any pending authorisations', 'Restore the merchant balance'], usageCount: 71 },
-  { id: uid(6, 'n'), title: 'Log out', type: 'POST', body: ['Open the account menu', 'Select Sign out'], usageCount: 203 },
-  { id: uid(7, 'n'), title: 'Sign in as standard user', type: 'PRE', body: ['Open the app', 'Sign in'], usageCount: 2 },
+  { id: uid(1, 'n'), title: 'Log in as standard user', type: 'PRE', body: ['Open the application', 'Enter valid credentials', 'Confirm the dashboard is shown'], usageCount: 412, suiteUsageCount: 3, lockVersion: 1 },
+  { id: uid(2, 'n'), title: 'Log in as administrator', type: 'PRE', body: ['Open the application', 'Enter administrator credentials', 'Confirm the admin console is shown'], usageCount: 87, suiteUsageCount: 0, lockVersion: 1 },
+  { id: uid(3, 'n'), title: 'Navigate to Billing', type: 'PRE', body: ['Open the account menu', 'Select Billing'], usageCount: 156, suiteUsageCount: 1, lockVersion: 1 },
+  { id: uid(4, 'n'), title: 'A settled card payment exists', type: 'PRE', body: ['Seed a captured payment of 120.00 EUR', 'Wait for settlement to complete'], usageCount: 64, suiteUsageCount: 0, lockVersion: 1 },
+  { id: uid(5, 'n'), title: 'Reset test payment data', type: 'POST', body: ['Void any pending authorisations', 'Restore the merchant balance'], usageCount: 71, suiteUsageCount: 0, lockVersion: 1 },
+  { id: uid(6, 'n'), title: 'Log out', type: 'POST', body: ['Open the account menu', 'Select Sign out'], usageCount: 203, suiteUsageCount: 2, lockVersion: 1 },
+  { id: uid(7, 'n'), title: 'Sign in as standard user', type: 'PRE', body: ['Open the app', 'Sign in'], usageCount: 2, suiteUsageCount: 0, lockVersion: 1 },
   // BOTH — setup that is also cleanup. Carried so the type filter's fold-in is reachable in
   // mock mode at all: with only PRE and POST rows, exact matching and the real semantics
   // return identical lists and the difference is invisible until live mode.
-  { id: uid(8, 'n'), title: 'Restore the merchant balance', type: 'BOTH', body: ['Void any pending authorisations', 'Set the balance to 1000.00 EUR'], usageCount: 38 },
+  { id: uid(8, 'n'), title: 'Restore the merchant balance', type: 'BOTH', body: ['Void any pending authorisations', 'Set the balance to 1000.00 EUR'], usageCount: 38, suiteUsageCount: 1, lockVersion: 1 },
 ];
 
 // `usageCount` is DERIVED — the server counts the distinct live cases referencing each entry and

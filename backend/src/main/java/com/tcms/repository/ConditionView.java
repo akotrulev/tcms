@@ -15,23 +15,39 @@ import java.util.UUID;
  * own id; this exposes the library entry's, and a picker that confused them would attach the wrong
  * row.
  *
- * @param id         the library entry's id — what {@code CaseConditionInput.conditionId} takes
- * @param body       the ordered steps. Never null; may legitimately be empty
- * @param usageCount zero on every row until something maintains it — see {@link Condition}
+ * <h2>Two counts, and they must not be added together</h2>
+ *
+ * <p>Both are derived as of §95 — the stored {@code condition.usage_count} was unmapped, see
+ * {@link Condition}. They are separate fields because they count different things:
+ * {@code usageCount} is <em>cases</em> attaching the entry directly, {@code suiteUsageCount} is
+ * <em>suites</em> attaching it, and a suite attachment reaches every case beneath it by
+ * inheritance. Their sum is a number about nothing. The client is expected to render the second as
+ * "attached to N suites — every case beneath inherits it" rather than converting it into a case
+ * figure it has no basis to compute.
+ *
+ * @param id              the library entry's id — what {@code CaseConditionInput.conditionId} takes
+ * @param body            the ordered steps. Never null; may legitimately be empty
+ * @param usageCount      distinct live cases attaching it directly
+ * @param suiteUsageCount live suites attaching it — each propagating to its whole subtree
+ * @param lockVersion     what the client sends back as {@code If-Match} on the {@code PUT}
  */
 public record ConditionView(
         UUID id,
         String title,
         ConditionType type,
         List<String> body,
-        int usageCount) {
+        int usageCount,
+        int suiteUsageCount,
+        long lockVersion) {
 
-    static ConditionView of(Condition condition) {
+    static ConditionView of(Condition condition, long cases, long suites) {
         return new ConditionView(
                 condition.getId(),
                 condition.getTitle(),
                 condition.getType(),
                 condition.getBody(),
-                condition.getUsageCount());
+                Math.toIntExact(cases),
+                Math.toIntExact(suites),
+                condition.getLockVersion());
     }
 }

@@ -1646,3 +1646,40 @@ Built and unverified. Rows written per §65; **none of them run.**
 |---|---|
 | **Write** | `StepSuggestionEndpointTest` — the corpus after a case is edited |
 | **Assert** | Editing a case's step text and re-reading the corpus shows the **new** text and drops the old one when no other case used it. The corpus is derived, so it has no invalidation step and nothing would report one being needed — but that also means a stale read here is a caching bug introduced later, not a defect in this slice. Establishes the baseline. |
+
+---
+
+## §95 phase 1 — the condition writers (`POST` / `PUT /projects/{projectId}/conditions`)
+
+Built and unverified. Rows written per §65; **none of them run.**
+
+| | |
+|---|---|
+| **Check** | the `@Version` is real — remove it and watch the right tests go red |
+| **Must show** | Deleting `@Version` from `Condition.lockVersion` (leaving the plain `@Column`) reddens **exactly two**: `theVersionMovesOnEveryEdit` and `aStaleIfMatchIsRefused`. If only the first goes red, the 409 test is passing for the wrong reason and would survive the defect §74 found on three other entities — a precondition that cannot fail. If **neither** goes red, the explicit `getLockVersion()` comparison in `ConditionService.update` is doing all the work and the backstop is untested, which is a different and still-live gap. |
+
+| | |
+|---|---|
+| **Check** | the two usage counts are not silently interchangeable |
+| **Must show** | Swapping `countCaseUsage` and `countSuiteUsage` at their call sites in `ConditionService.rank` reddens `suiteUsageIsCountedSeparately` **and** `usageCountIsDistinctLiveCases`. Both must move: a fixture where every entry is attached by the same number of cases and suites would let the swap survive, which is exactly the shape the pre-§95 fixture had (every count stored, none derived). |
+| **Check** | `COUNT(DISTINCT cc.caseId)` → `COUNT(cc.caseId)` reddens `usageCountIsDistinctLiveCases` with **3**, and dropping `c.deletedAt IS NULL` reddens it with **3** as well — the two wrong readings collide on one number, so a passing `!= 2` assertion does not identify which rule broke. Recorded because the test cannot distinguish them and the next reader will assume it can. |
+
+| | |
+|---|---|
+| **Check** | the project predicate on the edit is load-bearing |
+| **Must show** | Replacing `conditions.findLiveInProject(project.getId(), conditionId)` with `conditions.findById(conditionId)` reddens `refusesASiblingProjectsEntry` and **nothing else**. RLS and the Hibernate company filter both pass the sibling row — it is in the same company — so that one test is the only thing standing between a caller and editing a library they hold no grant on, across every case in the other project. |
+
+| | |
+|---|---|
+| **Check** | policy count and Flyway head UNCHANGED |
+| **Must show** | `SchemaConventionTest` still asserts **59** policies and `V30__test_step_action_trgm.sql` is still head with **`V31` free** — §95 phase 1 adds **no migration, no table and no column**. `condition.lock_version`, `created_by` and `updated_by` are all `V1` columns that were simply never mapped. A moved count means something else landed. |
+
+| | |
+|---|---|
+| **Write** | `ConditionWriteEndpointTest` — the edit under real concurrency |
+| **Assert** | Two callers reading version *n* and both submitting: exactly one 200 and one 409, with the 409'd caller's text **absent** from the stored row. The current stale test is sequential, so it proves the comparison works and not that the backstop catches an interleaving landing between the read and the flush — which is the only case the explicit check cannot see and the only reason `@Version` is there at all. |
+
+| | |
+|---|---|
+| **Write** | `ConditionWriteEndpointTest` — an edit to a condition attached to a **suite** |
+| **Assert** | The new text reaches every case beneath that suite, including cases added to it after the edit. Phase 1 proves propagation through `case_condition` only; the `suite_condition` half is the one `suiteUsageCount` exists to warn about and it is the half with the inheritance walk. **Blocked on nothing** — the fixture just does not have a suite-attached case yet. |
