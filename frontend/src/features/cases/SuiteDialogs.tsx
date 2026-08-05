@@ -1,5 +1,6 @@
 import {
   Alert,
+  Autocomplete,
   Button,
   Dialog,
   DialogActions,
@@ -11,7 +12,7 @@ import {
 } from '@mui/material';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import type { Suite } from '../../api/types';
 import { ApiError } from '../../api/client';
@@ -35,9 +36,25 @@ import { describeError } from '../../lib/describeError';
 /** Mirrors the server's own rule, so the message lands on the field without a round trip. */
 const MAX_NAME = 150;
 
+/** The server's cap on a tag rule, and it must equal a tag's own cap — see below. */
+const MAX_TAG = 60;
+
 const SuiteSchema = z.object({
   name: z.string().min(1, 'Enter a name.').max(MAX_NAME, `Keep the name under ${MAX_NAME} characters.`),
   description: z.string().max(2000).optional(),
+  /**
+   * The tags this suite CLAIMS (§96) — its third membership arm, beside the cases filed in it and
+   * the cases added to it individually.
+   *
+   * **Unioned, never intersected**: a suite with `smoke` and `payments` holds every case carrying
+   * *either*. That is the opposite of the case grid's `tag` filter, which ANDs, and the difference
+   * is the direction of the intent — a collection is being assembled here and a list narrowed
+   * there. The helper text says so, because nothing else on screen can.
+   *
+   * Capped at the same length a tag is capped at: a rule longer than a tag can be is a rule that
+   * can never match anything, accepted and silently useless.
+   */
+  tagRules: z.array(z.string().max(MAX_TAG, `Keep each tag under ${MAX_TAG} characters.`)),
 });
 
 type SuiteFormInput = z.infer<typeof SuiteSchema>;
@@ -54,12 +71,12 @@ const TestIdPrefix = 'Suites.Dialog';
  */
 function applyServerError(
   error: unknown,
-  setError: (field: 'name' | 'description' | 'root', message: string) => void,
+  setError: (field: 'name' | 'description' | 'tagRules' | 'root', message: string) => void,
 ) {
   if (error instanceof ApiError && error.fieldErrors) {
     let landed = false;
     for (const [field, messages] of Object.entries(error.fieldErrors)) {
-      if (field === 'name' || field === 'description') {
+      if (field === 'name' || field === 'description' || field === 'tagRules') {
         setError(field, messages.join(' '));
         landed = true;
       }
@@ -97,6 +114,7 @@ function SuiteFormDialog({
 }) {
   const {
     register,
+    control,
     handleSubmit,
     setError,
     setFocus,
@@ -157,6 +175,51 @@ function SuiteFormDialog({
               slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Description` } }}
               {...register('description')}
             />
+            <Controller
+              control={control}
+              name="tagRules"
+              render={({ field, fieldState }) => (
+                <Autocomplete
+                  multiple
+                  freeSolo
+                  // No option list, for the case editor's reason: there is no tag vocabulary in
+                  // the product, and a curated one is what left `shared_step` empty.
+                  options={[]}
+                  value={field.value}
+                  onChange={(_event, value) =>
+                    field.onChange([
+                      ...new Set(value.map((tag) => tag.trim()).filter((tag) => tag !== '')),
+                    ])
+                  }
+                  onBlur={field.onBlur}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Tag rules"
+                      error={!!fieldState.error}
+                      helperText={
+                        fieldState.error?.message ??
+                        'Any case carrying ANY of these belongs to this suite, wherever it is filed.'
+                      }
+                      slotProps={{
+                        // `...params.slotProps` FIRST, and this is not tidiness. MUI puts the
+                        // selected chips in `slotProps.input.startAdornment` and the field's ref
+                        // and ARIA wiring in `slotProps.htmlInput`; an object that merely adds a
+                        // testid REPLACES the lot, so every tag is held by the form, sent on save,
+                        // and invisible on screen — the author types it, sees nothing, and types
+                        // it again. Both gates were green when this was wrong.
+                        ...params.slotProps,
+                        htmlInput: {
+                          ...params.slotProps?.htmlInput,
+                          'data-testid': `${TestIdPrefix}.TagRules`,
+                        },
+                        formHelperText: { role: fieldState.error ? 'alert' : undefined },
+                      }}
+                    />
+                  )}
+                />
+              )}
+            />
           </Stack>
         </DialogContent>
         <DialogActions>
@@ -200,7 +263,7 @@ export function CreateSuiteDialog({
       title={parent ? `New suite in ${parent.name}` : 'New suite'}
       submitLabel="Create suite"
       // Keyed on the parent so opening the dialog from a different node resets the form.
-      defaults={{ name: '', description: '' }}
+      defaults={{ name: '', description: '', tagRules: [] }}
       isPending={create.isPending}
       testId={`${TestIdPrefix}.Create`}
       onSubmit={async (values, setError) => {
@@ -209,6 +272,7 @@ export function CreateSuiteDialog({
             name: values.name.trim(),
             description: values.description?.trim() || null,
             parentId: parent?.id ?? null,
+            tagRules: values.tagRules,
           });
           onCreated(created);
           onClose();
@@ -241,7 +305,10 @@ export function RenameSuiteDialog({
       onClose={onClose}
       title={`Rename ${suite.name}`}
       submitLabel="Save changes"
-      defaults={{ name: suite.name, description: suite.description ?? '' }}
+      // The suite's OWN rules, served on every read since §96. Seeding them is what makes a
+      // rename able to leave them alone — the field is always sent, so an unmentioned collection
+      // could only be preserved by knowing what it was.
+      defaults={{ name: suite.name, description: suite.description ?? '', tagRules: suite.tagRules }}
       isPending={rename.isPending}
       testId={`${TestIdPrefix}.Rename`}
       onSubmit={async (values, setError) => {
@@ -253,6 +320,10 @@ export function RenameSuiteDialog({
             // stored parent and refuses a differing one with a field error — so sending it buys
             // nothing here and would make an ordinary rename fail the day moving is implemented
             // and this form still echoes a stale value.
+            // Always sent, including as []: the server reads absent as "leave them alone", so
+            // clearing a suite's last rule would otherwise report success and change nothing —
+            // and the collection would keep holding cases nobody could see why.
+            tagRules: values.tagRules,
             lockVersion: suite.lockVersion,
           });
           onRenamed(renamed);

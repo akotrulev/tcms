@@ -1785,3 +1785,20 @@ Built and unverified. Rows written per §65; **none of them run.**
 | **Must show** | Adding `c.deleted_at IS NULL` to `caseIdsInSuiteSubtree` reddens `theDeletedCaseIsTheOneIntendedDifference`'s first assertion. A suite's history must keep a case somebody deleted last week, or the totals of runs that finished before the deletion silently drop. |
 | **Check** | plan scope actually widened |
 | **Must show** | A plan scoped on a tag-defined suite creates a run covering the tag-matched cases. **No test covers this end to end today** — the agreement test covers the predicate, and `RunCreateService` reaches it through `caseIdsInPlanScope`, which the same fragment now serves. **Write it**: scope a plan on a suite whose only members are tag-matched, create a run, and assert the executions materialised. Until then the widening is asserted one layer below where it matters. |
+
+---
+
+## §96 phases 5–6 — frontend
+
+Built and unverified. Rows written per §65; **none of them run.**
+
+| | |
+|---|---|
+| **Check** | the tag chips are rendered, not merely held |
+| **Must show** | Removing `...params.slotProps` from either tags `Autocomplete` (`CaseEditorPage`, `SuiteDialogs`) reddens `CaseEditorPage.test.tsx`'s "sends the tags it was given" — its `findByText('smoke')` is the assertion, and the payload assertion beside it passed against the broken version. This is the defect the phase actually shipped and fixed; the row exists so the fix cannot be undone quietly. |
+| **Check** | absent vs empty on a suite's tag rules |
+| **Must show** | Dropping `tagRules` from `RenameSuiteDialog`'s payload reddens `SuiteDialogs.test.tsx`'s "sends an EMPTY list"; defaulting it to `[]` instead of seeding from the suite reddens "seeds the stored rules". Two tests because the two mistakes are opposites and each passes the other's test. |
+| **Check** | `unfiled=false` is not an active filter |
+| **Must show** | Changing `useCaseFilters`' parse to `params.get('unfiled') === 'false' ? false : …` reddens "treats `unfiled=false` as absent". An active filter that narrows nothing makes the empty state claim a filter that does not exist. |
+| **Check** | the case editor still refuses a case with no steps |
+| **Must show** | Nothing here changed that rule, but `suiteId` losing its `.min(1)` removed the only *required* field the form had besides the title. Confirm `CaseSchema.test.ts`'s structured-steps refine still reddens when `liveSteps` is bypassed — **not run**, recorded because the two rules now sit alone. |

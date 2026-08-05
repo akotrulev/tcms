@@ -17,7 +17,23 @@ export function useSuites(projectId: string): UseQueryResult<Suite[]> {
  * and on a rename the server accepts it only when it repeats the stored one — moving is refused
  * with a field error rather than silently dropped, so the rename dialog does not send it at all.
  */
-export type SuiteInput = { name: string; parentId?: string | null; description?: string | null };
+export type SuiteInput = {
+  name: string;
+  parentId?: string | null;
+  description?: string | null;
+  /**
+   * The tags this suite claims (§96). **Absent means "leave them alone" and `[]` means "clear
+   * them"** — the same split every collection on this API uses, and the reason the rename dialog
+   * always sends the field: a save that omitted it could not clear the last rule.
+   */
+  tagRules?: string[];
+  /**
+   * The cases added to this suite **individually** — the membership arm no screen authors yet.
+   * The endpoint takes it and validates it against the project's live cases; the suite dialog
+   * offers tag rules only, so this is named here rather than left to be discovered as missing.
+   */
+  caseIds?: string[];
+};
 
 export function useCreateSuite(projectId: string) {
   const client = useQueryClient();

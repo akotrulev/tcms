@@ -36,7 +36,7 @@ describes, and it has now been caught twice running.
 - **`npm run build` is THE gate** (`tsc -b` + vite build). **Do not trust `tsc --noEmit`** — it has
   reported 0 errors while the build failed with nine (working agreement). `#confirmed`
 - `npm run lint` — oxlint, must stay at **0 warnings**; it prints nothing when clean.
-- `npm run test:run` — Vitest + RTL. **831/831** at §96 phase 5 (805 at §94; 770 at §91, 783 before this
+- `npm run test:run` — Vitest + RTL. **834/834** across 56 files at §96 phase 6 (805 at §94; 770 at §91, 783 before this
   slice). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
 - `npm run gen:api` — regenerate `src/api/schema.d.ts` after **any** `openapi.yaml` change. Runs
   through `npx` on purpose (the scaffold pins TS 6, the tool peer-requires 5.x); do not "fix" it.
@@ -70,6 +70,25 @@ directly above the switcher) and the wordmark links there too.
 
 ## Seams to reuse
 
+- **`slotProps` ON AN `Autocomplete`'s `renderInput` MUST SPREAD `...params.slotProps` FIRST.**
+  MUI v9 puts the selected **chips** in `slotProps.input.startAdornment` and the field's ref/ARIA
+  wiring in `slotProps.htmlInput`. An object that merely adds a `data-testid` **replaces** the lot:
+  every value is held by the form, sent on save, and **invisible on screen** — the author types a
+  tag, sees nothing, and types it again. `npm run build` and `oxlint` are both green, and a payload
+  assertion passes. §96 phase 6 shipped this and fixed it; the step-action `Autocomplete`
+  (`CaseEditorPage:281`) had it right since §94 and is the precedent to copy.
+  **Assert a chip is VISIBLE, not just in the payload** — that is the only check that fails.
+- **THE SUITE DIALOG CLAIMS CASES BY TAG (§96 phase 6).** `SuiteDialogs.tsx` gains `tagRules` to
+  its Zod schema and a chips `Autocomplete`; `SuiteInput` (`api/queries/suites.ts`) gains
+  `tagRules` and `caseIds`. The rename dialog **seeds from the suite and always sends the field** —
+  absent means "leave them alone", so an omitted field could never clear the last rule and a
+  `[]` default would empty the suite on every rename. Both mistakes are opposites and
+  `SuiteDialogs.test.tsx` (**new file**, this dialog had none) covers each.
+  `caseIds` is **on the type and authored by no screen**: the endpoint validates it, the dialog
+  offers tag rules only. Named rather than left to be found missing.
+  `SuiteTree`'s count carries a tooltip saying membership is filed ∪ added ∪ tagged **and that the
+  counts do not sum to the project total** — a case can be in several folders, and a reader who
+  subtracts otherwise finds a discrepancy in a correct number.
 - **A CASE MAY BE FILED NOWHERE, AND TAGS ARE AUTHORABLE (§96 phase 5).**
   `caseSchema.ts`: `suiteId` lost its `.min(1)` — **`''` IS THE UNFILED VALUE**, not a missing one
   (MUI's `Select` treats `null` as uncontrolled and warns), and the submit maps it to **`null`**

@@ -297,6 +297,13 @@ describe('CaseEditorPage — tags and the unfiled case (§96)', () => {
     const tags = screen.getByTestId('CaseEditor.Field.Tags')
     await user.type(tags, 'smoke{Enter}  smoke  {Enter}regression{Enter}')
 
+    // VISIBLE, not merely held. The first draft of this control replaced MUI's `slotProps` in
+    // order to add a testid, which drops the `input.startAdornment` the chips live in: every tag
+    // was in the form, was sent on save, and never appeared on screen — so an author types a tag,
+    // sees nothing, and types it again. The payload assertion below passed against that.
+    expect(await screen.findByText('smoke')).toBeVisible()
+    expect(screen.getByText('regression')).toBeVisible()
+
     await user.click(screen.getByTestId('CaseEditor.Submit'))
 
     await waitFor(() => expect(post).toHaveBeenCalled())

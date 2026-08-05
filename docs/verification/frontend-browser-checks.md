@@ -1007,3 +1007,16 @@ mode has one project, so a case moving between projects' vocabularies is unreach
 | 79 | **Live.** Retag a case (add a tag, save), then open its version timeline. | **No new version.** A tag is not authored content — the server keeps tags off `CaseEdit` and out of the content hash — so retagging must not write a version whose diff says nothing about the test having changed. A version here is the empty-diff noise §6j added the hash to keep out. |
 | 80 | Open the editor on a case that **is** filed, change the suite to **Not filed**, save, reload. | It is unfiled, and the detail page's breadcrumb reads **Not filed** and links to the grid's unfiled filter — not to `?suiteId=null`, which renders every case in the project and reads as a broken crumb. |
 | 81 | Type a 61-character tag in the editor and save. | Refused with the message on the tags field, never truncated. A silently shortened tag stops matching the suite rule it was written for, and the case leaves that collection with no symptom. |
+
+## §96 phase 6 — the suite side: a folder that claims cases
+
+Built and unverified. Rows written per §65; **none of them run.**
+
+| # | Drive | Expect |
+|---|---|---|
+| 82 | Create a suite with tag rule `smoke`. Then look at its count and open it in the grid. | The folder reports the cases carrying `smoke` **wherever they are filed** — its members are a query, not a filing decision. In mock mode the fixture's `Smoke` suite (TS-10) is the one folder where this is observable at all; every other answers the same number under the old rule and the new one. |
+| 83 | Rename that suite **without touching the rules**, then reopen the dialog. | The rules are still there. The form always sends `tagRules`, seeded from the suite — absent means "leave them alone" to the server, so a form that omitted the field could never clear a rule, and one that sent `[]` by default would empty the suite on every rename. |
+| 84 | Remove the last rule and save. | The rule is gone and the folder's count drops. This is the arm the two failure modes above meet on: it only works if the field is both **seeded** and **always sent**. |
+| 85 | Type a tag rule and watch the field. | The chip **appears as you press Enter**. It is the check that would have caught this phase's own defect — the first draft replaced MUI's `slotProps` to add a testid, which drops the adornment the chips live in, so every rule was held, sent and invisible. Both gates were green. |
+| 86 | Hover a suite's case count in the tree. | The tooltip says the count includes cases filed here, added here, or carrying its tags — **and that a case can belong to several folders, so the counts do not sum to the project total.** Without it a reader who subtracts finds a discrepancy and reports a bug in a correct number. |
+| 87 | Add a tag to a case that a suite claims, then reload the tree. | The folder's count goes up **with no write to the suite**. That is the whole point of the third arm, and the only way to see it is from the other side. |

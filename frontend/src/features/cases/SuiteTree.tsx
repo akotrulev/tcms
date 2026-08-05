@@ -10,6 +10,7 @@ import {
   Menu,
   MenuItem,
   Stack,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import { SimpleTreeView } from '@mui/x-tree-view/SimpleTreeView';
@@ -264,13 +265,23 @@ export function SuiteTree({
                 {lifecycleLabels[node.suite.lifecycleStatus]}
               </Box>
             )}
-            <Box
-              component="span"
-              className="identifier"
-              sx={{ fontSize: '0.6875rem', color: 'text.secondary' }}
+            <Tooltip
+              // §96: a count is now RESOLVED membership — filed, added individually, or carrying
+              // one of the folder's tags — so a case can be counted by several folders at once and
+              // these numbers do not add up to the project's case count. Saying so on the number
+              // itself is the only place a reader meets the discrepancy; leaving it to be found by
+              // subtraction is how a correct number reads as a bug.
+              title="Cases in this folder and everything under it — filed here, added here, or carrying one of its tags. A case can belong to several folders, so these do not sum to the project total."
+              enterDelay={600}
             >
-              {formatCount(node.totalCases)}
-            </Box>
+              <Box
+                component="span"
+                className="identifier"
+                sx={{ fontSize: '0.6875rem', color: 'text.secondary' }}
+              >
+                {formatCount(node.totalCases)}
+              </Box>
+            </Tooltip>
             {/*
               One kebab per node rather than three inline buttons: a tree rail is narrow, and
               three icons per row at every depth would crowd out the name the row exists to show.

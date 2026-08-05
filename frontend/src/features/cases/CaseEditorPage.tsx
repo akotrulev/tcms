@@ -1073,12 +1073,6 @@ function CaseEditorForm({
                       ])
                     }
                     onBlur={field.onBlur}
-                    renderValue={(values, getItemProps) =>
-                      values.map((tag, index) => {
-                        const { key, ...rest } = getItemProps({ index });
-                        return <Chip key={key} {...rest} size="small" label={tag} />;
-                      })
-                    }
                     renderInput={(params) => (
                       <TextField
                         {...params}
@@ -1089,9 +1083,13 @@ function CaseEditorForm({
                           'Press Enter after each. A suite claiming one of these holds this case.'
                         }
                         slotProps={{
-                          // Merged into the params MUI already built rather than replacing them:
-                          // Autocomplete puts its own ref and ARIA wiring on the input, and a
-                          // fresh object here silently unbinds the popup from the field.
+                          // `...params.slotProps` FIRST, and this is not tidiness. MUI puts the
+                          // selected chips in `slotProps.input.startAdornment` and the field's ref
+                          // and ARIA wiring in `slotProps.htmlInput`; an object that merely adds a
+                          // testid REPLACES the lot, so every tag is held by the form, sent on
+                          // save, and invisible on screen — the author types it, sees nothing, and
+                          // types it again. Both gates were green when this was wrong.
+                          ...params.slotProps,
                           htmlInput: {
                             ...params.slotProps?.htmlInput,
                             'data-testid': `${TestIdPrefix}.Field.Tags`,
