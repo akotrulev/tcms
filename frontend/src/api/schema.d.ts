@@ -2306,6 +2306,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The tags in use in this project
+         * @description Every distinct `case_tag` on a live case of this project, with the number of cases carrying
+         *     it, most-used first and then alphabetically.
+         *
+         *     **Derived, never curated** — `step-suggestions`' argument at a different altitude, and the
+         *     correction `shared_step` earned by staying empty: a tag list somebody has to populate is a
+         *     tag list nobody populates. A tag exists here because a case carries it, so this endpoint
+         *     cannot disagree with the grid.
+         *
+         *     **It is a picker's list and never a validator's.** A tag is free text (§96) and a client may
+         *     send one this endpoint did not return — that is how the first case to carry a new tag gets
+         *     it. Narrowing writes to this list would make the vocabulary closed, which is precisely what
+         *     `case_tag` is not.
+         *
+         *     Counts are over **live** cases, so a tag whose every case was soft-deleted disappears from
+         *     the list while remaining legal to write. Zero-count rows are therefore impossible rather
+         *     than filtered.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /**
+                 * @description The tags in use. An empty array is the ordinary answer for a project nobody has tagged,
+                 *     not an error — both tag controls must render an empty list as *"no tags yet"* rather
+                 *     than as a failure to load.
+                 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TagUsage"][];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/plans": {
         parameters: {
             query?: never;
@@ -3479,10 +3543,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The plan's document
-         * @description A test plan's narrative half — business requirements, test artefacts, scope, out of scope,
-         *     and the test-scenario outline. The plan row holds the *executable* half: the milestone, the
-         *     entry and exit criteria, and the suites and cases in scope.
+         * The plan's business-requirements page
+         * @description The document a plan's requirements are written in — **a page somebody already wrote**, which
+         *     the plan adopts. The plan row holds the *executable* half: the milestone, the entry and exit
+         *     criteria, and the suites, cases, tags and sections in scope; `scopeText` and
+         *     `outOfScopeText` hold the prose that used to be two of this document's headings.
          *
          *     **It is an ordinary `DocPage`**, living in the project's documentation space and reachable at
          *     `/doc-pages/{pageId}` like any other, with `subjectType: TEST_PLAN` naming the plan it is
@@ -3490,8 +3555,20 @@ export interface paths {
          *     `plan:edit`: it is documentation, it versions as documentation, and it is found by everyone
          *     who searches the documentation. This endpoint only *resolves* the plan to it.
          *
-         *     `404` when the plan has no document yet — a plan is created long before anybody writes one,
-         *     so this is the ordinary first answer and not an error state. `POST` creates it.
+         *     `404` when the plan has no document yet — a plan is created long before anybody links one,
+         *     so this is the ordinary first answer and not an error state. `PUT` links one.
+         *
+         *     > **Retired 2026-08-05 (§97):** `POST` — *start the plan's document from the five-section
+         *     > template* — is gone, and with it `PlanDocumentTemplate`. Four of that template's five
+         *     > headings now have real homes (business requirements is *this* linked page, test artefacts
+         *     > is the `artifact` register, scope and out of scope are `scopeText` / `outOfScopeText` on
+         *     > the plan, and the test-case outline is the plan's own sectioned scope items), which leaves
+         *     > the template seeding a document whose every section is authored somewhere else — a second
+         *     > place to write each one, and §6n's "graveyard of outdated copies" written by the product
+         *     > itself. What replaces it is `PUT`: a plan adopts the specification somebody wrote before
+         *     > the release was scheduled, keeping its history, its `doc_link`s and its place in the
+         *     > search index. **Existing documents are untouched** — retiring the template changes what a
+         *     > new plan gets, never what an old one holds.
          */
         get: {
             parameters: {
@@ -3528,10 +3605,10 @@ export interface paths {
         };
         /**
          * Link an existing page as the plan's document
-         * @description Adopts a page that already exists in the project's documentation space, rather than creating
-         *     one from the template. Requires `doc:edit`, the same key as `POST` and as editing the page,
-         *     because it is the same act seen from the other end: it writes the page's
-         *     `subjectType`/`subjectId` and nothing on the plan.
+         * @description Adopts a page that already exists in the project's documentation space. Since the template
+         *     `POST` was retired (§97) this is **the only way a plan gets a document**. Requires
+         *     `doc:edit`, the same key as editing the page, because it is the same act seen from the other
+         *     end: it writes the page's `subjectType`/`subjectId` and nothing on the plan.
          *
          *     **A plan's document is often written before the plan row exists** — a specification drafted
          *     in the documentation section, then adopted once the release it describes is scheduled. Until
@@ -3600,61 +3677,7 @@ export interface paths {
                 };
             };
         };
-        /**
-         * Start the plan's document from the template
-         * @description Creates the page and fills it with the standard test-plan skeleton — the five headed
-         *     sections, each with a prompt describing what belongs in it. Requires `doc:edit`.
-         *
-         *     **The template is seeded here and nowhere else.** There is deliberately no "reset to
-         *     template": a second application would overwrite whatever had been written under those
-         *     headings, and the request that did it would look identical to the one that created an empty
-         *     document. Calling this again is a `409`.
-         *
-         *     The prompts are prompts, not content — every one is a `paragraph` the author is expected to
-         *     replace, so a document nobody has touched reads as an empty form rather than as a plan
-         *     asserting things about a product.
-         *
-         *     **Test artefacts records identifiers, never secrets.** Its prompt asks for the environment,
-         *     the account, and *where the credential lives*; the product stores no password, and an
-         *     example plan that lists them in prose is the practice this section exists to replace.
-         */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    projectId: components["parameters"]["ProjectId"];
-                    planId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Created */
-                201: {
-                    headers: {
-                        /** @description The created page's own URL under `/doc-pages`. */
-                        Location?: string;
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["DocPage"];
-                    };
-                };
-                401: components["responses"]["Unauthorized"];
-                403: components["responses"]["Forbidden"];
-                404: components["responses"]["NotFound"];
-                /** @description The plan already has a document. `detail` names it. */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["Problem"];
-                    };
-                };
-            };
-        };
+        post?: never;
         /**
          * Unlink the plan's document
          * @description Clears the page's `subjectType`/`subjectId` and **keeps the page**. This unlinks
@@ -6128,6 +6151,10 @@ export interface components {
             configurations: components["schemas"]["Configuration"][];
             suiteIds: string[];
             caseIds: string[];
+            tags: string[];
+            sections: components["schemas"]["PlanSection"][];
+            scopeText: string | null;
+            outOfScopeText: string | null;
             currentVersionNo: number;
             lockVersion: number;
         };
@@ -6148,6 +6175,10 @@ export interface components {
             milestoneDate?: string | null;
             suiteIds?: string[];
             caseIds?: string[];
+            tags?: string[];
+            sections?: components["schemas"]["PlanSectionInput"][];
+            scopeText?: string | null;
+            outOfScopeText?: string | null;
             entryCriteria?: components["schemas"]["CriterionInput"][];
             exitCriteria?: components["schemas"]["CriterionInput"][];
         };
@@ -6179,6 +6210,56 @@ export interface components {
             op: ">=" | ">" | "<=" | "<" | "=" | "!=";
             value: number;
             label?: string | null;
+        };
+        /**
+         * @description A **sub-feature** subdivision of the plan's cases — "Create an object", "Edit",
+         *     "Navigation" — holding the same three kinds of reference the unsectioned group holds.
+         *
+         *     **A section is a live selector, not a snapshot.** Its members are resolved on every read, so
+         *     adding a case to a referenced suite, or tagging a case with a referenced tag, changes what
+         *     this section holds without anything writing to the plan. TestNG's `<test>` block is the
+         *     shape: a named subdivision carrying its own class list and its own group filter,
+         *     re-resolved on every run.
+         *
+         *     **A section is plan-local and is not a suite.** It has no key, no lifecycle, no versions and
+         *     no existence outside this plan — a suite is reusable project content, a section is this
+         *     plan's narrative structure.
+         *
+         *     **The counts do not sum.** A case can be referenced directly in one section and arrive
+         *     through a suite or a tag in another, so the sections' counts exceed the plan's deduped
+         *     `caseCount`. That is the design, and a client that lets a reader subtract will have them
+         *     report a bug in a correct number.
+         */
+        PlanSection: {
+            name: string;
+            /** @description Author order. Contiguous from 0 as served; a client sends the order it wants. */
+            position: number;
+            caseIds: string[];
+            suiteIds: string[];
+            tags: string[];
+        };
+        /**
+         * @description **The whole section list is replaced when `sections` is present** — sections have no ids, so
+         *     there is nothing to match a partial update against. Absent means "leave the sections alone";
+         *     `[]` removes them all and leaves their references unsectioned nowhere, i.e. removes them
+         *     from the plan.
+         *
+         *     A section with no references at all is legal and is kept: an author names the sub-feature
+         *     before filling it, and dropping empty ones on save would delete the heading they just typed.
+         */
+        PlanSectionInput: {
+            name: string;
+            caseIds?: string[];
+            suiteIds?: string[];
+            tags?: string[];
+        };
+        TagUsage: {
+            tag: string;
+            /**
+             * @description Live cases carrying this tag in this project. Never zero — a tag with no live case is
+             *     absent from the list rather than present with a zero.
+             */
+            caseCount: number;
         };
         PlanStatusInput: {
             /** @enum {string} */

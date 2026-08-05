@@ -91,7 +91,7 @@ export const runHandlers = [
 
     const requested = (body.caseIds as string[] | undefined) ?? [];
     const caseIds =
-      requested.length > 0 ? requested : plan ? planScopeCaseIds(plan.id) : [];
+      requested.length > 0 ? requested : plan ? planScopeCaseIds(plan) : [];
 
     if (caseIds.length === 0) {
       return problem(400, 'Validation failed', 'Check the highlighted fields.', {

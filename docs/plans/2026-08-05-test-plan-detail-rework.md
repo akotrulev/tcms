@@ -5,8 +5,7 @@
 out of it. **Revised 2026-08-05 (second pass)** after the user restated what a test plan *is* — see
 §1a. That restatement retires three of the five original decisions; they are struck through in place
 rather than deleted, per the working agreement.
-**Status:** phase 1 shipped (`eb548d2`, the contract's `PUT`/`DELETE`). Phases 2+ **re-planned, not
-started**.
+**Status:** phases 1–2 shipped (the contract, both halves). Phases 3+ **re-planned, not started**.
 
 ---
 
@@ -322,7 +321,7 @@ none of them.
 | # | Phase | Gate |
 |---|---|---|
 | 1 | ✅ **shipped** (`eb548d2`) — contract: `PUT`/`DELETE` plan document | `npm run build` |
-| 2 | Contract — scope texts, section fields, tags endpoint, retire the template `POST`; `gen:api` | `npm run build` |
+| 2 | ✅ **shipped** — contract: scope texts, `PlanSection`, the tags endpoint, the template `POST` retired; `gen:api`; the mock moved with it (§88's rule) and `planScopeCaseIds` now unions every arm | `npm run build` + lint + `test:run` |
 | 3 | Migration `V32` + backend: scope texts, sectioned items, both add-time expansions, tags query, link/unlink service, template deleted | `./gradlew build` |
 | 4 | Frontend — the form spine: state above tabs, one Save, ordered writes, partial-failure reporting, dirty banner, `useUnsavedWork` | both |
 | 5 | Frontend — the seven tabs: Plan (replacing `PlanEditDialog`), business requirements, artefacts, the two texts | both |
@@ -369,6 +368,11 @@ Both are in `docs/plans/2026-08-05-organization-model-restatement.md`. The filin
   second implementation `ui-rules` §8 is about; `PlanLifecycle.test.tsx` and `PlanEdit.test.tsx` move
   with it. Same for `PlanDocumentTemplate` and its tests.
 - **Progress must keep working for a reader with no write permission at all** (§3).
+- **Phases 2–4 are a window in which no plan can be given a document.** The template `POST` is
+  retired in phase 2 and the *Link a page* control lands in phase 5, so in between the empty state
+  is a sentence and a link into the documentation section. Deliberate — the alternative is a
+  contract phase that ships an affordance it cannot render — and recorded here and in browser
+  row 88 rather than left for the next reader to find as a regression.
 - **M7 deletes states that four slices' worth of reasoning was written about.** `PlanLifecycle`'s
   javadoc, `PlanStatusService`'s audit mapping, `PlanDeleteService`'s partition and §82's edge-vs-
   target finding all argue about `ACTIVE`/`CLOSED`. Strike them through with the reversal, per the

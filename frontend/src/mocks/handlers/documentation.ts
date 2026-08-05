@@ -20,77 +20,6 @@ type PageInput = { title?: string; parentId?: string | null; blocks?: BlockInput
 const BLOCK_TYPES = ['heading', 'paragraph', 'list', 'code', 'table', 'image'];
 
 /**
- * The server's plan-document template, mirrored.
- *
- * A copy, and it is the kind §52 warns about — two definitions of one thing that drift. It is here
- * anyway because the alternative is a mock that serves an empty document, which would leave the
- * whole screen unexercised in the mode this app is developed in. The drift that matters is the
- * SECTION HEADINGS, since the SPA finds "Test cases" by name to know where its create button
- * belongs; a prompt's wording drifting costs nothing.
- */
-const PLAN_TEMPLATE: { blockType: DocBlock['blockType']; level?: number; text: string }[] = [
-  { blockType: 'heading', level: 1, text: 'Business requirements' },
-  {
-    blockType: 'paragraph',
-    text:
-      'What the product under test does, in the words of the people who asked for it. Describe ' +
-      'the system in a sentence or two, then list its main functionalities below — one bullet each.',
-  },
-  { blockType: 'list', level: 1, text: 'A capability the product offers.' },
-
-  { blockType: 'heading', level: 1, text: 'Test artefacts' },
-  { blockType: 'heading', level: 2, text: 'Test environments' },
-  { blockType: 'list', level: 1, text: 'Environment name — its URL, and what build or branch it runs.' },
-  { blockType: 'heading', level: 2, text: 'Accounts' },
-  {
-    blockType: 'paragraph',
-    text:
-      'Who each account is and what it can reach. Record where the credential lives — a vault ' +
-      'entry, a shared secret store — and never the credential itself. A password typed here is ' +
-      'readable by everyone who can read this plan, survives every export of it, and outlives the ' +
-      'person who set it.',
-  },
-  {
-    blockType: 'list',
-    level: 1,
-    text: 'Account identifier — the role or team it stands for, and where its secret is kept.',
-  },
-
-  { blockType: 'heading', level: 1, text: 'Scope' },
-  {
-    blockType: 'paragraph',
-    text:
-      'What this plan undertakes to test. Sentences, not case keys — the suites and cases that ' +
-      'will actually be executed are the plan\'s own scope, set on the plan itself, and this ' +
-      'section is what a reader needs in order to agree that the selection is the right one.',
-  },
-  { blockType: 'list', level: 1, text: 'Something this plan will verify.' },
-
-  { blockType: 'heading', level: 1, text: 'Out of scope' },
-  {
-    blockType: 'paragraph',
-    text:
-      'What this plan deliberately does not cover, and — where it is not obvious — why. An ' +
-      'unstated exclusion reads as an oversight when the gap is found later.',
-  },
-  { blockType: 'list', level: 1, text: 'Something this plan will not verify.' },
-
-  { blockType: 'heading', level: 1, text: 'Test cases' },
-  {
-    blockType: 'paragraph',
-    text:
-      'The plan\'s test cases, grouped by area. Add one by title as you think of it — each is ' +
-      'created as a draft in the case repository and can be written up properly later. Indent a ' +
-      'bullet to put it under the one above.',
-  },
-  { blockType: 'heading', level: 2, text: 'Area' },
-  { blockType: 'list', level: 1, text: 'A case to run in this area.' },
-  { blockType: 'list', level: 2, text: 'A variation of the case above.' },
-  { blockType: 'list', level: 3, text: 'A specific condition within that variation.' },
-];
-
-
-/**
  * The page as both stores hold it.
  *
  * `db.docPages` is the tree and `db.docPageDetails` is the body, and every write has to touch
@@ -571,10 +500,15 @@ export const documentationHandlers = [
   }),
 
   /*
-    A plan's document.
+    A plan's business-requirements page.
 
-    404 when it has not been started, which is the ordinary first state and is what the screen's
+    404 when nothing is linked, which is the ordinary first state and is what the screen's
     invitation renders from. Deliberately the same 404 an unknown plan gets, matching the server.
+
+    §97 retired the template POST that used to sit here, and the mirrored template with it — a copy
+    §52 warned about, and the drift that mattered was the section HEADINGS, since the SPA found
+    "Test cases" by name. Nothing in the product creates a plan's document any more: `PUT` adopts a
+    page that already exists, and the mock's own link handler arrives with the tab that uses it.
   */
   http.get(`${API}/projects/:projectId/plans/:planId/document`, async ({ params }) => {
     await delay(LATENCY);
@@ -584,54 +518,6 @@ export const documentationHandlers = [
     if (!summary) return notFound("That plan's document");
     const page = load(summary.id);
     return page ? HttpResponse.json(page) : notFound("That plan's document");
-  }),
-
-  http.post(`${API}/projects/:projectId/plans/:planId/document`, async ({ params }) => {
-    await delay(LATENCY);
-    const refused = gate(String(params.projectId), 'doc:edit');
-    if (refused) return refused;
-
-    const planId = String(params.planId);
-    const plan = db.plans.find((p) => p.id === planId);
-    if (!plan) return notFound('That plan');
-
-    const already = db.docPages.find(
-      (p) => p.subjectType === 'TEST_PLAN' && p.subjectId === planId,
-    );
-    if (already) {
-      return problem(
-        409,
-        'This plan already has a document',
-        `This plan's document is ${already.key}. Open it instead — starting a second one would ` +
-          'replace what is already written.',
-      );
-    }
-
-    const { key, keySeq } = allocateDocPageKey();
-    const title = `${plan.key} — ${plan.name}`;
-    const page: DocPage = {
-      id: newId(),
-      key,
-      parentId: null,
-      title,
-      slug: `${plan.key.toLowerCase()}-document-${keySeq}`,
-      status: 'DRAFT',
-      updatedAt: new Date().toISOString(),
-      subjectType: 'TEST_PLAN',
-      subjectId: planId,
-      currentVersionNo: 1,
-      lockVersion: 0,
-      blocks: PLAN_TEMPLATE.map((block, position) => ({
-        id: newId(),
-        position,
-        blockType: block.blockType,
-        level: block.level ?? null,
-        text: block.text,
-        links: [],
-        coverage: null,
-      })),
-    };
-    return HttpResponse.json(upsert(page), { status: 201 });
   }),
 
   /*

@@ -12,6 +12,7 @@ import type {
   Facet,
   LifecycleStatus,
   StepSuggestion,
+  TagUsage,
   TestCase,
   TestCaseSummary,
   TestStep,
@@ -469,7 +470,41 @@ function normalizeTags(value: unknown): string[] | undefined {
   return [...new Set(value.map((tag) => String(tag).trim()).filter((tag) => tag !== ''))];
 }
 
+/**
+ * The tags in use, derived from the cases exactly as the server derives them (§97).
+ *
+ * **Derived, never curated** — `stepCorpus`' argument one altitude down, and the correction
+ * `shared_step` earned by staying empty. There is no tag store to read: a tag exists because a case
+ * carries it, so this list cannot disagree with the grid.
+ *
+ * Two rules that are invisible when wrong:
+ *
+ *  - **Live cases only**, which the mock satisfies structurally — `DELETE` splices the row out of
+ *    `db.cases` — so a zero-count row is impossible rather than filtered. Stated because it is
+ *    *not demonstrated by mock mode*, the same footnote `stepCorpus` carries.
+ *  - **Most-used first, then alphabetically.** Alphabetical alone puts the project's one stray tag
+ *    above the one on half its cases, in a picker whose first rows are the whole point.
+ */
+function tagsInUse(): TagUsage[] {
+  const counts = new Map<string, number>();
+  for (const summary of db.cases) {
+    // A case carrying one tag twice cannot happen (`normalizeTags` dedupes on the way in), but the
+    // count is over cases and not over tag rows either way — the distinction `useCount` records.
+    for (const tag of new Set(summary.tags)) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([tag, caseCount]) => ({ tag, caseCount }))
+    .sort((a, b) => b.caseCount - a.caseCount || a.tag.localeCompare(b.tag));
+}
+
 export const caseHandlers = [
+  http.get(`${API}/projects/:projectId/tags`, async ({ request }) => {
+    const denied = requireAuth(request);
+    if (denied) return denied;
+    await delay(LATENCY);
+    return HttpResponse.json(tagsInUse());
+  }),
+
   http.get(`${API}/projects/:projectId/step-suggestions`, async ({ request }) => {
     const denied = requireAuth(request);
     if (denied) return denied;

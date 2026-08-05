@@ -1,6 +1,6 @@
 /** Test plans and the plan statistics report. */
 import { HttpResponse, delay, http } from 'msw';
-import type { PlanStatus, TestPlan } from '../../api/types';
+import type { PlanSectionInput, PlanStatus, TestPlan } from '../../api/types';
 import {
   allocatePlanKey,
   db,
@@ -81,8 +81,8 @@ export const planHandlers = [
    *     reads, so the disabled button and the refused write cannot disagree.
    *  2. **`Idempotency-Key` honoured.** The hook sends one per mounted dialog; a mock that
    *     ignored it would let a retry make a second plan here and not on the server.
-   *  3. **The scope remembered**, so `caseCount` expands the folders and a run started from this
-   *     plan has a checklist. See `db.planScope`.
+   *  3. **The scope is on the row**, so `caseCount` expands the folders and a run started from
+   *     this plan has a checklist. See `planScopeCaseIds`, which resolves every arm off the plan.
    */
   http.post(`${API}/projects/:projectId/plans`, async ({ params, request }) => {
     await delay(LATENCY);
@@ -123,7 +123,6 @@ export const planHandlers = [
 
     const { key } = allocatePlanKey();
     const id = newId();
-    db.planScope.set(id, suiteIds);
 
     const plan: TestPlan = {
       id,
@@ -132,9 +131,10 @@ export const planHandlers = [
       status: 'DRAFT',
       milestoneName: (body.milestoneName as string) ?? null,
       milestoneDate: (body.milestoneDate as string) ?? null,
-      // The expansion, not the number of scope items — a plan that says "40 cases" for 27 is
-      // §32's defect one entity over.
-      caseCount: planScopeCaseIds(id).length,
+      // Filled from the resolved scope below, once the row exists to resolve. The expansion, not
+      // the number of scope items — a plan that says "40 cases" for 27 is §32's defect one entity
+      // over.
+      caseCount: 0,
       passRate: null,
       coverage: null,
       description: (body.description as string) ?? null,
@@ -144,9 +144,16 @@ export const planHandlers = [
       suiteIds,
       // The API accepts individually-named cases and no dialog offers them, exactly as live.
       caseIds: [],
+      // §97: a plan is created before anybody can say what is out of scope for it, so the prose
+      // and the sections arrive on the edit — the same argument entry/exit criteria already make.
+      tags: [],
+      sections: [],
+      scopeText: null,
+      outOfScopeText: null,
       currentVersionNo: 1,
       lockVersion: 1,
     };
+    plan.caseCount = planScopeCaseIds(plan).length;
     db.plans.unshift(plan);
     if (idempotencyKey) db.planIdempotency.set(idempotencyKey, plan);
     return HttpResponse.json(plan, {
@@ -238,10 +245,16 @@ export const planHandlers = [
       }
     }
 
-    // The server hashes a PlanSnapshot; this is the same five fields compared by value. Comparing
+    // The server hashes a PlanSnapshot; this is the same fields compared by value. Comparing
     // by *presence* instead — "did the request mention a milestone" — would bump the version on a
     // save that resubmitted the milestone unchanged, which is what the SPA's own dialog does every
     // time, so mock mode would count versions live mode does not.
+    //
+    // §97 puts the tags and the sections in it and deliberately leaves the two PROSE fields out:
+    // scope text is what the plan says it will test, the scope items are what it will run, and
+    // only the second is the thing a version pins. Wording the intent more carefully must not
+    // count as a change of scope — the call `suite_version`'s schema comment already makes about
+    // a name.
     const snapshot = () =>
       JSON.stringify([
         plan.milestoneName,
@@ -250,6 +263,8 @@ export const planHandlers = [
         plan.exitCriteria,
         [...(plan.suiteIds ?? [])].sort(),
         [...(plan.caseIds ?? [])].sort(),
+        [...(plan.tags ?? [])].sort(),
+        plan.sections,
       ]);
     const before = snapshot();
 
@@ -257,17 +272,37 @@ export const planHandlers = [
     if ('description' in body) plan.description = (body.description as string) ?? null;
     if ('milestoneName' in body) plan.milestoneName = (body.milestoneName as string) ?? null;
     if ('milestoneDate' in body) plan.milestoneDate = (body.milestoneDate as string) ?? null;
-    if (submittedSuites) {
-      plan.suiteIds = [...new Set(submittedSuites)].sort();
-      db.planScope.set(plan.id, plan.suiteIds);
-      plan.caseCount = planScopeCaseIds(plan.id).length;
-    }
+    if (submittedSuites) plan.suiteIds = [...new Set(submittedSuites)].sort();
     if (body.caseIds) plan.caseIds = [...new Set(body.caseIds as string[])].sort();
+    if (body.tags) plan.tags = [...new Set(body.tags as string[])].sort();
     if (body.entryCriteria) plan.entryCriteria = body.entryCriteria as TestPlan['entryCriteria'];
     if (body.exitCriteria) plan.exitCriteria = body.exitCriteria as TestPlan['exitCriteria'];
+    // Absent leaves the prose alone; `null` clears it. The pair `'x' in body` distinguishes, which
+    // `body.x ?? plan.x` would not — and a save that omitted a field it did not edit would empty
+    // it, which is §82's own finding about the settings form arriving here.
+    if ('scopeText' in body) plan.scopeText = (body.scopeText as string) ?? null;
+    if ('outOfScopeText' in body) plan.outOfScopeText = (body.outOfScopeText as string) ?? null;
 
-    // A name and a description are content, not scope, so they are outside the snapshot above and
-    // renaming a plan writes no version — the call `suite_version`'s schema comment makes.
+    // The WHOLE section list is replaced when it is present — sections carry no ids, so there is
+    // nothing to match a partial update against, and `position` is assigned from the order sent
+    // rather than trusted from the client (two sections claiming position 0 is a render order the
+    // author cannot fix from the screen).
+    if (body.sections) {
+      plan.sections = (body.sections as PlanSectionInput[]).map((section, position) => ({
+        name: String(section.name ?? '').trim(),
+        position,
+        caseIds: [...new Set(section.caseIds ?? [])],
+        suiteIds: [...new Set(section.suiteIds ?? [])],
+        tags: [...new Set(section.tags ?? [])],
+      }));
+    }
+
+    // Recomputed from the resolved union, never adjusted by a delta: every arm is a live selector
+    // and the sections' counts do not sum to this one, because a case reached two ways is one case.
+    plan.caseCount = planScopeCaseIds(plan).length;
+
+    // A name, a description and the scope prose are content, not scope, so they are outside the
+    // snapshot above and renaming a plan writes no version.
     if (snapshot() !== before) plan.currentVersionNo += 1;
     plan.lockVersion += 1;
 

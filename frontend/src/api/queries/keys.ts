@@ -62,11 +62,11 @@ export const keys = {
     A plan's document.
 
     Deliberately NOT nested under `docPage`, even though it resolves to one. The plan id is what
-    the caller has; the page id is what the answer contains, and it does not exist until somebody
-    starts the document. A key derived from the page id could not be built before the first fetch.
+    the caller has; the page id is what the answer contains, and it is absent until somebody links
+    a page. A key derived from the page id could not be built before the first fetch.
 
-    The consequence is two keys for one page once it exists, so the mutations that write a page
-    invalidate both — see `useStartPlanDocument`.
+    The consequence is two keys for one page once one is linked, so a mutation that writes the page
+    must invalidate both.
   */
   planDocument: (p: string, planId: string) => ['projects', p, 'plans', planId, 'document'] as const,
   artifacts: (p: string, scope?: string, planId?: string) =>

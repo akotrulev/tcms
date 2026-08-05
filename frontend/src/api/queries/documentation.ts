@@ -189,27 +189,20 @@ export function usePlanDocument(
   });
 }
 
-/**
- * Starts the plan's document from the server's template.
- *
- * Writes into **both** keys the page now answers to. It is one page reached two ways — by plan and
- * by page id — and seeding only the plan key leaves the documentation tree showing a space that is
- * one page short until something else invalidates it.
- */
-export function useStartPlanDocument(projectId: string, planId: string) {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: () => api.post<DocPage>(`${base(projectId)}/plans/${planId}/document`, {}),
-    // The 409 says the document already exists and names it — a message the screen shows in place,
-    // beside the tab it is about.
-    meta: { handled: true },
-    onSuccess: (page) => {
-      client.setQueryData(keys.planDocument(projectId, planId), page);
-      client.setQueryData(keys.docPage(projectId, page.id), page);
-      void client.invalidateQueries({ queryKey: keys.docPages(projectId) });
-    },
-  });
-}
+/*
+  ~~`useStartPlanDocument` — creates the plan's document from the server's five-section template.~~
+  → **retired 2026-08-05 (§97)** with the `POST` it called. Every one of those five sections now has
+  a home of its own (business requirements is a page the plan *adopts*, test artefacts is the
+  artifact register, scope and out of scope are prose on the plan row, and the case outline is the
+  plan's sectioned scope items), so the template's only remaining job was to seed a second place to
+  write each of them. Its replacement is `PUT .../document`, which links a page that already exists
+  — and the hook for that arrives with the tab that offers it (§97 phase 5), not here, so that the
+  contract phase adds no affordance it cannot yet render.
+
+  The reasoning it carried is kept because it is about the *cache* and outlives the endpoint: a plan
+  document is one page reached two ways — by plan and by page id — so a write must seed both keys
+  and invalidate the tree, or the documentation sidebar is one page short until something else does.
+*/
 
 /**
  * Links a test case or suite to one block.

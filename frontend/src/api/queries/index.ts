@@ -119,7 +119,6 @@ export {
   useLinkBlock,
   usePlanDocument,
   useSetDocPageStatus,
-  useStartPlanDocument,
   useUnlinkBlock,
   useUpdateDocPage,
 } from './documentation';

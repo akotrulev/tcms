@@ -1802,3 +1802,20 @@ Built and unverified. Rows written per §65; **none of them run.**
 | **Must show** | Changing `useCaseFilters`' parse to `params.get('unfiled') === 'false' ? false : …` reddens "treats `unfiled=false` as absent". An active filter that narrows nothing makes the empty state claim a filter that does not exist. |
 | **Check** | the case editor still refuses a case with no steps |
 | **Must show** | Nothing here changed that rule, but `suiteId` losing its `.min(1)` removed the only *required* field the form had besides the title. Confirm `CaseSchema.test.ts`'s structured-steps refine still reddens when `liveSteps` is bypassed — **not run**, recorded because the two rules now sit alone. |
+
+## §97 phase 2 — the contract phase, and two rows that redden nothing
+
+Built and unverified. Rows written per §65; **none of them run.** Two of the four are recorded as
+covering nothing *today*, which is the finding rather than a shortfall — the mock's plan resolution
+has no test file, and the phase that gives it one is phase 6.
+
+| | |
+|---|---|
+| **Check** | the contract check saw the retired operation leave |
+| **Must show** | The frontend suite went **834 → 832** with no test deleted by hand: `contractOperations.test.ts` and `apiResponseTypes.test.ts` generate one case per `api.*` call site, and `useStartPlanDocument` was the only caller of the retired `POST`. Re-adding the hook without re-adding the operation must **redden both** — that pair is the evidence the checks are keyed on call sites and not on the spec, which is the whole reason §52 built them. |
+| **Check** | the plan's resolved scope unions every arm |
+| **Must show** | **Nothing today.** Dropping the tag arm, the section arm or the suite's own `caseIds`/`tagRules` from `planScopeCaseIds` reddens **no test in the repository** — the mock's plan resolution has never had one, and `mocks/db/workItems.test.ts` is still the only test asserting the mock's own rules. Phase 3's `CaseFacts` tests and phase 6's cover it; until then this is an unverified rewrite of a function four screens read. **Do not skip this row for reddening nothing — that is what it reports.** |
+| **Check** | absent vs `null` on the scope prose |
+| **Must show** | **Nothing today.** Replacing `if ('scopeText' in body)` with `plan.scopeText = body.scopeText ?? plan.scopeText` reddens nothing, and it is §82's live defect one screen over: a save that omits a field it did not edit silently clears it, with a success message. The test belongs with the form, in phase 4. |
+| **Check** | the version does not move on prose |
+| **Must show** | Adding `plan.scopeText` to the mock's `snapshot()` must redden a phase-4 test asserting that editing the scope text writes no version. **Not written yet** — recorded here so the phase that writes the form knows which assertion is load-bearing. |

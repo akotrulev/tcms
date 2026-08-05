@@ -20,7 +20,6 @@ import {
   useCreateDraftCase,
   useLinkBlock,
   usePlanDocument,
-  useStartPlanDocument,
   useSuites,
   useUnlinkBlock,
   useUpdateDocPage,
@@ -74,7 +73,6 @@ export function PlanDocumentPanel({
   planId: string;
 }) {
   const document = usePlanDocument(projectId, planId);
-  const start = useStartPlanDocument(projectId, planId);
 
   return (
     <DataRegion
@@ -87,29 +85,20 @@ export function PlanDocumentPanel({
         ) : (
           <Panel testId="PlanDocument.Empty">
             <Stack sx={{ gap: 1.5, alignItems: 'flex-start' }}>
-              <Typography variant="h6">This plan has no document yet</Typography>
+              <Typography variant="h6">No page is linked to this plan</Typography>
               <Typography variant="body2" sx={{ color: 'text.secondary', maxWidth: 640 }}>
-                Start one to record what the product does, which environments and accounts the
-                testing runs against, what is in and out of scope, and the test cases the plan
-                covers. It is created from a standard outline you can fill in section by section.
+                A plan&rsquo;s requirements are an ordinary documentation page that this plan
+                adopts — written where specifications are written, keeping its own history and
+                links. Write it in the documentation section, then link it here.
               </Typography>
-              {start.isError && (
-                <Alert severity="error" data-testid="PlanDocument.StartError">
-                  {describeError(start.error).body}
-                </Alert>
-              )}
-              <PermissionGate permission="doc:edit" projectId={projectId}>
-                {({ allowed }) => (
-                  <Button
-                    variant="contained"
-                    disabled={!allowed || start.isPending}
-                    onClick={() => start.mutate()}
-                    data-testid="PlanDocument.Start"
-                  >
-                    Start the document
-                  </Button>
-                )}
-              </PermissionGate>
+              <Button
+                component={RouterLink}
+                to={`/projects/${projectId}/docs`}
+                variant="outlined"
+                data-testid="PlanDocument.OpenDocumentation"
+              >
+                Open documentation
+              </Button>
             </Stack>
           </Panel>
         )

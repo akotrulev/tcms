@@ -170,16 +170,6 @@ interface Store {
   planIdempotency: Map<string, TestPlan>;
   runIdempotency: Map<string, TestRun>;
   /**
-   * Plan id → the suite ids in its scope.
-   *
-   * The wire shape carries `caseCount`, not the scope, so the mock has to remember what was sent
-   * in order to answer the two questions that depend on it: the plan's own count, and — the one
-   * that matters — **which cases a run created from this plan materialises**. Without it a plan
-   * created in mock mode has an empty scope, and a run started from it is an empty checklist,
-   * which is precisely the state the server refuses.
-   */
-  planScope: Map<string, string[]>;
-  /**
    * Outstanding invitations, keyed by their token.
    *
    * Two seeded tokens rather than one, because the accept screen has two genuinely different
@@ -226,7 +216,6 @@ export const db: Store = {
   idempotency: new Map(),
   planIdempotency: new Map(),
   runIdempotency: new Map(),
-  planScope: new Map(),
   invitations: new Map<string, MockInvitation>([
     [
       // Open /accept-invitation?token=new-user-token to walk the first-account path.

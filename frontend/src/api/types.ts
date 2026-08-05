@@ -59,6 +59,15 @@ export type SharedStep = S['SharedStep'];
  */
 export type StepSuggestion = S['StepSuggestion'];
 export type SharedStepInput = S['SharedStepInput'];
+/**
+ * One tag in use in the project, with the number of live cases carrying it (§97).
+ *
+ * Derived from the cases themselves, so it is a **picker's list and never a validator's**: a tag is
+ * free text and a client may send one this list does not contain — that is how the first case to
+ * carry a new tag gets it. Narrowing a write to this list would close a vocabulary the product
+ * deliberately leaves open.
+ */
+export type TagUsage = S['TagUsage'];
 export type BulkOperation = S['BulkOperation'];
 export type BulkPayload = S['BulkPayload'];
 export type BulkResult = S['BulkResult'];
@@ -93,6 +102,18 @@ export type ReviewVerdict = NonNullable<ReviewParticipation['verdict']>;
 
 // execution
 export type TestPlan = S['TestPlan'];
+/**
+ * A sub-feature subdivision of a plan's cases (§97) — "Create an object", "Edit", "Navigation".
+ *
+ * **A live selector, not a snapshot.** It holds references — case ids, suite ids, tags — resolved
+ * on every read, so a section's contents move when a referenced suite gains a case or a case is
+ * tagged, with nothing written to the plan. TestNG's `<test>` block is the shape.
+ *
+ * It is plan-local: no key, no lifecycle, no versions, no existence outside its plan. A reader who
+ * takes it for a suite will expect it in the tree, where it will never be.
+ */
+export type PlanSection = S['PlanSection'];
+export type PlanSectionInput = S['PlanSectionInput'];
 export type TestPlanSummary = S['TestPlanSummary'];
 export type TestRun = S['TestRun'];
 export type TestRunDetail = S['TestRunDetail'];

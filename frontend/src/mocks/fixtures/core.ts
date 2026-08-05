@@ -630,6 +630,24 @@ export const plans: TestPlan[] = [
     */
     suiteIds: [uid(1, 'q')],
     caseIds: [],
+    /*
+      §97: the unsectioned tag arm plus two sub-feature sections. TP-1 is the only fixture with
+      sections for the reason §96's `Smoke` suite exists — every other plan answers the same case
+      list sectioned and unsectioned, so without one plan whose sections are a query, none of the
+      Test cases tab is observable without a backend. The second section references a SUITE and a
+      TAG rather than case ids, which is what makes "a section is a live selector" visible: its
+      count moves when a case is tagged, and nothing writes to the plan.
+    */
+    tags: [],
+    sections: [
+      { name: 'Create an object', position: 0, caseIds: [uid(1, 'c'), uid(2, 'c')], suiteIds: [], tags: [] },
+      { name: 'Navigation', position: 1, caseIds: [], suiteIds: [uid(2, 'q')], tags: ['smoke'] },
+    ],
+    scopeText:
+      'Every payment capture path a customer can reach from the checkout, on the two supported '
+      + 'card networks.',
+    outOfScopeText:
+      'Refunds and chargebacks — covered by TP-3. Anything behind the settlement feature flag.',
     currentVersionNo: 2,
     lockVersion: 2,
   },
@@ -643,6 +661,10 @@ export const plans: TestPlan[] = [
     ],
     configurations: [configurations[0]],
     suiteIds: [uid(1, 'q')], caseIds: [],
+    tags: [],
+    sections: [],
+    scopeText: null,
+    outOfScopeText: null,
     currentVersionNo: 1, lockVersion: 1,
   },
   {
@@ -653,6 +675,10 @@ export const plans: TestPlan[] = [
     entryCriteria: [], exitCriteria: [],
     configurations: [configurations[0]],
     suiteIds: [uid(2, 'q')], caseIds: [],
+    tags: [],
+    sections: [],
+    scopeText: null,
+    outOfScopeText: null,
     currentVersionNo: 1, lockVersion: 1,
   },
   /*
@@ -673,6 +699,10 @@ export const plans: TestPlan[] = [
     // Genuinely empty, and it agrees with `caseCount: 0` — a plan somebody has named and not yet
     // filled is the state a fresh install produces, and the editor must open cleanly on it.
     suiteIds: [], caseIds: [],
+    tags: [],
+    sections: [],
+    scopeText: null,
+    outOfScopeText: null,
     currentVersionNo: 1, lockVersion: 1,
   },
   {
@@ -683,6 +713,10 @@ export const plans: TestPlan[] = [
     entryCriteria: [], exitCriteria: [],
     configurations: [configurations[0]],
     suiteIds: [uid(3, 'q')], caseIds: [],
+    tags: [],
+    sections: [],
+    scopeText: null,
+    outOfScopeText: null,
     currentVersionNo: 1, lockVersion: 1,
   },
 ];

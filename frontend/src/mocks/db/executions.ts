@@ -1,5 +1,5 @@
 /** A run's executions, materialized on demand, and the recount a result triggers. */
-import type { Evidence, TestExecution } from '../../api/types';
+import type { Evidence, TestExecution, TestPlan } from '../../api/types';
 import { caseDetail } from './cases';
 import { db, statusByKind, uid, users } from './store';
 
@@ -131,15 +131,33 @@ export function materialiseRun(runId: string, caseIds: string[]): TestExecution[
 }
 
 /**
- * The live cases a plan's scope covers — the suite subtree expansion, deduped.
+ * The live cases a plan's scope covers — every arm, unioned and deduped.
  *
- * A suite item means the folder **and everything beneath it**, which the server answers with an
- * `ltree` descendant query. Here the tree is the `path` string, so a descendant is anything whose
- * path starts with the folder's own path — the same relation, spelled for the shape the mock has.
+ * ## Four arms since §97, and they are read off the PLAN ROW
+ *
+ * Suites (the folder **and everything beneath it**, which the server answers with an `ltree`
+ * descendant query and which is the `path` prefix here), individually named cases, tags, and the
+ * same three again inside every named section. Nothing distinguishes a reference that arrived
+ * unsectioned from one inside a section: a section is the plan's narrative structure, not a second
+ * scope. It only changes where the case is *listed*.
+ *
+ * **Live selectors, all of them** — the count moves when a suite gains a case or a case is tagged,
+ * with nothing written to the plan. That is D7′, and the mock has to have it or the Test cases tab
+ * would be built against a number the server does not produce (§81's finding, and §87's).
+ *
+ * **A suite's membership is its own union, not just what is filed in it** — §96: filed ∪ added ∪
+ * tagged, per suite in the subtree. Answering only the filed arm here is one of the four silent
+ * joins §96 found, arriving through the plan instead of through the grid.
+ *
+ * **It takes the row and not an id**, which is what deleted `db.planScope` — a side map holding
+ * the suite arm alone. The row carries every arm now, so a map carrying one of them is the second
+ * copy that drifts, and a create can count its own scope before it has been pushed to the store.
  */
-export function planScopeCaseIds(planId: string): string[] {
-  const suiteIds = db.planScope.get(planId) ?? [];
-  if (suiteIds.length === 0) return [];
+export function planScopeCaseIds(plan: TestPlan): string[] {
+  const sections = plan.sections ?? [];
+  const suiteIds = [...(plan.suiteIds ?? []), ...sections.flatMap((s) => s.suiteIds ?? [])];
+  const caseIds = new Set([...(plan.caseIds ?? []), ...sections.flatMap((s) => s.caseIds ?? [])]);
+  const tags = new Set([...(plan.tags ?? []), ...sections.flatMap((s) => s.tags ?? [])]);
 
   const roots = db.suites.filter((suite) => suiteIds.includes(suite.id));
   const covered = new Set(
@@ -147,13 +165,24 @@ export function planScopeCaseIds(planId: string): string[] {
       .filter((suite) => roots.some((root) => suite.path === root.path || suite.path.startsWith(`${root.path}.`)))
       .map((suite) => suite.id),
   );
+  // A suite's own `caseIds` and `tagRules` reach the plan through the suite, exactly as they reach
+  // the tree — the union §96 made the suite mean.
+  const claimed = db.suites.filter((suite) => covered.has(suite.id));
 
   return db.cases
-    // An unfiled case is in no suite's subtree, so a suite-scoped plan never covers it. It
-    // reaches a run by being named directly, which is the case_id arm of plan scope.
-    .filter(
-      (row) => row.suiteId !== null && covered.has(row.suiteId) && row.lifecycleStatus !== 'DEPRECATED',
-    )
+    .filter((row) => {
+      if (row.lifecycleStatus === 'DEPRECATED') return false;
+      // An unfiled case is in no suite's subtree, so a suite arm never covers it by filing. It
+      // reaches the plan by being named, by carrying a tag, or by a suite claiming it.
+      if (row.suiteId !== null && covered.has(row.suiteId)) return true;
+      if (caseIds.has(row.id)) return true;
+      if (row.tags.some((tag) => tags.has(tag))) return true;
+      return claimed.some(
+        (suite) =>
+          (suite.caseIds ?? []).includes(row.id)
+          || (suite.tagRules ?? []).some((tag) => row.tags.includes(tag)),
+      );
+    })
     .map((row) => row.id);
 }
 

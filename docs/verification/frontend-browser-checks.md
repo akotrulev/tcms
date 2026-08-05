@@ -1020,3 +1020,15 @@ Built and unverified. Rows written per §65; **none of them run.**
 | 85 | Type a tag rule and watch the field. | The chip **appears as you press Enter**. It is the check that would have caught this phase's own defect — the first draft replaced MUI's `slotProps` to add a testid, which drops the adornment the chips live in, so every rule was held, sent and invisible. Both gates were green. |
 | 86 | Hover a suite's case count in the tree. | The tooltip says the count includes cases filed here, added here, or carrying its tags — **and that a case can belong to several folders, so the counts do not sum to the project total.** Without it a reader who subtracts finds a discrepancy and reports a bug in a correct number. |
 | 87 | Add a tag to a case that a suite claims, then reload the tree. | The folder's count goes up **with no write to the suite**. That is the whole point of the third arm, and the only way to see it is from the other side. |
+
+## §97 phase 2 — the contract: scope prose, sections, tags, and the retired template
+
+Built and unverified. Rows written per §65; **none of them run.** Rows 90–91 are the ones that can
+only be seen from the *other* side of the screen, which is what makes them worth queueing.
+
+| # | Drive | Expect |
+|---|---|---|
+| 88 | Open a plan that has no document (mock: any plan but TP-1) and go to its **Document** tab. | The empty state no longer offers **Start the document** — that endpoint is retired — and says the requirements are a page written in the documentation section, with **Open documentation** as the only affordance. **A known interim state**: the *Link a page* control is phase 5's, so between here and there a plan cannot be given a document at all. Named rather than discovered. |
+| 89 | Open **TP-1** and look at the plan's case count against the sections in its fixture. | The count is the **deduped union of every arm** — the unsectioned suite, the *Create an object* section's two named cases, and the *Navigation* section's suite reference and `smoke` tag. The sections' own counts **exceed** it, because a case reached two ways is one case. A count that equals the sum is the mock resolving each arm separately, which is the number no server will produce. |
+| 90 | With TP-1 open in one tab, tag any case `smoke` in another, then reload the plan. | The plan's count **goes up with nothing written to the plan**. That is D7′ — a section is a live selector — and this is the only way to observe it: from the case side. |
+| 91 | Edit a plan's name only (no scope change) and save; check the version number. | Unchanged. The scope prose and the name are content; the version pins what will be **run**. Then move a case into a section and save: the version **does** move. Two saves, because each passes the other's check. |
