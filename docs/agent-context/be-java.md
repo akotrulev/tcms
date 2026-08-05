@@ -93,6 +93,25 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   Filters: `?tag=` repeats and **ANDs** (a grid narrows), which is deliberately the opposite of
   `suite_tag_rule`'s union (a collection widens); `?unfiled=true` is **ignored** beside `suiteId`
   rather than refused.
+- **THE SUITE SIDE OF §96 (phase 3) — `SuiteMembership` IS THE ONE UNION.**
+  `SuiteMembership.countsBySuite` / `caseIdsInSubtree` / `suitesByCase` (native SQL, explicit
+  `company_id` **and** `project_id` predicates) resolve **filed ∪ added ∪ tagged**, deduped with
+  `COUNT(DISTINCT c.id)` — a case reachable through two arms is one member.
+  **`Suite.caseCount` is now resolved membership, not filed cases**, and the counts **no longer sum
+  to the project's case count**: a case can be in three suites at once, so the client must say so
+  rather than let a reader find it by subtraction.
+  Contract: `Suite` gains required `tagRules` and `caseIds` (the **explicitly added** cases only —
+  not the filed or tag-matched ones, because that list is what an editor reconciles); `SuiteInput`
+  takes both, absent = "leave alone", `[]` = clear.
+  New: `SuiteCase`/`SuiteTagRule` (+ `…Id`, `…Repository`), `SuiteMembershipWriter`,
+  `SuiteEdit.normalizeTagRules`/`normalizeCaseIds`, `TestCaseRepository.liveIdsForProject`.
+  **A suite may CLAIM a case and may never MOVE one** — filing is `test_case.suite_id` and belongs
+  to the case's own write path; a suite edit that could re-file would let two screens write one
+  column. `SuiteMembershipWriter` therefore touches two arms and never the third.
+  Still open after this phase: **run scoping does not resolve the new arms** —
+  `CaseFacts.caseIdsInSuiteSubtree` is still `JOIN test_case c ON c.suite_id = d.id`, so a
+  tag-resolved suite in a plan's scope contributes only its filed cases. That is the next phase, and
+  it is the one that makes "run everything tagged smoke" true.
 - **THE CONDITION LIBRARY HAS WRITERS SINCE §95 phase 1, AND THE USAGE COUNT IS NOW TWO NUMBERS.**
   `ConditionService.create`/`update` + `POST`/`PUT /projects/{projectId}/conditions` +
   `ConditionEdit`/`ConditionWriteRequest`/`ConditionUsage` + `ConditionRepository.countCaseUsage`/

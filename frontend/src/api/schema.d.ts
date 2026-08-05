@@ -5430,7 +5430,35 @@ export interface components {
             name: string;
             description?: string | null;
             path: string;
+            /**
+             * @description The suite's **own** resolved membership — the cases filed in it, plus the cases added to
+             *     it individually, plus every live case carrying any of its `tagRules`, unioned and
+             *     deduped. Not its subtree's: the tree sums a node with its children, so a subtree count
+             *     here would be counted again at every ancestor.
+             *
+             *     **These counts do not sum to the project's case count, and that is the design.** A case
+             *     can belong to three suites — filed in one, added to another, tagged into a third — so
+             *     the totals genuinely overlap. A client showing both must say so rather than leave a
+             *     reader to discover it by subtraction.
+             */
             caseCount: number;
+            /**
+             * @description The tags this suite claims, **unioned**: a suite with `smoke` and `payments` holds every
+             *     case carrying *either*. Deliberately the opposite of the case grid's `tag` filter, which
+             *     ANDs — a collection is being assembled here and a list is being narrowed there.
+             *
+             *     Matched against a case's `tags` exactly, and never against `automationTags` (plan §6c).
+             */
+            tagRules: string[];
+            /**
+             * @description The cases added to this suite **individually** — the second membership arm, for a case
+             *     that belongs here because somebody decided so rather than because of where it is filed
+             *     or what it is labelled. A set: order carries nothing.
+             *
+             *     Cases that are merely *filed* here or matched by a tag rule are **not** in this list;
+             *     it is what was explicitly added, which is what an editor has to render and reconcile.
+             */
+            caseIds: string[];
             lifecycleStatus: components["schemas"]["LifecycleStatus"];
             /** @description Suite-level conditions inherited by every case beneath (plan §6f). */
             conditions: components["schemas"]["CaseConditionRef"][];
@@ -5446,6 +5474,28 @@ export interface components {
              */
             parentId?: string | null;
             description?: string | null;
+            /**
+             * @description The suite's tag rules, as a **complete set** — every tag it should claim after this
+             *     save. Omitting the field leaves them alone; sending `[]` clears them. Same rule as
+             *     `TestCaseInput.tags`, and it matters for the same reason: a rename that never mentioned
+             *     the rules must not empty a collection.
+             *
+             *     Free text, trimmed and de-duplicated. A tag nothing carries is accepted, not refused —
+             *     there is no vocabulary to check against, and a rule written before the cases are
+             *     tagged is an ordinary way to work.
+             */
+            tagRules?: string[];
+            /**
+             * @description The cases added to this suite individually, as a **complete set**. Absent leaves them
+             *     alone; `[]` removes them all — which removes only the *added* arm and never unfiles a
+             *     case or drops a tag rule.
+             *
+             *     Each id must name a **live case of this project**. A sibling project's case is refused
+             *     with a field error rather than stored: it satisfies the foreign key and the company
+             *     check, and every later read of this suite would resolve a case through a project the
+             *     reader was never granted.
+             */
+            caseIds?: string[];
         };
         SuiteStatusInput: {
             status: components["schemas"]["LifecycleStatus"];

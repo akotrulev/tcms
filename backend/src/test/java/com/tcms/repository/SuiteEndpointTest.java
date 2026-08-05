@@ -288,13 +288,18 @@ class SuiteEndpointTest extends IntegrationTestBase {
         @Test
         @DisplayName("a parent counts only its own cases, never its subtree's")
         void countsAreDirectNotRolledUp() throws Exception {
-            // Payments holds no cases of its own; its children hold 3 and 2. A subtree count
-            // would report 5 here, the SPA would add the children's counts to it, and the tree
-            // would claim 10 cases in a project that has 5. Both numbers are plausible, which is
-            // why this is asserted rather than eyeballed.
+            // Payments holds no cases FILED in it; its children hold 3 and 2. A subtree count
+            // would report 5 more than it does here, the SPA would add the children's counts to
+            // it, and the tree would claim ten-odd cases in a project that has five. Both numbers
+            // are plausible, which is why this is asserted rather than eyeballed.
+            //
+            // The 2 is §96's other two arms — one case added individually, one matched by the
+            // folder's tag rule — and it is deliberately NOT zero any more: a rollup would make it
+            // 7, which is what this test discriminates. The Membership section asserts what the 2
+            // is made of.
             List<JsonNode> tree = treeAs(LEAD, ACME, ACME_BANKING);
 
-            assertThat(byName(tree, "Payments").get("caseCount").asLong()).isZero();
+            assertThat(byName(tree, "Payments").get("caseCount").asLong()).isEqualTo(2);
             assertThat(byName(tree, "Refunds").get("caseCount").asLong()).isEqualTo(3);
             assertThat(byName(tree, "Partial refunds").get("caseCount").asLong()).isEqualTo(2);
         }
@@ -324,6 +329,75 @@ class SuiteEndpointTest extends IntegrationTestBase {
                     .asLong())
                     .as("the sibling really is populated — otherwise the assertion above is "
                             + "vacuous")
+                    .isEqualTo(4);
+        }
+    }
+
+
+    // =====================================================================
+    // Membership — three arms, unioned and deduped (§96)
+    // =====================================================================
+
+    @Nested
+    @DisplayName("Membership — a suite resolves rather than merely holds")
+    class Membership {
+
+        @Test
+        @DisplayName("the count is filed PLUS added PLUS tagged, deduped")
+        void theCountIsTheWholeUnion() throws Exception {
+            // Payments has NOTHING filed in it. Its two members are one case added individually
+            // and one matched by its `smoke` rule — and the added one is tagged too, so a
+            // COUNT(*) over the union answers 3 where the deduped count answers 2. That pair is
+            // what separates "unioned" from "unioned and deduped"; every other assertion here
+            // passes under both.
+            List<JsonNode> tree = treeAs(LEAD, ACME, ACME_BANKING);
+
+            assertThat(byName(tree, "Payments").get("caseCount").asLong()).isEqualTo(2);
+            assertThat(byName(tree, "Refunds").get("caseCount").asLong())
+                    .as("the filed arm is unchanged — being claimed by another suite does not "
+                            + "remove a case from the folder it is filed in")
+                    .isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("a tag rule does not resurrect a soft-deleted case")
+        void deletedCasesAreNotMatched() throws Exception {
+            // Checkout's rule matches exactly one case and that case is deleted. Without the
+            // deleted_at predicate on the tag arm the folder would report 1, and a case the grid
+            // refuses to show would be counted on the tree beside it — the contradiction this
+            // class's caseCount section exists for, arriving through a new arm.
+            assertThat(byName(treeAs(LEAD, ACME, ACME_BANKING), "Checkout").get("caseCount")
+                    .asLong())
+                    .isZero();
+        }
+
+        @Test
+        @DisplayName("the rules and the added cases are served, and never null")
+        void theArmsAreOnTheWire() throws Exception {
+            List<JsonNode> tree = treeAs(LEAD, ACME, ACME_BANKING);
+            JsonNode payments = byName(tree, "Payments");
+
+            assertThat(payments.get("tagRules").isArray()).isTrue();
+            assertThat(namesIn(payments.get("tagRules"))).containsExactly("smoke");
+            assertThat(payments.get("caseIds")).hasSize(1);
+
+            JsonNode refunds = byName(tree, "Refunds");
+            assertThat(refunds.get("tagRules").isArray())
+                    .as("[] and never null — the contract marks both required, so the SPA cannot "
+                            + "null-check them")
+                    .isTrue();
+            assertThat(refunds.get("tagRules")).isEmpty();
+            assertThat(refunds.get("caseIds")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a sibling project's case is never resolved into this project's suite")
+        void membershipDoesNotCrossProjects() throws Exception {
+            // Both projects belong to the caller's company and the sibling's cases are untagged,
+            // so this asserts the project predicate on the tag arm rather than the company one —
+            // the boundary RLS does NOT enforce.
+            assertThat(byName(treeAs(ADMIN, ACME, ACME_MOBILE), "Payments").get("caseCount")
+                    .asLong())
                     .isEqualTo(4);
         }
     }
@@ -698,6 +772,68 @@ class SuiteEndpointTest extends IntegrationTestBase {
             cases(connection, ACME, ACME_BANKING, REFUNDS, "acme-ref", 3, 0);
             cases(connection, ACME, ACME_BANKING, PARTIAL, "acme-par", 2, 1);
             cases(connection, ACME, ACME_BANKING, CHECKOUT, "acme-che", 0, 3);
+
+            // §96's three arms, on ONE folder, so the union is distinguishable from any single arm
+            // taken alone. Payments holds nothing of its own — that is what makes it the right
+            // subject: every member it reports comes from an arm that did not exist before V31.
+            //
+            //   added:  the FIRST of Refunds' three live cases, individually
+            //   tagged: the SECOND of them, via the rule below
+            //   both:   the same first case is tagged too, so a COUNT(*) over the union answers 3
+            //           where the deduped COUNT(DISTINCT) answers 2. That is the assertion that
+            //           separates "unioned" from "unioned and deduped", and nothing else does.
+            tag(connection, ACME, caseOf("acme-ref", 0), "smoke");
+            tag(connection, ACME, caseOf("acme-ref", 1), "smoke");
+            addedCase(connection, ACME, PAYMENTS, caseOf("acme-ref", 0));
+            tagRule(connection, ACME, PAYMENTS, "smoke");
+
+            // A rule matching a case that is DELETED, on a folder that has nothing else: the arm
+            // must not resurrect a case the grid has dropped, and with a live match beside it the
+            // difference would be invisible.
+            tag(connection, ACME, caseOf("acme-par", 2), "gone");
+            tagRule(connection, ACME, CHECKOUT, "gone");
+        }
+    }
+
+    /** The id {@link #cases} assigns to the {@code index}-th row it writes under one marker. */
+    private static UUID caseOf(String marker, int index) {
+        return UUID.nameUUIDFromBytes(("suite-case:" + marker + ":" + index).getBytes());
+    }
+
+    private void tag(Connection connection, UUID companyId, UUID caseId, String tag)
+            throws SQLException {
+        try (var statement = connection.prepareStatement(
+                "INSERT INTO case_tag (company_id, case_id, tag) "
+                        + "VALUES (CAST(? AS uuid), CAST(? AS uuid), ?) ON CONFLICT DO NOTHING")) {
+            statement.setString(1, companyId.toString());
+            statement.setString(2, caseId.toString());
+            statement.setString(3, tag);
+            statement.executeUpdate();
+        }
+    }
+
+    private void tagRule(Connection connection, UUID companyId, UUID suiteId, String tag)
+            throws SQLException {
+        try (var statement = connection.prepareStatement(
+                "INSERT INTO suite_tag_rule (company_id, suite_id, tag) "
+                        + "VALUES (CAST(? AS uuid), CAST(? AS uuid), ?) ON CONFLICT DO NOTHING")) {
+            statement.setString(1, companyId.toString());
+            statement.setString(2, suiteId.toString());
+            statement.setString(3, tag);
+            statement.executeUpdate();
+        }
+    }
+
+    private void addedCase(Connection connection, UUID companyId, UUID suiteId, UUID caseId)
+            throws SQLException {
+        try (var statement = connection.prepareStatement(
+                "INSERT INTO suite_case (company_id, suite_id, case_id) "
+                        + "VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid)) "
+                        + "ON CONFLICT DO NOTHING")) {
+            statement.setString(1, companyId.toString());
+            statement.setString(2, suiteId.toString());
+            statement.setString(3, caseId.toString());
+            statement.executeUpdate();
         }
     }
 

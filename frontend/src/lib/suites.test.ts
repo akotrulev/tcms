@@ -20,6 +20,8 @@ const suite = (id: string, name: string, parentId: string | null, ownCaseCount: 
   name,
   path: name.toLowerCase(),
   caseCount: ownCaseCount,
+  tagRules: [],
+  caseIds: [],
   lifecycleStatus: 'APPROVED',
   conditions: [],
   lockVersion: 1,

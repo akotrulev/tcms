@@ -52,17 +52,26 @@ public class SuiteService {
     private final SuiteRepository suites;
     private final SuiteConditionRepository attachments;
     private final ConditionRepository conditions;
+    private final SuiteMembership membership;
+    private final SuiteTagRuleRepository tagRules;
+    private final SuiteCaseRepository addedCases;
 
     public SuiteService(
             ProjectService projects,
             SuiteRepository suites,
             SuiteConditionRepository attachments,
-            ConditionRepository conditions) {
+            ConditionRepository conditions,
+            SuiteMembership membership,
+            SuiteTagRuleRepository tagRules,
+            SuiteCaseRepository addedCases) {
 
         this.projects = projects;
         this.suites = suites;
         this.attachments = attachments;
         this.conditions = conditions;
+        this.membership = membership;
+        this.tagRules = tagRules;
+        this.addedCases = addedCases;
     }
 
     /**
@@ -130,9 +139,11 @@ public class SuiteService {
             return List.of();
         }
 
-        Map<UUID, Long> caseCounts = caseCounts(companyId, projectId);
-        Map<UUID, List<SuiteConditionView>> bySuite =
-                conditionsBySuite(live.stream().map(Suite::getId).toList());
+        List<UUID> suiteIds = live.stream().map(Suite::getId).toList();
+        Map<UUID, Long> caseCounts = membership.countsBySuite(companyId, projectId);
+        Map<UUID, List<SuiteConditionView>> bySuite = conditionsBySuite(suiteIds);
+        Map<UUID, List<String>> tagRules = tagRulesBySuite(suiteIds);
+        Map<UUID, List<UUID>> addedCases = addedCasesBySuite(suiteIds);
 
         return live.stream()
                 .map(suite -> new SuiteView(
@@ -142,10 +153,14 @@ public class SuiteService {
                         suite.getName(),
                         suite.getDescription(),
                         suite.getPath(),
-                        // A suite with no cases has no GROUP BY row at all, so this default is the
-                        // normal path for an empty folder rather than a fallback for a broken
+                        // A suite with no members has no GROUP BY row at all, so this default is
+                        // the normal path for an empty folder rather than a fallback for a broken
                         // query.
                         caseCounts.getOrDefault(suite.getId(), 0L),
+                        // [] and never null, for `conditions`' reason below: both are required by
+                        // the contract, so the SPA cannot null-check either.
+                        tagRules.getOrDefault(suite.getId(), List.of()),
+                        addedCases.getOrDefault(suite.getId(), List.of()),
                         suite.getLifecycleStatus(),
                         // Must serialize as [] and never as null: the contract marks `conditions`
                         // required, so the SPA cannot null-check it.
@@ -154,12 +169,28 @@ public class SuiteService {
                 .toList();
     }
 
-    private Map<UUID, Long> caseCounts(UUID companyId, UUID projectId) {
-        Map<UUID, Long> counts = new HashMap<>();
-        for (var row : suites.countLiveCasesBySuite(companyId, projectId)) {
-            counts.put(row.getSuiteId(), row.getCaseCount());
+    /**
+     * The tag rules of a page of suites, grouped — one query for the whole tree.
+     *
+     * <p>Alphabetical, from the repository's own ordering: rules are a set, so there is no authored
+     * order to preserve, and a stable one keeps a node's chips from reshuffling between requests.
+     */
+    private Map<UUID, List<String>> tagRulesBySuite(List<UUID> suiteIds) {
+        Map<UUID, List<String>> rules = new HashMap<>();
+        for (SuiteTagRule rule : tagRules.findForSuites(suiteIds)) {
+            rules.computeIfAbsent(rule.getSuiteId(), key -> new ArrayList<>()).add(rule.getTag());
         }
-        return counts;
+        return rules;
+    }
+
+    /** The individually-added cases of a page of suites, grouped — one query for the whole tree. */
+    private Map<UUID, List<UUID>> addedCasesBySuite(List<UUID> suiteIds) {
+        Map<UUID, List<UUID>> added = new HashMap<>();
+        for (SuiteCase member : addedCases.findForSuites(suiteIds)) {
+            added.computeIfAbsent(member.getSuiteId(), key -> new ArrayList<>())
+                    .add(member.getCaseId());
+        }
+        return added;
     }
 
     /**

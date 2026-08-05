@@ -76,6 +76,8 @@ public class SuiteWriteService {
     private final SuiteRepository suites;
     private final SuiteService tree;
     private final SuiteVersions versions;
+    private final SuiteMembershipWriter membership;
+    private final TestCaseRepository cases;
     private final DisplayKeys displayKeys;
     private final ReviewService reviews;
     private final AuditEventRepository auditEvents;
@@ -86,6 +88,8 @@ public class SuiteWriteService {
             SuiteRepository suites,
             SuiteService tree,
             SuiteVersions versions,
+            SuiteMembershipWriter membership,
+            TestCaseRepository cases,
             DisplayKeys displayKeys,
             ReviewService reviews,
             AuditEventRepository auditEvents,
@@ -95,6 +99,8 @@ public class SuiteWriteService {
         this.suites = suites;
         this.tree = tree;
         this.versions = versions;
+        this.membership = membership;
+        this.cases = cases;
         this.displayKeys = displayKeys;
         this.reviews = reviews;
         this.auditEvents = auditEvents;
@@ -169,7 +175,8 @@ public class SuiteWriteService {
             liveIds.add(suite.getId());
         }
 
-        SuiteEdit.Outcome validated = SuiteEdit.validateCreate(request, liveIds);
+        SuiteEdit.Outcome validated =
+                SuiteEdit.validateCreate(request, liveIds, liveCaseIds(project.getId(), request));
         if (validated instanceof SuiteEdit.Outcome.Invalid invalid) {
             return new Outcome.Invalid(invalid.errors());
         }
@@ -206,6 +213,9 @@ public class SuiteWriteService {
         // reference, and so a constraint this class did not validate — the unique key — fails at its
         // cause rather than underneath the version written on top of it.
         suites.saveAndFlush(created);
+        // After the flush, so suite_case.suite_id has a row to reference.
+        membership.reconcile(
+                created, edit.tagRules(), edit.caseIds(), companyId, userId, now);
         versions.writeInitial(created, userId, now);
 
         audit(project.getId(), userId, "suite.created", created, now);
@@ -241,8 +251,8 @@ public class SuiteWriteService {
                 return new Outcome.Stale();
             }
 
-            SuiteEdit.Outcome validated =
-                    SuiteEdit.validateRename(request, suite.getParentId());
+            SuiteEdit.Outcome validated = SuiteEdit.validateRename(
+                    request, suite.getParentId(), liveCaseIds(project.getId(), request));
             if (validated instanceof SuiteEdit.Outcome.Invalid invalid) {
                 return new Outcome.Invalid(invalid.errors());
             }
@@ -267,6 +277,13 @@ public class SuiteWriteService {
                 suite.applyStatus(LifecycleStatus.DRAFT, userId, now);
             }
             suites.saveAndFlush(suite);
+            // Membership is not versioned here, and that is worth stating: suite_version holds
+            // composition, so a membership change is exactly what a v2 would be for — and nothing
+            // writes one today (SuiteVersions writes v1 and nothing since, which CaseFacts'
+            // suiteVersionMarkers already records as a property of the writer). Changing that is
+            // the composition-versioning slice, not a line here.
+            membership.reconcile(
+                    suite, edit.tagRules(), edit.caseIds(), companyId, userId, now);
 
             // No version row: a name is content, and suite_version holds composition. See
             // SuiteVersions for why bumping here would start the every-edit-bumps-every-ancestor
@@ -347,6 +364,22 @@ public class SuiteWriteService {
      * <p>The body moved onto {@link SuiteService#viewOf} when {@link SuiteStatusService} needed the
      * same read: a second private copy is how {@code CaseRenderer}'s fourth copy happened.
      */
+    /**
+     * The project's live case ids — but only when the request actually names some.
+     *
+     * <p>Loaded lazily because the overwhelmingly common suite write is a rename with no
+     * {@code caseIds} at all, and reading every case id of a project to validate a field nobody
+     * sent is a full scan per rename. When the field IS present it must be checked against
+     * something: a sibling project's case id satisfies {@code suite_case}'s foreign key, the
+     * company column and RLS, so nothing else would refuse it (see {@link SuiteEdit}).
+     */
+    private Set<UUID> liveCaseIds(UUID projectId, SuiteWriteRequest request) {
+        if (request.caseIds() == null || request.caseIds().isEmpty()) {
+            return Set.of();
+        }
+        return new HashSet<>(cases.liveIdsForProject(projectId));
+    }
+
     private SuiteView view(UUID companyId, UUID projectId, Suite suite) {
         return tree.viewOf(companyId, projectId, suite);
     }

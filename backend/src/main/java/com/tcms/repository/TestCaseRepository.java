@@ -157,4 +157,23 @@ public interface TestCaseRepository extends JpaRepository<TestCase, UUID> {
             """)
     Optional<TestCase> findByIdempotencyKey(
             @Param("projectId") UUID projectId, @Param("idempotencyKey") String idempotencyKey);
+
+    /**
+     * Every live case id in a project — the set a suite's individually-added members are validated
+     * against (§96).
+     *
+     * <p>Ids and not entities: the caller asks a membership question, and loading the rows would
+     * fetch every mapped column of every case in the project in order to compare primary keys.
+     *
+     * <p><strong>Live only</strong>, which is a bound rather than a filter: adding a soft-deleted
+     * case to a suite would put a permanent invisible member in a collection whose count is on
+     * screen. Read by {@code SuiteWriteService} only when the request actually names cases, so an
+     * ordinary rename does not pay for it.
+     */
+    @Query("""
+            SELECT tc.id FROM TestCase tc
+             WHERE tc.projectId = :projectId
+               AND tc.deletedAt IS NULL
+            """)
+    List<UUID> liveIdsForProject(@Param("projectId") UUID projectId);
 }

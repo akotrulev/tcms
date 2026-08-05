@@ -575,6 +575,81 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         }
     }
 
+
+    // =====================================================================
+    // Membership — the two arms a suite owns (§96)
+    // =====================================================================
+
+    @Nested
+    @DisplayName("Membership — tag rules and added cases, reconciled like a set")
+    class Membership {
+
+        @Test
+        @DisplayName("a create stores its rules and its added cases, and serves them back")
+        void createStoresMembership() throws Exception {
+            MvcResult created = post(LEAD, ACME, ACME_BANKING,
+                    "{\"name\":\"Smoke\",\"tagRules\":[\"smoke\",\"  smoke  \",\"  \"],"
+                            + "\"caseIds\":[\"" + seededCase(0) + "\"]}");
+
+            assertThat(created.getResponse().getStatus()).isEqualTo(201);
+            // Trimmed and de-duplicated — the same normalization a case's tags get, because a rule
+            // and a tag are matched against each other exactly and one of them being trimmed is
+            // the difference between a rule that works and one that never matches.
+            List<String> rules = new ArrayList<>();
+            body(created).get("tagRules").forEach(node -> rules.add(node.asText()));
+            assertThat(rules).containsExactly("smoke");
+            assertThat(body(created).get("caseIds")).hasSize(1);
+            assertThat(storedTagRules(ACME, UUID.fromString(body(created).get("id").asText())))
+                    .containsExactly("smoke");
+        }
+
+        @Test
+        @DisplayName("an ABSENT field leaves membership alone; [] clears it")
+        void absentAndEmptyAreDifferentInstructions() throws Exception {
+            UUID id = UUID.fromString(body(post(LEAD, ACME, ACME_BANKING,
+                    "{\"name\":\"Claiming\",\"tagRules\":[\"smoke\"]}"))
+                    .get("id").asText());
+
+            // The rename dialog's payload: a name and nothing else. Reading that as "clear them"
+            // would empty a collection somebody assembled, through a save that never mentioned it.
+            patch(LEAD, ACME, ACME_BANKING, id, suiteInput("Renamed", null), null);
+            assertThat(storedTagRules(ACME, id))
+                    .as("a rename must not empty a collection it never mentioned")
+                    .containsExactly("smoke");
+
+            patch(LEAD, ACME, ACME_BANKING, id,
+                    "{\"name\":\"Renamed\",\"tagRules\":[]}", null);
+            assertThat(storedTagRules(ACME, id)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a SIBLING PROJECT's case is refused as a field error, not stored")
+        void aSiblingProjectsCaseIsRefused() throws Exception {
+            // It satisfies the foreign key, the company column and RLS. Without the project bound
+            // it would be stored, and every later read of this suite would resolve a case through
+            // a project the reader was never granted.
+            MvcResult result = post(LEAD, ACME, ACME_BANKING,
+                    "{\"name\":\"Borrowing\",\"caseIds\":[\"" + siblingCase() + "\"]}");
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(body(result).get("errors").has("caseIds")).isTrue();
+        }
+
+        @Test
+        @DisplayName("the count on the response is the resolved membership, not the filed cases")
+        void theCountIsTheUnion() throws Exception {
+            // The folder holds nothing filed. Its member is the case it just claimed by tag, and
+            // the number is served by the same renderer the tree reads — so create, reload and
+            // tree cannot disagree about what the folder holds.
+            tagCase(ACME, seededCase(0), "smoke");
+
+            JsonNode created = body(post(LEAD, ACME, ACME_BANKING,
+                    "{\"name\":\"Resolving\",\"tagRules\":[\"smoke\"]}"));
+
+            assertThat(created.get("caseCount").asLong()).isEqualTo(1);
+        }
+    }
+
     // =====================================================================
     // Validation
     // =====================================================================
@@ -1419,6 +1494,10 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
     }
 
     /** The one spare folder in the sibling project, for the project-scoped emptiness assertion. */
+    private static UUID mobileHolder() {
+        return UUID.fromString("f1004000-0000-4000-8000-000000000020");
+    }
+
     private static UUID mobileSpare() {
         return UUID.fromString("f1004000-0000-4000-8000-000000000006");
     }
@@ -1463,6 +1542,10 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
                     "s1", "DRAFT");
             suite(connection, LOCKED_SUITE, ACME, ACME_LOCKED, null, "TS-91", 91, "Internal", "s91",
                     "DRAFT");
+            // A second sibling folder, holding the sibling case §96's caseIds bound is refused
+            // with — deliberately not `mobileSpare()`, which the delete section empties.
+            suite(connection, mobileHolder(), ACME, ACME_MOBILE, null, "TS-89", 89, "Mobile holder",
+                    "s89", "DRAFT");
 
             // Two live cases under Refunds — at path `s1.s2`, which is INSIDE the subtree of
             // ACME_BANKING's `s1`. The sibling project's spare folder is also at `s1` and is
@@ -1471,6 +1554,10 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
             // for reasons nothing on the user's screen can explain. Both folders are in the same
             // company, so only project_id separates them.
             cases(connection, ACME, ACME_BANKING, REFUNDS, "sw-ref", 2);
+            // A case in the SIBLING project, so `caseIds` has something to be refused with. It
+            // satisfies suite_case's foreign key, the company column and RLS — only the project
+            // predicate refuses it, which is why it needs a row rather than a random UUID.
+            cases(connection, ACME, ACME_MOBILE, mobileHolder(), "sw-mob", 1);
 
             // The counter was reset to 1 and the fixture occupies 1..3, so the next allocation must
             // be 4. Set explicitly rather than left implicit: TS-90/TS-91 exist to keep the sibling
@@ -1535,6 +1622,45 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
             statement.setString(8, name);
             statement.setString(9, status);
             statement.executeUpdate();
+        }
+    }
+
+    /** The id {@link #cases} assigned to the {@code index}-th REFUNDS case. */
+    private static UUID seededCase(int index) {
+        return UUID.nameUUIDFromBytes(("sw-ref" + index).getBytes());
+    }
+
+    /** The sibling project's only case — same company, different project. */
+    private static UUID siblingCase() {
+        return UUID.nameUUIDFromBytes(("sw-mob" + 0).getBytes());
+    }
+
+    private void tagCase(UUID companyId, UUID caseId, String tag) throws SQLException {
+        try (Connection connection = appConnection(companyId);
+                var statement = connection.prepareStatement(
+                        "INSERT INTO case_tag (company_id, case_id, tag) "
+                                + "VALUES (CAST(? AS uuid), CAST(? AS uuid), ?) "
+                                + "ON CONFLICT DO NOTHING")) {
+            statement.setString(1, companyId.toString());
+            statement.setString(2, caseId.toString());
+            statement.setString(3, tag);
+            statement.executeUpdate();
+        }
+    }
+
+    private List<String> storedTagRules(UUID companyId, UUID suiteId) throws SQLException {
+        try (Connection connection = appConnection(companyId);
+                var statement = connection.prepareStatement(
+                        "SELECT tag FROM suite_tag_rule WHERE suite_id = CAST(? AS uuid) "
+                                + "ORDER BY tag")) {
+            statement.setString(1, suiteId.toString());
+            List<String> found = new ArrayList<>();
+            try (ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) {
+                    found.add(rows.getString(1));
+                }
+            }
+            return found;
         }
     }
 

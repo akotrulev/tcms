@@ -17,5 +17,15 @@ import java.util.UUID;
  * the lock version travels as {@code If-Match} rather than in the body, for the reason
  * {@link CaseController#update} records.
  */
-public record SuiteWriteRequest(String name, UUID parentId, String description) {
+public record SuiteWriteRequest(
+        String name,
+        UUID parentId,
+        String description,
+
+        // Absent (null) means "leave them alone"; an empty list means "clear them". The same split
+        // TestCaseInput.tags uses and for the same reason — these are collections, so "not sent"
+        // and "sent empty" have different representations, and a rename dialog that sends neither
+        // must not empty a collection somebody assembled.
+        java.util.List<String> tagRules,
+        java.util.List<UUID> caseIds) {
 }

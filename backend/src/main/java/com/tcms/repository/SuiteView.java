@@ -21,9 +21,19 @@ import java.util.UUID;
  * @param path      the materialized {@code ltree} path, <strong>not</strong> a display string.
  *                  Labels admit only {@code [A-Za-z0-9_]}, so a suite named "UI / E2E" has a path
  *                  that does not spell it. Render {@link #name}; use the path for subtree matching.
- * @param caseCount the suite's <strong>own</strong> live cases, not its subtree's. The SPA's tree
- *                  sums a node's count with its children's to get the rollup, so a subtree count
- *                  here would be counted again at every ancestor.
+ * @param caseCount the suite's <strong>own</strong> resolved membership, not its subtree's — the
+ *                  cases filed in it, plus those added individually, plus every live case carrying
+ *                  any of its {@link #tagRules}, unioned and deduped by {@link SuiteMembership}.
+ *                  The SPA's tree sums a node's count with its children's to get the rollup, so a
+ *                  subtree count here would be counted again at every ancestor.
+ *                  <p><strong>These counts no longer sum to the project's case count</strong>, and
+ *                  that is the design rather than a defect: a case can be in three suites at once.
+ * @param tagRules  the tags this suite claims, <strong>unioned</strong> — either, not both. The
+ *                  opposite of the case grid's {@code tag} filter, which ANDs, because a collection
+ *                  is being assembled there and a list narrowed here.
+ * @param caseIds   the cases added to this suite <em>individually</em> — the explicit arm only.
+ *                  A case merely filed here, or matched by a tag rule, is not in this list: it is
+ *                  what an editor has to render and reconcile, not the membership.
  * @param lockVersion sent back on a rename so a concurrent edit is a 409 rather than a silent
  *                  overwrite (plan §6j). The one internal field that is on the wire on purpose.
  */
@@ -35,6 +45,8 @@ public record SuiteView(
         String description,
         String path,
         long caseCount,
+        List<String> tagRules,
+        List<UUID> caseIds,
         LifecycleStatus lifecycleStatus,
         List<SuiteConditionView> conditions,
         long lockVersion) {

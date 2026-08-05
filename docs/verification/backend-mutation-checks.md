@@ -1747,3 +1747,24 @@ Built and unverified. Rows written per §65; **none of them run.**
 | **Must show** | Changing `CaseSpecifications.tags` from `cb.and` to `cb.or` reddens `tagsNarrowByIntersection`'s second assertion. The fixture tags a second and a third case with `smoke` precisely so the two readings answer differently; with tags on one case only, both spellings pass. |
 | **Check** | a sibling project's suite is still refused |
 | **Must show** | Deleting the `!liveSuiteIds.contains(...)` arm in `CaseEdit.validate` — now that the null arm is gone, the whole check looks optional — reddens `Unfiled.aSiblingProjectsSuiteIsStillRefused`. That id satisfies the foreign key, the company column and RLS, so nothing else would refuse it. |
+
+---
+
+## §96 phase 3 — the suite side: a collection that resolves
+
+Built and unverified. Rows written per §65; **none of them run.**
+
+| | |
+|---|---|
+| **Check** | the union is deduped, not merely unioned |
+| **Must show** | Changing `SuiteMembership.countsBySuite`'s `COUNT(DISTINCT c.id)` to `COUNT(*)` reddens `SuiteEndpointTest.theCountIsTheWholeUnion`. The fixture tags the case it also adds individually, precisely so the two spellings answer 3 and 2; without that one row both pass and the dedup is unasserted. |
+| **Check** | a tag rule does not resurrect a deleted case |
+| **Must show** | Dropping `c.deleted_at IS NULL` from `SuiteMembership` reddens `deletedCasesAreNotMatched`. The folder's only match is a soft-deleted case, so the arm is the whole test — with a live match beside it the difference would be invisible. |
+| **Check** | membership does not cross projects |
+| **Must show** | Dropping `c.project_id = s.project_id` from the tag arm reddens `membershipDoesNotCrossProjects` **only if the sibling project has tagged cases** — it does not today, so the row is honest about being weaker than it looks: RLS still bounds the company, and the project predicate is asserted through the *count*, not through a leak. **Strengthen it**: tag a sibling project's case with the same word and assert this project's count does not move. |
+| **Check** | absent tag rules are not "clear the rules" |
+| **Must show** | Making `SuiteMembershipWriter.reconcile` treat a null `submittedTagRules` as an empty list reddens `SuiteWriteEndpointTest.absentAndEmptyAreDifferentInstructions`. The rename dialog sends a name and nothing else, so the null arm is the ordinary path and not an edge. |
+| **Check** | a sibling project's case cannot be added |
+| **Must show** | Deleting the `liveCaseIds.contains(...)` arm in `SuiteEdit.normalizeCaseIds` reddens `aSiblingProjectsCaseIsRefused`. It satisfies the foreign key, the company column and RLS, so nothing else refuses it. |
+| **Check** | the write's response is the read's shape |
+| **Must show** | Having `SuiteWriteService` assemble a `SuiteView` itself rather than calling `SuiteService.viewOf` reddens `theCountIsTheUnion` — the created folder's `caseCount` is a resolved membership the write path does not compute, so a hand-assembled view answers 0 and the reload answers 1. |

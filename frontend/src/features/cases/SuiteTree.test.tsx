@@ -37,6 +37,8 @@ const suite = (
   parentId,
   name,
   path: name.toLowerCase(),
+  tagRules: [],
+  caseIds: [],
   /** The WIRE meaning: this suite's OWN cases, excluding descendants. */
   caseCount: ownCaseCount,
   lifecycleStatus: 'APPROVED',

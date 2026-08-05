@@ -15,6 +15,20 @@ import {
 import { decide, needsApproval, standingOf } from '../lifecycleLadder';
 import { API, LATENCY, MAX_SUITE_NAME, meRef, notFound, permissionsOn, problem } from './shared';
 
+interface SuiteBody {
+  name?: string;
+  parentId?: string | null;
+  description?: string | null;
+  tagRules?: string[];
+  caseIds?: string[];
+}
+
+/** Trimmed, blanks dropped, duplicates collapsed — `SuiteEdit.normalizeTagRules`, in the mock. */
+function normalizeTagRules(rules: string[] | undefined): string[] | undefined {
+  if (rules === undefined) return undefined;
+  return [...new Set(rules.map((tag) => tag.trim()).filter((tag) => tag !== ''))];
+}
+
 export const suiteHandlers = [
   http.get(`${API}/projects/:projectId/suites`, async () => {
     await delay(LATENCY);
@@ -30,7 +44,7 @@ export const suiteHandlers = [
   */
   http.post(`${API}/projects/:projectId/suites`, async ({ request }) => {
     await delay(LATENCY);
-    const body = (await request.json()) as { name?: string; parentId?: string | null; description?: string | null };
+    const body = (await request.json()) as SuiteBody;
 
     const name = body.name?.trim() ?? '';
     const errors: Record<string, string[]> = {};
@@ -61,6 +75,11 @@ export const suiteHandlers = [
       // rewrite.
       path: parent ? `${parent.path}.s${keySeq}` : `s${keySeq}`,
       caseCount: 0,
+      // Absent means "none yet" on a create — there is nothing to leave alone. On the PATCH below
+      // absent means "leave them alone", which is not the same instruction and is the one a rename
+      // dialog sends by not mentioning either field.
+      tagRules: normalizeTagRules(body.tagRules) ?? [],
+      caseIds: body.caseIds ?? [],
       lifecycleStatus: 'DRAFT',
       conditions: [],
       lockVersion: 0,
@@ -79,7 +98,7 @@ export const suiteHandlers = [
     const suite = db.suites.find((s) => s.id === params.suiteId);
     if (!suite) return notFound('That suite');
 
-    const body = (await request.json()) as { name?: string; parentId?: string | null; description?: string | null };
+    const body = (await request.json()) as SuiteBody;
 
     // The precondition is the HEADER, never a body field. It was read from the body here for as
     // long as no server read it at all, which is exactly how a divergence survives: both sides
@@ -118,6 +137,10 @@ export const suiteHandlers = [
 
     suite.name = name;
     if (body.description !== undefined) suite.description = body.description?.trim() || null;
+    // Absent leaves them alone; [] clears them. A rename that emptied a collection somebody
+    // assembled would be the mock teaching a behaviour the server refuses to have.
+    if (body.tagRules !== undefined) suite.tagRules = normalizeTagRules(body.tagRules) ?? [];
+    if (body.caseIds !== undefined) suite.caseIds = body.caseIds;
     // `lifecycleStatus` is NOT applied any more: it is not on SuiteInput, and a status an
     // ordinary edit can set is an approval its author granted themselves (§6g).
     suite.lockVersion = (suite.lockVersion ?? 0) + 1;
