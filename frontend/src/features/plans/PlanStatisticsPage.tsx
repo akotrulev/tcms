@@ -21,7 +21,7 @@ import {
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlineOutlined';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlineOutlined';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutlineOutlined';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import type { AggregationPolicy, Criterion, PlanStatistics, PlanStatus, TestPlan } from '../../api/types';
@@ -41,11 +41,13 @@ import {
   PLAN_TABS,
   draftFromPlan,
   dirtyTabs,
+  ensureTrailingBlank,
   planProblems,
   planTabLabels,
   type PlanDraft,
   type PlanTabId,
 } from './planDraft';
+import { PlanCasesTab } from './PlanCasesTab';
 import { PlanFieldsTab } from './PlanFieldsTab';
 import { usePlanSave, type SaveOutcome } from './usePlanSave';
 import { DataRegion } from '../../components/DataRegion';
@@ -273,6 +275,22 @@ function PlanForm({
   const problems = planProblems(draft);
 
   /*
+    Every group on the Test cases tab ends in a blank row, which is what makes "add a case" a place
+    to type rather than a button (§94's step list). Held as an effect rather than seeded into
+    `draftFromPlan`, because the invariant has to be restored in three situations and only one of
+    them is the first render: a save reseeds the draft from the response, Discard reseeds it from
+    the base, and a section can be added at any time.
+
+    `ensureTrailingBlank` returns the SAME object when nothing is missing, so this cannot loop — and
+    the rows it adds are blank, which `liveCaseRows` drops and `dirtyTabs` ignores, so a reader who
+    never opens the tab is unaffected by them.
+  */
+  useEffect(() => {
+    const filled = ensureTrailingBlank(draft);
+    if (filled !== draft) setDraft(filled);
+  }, [draft]);
+
+  /*
     The last save's refusals, keyed as the server keys them, so each one lands on the control it is
     about. Cleared on every press rather than accumulated: a stale error under a field the author
     has since corrected is a screen arguing with itself.
@@ -393,7 +411,15 @@ function PlanForm({
           onChange={(outOfScopeText) => edit({ outOfScopeText })}
         />
       )}
-      {tab === 'cases' && <PlanCasesTab plan={base} />}
+      {tab === 'cases' && (
+        <PlanCasesTab
+          projectId={projectId}
+          draft={draft}
+          plan={base}
+          dirty={dirty.includes('cases')}
+          onChange={setDraft}
+        />
+      )}
     </Stack>
   );
 }
@@ -546,67 +572,6 @@ function ArtefactsTab({ projectId, planId }: { projectId: string; planId: string
       </DataRegion>
     </Panel>
   );
-}
-
-/**
- * The Test cases tab, **read-only in phase 4** — the four fill mechanisms land in phase 6. What it
- * already tells the truth about is the shape: a plan's cases are named sections plus an unsectioned
- * group, every arm is a **live selector**, and the counts do not sum.
- */
-function PlanCasesTab({ plan }: { plan: TestPlan }) {
-  const unsectioned =
-    plan.suiteIds.length + plan.caseIds.length + plan.tags.length > 0 || plan.sections.length === 0;
-
-  return (
-    <Panel
-      title="Test cases"
-      testId="PlanStats.Cases"
-      actions={
-        <Tooltip title="A case can be named directly in one section and arrive through a suite or a tag in another, so the sections' counts add up to more than the plan's total.">
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            {formatCount(plan.caseCount)} cases in scope
-          </Typography>
-        </Tooltip>
-      }
-    >
-      <Stack sx={{ gap: 2 }}>
-        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-          Every reference below is resolved on each read: this plan grows when a referenced suite
-          grows and when somebody tags a case.
-        </Typography>
-        {plan.sections.map((section) => (
-          <Stack key={section.name} sx={{ gap: 0.25 }} data-testid="PlanStats.Cases.Section">
-            <Stack direction="row" sx={{ gap: 1, alignItems: 'baseline' }}>
-              <Typography variant="subtitle2">{section.name}</Typography>
-              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                {formatCount(section.caseCount)} cases
-              </Typography>
-            </Stack>
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-              {describeReferences(section.suiteIds.length, section.caseIds.length, section.tags)}
-            </Typography>
-          </Stack>
-        ))}
-        {unsectioned && (
-          <Stack sx={{ gap: 0.25 }} data-testid="PlanStats.Cases.Unsectioned">
-            <Typography variant="subtitle2">Not in a section</Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-              {describeReferences(plan.suiteIds.length, plan.caseIds.length, plan.tags)}
-            </Typography>
-          </Stack>
-        )}
-      </Stack>
-    </Panel>
-  );
-}
-
-/** What defines a group, beside its count (§97 §5) — the references, never the resolved cases. */
-function describeReferences(suites: number, cases: number, tags: string[]): string {
-  const parts: string[] = [];
-  if (suites > 0) parts.push(`${formatCount(suites)} suites`);
-  if (cases > 0) parts.push(`${formatCount(cases)} cases added directly`);
-  if (tags.length > 0) parts.push(`tags ${tags.join(', ')}`);
-  return parts.length === 0 ? 'Nothing referenced yet.' : parts.join(' · ');
 }
 
 /**

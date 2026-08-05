@@ -182,8 +182,9 @@ function SuiteFormDialog({
                 <Autocomplete
                   multiple
                   freeSolo
-                  // No option list, for the case editor's reason: there is no tag vocabulary in
-                  // the product, and a curated one is what left `shared_step` empty.
+                  // No option list, for the case editor's reason — and see its note: the
+                  // tags-in-use endpoint exists since §97 phase 3b and this control is one of the
+                  // three that could suggest from it and does not yet.
                   options={[]}
                   value={field.value}
                   onChange={(_event, value) =>

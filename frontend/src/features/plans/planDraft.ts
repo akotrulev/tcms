@@ -268,6 +268,211 @@ export function dirtyTabs(draft: PlanDraft, plan: TestPlan): PlanTabId[] {
 }
 
 /**
+ * The **groups** a case reference can sit in: the unsectioned one, then the sections in author
+ * order. `null` is not a section with an empty name — it is the absence of one, and it is what every
+ * plan created before §97 holds.
+ */
+export type GroupId = string | null;
+
+export function groupIds(draft: PlanDraft): GroupId[] {
+  return [null, ...draft.sections.map((section) => section.name)];
+}
+
+/** The new-case rows authored under one group, in the order they were written. */
+export function caseRowsIn(draft: PlanDraft, group: GroupId): NewCaseRow[] {
+  return draft.newCases.filter((row) => row.section === group);
+}
+
+/**
+ * Guarantees **every group ends in a blank row**, which is what makes "add a case" a place to type
+ * rather than a button (§94's step list, and §97 §5's first fill mechanism).
+ *
+ * Returns the **same object** when the invariant already holds, so a component may call it from an
+ * effect without looping. Idempotent by construction: a group whose last row is already blank is
+ * left alone.
+ *
+ * It has to be re-run after a save reseeds the draft and after a section is added, which is exactly
+ * why it is a function of the whole draft rather than a step inside one operation.
+ */
+export function ensureTrailingBlank(draft: PlanDraft): PlanDraft {
+  const missing = groupIds(draft).filter((group) => {
+    const rows = caseRowsIn(draft, group);
+    return rows.length === 0 || rows[rows.length - 1].title.trim() !== '';
+  });
+  if (missing.length === 0) return draft;
+  return { ...draft, newCases: [...draft.newCases, ...missing.map((group) => blankCaseRow(group))] };
+}
+
+/**
+ * Types into one row, **appending the group's next blank row when this one was its last**.
+ *
+ * Guarded on being last rather than on "this row was empty a moment ago", which is §94's exact
+ * wording and its reason: one keystroke makes the row non-last, so the second keystroke cannot
+ * append a second time and a paste appends exactly once.
+ */
+export function typeInCaseRow(draft: PlanDraft, rowId: string, title: string): PlanDraft {
+  const next = {
+    ...draft,
+    newCases: draft.newCases.map((row) => (row.rowId === rowId ? { ...row, title } : row)),
+  };
+  const row = draft.newCases.find((entry) => entry.rowId === rowId);
+  if (!row) return next;
+
+  const rows = caseRowsIn(draft, row.section);
+  const isLast = rows[rows.length - 1]?.rowId === rowId;
+  if (!isLast || title.trim() === '') return next;
+  return { ...next, newCases: [...next.newCases, blankCaseRow(row.section)] };
+}
+
+/** Removes a row and puts the group's blank invitation back, so the last one cannot be deleted away. */
+export function removeCaseRow(draft: PlanDraft, rowId: string): PlanDraft {
+  return ensureTrailingBlank({
+    ...draft,
+    newCases: draft.newCases.filter((row) => row.rowId !== rowId),
+  });
+}
+
+/** Appends an empty section, with its blank case row already in place. */
+export function addSection(draft: PlanDraft, name: string): PlanDraft {
+  return ensureTrailingBlank({
+    ...draft,
+    sections: [...draft.sections, { name, caseIds: [], suiteIds: [], tags: [] }],
+  });
+}
+
+/**
+ * Renames a section — **and moves its unsaved case rows with it**.
+ *
+ * `NewCaseRow.section` is the section's *name*, because that is what the server keys a section by
+ * (there are no section ids to match a partial update against). So a rename that touched only the
+ * section would strand every row authored under it: they would still name the old heading, and
+ * `planPayload` would file the cases created from them in the **unsectioned** group — a case the
+ * author put under "Navigation" quietly landing outside every section, with nothing on screen
+ * saying so.
+ */
+export function renameSection(draft: PlanDraft, index: number, name: string): PlanDraft {
+  const previous = draft.sections[index]?.name;
+  if (previous === undefined) return draft;
+  return {
+    ...draft,
+    sections: draft.sections.map((section, i) => (i === index ? { ...section, name } : section)),
+    newCases: draft.newCases.map((row) =>
+      row.section === previous ? { ...row, section: name } : row),
+  };
+}
+
+/** Moves a section one place up or down. Out-of-range is a no-op, so the end buttons need no guard. */
+export function moveSection(draft: PlanDraft, index: number, delta: -1 | 1): PlanDraft {
+  const target = index + delta;
+  if (index < 0 || target < 0 || index >= draft.sections.length || target >= draft.sections.length) {
+    return draft;
+  }
+  const sections = [...draft.sections];
+  [sections[index], sections[target]] = [sections[target], sections[index]];
+  return { ...draft, sections };
+}
+
+/**
+ * What happens to a deleted section's references. **Asked, never guessed** (§97 §5): the two answers
+ * differ by whether the cases stay in the plan at all, and a delete that silently chose one of them
+ * would either lose scope or leave it behind, with the same confirmation either way.
+ */
+export type SectionDeletion = 'unsection' | 'remove';
+
+export function removeSection(
+  draft: PlanDraft,
+  index: number,
+  disposition: SectionDeletion,
+): PlanDraft {
+  const section = draft.sections[index];
+  if (!section) return draft;
+
+  const sections = draft.sections.filter((_, i) => i !== index);
+  const rows =
+    disposition === 'remove'
+      ? draft.newCases.filter((row) => row.section !== section.name)
+      : draft.newCases.map((row) => (row.section === section.name ? { ...row, section: null } : row));
+
+  if (disposition === 'remove') {
+    return ensureTrailingBlank({ ...draft, sections, newCases: rows });
+  }
+  return ensureTrailingBlank({
+    ...draft,
+    sections,
+    newCases: rows,
+    // Merged as SETS: a case named in the section and also named unsectioned is one reference, and
+    // a duplicate id in the payload is a row the server would have to dedupe on our behalf.
+    suiteIds: [...new Set([...draft.suiteIds, ...section.suiteIds])],
+    caseIds: [...new Set([...draft.caseIds, ...section.caseIds])],
+    tags: [...new Set([...draft.tags, ...section.tags])],
+  });
+}
+
+/** One reference, in the one shape every add and every remove goes through. */
+export type Reference =
+  | { kind: 'case'; id: string }
+  | { kind: 'suite'; id: string }
+  | { kind: 'tag'; value: string };
+
+function withReferences(
+  draft: PlanDraft,
+  group: GroupId,
+  change: (holder: DraftSection) => DraftSection,
+): PlanDraft {
+  if (group === null) {
+    const updated = change({
+      name: '',
+      caseIds: draft.caseIds,
+      suiteIds: draft.suiteIds,
+      tags: draft.tags,
+    });
+    return {
+      ...draft,
+      caseIds: updated.caseIds,
+      suiteIds: updated.suiteIds,
+      tags: updated.tags,
+    };
+  }
+  return {
+    ...draft,
+    sections: draft.sections.map((section) =>
+      section.name === group ? { ...change(section), name: section.name } : section),
+  };
+}
+
+/**
+ * Adds a reference to one group.
+ *
+ * **Duplicates within a group are dropped and duplicates across groups are kept** — the second half
+ * is the design, not an oversight: a case may be named directly in *Create* and arrive through a
+ * suite in *Navigation*, which is why the sections' counts do not sum to the plan's total (§96's
+ * lesson, one slice later).
+ */
+export function addReference(draft: PlanDraft, group: GroupId, reference: Reference): PlanDraft {
+  return withReferences(draft, group, (holder) => {
+    if (reference.kind === 'case') {
+      return { ...holder, caseIds: [...new Set([...holder.caseIds, reference.id])] };
+    }
+    if (reference.kind === 'suite') {
+      return { ...holder, suiteIds: [...new Set([...holder.suiteIds, reference.id])] };
+    }
+    return { ...holder, tags: [...new Set([...holder.tags, reference.value])] };
+  });
+}
+
+export function removeReference(draft: PlanDraft, group: GroupId, reference: Reference): PlanDraft {
+  return withReferences(draft, group, (holder) => {
+    if (reference.kind === 'case') {
+      return { ...holder, caseIds: holder.caseIds.filter((id) => id !== reference.id) };
+    }
+    if (reference.kind === 'suite') {
+      return { ...holder, suiteIds: holder.suiteIds.filter((id) => id !== reference.id) };
+    }
+    return { ...holder, tags: holder.tags.filter((tag) => tag !== reference.value) };
+  });
+}
+
+/**
  * What this draft cannot be saved as, and which tab it is on.
  *
  * **Only refusals the client can know on its own.** The server is the authority on everything else
@@ -287,6 +492,23 @@ export function planProblems(draft: PlanDraft): { tab: PlanTabId; message: strin
   if (draft.name.trim() === '') {
     problems.push({ tab: 'plan', message: 'The plan needs a name.' });
   }
+
+  /*
+    A section's NAME is its identity — the contract has no section id, so the whole list is replaced
+    on every save and the server keys each one by what it is called. Two sections sharing a name are
+    therefore one section on the way back, silently holding the union of both, and a nameless one is
+    indistinguishable from the unsectioned group it would swallow. Both are refusals the client is
+    certain about for the same reason the blank plan name is: the shape cannot be sent at all.
+  */
+  const names = draft.sections.map((section) => section.name.trim());
+  if (names.some((name) => name === '')) {
+    problems.push({ tab: 'cases', message: 'Every section needs a name.' });
+  }
+  const duplicate = names.find((name, index) => name !== '' && names.indexOf(name) !== index);
+  if (duplicate) {
+    problems.push({ tab: 'cases', message: `Two sections are called “${duplicate}”.` });
+  }
+
   return problems;
 }
 
@@ -340,7 +562,10 @@ export function planPayload(
     payload.tags = draft.tags;
     payload.sections = draft.sections.map(
       (section): PlanSectionInput => ({
-        name: section.name,
+        // Trimmed on the way out, because `planProblems` refuses an empty and a duplicate name on
+        // the TRIMMED value — sending the untrimmed one would let "Create " and "Create" through as
+        // two sections after the check said they were one.
+        name: section.name.trim(),
         caseIds: [...new Set([...section.caseIds, ...bySection(section.name)])],
         suiteIds: section.suiteIds,
         tags: section.tags,

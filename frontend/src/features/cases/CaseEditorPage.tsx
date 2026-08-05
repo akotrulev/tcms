@@ -1057,11 +1057,18 @@ function CaseEditorForm({
                   <Autocomplete
                     multiple
                     freeSolo
-                    // No options list. Tags are free text with no vocabulary anywhere — there is
-                    // no endpoint that lists the ones in use, and offering a curated set is
-                    // exactly what left `shared_step` empty (authoring-rework decision 2). A
-                    // suggestion source is a slice of its own, and inventing one here would be a
-                    // second, drifting answer to "what tags does this project use".
+                    /*
+                      No options list. Tags are free text and a curated vocabulary is exactly what
+                      left `shared_step` empty (authoring-rework decision 2).
+
+                      ~~There is no endpoint that lists the ones in use.~~ → **there is, since §97
+                      phase 3b**: `GET /projects/{id}/tags`, whose first consumer is the plan's
+                      Test cases tab (`useProjectTags`, §97 phase 6). Suggesting them here is a
+                      three-line change and is deliberately NOT made in that slice — this control
+                      and its two siblings (`SuiteDialogs`, `BulkActionDialog`) are three screens
+                      §97 does not own, and a suggestion list is a behaviour change that wants its
+                      own browser row. Recorded as a gap rather than left reading as impossible.
+                    */
                     options={[]}
                     value={field.value}
                     onChange={(_event, value) =>

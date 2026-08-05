@@ -2,8 +2,8 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-05 (§97 phase 5)
-**Baseline commit:** `4b582ec` (§97 phase 4) **+ the doc commit this line ships in** (its own SHA
+**Last verified:** 2026-08-05 (§97 phase 6)
+**Baseline commit:** `1b398fd` (§97 phase 5) **+ the doc commit this line ships in** (its own SHA
 cannot be written into itself; trust the body over the header and re-grep what a later commit
 could have moved).
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
@@ -35,7 +35,7 @@ could have moved).
 - **`npm run build` is THE gate** (`tsc -b` + vite build). **Do not trust `tsc --noEmit`** — it has
   reported 0 errors while the build failed with nine (working agreement). `#confirmed`
 - `npm run lint` — oxlint, must stay at **0 warnings**; it prints nothing when clean.
-- `npm run test:run` — Vitest + RTL. **895/895** across 64 files at §97 phase 5 (880/63 at phase 4, 849/60 at §100). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
+- `npm run test:run` — Vitest + RTL. **915/915** across 65 files at §97 phase 6 (895/64 at phase 5, 849/60 at §100). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
 - `npm run gen:api` — regenerate `src/api/schema.d.ts` after **any** `openapi.yaml` change. Runs
   through `npx` on purpose (the scaffold pins TS 6, the tool peer-requires 5.x); do not "fix" it.
 - **Live mode:** `VITE_API_MODE=live` in `.env.local` proxies `/api` to `localhost:8080`.
@@ -258,6 +258,25 @@ directly above the switcher) and the wordmark links there too.
   **`PlanEdit.test.tsx` was rewritten, not deleted**, because every assertion in it is about the
   *payload* (`caseIds` absent not `[]`, no `met`/`actual`, the number coercion, the derived label),
   and the payload outlived the dialog.
+  **Phase 6 finished the tabs with `PlanCasesTab.tsx`, and its model is REFERENCES.** A group (the
+  unsectioned one, then the sections in author order) holds case ids, suite ids and tags — never
+  cases — and its membership is a query the server re-runs on every read (D7′, validated against
+  TestNG's `<test>` block). Ten pure helpers in `planDraft.ts` do the work: `ensureTrailingBlank`
+  (returns the **same object** when satisfied, which is what lets `PlanForm` call it from an effect
+  without looping), `typeInCaseRow` (appends the next blank only when the typed row was its group's
+  **last** — §94's guard, so a paste appends exactly once), `add`/`rename`/`move`/`removeSection`,
+  `add`/`removeReference`, `caseRowsIn`, `groupIds`.
+  **A SECTION'S NAME IS ITS IDENTITY** — the contract has no section id and the whole list is
+  replaced on every save — with two consequences worth knowing before touching this: `renameSection`
+  must **move the section's unsaved case rows with it** (`NewCaseRow.section` is a name, so a rename
+  that missed them files their cases in the unsectioned group), and a blank or duplicate name is a
+  `planProblems` refusal rather than a server round trip.
+  **A served `caseCount` is hidden while the tab is dirty**, never shown against a draft that has
+  moved past it. **Deleting a section asks** what happens to its references (keep them in the plan ·
+  remove them) instead of guessing — the plan's total moves in one case and not the other.
+  `useProjectTags` (`GET /projects/{id}/tags`, shipped consumerless in phase 3b) is the tag picker's
+  source; the case editor's, `SuiteDialogs`' and `BulkActionDialog`'s tag controls **still pass
+  `options={[]}`** and are the named follow-up.
   **A captured DOM node goes stale across a permission verdict** — `PermissionGate`'s denied branch
   wraps the control in a tooltip span, so when the answer lands React mints a **new** button and
   `waitFor(() => expect(captured).toBeEnabled())` waits for ever on a detached one. Re-query inside
@@ -685,6 +704,15 @@ directly above the switcher) and the wordmark links there too.
 
 ## Session log
 
+- 2026-08-05 · EXTEND · **The plan's scope becomes editable** (§97 phase 6, the last build phase) —
+  `features/plans/PlanCasesTab.tsx` + ten pure helpers in `planDraft.ts` + `useProjectTags` +
+  `keys.tags`. Sections created, renamed, reordered and deleted (with the reference question asked);
+  four fill mechanisms, of which only the new-case rows write anything and they write it **on Save**.
+  New test file `PlanCases.test.tsx` (9) and ten helper tests. No contract change, no migration, no
+  `gen:api`. **915/915 across 65 files, lint 0, build clean. Zero browser rows run; 11 M3 rows
+  queued (M3-41…M3-51).** Found and not fixed: the case-id chips resolve through a **client-side
+  join over the case list's first 200**, because the contract has no by-ids read — an id outside it
+  renders as "a case outside the loaded list" and can still be removed.
 - 2026-08-05 · EXTEND · **The plan detail's tabs get their editors** (§97 phase 5) — the Plan tab
   (`features/plans/PlanFieldsTab.tsx`), the Business requirements tab rewritten read-only over an
   adopted page (`PlanDocumentPanel.tsx`, `useLinkPlanDocument`/`useUnlinkPlanDocument`, the mock's

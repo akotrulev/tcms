@@ -61,6 +61,7 @@ export {
   useCases,
   useCreateCase,
   useCreatePlanCase,
+  useProjectTags,
   useDeleteCase,
   useUpdateCase,
   type BulkInput,

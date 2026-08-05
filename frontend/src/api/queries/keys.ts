@@ -29,6 +29,15 @@ export const keys = {
   caseVersions: (p: string, id: string) => ['projects', p, 'cases', id, 'versions'] as const,
   caseHistory: (p: string, id: string, scope: string) =>
     ['projects', p, 'cases', id, 'history', scope] as const,
+  /**
+   * The project's tags **in use** (§97 phase 3b's endpoint, first consumer in phase 6).
+   *
+   * No `q` in the key, unlike the searches around it: this list is derived from `case_tag` and is a
+   * project's whole vocabulary, filtered in the client. A tag list is short and the picker has to be
+   * able to say "this project uses none yet", which a server-side search cannot distinguish from
+   * "none match what you typed".
+   */
+  tags: (p: string) => ['projects', p, 'tags'] as const,
   conditions: (p: string, q: string, type?: string) => ['projects', p, 'conditions', q, type ?? 'ALL'] as const,
   sharedSteps: (p: string, q: string) => ['projects', p, 'shared-steps', q] as const,
   /**

@@ -17,6 +17,7 @@ import type {
   EntityVersion,
   ExecutionHistoryEntry,
   Paged,
+  TagUsage,
   TestCase,
   TestCaseSummary,
   VersionMarker,
@@ -56,6 +57,28 @@ export function useCases(
      * the answer to the filter you typed, would be a lie the staleness marker cannot fix.
      */
     placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * The tags this project's cases actually carry, with how many carry each.
+ *
+ * **Shipped without a consumer in §97 phase 3b and this is where it gets one** — §96 shipped both
+ * tag controls with an empty option list and named this endpoint as the follow-up, because a tag is
+ * now a *fill mechanism* for a plan section (D8) and a picker that cannot say which tags exist makes
+ * it unusable.
+ *
+ * Free text stays free text: this is a suggestion source, never a vocabulary. The server takes any
+ * string, and a control that refused an unlisted tag would make the first use of a new one
+ * impossible.
+ */
+export function useProjectTags(projectId: string): UseQueryResult<TagUsage[]> {
+  return useQuery({
+    queryKey: keys.tags(projectId),
+    queryFn: ({ signal }) => api.get<TagUsage[]>(`${base(projectId)}/tags`, { signal }),
+    // A project's tag vocabulary moves when somebody edits a case, not between two keystrokes in a
+    // picker; the case editor's own writes invalidate the prefix this key sits under.
+    staleTime: 60_000,
   });
 }
 

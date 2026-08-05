@@ -1,12 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import type { TestPlan } from '../../api/types'
 import {
+  addReference,
+  addSection,
   blankCaseRow,
+  caseRowsIn,
   dirtyTabs,
   draftFromPlan,
+  ensureTrailingBlank,
   liveCaseRows,
+  moveSection,
   planPayload,
   planProblems,
+  removeCaseRow,
+  removeReference,
+  removeSection,
+  renameSection,
+  typeInCaseRow,
   type PlanDraft,
 } from './planDraft'
 
@@ -234,6 +244,135 @@ describe('planPayload', () => {
       // something the client could see, and the author is told by a round trip.
       const draft = { ...draftFromPlan(planBody()), name: '   ' }
       expect(planProblems(draft)).toHaveLength(1)
+    })
+  })
+
+  /**
+   * The Test cases tab's operations (§97 phase 6), tested where they are pure.
+   *
+   * The two that carry a defect nothing else would catch are the rename and the trailing blank.
+   */
+  describe('sections and their rows', () => {
+    it('gives every group a trailing blank row, and is idempotent', () => {
+      const draft = ensureTrailingBlank(addSection(draftFromPlan(planBody()), 'Navigation'))
+
+      expect(caseRowsIn(draft, null)).toHaveLength(1)
+      expect(caseRowsIn(draft, 'Navigation')).toHaveLength(1)
+      // The SAME object when nothing is missing — the effect that calls this from a component
+      // depends on it, and a fresh object every time is an infinite render loop.
+      expect(ensureTrailingBlank(draft)).toBe(draft)
+    })
+
+    it('appends the next blank row only when the LAST one is typed in', () => {
+      const seeded = ensureTrailingBlank(draftFromPlan(planBody()))
+      const first = caseRowsIn(seeded, null)[0]
+
+      const typed = typeInCaseRow(seeded, first.rowId, 'Open the ledger')
+      expect(caseRowsIn(typed, null)).toHaveLength(2)
+
+      // A second keystroke in the same row must NOT append again: it is no longer the last row,
+      // which is the guard §94 wrote and the reason a paste appends exactly once.
+      const again = typeInCaseRow(typed, first.rowId, 'Open the ledger again')
+      expect(caseRowsIn(again, null)).toHaveLength(2)
+    })
+
+    it('puts the blank invitation back when the last row is removed', () => {
+      const seeded = ensureTrailingBlank(draftFromPlan(planBody()))
+      const typed = typeInCaseRow(seeded, caseRowsIn(seeded, null)[0].rowId, 'A case')
+      const rows = caseRowsIn(typed, null)
+
+      const removed = removeCaseRow(removeCaseRow(typed, rows[0].rowId), rows[1].rowId)
+
+      // Without this the blank row IS the way to add a case and an author who removed it has no
+      // control on screen that says so.
+      expect(caseRowsIn(removed, null)).toHaveLength(1)
+      expect(liveCaseRows(removed.newCases)).toEqual([])
+    })
+
+    it('MOVES a section’s unsaved rows when the section is renamed', () => {
+      const withSection = addSection(draftFromPlan(planBody()), 'Navigatoin')
+      const row = caseRowsIn(withSection, 'Navigatoin')[0]
+      const typed = typeInCaseRow(withSection, row.rowId, 'Open the ledger')
+
+      const renamed = renameSection(typed, 0, 'Navigation')
+
+      // The row's `section` is the section's NAME, because that is what the server keys a section
+      // by. A rename that touched only the section would strand the row under a heading that no
+      // longer exists, and `planPayload` would file its case in the UNSECTIONED group — the case
+      // the author put under Navigation landing outside every section, silently.
+      expect(caseRowsIn(renamed, 'Navigation')).toHaveLength(2)
+      expect(caseRowsIn(renamed, 'Navigatoin')).toHaveLength(0)
+    })
+
+    it('keeps a deleted section’s references when asked to, and drops them when asked to', () => {
+      const plan = planBody({
+        sections: [
+          { name: 'Create', position: 0, caseIds: ['case-1'], suiteIds: ['suite-2'], tags: ['smoke'], caseCount: 4 },
+        ],
+      } as Partial<TestPlan>)
+
+      const kept = removeSection(draftFromPlan(plan), 0, 'unsection')
+      expect(kept.sections).toEqual([])
+      expect(kept.caseIds).toEqual(['case-9', 'case-1'])
+      expect(kept.suiteIds).toEqual(['suite-1', 'suite-2'])
+      expect(kept.tags).toEqual(['smoke'])
+
+      const dropped = removeSection(draftFromPlan(plan), 0, 'remove')
+      expect(dropped.sections).toEqual([])
+      // Untouched: the plan's own references are not the section's, and a delete that swallowed
+      // both would cut scope the author never named.
+      expect(dropped.caseIds).toEqual(['case-9'])
+      expect(dropped.suiteIds).toEqual(['suite-1'])
+    })
+
+    it('reorders sections, and does nothing at the ends', () => {
+      const draft = addSection(addSection(draftFromPlan(planBody()), 'A'), 'B')
+
+      expect(moveSection(draft, 1, -1).sections.map((s) => s.name)).toEqual(['B', 'A'])
+      // No guard needed at the call site: the end buttons are disabled, and a stray call is a
+      // no-op rather than a swap with a section that is not there.
+      expect(moveSection(draft, 0, -1)).toBe(draft)
+      expect(moveSection(draft, 1, 1)).toBe(draft)
+    })
+
+    it('dedupes a reference within a group and keeps it across two', () => {
+      const draft = addSection(draftFromPlan(planBody()), 'Create')
+
+      const twice = addReference(
+        addReference(draft, 'Create', { kind: 'tag', value: 'smoke' }),
+        'Create',
+        { kind: 'tag', value: 'smoke' },
+      )
+      expect(twice.sections[0].tags).toEqual(['smoke'])
+
+      // Across groups it is KEPT — that is the design, and it is why the counts do not sum.
+      const both = addReference(twice, null, { kind: 'tag', value: 'smoke' })
+      expect(both.tags).toEqual(['smoke'])
+      expect(both.sections[0].tags).toEqual(['smoke'])
+
+      const gone = removeReference(both, 'Create', { kind: 'tag', value: 'smoke' })
+      expect(gone.sections[0].tags).toEqual([])
+      // Removing from one group leaves the other alone, or "add it to both" would be unusable.
+      expect(gone.tags).toEqual(['smoke'])
+    })
+
+    it('refuses a nameless section and two sections with one name', () => {
+      const nameless = addSection(draftFromPlan(planBody()), '  ')
+      expect(planProblems(nameless)).toContainEqual({
+        tab: 'cases',
+        message: 'Every section needs a name.',
+      })
+
+      const twins = addSection(addSection(draftFromPlan(planBody()), 'Create'), 'Create')
+      // A section has no id: the list is replaced whole and the server keys each one by name, so
+      // two called the same thing are ONE section holding the union of both on the way back.
+      expect(planProblems(twins).some((p) => p.message.includes('Two sections'))).toBe(true)
+    })
+
+    it('trims a section name on the way out, since the check trims too', () => {
+      const plan = planBody()
+      const draft = addSection(draftFromPlan(plan), 'Create ')
+      expect(planPayload(draft, plan).sections?.[0].name).toBe('Create')
     })
   })
 })
