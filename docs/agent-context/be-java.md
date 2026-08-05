@@ -108,10 +108,23 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   **A suite may CLAIM a case and may never MOVE one** — filing is `test_case.suite_id` and belongs
   to the case's own write path; a suite edit that could re-file would let two screens write one
   column. `SuiteMembershipWriter` therefore touches two arms and never the third.
-  Still open after this phase: **run scoping does not resolve the new arms** —
-  `CaseFacts.caseIdsInSuiteSubtree` is still `JOIN test_case c ON c.suite_id = d.id`, so a
-  tag-resolved suite in a plan's scope contributes only its filed cases. That is the next phase, and
-  it is the one that makes "run everything tagged smoke" true.
+  ~~Still open after this phase: run scoping does not resolve the new arms~~ → **phase 4 closed it.**
+- **RUN SCOPING RESOLVES THE UNION TOO (phase 4) — AND THE PREDICATE EXISTS TWICE ON PURPOSE.**
+  `CaseFacts.inSubtreeOf(alias)` is the {@code execution} module's copy of the union, used by all
+  four of its suite-expanding queries (`caseCountsByPlan`, `caseIdsInPlanScope`,
+  `casesInPlanScope`, `caseIdsInSuiteSubtree`) via `"…%s…".formatted(inSubtreeOf("s"))`.
+  **This is what makes "run everything tagged smoke" work with no new mechanism** — such a run is a
+  suite whose tag rule is `smoke`, scoped into a plan the way suites already are; there is no tag
+  option on `plan_scope_item`.
+  It duplicates `repository.SuiteMembership` because ERD §0.2 forbids the call, so the two are kept
+  honest by **`SuiteScopeAgreementTest`** (prefix `5c`), which also pins the ONE intended
+  disagreement: the seam **includes soft-deleted cases** (history must not shrink), the repository's
+  union excludes them (the tree and grid must not show them).
+  **Two traps that class paid for**: only one live member is *filed* in its fixture, so a
+  filed-arm-only resolution reddens it — and calling a `CaseFacts` method straight from a test runs
+  it **outside any transaction**, so `app.current_company` is unset and RLS answers zero rows. The
+  first draft compared an empty list to an empty list and reported agreement; the fix is a
+  `TransactionTemplate`, not just a `CompanyContext`.
 - **THE CONDITION LIBRARY HAS WRITERS SINCE §95 phase 1, AND THE USAGE COUNT IS NOW TWO NUMBERS.**
   `ConditionService.create`/`update` + `POST`/`PUT /projects/{projectId}/conditions` +
   `ConditionEdit`/`ConditionWriteRequest`/`ConditionUsage` + `ConditionRepository.countCaseUsage`/

@@ -1768,3 +1768,20 @@ Built and unverified. Rows written per §65; **none of them run.**
 | **Must show** | Deleting the `liveCaseIds.contains(...)` arm in `SuiteEdit.normalizeCaseIds` reddens `aSiblingProjectsCaseIsRefused`. It satisfies the foreign key, the company column and RLS, so nothing else refuses it. |
 | **Check** | the write's response is the read's shape |
 | **Must show** | Having `SuiteWriteService` assemble a `SuiteView` itself rather than calling `SuiteService.viewOf` reddens `theCountIsTheUnion` — the created folder's `caseCount` is a resolved membership the write path does not compute, so a hand-assembled view answers 0 and the reload answers 1. |
+
+---
+
+## §96 phase 4 — run scoping resolves the new arms
+
+Built and unverified. Rows written per §65; **none of them run.**
+
+| | |
+|---|---|
+| **Check** | the seam resolves all three arms |
+| **Must show** | Reverting `CaseFacts.inSubtreeOf` to `c.suite_id = d.id` alone reddens `SuiteScopeAgreementTest.theTwoUnionsAgree` — three of the four expected members disappear. The fixture files only ONE live member under the root on purpose: with a fixture where everything is filed, the union and the column answer identically and this whole class is vacuous. |
+| **Check** | the two unions are compared, not two copies of one |
+| **Must show** | The agreement test asserts an explicit expected SET on the repository side rather than only `assertThat(a).isEqualTo(b)` — so breaking BOTH implementations the same way still reddens it. Confirm by breaking both: it must stay red. |
+| **Check** | the intended disagreement is a decision, not an accident |
+| **Must show** | Adding `c.deleted_at IS NULL` to `caseIdsInSuiteSubtree` reddens `theDeletedCaseIsTheOneIntendedDifference`'s first assertion. A suite's history must keep a case somebody deleted last week, or the totals of runs that finished before the deletion silently drop. |
+| **Check** | plan scope actually widened |
+| **Must show** | A plan scoped on a tag-defined suite creates a run covering the tag-matched cases. **No test covers this end to end today** — the agreement test covers the predicate, and `RunCreateService` reaches it through `caseIdsInPlanScope`, which the same fragment now serves. **Write it**: scope a plan on a suite whose only members are tag-matched, create a run, and assert the executions materialised. Until then the widening is asserted one layer below where it matters. |

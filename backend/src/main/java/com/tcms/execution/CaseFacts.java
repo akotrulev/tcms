@@ -112,6 +112,52 @@ import org.springframework.stereotype.Component;
 class CaseFacts {
 
     /**
+     * <strong>Membership in a suite's subtree</strong>, as a SQL predicate over an already-joined
+     * case alias {@code c} and a suite alias supplied by the caller — the four queries below all
+     * need it and it must mean the same thing in all four.
+     *
+     * <p>Since {@code V31} a suite is a resolvable collection, so this is three arms rather than
+     * one column: the cases <strong>filed</strong> in a descendant folder, the cases
+     * <strong>added</strong> to one individually ({@code suite_case}), and every case carrying
+     * <strong>any</strong> of a descendant's tag rules ({@code suite_tag_rule} ⋈ {@code case_tag}).
+     * Before §96 this was {@code c.suite_id IN (…)} written out four times, which could not drift
+     * because it was a column comparison. It can now, which is why it is one string.
+     *
+     * <p><strong>This is what makes "run everything tagged smoke" work with no new mechanism</strong>
+     * — such a run is a suite whose tag rule is {@code smoke}, scoped into a plan the way suites
+     * already are. There is no tag option on {@code plan_scope_item} and
+     * {@code ck_plan_scope_target} is untouched. Without this predicate the scope silently resolves
+     * to whatever happens to be <em>filed</em> under that folder, which for a tag-defined suite is
+     * usually nothing: a run of zero cases, created successfully, reported as a plan covering none.
+     *
+     * <p><strong>It is a second implementation of {@code repository.SuiteMembership}'s union, and
+     * that is forced rather than chosen.</strong> ERD §0.2 lets this module read the repository's
+     * tables only through this one seam class, and calling into that module instead would trade a
+     * duplicated predicate for a dependency the architecture test refuses. So the two are kept
+     * honest by a test rather than by sharing code: {@code SuiteScopeAgreementTest} asserts both
+     * resolutions answer the same set over one fixture — the same device
+     * {@code PlanStatisticsTest} uses for the three expansions below.
+     *
+     * @param suiteAlias the alias of the <em>root</em> suite of the subtree — {@code s} for a plan
+     *                   scope item's suite, {@code root} for a suite's own history
+     */
+    private static String inSubtreeOf(String suiteAlias) {
+        return """
+                EXISTS (
+                    SELECT 1 FROM suite d
+                     WHERE d.project_id = %1$s.project_id
+                       AND d.deleted_at IS NULL
+                       AND d.path <@ %1$s.path
+                       AND ( c.suite_id = d.id
+                          OR EXISTS (SELECT 1 FROM suite_case m
+                                      WHERE m.suite_id = d.id AND m.case_id = c.id)
+                          OR EXISTS (SELECT 1 FROM suite_tag_rule r
+                                       JOIN case_tag t ON t.tag = r.tag AND t.case_id = c.id
+                                      WHERE r.suite_id = d.id) ))
+                """.formatted(suiteAlias);
+    }
+
+    /**
      * Constructor-injected, not {@code @PersistenceContext}-annotated on a field: the project's
      * rule is constructor injection everywhere, and Spring resolves this to the same shared,
      * transaction-bound proxy the annotation would have produced.
@@ -226,14 +272,10 @@ class CaseFacts {
                           ON c.project_id = :projectId
                          AND c.deleted_at IS NULL
                          AND ( (i.case_id IS NOT NULL AND c.id = i.case_id)
-                            OR (i.suite_id IS NOT NULL AND c.suite_id IN (
-                                    SELECT d.id FROM suite d
-                                    WHERE d.project_id = s.project_id
-                                      AND d.deleted_at IS NULL
-                                      AND d.path <@ s.path)) )
+                            OR (i.suite_id IS NOT NULL AND %s) )
                         WHERE i.plan_id IN (:planIds)
                         GROUP BY i.plan_id
-                        """)
+                        """.formatted(inSubtreeOf("s")))
                 .setParameter("projectId", projectId)
                 .setParameter("planIds", planIds)
                 .getResultList();
@@ -267,14 +309,10 @@ class CaseFacts {
                           ON c.project_id = :projectId
                          AND c.deleted_at IS NULL
                          AND ( (i.case_id IS NOT NULL AND c.id = i.case_id)
-                            OR (i.suite_id IS NOT NULL AND c.suite_id IN (
-                                    SELECT d.id FROM suite d
-                                    WHERE d.project_id = s.project_id
-                                      AND d.deleted_at IS NULL
-                                      AND d.path <@ s.path)) )
+                            OR (i.suite_id IS NOT NULL AND %s) )
                         WHERE i.plan_id = :planId
                         ORDER BY c.key_seq
-                        """)
+                        """.formatted(inSubtreeOf("s")))
                 .setParameter("projectId", projectId)
                 .setParameter("planId", planId)
                 .getResultList()
@@ -340,15 +378,11 @@ class CaseFacts {
                           ON c.project_id = :projectId
                          AND c.deleted_at IS NULL
                          AND ( (i.case_id IS NOT NULL AND c.id = i.case_id)
-                            OR (i.suite_id IS NOT NULL AND c.suite_id IN (
-                                    SELECT d.id FROM suite d
-                                    WHERE d.project_id = s.project_id
-                                      AND d.deleted_at IS NULL
-                                      AND d.path <@ s.path)) )
+                            OR (i.suite_id IS NOT NULL AND %s) )
                         LEFT JOIN suite cs ON cs.id = c.suite_id
                         WHERE i.plan_id = :planId
                         ORDER BY c.key_seq
-                        """)
+                        """.formatted(inSubtreeOf("s")))
                 .setParameter("projectId", projectId)
                 .setParameter("planId", planId)
                 .getResultList();
@@ -592,9 +626,17 @@ class CaseFacts {
      * exists cannot be the subject of this page, and its cases are reachable through wherever they
      * live now.
      *
+     * <p><strong>Membership is the whole union since §96</strong> — filed, added individually, or
+     * matched by a descendant's tag rule ({@link #inSubtreeOf}). A folder whose members are entirely
+     * tag-resolved used to report an empty history, which reads as "never executed" for a suite that
+     * runs nightly: the same defect this method's first paragraph exists to prevent, arriving
+     * through the arms rather than through the depth. {@code DISTINCT} because a case can qualify
+     * through two of them.
+     *
      * <p><strong>Membership is read as it is now, not as it was.</strong> A case moved between suites
      * takes its whole execution history with it, because {@code test_execution} pins the case
-     * <em>version</em> and not the suite. §6p's {@code execution_fact} read model stores
+     * <em>version</em> and not the suite. Retagging a case now moves its history the same way, which
+     * is the same trade one step wider. §6p's {@code execution_fact} read model stores
      * {@code suite_path} per row for exactly this reason; until that model has a writer, this is the
      * honest approximation and the limitation is stated rather than hidden.
      *
@@ -604,17 +646,15 @@ class CaseFacts {
     List<UUID> caseIdsInSuiteSubtree(UUID projectId, UUID suiteId) {
         @SuppressWarnings("unchecked")
         List<UUID> ids = entities.createNativeQuery("""
-                        SELECT c.id
+                        SELECT DISTINCT c.id
                         FROM suite root
-                        JOIN suite d
-                          ON d.project_id = root.project_id
-                         AND d.deleted_at IS NULL
-                         AND d.path <@ root.path
-                        JOIN test_case c ON c.suite_id = d.id
+                        JOIN test_case c
+                          ON c.project_id = root.project_id
+                         AND %s
                         WHERE root.project_id = :projectId
                           AND root.deleted_at IS NULL
                           AND root.id = :suiteId
-                        """)
+                        """.formatted(inSubtreeOf("root")))
                 .setParameter("projectId", projectId)
                 .setParameter("suiteId", suiteId)
                 .getResultList();
