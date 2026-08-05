@@ -2391,13 +2391,31 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Plans */
+                /**
+                 * @description The **full** `TestPlan`, not `TestPlanSummary` — the list row and the detail are one
+                 *     shape, assembled once (`TestPlanView`'s own note gives the reason: two assemblers are
+                 *     how a row and a detail page come to disagree about a plan's status three slices later).
+                 *
+                 *     This line was `TestPlanSummary` until §100 and had been a live three-way divergence:
+                 *     `TestPlanView` serves the wide shape, the mock's `present()` serves the wide shape,
+                 *     `usePlans` has been typed `TestPlan[]` since Phase 1 — and `TestPlanView`'s javadoc
+                 *     already claimed "the contract now declares the wider shape", which was never true. The
+                 *     field the gap actually hid is `exitCriteria`: every consumer read it, the contract said
+                 *     it was not there, and nothing failed because both implementations sent it anyway.
+                 *     Widening the declaration changes no server and no client; it makes the spec say what
+                 *     three implementations already do.
+                 *
+                 *     `met` is null on every criterion here. Evaluating a plan's gates means resolving its
+                 *     results, which is the statistics endpoint — a list that did it per row would be that
+                 *     endpoint run once per plan. So the list can say a criterion EXISTS and never that it
+                 *     passed, which is exactly what the compact strip on the plan list renders.
+                 */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["TestPlanSummary"][];
+                        "application/json": components["schemas"]["TestPlan"][];
                     };
                 };
                 404: components["responses"]["NotFound"];

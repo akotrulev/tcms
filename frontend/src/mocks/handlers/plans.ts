@@ -61,11 +61,33 @@ function planMoveRefusal(current: PlanStatus, target: PlanStatus): string | null
  * One presenter for the list, the detail and both write responses, for `PlanService.view`'s reason:
  * a created plan rendered by a different path shows one thing on create and another on the reload
  * that follows it, with neither screen revealing which is stored.
+ *
+ * <h3>Criteria come back UNEVALUATED, and that is the server's behaviour rather than a shortcut</h3>
+ *
+ * `PlanCriteria.parse` — the only path `PlanService.view` uses, for the list and the detail alike —
+ * builds every `CriterionView` with `met` and `actual` **null**, and its own comment says so
+ * ("Never evaluated in this slice"). `PlanCriteria.evaluate` fills them, and it runs on **one**
+ * endpoint: `/statistics`. Resolving a plan's gates means resolving its results, so a list that did
+ * it per row would be the statistics endpoint run once per plan.
+ *
+ * The fixtures nonetheless store `met: false` / `actual: 89.1` on the plan rows, and until §100
+ * `present` handed those straight back. Mock mode therefore showed a plan list with red and green
+ * gates while every real deployment showed grey ones — §81's class exactly, and the specific trap
+ * `lib/results.test.ts` already has a comment about: **the mock always supplied a boolean, so the
+ * null branch was unreachable and the defect survived every gate and every browser pass.**
+ *
+ * The fixture values are left in place rather than nulled at the source, because `/statistics`
+ * reads the same rows and is the one endpoint that legitimately serves them evaluated.
  */
 function present(plan: TestPlan): TestPlan {
+  const unevaluated = (criteria: TestPlan['exitCriteria']) =>
+    (criteria ?? []).map((criterion) => ({ ...criterion, met: null, actual: null }));
+
   return {
     ...plan,
     caseCount: planScopeCaseIds(plan).length,
+    entryCriteria: unevaluated(plan.entryCriteria),
+    exitCriteria: unevaluated(plan.exitCriteria),
     sections: (plan.sections ?? []).map((section) => ({
       ...section,
       caseCount: sectionCaseCount(section),

@@ -75,3 +75,38 @@ export function criterionState(criterion: { met?: boolean | null }): CriterionSt
   // entirely is saying the same thing as one that sends null.
   return 'NOT_EVALUATED';
 }
+
+/**
+ * The colour each state renders in, and the sentence each state means.
+ *
+ * Extracted in §100 because the plan LIST grew a second reader of `criterionState`. The mapping
+ * had lived inline in `PlanStatisticsPage.ExitCriteria`, where it was correct — and a second
+ * inline copy is precisely how the detail page would come to draw a not-evaluated gate grey
+ * while the list drew the same gate red. The state helper above already carries that argument;
+ * these two carry it the rest of the way to the pixels.
+ *
+ * **`NOT_EVALUATED` must never borrow the failed colour.** It is the whole reason the three
+ * states exist: a gate nobody measured is not a gate that failed, and a release blocked by a
+ * red mark nothing computed is the defect `criterionState` was written to prevent.
+ */
+export function criterionColor(state: CriterionState): string {
+  if (state === 'MET') return 'var(--color-passed)';
+  if (state === 'UNMET') return 'var(--color-failed)';
+  // Deliberately the muted text token rather than `--color-untested`: this is an absence of a
+  // measurement, not a result kind, and reusing a StatusKind colour would put it in the result
+  // vocabulary a reader scans the row for.
+  return 'var(--color-text-muted)';
+}
+
+/**
+ * What a criterion in this state means, in one clause — the tooltip on a mark too small to
+ * carry a label of its own.
+ *
+ * Colour is never the only signal (`StatusChip`'s rule): the strip that uses these is always
+ * accompanied by the "n of m met" count in text, and each mark names its own criterion here.
+ */
+export function criterionStateLabel(state: CriterionState): string {
+  if (state === 'MET') return 'met';
+  if (state === 'UNMET') return 'not met';
+  return 'not evaluated';
+}

@@ -18,6 +18,7 @@ import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
+import { CriteriaStrip } from '../../components/CriteriaStrip';
 import { formatCount, formatRatio } from '../../lib/format';
 import { planStatusColors, planStatusLabels } from '../../lib/labels';
 import { PlanCreateDialog } from './PlanCreateDialog';
@@ -139,27 +140,16 @@ function PlanTable({ rows, projectId }: { rows: TestPlan[]; projectId: string })
             <TableCell sx={{ color: 'text.secondary', width: 100 }} align="right">
               Coverage
             </TableCell>
-            <TableCell sx={{ color: 'text.secondary', width: 110 }} align="right">
-              Exit criteria
-            </TableCell>
+            {/*
+              Left-aligned and wider since §100: the cell is a strip of marks read left-to-right
+              followed by its count, not a number. Right-aligning it would put the marks against
+              the table's edge and the count in the middle, which reads as two columns.
+            */}
+            <TableCell sx={{ color: 'text.secondary', width: 210 }}>Exit criteria</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
           {sorted.map((plan) => {
-            /*
-              `met === false`, not `!met`. Null means "not evaluated", which is not "unmet"
-              (`Criterion.met`'s own contract) — and this endpoint never evaluates anything, because
-              a plan list resolving every plan's results would be the statistics endpoint run once
-              per row. So `!c.met` counted every criterion as unmet and this column would have read
-              "3 unmet" for a plan whose gates were all green.
-
-              Invisible until §73: `exit_criteria` had no writer, so the array was empty on every
-              real instance and this branch never ran. Recorded rather than left, because the
-              editor that fills the column is the next slice and would have shipped on top of it.
-            */
-            const unmet = (plan.exitCriteria ?? []).filter((c) => c.met === false).length;
-            const criteriaCount = (plan.exitCriteria ?? []).length;
-
             return (
               <TableRow key={plan.id} data-testid="Plans.Row" hover>
                 <TableCell>
@@ -212,23 +202,8 @@ function PlanTable({ rows, projectId }: { rows: TestPlan[]; projectId: string })
                 <TableCell align="right">
                   <Identifier>{formatRatio(plan.coverage)}</Identifier>
                 </TableCell>
-                <TableCell align="right">
-                  {criteriaCount === 0 ? (
-                    <Box sx={{ color: 'text.secondary', fontSize: '0.75rem' }}>None set</Box>
-                  ) : (
-                    <Chip
-                      size="small"
-                      label={unmet === 0 ? 'All met' : `${unmet} unmet`}
-                      data-testid="Plans.Row.ExitCriteria"
-                      sx={{
-                        bgcolor: 'transparent',
-                        color: unmet === 0 ? 'var(--color-passed)' : 'var(--color-failed)',
-                        border: `1px solid color-mix(in srgb, ${
-                          unmet === 0 ? 'var(--color-passed)' : 'var(--color-failed)'
-                        } 45%, transparent)`,
-                      }}
-                    />
-                  )}
+                <TableCell>
+                  <CriteriaStrip criteria={plan.exitCriteria ?? []} testId="Plans.Row.ExitCriteria" />
                 </TableCell>
               </TableRow>
             );

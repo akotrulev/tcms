@@ -30,7 +30,7 @@ import { PlanDocumentPanel } from './PlanDocumentPanel';
 import { ReviewPanel } from '../review/ReviewPanel';
 import { PermissionGate } from '../../components/PermissionGate';
 import { DenominatorToggle, PassRateSummary, ResultBar, ResultCountsCell } from '../../components/ResultBar';
-import { criterionState, type Denominator } from '../../lib/results';
+import { criterionColor, criterionState, type Denominator } from '../../lib/results';
 import { StatusChip } from '../../components/StatusChip';
 import { describeError } from '../../lib/describeError';
 import { formatCount, formatDateTime, formatPercent } from '../../lib/format';
@@ -539,13 +539,12 @@ function ExitCriteria({ criteria }: { criteria: Criterion[] }) {
         {criteria.map((criterion, index) => {
           // Three states, not two. A criterion the server could not evaluate is grey and says so,
           // rather than borrowing the failed colour and reading as a blocker.
+          //
+          // The mapping moved to `lib/results.ts` in §100, when the plan LIST grew a second
+          // reader of it (`CriteriaStrip`). It was correct here and a second inline copy there is
+          // how the two would come to draw the same unevaluated gate in different colours.
           const state = criterionState(criterion);
-          const color =
-            state === 'NOT_EVALUATED'
-              ? 'text.secondary'
-              : state === 'MET'
-                ? 'var(--color-passed)'
-                : 'var(--color-failed)';
+          const color = criterionColor(state);
 
           return (
             <Stack
