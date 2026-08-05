@@ -30,6 +30,7 @@ import { StatusChip } from '../../components/StatusChip';
 import { EvidencePanel } from './EvidencePanel';
 import { formatDateTime } from '../../lib/format';
 import { isRunClosed, statusLabels } from '../../lib/labels';
+import { suggestedVerdict } from './suggestedVerdict';
 
 /**
  * Recording a result.
@@ -219,6 +220,22 @@ function ExecutionForm({
     (step) => stepResults[step.stepId ?? ''] === byKind('FAILED')?.id,
   );
 
+  /*
+    The verdict the steps propose — a suggestion, never a decision. The rules and the argument
+    for keeping it advisory live in `suggestedVerdict.ts`, with their own test; this call site
+    owns only the id → kind resolution, which is the same lookup the step buttons already do.
+
+    `statuses` is a project's status vocabulary, so an id has exactly one kind — resolving here
+    rather than passing ids into the helper keeps the rules written in the vocabulary they are
+    about, and means a project that renames a status changes nothing in the logic.
+  */
+  const suggestedKind = suggestedVerdict(
+    (execution.steps ?? []).map((step) => {
+      const statusId = stepResults[step.stepId ?? ''];
+      return statuses.find((s) => s.id === statusId)?.kind ?? null;
+    }),
+  );
+
   return (
     <Stack sx={{ gap: 3 }}>
       {conflict && (
@@ -395,15 +412,28 @@ function ExecutionForm({
                 </Alert>
               )}
 
-              {anyStepFailed && (
-                <Alert severity="warning" sx={{ mb: 0.5 }} data-testid="Execution.StepFailureHint">
-                  <Typography variant="body2">A step is marked failed.</Typography>
-                </Alert>
+              {/*
+                Replaces a bare "A step is marked failed." alert. That sentence stated a fact the
+                tester had just entered themselves and asked nothing of them; this names the
+                verdict the marks point at and leaves every button live (see `suggestedKind`).
+              */}
+              {suggestedKind && (
+                <Typography
+                  variant="caption"
+                  sx={{ color: 'text.secondary', mb: 0.5 }}
+                  data-testid="Execution.SuggestedVerdict"
+                >
+                  {anyStepFailed
+                    ? `A step failed, so the steps point at ${statusLabels[suggestedKind]}.`
+                    : `Every step is marked, and they point at ${statusLabels[suggestedKind]}.`}{' '}
+                  Record whichever verdict is right.
+                </Typography>
               )}
 
               {(['PASSED', 'FAILED', 'BLOCKED', 'SKIPPED'] as const).map((kind) => {
                 const status = byKind(kind);
                 if (!status) return null;
+                const suggested = kind === suggestedKind;
 
                 // Blocked goes through a dialog that requires naming the unmet precondition;
                 // everything else records directly.
@@ -439,9 +469,27 @@ function ExecutionForm({
                                 color: `var(--color-${kind.toLowerCase()})`,
                                 borderColor: `color-mix(in srgb, var(--color-${kind.toLowerCase()}) 45%, transparent)`,
                               }),
+                          // The suggestion is a weight, not a state: a thicker border on the
+                          // verdict the steps point at. Deliberately NOT a colour change, a
+                          // disabled sibling or a preselection — the tester's judgement outranks
+                          // the arithmetic, and every other verdict stays exactly as clickable.
+                          ...(suggested && {
+                            borderWidth: 2,
+                            borderStyle: 'solid',
+                            borderColor: `var(--color-${kind.toLowerCase()})`,
+                          }),
                         }}
                       >
                         {submit.isPending ? 'Saving…' : statusLabels[kind]}
+                        {suggested && (
+                          <Typography
+                            component="span"
+                            variant="caption"
+                            sx={{ ml: 'auto', pl: 1, opacity: 0.75, textTransform: 'none' }}
+                          >
+                            suggested
+                          </Typography>
+                        )}
                       </Button>
                     )}
                   </PermissionGate>
@@ -559,11 +607,17 @@ function StepRow({
                   aria-label={`Mark step ${index + 1} as ${statusLabels[kind]}`}
                   data-testid={`Execution.Steps.Row.Mark.${kind}`}
                   sx={{
+                    // A fixed square rather than text-sized padding: four marks per step row,
+                    // fifteen rows, and a ragged right edge makes the column unscannable — the
+                    // tester is aiming down it, not reading it.
                     font: 'inherit',
+                    fontFamily: 'var(--font-mono)',
                     fontSize: '0.6875rem',
-                    fontWeight: selected ? 600 : 400,
-                    px: 1,
-                    py: 0.5,
+                    fontWeight: 600,
+                    width: 30,
+                    height: 24,
+                    display: 'grid',
+                    placeItems: 'center',
                     cursor: 'pointer',
                     borderRadius: 0.5,
                     border: '1px solid',
@@ -576,7 +630,17 @@ function StepRow({
                       : 'transparent',
                   }}
                 >
-                  {statusLabels[kind].slice(0, 4)}
+                  {/*
+                    The initial, not `statusLabels[kind].slice(0, 4)` — which rendered "Bloc",
+                    a word that is not a word, four times per step row.
+
+                    Derived from the shared label rather than a second map (`test-ids` rule 7's
+                    reasoning applies to display too): a renamed status renames its key with it.
+                    The four kinds are the literal tuple below, and their initials — P F B S — are
+                    distinct; the tooltip and the `aria-label` above carry the full label, so the
+                    letter is never the only thing identifying the button.
+                  */}
+                  {statusLabels[kind].charAt(0)}
                 </Box>
               </Tooltip>
             );
