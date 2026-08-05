@@ -1683,3 +1683,29 @@ Built and unverified. Rows written per §65; **none of them run.**
 |---|---|
 | **Write** | `ConditionWriteEndpointTest` — an edit to a condition attached to a **suite** |
 | **Assert** | The new text reaches every case beneath that suite, including cases added to it after the edit. Phase 1 proves propagation through `case_condition` only; the `suite_condition` half is the one `suiteUsageCount` exists to warn about and it is the half with the inheritance walk. **Blocked on nothing** — the fixture just does not have a suite-attached case yet. |
+
+---
+
+## §95 phases 2–3 — case conditions, and the frontend half
+
+Built and unverified. Rows written per §65; **none of them run.**
+
+| | |
+|---|---|
+| **Check** | the bulk hash actually carries the conditions |
+| **Must show** | Reverting `loadContext`'s condition load to the two condition commands only (dropping `\|\| authored`) reddens a test. **It currently would not** — this is a gap, and it is the slice's most dangerous one. `CaseEdit` hashes both condition lists, so an authored bulk action reconstructing a case with no attachments hashes it as though it had none, and the next ordinary save is credited with restoring them. **Write the test**: a case with an attached condition, a `MOVE_TO_SUITE` over it, then an ordinary save that changes only the title — the second save's version must not report the conditions as changed. |
+| **Check** | absent vs empty on the two lists |
+| **Must show** | Changing `normalizeConditions`' `submitted == null` arm to return `List.of()` instead of the stored value reddens `absentAndEmptyAreDifferentInstructions` **and** at least one bulk test. If only the first goes red, no bulk path is exercising the absent arm and the trap above is live. |
+| **Check** | the retired bound in the reconcile |
+| **Must show** | Deleting the `!live.contains(...)` guard in `CaseConditions.reconcile` — so a retired attachment becomes a removal candidate — reddens a test. **No test covers this today.** The reader drops an attachment whose entry no longer resolves, so the client cannot resubmit it, so a naive reconcile deletes it on the next save: an attachment nobody chose to drop, removed by a save that never mentioned it, invisible afterwards. **Write it**: attach, retire the condition, save the case with an unrelated change, and assert the row survives. |
+
+### Frontend
+
+| | |
+|---|---|
+| **Check** | `ownConditionIds` drops inherited rows |
+| **Must show** | Removing the `!ref.inherited` filter reddens a `CaseEditorPage` test. **No test covers this today** — the editor tests build cases with no inherited conditions. **Write it**: an existing case whose detail carries one inherited and one own precondition, and assert the submitted payload contains **only the own one**. This is the defect that would attach every folder's conditions directly to every case anybody edits. |
+| **Check** | the two counts are not interchangeable in the UI |
+| **Must show** | Swapping `usageCount` and `suiteUsageCount` in `impactSummary` reddens `lib/conditions.test.ts`. Expected to pass — the fixtures use 4 and 3 precisely so the two are distinguishable — but it is the assertion the whole "never add them" rule rests on. |
+| **Check** | the resolver query's gate |
+| **Must show** | Removing `value.length > 0` from `ConditionsPanel`'s resolver read makes `CaseEditorPage.test.tsx` slow enough to time out again (it did, at 640s on one test). Recorded because the gate reads like an optimization and is load-bearing for the suite. |

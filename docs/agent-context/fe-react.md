@@ -3,9 +3,10 @@
 # fe-react — orientation cache (TCMS)
 
 **Last verified:** 2026-08-05
-**Baseline commit:** `fca7abf` (+ §94 phase 3, this commit). The header before this one said
-`6980bfb` while HEAD was three slices further on (§92, §93, §94 phase 1) — the drift the warning
-below describes, caught again.
+**Baseline commit:** `7f3f8c3` (§95 phase 3) **+ §95 phase 4, the commit this line ships in** (its
+own SHA cannot be written into itself; per `CLAUDE.md`, trust the body over the header). Two headers
+ago this read `6980bfb` while HEAD was three slices further on — the drift the warning below
+describes, and it has now been caught twice running.
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
 `frontend/vite.config.ts`
 
@@ -68,6 +69,41 @@ directly above the switcher) and the wordmark links there too.
 > slice's shape. `docs/handoff/00-plugin-skills-are-mandatory.md` step 0 now states the protocol.
 
 ## Seams to reuse
+
+- **THE CONDITION PANELS, AND THE INHERITED ROW THAT MUST NOT BE SUBMITTED (§95 phase 3).**
+  `features/cases/ConditionsPanel.tsx` (one component, `kind="PRE"|"POST"` — two would be
+  `ui-rules` §8's "hundred slightly different pages" in miniature) + `ConditionEditDialog.tsx` +
+  `lib/conditions.ts` (`impactSummary`) + `useCreateCondition`/`useUpdateCondition` in
+  `api/queries/library.ts`. `useConditions` gained an **`enabled`** parameter and finally has
+  consumers — it had **zero call sites** from the day it was written.
+  **An attachment is a REFERENCE, and that is the design and the hazard.** Picking stores the id;
+  editing the entry later changes every case and suite attaching it, with **no prompt and no fork**
+  — the deliberate opposite of §94's step corpus, where a pick copies text. Hence the dialog states
+  the blast radius *before* the save, its button reads **"Change everywhere"** and is danger-styled
+  (`ui-rules` §4), and no fork is offered (the fork is what turned `shared_step` into
+  near-duplicates nobody could rank).
+  **`impactSummary` is in `lib/` with its own test because THE TWO COUNTS MUST NEVER BE ADDED.**
+  `usageCount` is cases attaching directly; `suiteUsageCount` is suites, each propagating to every
+  case beneath. A suite's case reach is **not computable on this side** — the server declines to
+  publish it (an `ltree` walk the library read cannot express) — so blending them would be a guess
+  presented as a measurement, understating in the one direction an impact warning must not. The
+  test uses 4 and 3 and asserts **7 never appears**.
+  **THE most dangerous line is `ownConditionIds`.** `TestCaseDetail.preconditions` carries the
+  FOLDER's conditions too, marked `inherited`, and they render almost identically to an own row.
+  Seeding one into the form attaches the folder's condition **directly** to the case on the first
+  save — permanently, invisibly, on every case anybody edits. Inherited rows are passed to the panel
+  as a separate read-only prop with no remove, reorder or drag. **Not covered by a test yet**; a
+  mutation row says so.
+  **Both lists are always sent, including as `[]`** — absent means "leave them alone" to the server,
+  so detaching the last condition would report success and change nothing. `classificationValueIds`'
+  rule, one field over.
+  Reordering reuses §94's `resolveStepMove` and keeps the **▲▼ buttons** beside the drag handle.
+  **Two findings from running it:** a created entry rendered as *"Unknown condition"* until a
+  library list refetched (the panel now takes `known` — the entries created this session — as a
+  rendering fallback), and **the second library read per panel pushed `CaseEditorPage.test.tsx` over
+  the suite's load cliff at 640s on one test**; the resolver read is now gated on
+  `value.length > 0`, which is also the right product behaviour. Bundle **+8.9 kB raw / +2.1 kB gz
+  (+0.54%)**, entirely in the lazy route chunk. `#confirmed`
 
 - **THE STEP EDITOR, AND THE RULE A PERMANENT BLANK ROW BREAKS (§94).**
   `features/cases/CaseEditorPage.tsx` — the action field is an **`Autocomplete` (`freeSolo`)** over
@@ -496,6 +532,23 @@ directly above the switcher) and the wordmark links there too.
   with the reasoning recorded in `vite.config.ts`.
 
 ## Session log
+
+- 2026-08-05 · EXTEND · **Conditions get a writer** (§95, phases 1–4) — the library that could be
+  read, ranked and attached and never created. Backend: `POST`/`PUT /projects/{id}/conditions`
+  (`library:manage`, `If-Match`, 409) and the case's `preconditions`/`postconditions` finally
+  accepted after refusing them with a 400 since M1. Frontend: `ConditionsPanel` ×2 +
+  `ConditionEditDialog` + `lib/conditions.ts` + two write hooks + the mock's writers and its
+  `applyConditions` reconcile. **One contract change, `gen:api` run.**
+  The findings were **numbers**: `condition.usage_count` read its `DEFAULT 0` on every row in every
+  deployment and was one slice from becoming an impact warning, so both counts are derived now — and
+  deliberately **two numbers that are never added**, which answers a design question `/shared-steps`
+  had posed and left open. Plus `lock_version` mapped **with `@Version`** from the first writer
+  (§74's trap, prevented), and a bulk-hash trap that would have credited the next ordinary save with
+  restoring conditions a `MOVE_TO_SUITE` stripped.
+  Backend 1704 → **1715**; frontend 805 → **820/820 across 55 files**; build clean, lint 0.
+  **Built and unverified** — 12 browser rows (62–73, two live-only) and 9 mutation rows queued,
+  **zero run**. Three of the mutation rows are tests that do not exist yet, and the
+  `ownConditionIds` one guards the slice's most dangerous defect.
 
 - 2026-08-05 · EXTEND · **Writing steps** (§94 phases 2–3) — the case editor's step list reworked
   around the corpus §94 phase 1 built. New: `CaseEditorPage.test.tsx` (**the screen's first test

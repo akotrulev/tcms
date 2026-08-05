@@ -1,9 +1,16 @@
 # §95 — Conditions get a writer: the library nothing could fill, and the count that was always zero
 
 **Date:** 2026-08-05 · **Plan:** `docs/plans/2026-08-04-test-case-authoring-rework.md` (slice §95)
-**Status: PHASE 1 OF 4 COMPLETE — BUILT AND UNVERIFIED.** The number is reserved by this file
-before the slice finishes, per §10's lesson (paid twice: §92's number was claimed mid-slice by a
-concurrent strand, and §94 recorded the rule).
+**Status: COMPLETE — ALL FOUR PHASES, BUILT AND UNVERIFIED.** Four commits (`73d3d58`, `d4b4dab`,
+`7f3f8c3`, and this one). Every gate is green and **not one queued check has been run**: 12 browser
+rows (62–73) and 9 mutation rows, zero executed, per §65. Two browser rows are live-only and
+**three of the mutation rows are tests that do not exist yet** — one of them guards this slice's
+most dangerous defect. See §8.
+
+The number was reserved by this file before the slice finished, per §10's lesson (paid twice: §92's
+number was claimed mid-slice by a concurrent strand, and §94 recorded the rule). A second agent was
+working on test plans for part of this session and was stopped before phase 2; nothing of theirs
+landed in this tree.
 
 ## 0. Why this slice exists
 
@@ -112,25 +119,128 @@ The same fixture makes three separate wrong readings land on three different num
 assertion separates all of them: `203` = the column is being served again; `4` = neither `DISTINCT`
 nor the deleted filter; `3` = `COUNT(*)` **or** counting the soft-deleted case; `2` = correct.
 
-## 5. What is NOT done
+## 5. Phase 2 — the case can finally attach one
 
-- **Phase 2 — the case-conditions write path.** `CaseUpdateRequest` still **rejects
-  `preconditions`/`postconditions` with a 400**; it is on that record's own list of five fields "no
-  slice has built yet". `CaseEdit` must validate and persist them and `CaseConditions` must
-  reconcile with `position`, the way `CaseClassifications` reconciles classifications.
-- **Phase 3 — the frontend.** No call site exists for any of this yet: the `GET` has never had one,
-  and now the `POST` and `PUT` have none either. The case editor gains Preconditions/Postconditions
-  (attach, detach, reorder with §94's drag primitive, create, and edit behind the impact confirm).
-- **Phase 4 — the record and the queues.**
+`CaseUpdateRequest` had refused `preconditions`/`postconditions` with a 400 since M1 — five fields
+on its "no slice has built yet" list, of which these two were the ones the library existed for. They
+are accepted now, validated, reconciled, and the boundary is deleted in the one place it was
+written. **Only the reference form**: an inline body is refused with a field error, because nothing
+can render one (every `CaseConditionRef` requires a `title`, an inline row has no column for it, and
+both readers exclude such rows at the query). `CaseConditionInput` also got the `required` array it
+never had.
+
+Two rules were carried over from `CaseClassifications` rather than reinvented, and both fail
+silently when wrong:
+
+- **Absent means "leave them alone"; empty means "detach everything."** A bulk action reconstructs a
+  request without touching conditions, so reading absent as "detach" would have every
+  `MOVE_TO_SUITE` quietly strip the case's setup.
+- **The retired bound.** A condition is retired by a soft delete because attachments survive it, and
+  the reader drops an attachment whose entry no longer resolves — so a client is never shown one and
+  cannot resubmit it. A naive reconcile therefore deletes it on the next save.
+
+### The trap, and it is the one worth reading
+
+`CaseEdit` now carries both condition lists, so they are in `CaseVersions#hash` — correct, since a
+condition is authored content and `test_case_version` snapshots it. But `loadContext` only loaded
+the attachments **for the two condition commands**. Left alone, every *authored* bulk action would
+have reconstructed the case with no conditions, hashed it as though it had none, and the next
+ordinary save would have been credited with restoring attachments a `MOVE_TO_SUITE` never touched —
+exactly the trap `classificationOf` documents, on a second field, introduced by *not* touching a
+line. It loads them for authored commands too.
+
+**One-time consequence, stated rather than discovered:** every stored hash was computed without
+these fields, so the first save of each existing case writes a version whose diff looks empty. That
+is the price of conditions joining the pinned content, it happens once per case, and it is the
+opposite of the recurring empty-diff defect the surrounding comments warn about.
+
+## 6. Phase 3 — the library gets its first consumer
+
+`useConditions` had **zero call sites** from the day it was written, and phase 1's two writers had
+none either. The case editor now has a Conditions panel per kind — attach, detach, reorder (drag or
+▲▼), create, edit — as **one component** parameterised by `kind`.
+
+**The most dangerous line is `ownConditionIds`.** `TestCaseDetail.preconditions` carries the
+*folder's* conditions too, marked `inherited`, and they render almost identically to an own row.
+Seeding one into the form would attach the folder's condition **directly** to the case on the first
+save: permanently, invisibly, on every case anybody edits. Inherited rows are passed separately and
+carry no remove, reorder or drag.
+
+**The edit is the only mutation in this app whose blast radius is not the thing being edited**, so
+`ui-rules` §4's destructive-action rule is applied to it: the dialog names the object, states the
+impact from the two derived counts, and its button reads *"Change everywhere"* in danger styling.
+No fork is offered.
+
+**`impactSummary` is in `lib/` with its own test** because the two counts must never be added — see
+§2. The test uses 4 and 3 and asserts **7 never appears**.
+
+Two findings, both from running it:
+
+- **A created condition rendered as "Unknown condition."** The library lists are cached per search
+  term, so invalidating them does not make a new entry resolvable synchronously — and the row in
+  between reported the author's own condition as missing, on the screen they created it from.
+- **The panel pushed `CaseEditorPage.test.tsx` over the suite's load cliff**, and the cause was
+  mine: each panel mounted *two* library reads, so every render in that file paid four extra queries
+  and a `userEvent.type` test blew past 30s to 640s. The resolver read is now gated on there being a
+  row to resolve — which is also the right product behaviour, and is §94's argument about the step
+  corpus one endpoint over.
+
+Bundle measured per the working agreement: **+8.9 kB raw / +2.1 kB gz (+0.54%)**, entirely in the
+lazy `CaseEditorPage` chunk (79.92 → 88.19 kB); entry unchanged at 336.84 kB.
+
+### A third finding, in git rather than in the code — and it shipped a red commit
+
+The schema's test file is tracked as **`CaseSchema.test.ts`** (capital S) while its subject is
+`caseSchema.ts`. macOS's filesystem is case-insensitive, so `git add
+frontend/src/features/cases/caseSchema.test.ts` **wrote to the right file and staged nothing** — the
+path did not match the tracked one. Phase 3's first commit therefore contained the schema's two new
+required fields and *not* the test fixture that supplies them, which means that commit's test suite
+was red while every gate had just been run green in the working tree.
+
+Caught by reading `git status --porcelain` after staging rather than trusting the `git add`, and
+fixed by amending phase 3 (`7f3f8c3` → `1b9378c`) so each commit remains a state whose gates
+actually pass — which is what `CLAUDE.md`'s per-phase commit rule exists to guarantee.
+
+**The general lesson, and it is not about this file:** the repo's staging discipline is
+`git add <explicit paths>` precisely so a concurrent lane's work is not swept in — and on a
+case-insensitive filesystem that discipline will silently no-op on any path whose case is
+misremembered. `git status` after staging is the only thing that shows it.
+
+## 7. Gates
+
+| | Before | After |
+|---|---|---|
+| Backend | 1704 | **1715** (build clean, `-Werror`) |
+| Frontend tests | 805 | **820** across 55 files |
+| Frontend build / lint | clean / 0 | clean / 0 |
+
+No migration, no table, no column, no new permission key, across all four phases. Policy count
+stays **59** and `V30` is still head with `V31` free.
+
+## 8. What is NOT done — and the queues nobody ran
+
+**This slice is built and unverified.** 12 browser rows (62–73) and 9 mutation rows are queued and
+**zero have been run**, per §65. Read that as the status, not as a formality:
+
+- **Three of the mutation rows are tests that do not exist yet**, and they are named as such. The
+  `ownConditionIds` one guards the inherited-row defect above — the editor's tests build cases with
+  no inherited conditions, so nothing currently fails if that filter is deleted. The bulk-hash row
+  and the retired-bound row are the other two.
+- **Browser rows 68 and 69 are live-only** and carry the real risk: mock mode has one project, so a
+  sibling project's condition and a suite attachment's true reach are structurally unreachable in it.
+
+Still not built:
+
 - **No delete.** Retiring a condition is a soft delete the schema supports and no endpoint offers.
-  Deliberately out of scope: a retire is only meaningful once something can attach, which is phase 2.
+  Out of scope deliberately — a retire is only meaningful once something can attach, which is what
+  this slice just built.
+- **Inline conditions.** Refused with a field error rather than implemented, because nothing can
+  render one. When a reader exists, `CaseConditionInput` is where the second arm lands.
+- **Suite-level condition authoring.** `suite_condition` still has no writer, so the inherited rows
+  the editor renders can only be created by a fixture. That is the natural next slice and it is what
+  makes `suiteUsageCount` mean something in practice.
+- **`CaseUpdateRequest` still refuses three fields** — `ownerId`, `tags`, `automationTags`. Tags are
+  §96's.
 - **`condition_title_trgm_idx` is still spelled on the bare column** while `findLibrary` filters
   `LOWER(title)`, so it is never consulted — §94 §4 found it, declined to fix it for a reason that
-  still holds (bounded to hundreds of curated rows, and a correctness-neutral performance change
-  belongs in a slice that can measure it), and this slice does not change that.
-
-## 6. Gates
-
-Phase 1: `./gradlew build` — see the session log entry for the result. **Zero mutation checks run**
-and zero browser rows executed, per §65; the queue rows are owed at phase 4 and the slice is
-**built and unverified** until they are run.
+  still holds, and this slice does not change that.
