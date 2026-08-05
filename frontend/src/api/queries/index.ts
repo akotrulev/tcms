@@ -98,6 +98,7 @@ export {
 } from './plans';
 export {
   MAX_EVIDENCE_BYTES,
+  executionQueryOptions,
   useAttachEvidence,
   useCreateRun,
   useDeleteEvidence,

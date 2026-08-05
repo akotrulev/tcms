@@ -97,15 +97,35 @@ export function useSetRunStatus(projectId: string, runId: string) {
   });
 }
 
+/**
+ * One execution, as query options rather than only as a hook.
+ *
+ * Extracted in §100 for the grid execution mode, which needs an execution **imperatively**: a row
+ * carries `TestExecutionSummary`, and recording a result needs two fields that live only on the
+ * full `TestExecution` — `lockVersion`, which travels as `If-Match`, and `comment`, which the
+ * `PATCH` overwrites with whatever it is sent (`execution.comment = body.comment ?? null` in the
+ * mock, `request.comment()` on the server — **an omitted comment CLEARS it**). So the grid reads
+ * the execution through `queryClient.fetchQuery` before it writes.
+ *
+ * Shared options rather than a second `api.get` beside the hook, because the two would drift on
+ * exactly the fields that matter: the key (so a grid read warms the detail screen's cache instead
+ * of racing it) and the budget.
+ */
+export function executionQueryOptions(projectId: string, runId: string, executionId: string) {
+  return {
+    queryKey: keys.execution(projectId, runId, executionId),
+    queryFn: ({ signal }: { signal?: AbortSignal }) =>
+      api.get<TestExecution>(`${base(projectId)}/runs/${runId}/executions/${executionId}`, { signal }),
+  };
+}
+
 export function useExecution(
   projectId: string,
   runId: string | undefined,
   executionId: string | undefined,
 ): UseQueryResult<TestExecution> {
   return useQuery({
-    queryKey: keys.execution(projectId, runId ?? '', executionId ?? ''),
-    queryFn: ({ signal }) =>
-      api.get<TestExecution>(`${base(projectId)}/runs/${runId}/executions/${executionId}`, { signal }),
+    ...executionQueryOptions(projectId, runId ?? '', executionId ?? ''),
     enabled: !!runId && !!executionId,
   });
 }

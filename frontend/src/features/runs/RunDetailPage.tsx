@@ -22,7 +22,7 @@ import { PassRateSummary, ResultBar } from '../../components/ResultBar';
 import { PermissionGate } from '../../components/PermissionGate';
 import { StatusChip } from '../../components/StatusChip';
 import { describeError } from '../../lib/describeError';
-import { formatCount, formatDateTime, formatDuration } from '../../lib/format';
+import { compareCaseKeys, formatCount, formatDateTime, formatDuration } from '../../lib/format';
 import { isRunClosed, runStatusColors, runStatusLabels, statusLabels } from '../../lib/labels';
 import { ScrollX } from '../../components/ScrollX';
 
@@ -213,10 +213,18 @@ function RunBody({ data, projectId, runId }: { data: TestRunDetail; projectId: s
    * Unexecuted first, then failures, then everything else — and always with the case key as
    * a unique tiebreaker so the order is stable across refetches. Without the tiebreaker a
    * tester's list reshuffles under them every time a result posts.
+   *
+   * The tiebreaker was a bare `caseKey.localeCompare` until §100, which sorts `TC-10` ahead of
+   * `TC-9` — the bug `compareReleaseVersions` had already named as "the same class as ordering by
+   * case key" without anyone checking whether the case existed. It does not show on a fixture set
+   * whose keys never cross a power of ten, and on a real run it reads as the list being corrupt.
+   *
+   * This screen keeps its needs-doing rank; Split mode's rail deliberately does not (see
+   * `queueOrder.ts` for why a triage view and a position view want different orders).
    */
   const sorted = [...filtered].sort((a, b) => {
     const rank = (kind: string | undefined) => (kind === undefined ? 0 : kind === 'FAILED' || kind === 'BLOCKED' ? 1 : 2);
-    return rank(a.status?.kind) - rank(b.status?.kind) || a.caseKey.localeCompare(b.caseKey);
+    return rank(a.status?.kind) - rank(b.status?.kind) || compareCaseKeys(a.caseKey, b.caseKey);
   });
 
   return (

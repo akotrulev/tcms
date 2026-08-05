@@ -176,4 +176,21 @@ export function compareReleaseVersions(a: string, b: string): number {
   return 0;
 }
 
+/**
+ * Display keys in their natural order — `TC-9` before `TC-10`, which a string compare inverts.
+ *
+ * `compareReleaseVersions` above already named this "the same class of bug as ordering by case
+ * key", and §100 found the case doing it: `RunDetailPage`'s tiebreaker was a bare
+ * `caseKey.localeCompare`, so a run whose keys crossed a power of ten listed TC-10 through TC-19
+ * ahead of TC-9. Invisible on a fixture set that never crosses one, and read as data corruption
+ * by a tester on a real run scrolling for the case they just marked.
+ *
+ * `numeric: true` is the whole fix and it is a collator option rather than arithmetic: keys are
+ * `PREFIX-N`, the prefix is per-project and not always two letters, and splitting on the dash
+ * would need a second rule for the day a project uses one in its prefix.
+ */
+export function compareCaseKeys(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+}
+
 export { EM_DASH };

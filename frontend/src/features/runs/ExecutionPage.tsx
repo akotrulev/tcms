@@ -4,32 +4,39 @@ import {
   Button,
   Checkbox,
   Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
   FormControlLabel,
   Stack,
   TextField,
   Tooltip,
   Typography,
 } from '@mui/material';
+import CenterFocusStrongOutlinedIcon from '@mui/icons-material/CenterFocusStrongOutlined';
+import TableRowsOutlinedIcon from '@mui/icons-material/TableRowsOutlined';
+import VerticalSplitOutlinedIcon from '@mui/icons-material/VerticalSplitOutlined';
 import { useSnackbar } from 'notistack';
-import { useState } from 'react';
-import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
+import { useState, type ReactNode } from 'react';
+import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import { useUnsavedWork } from '../../auth/useSessionRecovery';
-import type { CaseStatus, StepResult, TestExecution } from '../../api/types';
+import type { CaseStatus, StepResult, TestExecution, TestExecutionSummary } from '../../api/types';
 import { useExecution, useProject, useRun, useStatuses, useSubmitResult } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
 import { StatusChip } from '../../components/StatusChip';
+import { BlockedDialog } from './BlockedDialog';
 import { EvidencePanel } from './EvidencePanel';
+import { ExecutionGrid } from './ExecutionGrid';
+import { ExecutionQueue } from './ExecutionQueue';
 import { formatDateTime } from '../../lib/format';
 import { isRunClosed, statusLabels } from '../../lib/labels';
+import {
+  EXECUTION_MODES,
+  executionModeParam,
+  parseExecutionMode,
+  type ExecutionMode,
+} from './executionMode';
 import { suggestedVerdict } from './suggestedVerdict';
 
 /**
@@ -41,15 +48,40 @@ import { suggestedVerdict } from './suggestedVerdict';
  *      preconditions to hold is not looking at a failing feature, they're looking at a
  *      broken environment — and recording that as *Failed* poisons the pass rate and sends
  *      someone chasing a defect that doesn't exist. So Blocked requires saying which
- *      precondition didn't hold.
+ *      precondition didn't hold. **This holds in all three modes** — it is why Grid's `B`
+ *      opens the dialog rather than writing.
  *   2. **The case version is pinned and displayed.** This execution records a result against
  *      the text shown here, not against whatever the case says next week.
+ *
+ * Since §100 the screen has three layouts over one queue — Focus, Split, Grid — chosen in the
+ * URL. `executionMode.ts` carries what each is for; all three write the same result through the
+ * same mutation, and none of them relaxes rule 1.
  */
 export function ExecutionPage() {
   const { projectId = '', runId = '', executionId = '' } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const project = useProject(projectId);
   const execution = useExecution(projectId, runId, executionId);
   const statuses = useStatuses(projectId);
+
+  /*
+    The run, for three things now: whether it has ended (since §72), the queue Split and Grid
+    render, and the case count in the header. Still normally free — the tester arrived from the
+    run detail, so this key is already in the cache.
+  */
+  const run = useRun(projectId, runId);
+  const mode = parseExecutionMode(searchParams.get('mode'));
+  const modeParam = executionModeParam(mode);
+
+  const setMode = (next: ExecutionMode) => {
+    const params = new URLSearchParams(searchParams);
+    const value = executionModeParam(next);
+    if (value === null) params.delete('mode');
+    else params.set('mode', value);
+    // `replace`, so flipping between layouts does not fill the back button with them — Back
+    // belongs to the case the tester came from, not to the last three times they changed view.
+    setSearchParams(params, { replace: true });
+  };
 
   return (
     <Box>
@@ -63,6 +95,7 @@ export function ExecutionPage() {
           { label: 'Run', to: `/projects/${projectId}/runs/${runId}` },
           { label: execution.data?.caseKey ?? 'Execution' },
         ]}
+        actions={<ModeSwitch mode={mode} onChange={setMode} />}
         meta={
           execution.data && (
             <>
@@ -86,18 +119,231 @@ export function ExecutionPage() {
         }
       />
 
-      <DataRegion testId="Execution.Content" state={{ ...execution, refetch: () => void execution.refetch() }}>
-        {(data) => (
-          <ExecutionForm
-            execution={data}
-            statuses={statuses.data ?? []}
+      <Workspace
+        mode={mode}
+        modeParam={modeParam}
+        projectId={projectId}
+        runId={runId}
+        executionId={executionId}
+        executions={run.data?.executions ?? []}
+        statuses={statuses.data ?? []}
+        frozen={run.data ? isRunClosed(run.data.status) : false}
+      >
+        <DataRegion testId="Execution.Content" state={{ ...execution, refetch: () => void execution.refetch() }}>
+          {(data) => (
+            <ExecutionForm
+              execution={data}
+              statuses={statuses.data ?? []}
+              projectId={projectId}
+              runId={runId}
+              executionId={executionId}
+            />
+          )}
+        </DataRegion>
+      </Workspace>
+    </Box>
+  );
+}
+
+/**
+ * The layout each mode produces, and the one place the queue is rendered beside the detail.
+ *
+ * Focus is the fallthrough rather than a branch of its own: a mode that renders neither the rail
+ * nor the grid *is* Focus, so an unrecognised `?mode=` degrades to the narrowest working screen
+ * rather than to an empty one. (`parseExecutionMode` already normalises those, so this is the
+ * second of two guards on the same failure — a blank page produced by a query parameter.)
+ */
+function Workspace({
+  mode,
+  modeParam,
+  projectId,
+  runId,
+  executionId,
+  executions,
+  statuses,
+  frozen,
+  children,
+}: {
+  mode: ExecutionMode;
+  modeParam: string | null;
+  projectId: string;
+  runId: string;
+  executionId: string;
+  executions: TestExecutionSummary[];
+  statuses: CaseStatus[];
+  frozen: boolean;
+  children: ReactNode;
+}) {
+  /* Grid's Blocked, held here because the dialog outlives the row that opened it. */
+  const [blockedFor, setBlockedFor] = useState<TestExecutionSummary | null>(null);
+
+  if (mode === 'grid') {
+    return (
+      <>
+        <ExecutionGrid
+          executions={executions}
+          statuses={statuses}
+          projectId={projectId}
+          runId={runId}
+          currentExecutionId={executionId}
+          modeParam={modeParam}
+          frozen={frozen}
+          onBlockedRequested={setBlockedFor}
+        />
+        {blockedFor && (
+          <GridBlockedDialog
+            // Keyed on the execution, so opening the dialog for a second row mounts a fresh one
+            // rather than inheriting the first row's ticked conditions and typed reason.
+            key={blockedFor.id}
+            execution={blockedFor}
+            statuses={statuses}
             projectId={projectId}
             runId={runId}
-            executionId={executionId}
+            onClose={() => setBlockedFor(null)}
           />
         )}
-      </DataRegion>
-    </Box>
+      </>
+    );
+  }
+
+  return (
+    <Stack direction="row" sx={{ alignItems: 'flex-start', gap: 0 }}>
+      {mode === 'split' && (
+        <ExecutionQueue
+          executions={executions}
+          currentExecutionId={executionId}
+          projectId={projectId}
+          runId={runId}
+          modeParam={modeParam}
+        />
+      )}
+      <Box sx={{ flex: 1, minWidth: 0, pl: mode === 'split' ? { xs: 0, lg: 3 } : 0 }}>{children}</Box>
+    </Stack>
+  );
+}
+
+/**
+ * Blocked from Grid mode: read the execution, show its preconditions, write the verdict.
+ *
+ * A component rather than inline state because it calls two hooks bound to one execution id —
+ * and because mounting it only when a row asks means Grid makes no per-row detail request until
+ * somebody actually presses `B`.
+ */
+function GridBlockedDialog({
+  execution,
+  statuses,
+  projectId,
+  runId,
+  onClose,
+}: {
+  execution: TestExecutionSummary;
+  statuses: CaseStatus[];
+  projectId: string;
+  runId: string;
+  onClose: () => void;
+}) {
+  const detail = useExecution(projectId, runId, execution.id);
+  const submit = useSubmitResult(projectId, runId, execution.id);
+  const { enqueueSnackbar } = useSnackbar();
+
+  const record = async (reason: string) => {
+    const blocked = statuses.find((s) => s.kind === 'BLOCKED');
+    if (!blocked || !detail.data) return;
+    try {
+      await submit.mutateAsync({
+        statusId: blocked.id,
+        // The existing comment is kept and the reason appended — the same composition the
+        // detail screen does, because a PATCH overwrites `comment` with whatever it is sent.
+        comment: [detail.data.comment, reason].filter(Boolean).join('\n\n'),
+        lockVersion: detail.data.lockVersion,
+      });
+      enqueueSnackbar(`Recorded Blocked for ${execution.caseKey}`, { variant: 'warning' });
+      onClose();
+    } catch (failure) {
+      enqueueSnackbar(
+        failure instanceof ApiError ? failure.detail : "Couldn't record the result. Check your connection and try again.",
+        { variant: 'error' },
+      );
+    }
+  };
+
+  return (
+    <BlockedDialog
+      open
+      onClose={onClose}
+      // `conditions` rather than `unmet`: Grid has no checklist on screen, so the dialog renders
+      // one. Undefined while the read is in flight — the dialog then shows the free-text reason
+      // alone, which is still a valid Blocked, rather than an empty checklist claiming the case
+      // has no preconditions.
+      conditions={detail.data?.preconditions}
+      pending={submit.isPending || detail.isPending}
+      onConfirm={(reason) => void record(reason)}
+    />
+  );
+}
+
+/** Which layout, in the URL. Three segments rather than a menu: the set is small, fixed, and the
+ *  tester switches between them often enough that a click to open a menu is a click too many. */
+function ModeSwitch({ mode, onChange }: { mode: ExecutionMode; onChange: (next: ExecutionMode) => void }) {
+  const icons = {
+    focus: <CenterFocusStrongOutlinedIcon fontSize="small" />,
+    split: <VerticalSplitOutlinedIcon fontSize="small" />,
+    grid: <TableRowsOutlinedIcon fontSize="small" />,
+  } satisfies Record<ExecutionMode, ReactNode>;
+
+  const hints = {
+    focus: 'Focus — one case at a time, nothing else on screen',
+    split: 'Split — the run’s cases beside the one you are running',
+    grid: 'Grid — every case in one table, for a pass you already know the answers to',
+  } satisfies Record<ExecutionMode, string>;
+
+  return (
+    <Stack
+      direction="row"
+      role="group"
+      aria-label="Execution layout"
+      sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}
+    >
+      {EXECUTION_MODES.map((option) => {
+        const active = option === mode;
+        return (
+          <Tooltip key={option} title={hints[option]}>
+            <Box
+              component="button"
+              type="button"
+              onClick={() => onChange(option)}
+              aria-pressed={active}
+              // Derived from the mode itself rather than a lookup table, so a fourth mode cannot
+              // silently share a locator with a third (`test-ids` rule 7).
+              data-testid={`Execution.Mode.${option}`}
+              sx={{
+                font: 'inherit',
+                fontSize: '0.75rem',
+                fontWeight: active ? 600 : 400,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.75,
+                px: 1.25,
+                height: 30,
+                cursor: 'pointer',
+                border: 'none',
+                borderLeft: '1px solid',
+                borderLeftColor: 'divider',
+                '&:first-of-type': { borderLeft: 'none' },
+                // Weight and background, not colour alone — the active-state rule the rail and
+                // the nav already follow.
+                bgcolor: active ? 'action.selected' : 'transparent',
+                color: active ? 'primary.main' : 'text.secondary',
+                textTransform: 'capitalize',
+              }}
+            >
+              {icons[option]}
+              {option}
+            </Box>
+          </Tooltip>
+        );
+      })}
+    </Stack>
   );
 }
 
@@ -648,65 +894,5 @@ function StepRow({
         </Stack>
       </Stack>
     </Box>
-  );
-}
-
-/**
- * Blocked is the one result that requires an explanation, because it is a statement about the
- * environment rather than about the software. Recording it without saying what blocked you
- * produces a row nobody can act on — and the pre-filled unmet preconditions mean the tester
- * usually doesn't have to type anything.
- */
-function BlockedDialog({
-  open,
-  onClose,
-  unmet,
-  onConfirm,
-}: {
-  open: boolean;
-  onClose: () => void;
-  unmet: string[];
-  onConfirm: (reason: string) => void;
-}) {
-  const [reason, setReason] = useState('');
-
-  const prefilled = unmet.length
-    ? `Blocked — these preconditions did not hold:\n${unmet.map((title) => `- ${title}`).join('\n')}`
-    : '';
-  const value = reason || prefilled;
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth data-testid="Execution.BlockedDialog">
-      <DialogTitle>Record this as blocked</DialogTitle>
-      <DialogContent>
-        <DialogContentText sx={{ mb: 2, fontSize: '0.875rem' }}>
-          Blocked means the test couldn't be run — not that the software failed. It's excluded
-          from the pass rate and shown separately, so say what stopped you.
-        </DialogContentText>
-        <TextField
-          label="What blocked this test"
-          fullWidth
-          multiline
-          minRows={3}
-          value={value}
-          onChange={(event) => setReason(event.target.value)}
-          slotProps={{ htmlInput: { 'data-testid': 'Execution.BlockedDialog.ReasonField' } }}
-        />
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} data-testid="Execution.BlockedDialog.Cancel">
-          Cancel
-        </Button>
-        <Button
-          variant="contained"
-          disabled={!value.trim()}
-          onClick={() => onConfirm(value)}
-          data-testid="Execution.BlockedDialog.Confirm"
-          sx={{ bgcolor: 'var(--color-blocked)', '&:hover': { bgcolor: 'var(--color-blocked)', filter: 'brightness(0.92)' } }}
-        >
-          Record blocked
-        </Button>
-      </DialogActions>
-    </Dialog>
   );
 }
