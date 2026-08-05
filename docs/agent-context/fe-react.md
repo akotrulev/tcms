@@ -2,10 +2,10 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-05 (§97 phase 3b)
-**Baseline commit:** `923086c` (§97 phase 3a) **+ §97 phase 3b, the commit this line ships in** (its
-own SHA cannot be written into itself; trust the body over the header and re-grep what a later
-commit could have moved).
+**Last verified:** 2026-08-05 (§100 phase C)
+**Baseline commit:** `0e58651` (§100 phase C) **+ the doc commit this line ships in** (its own SHA
+cannot be written into itself; trust the body over the header and re-grep what a later commit
+could have moved).
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
 `frontend/vite.config.ts`
 
@@ -35,8 +35,8 @@ commit could have moved).
 - **`npm run build` is THE gate** (`tsc -b` + vite build). **Do not trust `tsc --noEmit`** — it has
   reported 0 errors while the build failed with nine (working agreement). `#confirmed`
 - `npm run lint` — oxlint, must stay at **0 warnings**; it prints nothing when clean.
-- `npm run test:run` — Vitest + RTL. **834/834** across 56 files at §96 phase 6 (805 at §94; 770 at §91, 783 before this
-  slice). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
+- `npm run test:run` — Vitest + RTL. **849/849** across 60 files at §100 (828 before it; 834/56 was
+  recorded at §96 phase 6 and the §97 phases moved it). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
 - `npm run gen:api` — regenerate `src/api/schema.d.ts` after **any** `openapi.yaml` change. Runs
   through `npx` on purpose (the scaffold pins TS 6, the tool peer-requires 5.x); do not "fix" it.
 - **Live mode:** `VITE_API_MODE=live` in `.env.local` proxies `/api` to `localhost:8080`.
@@ -69,6 +69,57 @@ directly above the switcher) and the wordmark links there too.
 
 ## Seams to reuse
 
+- **THE EXECUTION SCREEN HAS THREE MODES OVER ONE QUEUE (§100 phase C).** `?mode=focus|split|grid`
+  on the execution route, parsed by `features/runs/executionMode.ts` (**falls back rather than
+  trusting the value** — an unrecognised mode reaching the layout renders neither rail nor detail,
+  a blank page produced by a query string; `executionModeParam` returns **null for the default** so
+  two links to one screen are the same string). `ExecutionQueue.tsx` is Split's rail,
+  `ExecutionGrid.tsx` is Grid, `Workspace` in `ExecutionPage.tsx` picks between them with **Focus as
+  the fallthrough**, not a branch.
+  **No new endpoint and no new request**: the queue is `useRun`'s `executions`, already read since
+  §72 for the run-closed bit.
+  **`queueOrder.ts` sorts by case key and NOT by what needs doing** — the deliberate divergence from
+  `RunDetailPage`, which is triage and static while read; the rail is read *while marking*, and a
+  needs-doing rank re-ranks the row the tester is standing on the instant they save. Named here
+  because it looks like an inconsistency and is not. (The file is `queueOrder.ts` and not
+  `executionQueue.ts` for a dull reason worth not rediscovering: `ExecutionQueue.tsx` beside it
+  collides on a case-insensitive filesystem and `tsc` refuses the build with TS1149.)
+  **Four per-row rules Grid re-asks that the single-case screen never had to**, all invisible when
+  wrong: the permission is **per row** (`result:submit` vs `result:amend` — half a run may be each);
+  every write carries **`If-Match`**, whose `lockVersion` is on `TestExecution` and *not* on the
+  summary a row holds, so a mark **reads the execution via `executionQueryOptions` + `fetchQuery`
+  before it writes**; the same read supplies `comment` back, because **`PATCH` sets `comment` to
+  whatever it is sent and an omitted comment CLEARS it** (server and mock alike) while `stepResults`
+  omitted means "leave them alone"; and **Blocked still routes through the dialog** —
+  `BlockedDialog.tsx` is its own file now and takes `conditions` (Grid, renders its own checklist)
+  or `unmet` (Focus/Split, the checklist is on screen). `#confirmed`
+- **`suggestedVerdict.ts` — the step marks propose a verdict and never decide one (§100 phase B).**
+  Advisory: a heavier border and a "suggested" label; nothing preselected, nothing disabled. Four
+  branches whose interaction is the risk, each pinned in `suggestedVerdict.test.ts`: **Failed fires
+  on a HALF-marked checklist** (failure outranks completeness) while everything else needs a
+  complete one; a **skipped** step proposes nothing rather than falling through to Passed; and a
+  case with **no steps** proposes nothing — `[].every()` is vacuously true, so the naive version
+  proposed Passed from no evidence, on exactly the exploratory cases where judgement is the only
+  input. Step buttons render `statusLabels[kind].charAt(0)`; they rendered `.slice(0, 4)` — **"Bloc"**
+  — until this slice. `#confirmed`
+- **`CriteriaStrip` + `criterionColor`/`criterionStateLabel` in `lib/results.ts` (§100 phase A).**
+  One mark per exit criterion plus the count in text; the strip is `aria-hidden` and the summary
+  carries the accessible name. **It distinguishes "5 not evaluated" from "0 of 5 met"**, which read
+  identically and mean opposite things, and denominates on what was measured.
+  **`GET /plans` evaluates nothing** — `PlanCriteria.parse` builds every criterion with `met`/`actual`
+  null and only `/statistics` calls `evaluate` — so the strip is grey on every real deployment. The
+  mock's `present()` **now nulls both fields**; it handed the fixtures' `met: false` straight back
+  until this slice, so mock mode showed red and green gates no server produces. That is §73's own
+  recorded trap (*"the mock always supplied a boolean, so the null branch was unreachable"*) still
+  live one layer up. `#confirmed`
+- **`compareCaseKeys` (`lib/format.ts`) — display keys sort numerically.** `caseKey.localeCompare`
+  puts `TC-10` ahead of `TC-9`; `RunDetailPage`'s tiebreaker did, and `compareReleaseVersions` had
+  *already named* the class ("the same class of bug as ordering by case key") without anyone
+  checking. Invisible on fixtures under ten. Both call sites use it now. `#confirmed`
+- **`GET /projects/{id}/plans` serves the full `TestPlan`, and the contract now says so (§100).**
+  It declared `TestPlanSummary` — which has no `exitCriteria` — while `TestPlanView`, the mock and
+  `usePlans` all used the wide shape. `TestPlanView`'s javadoc claimed the contract had been widened;
+  it had not. **A comment asserting a fact about another file is not a check.** `#confirmed`
 - **`slotProps` ON AN `Autocomplete`'s `renderInput` MUST SPREAD `...params.slotProps` FIRST.**
   MUI v9 puts the selected **chips** in `slotProps.input.startAdornment` and the field's ref/ARIA
   wiring in `slotProps.htmlInput`. An object that merely adds a `data-testid` **replaces** the lot:
@@ -569,6 +620,25 @@ directly above the switcher) and the wordmark links there too.
   with the reasoning recorded in `vite.config.ts`.
 
 ## Session log
+
+- 2026-08-05 · EXTEND · **The design comp lands** (§100 phases A–C) — three proposals from
+  `TCMS.dc.html`, imported through the design MCP. The comp is **mostly a portrait of what is already
+  built** (its own first note is headed "Now matches the code"), so the deliverable was four
+  "Proposed" notes; the user took 1–3 and dropped 4 because `DashboardPage` already totals health
+  signals, and more honestly than the comp.
+  New: `components/CriteriaStrip.tsx` + test · `features/runs/{executionMode,queueOrder,suggestedVerdict}.ts`
+  + tests · `features/runs/{ExecutionQueue,ExecutionGrid,BlockedDialog}.tsx` ·
+  `criterionColor`/`criterionStateLabel` and `compareCaseKeys` in `lib/`. **One contract change
+  (`GET /plans` → `TestPlan`), `gen:api` run.**
+  The findings were **three divergences no gate could see**: the contract declared a list shape no
+  implementation served, with a javadoc asserting the opposite; the mock evaluated exit criteria the
+  server leaves null, so mock mode showed gates no deployment shows; and `caseKey.localeCompare` put
+  TC-10 before TC-9 in a spot whose defect class `format.ts` had already named in prose.
+  Vitest 828 → **849/849 across 60 files**; build clean, lint 0.
+  **Browser pass RUN inline by explicit direction, overriding §65 for this slice only** — rows
+  101–110 `✅ RUN`, and two limits recorded rather than glossed: it was **mock mode** (no credentials
+  for the :8080 backend `.env.local` points at), and `resize_window` did nothing, so the sub-`lg`
+  rail collapse is the slice's one unverified claim. Rows 111–113 stay queued.
 
 - 2026-08-05 · EXTEND · **Conditions get a writer** (§95, phases 1–4) — the library that could be
   read, ranked and attached and never created. Backend: `POST`/`PUT /projects/{id}/conditions`

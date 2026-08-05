@@ -1057,3 +1057,32 @@ defect this phase fixed rather than a feature it added.
 |---|---|---|
 | 99 | Open the plan list, note **TP-1**'s case count, then tag any case `smoke` in another tab and reload the list. | The count **goes up**. Until this phase the mock stored `caseCount` on the row at save time, so it answered whatever was true when the plan was last edited — which made phase 2's own row 90 false in mock mode. Both counts are now resolved on the way out (`present`), as the server resolves them on every read. |
 | 100 | Open **TP-1** and compare its total against its two sections, once the Test cases tab exists (phase 6). | Recorded here because the number is already correct in the payload and can be read in the network tab today: *Create an object* holds 2, *Navigation* holds whatever carries `smoke` plus the second suite, and the two **exceed** the plan's deduped total. |
+
+## §100 — the design comp's three proposals
+
+**Ran inline at the user's explicit direction (2026-08-05), overriding §65 for this slice only.**
+Rows 101–110 were driven in Chrome against **mock mode** and their results are recorded below;
+111–113 could not be driven and stay queued. The §65 default is unchanged for the next slice.
+
+**The pass was in mock mode, not live** — which `CLAUDE.md` says is the one that counts, and the
+gap is named rather than glossed: `.env.local` holds `VITE_API_MODE=live` against a backend on
+:8080 that this session had no credentials for, so a second vite was started with
+`VITE_API_MODE=mock` on port 5199. Everything below is therefore evidence about the SPA and the
+mock agreeing, which is exactly the pairing §64, §54 and §52 each found a shared wrong assumption
+in. **Re-run 101–110 in live mode** when credentials are at hand.
+
+| # | Drive | Expect | Result |
+|---|---|---|---|
+| 101 | Open the plan list. | **TP-1** reads *3 not evaluated* against three grey outlined marks — never "3 unmet". The fixtures store `met: false`, so before this slice the chip claimed three failed gates that nothing had computed. | ✅ RUN — reads "3 not evaluated"; TP-2 "1 not evaluated"; TP-3/4/5 "None set". |
+| 102 | Same list in the **light** theme. | The unevaluated mark is legible: `--color-text-muted` at 4px would vanish on a light row, so it carries a 1px border. An invisible mark reads as "this plan has no criteria", which is what the strip exists to deny. | ✅ RUN — three marks clearly readable, verified zoomed. |
+| 103 | Open an execution. | Three-segment mode switch top right; **Split** is the default with the queue rail beside the detail, and the rail says *Case N of 42*. | ✅ RUN. |
+| 104 | Mark steps 1–3 Passed and step 4 Failed, leaving step 5 unmarked. | *Failed* gains a heavier border and a **suggested** label; the caption reads "A step failed…". Every other verdict stays enabled — the suggestion is never a decision. Fires on a **half-marked** checklist, which is the failure rule outranking the completeness rule. | ✅ RUN — all four verdicts remained clickable. |
+| 105 | Look at a step's verdict keys. | **P F B S**, fixed 30×24 squares. Previously `statusLabels[kind].slice(0, 4)` rendered **"Bloc"** four times per row. | ✅ RUN. |
+| 106 | Switch to **Grid** and mark an untested row Failed. | The row's Result chip becomes *Failed*, **and the page header's chip changes with it** — proof the row's write landed in the same query key the detail screen reads, rather than a second copy. | ✅ RUN. |
+| 107 | Press **B** on a row in Grid. | A dialog, never a one-click write. It renders **that case's own preconditions** as a checklist, because Grid has no checklist on screen — the rule that a Blocked result must say which precondition failed, kept in the third mode. | ✅ RUN — both preconditions listed; *Record blocked* disabled until a reason exists. |
+| 108 | Tick a precondition in that dialog. | The reason prefills with *"Blocked — these preconditions did not hold: - …"*. | ✅ RUN. |
+| 109 | Record it, then open that execution in **Focus** and scroll to Notes. | **The comment is there.** `PATCH` sets `comment` to whatever it is sent and an omitted comment CLEARS it, so a Grid mark that skipped the read would have silently emptied the field. | ✅ RUN — reason persisted verbatim; the "already recorded" alert names the result and time. |
+| 110 | Hand-edit the URL to `?mode=kanban`. | Falls back to Split and renders normally. An unrecognised value reaching the layout renders neither rail nor detail — a blank page produced by a query string. | ✅ RUN. |
+| 111 | Narrow the window below the `lg` breakpoint with Split active. | The rail is dropped and the detail takes the width — Split degrades to Focus, not to a squeezed version of itself. **Not driven**: `resize_window` had no effect on the rendered viewport in this environment, so the one responsive claim in the slice is unverified. | ⬜ QUEUED |
+| 112 | In Grid as a Test **Engineer** (holds `result:submit`, not `result:amend`), find a row that already has a result. | Its four keys are **disabled with the amend tooltip**, while an untested row's are live — the permission is per row, because half a run may be recorded and half not. Mock mode holds every key, so this is **live-only**. | ⬜ QUEUED — live only |
+| 113 | Open one execution in two tabs, record a result in the first, then mark the same row in Grid in the second. | The row shows *"Someone else recorded a result first"* **in place, on that row** — not a corner toast. This is the `If-Match` the row reads before it writes; bulk marking is the surface where overwriting a second tester is easiest. | ⬜ QUEUED |
