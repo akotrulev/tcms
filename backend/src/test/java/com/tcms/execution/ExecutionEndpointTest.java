@@ -1883,7 +1883,7 @@ class ExecutionEndpointTest extends IntegrationTestBase {
                 INSERT INTO test_plan
                     (id, company_id, project_id, key, key_seq, name, description, status,
                      milestone_name, milestone_date, entry_criteria, exit_criteria)
-                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?, ?, ?, 'ACTIVE',
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?, ?, ?, 'APPROVED',
                         'GA', DATE '2026-09-01',
                         CAST(? AS jsonb), CAST(? AS jsonb))
                 ON CONFLICT (id) DO NOTHING

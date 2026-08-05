@@ -202,14 +202,11 @@ public class PlanController {
                     ResponseEntity.badRequest().body(validationProblem(invalid.errors()));
             case PlanUpdateService.Outcome.Stale ignored ->
                     ResponseEntity.status(HttpStatus.CONFLICT).body(staleProblem());
-            case PlanUpdateService.Outcome.Refused refused ->
-                    ResponseEntity.status(HttpStatus.CONFLICT)
-                            .body(refusedProblem(refused.message()));
         };
     }
 
     /**
-     * Submits, approves, starts, closes or reopens the plan.
+     * Submits the plan for review, approves it, or withdraws it back to draft.
      *
      * <p><strong>{@code PUT}, not {@code PATCH}</strong>, and a sub-resource rather than a field on
      * the plan: the status <em>is</em> the resource being replaced and the request names an absolute

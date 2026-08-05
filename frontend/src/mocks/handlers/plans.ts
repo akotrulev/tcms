@@ -8,31 +8,23 @@ import {
   planScopeCaseIds,
   reporting,
   reviewMoved,
-  settingsForProject,
 } from '../db';
 import type { ReviewStanding } from '../db';
 import { API, LATENCY, holdsOn, meRef, notFound, problem } from './shared';
 
 /** The server's `PlanLifecycle.permissionFor`, in the mock's own words. */
 function planMovePermission(current: PlanStatus, target: PlanStatus): string {
-  if (target === 'APPROVED' || target === 'CLOSED') return 'plan:approve';
-  const rank: Record<PlanStatus, number> = {
-    DRAFT: 0,
-    IN_REVIEW: 1,
-    APPROVED: 2,
-    ACTIVE: 3,
-    CLOSED: 4,
-  };
-  // Taking an approval, a start or a closure back — the arm a target-keyed rule misses.
+  if (target === 'APPROVED') return 'plan:approve';
+  const rank: Record<PlanStatus, number> = { DRAFT: 0, IN_REVIEW: 1, APPROVED: 2 };
+  // Taking an approval back — the arm a target-keyed rule misses.
   return rank[target] < rank[current] && rank[current] >= rank.APPROVED ? 'plan:approve' : 'plan:edit';
 }
 
 /**
  * Where a plan's status sits relative to review — the server's `PlanLifecycle.standingOf`.
  *
- * `ACTIVE` and `CLOSED` are outside review entirely, which is the arm the case-and-suite ladder
- * does not have: starting an approved plan writes nothing to its review, and closing a release
- * does not retract the sign-off it was started on.
+ * Total and unremarkable since §97 (M7) took `ACTIVE` and `CLOSED` away: with three states the plan
+ * ladder maps one-to-one onto the review standings.
  */
 function planStandingOf(status: PlanStatus): ReviewStanding {
   if (status === 'IN_REVIEW') return 'IN_REVIEW';
@@ -51,19 +43,8 @@ function planMoveRefusal(current: PlanStatus, target: PlanStatus): string | null
       return current === 'IN_REVIEW'
         ? null
         : 'A plan is approved after it has been reviewed. Submit it for review first.';
-    case 'ACTIVE':
-      return current === 'IN_REVIEW'
-        ? 'This plan is still in review. Approve it, or return it to draft, before starting it.'
-        : null;
-    case 'CLOSED':
-      return current === 'ACTIVE'
-        ? null
-        : 'Only a plan that is being executed can be closed. Start the plan, or delete it if it '
-          + 'was never used.';
     case 'DRAFT':
-      return current === 'CLOSED'
-        ? 'This plan has been closed. Reopen it before returning it to draft.'
-        : null;
+      return null;
   }
 }
 
@@ -196,15 +177,6 @@ export const planHandlers = [
       );
     }
 
-    if (plan.status === 'CLOSED') {
-      return problem(
-        409,
-        'Not possible right now',
-        'This plan is closed, and its scope and criteria are the record of what the release was '
-          + 'tested against. Reopen the plan to change them.',
-      );
-    }
-
     const ifMatch = request.headers.get('If-Match');
     if (ifMatch !== null && Number(ifMatch.replace(/"/g, '')) !== plan.lockVersion) {
       return problem(
@@ -327,12 +299,9 @@ export const planHandlers = [
     const plan = db.plans.find((p) => p.id === params.planId);
     if (!plan) return notFound('That test plan');
 
-    const body = (await request.json()) as {
-      status?: PlanStatus;
-      overrideApprovalGate?: boolean;
-    };
+    const body = (await request.json()) as { status?: PlanStatus };
     const target = body.status;
-    const known: PlanStatus[] = ['DRAFT', 'IN_REVIEW', 'APPROVED', 'ACTIVE', 'CLOSED'];
+    const known: PlanStatus[] = ['DRAFT', 'IN_REVIEW', 'APPROVED'];
 
     // An unreadable status names no edge, so it falls back to the lower key — the server's rule,
     // and the reason a Viewer gets 403 rather than learning the vocabulary.
@@ -347,7 +316,7 @@ export const planHandlers = [
     }
     if (!target || !known.includes(target)) {
       return problem(400, 'Validation failed', 'Check the highlighted fields.', {
-        status: ['Choose a status: DRAFT, IN_REVIEW, APPROVED, ACTIVE or CLOSED.'],
+        status: ['Choose a status: DRAFT, IN_REVIEW or APPROVED.'],
       });
     }
 
@@ -357,27 +326,10 @@ export const planHandlers = [
     if (refusal) return problem(409, 'Not possible right now', refusal);
 
     /*
-      §6g's gating rule (§82), after the ladder has agreed the move exists and before anything is
-      written — the server's placement. It binds on ONE EDGE, `DRAFT → ACTIVE`, and not on the
-      target: `ACTIVE` is also reached from `APPROVED` (the rule satisfied) and from `CLOSED` (a
-      reopen), and a mock keyed on the target would refuse a reopen the server allows — leaving
-      every closed plan looking permanently stuck in mock mode.
-
-      Not conditioned on `reviewEnabledPlan`, for the reason on the run handler.
+      §6g's gating rule for plans (§82) was applied here, on the one edge `DRAFT → ACTIVE`. It went
+      with that edge in §97 (M7), along with `PlanStatusInput.overrideApprovalGate`. §6g's *case*
+      gate is untouched and still lives on the run-create handler.
     */
-    if (
-      target === 'ACTIVE' &&
-      plan.status === 'DRAFT' &&
-      settingsForProject(projectId).requireApprovedPlanToStart &&
-      !(body.overrideApprovalGate === true && holdsOn(projectId, 'plan:approve'))
-    ) {
-      return problem(
-        409,
-        'This plan needs approval',
-        'This project only starts approved plans. Submit this plan for review and have it ' +
-          'approved before starting it.',
-      );
-    }
 
     plan.status = target;
     // The review record moves with the status, inside the same handler the server writes it in the

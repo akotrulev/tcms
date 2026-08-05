@@ -45,7 +45,6 @@ function settings(overrides: Partial<ProjectSettings> = {}): ProjectSettings {
     authorMayApproveOwnWork: false,
     editAfterApproval: 'RETAIN',
     requireApprovedCaseForRun: false,
-    requireApprovedPlanToStart: false,
     updatedBy: null,
     updatedAt: null,
     ...overrides,
@@ -53,9 +52,10 @@ function settings(overrides: Partial<ProjectSettings> = {}): ProjectSettings {
 }
 
 /*
-  Declared as `ProjectSettings` and NOT cast — §79's rule, which paid for itself in §80 and again
-  here: this factory is the reason adding the two gating properties to the contract was one build
-  error in one place rather than a page of runtime failures with zero type errors.
+  Declared as `ProjectSettings` and NOT cast — §79's rule, which paid for itself in §80, in §82's
+  gating pair, and again when §97 REMOVED `requireApprovedPlanToStart`: this factory is the reason
+  each of those was one build error in one place rather than a page of runtime failures with zero
+  type errors.
 */
 function mockReads(current: ProjectSettings, permissions: string[] = ['project:settings']) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
@@ -95,7 +95,10 @@ describe('ReviewSettingsPage', () => {
 
     expect(await screen.findByTestId('ReviewSettings.Gating')).toBeInTheDocument()
     await enabled('ReviewSettings.requireApprovedCaseForRun')
-    expect(screen.getByTestId('ReviewSettings.requireApprovedPlanToStart')).toBeEnabled()
+    // One switch since §97 (M7) removed `requireApprovedPlanToStart`. Asserted as an absence as
+    // well, because a panel that kept rendering a control the contract has dropped would still
+    // pass the enabling assertion above.
+    expect(screen.queryByTestId('ReviewSettings.requireApprovedPlanToStart')).toBeNull()
   })
 
   it('warns while either gate is on, and says nothing while both are off', async () => {
@@ -126,16 +129,16 @@ describe('ReviewSettingsPage', () => {
         authorMayApproveOwnWork: true,
         editAfterApproval: 'RE_REVIEW',
         requireApprovedCaseForRun: true,
-        requireApprovedPlanToStart: true,
       }),
     )
     const put = vi.spyOn(api, 'put').mockResolvedValue(settings() as never)
     renderPage()
 
     // Change exactly one thing, so every OTHER field in the asserted body is one this form is
-    // merely carrying — which is the property under test.
-    await enabled('ReviewSettings.requireApprovedPlanToStart')
-    await userEvent.click(screen.getByTestId('ReviewSettings.requireApprovedPlanToStart'))
+    // merely carrying — which is the property under test. It was the plan gate until §97 removed
+    // it; the case gate is the only switch in this panel now.
+    await enabled('ReviewSettings.requireApprovedCaseForRun')
+    await userEvent.click(screen.getByTestId('ReviewSettings.requireApprovedCaseForRun'))
     await userEvent.click(screen.getByTestId('ReviewSettings.Save'))
 
     await waitFor(() => expect(put).toHaveBeenCalled())
@@ -146,9 +149,8 @@ describe('ReviewSettingsPage', () => {
       requiredPeerReviews: 2,
       authorMayApproveOwnWork: true,
       editAfterApproval: 'RE_REVIEW',
-      requireApprovedCaseForRun: true,
       // The one that was toggled.
-      requireApprovedPlanToStart: false,
+      requireApprovedCaseForRun: false,
     })
   })
 

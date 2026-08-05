@@ -37,7 +37,6 @@ import { formatCount, formatDateTime, formatPercent } from '../../lib/format';
 import {
   aggregationHelp,
   aggregationLabels,
-  isPlanClosed,
   planStatusColors,
   planStatusLabels,
 } from '../../lib/labels';
@@ -206,40 +205,30 @@ export function PlanStatisticsPage() {
  * button below is still refused server-side by the same rule, and the two disagreeing produces a
  * 403 with a sentence rather than an unauthorized write.
  *
- * The interesting rows are the two that ask for `plan:approve` on a move *down* the ladder —
- * rescinding an approval and un-starting a plan. A table keyed only by the target would spell those
- * `plan:edit` and put an enabled "Return to draft" in front of every Test Engineer, who would then
- * be refused by the server. That is exactly the gap the server-side rule closes, mirrored.
+ * The interesting row is the one that asks for `plan:approve` on a move *down* the ladder —
+ * rescinding an approval. A table keyed only by the target would spell it `plan:edit` and put an
+ * enabled "Return to draft" in front of every Test Engineer, who would then be refused by the
+ * server. That is exactly the gap the server-side rule closes, mirrored.
+ *
+ * Three rows since §97 (M7): ~~ACTIVE and CLOSED~~, and with them "Start plan", "Close plan" and
+ * "Reopen plan". A plan is an outline; whether its testing is under way is answered by its runs.
  */
 const planMoves = {
-  DRAFT: [
-    { target: 'IN_REVIEW', label: 'Submit for review', permission: 'plan:edit' },
-    { target: 'ACTIVE', label: 'Start plan', permission: 'plan:edit' },
-  ],
+  DRAFT: [{ target: 'IN_REVIEW', label: 'Submit for review', permission: 'plan:edit' }],
   IN_REVIEW: [
     { target: 'APPROVED', label: 'Approve plan', permission: 'plan:approve' },
     { target: 'DRAFT', label: 'Return to draft', permission: 'plan:edit' },
   ],
-  APPROVED: [
-    { target: 'ACTIVE', label: 'Start plan', permission: 'plan:edit' },
-    { target: 'DRAFT', label: 'Return to draft', permission: 'plan:approve' },
-  ],
-  ACTIVE: [
-    { target: 'CLOSED', label: 'Close plan', permission: 'plan:approve' },
-    { target: 'DRAFT', label: 'Return to draft', permission: 'plan:approve' },
-  ],
-  // Reopening lands on ACTIVE and never on DRAFT: a closed release that turns out to need more
-  // testing is still the release it was. The server refuses the other spelling.
-  CLOSED: [{ target: 'ACTIVE', label: 'Reopen plan', permission: 'plan:approve' }],
+  APPROVED: [{ target: 'DRAFT', label: 'Return to draft', permission: 'plan:approve' }],
 } as const satisfies Record<PlanStatus, readonly { target: PlanStatus; label: string; permission: string }[]>;
 
 /**
  * The plan's ladder and its delete — the first affordances in the product for a column that had no
  * writer at all until §73, and for `plan:delete`.
  *
- * **The controls swap rather than accumulate**, as on the run detail: a closed plan offers Reopen
- * and nothing else, because the server refuses everything else outright and offering a move that
- * cannot succeed is what §31 exists to stop.
+ * **The controls swap rather than accumulate**, as on the run detail: an approved plan offers
+ * Return to draft and nothing else, because the server refuses everything else outright and
+ * offering a move that cannot succeed is what §31 exists to stop.
  *
  * **The refusal renders here, not as a toast.** `useSetPlanStatus` marks its errors handled: "submit
  * it for review first" is an answer about the button that was just pressed.
@@ -254,35 +243,17 @@ function PlanLifecycleActions({ projectId, plan }: { projectId: string; plan: Te
   const navigate = useNavigate();
 
   /*
-    §82. A refused start is the one failure here that names a follow-up the user can actually take —
-    §6g's "documented lead override" — so the refusal is held with the target that produced it and
-    the affordance is offered beside it. `ui-rules`: every backend-mandated follow-up has a UI
-    affordance, and an error naming an action the UI does not offer is a design bug.
-
-    Offered only AFTER the refusal, never on the happy path: a standing "ignore the approval rules"
-    checkbox on every status button normalizes the exception §6g wants to stay exceptional, and it
-    would be visible on the four transitions the rule cannot touch.
+    §82's "Start it anyway" override lived here — a refused start was the one failure on this screen
+    that named a follow-up the user could take. It went with the DRAFT → ACTIVE edge in §97 (M7):
+    there is no gate on any remaining plan transition, so there is no refusal to offer a way out of,
+    and `PlanStatusInput.overrideApprovalGate` is gone from the contract. §6g's override survives
+    where its rule does — on run creation.
   */
-  const [refusedTarget, setRefusedTarget] = useState<PlanStatus | null>(null);
-
-  const move = (target: PlanStatus, overrideApprovalGate?: boolean) => {
+  const move = (target: PlanStatus) => {
     setError(null);
-    setRefusedTarget(null);
     setStatus.mutate(
-      { status: target, overrideApprovalGate },
-      {
-        onError: (failure) => {
-          setError(describeError(failure).body);
-          /*
-            Keyed on the target rather than on the message: matching the server's sentence would put
-            a second copy of the rule here, in a string, which is the drift `lib/labels.ts`'s header
-            warns about. ACTIVE is the only target the gate can refuse, and an override on any other
-            refusal is read and ignored by the server anyway — so the worst case of getting this
-            wrong is an affordance that changes nothing, not one that bypasses something.
-          */
-          setRefusedTarget(target === 'ACTIVE' && !overrideApprovalGate ? target : null);
-        },
-      },
+      { status: target },
+      { onError: (failure) => setError(describeError(failure).body) },
     );
   };
 
@@ -290,10 +261,10 @@ function PlanLifecycleActions({ projectId, plan }: { projectId: string; plan: Te
     <Stack sx={{ gap: 0.5, alignItems: 'flex-end' }}>
       <Stack direction="row" sx={{ gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
         {/*
-          Disabled on a CLOSED plan, with the reason on the control rather than as a 409 after the
-          user has retyped the whole form. The server refuses it either way — a closed plan's scope
-          and criteria are the record of what the release was tested against — and Reopen is the
-          affordance beside this one, which is the answer the refusal would have named.
+          No longer disabled by status: §97 (M7) removed CLOSED, so no plan is frozen against
+          editing. What still protects a sign-off is §6g's edit-after-approval rule, which the
+          server applies — editing an approved plan on a review-enabled project demotes it to DRAFT
+          rather than refusing the save.
         */}
         <PermissionGate projectId={projectId} permission="plan:edit">
           {({ allowed }) => (
@@ -301,8 +272,7 @@ function PlanLifecycleActions({ projectId, plan }: { projectId: string; plan: Te
               size="small"
               variant="outlined"
               data-testid="PlanStats.Edit"
-              disabled={!allowed || isPlanClosed(status)}
-              title={isPlanClosed(status) ? 'Reopen the plan to edit its scope and criteria.' : undefined}
+              disabled={!allowed}
               onClick={() => setEditing(true)}
             >
               Edit
@@ -343,28 +313,6 @@ function PlanLifecycleActions({ projectId, plan }: { projectId: string; plan: Te
         <Typography variant="caption" sx={{ color: 'var(--color-failed)' }} data-testid="PlanStats.StatusError">
           {error}
         </Typography>
-      )}
-      {/*
-        §6g's lead override. Disabled rather than hidden for a caller without `plan:approve` (§31),
-        so the way out is discoverable by the person who has to go and ask for it — and the tooltip
-        `PermissionGate` supplies is what tells them who to ask. The server refuses this caller
-        identically with or without the flag, so a disabled control here mirrors the gate rather
-        than guessing at it.
-      */}
-      {refusedTarget && (
-        <PermissionGate projectId={projectId} permission="plan:approve">
-          {({ allowed }) => (
-            <Button
-              size="small"
-              color="warning"
-              data-testid="PlanStats.OverrideGate"
-              disabled={!allowed || setStatus.isPending}
-              onClick={() => move(refusedTarget, true)}
-            >
-              Start it anyway
-            </Button>
-          )}
-        </PermissionGate>
       )}
       {/* Mounted only while open, so every control is seeded from the plan as it stands now. */}
       {editing && (

@@ -609,7 +609,10 @@ export const docPageDetail: Record<string, DocPage> = {
 export const plans: TestPlan[] = [
   {
     id: uid(1, 'l'), key: 'TP-1', name: 'Release 4.3 regression',
-    status: 'ACTIVE', milestoneName: 'Release 4.3', milestoneDate: '2026-08-14',
+    // §97 (M7). These three were ACTIVE, CLOSED and ACTIVE; V32 maps both of those states to
+    // APPROVED, and the fixture takes the migration's own mapping rather than inventing one.
+    // DRAFT and IN_REVIEW are still represented, on TP-4 and TP-5.
+    status: 'APPROVED', milestoneName: 'Release 4.3', milestoneDate: '2026-08-14',
     caseCount: 42, passRate: 0.89, coverage: 0.97,
     description: 'Full regression ahead of the 4.3 release.',
     entryCriteria: [
@@ -653,7 +656,7 @@ export const plans: TestPlan[] = [
   },
   {
     id: uid(2, 'l'), key: 'TP-2', name: 'Release 4.2 sign-off',
-    status: 'CLOSED', milestoneName: 'Release 4.2', milestoneDate: '2026-07-25',
+    status: 'APPROVED', milestoneName: 'Release 4.2', milestoneDate: '2026-07-25',
     caseCount: 38, passRate: 1, coverage: 1,
     description: 'Closed and signed off.',
     entryCriteria: [], exitCriteria: [
@@ -669,7 +672,7 @@ export const plans: TestPlan[] = [
   },
   {
     id: uid(3, 'l'), key: 'TP-3', name: 'Settlement smoke (nightly)',
-    status: 'ACTIVE', milestoneName: null, milestoneDate: null,
+    status: 'APPROVED', milestoneName: null, milestoneDate: null,
     caseCount: 7, passRate: 0.857, coverage: 1,
     description: 'Runs nightly from CI.',
     entryCriteria: [], exitCriteria: [],

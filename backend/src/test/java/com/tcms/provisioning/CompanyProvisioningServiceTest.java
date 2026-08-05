@@ -271,7 +271,11 @@ class CompanyProvisioningServiceTest extends IntegrationTestBase {
 
             assertThat(caseStatusNames(result.companyId(), projectId))
                     .containsExactlyInAnyOrder(
-                            "Passed", "Failed", "Blocked", "Skipped", "Retest", "Untested");
+                            "Passed", "Failed", "Blocked", "Skipped", "Retest", "Untested",
+                            // V32 (M9). Existing companies take it on by RE-RUNNING this service,
+                            // which is the documented top-up path and the reason the seed is
+                            // idempotent rather than run-once.
+                            "WIP");
 
             // Feature is the one PROJECT-scoped dimension, and it is seeded EMPTY —
             // inventing a client's feature taxonomy is how a controlled vocabulary gets

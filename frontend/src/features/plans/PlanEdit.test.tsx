@@ -256,21 +256,12 @@ describe('PlanEditDialog', () => {
     expect(within(alert).getByText(/is not a metric/)).toBeInTheDocument()
   })
 
-  it('disables Edit on a CLOSED plan, and explains why on the control', async () => {
-    mockReads(planBody({ status: 'CLOSED' } as Partial<TestPlan>), [
-      'project:read',
-      'plan:edit',
-      'plan:approve',
-    ])
-    renderPage()
-
-    // Reopen proves the permission answer has LANDED — without a control that is enabled, the
-    // assertion below would pass against a `useCan` that is merely still pending (§66).
-    await waitFor(() => expect(screen.getByTestId('PlanStats.Move.ACTIVE')).toBeEnabled())
-    const edit = screen.getByTestId('PlanStats.Edit')
-    expect(edit).toBeDisabled()
-    expect(edit).toHaveAttribute('title', expect.stringContaining('Reopen'))
-  })
+  /*
+    'disables Edit on a CLOSED plan, and explains why on the control' lived here. §97 (M7) removed
+    CLOSED, so no plan is frozen against editing and there is no disabled-with-reason to assert.
+    What still protects a sign-off is the server's edit-after-approval rule, which demotes rather
+    than refuses — a different behaviour, tested on the backend where it is decided.
+  */
 
   it('disables Edit for a caller without plan:edit', async () => {
     mockReads(planBody(), ['project:read'])

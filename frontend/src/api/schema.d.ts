@@ -2520,9 +2520,14 @@ export interface paths {
          *
          *     **Refused with `409` while any live run was created from the plan**, naming how many.
          *     `test_run.plan_id` references the plan and the run list keeps rendering its key, so
-         *     deleting it would leave those runs pointing at a plan the API answers 404 for. The way out
-         *     is not force — it is `PUT .../status` with `CLOSED`, which is the state that exists for a
-         *     plan that *was* executed. **Delete a plan nobody executed; close one somebody did.**
+         *     deleting it would leave those runs pointing at a plan the API answers 404 for.
+         *
+         *     ~~The way out is `PUT .../status` with `CLOSED`. **Delete a plan nobody executed; close one
+         *     somebody did.**~~ → **superseded 2026-08-05 (§97, M7):** with no `CLOSED` the partition has
+         *     one half. A plan a run names cannot be deleted and **has no terminal state** — it stays
+         *     `APPROVED` for ever, which is correct under M7, where a plan is an outline and its
+         *     execution state lives on its runs. The refusal names the runs, which is the thing actually
+         *     in the way, rather than an act that no longer exists.
          *
          *     Soft: the row stays, every read drops it, and the scope items and the suites and cases they
          *     name are untouched.
@@ -2543,11 +2548,13 @@ export interface paths {
          *     **Not `status`** — that is `PUT .../status`, with its own two gates. A status an
          *     ordinary save could set is an approval anybody grants themselves.
          *
-         *     **A closed plan is refused with `409`.** `CLOSED` says a release was executed and is
+         *     ~~**A closed plan is refused with `409`.** `CLOSED` says a release was executed and is
          *     over, and its scope and criteria are the record of what that release was tested
-         *     against — editing them afterwards would show it passing gates nobody applied to it.
-         *     The way out is to reopen the plan (`PUT .../status` with `ACTIVE`, which needs
-         *     `plan:approve`), so unfreezing a signed-off release is a lead's act.
+         *     against.~~ → **superseded 2026-08-05 (§97, M7):** there is no `CLOSED`, so no plan is
+         *     frozen against editing. What survives is §6g's edit-after-approval rule — editing an
+         *     **approved** plan on a project with review on demotes it to `DRAFT` — so a sign-off
+         *     cannot come to cover criteria nobody signed. What is genuinely lost: a plan whose runs
+         *     are finished stays `APPROVED` and can still be edited.
          *
          *     **Absent, null and empty are three different instructions**, and the split is by kind
          *     rather than by field. A **scalar** sent as `null` is cleared. A **list** sent as `null`
@@ -2576,29 +2583,28 @@ export interface paths {
         };
         get?: never;
         /**
-         * Submit, approve, start, close or reopen a plan
-         * @description The plan's ladder is DRAFT → IN_REVIEW → APPROVED → ACTIVE → CLOSED, and **which permission
-         *     a move needs is decided by the edge, not by the target**:
+         * Submit a plan for review, approve it, or withdraw it
+         * @description The plan's ladder is DRAFT → IN_REVIEW → APPROVED, and **which permission a move needs is
+         *     decided by the edge, not by the target**:
          *
          *     - `plan:edit` (Test Engineer and up) carries a plan *forward* through the states nobody has
-         *       signed off — submitting it for review, starting it, returning it from review to draft.
-         *     - `plan:approve` (Lead and up) is needed to **grant** the sign-off, to **close** the plan,
-         *       and to **take either back** — because rescinding a lead's approval or un-starting a plan
-         *       somebody is executing against is an approval act, and a target-only rule would let a Test
-         *       Engineer do it by asking for `DRAFT`.
+         *       signed off — submitting it for review, and returning it from review to draft.
+         *     - `plan:approve` (Lead and up) is needed to **grant** the sign-off and to **take it back** —
+         *       because rescinding a lead's approval is an approval act, and a target-only rule would let
+         *       a Test Engineer do it by asking for `DRAFT`.
          *
-         *     **Review is optional** (plan §6g), so `DRAFT → ACTIVE` is legal: a project that never turns
-         *     review on must still be able to start a plan — **unless it turned §6g's gating rule on**
-         *     (`requireApprovedPlanToStart`, §82), which closes exactly that edge with a `409`.
-         *     `APPROVED → ACTIVE` and `CLOSED → ACTIVE` are untouched by it: the first is the rule being
-         *     satisfied, and the second is a *reopen*, which a target-keyed rule would make impossible
-         *     for ever. A holder of `plan:approve` may pass `overrideApprovalGate`.
+         *     **Two states were removed on 2026-08-05 (§97, M7):** ~~`ACTIVE` and `CLOSED`~~. They
+         *     described a plan being *run*, which is `test_run`'s business — a plan is an outline of what
+         *     must be tested, and whether it is under way is answered by its runs, which have carried
+         *     NOT_STARTED → IN_PROGRESS → COMPLETED → ABORTED since the beginning. §6g's gating rule for
+         *     plans (`requireApprovedPlanToStart`) went with the one edge it bound on and its setting is
+         *     gone; §6g's *case* gate, `requireApprovedCaseForRun`, is untouched. A plan a run names can
+         *     no longer be deleted **and has no terminal state**: it stays `APPROVED`.
          *
-         *     Two moves are refused with `409` because the ladder does not have them: `APPROVED` is
-         *     reachable only from `IN_REVIEW` (approval must not be reachable without review), and
-         *     `CLOSED` only from `ACTIVE` (a plan nobody executed is deleted, not closed — closing it
-         *     would put a 0%-executed plan into every report beside plans that were really run).
-         *     Reopening a closed plan sends `ACTIVE`.
+         *     One move is refused with `409` because the ladder does not have it: `APPROVED` is reachable
+         *     only from `IN_REVIEW`, because approval must not be reachable without review — §6g's one
+         *     gate. `APPROVED → IN_REVIEW` is refused for the same reason read forwards: a withdrawn
+         *     sign-off returns the plan to its author, who resubmits it.
          *
          *     Idempotent: setting the status a plan already has answers `200` with the plan and writes
          *     nothing — no timestamp re-stamped and no audit row, so a repeated click cannot bury the
@@ -5336,19 +5342,6 @@ export interface components {
              *     `case:approve`, who could reach the same state by approving the cases first.
              */
             requireApprovedCaseForRun: boolean;
-            /**
-             * @description §6g's gating rule for plans — "before a plan can be started". Opt-in, off by
-             *     default, and independent of `reviewEnabledPlan` for the reason above.
-             *
-             *     Binds on the `DRAFT → ACTIVE` **edge**, not on the target. `ACTIVE` is also reached
-             *     from `APPROVED` (the rule being satisfied) and from `CLOSED` (a **reopen**) — and
-             *     refusing the reopen would make every closed plan on a gated project permanently
-             *     un-reopenable, since no legal move takes `CLOSED` back to `APPROVED`.
-             *
-             *     Overridable per request (`PlanStatusInput.overrideApprovalGate`) by a holder of
-             *     `plan:approve`.
-             */
-            requireApprovedPlanToStart: boolean;
             /** @description Null for a project nobody has configured — which is most of them. */
             updatedBy?: components["schemas"]["UserRef"] | null;
             /** Format: date-time */
@@ -5356,9 +5349,9 @@ export interface components {
         };
         /**
          * @description A full replacement. Every boolean defaults to **false** when omitted — an absent switch
-         *     is "off", which is both §6g's default and the safe reading, and for the two gating
-         *     switches it is the only safe reading, since a dropped field that turned a gate ON could
-         *     stop a release. `requiredPeerReviews` and `editAfterApproval` are **required**, because
+         *     is "off", which is both §6g's default and the safe reading, and for the gating switch it
+         *     is the only safe reading, since a dropped field that turned a gate ON could stop a
+         *     release. `requiredPeerReviews` and `editAfterApproval` are **required**, because
          *     0 and RETAIN are meaningful values a dropped field would silently assert.
          */
         ProjectSettingsUpdate: {
@@ -5374,8 +5367,6 @@ export interface components {
             editAfterApproval: components["schemas"]["EditAfterApproval"];
             /** @default false */
             requireApprovedCaseForRun: boolean;
-            /** @default false */
-            requireApprovedPlanToStart: boolean;
         };
         /** @enum {string} */
         LifecycleStatus: "DRAFT" | "IN_REVIEW" | "APPROVED" | "DEPRECATED";
@@ -5385,8 +5376,18 @@ export interface components {
         Priority: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
         /** @enum {string} */
         StepFormat: "STRUCTURED" | "GHERKIN";
-        /** @enum {string} */
-        StatusKind: "PASSED" | "FAILED" | "BLOCKED" | "SKIPPED" | "UNTESTED" | "RETEST";
+        /**
+         * @description The fixed aggregation class behind a project's own status names, so a report can roll up a
+         *     project that renamed "Blocked" to "Environment down" without knowing any of their names.
+         *
+         *     `WIP` joined the seeded defaults on 2026-08-05 (§97, M9): somebody is running this case
+         *     right now. It is **not final and not a pass**, like `RETEST`, so every rollup groups it
+         *     with `UNTESTED` as *still owed a verdict* — a case somebody picked up has no result, and
+         *     counting it otherwise would move a pass rate on the strength of opening a screen. Existing
+         *     projects take it on by re-running `provision-company`, which is idempotent.
+         * @enum {string}
+         */
+        StatusKind: "PASSED" | "FAILED" | "BLOCKED" | "SKIPPED" | "UNTESTED" | "RETEST" | "WIP";
         /**
          * @description Derived, never authored — self-heals when the cause is fixed (plan §6o).
          * @enum {string}
@@ -6136,7 +6137,7 @@ export interface components {
             key: string;
             name: string;
             /** @enum {string} */
-            status: "DRAFT" | "IN_REVIEW" | "APPROVED" | "ACTIVE" | "CLOSED";
+            status: "DRAFT" | "IN_REVIEW" | "APPROVED";
             milestoneName: string | null;
             /** Format: date */
             milestoneDate: string | null;
@@ -6263,26 +6264,7 @@ export interface components {
         };
         PlanStatusInput: {
             /** @enum {string} */
-            status: "DRAFT" | "IN_REVIEW" | "APPROVED" | "ACTIVE" | "CLOSED";
-            /**
-             * @description §6g's "documented lead override for the 2am release" (§82). Meaningful on exactly
-             *     one move — `DRAFT → ACTIVE` on a project with `requireApprovedPlanToStart` on —
-             *     and read-and-ignored on every other, so a client never has to hold a copy of which
-             *     edge the rule binds on.
-             *
-             *     **It nominates no permission and can never widen reach.** It is consulted only
-             *     where the gate would otherwise refuse, and only for a caller already holding
-             *     `plan:approve` — who could reach the same state by approving the plan first. A
-             *     caller who sets it without that key gets the same 409 as one who did not set it,
-             *     not a 403: they are authorized to make this request and simply not authorized to
-             *     ignore the project's policy.
-             *
-             *     **Explicit rather than automatic**, which is what §6g's word "documented" is for: a
-             *     lead silently exempted never learns their own project turned the policy on, and the
-             *     audit row records `approvalGateOverridden` only when the gate actually fired.
-             * @default false
-             */
-            overrideApprovalGate: boolean;
+            status: "DRAFT" | "IN_REVIEW" | "APPROVED";
         };
         /** @description Machine-evaluable so the plan page is a gate, not prose (plan §6p). */
         Criterion: {

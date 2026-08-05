@@ -608,52 +608,19 @@ class PlanUpdateEndpointTest extends IntegrationTestBase {
     }
 
     // =====================================================================
-    // The freeze
+    // The freeze — REMOVED with the CLOSED state (§97, M7)
     // =====================================================================
-
-    @Nested
-    @DisplayName("A closed plan is the record of a finished release, and does not change")
-    class Frozen {
-
-        @Test
-        @DisplayName("editing a CLOSED plan is refused with 409, naming the way out")
-        void aClosedPlanRefusesTheEdit() throws Exception {
-            UUID plan = closedPlan();
-
-            MvcResult refused = patch(LEAD, ACME, ACME_BANKING, plan, edit("Release 4.4"), null);
-
-            assertThat(refused.getResponse().getStatus()).isEqualTo(409);
-            assertThat(detailOf(refused))
-                    .as("the sentence names the act that unfreezes it, not the failure")
-                    .contains("Reopen");
-            assertThat(planColumn(plan, "name")).isEqualTo("Release 4.3");
-        }
-
-        /**
-         * §72's placement, checked rather than assumed: the refusal names a state, which is
-         * information about the plan, and a caller who may not edit plans at all has not earned it.
-         */
-        @Test
-        @DisplayName("a Viewer on a closed plan still gets 403 — the freeze is AFTER the permission")
-        void thePermissionComesFirst() throws Exception {
-            UUID plan = closedPlan();
-
-            assertThat(patch(VIEWER, ACME, ACME_BANKING, plan, edit("Release 4.4"), null)
-                    .getResponse().getStatus()).isEqualTo(403);
-        }
-
-        @Test
-        @DisplayName("and reopening it makes the plan editable again")
-        void reopeningUnfreezesIt() throws Exception {
-            UUID plan = closedPlan();
-
-            setStatus(LEAD, ACME_BANKING, plan, "ACTIVE");
-
-            assertThat(patch(LEAD, ACME, ACME_BANKING, plan, edit("Release 4.4"), null)
-                    .getResponse().getStatus()).isEqualTo(200);
-            assertThat(planColumn(plan, "name")).isEqualTo("Release 4.4");
-        }
-    }
+    //
+    // A `Frozen` nested class of three tests lived here: a CLOSED plan refusing the edit with a
+    // sentence naming the way out, a Viewer on one still getting 403 (§72's placement — the refusal
+    // names a state, and a caller who may not edit plans at all has not earned that information),
+    // and reopening making it editable again.
+    //
+    // §97 removed CLOSED, so no plan is frozen against editing. The concern the freeze answered —
+    // a sign-off coming to cover criteria nobody signed — is answered by §6g's edit-after-approval
+    // rule, which demotes an approved plan to DRAFT rather than refusing the save, and is asserted
+    // in this class's `EditAfterApproval` coverage. What is genuinely lost is the freeze on a plan
+    // whose runs are finished: under M7 such a plan stays APPROVED for ever and can be edited.
 
     // =====================================================================
     // Concurrency and validation
@@ -678,25 +645,18 @@ class PlanUpdateEndpointTest extends IntegrationTestBase {
                     patch(LEAD, ACME, ACME_BANKING, plan, edit("Release 4.5"), lockVersion);
             assertThat(stale.getResponse().getStatus()).isEqualTo(409);
             assertThat(detailOf(stale))
-                    .as("a lost update says reload-and-reapply; a closed plan says reopen. The two "
-                            + "409s want opposite advice")
+                    .as("a lost update says reload-and-reapply — the one 409 this endpoint has "
+                            + "left, since §97 removed the closed-plan freeze that wanted the "
+                            + "opposite advice")
                     .contains("Reload");
             assertThat(planColumn(plan, "name")).isEqualTo("Release 4.4");
         }
 
-        @Test
-        @DisplayName("a closed plan refuses BEFORE If-Match — a stale header is fixable and this is not")
-        void theFreezeComesBeforeThePrecondition() throws Exception {
-            UUID plan = closedPlan();
-
-            MvcResult refused = patch(LEAD, ACME, ACME_BANKING, plan, edit("Release 4.4"), 999L);
-
-            assertThat(refused.getResponse().getStatus()).isEqualTo(409);
-            assertThat(detailOf(refused))
-                    .as("telling somebody to reload a plan they still may not save is the wrong "
-                            + "of the two sentences")
-                    .contains("Reopen");
-        }
+        /*
+         * 'a closed plan refuses BEFORE If-Match — a stale header is fixable and this is not' was
+         * the ordering assertion for the freeze. It goes with the freeze (§97, M7): there is one
+         * 409 on this endpoint now, so there is no ordering between two of them to pin.
+         */
 
         @Test
         @DisplayName("an If-Match that is not a number is a 400 on the header, not a 500")
@@ -821,16 +781,6 @@ class PlanUpdateEndpointTest extends IntegrationTestBase {
                         created.getResponse().getContentAsString())
                 .isEqualTo(201);
         return UUID.fromString(body(created).get("id").asText());
-    }
-
-    /** DRAFT → ACTIVE → CLOSED, through the endpoint, as a lead. */
-    private UUID closedPlan() throws Exception {
-        UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3", List.of(PAYMENTS), List.of());
-        setStatus(LEAD, ACME_BANKING, plan, "ACTIVE");
-        setStatus(LEAD, ACME_BANKING, plan, "CLOSED");
-        assertThat(planColumn(plan, "status")).isEqualTo("CLOSED");
-        clearAudit(ACME);
-        return plan;
     }
 
     private void setStatus(UUID userId, UUID projectId, UUID planId, String status)

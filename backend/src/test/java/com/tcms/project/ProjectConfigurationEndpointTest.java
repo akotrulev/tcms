@@ -333,11 +333,15 @@ class ProjectConfigurationEndpointTest extends IntegrationTestBase {
     class Statuses {
 
         @Test
-        @DisplayName("the six defaults come back in position order, plus what the project added")
+        @DisplayName("the seven defaults come back in position order, plus what the project added")
         void statusesAreSeededAndOrdered() throws Exception {
             assertThat(namesOf(statusesAs(LEAD, ACME, ACME_BANKING)))
                     .containsExactly("Passed", "Failed", "Blocked", "Skipped", "Retest",
-                            "Untested", "Passed with comment");
+                            // WIP joined the seed at position 6 in V32 (M9), so the fixture's own
+                            // custom status moved to 7: two rows sharing a position fall back to
+                            // the name, which would put the project's addition among the defaults
+                            // and make the ordering the test is about an accident of spelling.
+                            "Untested", "WIP", "Passed with comment");
         }
 
         @Test
@@ -399,7 +403,7 @@ class ProjectConfigurationEndpointTest extends IntegrationTestBase {
                     .doesNotContainAnyElementsOf(mobile);
             assertThat(namesOf(statusesAs(ADMIN, ACME, ACME_MOBILE)))
                     .as("the sibling really is populated — otherwise 'does not contain' is vacuous")
-                    .hasSize(6);
+                    .hasSize(7);
         }
 
         @Test
@@ -740,7 +744,7 @@ class ProjectConfigurationEndpointTest extends IntegrationTestBase {
                         INSERT INTO case_status
                             (id, company_id, project_id, name, kind, color, is_final,
                              counts_as_pass, position)
-                        VALUES (?, ?, ?, 'Passed with comment', 'PASSED', '#4d7c5f', true, false, 6)
+                        VALUES (?, ?, ?, 'Passed with comment', 'PASSED', '#4d7c5f', true, false, 7)
                         ON CONFLICT (id) DO NOTHING
                         """)) {
 

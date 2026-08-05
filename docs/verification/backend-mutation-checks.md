@@ -1819,3 +1819,24 @@ has no test file, and the phase that gives it one is phase 6.
 | **Must show** | **Nothing today.** Replacing `if ('scopeText' in body)` with `plan.scopeText = body.scopeText ?? plan.scopeText` reddens nothing, and it is §82's live defect one screen over: a save that omits a field it did not edit silently clears it, with a success message. The test belongs with the form, in phase 4. |
 | **Check** | the version does not move on prose |
 | **Must show** | Adding `plan.scopeText` to the mock's `snapshot()` must redden a phase-4 test asserting that editing the scope text writes no version. **Not written yet** — recorded here so the phase that writes the form knows which assertion is load-bearing. |
+
+## §97 phase 3a — the lifecycle reduction (M7) and the WIP status (M9)
+
+Built and unverified. Rows written per §65; **none of them run.** This phase is mostly *deletion*,
+which is the category where a mutation row is hardest to write and most worth having: the risk is
+not a rule computed wrongly, it is a rule that quietly stopped being computed.
+
+| | |
+|---|---|
+| **Check** | `V32`'s status backfill actually ran under RLS |
+| **Must show** | Removing the `FOR v_company … set_config('app.current_company', …)` loop around `UPDATE test_plan SET status='APPROVED'` must leave the migration **still green on a fresh Testcontainers database** — which is exactly the point, and why this row cannot be satisfied by the suite. A fresh container has no ACTIVE plan to move, so the bare UPDATE touches zero rows and reports success; the defect only appears on a database with data, i.e. the real deployment. **Verify by hand against a restored dump, or with a `DO` block that inserts an ACTIVE plan before the loop.** V7 paid for this shape once. |
+| **Check** | the three-way target constraint refuses a nonsense row |
+| **Must show** | `ck_plan_scope_target` is the one thing in `V32` that can silently admit a row that expands to no cases. Dropping the `<= 1` half must let a `plan_scope_item` naming both a suite and a tag insert; dropping the second half must let a row naming nothing and no section insert. **Phase 3b writes the assertion** — this row is here because the columns land in this phase's migration and the check does not. |
+| **Check** | `WIP` is grouped with the non-verdicts and not silently dropped |
+| **Must show** | `StatusKind` is consumed by four **statement** switches (`ExecutionViews`, `SuiteHistoryService`, `PlanStatisticsService` ×2), which Java does **not** require to be exhaustive — so adding the constant compiled clean and a missing arm would drop the count with no error anywhere. Removing `WIP` from any one of the four `case UNTESTED, RETEST, WIP ->` arms must redden a test that records a WIP execution and asserts `notRun`. **Not written — there is no such test today**, and that is this phase's honest gap: the seed writes the row, nothing exercises it. |
+| **Check** | `isVerdict` excludes WIP |
+| **Must show** | Dropping `&& kind != StatusKind.WIP` from `PlanStatisticsService.isVerdict` makes a case somebody merely picked up count as *covered*, so coverage rises when a tester opens a screen. Reddens nothing today, same gap as above. |
+| **Check** | the plan gate is gone rather than inverted |
+| **Must show** | `PlanLifecycleEndpointTest`'s whole `Gating` class was deleted with the edge. Confirm `RunCreateEndpointTest`'s `requireApprovedCaseForRun` coverage — including the override arm and the not-an-override arm — is **still green and still non-vacuous**, since it is now the only place §6g's gating vocabulary is asserted at all. |
+| **Check** | `project_settings` lost a column and not a behaviour |
+| **Must show** | The settings `PUT` is a whole-value replace: `ReviewSettingsPage.test.tsx`'s exact-object save assertion must redden if `requireApprovedCaseForRun` is dropped from the submit. It does (§82's row, still standing). What is **not** covered: nothing asserts the removed column is gone, and a deployment whose `V32` half-applied would have the entity and the column disagree — `ddl-auto: validate` does not fail on an extra column. |

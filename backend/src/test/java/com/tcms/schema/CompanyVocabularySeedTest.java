@@ -134,7 +134,7 @@ class CompanyVocabularySeedTest extends IntegrationTestBase {
     }
 
     @Test
-    @DisplayName("the six default execution statuses, with kind and counts_as_pass separated")
+    @DisplayName("the seven default execution statuses, with kind and counts_as_pass separated")
     void projectStatusesAreSeeded() throws SQLException {
         assertThat(rows(acme, """
                 SELECT name || ' ' || kind || ' final=' || is_final || ' pass=' || counts_as_pass
@@ -144,14 +144,17 @@ class CompanyVocabularySeedTest extends IntegrationTestBase {
                         `kind` is what lets reporting aggregate a project's CUSTOM statuses without \
                         knowing their names, and counts_as_pass is separate from it because a project \
                         may add "Passed with comment" — which is PASSED-kind and still needs its own \
-                        pass semantics. Retest and Untested are the two non-final ones.""")
+                        pass semantics. Retest, Untested and WIP (V32, M9) are the three non-final \
+                        ones, and WIP is last on purpose: it is the newest seeded value, so its \
+                        position must not disturb the six a project already has.""")
                 .containsExactly(
                         "Passed PASSED final=true pass=true",
                         "Failed FAILED final=true pass=false",
                         "Blocked BLOCKED final=true pass=false",
                         "Skipped SKIPPED final=true pass=false",
                         "Retest RETEST final=false pass=false",
-                        "Untested UNTESTED final=false pass=false");
+                        "Untested UNTESTED final=false pass=false",
+                        "WIP WIP final=false pass=false");
     }
 
     @Test

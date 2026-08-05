@@ -90,19 +90,6 @@ public class TestPlan {
     @Column(name = "current_version_no", nullable = false)
     private int currentVersionNo;
 
-    /**
-     * When the plan was closed — <strong>mapped for the first time in §73</strong>, because until
-     * this slice nothing could put a plan into {@code CLOSED} and a column no code can reach is one
-     * an entity has no business declaring.
-     *
-     * <p>Derived from the status in both directions by {@link #applyStatus}, for the reason
-     * {@code TestRun.completedAt} gives: a plan that was closed, reopened and is being executed
-     * against while carrying a closing timestamp is a row that contradicts itself, and every
-     * "how long was this release under test" question ever asked will read this column.
-     */
-    @Column(name = "closed_at")
-    private java.time.Instant closedAt;
-
     @Column(name = "deleted_at")
     private java.time.Instant deletedAt;
 
@@ -157,9 +144,9 @@ public class TestPlan {
     /**
      * A new plan, {@code DRAFT} at v1.
      *
-     * <p><strong>Not {@code ACTIVE}.</strong> The status ladder is DRAFT → IN_REVIEW → APPROVED →
-     * ACTIVE → CLOSED and {@code plan:review} / {@code plan:approve} are separate permissions held
-     * by fewer roles (roles spec §A4). A create that landed at ACTIVE would let a Test Engineer
+     * <p><strong>Not {@code APPROVED}.</strong> The status ladder is DRAFT → IN_REVIEW → APPROVED
+     * (V32, M7) and {@code plan:review} / {@code plan:approve} are separate permissions held by
+     * fewer roles (roles spec §A4). A create that landed past DRAFT would let a Test Engineer
      * grant their own plan the approval the catalogue says they may not — the same argument
      * {@code repository.TestCase.applyEdit} makes for leaving {@code lifecycleStatus} off an edit,
      * and {@code TestPlanInput} agrees by having no status field.
@@ -209,15 +196,16 @@ public class TestPlan {
      * of the transition table inside the entity is a second answer to "may this happen", and the two
      * are consulted in different orders by the callers that exist a year from now.
      *
-     * <p><strong>{@code closedAt} is derived from the target, in both directions</strong>, so
-     * reopening clears it. {@code currentVersionNo} is deliberately <em>not</em> bumped: §6j defines
+     * <p>~~{@code closedAt} is derived from the target, in both directions, so reopening clears
+     * it.~~ → the column went with {@code CLOSED} in {@code V32} (M7); when a release ended is
+     * answered by its runs and by {@code audit_event}. {@code currentVersionNo} is deliberately
+     * <em>not</em> bumped: §6j defines
      * a plan version as its scope — suites, cases, milestone, criteria — and a status change alters
      * none of them. Recording one here would fill the history with rows whose snapshots are
      * identical, which is exactly what {@code SuiteVersions} refuses for a rename.
      */
     void applyStatus(PlanStatus target, UUID actorId, java.time.Instant now) {
         status = target;
-        closedAt = target == PlanStatus.CLOSED ? now : null;
         updatedAt = now;
         updatedBy = actorId;
     }
@@ -341,10 +329,6 @@ public class TestPlan {
 
     int getCurrentVersionNo() {
         return currentVersionNo;
-    }
-
-    java.time.Instant getClosedAt() {
-        return closedAt;
     }
 
     java.time.Instant getDeletedAt() {

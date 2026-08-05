@@ -27,11 +27,15 @@ import org.springframework.transaction.annotation.Transactional;
  * §69's live-children shape before it: <strong>409 with the count</strong>, so the sentence names
  * the thing standing in the way rather than reporting a failure.
  *
- * <p>The way out is not to force the delete. It is {@link PlanLifecycle}, whose {@code CLOSED} state
- * exists for exactly this plan and is reachable only from {@code ACTIVE}. <strong>The two acts
- * partition the space</strong>: delete a plan nobody executed, close one somebody did. That is why
- * neither needs to argue about the other's edge cases, and why the refusal below can name Close as
- * the alternative honestly rather than as consolation.
+ * <p>~~The way out is not to force the delete. It is {@link PlanLifecycle}, whose {@code CLOSED}
+ * state exists for exactly this plan and is reachable only from {@code ACTIVE}. <strong>The two
+ * acts partition the space</strong>: delete a plan nobody executed, close one somebody did.~~
+ *
+ * <p>→ <strong>superseded 2026-08-05 (M7).</strong> There is no {@code CLOSED}, so the partition
+ * has one half: delete stays refused while a run names the plan, and such a plan has <em>no</em>
+ * terminal state — it stays {@code APPROVED} for ever. That is correct under M7, where a plan is an
+ * outline and its execution state lives on its runs, and it is why the refusal below can no longer
+ * name an alternative act. It names the runs instead, which is the thing actually in the way.
  *
  * <h2>Soft, and nothing cascades</h2>
  *
@@ -129,7 +133,9 @@ public class PlanDeleteService {
                     liveRuns + (liveRuns == 1 ? " test run has" : " test runs have")
                             + " been executed against this plan, so deleting it would leave "
                             + (liveRuns == 1 ? "that run" : "those runs")
-                            + " pointing at a plan nobody can open. Close the plan instead.");
+                            + " pointing at a plan nobody can open. Delete "
+                            + (liveRuns == 1 ? "that run" : "those runs")
+                            + " first if this plan really was never used.");
         }
 
         Instant now = clock.instant();

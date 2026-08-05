@@ -562,7 +562,7 @@ class ProjectCreateEndpointTest extends IntegrationTestBase {
     class Seeding {
 
         @Test
-        @DisplayName("its six execution statuses are there — the same ones provision-company seeds")
+        @DisplayName("its seven execution statuses are there — the same ones provision-company seeds")
         void statusesAreSeeded() throws Exception {
             UUID created = idOf(post(ADMIN, WEST, body("PAY", "Payments Platform", null)));
 
@@ -571,7 +571,8 @@ class ProjectCreateEndpointTest extends IntegrationTestBase {
                     .forEach(status -> names.add(status.get("name").asText()));
 
             assertThat(names)
-                    .containsExactly("Passed", "Failed", "Blocked", "Skipped", "Retest", "Untested");
+                    .containsExactly("Passed", "Failed", "Blocked", "Skipped", "Retest",
+                            "Untested", "WIP");
         }
 
         @Test

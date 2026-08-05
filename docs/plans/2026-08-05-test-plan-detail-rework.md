@@ -5,7 +5,9 @@
 out of it. **Revised 2026-08-05 (second pass)** after the user restated what a test plan *is* — see
 §1a. That restatement retires three of the five original decisions; they are struck through in place
 rather than deleted, per the working agreement.
-**Status:** phases 1–2 shipped (the contract, both halves). Phases 3+ **re-planned, not started**.
+**Status:** phases 1–2 shipped (the contract, both halves). **Phase 3 split in three** — 3a (M7 + M9
++ `V32`) shipped; 3b (scope prose, sections, the tag arm, the tags endpoint) and 3c (the plan
+document's link/unlink, the template deleted) next. Phases 4–7 not started.
 
 ---
 
@@ -277,7 +279,12 @@ That is the second-order benefit of following TestNG here, and it is worth namin
    No new table, so **no new RLS policy**: the count stays at 61.
 3. **Backend**: `PlanLifecycle` and `PlanStatusService` reduced to `DRAFT → IN_REVIEW → APPROVED`,
    with §82's `requireApprovedPlanToStart` and `PlanDeleteService`'s close/delete partition retired
-   and their reasoning recorded rather than deleted (M7); the plan `PATCH` accepts both texts and
+   and their reasoning recorded rather than deleted (M7) — **shipped in 3a, and it took more than
+   the plan listed**: the reduction also removes `PlanStatusInput.overrideApprovalGate`, the
+   `project_settings.require_approved_plan_to_start` column and its switch on the settings screen
+   (a toggle whose rule no longer exists saves and does nothing), the closed-plan freeze on
+   `PATCH /plans/{planId}`, and three audit verbs. The contract's `status` enum had to narrow in
+   the same commit, which the plan's contract list did not name; the plan `PATCH` accepts both texts and
    sectioned scope items; **`CaseFacts.casesInPlanScope`
    extended with the tag arm and grouped by section** — the existing method, not a new one; the
    tags-in-use query; `PlanDocumentTemplate` deleted with its `POST`; the link/unlink service and
@@ -322,7 +329,9 @@ none of them.
 |---|---|---|
 | 1 | ✅ **shipped** (`eb548d2`) — contract: `PUT`/`DELETE` plan document | `npm run build` |
 | 2 | ✅ **shipped** — contract: scope texts, `PlanSection`, the tags endpoint, the template `POST` retired; `gen:api`; the mock moved with it (§88's rule) and `planScopeCaseIds` now unions every arm | `npm run build` + lint + `test:run` |
-| 3 | Migration `V32` + backend: scope texts, sectioned items, both add-time expansions, tags query, link/unlink service, template deleted | `./gradlew build` |
+| 3a | ✅ **shipped** — `V32` in full (scope texts, `section_name`/`ordinal`/`tag`, the widened CHECK, M7's status reduction and `closed_at` drop, M9's `WIP` seed) **plus the whole M7 backend reduction**: three plan states, §82's plan gate and its setting and request field retired, the closed-plan freeze gone, `PlanDeleteService`'s partition gone. Contract and frontend moved with the enum in the same commit, because a status the client still offers is a 400 nobody can act on | `./gradlew build` + both frontend gates |
+| 3b | Backend: scope texts and sectioned items on the plan `PATCH`, `CaseFacts` extended with the tag arm, the tags-in-use query and its endpoint, `PlanSection.caseCount`, the widened-CHECK assertion | `./gradlew build` |
+| 3c | Backend: the plan document's link/unlink service and its three refusals, `PlanDocumentTemplate` deleted with its `POST` | `./gradlew build` |
 | 4 | Frontend — the form spine: state above tabs, one Save, ordered writes, partial-failure reporting, dirty banner, `useUnsavedWork` | both |
 | 5 | Frontend — the seven tabs: Plan (replacing `PlanEditDialog`), business requirements, artefacts, the two texts | both |
 | 6 | Frontend — the Test cases tab: sections, four fill mechanisms, auto-append, deferred creation | both |

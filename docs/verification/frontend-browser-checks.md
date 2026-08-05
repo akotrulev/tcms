@@ -1032,3 +1032,17 @@ only be seen from the *other* side of the screen, which is what makes them worth
 | 89 | Open **TP-1** and look at the plan's case count against the sections in its fixture. | The count is the **deduped union of every arm** — the unsectioned suite, the *Create an object* section's two named cases, and the *Navigation* section's suite reference and `smoke` tag. The sections' own counts **exceed** it, because a case reached two ways is one case. A count that equals the sum is the mock resolving each arm separately, which is the number no server will produce. |
 | 90 | With TP-1 open in one tab, tag any case `smoke` in another, then reload the plan. | The plan's count **goes up with nothing written to the plan**. That is D7′ — a section is a live selector — and this is the only way to observe it: from the case side. |
 | 91 | Edit a plan's name only (no scope change) and save; check the version number. | Unchanged. The scope prose and the name are content; the version pins what will be **run**. Then move a case into a section and save: the version **does** move. Two saves, because each passes the other's check. |
+
+## §97 phase 3a — the plan ladder is three states
+
+Deferred per §65. **None of these were run.**
+
+| # | Drive | Expect |
+|---|---|---|
+| 92 | Open a plan on `/projects/:id/plans/:planId` as a Test Lead. | Three states only. A **draft** offers *Submit for review* and nothing else; **in review** offers *Approve plan* and *Return to draft*; **approved** offers *Return to draft*. No *Start plan*, no *Close plan*, no *Reopen plan* anywhere. |
+| 93 | On an approved plan, press **Edit**. | The dialog opens. It used to be disabled on a closed plan with a "Reopen the plan…" tooltip; there is no closed plan and no tooltip. The plan is editable. |
+| 94 | As a Test **Engineer** (holds `plan:edit`, not `plan:approve`), open an approved plan. | *Return to draft* is **disabled with the permission tooltip**, never hidden (§31) — the edge rule, from the only side that still has two answers. |
+| 95 | Open **Project settings → Approval required before work starts**. | **One** switch: *Only approved test cases can go into a run*. The plan switch is gone, not disabled. Saving with the case switch toggled leaves every other setting alone. |
+| 96 | On the plan list, check the order. | Drafts first, then in-review, then approved — the rank changed with the states, and a list that reshuffles between loads is the failure this ordering exists to prevent. |
+| 97 | **Live mode only.** Re-run `provision-company` against an existing company, then open a project's status vocabulary. | A seventh status, **WIP**, blue, not final, not counting as a pass. Existing projects do **not** get it from the migration — that is M9's decision, and this is the check that the documented top-up path actually works. |
+| 98 | **Live mode only.** Record a WIP result on a case in a run, then open the plan's Progress tab. | The case counts as **not run**, not as a verdict, and coverage does not move. Mock mode cannot show this: the mock's fixtures carry no WIP status. |

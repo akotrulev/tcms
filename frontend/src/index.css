@@ -36,6 +36,9 @@
   --color-skipped: #6b7280;
   --color-untested: #9ca3af;
   --color-retest: #7c5cbf;
+  /* §97/M9. Matches the colour V32's seed writes into case_status.color — status colour is
+     load-bearing data in a TCMS and must not be invented twice. */
+  --color-wip: #2563eb;
 
   /* --- semantic feedback (distinct from status-of-a-test) --- */
   --color-success: #2e7d5b;
@@ -113,6 +116,7 @@
   --color-skipped: #8b94a3;
   --color-untested: #6b7280;
   --color-retest: #a58ad6;
+  --color-wip: #6ba0f0;
 
   --color-success: #5aab84;
   --color-warning: #d9a441;

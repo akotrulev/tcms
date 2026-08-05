@@ -20,5 +20,14 @@ public enum StatusKind {
     BLOCKED,
     SKIPPED,
     UNTESTED,
-    RETEST
+    RETEST,
+
+    /**
+     * Somebody is running this case right now — seeded as a seventh default in {@code V32} (M9),
+     * matching Zephyr. Not final and not a pass, like {@link #RETEST}, so every reporting rollup
+     * groups it with {@link #UNTESTED} as <em>still owed a verdict</em>: a case somebody has picked
+     * up has no result, and counting it as anything else would move a pass rate on the strength of
+     * a tester opening a screen.
+     */
+    WIP
 }

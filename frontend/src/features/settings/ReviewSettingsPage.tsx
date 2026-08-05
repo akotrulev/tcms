@@ -137,7 +137,7 @@ function ReviewSettingsForm({
   const reviewOn =
     draft.reviewEnabledCase || draft.reviewEnabledSuite || draft.reviewEnabledPlan;
 
-  const gatingOn = draft.requireApprovedCaseForRun || draft.requireApprovedPlanToStart;
+  const gatingOn = draft.requireApprovedCaseForRun;
 
   return (
     <Stack sx={{ gap: 3 }} component="form" data-testid="ReviewSettings.Form"
@@ -160,7 +160,6 @@ function ReviewSettingsForm({
             authorMayApproveOwnWork: draft.authorMayApproveOwnWork,
             editAfterApproval: draft.editAfterApproval,
             requireApprovedCaseForRun: draft.requireApprovedCaseForRun,
-            requireApprovedPlanToStart: draft.requireApprovedPlanToStart,
           });
         }
       }}
@@ -319,9 +318,9 @@ function ReviewSettingsForm({
       */}
       <Panel title="Approval required before work starts" testId="ReviewSettings.Gating">
         <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
-          These apply whether or not review is switched on above — they read the Draft / In review /
-          Approved status, not the review process. A test lead can override either one when a
-          release cannot wait.
+          This applies whether or not review is switched on above — it reads the Draft / In review /
+          Approved status, not the review process. A test lead can override it when a release cannot
+          wait.
         </Typography>
 
         <Stack>
@@ -332,11 +331,9 @@ function ReviewSettingsForm({
                 'Only approved test cases can go into a run',
                 'A run is refused if anything in it is not approved — including cases pulled in through a plan’s scope.',
               ],
-              [
-                'requireApprovedPlanToStart',
-                'Only approved plans can be started',
-                'A draft plan cannot be started. Reopening a closed plan is unaffected.',
-              ],
+              // 'requireApprovedPlanToStart' was the second row here. §97 (M7) removed the plan
+              // states its rule bound on, so the setting is gone from the contract rather than left
+              // as a switch that saves and does nothing.
             ] as const
           ).map(([field, label, help]) => (
             <FormControlLabel

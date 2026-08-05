@@ -2,7 +2,6 @@ package com.tcms.execution;
 
 import com.tcms.project.GateResult;
 import com.tcms.project.ProjectService;
-import com.tcms.project.ProjectSettingsService;
 import com.tcms.project.ReviewService;
 import com.tcms.project.ReviewSubjectType;
 import com.tcms.tenancy.AuditEvent;
@@ -57,18 +56,17 @@ import org.springframework.transaction.annotation.Transactional;
  * than a delta against something the client read, so there is no lost update to protect. Two leads
  * both pressing Approve want the same outcome and get it.
  *
- * <h2>§6g's gating rule, added in §82 — and this class's own header predicted it</h2>
+ * <h2>§6g's gating rule was here and is gone (M7)</h2>
  *
- * <p>{@link PlanLifecycle}'s header says {@code DRAFT → ACTIVE} must be legal <em>"because review is
- * optional … and the per-project setting does not exist yet"</em>. It exists now (§77's row, §82's
- * two columns), so a project may close that edge: {@code requireApprovedPlanToStart} refuses
- * starting a plan nobody signed off.
+ * <p>~~A project may close the {@code DRAFT → ACTIVE} edge: {@code requireApprovedPlanToStart}
+ * refuses starting a plan nobody signed off, overridable with {@code plan:approve}.~~
  *
- * <p>It binds on <strong>that one edge</strong> and not on the target — the argument, including why
- * a target-keyed reading would make every closed plan on a gated project permanently un-reopenable,
- * is on {@link PlanLifecycle#startsWithoutApproval}. The override is {@code plan:approve}, which is
- * <em>derived</em> rather than chosen: its holder can start this plan today by approving it first,
- * so the override widens nothing and changes only what the record says afterwards.
+ * <p>→ <strong>superseded 2026-08-05.</strong> The rule bound on that one edge and §97 removed the
+ * edge with the {@code ACTIVE} state. {@link PlanLifecycle}'s header keeps §82's finding — the rule
+ * was an edge and not a target — because it cost a slice to discover and is moot rather than wrong.
+ * §6g's <em>other</em> gating rule, {@code requireApprovedCaseForRun}, is untouched and lives in
+ * {@link RunCreateService}: it binds on the resolved case set at run-create time, which is where a
+ * plan whose sections re-resolve (D7′) still meets an approval check.
  */
 @Service
 public class PlanStatusService {
@@ -76,7 +74,6 @@ public class PlanStatusService {
     private static final String AUDIT_TARGET = "test_plan";
 
     private final ProjectService projects;
-    private final ProjectSettingsService settings;
     private final TestPlanRepository plans;
     private final PlanService views;
     private final ReviewService reviews;
@@ -86,7 +83,6 @@ public class PlanStatusService {
     @SuppressWarnings("checkstyle:ParameterNumber")
     public PlanStatusService(
             ProjectService projects,
-            ProjectSettingsService settings,
             TestPlanRepository plans,
             PlanService views,
             ReviewService reviews,
@@ -94,7 +90,6 @@ public class PlanStatusService {
             Clock clock) {
 
         this.projects = projects;
-        this.settings = settings;
         this.plans = plans;
         this.views = views;
         this.reviews = reviews;
@@ -138,12 +133,7 @@ public class PlanStatusService {
                         requested == null
                                 ? PlanLifecycle.EDIT_PLAN
                                 : PlanLifecycle.permissionFor(plan.getStatus(), requested)),
-                (project, plan) -> apply(
-                        userId,
-                        project.getId(),
-                        plan,
-                        requested,
-                        request != null && Boolean.TRUE.equals(request.overrideApprovalGate())));
+                (project, plan) -> apply(userId, project.getId(), plan, requested));
 
         return switch (gated) {
             case GateResult.Unreachable<Outcome> ignored -> new Outcome.NotFound();
@@ -152,16 +142,11 @@ public class PlanStatusService {
         };
     }
 
-    private Outcome apply(
-            UUID userId,
-            UUID projectId,
-            TestPlan plan,
-            PlanStatus requested,
-            boolean overrideRequested) {
+    private Outcome apply(UUID userId, UUID projectId, TestPlan plan, PlanStatus requested) {
 
         if (requested == null) {
             return new Outcome.Invalid(Map.of("status", List.of(
-                    "Choose a status: DRAFT, IN_REVIEW, APPROVED, ACTIVE or CLOSED.")));
+                    "Choose a status: DRAFT, IN_REVIEW or APPROVED.")));
         }
 
         return switch (PlanLifecycle.decide(plan.getStatus(), requested)) {
@@ -169,31 +154,25 @@ public class PlanStatusService {
             // 200 with the plan and nothing written — no timestamp re-stamped, no audit row. See
             // Decision.Unchanged: a repeated click must not bury the change that happened.
             case PlanLifecycle.Decision.Unchanged ignored -> new Outcome.Updated(views.viewOf(plan));
-            case PlanLifecycle.Decision.Move move ->
-                    moving(userId, projectId, plan, move.target(), overrideRequested);
+            case PlanLifecycle.Decision.Move move -> moving(userId, projectId, plan, move.target());
         };
     }
 
     /**
-     * The two policy questions between "the ladder allows this move" and anything being written.
+     * The one policy question between "the ladder allows this move" and anything being written.
      *
-     * <p>Both refuse with a 409 and they are <strong>disjoint by construction</strong>: §6g's review
-     * policy binds only on a move to {@code APPROVED} ({@code ReviewService#refuses} returns empty
-     * for every other standing) and §6g's gating rule binds only on {@code DRAFT → ACTIVE}. So the
-     * order between them decides nothing today — it is written review-first because that is the one
-     * §77 established, and because a target that ever became subject to both would be a plan being
-     * approved and started in one move, which the ladder does not have.
+     * <p>§6g's review policy binds only on a move to {@code APPROVED} — {@code ReviewService#refuses}
+     * returns empty for every other standing.
+     *
+     * <p>~~It is one of two, disjoint by construction from §6g's gating rule, which binds only on
+     * {@code DRAFT → ACTIVE}.~~ → the gating rule went with that edge in M7, so there is one policy
+     * here now and no ordering question at all.
      *
      * <p>Placement is {@code SuiteStatusService}'s and its reason: <em>after</em> the ladder has
      * agreed the move exists, so a caller asking for an impossible transition is told that rather
      * than told about a policy that would not have applied, and <em>before</em> anything is written.
      */
-    private Outcome moving(
-            UUID userId,
-            UUID projectId,
-            TestPlan plan,
-            PlanStatus target,
-            boolean overrideRequested) {
+    private Outcome moving(UUID userId, UUID projectId, TestPlan plan, PlanStatus target) {
 
         Optional<String> reviewPolicy = reviews.refuses(
                 projectId,
@@ -204,44 +183,10 @@ public class PlanStatusService {
         if (reviewPolicy.isPresent()) {
             return new Outcome.Refused(reviewPolicy.get());
         }
-
-        ApprovalGating.Verdict gate = gate(userId, projectId, plan, target, overrideRequested);
-        if (gate.refusal() != null) {
-            return new Outcome.Refused(gate.refusal());
-        }
-        return move(userId, projectId, plan, target, gate.overridden());
+        return move(userId, projectId, plan, target);
     }
 
-    /**
-     * §6g's gating rule for starting a plan (§82) — the edge is {@link
-     * PlanLifecycle#startsWithoutApproval}'s and the answer is {@link ApprovalGating.Verdict}'s.
-     *
-     * <p>The edge is asked about <strong>before</strong> the setting, which is the opposite order
-     * from {@code RunCreateService} and correct in both places: there, the cheap question is the
-     * setting and the expensive one is a query over up to four hundred cases; here the edge is two
-     * enum comparisons and the setting is a read, so the four transitions out of five that the rule
-     * cannot touch cost nothing at all.
-     */
-    private ApprovalGating.Verdict gate(
-            UUID userId,
-            UUID projectId,
-            TestPlan plan,
-            PlanStatus target,
-            boolean overrideRequested) {
-
-        if (!PlanLifecycle.startsWithoutApproval(plan.getStatus(), target)
-                || !settings.effective(projectId).requireApprovedPlanToStart()) {
-
-            return ApprovalGating.Verdict.PROCEED;
-        }
-        return ApprovalGating.Verdict.fired(
-                overrideRequested
-                        && projects.holds(userId, projectId, PlanLifecycle.APPROVE_PLAN),
-                PlanLifecycle.APPROVAL_REQUIRED_MESSAGE);
-    }
-
-    private Outcome move(
-            UUID userId, UUID projectId, TestPlan plan, PlanStatus target, boolean overridden) {
+    private Outcome move(UUID userId, UUID projectId, TestPlan plan, PlanStatus target) {
         Instant now = clock.instant();
         PlanStatus previous = plan.getStatus();
 
@@ -264,22 +209,21 @@ public class PlanStatusService {
         auditEvents.save(AuditEvent.record(
                 projectId,
                 userId,
-                action(previous, target),
+                action(target),
                 AUDIT_TARGET,
                 List.of(plan.getId()),
-                // Both ends of the move. "plan.closed" alone does not say which state it replaced,
+                // Both ends of the move. "plan.approved" alone does not say which state it replaced,
                 // and a plan that was approved, returned to draft and approved again is three events
                 // whose order is only readable if each carries where it came from — RunStatusService's
                 // argument, and ExecutionService's before it.
+                //
+                // The rows M7 stopped writing — plan.started, plan.reopened, plan.closed — are still
+                // in this table on every deployment that ran them, and they are now the ONLY record
+                // of which releases were executed and when they ended: V32 dropped the column that
+                // said so. A reader of this trail must not assume the vocabulary was always three.
                 "{\"key\":" + AuditEvent.jsonString(plan.getKey())
                         + ",\"from\":" + AuditEvent.jsonString(previous.name())
                         + ",\"to\":" + AuditEvent.jsonString(target.name())
-                        // §6g's "documented" override, written only when the gate actually fired —
-                        // RunCreateService's field and its reason. Not a distinct verb: the act is
-                        // still plan.started, and the two ends of the move are already on the row,
-                        // so a reader asking "which releases were started unapproved" filters on
-                        // this key rather than learning a sixth verb.
-                        + (overridden ? ",\"approvalGateOverridden\":true" : "")
                         + "}",
                 now));
 
@@ -287,22 +231,21 @@ public class PlanStatusService {
     }
 
     /**
-     * The audit action, by where the plan landed — and by where it came from for the one target two
-     * different acts reach.
+     * The audit action, by where the plan landed.
      *
      * <p>Distinct verbs rather than one {@code plan.status_changed}, for {@link RunStatusService}'s
      * reason: plan §7's audit vocabulary lists the acts by name, and a reader asking "who signed off
      * on releases last quarter" should not have to parse a payload to exclude the withdrawals.
      *
-     * <p>{@code ACTIVE} is the target reached both by starting a plan and by reopening a closed one,
-     * and those are not the same act to anybody reading the trail — hence the one pair-sensitive arm.
+     * <p>~~{@code ACTIVE} is the target reached both by starting a plan and by reopening a closed
+     * one, and those are not the same act to anybody reading the trail — hence the one
+     * pair-sensitive arm.~~ → gone with M7, which is why this no longer needs {@code previous}. The
+     * three verbs it wrote are still in {@code audit_event} and are described in {@link #move}.
      */
-    private static String action(PlanStatus previous, PlanStatus target) {
+    private static String action(PlanStatus target) {
         return switch (target) {
             case IN_REVIEW -> "plan.submitted";
             case APPROVED -> "plan.approved";
-            case ACTIVE -> previous == PlanStatus.CLOSED ? "plan.reopened" : "plan.started";
-            case CLOSED -> "plan.closed";
             case DRAFT -> "plan.withdrawn";
         };
     }

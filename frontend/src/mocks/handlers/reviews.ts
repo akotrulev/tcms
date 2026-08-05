@@ -100,7 +100,6 @@ export const reviewHandlers = [
           // release. `saveProjectSettings` takes the whole value, so the compiler refuses a
           // handler that forgets one, which is how this omission was caught rather than shipped.
           requireApprovedCaseForRun: body.requireApprovedCaseForRun === true,
-          requireApprovedPlanToStart: body.requireApprovedPlanToStart === true,
         },
         meRef(),
       ),

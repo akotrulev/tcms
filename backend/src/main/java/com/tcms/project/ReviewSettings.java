@@ -33,10 +33,11 @@ package com.tcms.project;
  * @param editAfterApproval          what an edit to an approved artifact does
  * @param requireApprovedCaseForRun  §6g's gating rule for cases — every case a new run materialises
  *                                   must be {@code APPROVED}, on the resolved set and not merely on
- *                                   the explicitly named one
- * @param requireApprovedPlanToStart §6g's gating rule for plans — a plan is started from
- *                                   {@code APPROVED}, which binds on the {@code DRAFT → ACTIVE}
- *                                   edge alone and never on a reopen
+ *                                   the explicitly named one. <strong>The only one of §6g's two
+ *                                   gating rules left</strong>: ~~{@code requireApprovedPlanToStart}
+ *                                   — a plan is started from {@code APPROVED}, binding on the
+ *                                   {@code DRAFT → ACTIVE} edge alone~~ went with that edge in
+ *                                   {@code V32} (§97, M7)
  */
 public record ReviewSettings(
         boolean reviewEnabledCase,
@@ -45,8 +46,7 @@ public record ReviewSettings(
         int requiredPeerReviews,
         boolean authorMayApproveOwnWork,
         EditAfterApproval editAfterApproval,
-        boolean requireApprovedCaseForRun,
-        boolean requireApprovedPlanToStart) {
+        boolean requireApprovedCaseForRun) {
 
     /**
      * Whether §6g's workflow is switched on for one kind of artifact in this project.

@@ -229,13 +229,14 @@ class ReviewEndpointTest extends IntegrationTestBase {
             ProjectSettings row = projectSettings.findForProject(projectId)
                     .orElseGet(() -> ProjectSettings.initial(companyId, projectId, at));
             row.apply(
-                    // §6g's two GATING rules stay off here, and that is the fixture asserting
-                    // something: they are deliberately not governed by the review opt-in this
-                    // helper turns on (see ReviewSettings), so a helper that switched them on
-                    // alongside would hide exactly the coupling §82 refused to create.
+                    // §6g's GATING rule stays off here, and that is the fixture asserting
+                    // something: it is deliberately not governed by the review opt-in this
+                    // helper turns on (see ReviewSettings), so a helper that switched it on
+                    // alongside would hide exactly the coupling §82 refused to create. There were
+                    // two until §97 (M7) removed requireApprovedPlanToStart with its edge.
                     new ReviewSettings(
                             true, true, true, requiredPeers, authorMayApprove,
-                            EditAfterApproval.RETAIN, false, false),
+                            EditAfterApproval.RETAIN, false),
                     null,
                     at);
             projectSettings.saveAndFlush(row);
@@ -326,10 +327,12 @@ class ReviewEndpointTest extends IntegrationTestBase {
         void aMoveOutsideReviewWritesNothing() throws Exception {
             UUID plan = plan(LEAD, "Release 4.7");
 
-            // DRAFT → ACTIVE, the path a project that never turned review on takes (§6g: review is
-            // optional and off by default). A record here would mean every team that does not
+            // IN_REVIEW → DRAFT with no review ever opened. §97 (M7) removed DRAFT → ACTIVE, which
+            // was the move this test used to make — the path a project that never turned review on
+            // takes. The property is the same one: `ReviewService.moved` with a standing of
+            // OUTSIDE_REVIEW and no open record must write NOTHING, or every team that does not
             // review at all accumulates reviews nobody held.
-            setPlanStatus(LEAD, plan, "ACTIVE");
+            setPlanStatus(LEAD, plan, "DRAFT");
 
             assertThat(reviewsOf(LEAD, "PLAN", plan)).isEmpty();
         }

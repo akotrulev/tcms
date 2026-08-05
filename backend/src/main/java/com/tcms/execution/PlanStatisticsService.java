@@ -94,6 +94,10 @@ public class PlanStatisticsService {
             StatusKind.FAILED,
             StatusKind.BLOCKED,
             StatusKind.RETEST,
+            // WIP (V32, M9) ranks with the other non-verdicts and BELOW untested: a case somebody
+            // picked up and did not finish is at least as unresolved as one nobody touched, and
+            // ranking it above untested would let a run look better because a tester opened a case.
+            StatusKind.WIP,
             StatusKind.UNTESTED,
             StatusKind.SKIPPED,
             StatusKind.PASSED);
@@ -327,7 +331,9 @@ public class PlanStatisticsService {
 
     /** A verdict was reached — the predicate behind both coverage and the not-run list. */
     private static boolean isVerdict(StatusKind kind) {
-        return kind != StatusKind.UNTESTED && kind != StatusKind.RETEST;
+        return kind != StatusKind.UNTESTED
+                && kind != StatusKind.RETEST
+                && kind != StatusKind.WIP;
     }
 
     /**
@@ -391,7 +397,7 @@ public class PlanStatisticsService {
                 case FAILED -> failed++;
                 case BLOCKED -> blocked++;
                 case SKIPPED -> skipped++;
-                case UNTESTED, RETEST -> notRun++;
+                case UNTESTED, RETEST, WIP -> notRun++;
             }
         }
         return new ResultCountsView(

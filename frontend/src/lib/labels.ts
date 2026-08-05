@@ -126,6 +126,10 @@ export const statusLabels = {
   SKIPPED: 'Skipped',
   RETEST: 'Retest',
   UNTESTED: 'Untested',
+  // §97 (M9). "WIP" rather than "In progress": it is the name Zephyr uses, it is what the seed
+  // writes into `case_status.name`, and a label that disagreed with the row's own name would put
+  // two words for one status on two screens.
+  WIP: 'WIP',
 } as const satisfies Record<StatusKind, string>;
 
 /**
@@ -218,8 +222,6 @@ export const planStatusLabels = {
   DRAFT: 'Draft',
   IN_REVIEW: 'In review',
   APPROVED: 'Approved',
-  ACTIVE: 'Active',
-  CLOSED: 'Closed',
 } as const satisfies Record<PlanStatus, string>;
 
 /** Beside the labels, so a status cannot be worded in one place and coloured in another. */
@@ -227,12 +229,11 @@ export const planStatusColors = {
   DRAFT: 'var(--color-draft)',
   IN_REVIEW: 'var(--color-info)',
   APPROVED: 'var(--color-passed)',
-  ACTIVE: 'var(--color-passed)',
-  CLOSED: 'var(--color-skipped)',
 } as const satisfies Record<PlanStatus, string>;
 
-/** Whether the plan is over — the server's `PlanLifecycle.isClosed`, and the one copy of it here. */
-export const isPlanClosed = (status: PlanStatus) => status === 'CLOSED';
+// `isPlanClosed` lived here — the client's one copy of the server's `PlanLifecycle.isClosed`. It
+// went with the CLOSED state in §97 (M7): a plan is an outline, and whether its testing is over is
+// answered by its runs. Nothing freezes a plan against editing any more.
 
 /**
  * The review record's four states (plan §6g), in the reader's words.

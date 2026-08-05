@@ -8,25 +8,19 @@ package com.tcms.execution;
  * handler runs, with a body naming the Java type and its constants. Parsed in the service instead,
  * the same mistake is a field error the form can land on.
  *
- * @param status one of {@code DRAFT}, {@code IN_REVIEW}, {@code APPROVED}, {@code ACTIVE},
- *               {@code CLOSED} — an absolute target, not a verb. Which of them a given plan may
- *               move to, and what each move costs in permissions, is {@link PlanLifecycle}'s
- *               question and not the client's.
- * @param overrideApprovalGate §6g's <em>"documented lead override for the 2am release"</em> (§82),
- *                             and meaningful on exactly one of the five targets — the
- *                             {@code DRAFT → ACTIVE} edge, which is the only one the gating rule
- *                             refuses. On every other move it is read and ignored, which is honest
- *                             rather than sloppy: the alternative is a second endpoint whose only
- *                             difference from this one is a boolean, and a client that had to know
- *                             which of the two to call would be holding a copy of
- *                             {@link PlanLifecycle#startsWithoutApproval}.
+ * <h2>{@code overrideApprovalGate} was here and is gone (M7)</h2>
  *
- *                             <p>Like {@code TestRunInput}'s, it nominates no permission — it is
- *                             consulted only where §6g's rule would otherwise refuse, and only for
- *                             a caller already holding {@code plan:approve}, so it can neither
- *                             widen anybody's reach nor turn an acceptable request into a refused
- *                             one. Explicit rather than automatic, because a lead silently exempted
- *                             never discovers the policy their own project turned on.
+ * <p>~~§6g's <em>"documented lead override for the 2am release"</em> (§82), meaningful on exactly
+ * one of the five targets — the {@code DRAFT → ACTIVE} edge, which is the only one the gating rule
+ * refuses.~~ → <strong>superseded 2026-08-05.</strong> §97 removed {@code ACTIVE}, so the field's
+ * one meaningful target no longer exists and every remaining move would read and ignore it. A
+ * boolean that is always ignored is worse than an absent one: a client keeps sending it and the
+ * next reader has to prove it does nothing. §6g's override survives where its rule does, on
+ * {@code TestRunInput.overrideApprovalGate}.
+ *
+ * @param status one of {@code DRAFT}, {@code IN_REVIEW} or {@code APPROVED} — an absolute target,
+ *               not a verb. Which of them a given plan may move to, and what each move costs in
+ *               permissions, is {@link PlanLifecycle}'s question and not the client's.
  */
-public record PlanStatusRequest(String status, Boolean overrideApprovalGate) {
+public record PlanStatusRequest(String status) {
 }

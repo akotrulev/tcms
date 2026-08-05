@@ -2,8 +2,8 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-05 (§96 phases 5–6)
-**Baseline commit:** `097f7a7` (§96 phase 6) **+ §96 phase 7, the commit this line ships in** (its
+**Last verified:** 2026-08-05 (§97 phase 3a)
+**Baseline commit:** `31bd6a9` (§97 phase 2) **+ §97 phase 3a, the commit this line ships in** (its
 own SHA cannot be written into itself; trust the body over the header and re-grep what a later
 commit could have moved).
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
@@ -660,10 +660,27 @@ directly above the switcher) and the wordmark links there too.
   for the new `api.get` call site unattended. **0 mutations run inline** (policy); 19 browser rows
   queued (three live-only), 5 frontend mutation rows.
 
+- 2026-08-05 · REDUCE · **§97 phase 3a — the plan ladder is three states (M7), and a seventh status
+  exists (M9).** `PlanStatus` is `DRAFT | IN_REVIEW | APPROVED`: `planStatusLabels` and
+  `planStatusColors` lose two entries, **`isPlanClosed` is deleted** (its only consumer was the Edit
+  button's disabled state), `planMoves` drops *Start plan* / *Close plan* / *Reopen plan*, and
+  `PlanStats.OverrideGate` goes with the gate it retried — `useSetPlanStatus` takes `{status}`
+  alone. The `ReviewSettings.Gating` panel keeps **one** switch. `StatusKind` gains `WIP`, so
+  `statusLabels` and `StatusChip`'s `statusVar` gain an entry and `index.css` gains
+  `--color-wip` in both schemes, **matching the colour `V32`'s seed writes into `case_status.color`
+  rather than inventing a second one**. The mock's three ACTIVE/CLOSED plan fixtures become
+  `APPROVED`, which is `V32`'s own mapping; TP-4 and TP-5 still carry DRAFT and IN_REVIEW, so all
+  three states stay renderable. **`npm run build` found every site** — 30 type errors across 15
+  files, none of them a runtime surprise, which is what `satisfies Record<Union, string>` and the
+  un-cast `ProjectSettings` factory are for. Tests: two deleted with the affordances they covered
+  (`PlanEdit`'s closed-plan disable, `PlanLifecycle`'s four gating tests), the rest rewritten;
+  828 pass. **0 mutations run inline** (policy); 7 browser rows queued (89–95), two live-only.
+
 - 2026-08-04 · EXTEND · §6g's gating rules (§82) — the two approval gates get a settings panel and
-  two override affordances. New: the `ReviewSettings.Gating` panel + its warning,
+  two override affordances. ~~New: the `ReviewSettings.Gating` panel + its warning,
   `Runs.Create.OverrideGate`, `PlanStats.OverrideGate`, `SetPlanStatus` (the hook now takes
-  `{status, overrideApprovalGate}`), `overrideApprovalGate` on `TestRunInput`, both rules in the
+  `{status, overrideApprovalGate}`),~~ **the plan half of all of this was removed in §97 phase 3a
+  (M7); the run half stands.** New: `overrideApprovalGate` on `TestRunInput`, both rules in the
   mock (`handlers/runs.ts`, `handlers/plans.ts`) mirrored from the server including the
   resolved-set, refuse-the-whole-run, after-validation and not-ANDed-with-the-opt-in properties, and
   **`ReviewSettingsPage.test.tsx`, which did not exist** — §77 shipped that screen untested.

@@ -124,7 +124,7 @@ public class SuiteHistoryService {
                 case FAILED -> failed += count;
                 case BLOCKED -> blocked += count;
                 case SKIPPED -> skipped += count;
-                case UNTESTED, RETEST -> notRun += count;
+                case UNTESTED, RETEST, WIP -> notRun += count;
             }
             if (executedAt != null && (lastExecutedAt == null || executedAt.isAfter(lastExecutedAt))) {
                 lastExecutedAt = executedAt;

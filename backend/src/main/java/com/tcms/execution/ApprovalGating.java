@@ -5,9 +5,15 @@ package com.tcms.execution;
  *
  * <p>Plan §6g's mechanics end with one line: <em>"a project may require APPROVED status before a
  * case can be added to a run, or before a plan can be started. Powerful and genuinely obstructive —
- * must be an explicit choice, with a documented lead override for the 2am release."</em> That is two
- * rules over two aggregates, and this module holds both — {@link RunCreateService} for the case
- * rule, {@link PlanStatusService} for the plan rule.
+ * must be an explicit choice, with a documented lead override for the 2am release."</em> That was
+ * two rules over two aggregates and <strong>it is one since §97</strong>: {@link RunCreateService}
+ * holds the case rule, and the plan rule went with the {@code ACTIVE} state M7 removed — a plan
+ * cannot be "started" any more, so there is no edge for it to bind on ({@link PlanStatus}).
+ *
+ * <p>This class stays, with one caller, and that is deliberate rather than inertia. Its whole
+ * subject is <strong>what the answer means</strong> — see {@link Verdict} — and the two invariants
+ * below are the ones a second gating rule will get wrong when §99 adds tag-scoped runs. Collapsing
+ * it into {@code RunCreateService} would put them where only that service can read them.
  *
  * <h2>What is shared, and what deliberately is not</h2>
  *

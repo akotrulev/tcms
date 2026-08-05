@@ -27,7 +27,6 @@ public record ProjectSettingsView(
         boolean authorMayApproveOwnWork,
         EditAfterApproval editAfterApproval,
         boolean requireApprovedCaseForRun,
-        boolean requireApprovedPlanToStart,
         UserRefView updatedBy,
         Instant updatedAt) {
 
@@ -44,7 +43,6 @@ public record ProjectSettingsView(
                 settings.authorMayApproveOwnWork(),
                 settings.editAfterApproval(),
                 settings.requireApprovedCaseForRun(),
-                settings.requireApprovedPlanToStart(),
                 updatedBy,
                 updatedAt);
     }

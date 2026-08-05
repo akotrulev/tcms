@@ -30,6 +30,5 @@ public record ProjectSettingsRequest(
         Integer requiredPeerReviews,
         Boolean authorMayApproveOwnWork,
         String editAfterApproval,
-        Boolean requireApprovedCaseForRun,
-        Boolean requireApprovedPlanToStart) {
+        Boolean requireApprovedCaseForRun) {
 }

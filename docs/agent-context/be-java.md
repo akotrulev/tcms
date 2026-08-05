@@ -2,8 +2,8 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-05 (§96, all six phases)
-**Baseline commit:** `097f7a7` (§96 phase 6) **+ §96 phase 7, the commit this line ships in** (its
+**Last verified:** 2026-08-05 (§97 phase 3a)
+**Baseline commit:** `31bd6a9` (§97 phase 2) **+ §97 phase 3a, the commit this line ships in** (its
 own SHA cannot be written into itself; per `CLAUDE.md`, trust the body over the header and re-grep
 what a later commit could have moved).
 **Fingerprint files:** `backend/build.gradle.kts`, `backend/gradle/libs.versions.toml`, `backend/gradle/wrapper/gradle-wrapper.properties`
@@ -54,7 +54,9 @@ exist**, and the slice plan's decision E declines to create it for two storage p
 ## Seams to reuse
 
 - **A SUITE IS A RESOLVABLE COLLECTION SINCE §96 phase 1, AND A CASE MAY BE FILED NOWHERE.**
-  `V31__suite_membership.sql` (**head**, `V32` next free, **policy count 59 → 61**) creates
+  ~~`V31__suite_membership.sql` (**head**, `V32` next free)~~ → **`V32` is the head since §97 phase
+  3a; `V33` next free. Policy count stays 61** — `V32` adds no table. `V31` (**policy count 59 →
+  61**) creates
   `suite_case` (added individually) and `suite_tag_rule` (matched by tag, **unioned never
   intersected**), and relaxes `test_case.suite_id` to nullable — so membership is three arms:
   filed ∪ added ∪ tagged. `TestCase.suiteId`'s mapping lost its `nullable = false`.
@@ -470,23 +472,35 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   null `started_at` is unreachable through the API. **No `If-Match`** — the target state is
   absolute, so there is no stale-read-derived value to lose (`DocPageWriteService#setStatus`'s
   call). `updated_by` is mapped for the first time. `#confirmed`
-- **The PLAN has a LIFECYCLE since §73, and it is the only writer `test_plan.status` has ever had
-  besides the factory.** `PlanLifecycle` (pure, static — the transition table, `permissionFor`,
-  `isClosed`) + `PlanStatusService` + `PlanDeleteService` + `PUT /plans/{planId}/status` +
+- **THE PLAN LADDER IS THREE STATES SINCE §97 (M7): `DRAFT → IN_REVIEW → APPROVED`, and that is the
+  whole of it.** `PlanLifecycle` (pure, static — the transition table, `permissionFor`,
+  `standingOf`) + `PlanStatusService` + `PlanDeleteService` + `PUT /plans/{planId}/status` +
   `DELETE /plans/{planId}`. **The gate is decided by the EDGE, not the target**: `plan:approve`
-  grants the sign-off, ends the plan and **takes either back**, `plan:edit` carries it forward
-  through the states nobody signed off — a target-keyed rule lets a Test Engineer rescind a lead's
-  approval by asking for `DRAFT`, and reddens nothing else in the suite. Hence
+  grants the sign-off and **takes it back**, `plan:edit` carries the plan forward through the states
+  nobody signed off — a target-keyed rule lets a Test Engineer rescind a lead's approval by asking
+  for `DRAFT`, and reddens nothing else in the suite. Hence
   `ProjectService.writeGrantedOnTarget` (§69's seam, second consumer): the deciding fact is the
-  STORED status. **The ladder does not require approval** — §6g says review is optional and off by
-  default and that setting does not exist, so `DRAFT → ACTIVE` is legal; `APPROVED` is reachable only
-  from `IN_REVIEW` and `CLOSED` only from `ACTIVE`. **Delete and close partition the space**: the
-  delete refuses 409 + count while a live run names the plan (`findPlanKeys` is not filtered on
-  `deleted_at`, so nothing breaks loudly), and `CLOSED` is the answer for a plan that WAS executed.
-  `closed_at` and `updated_by` are mapped for the first time; `applyStatus` derives `closed_at` in
-  both directions and deliberately does **not** bump `currentVersionNo`. `plan:review` stays
+  STORED status. `APPROVED` is reachable only from `IN_REVIEW` (§6g's one gate) and
+  `APPROVED → IN_REVIEW` is refused — a withdrawn sign-off returns the plan to its author.
+  **The delete refuses 409 + count while a live run names the plan** (`findPlanKeys` is not filtered
+  on `deleted_at`, so nothing breaks loudly), and such a plan now has **no terminal state**: it
+  stays `APPROVED` for ever, because a plan is an outline and its execution state lives on its runs.
+  `applyStatus` deliberately does **not** bump `currentVersionNo`. `plan:review` stays
   unconsumed on purpose — §6g puts peer review inside `IN_REVIEW` without moving the item, like
   `case:review` and `suite:review`. `#confirmed`
+
+  **What §97 removed, because a reader will find the arguments elsewhere and think they still hold:**
+  ~~`ACTIVE`~~ and ~~`CLOSED`~~ (they described a plan being *run*, which `test_run` already does),
+  ~~`test_plan.closed_at`~~, ~~`PlanLifecycle.isClosed`~~ and the closed-plan freeze on
+  `PATCH /plans/{planId}`, ~~`PlanLifecycle.startsWithoutApproval`~~ and §82's whole plan gate with
+  its `project_settings.require_approved_plan_to_start` column and
+  ~~`PlanStatusInput.overrideApprovalGate`~~, ~~`PlanDeleteService`'s delete-or-close partition~~,
+  and the audit verbs ~~`plan.started`~~ / ~~`plan.reopened`~~ / ~~`plan.closed`~~ — which survive in
+  `audit_event` on any deployment that wrote them and are now the **only** record of which releases
+  were executed. `V32` maps every `ACTIVE`/`CLOSED` row to `APPROVED` **inside a per-company loop**,
+  because `test_plan` is under `FORCE ROW LEVEL SECURITY` and a bare `UPDATE` in a migration touches
+  zero rows and reports success (V7's shape). §6g's **case** gate, `requireApprovedCaseForRun`, is
+  untouched and still binds on the resolved set at run-create time. `#confirmed`
 - **The plan has an EDITOR since §74, and it is the first writer of `entry_criteria`,
   `exit_criteria` and `test_plan_version` alike.** `PlanUpdateService` + `PlanUpdateRequest` +
   `CriterionInput` + `PlanEdit.validateUpdate` + `PATCH /plans/{planId}`, gated on **`plan:edit`** at
@@ -503,10 +517,10 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   alone and `[]` clears (§68's `normalizeClassification` rule, now stated generally) — which is what
   keeps `TestPlan.create`'s *nobody has decided* apart from *deliberately none*. `PlanCriteria` owns
   the closed `METRICS` set and `isKnownOperator`, the latter **calling** `satisfies` rather than
-  listing the operators twice. **A CLOSED plan refuses the edit (409) and that is
-  `PlanLifecycle.isClosed`'s first consumer** — §73 wrote it and `TestPlan.applyStatus` compares the
-  enum inline — placed after the permission, before the `If-Match`, before validation (§72's order).
-  `#confirmed`
+  listing the operators twice. ~~A CLOSED plan refuses the edit (409), placed after the permission,
+  before the `If-Match`, before validation (§72's order).~~ → **gone with the state in §97**: no plan
+  is frozen against editing, and what protects a sign-off is §6g's edit-after-approval demotion.
+  This endpoint has **one** 409 left, the stale `If-Match`. `#confirmed`
 - **The REVIEW RECORD lives in `project`, and the placement is the design (§76).** `ReviewService` +
   `Review`/`ReviewParticipation` + `ReviewController` + `GET /projects/{id}/reviews?subjectType&subjectId`
   + `POST …/reviews/{id}/participations`. **A review's subject is an opaque triple** (`subject_type`,
@@ -668,16 +682,16 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   Uniqueness is **two partial indexes**, because a plain four-column UNIQUE enforces nothing —
   every team row has a NULL user and NULL ≠ NULL. Policy count **57 → 58**;
   `ix_review_assignment_assignee_user` is added **before its query**, for §6l's queue. `#confirmed`
-- **§6g's GATING RULES are the last part of the review workflow, and they live in `execution` (§82).**
-  `V26` adds `require_approved_case_for_run` / `require_approved_plan_to_start` to
-  `project_settings` (two columns, **no table — the policy count stays 58**), `ReviewSettings` gains
-  two components, and the two readers are `RunCreateService.gate` and `PlanStatusService.gate`.
-  **The plan rule binds on ONE EDGE, `DRAFT → ACTIVE`** — `PlanLifecycle.startsWithoutApproval` —
-  and the target-keyed reading is a live trap: `ACTIVE` is also reached from `APPROVED` (the rule
-  satisfied) and from `CLOSED` (**a reopen**), and refusing that makes every closed plan on a gated
-  project **permanently un-reopenable**, since `CLOSED` has no legal move back to `APPROVED`. §72's
-  `plan.reopened` / `plan.started` audit split had already defined *started* one slice before the
-  gate needed it. **The case rule binds on the RESOLVED set** (`edit.caseIds()`, after the plan's
+- **§6g's GATING RULE is the last part of the review workflow, it lives in `execution` (§82), and
+  since §97 there is ONE of it.** `V26` added `require_approved_case_for_run` /
+  ~~`require_approved_plan_to_start`~~ to `project_settings`; `V32` **drops the second column**, so
+  `ReviewSettings` has one gating component and the one reader is `RunCreateService.gate`.
+  ~~The plan rule binds on ONE EDGE, `DRAFT → ACTIVE` (`PlanLifecycle.startsWithoutApproval`), and
+  the target-keyed reading is a live trap: refusing a reopen makes every closed plan on a gated
+  project permanently un-reopenable.~~ → **moot rather than wrong since M7 removed the edge**, and
+  kept here because it cost a slice to find: *a rule about a transition binds on the edge, not on
+  the target*, and the naive reading passes every obvious test. **The case rule binds on the
+  RESOLVED set** (`edit.caseIds()`, after the plan's
   scope is expanded) or naming a plan is a bypass costing no permission and leaving no trace, and
   **the whole run is refused, never trimmed** (this class's own partial-materialisation argument).
   **Neither is ANDed with `reviewEnabledFor`** — §77's "off is narrow" applies: gating reads the
@@ -725,7 +739,8 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   diagram. Pure static: `decide(current, requested, noun)` → sealed `Decision`,
   `permissionFor(current, requested, Keys)` where `Keys` is a record so two adjacent key strings
   cannot be swapped unnoticed, and a written-out `rank`. **The plan's ladder is deliberately NOT
-  folded in** — `PlanStatus` has `ACTIVE`/`CLOSED`, an execution phase these four lack. Table:
+  folded in** — since §97 the two differ the other way round: `PlanStatus` has three values and
+  this one has `DEPRECATED`, which a plan does not. Table:
   `IN_REVIEW` only from `DRAFT`; `APPROVED` only from `IN_REVIEW`; `DRAFT` and `DEPRECATED` from
   anywhere (a folder that cannot be deleted must still be retirable, or ordinary use reaches a dead
   end); a `DEPRECATED` artifact returns only via `DRAFT`. **`permissionFor` is decided by the EDGE**:

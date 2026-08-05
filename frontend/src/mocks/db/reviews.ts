@@ -276,7 +276,6 @@ export function defaultProjectSettings(projectId: string): ProjectSettings {
     // which is a demo of the refusal rather than of the product. The state is reachable in one
     // click on the settings screen, which is where somebody exploring the feature will be.
     requireApprovedCaseForRun: false,
-    requireApprovedPlanToStart: false,
     updatedBy: null,
     updatedAt: null,
   };

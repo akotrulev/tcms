@@ -28,6 +28,7 @@ const statusVar: Record<StatusKind, string> = {
   SKIPPED: 'var(--color-skipped)',
   RETEST: 'var(--color-retest)',
   UNTESTED: 'var(--color-untested)',
+  WIP: 'var(--color-wip)',
 };
 
 const lifecycleVar: Record<LifecycleStatus, string> = {

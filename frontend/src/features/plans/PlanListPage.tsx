@@ -109,10 +109,12 @@ export function PlanListPage() {
 }
 
 function PlanTable({ rows, projectId }: { rows: TestPlan[]; projectId: string }) {
-  // Deterministic order with a unique tiebreaker: active plans first, then by milestone
-  // date, then by key — so the list never reshuffles between loads.
+  // Deterministic order with a unique tiebreaker: the plans still being written first, then by
+  // milestone date, then by key — so the list never reshuffles between loads. §97 (M7) removed
+  // ACTIVE, which used to lead: with three states, what a reader is looking for on this screen is
+  // the draft they were editing, and an approved plan is finished work.
   const sorted = [...rows].sort((a, b) => {
-    const rank = (plan: TestPlan) => (plan.status === 'ACTIVE' ? 0 : plan.status === 'DRAFT' ? 1 : 2);
+    const rank = (plan: TestPlan) => (plan.status === 'DRAFT' ? 0 : plan.status === 'IN_REVIEW' ? 1 : 2);
     return (
       rank(a) - rank(b) ||
       (b.milestoneDate ?? '').localeCompare(a.milestoneDate ?? '') ||

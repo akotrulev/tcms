@@ -35,35 +35,20 @@ import org.springframework.transaction.annotation.Transactional;
  *       was to delete the plan and make another one, which loses its key, its runs and its history.</li>
  * </ul>
  *
- * <h2>The refusal that is a decision: a closed plan does not change</h2>
+ * <h2>~~The refusal that is a decision: a closed plan does not change~~ — gone with M7</h2>
  *
- * <p>{@code CLOSED} says a release was executed and is over, and §6n pins a plan's numbers into the
- * evidence bundle when it closes. Editing the exit criteria of a closed plan therefore rewrites the
- * gate a sign-off was measured against, <em>after</em> the sign-off — so the record would show a
- * release passing criteria nobody applied to it. Refused with 409.
+ * <p>~~{@code CLOSED} says a release was executed and is over, and §6n pins a plan's numbers into
+ * the evidence bundle when it closes. Editing the exit criteria of a closed plan therefore rewrites
+ * the gate a sign-off was measured against, <em>after</em> the sign-off. Refused with 409, and the
+ * way out is reopening, which costs {@code plan:approve}.~~
  *
- * <p>This is {@code RunLifecycle}'s frozen-run rule (§72) at the aggregate above, and it gives
- * {@link PlanLifecycle#isClosed} its <strong>first consumer</strong>: §73 wrote the method and
- * nothing called it, because {@code TestPlan.applyStatus} compares the enum inline.
- *
- * <p>The way out is the same asymmetry §72 built: <strong>reopening exists</strong>. A closed plan
- * that genuinely needs more testing is sent back to {@code ACTIVE} — which needs
- * {@code plan:approve}, so unfreezing a signed-off release is a lead's act and editing it afterwards
- * is not. Forcing the edit instead would make the freeze advisory.
- *
- * <p><strong>The placement carries the reasoning</strong>, and it is §72's, checked against the same
- * three questions:
- *
- * <ul>
- *   <li><strong>after the permission</strong> — a Viewer editing a closed plan gets 403, not 409.
- *       The refusal that names a state is information about the plan, and a caller who may not edit
- *       plans at all has not earned it.</li>
- *   <li><strong>before the {@code If-Match}</strong> — a stale header is fixable by reloading and
- *       this is not, so telling somebody to reload a plan they will still not be allowed to save is
- *       the wrong of the two sentences.</li>
- *   <li><strong>before validation</strong> — there is no point landing field errors on a form whose
- *       submit is refused whatever it contains.</li>
- * </ul>
+ * <p>→ <strong>superseded 2026-08-05.</strong> §97 removed {@code CLOSED}, so there is no frozen
+ * plan to refuse and no {@code Refused} arm on this service at all. The concern the freeze answered
+ * has not gone away and is answered elsewhere: editing an <em>approved</em> plan on a project with
+ * review on demotes it to {@code DRAFT} (§6g's RE_REVIEW arm, below), so a sign-off cannot silently
+ * come to cover criteria nobody signed. What is genuinely lost is the freeze on a plan whose runs
+ * are finished — under M7 such a plan stays {@code APPROVED} for ever, because its execution state
+ * lives on its runs, and it can be edited. Named here rather than discovered.
  *
  * <h2>What commits together</h2>
  *
@@ -139,10 +124,6 @@ public class PlanUpdateService {
         record Stale() implements Outcome {
         }
 
-        /** The plan is closed. 409, with the sentence naming the way out. */
-        record Refused(String message) implements Outcome {
-        }
-
         /** Field name to messages, for the form to land on its inputs. 400. */
         record Invalid(Map<String, List<String>> errors) implements Outcome {
         }
@@ -194,12 +175,6 @@ public class PlanUpdateService {
             return new Outcome.NotFound();
         }
         TestPlan plan = found.get();
-
-        if (PlanLifecycle.isClosed(plan.getStatus())) {
-            return new Outcome.Refused(
-                    "This plan is closed, and its scope and criteria are the record of what the "
-                            + "release was tested against. Reopen the plan to change them.");
-        }
 
         if (expectedLockVersion != null && expectedLockVersion != plan.getLockVersion()) {
             // Checked before validating, so a stale editor is told to reload rather than being sent

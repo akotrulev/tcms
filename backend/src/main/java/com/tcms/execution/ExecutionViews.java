@@ -181,8 +181,8 @@ class ExecutionViews {
                 case FAILED -> failed += count;
                 case BLOCKED -> blocked += count;
                 case SKIPPED -> skipped += count;
-                // UNTESTED and RETEST both mean "still owed a verdict" — see ResultCountsView.
-                case UNTESTED, RETEST -> notRun += count;
+                // UNTESTED, RETEST and WIP all mean "still owed a verdict" — see ResultCountsView.
+                case UNTESTED, RETEST, WIP -> notRun += count;
             }
         }
         return new ResultCountsView(passed, failed, blocked, skipped, notRun, total);
