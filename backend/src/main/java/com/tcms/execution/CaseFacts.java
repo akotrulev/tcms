@@ -123,12 +123,19 @@ class CaseFacts {
      * Before §96 this was {@code c.suite_id IN (…)} written out four times, which could not drift
      * because it was a column comparison. It can now, which is why it is one string.
      *
-     * <p><strong>This is what makes "run everything tagged smoke" work with no new mechanism</strong>
-     * — such a run is a suite whose tag rule is {@code smoke}, scoped into a plan the way suites
-     * already are. There is no tag option on {@code plan_scope_item} and
-     * {@code ck_plan_scope_target} is untouched. Without this predicate the scope silently resolves
-     * to whatever happens to be <em>filed</em> under that folder, which for a tag-defined suite is
-     * usually nothing: a run of zero cases, created successfully, reported as a plan covering none.
+     * <p>~~<strong>This is what makes "run everything tagged smoke" work with no new
+     * mechanism</strong> — such a run is a suite whose tag rule is {@code smoke}, scoped into a plan
+     * the way suites already are. There is no tag option on {@code plan_scope_item} and
+     * {@code ck_plan_scope_target} is untouched.~~ → <strong>superseded 2026-08-05</strong> by §97's
+     * D8: {@code V32} gave {@code plan_scope_item} a {@code tag} arm, so there are now two ways to
+     * say "everything tagged smoke". The reversal is recorded rather than the sentence deleted —
+     * forcing a plan section to express "the checkout cases" through a whole reusable
+     * <em>suite</em>, with a key and a history, was the worse trade. See {@link #scopeMatch()}.
+     *
+     * <p>The other half of the paragraph still stands and is the reason this predicate exists at
+     * all: without it a suite-armed scope silently resolves to whatever happens to be
+     * <em>filed</em> under that folder, which for a tag-defined suite is usually nothing — a run of
+     * zero cases, created successfully, reported as a plan covering none.
      *
      * <p><strong>It is a second implementation of {@code repository.SuiteMembership}'s union, and
      * that is forced rather than chosen.</strong> ERD §0.2 lets this module read the repository's
@@ -155,6 +162,40 @@ class CaseFacts {
                                        JOIN case_tag t ON t.tag = r.tag AND t.case_id = c.id
                                       WHERE r.suite_id = d.id) ))
                 """.formatted(suiteAlias);
+    }
+
+    /**
+     * <strong>A plan scope item's three arms</strong>, as a SQL predicate over the item alias
+     * {@code i}, the case alias {@code c} and the item's suite alias {@code s} — the three plan
+     * expansions below all need it and it must mean the same thing in all three.
+     *
+     * <p>Written once for §96's reason, which is the reason this file has a standing rule about it:
+     * the three queries answer *count*, *ids* and *rows* of one question, and a plan whose
+     * statistics said 312 cases while its detail listed 307 would have two numbers on two screens
+     * with nothing to identify the wrong one. Before §97 the branch was two arms and was copied
+     * three times; the third arm is the point at which copying stops being survivable.
+     *
+     * <p><strong>The tag arm is an exact match on {@code case_tag}</strong> — the same comparison
+     * {@code suite_tag_rule} makes inside {@link #inSubtreeOf}, so "add by tag" on a plan section
+     * and "add by tag" on a suite genuinely are one act. It is a plain {@code EXISTS} and never a
+     * join to {@code case_tag} in the {@code FROM} list: a case carrying three of the plan's tags
+     * would otherwise multiply into three rows, which {@code COUNT(DISTINCT …)} survives and
+     * {@code SELECT DISTINCT} survives and a future aggregate would not.
+     *
+     * <p><strong>A targetless row matches nothing, and that is what it is for.</strong> An empty
+     * section is stored as a row naming the section with all three targets null, so every arm here
+     * is guarded by its own {@code IS NOT NULL} and such a row contributes no case. Without those
+     * guards {@code i.tag = t.tag} on a null tag would be null rather than false — which is the same
+     * three-valued trap §96 found on the suite side, arriving from the other direction.
+     */
+    private static String scopeMatch() {
+        return """
+                ( (i.case_id IS NOT NULL AND c.id = i.case_id)
+                  OR (i.suite_id IS NOT NULL AND %s)
+                  OR (i.tag IS NOT NULL AND EXISTS (SELECT 1 FROM case_tag pt
+                                                     WHERE pt.case_id = c.id
+                                                       AND pt.tag = i.tag)) )
+                """.formatted(inSubtreeOf("s").strip());
     }
 
     /**
@@ -271,11 +312,10 @@ class CaseFacts {
                         JOIN test_case c
                           ON c.project_id = :projectId
                          AND c.deleted_at IS NULL
-                         AND ( (i.case_id IS NOT NULL AND c.id = i.case_id)
-                            OR (i.suite_id IS NOT NULL AND %s) )
+                         AND %s
                         WHERE i.plan_id IN (:planIds)
                         GROUP BY i.plan_id
-                        """.formatted(inSubtreeOf("s")))
+                        """.formatted(scopeMatch()))
                 .setParameter("projectId", projectId)
                 .setParameter("planIds", planIds)
                 .getResultList();
@@ -308,11 +348,10 @@ class CaseFacts {
                         JOIN test_case c
                           ON c.project_id = :projectId
                          AND c.deleted_at IS NULL
-                         AND ( (i.case_id IS NOT NULL AND c.id = i.case_id)
-                            OR (i.suite_id IS NOT NULL AND %s) )
+                         AND %s
                         WHERE i.plan_id = :planId
                         ORDER BY c.key_seq
-                        """.formatted(inSubtreeOf("s")))
+                        """.formatted(scopeMatch()))
                 .setParameter("projectId", projectId)
                 .setParameter("planId", planId)
                 .getResultList()
@@ -377,12 +416,11 @@ class CaseFacts {
                         JOIN test_case c
                           ON c.project_id = :projectId
                          AND c.deleted_at IS NULL
-                         AND ( (i.case_id IS NOT NULL AND c.id = i.case_id)
-                            OR (i.suite_id IS NOT NULL AND %s) )
+                         AND %s
                         LEFT JOIN suite cs ON cs.id = c.suite_id
                         WHERE i.plan_id = :planId
                         ORDER BY c.key_seq
-                        """.formatted(inSubtreeOf("s")))
+                        """.formatted(scopeMatch()))
                 .setParameter("projectId", projectId)
                 .setParameter("planId", planId)
                 .getResultList();
@@ -399,6 +437,60 @@ class CaseFacts {
                     (String) row[6]));
         }
         return List.copyOf(scoped);
+    }
+
+    /**
+     * How many live cases each of a plan's <strong>sections</strong> covers, keyed on section name.
+     *
+     * <p>The fourth caller of {@link #scopeMatch()} and the same expansion as the three above, one
+     * level down: a section holds the same three kinds of reference the plan does, so its count is
+     * the plan's count with {@code section_name} added to the grouping. Deriving it any other way —
+     * counting the references, or resolving each arm in Java and adding — is the arithmetic that
+     * produces a second number for one question.
+     *
+     * <p><strong>These counts do not sum to the plan's own, and that is the design.</strong> A case
+     * named directly in one section and reached through a suite or a tag in another is one case in
+     * the plan and one case in each section, so the parts exceed the whole. The contract says so on
+     * {@code PlanSection} and the UI says so beside the number, because a reader who subtracts will
+     * otherwise report a bug in a correct total.
+     *
+     * <p>An <strong>empty</strong> section is absent from the result rather than present as zero:
+     * its only row targets nothing, so it produces no {@code GROUP BY} row at all. The caller reads
+     * through {@code getOrDefault(name, 0L)}, which is also the honest answer for a section whose
+     * every reference has since been deleted.
+     *
+     * <p>Batched over plans for {@link #caseCountsByPlan}'s reason and not merely to be tidy: the
+     * plan <em>list</em> serves every plan's sections, so a per-plan query here would be one round
+     * trip per row of a screen that already has one for its counts.
+     */
+    Map<UUID, Map<String, Long>> caseCountsBySection(UUID projectId, Collection<UUID> planIds) {
+        if (planIds.isEmpty()) {
+            return Map.of();
+        }
+
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = entities.createNativeQuery("""
+                        SELECT i.plan_id, i.section_name, COUNT(DISTINCT c.id)
+                        FROM plan_scope_item i
+                        LEFT JOIN suite s ON s.id = i.suite_id AND s.deleted_at IS NULL
+                        JOIN test_case c
+                          ON c.project_id = :projectId
+                         AND c.deleted_at IS NULL
+                         AND %s
+                        WHERE i.plan_id IN (:planIds)
+                          AND i.section_name IS NOT NULL
+                        GROUP BY i.plan_id, i.section_name
+                        """.formatted(scopeMatch()))
+                .setParameter("projectId", projectId)
+                .setParameter("planIds", planIds)
+                .getResultList();
+
+        Map<UUID, Map<String, Long>> counts = new HashMap<>();
+        for (Object[] row : rows) {
+            counts.computeIfAbsent((UUID) row[0], ignored -> new HashMap<>())
+                    .put((String) row[1], ((Number) row[2]).longValue());
+        }
+        return counts;
     }
 
     /**

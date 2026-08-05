@@ -2,8 +2,8 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-05 (§97 phase 3a)
-**Baseline commit:** `31bd6a9` (§97 phase 2) **+ §97 phase 3a, the commit this line ships in** (its
+**Last verified:** 2026-08-05 (§97 phase 3b)
+**Baseline commit:** `923086c` (§97 phase 3a) **+ §97 phase 3b, the commit this line ships in** (its
 own SHA cannot be written into itself; trust the body over the header and re-grep what a later
 commit could have moved).
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
@@ -660,6 +660,20 @@ directly above the switcher) and the wordmark links there too.
   for the new `api.get` call site unattended. **0 mutations run inline** (policy); 19 browser rows
   queued (three live-only), 5 frontend mutation rows.
 
+- 2026-08-05 · FIX · **§97 phase 3b — the mock STOPS STORING both case counts.** `PlanSection`
+  gains `caseCount` on the contract, and the mock now resolves it — and the plan's own `caseCount` —
+  in a single `present(plan)` applied to the list, the detail, the create, the edit, the status move
+  and the idempotency replay. **The bug this fixes shipped in phase 2**: the counts were written on
+  the last `PATCH` and stored on the row, so a plan's total never moved when a case was tagged,
+  which made phase 2's own browser row 90 false in mock mode and would have had phase 6 built
+  against a number the server does not produce (§81's finding, §87's). `db/executions.ts` gains
+  `sectionCaseCount` and both it and `planScopeCaseIds` now go through one `resolveArms` union, so a
+  plan and a section cannot disagree about what a reference catches — mirroring the server, where
+  `caseCountsBySection` is `caseCountsByPlan` with `section_name` added to the grouping.
+  **Fixture sections carry `caseCount: 0` deliberately**: seeding the "right" number would be
+  seeding the one field that must never be stored. No screen consumes sections yet (the Test cases
+  tab is phase 6), so the suite is unchanged at **828** — the tags endpoint has no client hook, so
+  §70's contract-hygiene checks generated nothing.
 - 2026-08-05 · REDUCE · **§97 phase 3a — the plan ladder is three states (M7), and a seventh status
   exists (M9).** `PlanStatus` is `DRAFT | IN_REVIEW | APPROVED`: `planStatusLabels` and
   `planStatusColors` lose two entries, **`isPlanClosed` is deleted** (its only consumer was the Edit

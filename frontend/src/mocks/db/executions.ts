@@ -155,9 +155,38 @@ export function materialiseRun(runId: string, caseIds: string[]): TestExecution[
  */
 export function planScopeCaseIds(plan: TestPlan): string[] {
   const sections = plan.sections ?? [];
-  const suiteIds = [...(plan.suiteIds ?? []), ...sections.flatMap((s) => s.suiteIds ?? [])];
-  const caseIds = new Set([...(plan.caseIds ?? []), ...sections.flatMap((s) => s.caseIds ?? [])]);
-  const tags = new Set([...(plan.tags ?? []), ...sections.flatMap((s) => s.tags ?? [])]);
+  return resolveArms(
+    [...(plan.suiteIds ?? []), ...sections.flatMap((s) => s.suiteIds ?? [])],
+    [...(plan.caseIds ?? []), ...sections.flatMap((s) => s.caseIds ?? [])],
+    [...(plan.tags ?? []), ...sections.flatMap((s) => s.tags ?? [])],
+  );
+}
+
+/**
+ * The live cases ONE section resolves to — its `caseCount` on the wire.
+ *
+ * Deliberately the same function the plan's own count goes through, one level down, because that is
+ * what the server does: `caseCountsBySection` is `caseCountsByPlan` with `section_name` added to the
+ * grouping. Resolving a section any other way here would put a second definition of "what a
+ * reference catches" in the mock, and the screen would be built against whichever one it happened
+ * to read.
+ *
+ * **These do not sum to the plan's count** — a case named in one section and reached through a
+ * suite or a tag in another is one case in the plan and one in each section.
+ */
+export function sectionCaseCount(section: {
+  suiteIds?: string[];
+  caseIds?: string[];
+  tags?: string[];
+}): number {
+  return resolveArms(section.suiteIds ?? [], section.caseIds ?? [], section.tags ?? []).length;
+}
+
+/** The union itself, over one set of arms. Shared so a plan and a section cannot disagree. */
+function resolveArms(rawSuiteIds: string[], rawCaseIds: string[], rawTags: string[]): string[] {
+  const suiteIds = rawSuiteIds;
+  const caseIds = new Set(rawCaseIds);
+  const tags = new Set(rawTags);
 
   const roots = db.suites.filter((suite) => suiteIds.includes(suite.id));
   const covered = new Set(

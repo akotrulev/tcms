@@ -90,6 +90,32 @@ public class TestPlan {
     @Column(name = "current_version_no", nullable = false)
     private int currentVersionNo;
 
+    /**
+     * What this plan says <strong>will</strong> be tested, as prose (§97 D6, {@code V32}).
+     *
+     * <p><strong>Not the plan's scope items.</strong> {@code plan_scope_item} has meant "which cases
+     * the plan covers" since {@code V1}, and this is the document section a test plan calls its
+     * Scope — two meanings of one word on one aggregate, which is why the column, the contract field
+     * and this javadoc each name the other.
+     *
+     * <p>Nullable, and null is not the empty string: nobody has written one, as against somebody
+     * having cleared it. It is deliberately <em>not</em> in {@link PlanSnapshot} — a plan version
+     * pins what will be <em>run</em> (§6j), so editing the prose writes no version, exactly as a
+     * rename does not.
+     */
+    @Column(name = "scope_text")
+    private String scopeText;
+
+    /**
+     * What is deliberately not tested here.
+     *
+     * <p>Its whole value is being explicit: an absent out-of-scope section reads as an oversight to
+     * the person signing the release off, which is why it is a field of its own rather than a
+     * paragraph somebody may or may not add to {@link #scopeText}.
+     */
+    @Column(name = "out_of_scope_text")
+    private String outOfScopeText;
+
     @Column(name = "deleted_at")
     private java.time.Instant deletedAt;
 
@@ -247,6 +273,12 @@ public class TestPlan {
         description = edit.description();
         milestoneName = edit.milestoneName();
         milestoneDate = edit.milestoneDate();
+        // Assigned unconditionally, unlike the criteria below, because they are SCALARS: null means
+        // "clear it" (PlanUpdateRequest's convention) and the only client submits every field it
+        // renders on every save. The lists get the opposite treatment two lines down, and the split
+        // is the whole reason that convention exists — a list has an empty spelling of its own.
+        scopeText = edit.scopeText();
+        outOfScopeText = edit.outOfScopeText();
         if (edit.entryCriteria() != null) {
             entryCriteria = entryCriteriaJson;
         }
@@ -329,6 +361,14 @@ public class TestPlan {
 
     int getCurrentVersionNo() {
         return currentVersionNo;
+    }
+
+    String getScopeText() {
+        return scopeText;
+    }
+
+    String getOutOfScopeText() {
+        return outOfScopeText;
     }
 
     java.time.Instant getDeletedAt() {

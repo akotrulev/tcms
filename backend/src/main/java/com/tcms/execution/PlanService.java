@@ -76,11 +76,14 @@ public class PlanService {
             List<TestPlan> rows = plans.findLiveInProject(project.getId());
             List<UUID> planIds = rows.stream().map(TestPlan::getId).toList();
             Map<UUID, Long> caseCounts = cases.caseCountsByPlan(project.getId(), planIds);
+            Map<UUID, Map<String, Long>> sectionCounts =
+                    cases.caseCountsBySection(project.getId(), planIds);
             Map<UUID, PlanScope> scopes = scopesOf(planIds);
             List<ConfigurationView> projectConfigurations = configurationsOf(project.getId());
 
             return rows.stream()
-                    .map(plan -> view(plan, caseCounts, scopes, projectConfigurations))
+                    .map(plan -> view(
+                            plan, caseCounts, sectionCounts, scopes, projectConfigurations))
                     .toList();
         });
     }
@@ -109,6 +112,7 @@ public class PlanService {
         return view(
                 plan,
                 cases.caseCountsByPlan(plan.getProjectId(), List.of(plan.getId())),
+                cases.caseCountsBySection(plan.getProjectId(), List.of(plan.getId())),
                 scopesOf(List.of(plan.getId())),
                 configurationsOf(plan.getProjectId()));
     }
@@ -125,10 +129,12 @@ public class PlanService {
     private TestPlanView view(
             TestPlan plan,
             Map<UUID, Long> caseCounts,
+            Map<UUID, Map<String, Long>> sectionCounts,
             Map<UUID, PlanScope> scopes,
             List<ConfigurationView> configurations) {
 
         PlanScope scope = scopes.getOrDefault(plan.getId(), PlanScope.empty());
+        Map<String, Long> counts = sectionCounts.getOrDefault(plan.getId(), Map.of());
         return new TestPlanView(
                 plan.getId(),
                 plan.getKey(),
@@ -148,6 +154,20 @@ public class PlanService {
                 configurations,
                 scope.suiteIds(),
                 scope.caseIds(),
+                scope.tags(),
+                // Zero for a section absent from the counts, which is the ordinary answer for an
+                // empty one: its single row targets nothing, so it produces no GROUP BY row at all.
+                scope.sections().stream()
+                        .map(section -> new PlanSectionView(
+                                section.name(),
+                                section.position(),
+                                section.caseIds(),
+                                section.suiteIds(),
+                                section.tags(),
+                                counts.getOrDefault(section.name(), 0L)))
+                        .toList(),
+                plan.getScopeText(),
+                plan.getOutOfScopeText(),
                 plan.getCurrentVersionNo(),
                 plan.getLockVersion());
     }

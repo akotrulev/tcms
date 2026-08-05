@@ -186,12 +186,16 @@ public class PlanCreateService {
         // on top of it.
         plans.saveAndFlush(created);
 
+        // Unsectioned, and only ever unsectioned: TestPlanInput carries no sections and no tags, for
+        // the reason it carries no criteria — a plan is named before anybody has subdivided it, and
+        // the sub-feature breakdown is authored on the plan's own screen. So both arms pass a null
+        // section and ordinal 0, which is what every plan written before §97 holds.
         List<PlanScopeItem> items = new ArrayList<>();
         for (UUID suiteId : edit.scope().suiteIds()) {
-            items.add(PlanScopeItem.ofSuite(created.getId(), suiteId));
+            items.add(PlanScopeItem.ofSuite(created.getId(), suiteId, null, 0));
         }
         for (UUID caseId : edit.scope().caseIds()) {
-            items.add(PlanScopeItem.ofCase(created.getId(), caseId));
+            items.add(PlanScopeItem.ofCase(created.getId(), caseId, null, 0));
         }
         scopeItems.saveAll(items);
 

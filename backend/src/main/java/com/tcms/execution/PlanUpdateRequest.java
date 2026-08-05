@@ -44,7 +44,22 @@ import java.util.UUID;
  * @param suiteIds      the folders in scope. Same validation as the create: an id naming a
  *                      <strong>sibling project's</strong> suite satisfies the foreign key, the
  *                      company column and RLS, and is refused only by {@link PlanEdit}'s live-id set
+ * <h2>Two meanings of "scope" arrive on one record, and only one of them is prose</h2>
+ *
+ * <p>{@code suiteIds}, {@code caseIds}, {@code tags} and {@code sections} are the plan's scope
+ * <em>items</em> — which cases it covers. {@code scopeText} and {@code outOfScopeText} are the
+ * document sections a test plan calls Scope and Out of scope — what it says it will and will not
+ * test, in sentences. They are unrelated, they are adjacent here, and the pair follows the
+ * <strong>scalar</strong> half of the convention above while the four above it follow the list half.
+ *
  * @param caseIds       likewise for individually named cases
+ * @param tags          the unsectioned tag arm (§97 D8) — §96's {@code case_tag}, matched exactly,
+ *                      re-resolved on every read, so what it covers can change with nothing written
+ *                      to the plan
+ * @param sections      the named sub-features. Present replaces the whole list; see
+ *                      {@link PlanSectionInput}
+ * @param scopeText     prose: what this plan says will be tested. {@code null} clears it
+ * @param outOfScopeText prose: what is deliberately not tested here
  * @param entryCriteria what must be true before execution starts
  * @param exitCriteria  what must be true before the release is signed off — the gate §6p exists for
  */
@@ -55,6 +70,10 @@ public record PlanUpdateRequest(
         LocalDate milestoneDate,
         List<UUID> suiteIds,
         List<UUID> caseIds,
+        List<String> tags,
+        List<PlanSectionInput> sections,
+        String scopeText,
+        String outOfScopeText,
         List<CriterionInput> entryCriteria,
         List<CriterionInput> exitCriteria) {
 }

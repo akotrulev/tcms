@@ -2,8 +2,8 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-05 (§97 phase 3a)
-**Baseline commit:** `31bd6a9` (§97 phase 2) **+ §97 phase 3a, the commit this line ships in** (its
+**Last verified:** 2026-08-05 (§97 phase 3b)
+**Baseline commit:** `923086c` (§97 phase 3a) **+ §97 phase 3b, the commit this line ships in** (its
 own SHA cannot be written into itself; per `CLAUDE.md`, trust the body over the header and re-grep
 what a later commit could have moved).
 **Fingerprint files:** `backend/build.gradle.kts`, `backend/gradle/libs.versions.toml`, `backend/gradle/wrapper/gradle-wrapper.properties`
@@ -114,9 +114,13 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   `CaseFacts.inSubtreeOf(alias)` is the {@code execution} module's copy of the union, used by all
   four of its suite-expanding queries (`caseCountsByPlan`, `caseIdsInPlanScope`,
   `casesInPlanScope`, `caseIdsInSuiteSubtree`) via `"…%s…".formatted(inSubtreeOf("s"))`.
-  **This is what makes "run everything tagged smoke" work with no new mechanism** — such a run is a
-  suite whose tag rule is `smoke`, scoped into a plan the way suites already are; there is no tag
-  option on `plan_scope_item`.
+  ~~**This is what makes "run everything tagged smoke" work with no new mechanism** — such a run is
+  a suite whose tag rule is `smoke`, scoped into a plan the way suites already are; there is no tag
+  option on `plan_scope_item`.~~ → **superseded by §97 phase 3b (D8)**: `V32` gave
+  `plan_scope_item` a `tag` arm, so there are now **two** ways to say "everything tagged smoke", and
+  that cost was accepted rather than force a plan section through a whole reusable suite. The
+  paragraph's other half stands — without `inSubtreeOf` a suite arm resolves to what is *filed*,
+  which for a tag-defined suite is usually nothing.
   It duplicates `repository.SuiteMembership` because ERD §0.2 forbids the call, so the two are kept
   honest by **`SuiteScopeAgreementTest`** (prefix `5c`), which also pins the ONE intended
   disagreement: the seam **includes soft-deleted cases** (history must not shrink), the repository's
@@ -126,6 +130,36 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   it **outside any transaction**, so `app.current_company` is unset and RLS answers zero rows. The
   first draft compared an empty list to an empty list and reported agreement; the fix is a
   `TransactionTemplate`, not just a `CompanyContext`.
+- **A PLAN SCOPE LINE HAS THREE ARMS AND TWO LEVELS SINCE §97 phase 3b — AND THE PREDICATE IS ONE
+  STRING.** `CaseFacts.scopeMatch()` is the case-or-suite-or-**tag** branch, interpolated into all
+  **four** plan expansions (`caseCountsByPlan`, `caseIdsInPlanScope`, `casesInPlanScope`,
+  `caseCountsBySection`). It wraps `inSubtreeOf("s")`, so the two predicates nest rather than
+  compete. Before §97 the branch was two arms copied three times; the third arm is where copying
+  stops being survivable, which is why it moved into a method.
+  **Every arm is guarded by its own `IS NOT NULL`** — an empty section is stored as a row naming the
+  section with all three targets null, and an unguarded `i.tag = pt.tag` on a NULL tag is *null*,
+  not false. Same three-valued trap §96 found on the suite side, from the other direction.
+  `PlanScope` is now `(suiteIds, caseIds, tags, sections)`; `PlanScope.Section` is
+  `(name, position, suiteIds, caseIds, tags)`, plan-local and **id-less**, so `sections` present
+  replaces the whole list. `allSuiteIds()`/`allCaseIds()` flatten both levels and are what
+  `PlanEdit` live-id-checks — checking only the unsectioned group is §97's own version of the
+  sibling-project hole.
+  **The section name IS its identity** (storage keys membership on `section_name`), so duplicates
+  are a 400: saved as two, they read back as one, silently merged.
+  **`ck_plan_scope_target` is deliberately NOT a three-way exactly-one** — an empty section needs a
+  targetless row that names it — so the rule is *at most one target, AND a targetless row must name
+  a section*. `PlanScopeConstraintTest` (prefix **`5d`**) asserts both halves over plain JDBC, not
+  through `PlanScopeItem`'s factories, which would pass with the constraint dropped outright.
+- **`GET /projects/{projectId}/tags` — the picker list §96 shipped without.**
+  `TagController`/`TagService`/`TagUsageView` + `CaseTagRepository.findTagUsage`, in `repository`,
+  no new key (project visibility only, the eighth time that argument is made rather than a key
+  invented), `StepSuggestionController`'s shape exactly.
+  **`case_tag` has a `company_id` and NO `project_id`**, so the join to `TestCase` is the only thing
+  scoping this — without it the endpoint serves a client's whole tag vocabulary across every project
+  in their instance while every cross-company test in the suite stays green. `TagEndpointTest`
+  (prefix **`6c`**) asserts it in both directions: the absent foreign tag *and* the uninflated count.
+  **A picker's list, never a validator's** — a client may send a tag this never returned, which is
+  how the first case to carry a new tag gets it.
 - **THE CONDITION LIBRARY HAS WRITERS SINCE §95 phase 1, AND THE USAGE COUNT IS NOW TWO NUMBERS.**
   `ConditionService.create`/`update` + `POST`/`PUT /projects/{projectId}/conditions` +
   `ConditionEdit`/`ConditionWriteRequest`/`ConditionUsage` + `ConditionRepository.countCaseUsage`/

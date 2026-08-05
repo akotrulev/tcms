@@ -8,6 +8,7 @@ import {
   planScopeCaseIds,
   reporting,
   reviewMoved,
+  sectionCaseCount,
 } from '../db';
 import type { ReviewStanding } from '../db';
 import { API, LATENCY, holdsOn, meRef, notFound, problem } from './shared';
@@ -48,10 +49,34 @@ function planMoveRefusal(current: PlanStatus, target: PlanStatus): string | null
   }
 }
 
+/**
+ * A stored plan as the API serves it — **every count resolved at read time, never at write time.**
+ *
+ * This is the whole of D7′ in the mock. A suite arm, a tag arm and a section are *selectors*: the
+ * plan gains a case when somebody tags one, with nothing written to the plan. A `caseCount` computed
+ * on the last `PATCH` and stored on the row cannot do that — it answers whatever was true when the
+ * plan was last saved, and the screen built against it would be built against a number the server
+ * does not produce (§81's finding, and §87's).
+ *
+ * One presenter for the list, the detail and both write responses, for `PlanService.view`'s reason:
+ * a created plan rendered by a different path shows one thing on create and another on the reload
+ * that follows it, with neither screen revealing which is stored.
+ */
+function present(plan: TestPlan): TestPlan {
+  return {
+    ...plan,
+    caseCount: planScopeCaseIds(plan).length,
+    sections: (plan.sections ?? []).map((section) => ({
+      ...section,
+      caseCount: sectionCaseCount(section),
+    })),
+  };
+}
+
 export const planHandlers = [
   http.get(`${API}/projects/:projectId/plans`, async () => {
     await delay(LATENCY);
-    return HttpResponse.json(db.plans);
+    return HttpResponse.json(db.plans.map(present));
   }),
 
   /**
@@ -82,7 +107,7 @@ export const planHandlers = [
       const already = db.planIdempotency.get(idempotencyKey);
       // 200 rather than 201, and before validation: the client is asking whether its intent
       // landed, so a drifted retry answers the plan it already made.
-      if (already) return HttpResponse.json(already, { status: 200 });
+      if (already) return HttpResponse.json(present(already), { status: 200 });
     }
 
     const body = (await request.json()) as Record<string, unknown>;
@@ -134,10 +159,9 @@ export const planHandlers = [
       currentVersionNo: 1,
       lockVersion: 1,
     };
-    plan.caseCount = planScopeCaseIds(plan).length;
     db.plans.unshift(plan);
     if (idempotencyKey) db.planIdempotency.set(idempotencyKey, plan);
-    return HttpResponse.json(plan, {
+    return HttpResponse.json(present(plan), {
       status: 201,
       headers: { Location: `${API}/projects/${projectId}/plans/${id}` },
     });
@@ -146,7 +170,7 @@ export const planHandlers = [
   http.get(`${API}/projects/:projectId/plans/:planId`, async ({ params }) => {
     await delay(LATENCY);
     const plan = db.plans.find((p) => p.id === params.planId);
-    return plan ? HttpResponse.json(plan) : notFound('That test plan');
+    return plan ? HttpResponse.json(present(plan)) : notFound('That test plan');
   }),
 
   /**
@@ -260,25 +284,30 @@ export const planHandlers = [
     // rather than trusted from the client (two sections claiming position 0 is a render order the
     // author cannot fix from the screen).
     if (body.sections) {
-      plan.sections = (body.sections as PlanSectionInput[]).map((section, position) => ({
-        name: String(section.name ?? '').trim(),
-        position,
-        caseIds: [...new Set(section.caseIds ?? [])],
-        suiteIds: [...new Set(section.suiteIds ?? [])],
-        tags: [...new Set(section.tags ?? [])],
-      }));
+      plan.sections = (body.sections as PlanSectionInput[]).map((section, position) => {
+        const arms = {
+          caseIds: [...new Set(section.caseIds ?? [])],
+          suiteIds: [...new Set(section.suiteIds ?? [])],
+          tags: [...new Set(section.tags ?? [])],
+        };
+        return {
+          name: String(section.name ?? '').trim(),
+          position,
+          ...arms,
+          // Stored as zero and never read: `present` resolves it on the way out. A count written
+          // here would be the one the row keeps, and a section defined by a tag would report what
+          // it caught at save time for ever.
+          caseCount: 0,
+        };
+      });
     }
-
-    // Recomputed from the resolved union, never adjusted by a delta: every arm is a live selector
-    // and the sections' counts do not sum to this one, because a case reached two ways is one case.
-    plan.caseCount = planScopeCaseIds(plan).length;
 
     // A name, a description and the scope prose are content, not scope, so they are outside the
     // snapshot above and renaming a plan writes no version.
     if (snapshot() !== before) plan.currentVersionNo += 1;
     plan.lockVersion += 1;
 
-    return HttpResponse.json(plan);
+    return HttpResponse.json(present(plan));
   }),
 
   /**
@@ -320,7 +349,7 @@ export const planHandlers = [
       });
     }
 
-    if (target === plan.status) return HttpResponse.json(plan);
+    if (target === plan.status) return HttpResponse.json(present(plan));
 
     const refusal = planMoveRefusal(plan.status, target);
     if (refusal) return problem(409, 'Not possible right now', refusal);
@@ -342,7 +371,7 @@ export const planHandlers = [
       planStandingOf(target),
       meRef(),
     );
-    return HttpResponse.json(plan);
+    return HttpResponse.json(present(plan));
   }),
 
   /** Refused while a run names the plan, with the count — the server's 409, same sentence shape. */

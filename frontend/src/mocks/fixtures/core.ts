@@ -642,9 +642,15 @@ export const plans: TestPlan[] = [
       count moves when a case is tagged, and nothing writes to the plan.
     */
     tags: [],
+    /*
+      `caseCount` is 0 on every fixture section on purpose, and it is never what the API answers:
+      the handlers resolve it on the way out (`present`), because a section is a selector and a
+      stored count is the value that stops moving. A fixture that seeded the "right" number here
+      would be seeding the one thing this field must never be.
+    */
     sections: [
-      { name: 'Create an object', position: 0, caseIds: [uid(1, 'c'), uid(2, 'c')], suiteIds: [], tags: [] },
-      { name: 'Navigation', position: 1, caseIds: [], suiteIds: [uid(2, 'q')], tags: ['smoke'] },
+      { name: 'Create an object', position: 0, caseIds: [uid(1, 'c'), uid(2, 'c')], suiteIds: [], tags: [], caseCount: 0 },
+      { name: 'Navigation', position: 1, caseIds: [], suiteIds: [uid(2, 'q')], tags: ['smoke'], caseCount: 0 },
     ],
     scopeText:
       'Every payment capture path a customer can reach from the checkout, on the two supported '

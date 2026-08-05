@@ -54,4 +54,37 @@ public interface CaseTagRepository extends JpaRepository<CaseTag, CaseTagId> {
              ORDER BY t.tag ASC
             """)
     List<CaseTag> findForCase(@Param("caseId") UUID caseId);
+
+    /**
+     * Every tag in use in one project, with how many live cases carry it.
+     *
+     * <p><strong>Derived, never curated</strong> — {@link StepSuggestionService}'s argument at a
+     * different altitude, and the correction {@code shared_step} earned by staying empty: a tag list
+     * somebody has to populate is a tag list nobody populates. A tag exists here because a case
+     * carries it, so this cannot disagree with the grid.
+     *
+     * <p><strong>The join to {@code TestCase} is what scopes it, and it is not decoration.</strong>
+     * {@code case_tag} has a {@code company_id} and no {@code project_id}, so RLS bounds this to the
+     * caller's company and nothing else — without the join a client's tag vocabulary would leak
+     * across every sibling project in their own instance, which is precisely the sibling-project
+     * hole {@code PlanEdit}'s live-id sets exist to close, arriving on a read.
+     *
+     * <p>Counts are over <strong>live</strong> cases, so a tag whose every case was soft-deleted
+     * disappears from the list while remaining legal to write — zero-count rows are impossible
+     * rather than filtered.
+     *
+     * <p>Most-used first, then alphabetically. The second key is not cosmetic: the counts tie
+     * constantly on a young project, and without it the picker's order would be the database's and
+     * would move between two loads of one screen.
+     */
+    @Query("""
+            SELECT t.tag, COUNT(c.id)
+              FROM CaseTag t
+              JOIN TestCase c ON c.id = t.caseId
+             WHERE c.projectId = :projectId
+               AND c.deletedAt IS NULL
+             GROUP BY t.tag
+             ORDER BY COUNT(c.id) DESC, t.tag ASC
+            """)
+    List<Object[]> findTagUsage(@Param("projectId") UUID projectId);
 }

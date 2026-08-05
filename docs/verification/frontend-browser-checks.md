@@ -1046,3 +1046,14 @@ Deferred per §65. **None of these were run.**
 | 96 | On the plan list, check the order. | Drafts first, then in-review, then approved — the rank changed with the states, and a list that reshuffles between loads is the failure this ordering exists to prevent. |
 | 97 | **Live mode only.** Re-run `provision-company` against an existing company, then open a project's status vocabulary. | A seventh status, **WIP**, blue, not final, not counting as a pass. Existing projects do **not** get it from the migration — that is M9's decision, and this is the check that the documented top-up path actually works. |
 | 98 | **Live mode only.** Record a WIP result on a case in a run, then open the plan's Progress tab. | The case counts as **not run**, not as a verdict, and coverage does not move. Mock mode cannot show this: the mock's fixtures carry no WIP status. |
+
+## §97 phase 3b — the counts stop being stored
+
+Deferred per §65. **None of these were run.** Phase 3b is backend work; the Test cases tab that
+renders sections is phase 6, so there is exactly one thing observable today — and it is a mock
+defect this phase fixed rather than a feature it added.
+
+| # | Drive | Expect |
+|---|---|---|
+| 99 | Open the plan list, note **TP-1**'s case count, then tag any case `smoke` in another tab and reload the list. | The count **goes up**. Until this phase the mock stored `caseCount` on the row at save time, so it answered whatever was true when the plan was last edited — which made phase 2's own row 90 false in mock mode. Both counts are now resolved on the way out (`present`), as the server resolves them on every read. |
+| 100 | Open **TP-1** and compare its total against its two sections, once the Test cases tab exists (phase 6). | Recorded here because the number is already correct in the payload and can be read in the network tab today: *Create an object* holds 2, *Navigation* holds whatever carries `smoke` plus the second suite, and the two **exceed** the plan's deduped total. |

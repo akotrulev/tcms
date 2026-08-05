@@ -52,6 +52,8 @@ record PlanEdit(
         String milestoneName,
         LocalDate milestoneDate,
         PlanScope scope,
+        String scopeText,
+        String outOfScopeText,
         List<CriterionInput> entryCriteria,
         List<CriterionInput> exitCriteria) {
 
@@ -92,6 +94,36 @@ record PlanEdit(
     /** A gate's own name — "Support sign-off", not its justification. */
     static final int MAX_CRITERION_LABEL = 200;
 
+    /**
+     * The longest scope or out-of-scope text.
+     *
+     * <p>Ten times a description, because this is the one prose field on a plan that is genuinely
+     * a document section — "what will be tested" is paragraphs, not a sentence — and a limit that
+     * refuses a real one would send authors back to writing it in a wiki, which is the habit §97
+     * exists to end. Still bounded: both columns are read whole on every plan detail.
+     */
+    static final int MAX_SCOPE_TEXT = 20_000;
+
+    /**
+     * A sub-feature's own name — "Create an object", "Edit", "Navigation".
+     *
+     * <p>Same ceiling as a plan name for the same reason: it is a heading rendered in a tab strip
+     * and beside a count, not a paragraph.
+     */
+    static final int MAX_SECTION_NAME = 200;
+
+    /**
+     * The most sections one plan may carry.
+     *
+     * <p>A sub-feature breakdown somebody reads down the side of a screen. Past this the author is
+     * modelling a suite tree, which is the thing a section deliberately is not — reusable project
+     * content with a key and a history — and the product already has one.
+     */
+    static final int MAX_SECTIONS = 100;
+
+    /** A tag as {@code case_tag} stores it — {@code repository.CaseEdit}'s ceiling, exactly. */
+    static final int MAX_TAG = 60;
+
     /** Sealed so the caller's mapping is exhaustive, like {@code GateResult}. */
     sealed interface Outcome {
 
@@ -122,12 +154,13 @@ record PlanEdit(
         Fields fields = validateFields(
                 request.name(), request.description(), request.milestoneName(), errors);
         PlanScope scope = validateScope(
-                request.suiteIds(), request.caseIds(), null, liveSuiteIds, liveCaseIds, errors);
+                request.suiteIds(), request.caseIds(), null, null, null,
+                liveSuiteIds, liveCaseIds, errors);
 
         return errors.isEmpty()
                 ? new Outcome.Valid(new PlanEdit(
                         fields.name(), fields.description(), fields.milestoneName(),
-                        request.milestoneDate(), scope, null, null))
+                        request.milestoneDate(), scope, null, null, null, null))
                 : new Outcome.Invalid(errors);
     }
 
@@ -153,15 +186,37 @@ record PlanEdit(
         Fields fields = validateFields(
                 request.name(), request.description(), request.milestoneName(), errors);
         PlanScope scope = validateScope(
-                request.suiteIds(), request.caseIds(), stored, liveSuiteIds, liveCaseIds, errors);
+                request.suiteIds(), request.caseIds(), request.tags(), request.sections(), stored,
+                liveSuiteIds, liveCaseIds, errors);
         List<CriterionInput> entry = validateCriteria(request.entryCriteria(), "entryCriteria", errors);
         List<CriterionInput> exit = validateCriteria(request.exitCriteria(), "exitCriteria", errors);
+        String scopeText = validateProse(request.scopeText(), "scopeText", errors);
+        String outOfScopeText = validateProse(request.outOfScopeText(), "outOfScopeText", errors);
 
         return errors.isEmpty()
                 ? new Outcome.Valid(new PlanEdit(
                         fields.name(), fields.description(), fields.milestoneName(),
-                        request.milestoneDate(), scope, entry, exit))
+                        request.milestoneDate(), scope, scopeText, outOfScopeText, entry, exit))
                 : new Outcome.Invalid(errors);
+    }
+
+    /**
+     * One of the two prose fields.
+     *
+     * <p>A <strong>scalar</strong>, so {@code null} means <em>clear it</em> — {@link
+     * PlanUpdateRequest}'s convention, and the SPA submits every field it renders on every save.
+     * Blank trims to null for {@code ProjectEdit}'s reason, which matters more here than usual: an
+     * out-of-scope section holding a single space would render as written and say nothing, and the
+     * whole value of that section is being explicit.
+     */
+    private static String validateProse(
+            String submitted, String field, Map<String, List<String>> errors) {
+
+        String text = trimToNull(submitted);
+        if (text != null && text.length() > MAX_SCOPE_TEXT) {
+            error(errors, field, "Keep this under " + MAX_SCOPE_TEXT + " characters.");
+        }
+        return text;
     }
 
     /** The three free-text fields, normalized — shared so the two entry points cannot diverge. */
@@ -207,6 +262,8 @@ record PlanEdit(
     private static PlanScope validateScope(
             List<UUID> submittedSuiteIds,
             List<UUID> submittedCaseIds,
+            List<String> submittedTags,
+            List<PlanSectionInput> submittedSections,
             PlanScope stored,
             Set<UUID> liveSuiteIds,
             Set<UUID> liveCaseIds,
@@ -219,15 +276,22 @@ record PlanEdit(
         // put rows in the table that no read can distinguish from a mistake.
         PlanScope scope = PlanScope.of(
                 submittedSuiteIds == null ? fallback.suiteIds() : submittedSuiteIds,
-                submittedCaseIds == null ? fallback.caseIds() : submittedCaseIds);
+                submittedCaseIds == null ? fallback.caseIds() : submittedCaseIds,
+                submittedTags == null ? fallback.tags() : normalizeTags(submittedTags, "tags", errors),
+                submittedSections == null
+                        ? fallback.sections()
+                        : validateSections(submittedSections, errors));
 
         if (scope.itemCount() > MAX_SCOPE_ITEMS) {
             error(errors, "suiteIds",
-                    "Add at most " + MAX_SCOPE_ITEMS + " suites and cases to a plan's scope.");
+                    "Add at most " + MAX_SCOPE_ITEMS + " suites, cases and tags to a plan's scope.");
             return scope;
         }
 
-        for (UUID suiteId : scope.suiteIds()) {
+        // Both levels, because a section's references are scope items like any other and an id that
+        // is checked in the unsectioned group and not in a section is a hole shaped exactly like the
+        // one this check exists to close.
+        for (UUID suiteId : scope.allSuiteIds()) {
             // Anything carried over from `stored` was live when it was stored and may not be now —
             // a folder deleted since is checked here like any other id, so an edit of an unrelated
             // field surfaces it rather than silently rewriting a scope the project no longer has.
@@ -240,7 +304,7 @@ record PlanEdit(
                 break;
             }
         }
-        for (UUID caseId : scope.caseIds()) {
+        for (UUID caseId : scope.allCaseIds()) {
             if (!liveCaseIds.contains(caseId)) {
                 error(errors, "caseIds",
                         "One of the selected cases is not in this project any more.");
@@ -248,6 +312,106 @@ record PlanEdit(
             }
         }
         return scope;
+    }
+
+    /**
+     * The submitted sections, in the order they arrived, each normalized like the unsectioned group.
+     *
+     * <p><strong>The name is the section's identity, so two sections may not share one.</strong>
+     * There is no id — a section is plan-local and nothing references it — which is why the whole
+     * list is replaced on every write; the storage keys a row's membership on
+     * {@code section_name}, so two sections called "Edit" would merge into one on the next read
+     * having been saved as two. Refused rather than merged or suffixed, because both of those
+     * silently change what the author typed.
+     *
+     * <p><strong>An empty section is legal and is kept</strong> — the contract says so, and it is
+     * the reason {@code ck_plan_scope_target} admits a targetless row at all: an author names the
+     * sub-feature before filling it, and dropping empty ones on save would delete the heading they
+     * had just typed, mid-edit, with a success message.
+     *
+     * <p>No live-id checking happens here; the caller does it over both levels at once, so a
+     * section's suite and an unsectioned one are refused by the same line.
+     */
+    private static List<PlanScope.Section> validateSections(
+            List<PlanSectionInput> submitted, Map<String, List<String>> errors) {
+
+        if (submitted.size() > MAX_SECTIONS) {
+            error(errors, "sections", "Add at most " + MAX_SECTIONS + " sections to a plan.");
+            return List.of();
+        }
+
+        List<PlanScope.Section> sections = new ArrayList<>(submitted.size());
+        Set<String> names = new LinkedHashSet<>();
+        int position = 0;
+
+        for (PlanSectionInput section : submitted) {
+            if (section == null) {
+                continue;
+            }
+            String name = trimToNull(section.name());
+            if (name == null) {
+                error(errors, "sections", "Give every section a name.");
+                continue;
+            }
+            if (name.length() > MAX_SECTION_NAME) {
+                error(errors, "sections",
+                        "Keep a section name under " + MAX_SECTION_NAME + " characters.");
+                continue;
+            }
+            if (!names.add(name)) {
+                error(errors, "sections",
+                        "Two sections are called '" + name + "'. Give each one its own name.");
+                continue;
+            }
+            // position is the SERVER's, taken from the order submitted — the contract says a client
+            // sends the order it wants, and a position the client also numbered would be two
+            // opinions about one list, with a gap or a duplicate reachable from the wire.
+            sections.add(new PlanScope.Section(
+                    name,
+                    position++,
+                    distinct(section.suiteIds()),
+                    distinct(section.caseIds()),
+                    normalizeTags(section.tags(), "sections", errors)));
+        }
+        return List.copyOf(sections);
+    }
+
+    /**
+     * A tag list, trimmed and deduplicated — {@code repository.CaseEdit.normalizeTags}, held to the
+     * same ceiling on purpose.
+     *
+     * <p>A tag here is matched against {@code case_tag} <strong>exactly</strong>, so a plan that
+     * accepted a 90-character tag the case editor refuses would store a selector that can never
+     * match anything: the section would render as empty for ever with no error anywhere. That is why
+     * this is a field error rather than a truncation, and why the number is not chosen
+     * independently.
+     *
+     * <p>A blank is dropped rather than refused, for the same reason the case editor drops one — a
+     * tag input holds an empty chip mid-typing, and refusing the save would report an error about a
+     * value the author does not think they entered.
+     */
+    private static List<String> normalizeTags(
+            List<String> submitted, String field, Map<String, List<String>> errors) {
+
+        if (submitted == null) {
+            return List.of();
+        }
+        List<String> distinct = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+        for (String raw : submitted) {
+            String tag = trimToNull(raw);
+            if (tag == null) {
+                continue;
+            }
+            if (tag.length() > MAX_TAG) {
+                error(errors, field, "Keep each tag under " + MAX_TAG + " characters.");
+                continue;
+            }
+            if (seen.add(tag)) {
+                distinct.add(tag);
+            }
+        }
+        return List.copyOf(distinct);
     }
 
     /**

@@ -57,6 +57,10 @@ public record TestPlanView(
         List<ConfigurationView> configurations,
         List<UUID> suiteIds,
         List<UUID> caseIds,
+        List<String> tags,
+        List<PlanSectionView> sections,
+        String scopeText,
+        String outOfScopeText,
         int currentVersionNo,
         long lockVersion) {
 }

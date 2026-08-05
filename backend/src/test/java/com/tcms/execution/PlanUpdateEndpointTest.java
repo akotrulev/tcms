@@ -105,6 +105,12 @@ class PlanUpdateEndpointTest extends IntegrationTestBase {
 
     private static final UUID PAYMENTS_CASE = UUID.fromString("ed005000-0000-4000-8000-000000000001");
     private static final UUID MOBILE_CASE = UUID.fromString("ed005000-0000-4000-8000-000000000002");
+    /**
+     * Filed under LOGIN and tagged {@code checkout} — reachable by the tag arm and by no suite the
+     * section tests name, which is what lets a tag-armed section's count be told apart from a
+     * suite-armed one's.
+     */
+    private static final UUID TAGGED_CASE = UUID.fromString("ed005000-0000-4000-8000-000000000003");
 
     private static final UUID ABSENT = UUID.fromString("ed00ffff-0000-4000-8000-00000000ffff");
 
@@ -182,6 +188,8 @@ class PlanUpdateEndpointTest extends IntegrationTestBase {
             suite(connection, MOBILE_SUITE, ACME, ACME_MOBILE, "PUS-3", 3, "Android", "android");
             testCase(connection, PAYMENTS_CASE, ACME, ACME_BANKING, PAYMENTS, "PUC-1", 1, "Refund");
             testCase(connection, MOBILE_CASE, ACME, ACME_MOBILE, MOBILE_SUITE, "PUC-2", 2, "Push");
+            testCase(connection, TAGGED_CASE, ACME, ACME_BANKING, LOGIN, "PUC-3", 3, "Checkout");
+            caseTag(connection, TAGGED_CASE, "checkout");
         }
 
         // Cleared LAST, so "a refusal writes no audit row" is about the request under test.
@@ -480,6 +488,314 @@ class PlanUpdateEndpointTest extends IntegrationTestBase {
             patch(LEAD, ACME, ACME_BANKING, plan, payload, null);
 
             assertThat(scopeRows(plan)).containsExactlyInAnyOrder(PAYMENTS, LOGIN);
+        }
+    }
+
+    // =====================================================================
+    // §97 — the tag arm, the sections, and the prose
+    // =====================================================================
+
+    @Nested
+    @DisplayName("The tag arm — a scope line whose membership is a query (§97 D8)")
+    class TagArm {
+
+        @Test
+        @DisplayName("a tag in scope resolves to the cases carrying it, and is served back")
+        void aTagResolves() throws Exception {
+            UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3");
+
+            Map<String, Object> payload = edit("Release 4.3");
+            payload.put("tags", List.of("checkout"));
+
+            MvcResult saved = patch(LEAD, ACME, ACME_BANKING, plan, payload, null);
+
+            assertThat(saved.getResponse().getStatus()).isEqualTo(200);
+            assertThat(strings(body(saved).get("tags"))).containsExactly("checkout");
+            // The point of the arm: the plan covers a case it never names. A tag stored and not
+            // resolved would serve the tag back and report a caseCount of 0, which reads exactly
+            // like a tag nobody has used.
+            assertThat(body(saved).get("caseCount").asLong())
+                    .as("TAGGED_CASE carries `checkout` and is named nowhere in this plan")
+                    .isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("the plan gains a case when one is TAGGED, with nothing written to the plan")
+        void theSelectorIsLive() throws Exception {
+            UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3");
+            Map<String, Object> payload = edit("Release 4.3");
+            payload.put("tags", List.of("checkout"));
+            patch(LEAD, ACME, ACME_BANKING, plan, payload, null);
+
+            // Taken AFTER the edit, because adding the tag IS a scope change and legitimately
+            // writes a version. The claim under test is about what happens with no edit at all.
+            String versionBeforeTagging = planColumn(plan, "CAST(current_version_no AS text)");
+
+            // D7′ in one assertion, and the only way to observe it is from the case side.
+            try (Connection connection = appConnection(ACME)) {
+                caseTag(connection, PAYMENTS_CASE, "checkout");
+            }
+
+            JsonNode reread = body(get(LEAD, ACME, "/projects/" + ACME_BANKING + "/plans/" + plan));
+
+            assertThat(reread.get("caseCount").asLong())
+                    .as("no PATCH happened between the two reads — a snapshot would still say 1")
+                    .isEqualTo(2);
+            assertThat(planColumn(plan, "CAST(current_version_no AS text)"))
+                    .as("and the plan's own version does NOT move, because the plan did not change "
+                            + "— that is the accepted cost of a live selector, and it is why the "
+                            + "approval goes stale silently while the case gate still fires at "
+                            + "run-create time")
+                    .isEqualTo(versionBeforeTagging);
+        }
+
+        @Test
+        @DisplayName("a tag matching nothing is stored and resolves to nothing — never an error")
+        void anUnusedTagIsLegal() throws Exception {
+            UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3");
+
+            Map<String, Object> payload = edit("Release 4.3");
+            payload.put("tags", List.of("not-a-tag-anyone-uses"));
+
+            MvcResult saved = patch(LEAD, ACME, ACME_BANKING, plan, payload, null);
+
+            // A tag is free text and the endpoint that lists them is a picker's list, never a
+            // validator's — refusing this would close the vocabulary, and the first case to carry
+            // a new tag could never be planned for.
+            assertThat(saved.getResponse().getStatus()).isEqualTo(200);
+            assertThat(body(saved).get("caseCount").asLong()).isZero();
+        }
+    }
+
+    @Nested
+    @DisplayName("Sections — named sub-features whose membership is resolved on every read (D7′)")
+    class Sections {
+
+        @Test
+        @DisplayName("a section round-trips with all three of its arms and its resolved count")
+        void aSectionRoundTrips() throws Exception {
+            UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3");
+
+            MvcResult saved = patch(LEAD, ACME, ACME_BANKING, plan, withSections(List.of(
+                    section("Create an object", List.of(PAYMENTS_CASE), List.of(), List.of()),
+                    section("Navigation", List.of(), List.of(), List.of("checkout")))), null);
+
+            assertThat(saved.getResponse().getStatus())
+                    .as("%s", saved.getResponse().getContentAsString())
+                    .isEqualTo(200);
+
+            JsonNode sections = body(saved).get("sections");
+            assertThat(names(sections))
+                    .as("author order, as submitted — not alphabetical, which would rearrange "
+                            + "somebody's document on save")
+                    .containsExactly("Create an object", "Navigation");
+            assertThat(sections.get(0).get("position").asInt()).isZero();
+            assertThat(sections.get(1).get("position").asInt()).isEqualTo(1);
+            assertThat(ids(sections.get(0).get("caseIds"))).containsExactly(PAYMENTS_CASE);
+            assertThat(strings(sections.get(1).get("tags"))).containsExactly("checkout");
+
+            // The count is the RESOLUTION and not the number of references: the second section
+            // names one tag and holds one case, and it is not the same case.
+            assertThat(sections.get(0).get("caseCount").asLong()).isEqualTo(1);
+            assertThat(sections.get(1).get("caseCount").asLong()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("the sections' counts EXCEED the plan's, because a case reached twice is one case")
+        void theCountsDoNotSum() throws Exception {
+            UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3");
+
+            // PAYMENTS_CASE is named directly in one section and arrives through its own folder in
+            // the other. Both sections hold it; the plan holds it once.
+            MvcResult saved = patch(LEAD, ACME, ACME_BANKING, plan, withSections(List.of(
+                    section("Named directly", List.of(PAYMENTS_CASE), List.of(), List.of()),
+                    section("Via the folder", List.of(), List.of(PAYMENTS), List.of()))), null);
+
+            JsonNode served = body(saved);
+            assertThat(served.get("sections").get(0).get("caseCount").asLong()).isEqualTo(1);
+            assertThat(served.get("sections").get(1).get("caseCount").asLong()).isEqualTo(1);
+            assertThat(served.get("caseCount").asLong())
+                    .as("the parts sum to 2 and the whole is 1 — stated on the contract and on the "
+                            + "screen, because a reader who subtracts reports a bug in a correct "
+                            + "number")
+                    .isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("an EMPTY section survives a save and a reload")
+        void anEmptySectionIsKept() throws Exception {
+            UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3");
+
+            // The state the whole shape of ck_plan_scope_target exists for: an author types the
+            // sub-feature heading before filling it. Dropping it on save deletes what they just
+            // typed, mid-edit, with a success message.
+            MvcResult saved = patch(LEAD, ACME, ACME_BANKING, plan, withSections(List.of(
+                    section("Nobody has filled this in", List.of(), List.of(), List.of()))), null);
+
+            assertThat(saved.getResponse().getStatus()).isEqualTo(200);
+            assertThat(names(body(saved).get("sections")))
+                    .containsExactly("Nobody has filled this in");
+            assertThat(body(saved).get("sections").get(0).get("caseCount").asLong())
+                    .as("zero, and zero is not an error")
+                    .isZero();
+
+            JsonNode reread = body(get(LEAD, ACME, "/projects/" + ACME_BANKING + "/plans/" + plan));
+            assertThat(names(reread.get("sections")))
+                    .as("the reload is the half a response assertion cannot make — the row has to "
+                            + "be in the table, not merely echoed back")
+                    .containsExactly("Nobody has filled this in");
+        }
+
+        @Test
+        @DisplayName("two sections with one name are refused, because the name IS the identity")
+        void duplicateSectionNamesAreRefused() throws Exception {
+            UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3");
+
+            // Storage keys a row's membership on section_name, so two sections called "Edit" would
+            // be saved as two and read back as one, silently merging their contents.
+            MvcResult refused = patch(LEAD, ACME, ACME_BANKING, plan, withSections(List.of(
+                    section("Edit", List.of(PAYMENTS_CASE), List.of(), List.of()),
+                    section("Edit", List.of(), List.of(PAYMENTS), List.of()))), null);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(refused.getResponse().getContentAsString()).contains("sections");
+            assertThat(scopeRows(plan)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a section naming a SIBLING project's case is refused like an unsectioned one")
+        void aSectionIsCheckedAgainstTheProject() throws Exception {
+            UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3");
+
+            // The live-id check moved one level down. An id validated in the unsectioned group and
+            // not inside a section is the same hole in a place nobody would look.
+            MvcResult refused = patch(LEAD, ACME, ACME_BANKING, plan, withSections(List.of(
+                    section("Create an object", List.of(MOBILE_CASE), List.of(), List.of()))), null);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(refused.getResponse().getContentAsString())
+                    .contains("caseIds")
+                    .doesNotContain(MOBILE_CASE.toString());
+            assertThat(scopeRows(plan)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("omitting sections leaves them alone; [] removes them")
+        void absentIsNotEmpty() throws Exception {
+            UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3");
+            patch(LEAD, ACME, ACME_BANKING, plan, withSections(List.of(
+                    section("Navigation", List.of(PAYMENTS_CASE), List.of(), List.of()))), null);
+
+            MvcResult renamed = patch(LEAD, ACME, ACME_BANKING, plan, edit("Release 4.4"), null);
+            assertThat(names(body(renamed).get("sections")))
+                    .as("a rename must not empty the plan's structure")
+                    .containsExactly("Navigation");
+
+            Map<String, Object> cleared = edit("Release 4.4");
+            cleared.put("sections", List.of());
+            MvcResult emptied = patch(LEAD, ACME, ACME_BANKING, plan, cleared, null);
+
+            assertThat(emptied.getResponse().getStatus()).isEqualTo(200);
+            assertThat(body(emptied).get("sections")).isEmpty();
+            assertThat(body(emptied).get("caseCount").asLong())
+                    .as("removing a section removes its references from the plan — they are not "
+                            + "quietly relocated into the unsectioned group")
+                    .isZero();
+        }
+
+        @Test
+        @DisplayName("moving a case into a section IS a scope change, so it writes a version")
+        void sectioningWritesAVersion() throws Exception {
+            UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3", List.of(), List.of(PAYMENTS_CASE));
+            assertThat(versionNumbers(plan)).containsExactly(1);
+
+            Map<String, Object> payload = edit("Release 4.3");
+            payload.put("caseIds", List.of());
+            payload.put("sections", List.of(
+                    section("Create an object", List.of(PAYMENTS_CASE), List.of(), List.of())));
+
+            patch(LEAD, ACME, ACME_BANKING, plan, payload, null);
+
+            // The plan covers the same one case either way, and the version still moves: a version
+            // is the plan's SCOPE as authored, and where a case sits in the document is part of it.
+            assertThat(versionNumbers(plan)).containsExactly(1, 2);
+        }
+    }
+
+    @Nested
+    @DisplayName("The prose — the OTHER meaning of the word scope (§97 D6)")
+    class Prose {
+
+        @Test
+        @DisplayName("both texts are stored and served back")
+        void theProseRoundTrips() throws Exception {
+            UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3");
+
+            Map<String, Object> payload = edit("Release 4.3");
+            payload.put("scopeText", "Payments, refunds and the settlement report.");
+            payload.put("outOfScopeText", "Anything behind the partner feature flag.");
+
+            MvcResult saved = patch(LEAD, ACME, ACME_BANKING, plan, payload, null);
+
+            assertThat(saved.getResponse().getStatus()).isEqualTo(200);
+            assertThat(body(saved).get("scopeText").asText())
+                    .isEqualTo("Payments, refunds and the settlement report.");
+            assertThat(body(saved).get("outOfScopeText").asText())
+                    .isEqualTo("Anything behind the partner feature flag.");
+        }
+
+        @Test
+        @DisplayName("null clears the text — a scalar, unlike every list on this input")
+        void nullClears() throws Exception {
+            UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3");
+            Map<String, Object> written = edit("Release 4.3");
+            written.put("scopeText", "Something somebody wrote.");
+            patch(LEAD, ACME, ACME_BANKING, plan, written, null);
+
+            Map<String, Object> cleared = edit("Release 4.3");
+            cleared.put("scopeText", null);
+            MvcResult saved = patch(LEAD, ACME, ACME_BANKING, plan, cleared, null);
+
+            assertThat(body(saved).get("scopeText").isNull())
+                    .as("the SPA submits every field it renders on every save, so an omitted "
+                            + "scalar is a cleared one — the list half of the convention is the "
+                            + "opposite and both are asserted in this class")
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("prose is CONTENT, so editing it writes no version")
+        void proseIsNotScope() throws Exception {
+            UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3", List.of(PAYMENTS), List.of());
+            assertThat(versionNumbers(plan)).containsExactly(1);
+
+            Map<String, Object> payload = edit("Release 4.3");
+            payload.put("scopeText", "Rewritten from scratch, twice, at length.");
+            payload.put("outOfScopeText", "And this too.");
+            patch(LEAD, ACME, ACME_BANKING, plan, payload, null);
+
+            // The two meanings of "scope" pull in opposite directions here and this is where it
+            // shows: a plan version pins what will be RUN (§6j). Filling the prose in over three
+            // sittings must not produce three versions of a scope that never moved.
+            assertThat(versionNumbers(plan))
+                    .as("a version per paragraph would fill the history with rows whose snapshots "
+                            + "are identical, which is what SuiteVersions refuses for a rename")
+                    .containsExactly(1);
+        }
+
+        @Test
+        @DisplayName("blank trims to absent, so a cleared box is not a section holding a space")
+        void blankIsAbsent() throws Exception {
+            UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3");
+
+            Map<String, Object> payload = edit("Release 4.3");
+            payload.put("outOfScopeText", "   ");
+            MvcResult saved = patch(LEAD, ACME, ACME_BANKING, plan, payload, null);
+
+            assertThat(body(saved).get("outOfScopeText").isNull())
+                    .as("an out-of-scope section holding a single space renders as written and "
+                            + "says nothing, and its whole value is being explicit")
+                    .isTrue();
         }
     }
 
@@ -829,6 +1145,39 @@ class PlanUpdateEndpointTest extends IntegrationTestBase {
         return ids;
     }
 
+    private static List<String> strings(JsonNode array) {
+        List<String> values = new ArrayList<>();
+        array.forEach(node -> values.add(node.asText()));
+        return values;
+    }
+
+    /** The served sections' names, in served order — which is an assertion about the order too. */
+    private static List<String> names(JsonNode sections) {
+        List<String> values = new ArrayList<>();
+        sections.forEach(node -> values.add(node.get("name").asText()));
+        return values;
+    }
+
+    private Map<String, Object> section(
+            String name, List<UUID> caseIds, List<UUID> suiteIds, List<String> tags) {
+
+        Map<String, Object> section = new LinkedHashMap<>();
+        section.put("name", name);
+        section.put("caseIds", caseIds.stream().map(UUID::toString).toList());
+        section.put("suiteIds", suiteIds.stream().map(UUID::toString).toList());
+        section.put("tags", tags);
+        return section;
+    }
+
+    /** A rename-free edit carrying just the sections. A List rather than varargs: a generic array
+     *  parameter is a {@code -Werror} heap-pollution warning, and {@code @SafeVarargs} is a claim
+     *  worth more than the two characters it saves at each call site. */
+    private Map<String, Object> withSections(List<Map<String, Object>> sections) {
+        Map<String, Object> payload = edit("Release 4.3");
+        payload.put("sections", sections);
+        return payload;
+    }
+
     // =====================================================================
     // helpers — fixture
     // =====================================================================
@@ -948,6 +1297,26 @@ class PlanUpdateEndpointTest extends IntegrationTestBase {
             statement.setString(5, key);
             statement.setLong(6, keySeq);
             statement.setString(7, title);
+            statement.executeUpdate();
+        }
+    }
+
+    /**
+     * Tags a case, in ACME.
+     *
+     * <p>Written straight to {@code case_tag} rather than through the case editor because the tag
+     * arm resolves against that table and nothing else — and because one test tags a case
+     * <em>between two reads of one plan</em>, which is how a live selector is observed at all.
+     */
+    private void caseTag(Connection connection, UUID caseId, String tag) throws SQLException {
+        try (var statement = connection.prepareStatement("""
+                INSERT INTO case_tag (company_id, case_id, tag)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), ?)
+                ON CONFLICT DO NOTHING
+                """)) {
+            statement.setString(1, ACME.toString());
+            statement.setString(2, caseId.toString());
+            statement.setString(3, tag);
             statement.executeUpdate();
         }
     }

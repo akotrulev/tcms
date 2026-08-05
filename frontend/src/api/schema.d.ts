@@ -6238,6 +6238,18 @@ export interface components {
             caseIds: string[];
             suiteIds: string[];
             tags: string[];
+            /**
+             * @description The live cases this section resolves to right now, deduped across its three arms.
+             *
+             *     Served beside the references rather than instead of them: the references are what the
+             *     author wrote and are what a `PATCH` sends back, and the count is what they currently
+             *     catch. A section defined by the tag `smoke` and reporting 12 says both halves of the
+             *     live-selector design on one row.
+             *
+             *     **These do not sum to the plan's `caseCount`** — see this schema's own description. A
+             *     section with no references at all reports `0`, which is legal and is not an error.
+             */
+            caseCount: number;
         };
         /**
          * @description **The whole section list is replaced when `sections` is present** — sections have no ids, so

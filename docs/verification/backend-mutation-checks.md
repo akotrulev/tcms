@@ -1840,3 +1840,28 @@ not a rule computed wrongly, it is a rule that quietly stopped being computed.
 | **Must show** | `PlanLifecycleEndpointTest`'s whole `Gating` class was deleted with the edge. Confirm `RunCreateEndpointTest`'s `requireApprovedCaseForRun` coverage — including the override arm and the not-an-override arm — is **still green and still non-vacuous**, since it is now the only place §6g's gating vocabulary is asserted at all. |
 | **Check** | `project_settings` lost a column and not a behaviour |
 | **Must show** | The settings `PUT` is a whole-value replace: `ReviewSettingsPage.test.tsx`'s exact-object save assertion must redden if `requireApprovedCaseForRun` is dropped from the submit. It does (§82's row, still standing). What is **not** covered: nothing asserts the removed column is gone, and a deployment whose `V32` half-applied would have the entity and the column disagree — `ddl-auto: validate` does not fail on an extra column. |
+
+## §97 phase 3b — the tag arm, the sections, the prose, and the tags endpoint
+
+Built and unverified. Rows written per §65; **none of them run.**
+
+| | |
+|---|---|
+| **Check** | the tag arm actually resolves rather than being stored and ignored |
+| **Must show** | Deleting the `i.tag IS NOT NULL AND EXISTS (…case_tag…)` clause from `CaseFacts.scopeMatch()` must redden `PlanUpdateEndpointTest.TagArm.aTagResolves` — the plan's `caseCount` falls to 0 while the tag is still served back. That pairing is the point: a stored-and-unresolved tag looks exactly like a tag nobody has used, on the screen and in the response. |
+| **Check** | the three plan expansions still share one predicate |
+| **Must show** | `scopeMatch()` is interpolated into `caseCountsByPlan`, `caseIdsInPlanScope`, `casesInPlanScope` and `caseCountsBySection`. Changing the tag arm in a **copy** rather than in the shared string is the drift `PlanStatisticsTest` was built to catch — confirm it still fails when one of the four is given its own two-arm predicate. §96's standing rule (**grep for `JOIN suite` before adding one**) covers the other half. |
+| **Check** | `caseCountsBySection` is bounded to sectioned rows |
+| **Must show** | Dropping `AND i.section_name IS NOT NULL` groups every unsectioned row under a NULL key. **This probably reddens nothing** — the view reads the map through `getOrDefault(section.name(), 0L)`, so a NULL key is simply never asked for. Recorded as a row rather than a test because the honest statement is that the guard is defensive, not load-bearing, and a later reader should not assume coverage. |
+| **Check** | the tags endpoint is bounded by PROJECT and not merely by company |
+| **Must show** | Dropping `AND c.projectId = :projectId` from `CaseTagRepository.findTagUsage` must redden **exactly two** assertions in `TagEndpointTest.siblingProjectIsInvisible` — the absent `mobile-only` and the inflated `checkout` count. `case_tag` has a `company_id` and **no `project_id`**, so RLS alone leaks a client's whole tag vocabulary across their own projects while every cross-company test in the suite stays green. This is the highest-signal row in this phase. |
+| **Check** | a section's ids are checked against the project like an unsectioned one's |
+| **Must show** | Reverting `PlanEdit.validateScope`'s `scope.allSuiteIds()` / `allCaseIds()` to `scope.suiteIds()` / `caseIds()` must redden `Sections.aSectionIsCheckedAgainstTheProject`. Without it a sibling project's case enters the plan through a section — the same hole `PlanEdit`'s live-id sets exist to close, one level down where nobody would look for it. |
+| **Check** | an empty section survives a save |
+| **Must show** | Removing the `if (section.isEmpty())` placeholder write in `PlanUpdateService` must redden `Sections.anEmptySectionIsKept` — **on its reload assertion and not on its response assertion**, since the response is assembled from the validated edit either way. The reload is what proves a row reached the table. |
+| **Check** | two sections cannot share a name |
+| **Must show** | Dropping the `names.add(name)` check in `PlanEdit.validateSections` must redden `Sections.duplicateSectionNamesAreRefused`. Storage keys membership on `section_name`, so without it two sections save as two and read back as one, silently merged — a data-losing save that answers 200. |
+| **Check** | the prose is content and not scope |
+| **Must show** | Adding `scopeText` to `PlanSnapshot` must redden `Prose.proseIsNotScope`. A version per paragraph fills the history with rows whose snapshots differ in nothing that will ever be run. |
+| **Check** | the widened CHECK constraint |
+| **Must show** | Now covered — `PlanScopeConstraintTest` is written and green, and asserts both halves in both directions over plain JDBC rather than through `PlanScopeItem`'s factories (which would pass with the constraint dropped entirely). §97 phase 3a's row naming it as "not yet written" is **closed**. |

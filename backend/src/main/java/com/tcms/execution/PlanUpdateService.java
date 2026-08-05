@@ -188,10 +188,15 @@ public class PlanUpdateService {
         // carries an omitted list over from the stored scope and then checks every id it ends up
         // with — so a folder deleted since the plan was written is surfaced rather than silently
         // re-inserted by an edit that only meant to change the milestone.
+        // Both levels on both sides: the submitted sections' ids as well as the unsectioned ones,
+        // and the stored scope's whole expansion. An id checked in one group and not the other is
+        // the hole this check exists to close, moved one level down.
         Set<UUID> liveSuites = cases.liveSuiteIds(
-                project.getId(), union(request.suiteIds(), stored.suiteIds()));
+                project.getId(),
+                union(sectionSuiteIds(request), union(request.suiteIds(), stored.allSuiteIds())));
         Set<UUID> liveCases = cases.liveCaseIds(
-                project.getId(), union(request.caseIds(), stored.caseIds()));
+                project.getId(),
+                union(sectionCaseIds(request), union(request.caseIds(), stored.allCaseIds())));
 
         PlanEdit.Outcome validated =
                 PlanEdit.validateUpdate(request, stored, liveSuites, liveCases);
@@ -242,11 +247,38 @@ public class PlanUpdateService {
             scopeItems.flush();
 
             List<PlanScopeItem> items = new ArrayList<>();
+
+            // The unsectioned group: section null, ordinal 0. Not an ordering claim — within a
+            // group the scope is a set, and PlanScope sorts what it hashes.
             for (UUID suiteId : edit.scope().suiteIds()) {
-                items.add(PlanScopeItem.ofSuite(plan.getId(), suiteId));
+                items.add(PlanScopeItem.ofSuite(plan.getId(), suiteId, null, 0));
             }
             for (UUID caseId : edit.scope().caseIds()) {
-                items.add(PlanScopeItem.ofCase(plan.getId(), caseId));
+                items.add(PlanScopeItem.ofCase(plan.getId(), caseId, null, 0));
+            }
+            for (String tag : edit.scope().tags()) {
+                items.add(PlanScopeItem.ofTag(plan.getId(), tag, null, 0));
+            }
+
+            for (PlanScope.Section section : edit.scope().sections()) {
+                int ordinal = section.position();
+                for (UUID suiteId : section.suiteIds()) {
+                    items.add(PlanScopeItem.ofSuite(plan.getId(), suiteId, section.name(), ordinal));
+                }
+                for (UUID caseId : section.caseIds()) {
+                    items.add(PlanScopeItem.ofCase(plan.getId(), caseId, section.name(), ordinal));
+                }
+                for (String tag : section.tags()) {
+                    items.add(PlanScopeItem.ofTag(plan.getId(), tag, section.name(), ordinal));
+                }
+                // A section with no references gets a row that names it and targets nothing — the
+                // one shape ck_plan_scope_target admits with no target, and the only way an empty
+                // section survives a reload. Written ONLY when it is genuinely empty: a filled
+                // section is named by its own member rows, and adding a placeholder beside them
+                // would put a row in the table that expands to nothing and reads as a mistake.
+                if (section.isEmpty()) {
+                    items.add(PlanScopeItem.ofSection(plan.getId(), section.name(), ordinal));
+                }
             }
             scopeItems.saveAll(items);
         }
@@ -299,5 +331,30 @@ public class PlanUpdateService {
             all.addAll(submitted);
         }
         return all;
+    }
+
+    /** The suite ids named inside the submitted sections, or empty when none were submitted. */
+    private static List<UUID> sectionSuiteIds(PlanUpdateRequest request) {
+        return sectionIds(request, PlanSectionInput::suiteIds);
+    }
+
+    /** Likewise for cases. */
+    private static List<UUID> sectionCaseIds(PlanUpdateRequest request) {
+        return sectionIds(request, PlanSectionInput::caseIds);
+    }
+
+    private static List<UUID> sectionIds(
+            PlanUpdateRequest request, java.util.function.Function<PlanSectionInput, List<UUID>> arm) {
+
+        if (request.sections() == null) {
+            return List.of();
+        }
+        List<UUID> ids = new ArrayList<>();
+        for (PlanSectionInput section : request.sections()) {
+            if (section != null && arm.apply(section) != null) {
+                arm.apply(section).stream().filter(java.util.Objects::nonNull).forEach(ids::add);
+            }
+        }
+        return ids;
     }
 }
