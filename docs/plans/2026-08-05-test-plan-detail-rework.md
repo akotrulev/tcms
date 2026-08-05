@@ -269,8 +269,17 @@ That is the second-order benefit of following TestNG here, and it is worth namin
    requires widening `ck_plan_scope_target` from a two-way XOR (`(suite_id IS NULL) <> (case_id IS
    NULL)`) to a **three-way exactly-one** over suite / case / tag. That constraint is the one thing
    in this migration that can silently admit a nonsense row, so it gets its own assertion rather
-   than being trusted to review. No new table, so **no new RLS policy**: the count stays at 61.
-3. **Backend**: the plan `PATCH` accepts both texts and sectioned scope items; **`CaseFacts.casesInPlanScope`
+   than being trusted to review.
+   **Plus M7's lifecycle reduction** (`2026-08-05-organization-model-restatement.md`): the
+   `test_plan.status` CHECK drops `ACTIVE` and `CLOSED`, existing rows in either state become
+   `APPROVED`, and `closed_at` goes. **Lossy and not reversible** — the header must say that the
+   audit log's `plan.started`/`.reopened`/`.closed` events are where that history now lives.
+   **Plus M9**: `WIP` joins the seeded `case_status` set.
+   No new table, so **no new RLS policy**: the count stays at 61.
+3. **Backend**: `PlanLifecycle` and `PlanStatusService` reduced to `DRAFT → IN_REVIEW → APPROVED`,
+   with §82's `requireApprovedPlanToStart` and `PlanDeleteService`'s close/delete partition retired
+   and their reasoning recorded rather than deleted (M7); the plan `PATCH` accepts both texts and
+   sectioned scope items; **`CaseFacts.casesInPlanScope`
    extended with the tag arm and grouped by section** — the existing method, not a new one; the
    tags-in-use query; `PlanDocumentTemplate` deleted with its `POST`; the link/unlink service and
    its three refusals (phase 1's contract).
@@ -295,6 +304,10 @@ That is the second-order benefit of following TestNG here, and it is worth namin
 - **Business requirements is one page, not a list** (D4′).
 - **The Feature classification dimension is not a fill mechanism** (D8 chose tags). It exists, it is
   seeded per project (`V18`), and using it here is a later call.
+- **An epic identifier.** M8: the linked business-requirements page *is* the epic's specification, so
+  there is no `epicKey` on the plan. A plan whose epic lives only in a tracker cannot say so, which
+  is the named cost.
+- **An exclude arm** on tags anywhere (M6), and it is a known gap rather than an oversight.
 - **`DocBlock.coverage` stays absent** — still nothing here can price a link (§93 §3).
 - **Export.** Printing the plan as the PDF is still §88's renderer's future job.
 - **File uploads on the artifact tab** — the storage port does not exist (open question #28).
@@ -316,7 +329,15 @@ none of them.
 | 6 | Frontend — the Test cases tab: sections, four fill mechanisms, auto-append, deferred creation | both |
 | 7 | Handoff section, index row, both orientation caches, verification queue rows | both |
 
-## 7a. What this slice is NOT, after the organization-model restatement
+## 7a. Why M7 lands HERE and not in its own slice
+
+The plan lifecycle reduction is not plan-detail work, and the instinct is to give it a slice. It
+lands inside §97 for one reason: **§97's Plan tab renders the lifecycle**, phase 3 is already writing
+`V32`, and the frontend phases have not started. Building the tab against five states and then
+cutting to three is the same screen written twice. M9's seed change rides along because it is one
+row in the same migration.
+
+## 7b. What this slice is NOT, after the organization-model restatement
 
 The user's model restatement (2026-08-05) produced two further slices, and neither belongs here:
 
@@ -348,5 +369,9 @@ Both are in `docs/plans/2026-08-05-organization-model-restatement.md`. The filin
   second implementation `ui-rules` §8 is about; `PlanLifecycle.test.tsx` and `PlanEdit.test.tsx` move
   with it. Same for `PlanDocumentTemplate` and its tests.
 - **Progress must keep working for a reader with no write permission at all** (§3).
+- **M7 deletes states that four slices' worth of reasoning was written about.** `PlanLifecycle`'s
+  javadoc, `PlanStatusService`'s audit mapping, `PlanDeleteService`'s partition and §82's edge-vs-
+  target finding all argue about `ACTIVE`/`CLOSED`. Strike them through with the reversal, per the
+  working agreement — a reader who finds the argument gone assumes it was never made.
 - **The tags endpoint is a new `api.*` call site**, so §70's contract-hygiene checks will generate
   against it — expect the frontend test count to move by more than the tests written by hand.

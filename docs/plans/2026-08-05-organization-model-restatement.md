@@ -58,6 +58,77 @@ another with no contradiction anywhere, and no history is rewritten when it is r
   the shape when it is built is a flag on `suite_tag_rule` and a subtraction applied **after** all
   arms resolve.
 
+### Taken after the Zephyr clarification (2026-08-05, same day)
+
+The user restated the plan/execution split against Zephyr: *"A test plan is just an outline of what
+should be tested for an epic to be considered complete, it has draft and approved states. Running a
+test and writing down the result is done in a test execution … within a test cycle."*
+
+**Zephyr's split is already what is built** — see §3b — so the clarification produced no structural
+change. It produced three corrections.
+
+- **M7 — the plan lifecycle drops `ACTIVE` and `CLOSED`.** `DRAFT → IN_REVIEW → APPROVED` is the
+  whole ladder.
+  **The argument is the user's own, applied precisely.** `PlanStatusService` writes `plan.started`,
+  `plan.reopened` and `plan.closed` and fills `closed_at` — those describe *a plan being run*, which
+  is the execution's business, and `test_run` **already has** `NOT_STARTED → IN_PROGRESS →
+  COMPLETED → ABORTED`. Plan-`ACTIVE` duplicates run-`IN_PROGRESS` one level up.
+  **`IN_REVIEW` stays, and it is not a third state the author manages** — it is the transit between
+  the two the user named. Cutting it would remove plan review from the product: `review.subject_type`
+  admits `PLAN`, and §77's `reviewEnabledPlan`, §79's comments, §80's assignment and §81's reviewer
+  inbox all operate on it. It would also reopen what `PlanLifecycle` closed on §6g's authority —
+  *"the state machine has exactly one gate"* — by making approval reachable with no gate before it.
+- **M8 — the epic is the linked business-requirements page.** §97's D4′ already links a `DocPage`;
+  that page *is* the epic's specification and the plan needs no separate identifier. **Nothing to
+  build**, and the named cost: a plan whose epic lives in a tracker and not in the docs space has
+  nowhere to say so. An external issue reference on `test_plan` is the shape if that changes.
+- **M9 — `WIP` joins the default execution statuses.** A seventh seeded `case_status`
+  (`is_final=false`, `counts_as_pass=false`, like `Retest`), matching Zephyr. The six seeded today —
+  Passed, Failed, Blocked, Skipped, Retest, Untested — have no value meaning *"somebody is running
+  this right now"*, which is what a lead wants halfway through a long manual cycle. `case_status` was
+  always per-project configurable, so this changes the **default seed** and not the mechanism;
+  existing companies top up by re-running `provision-company`, which is idempotent by design and is
+  documented as the supported way to take on a release's new vocabulary.
+
+## 3b. Validation against Zephyr (2026-08-05)
+
+| Zephyr | TCMS | |
+|---|---|---|
+| Test cycle | `test_run` | ✅ |
+| Test execution — a case run *within* a cycle | `test_execution` (`run_id` + `case_id`, `uq_execution_run_case`) | ✅ |
+| Pass / Fail / Blocked | seeded `case_status`, plus Skipped / Retest / Untested | ✅ |
+| WIP | — | → **M9** |
+| Results never touch the case definition | `test_case` has no status column | ✅ |
+
+**The clarification confirms §97 rather than changing it**: the plan stays an outline, and its
+Progress tab is *derived* from runs — nothing writes a result to a plan. "Is this plan done?" is
+answered by the runs, which is where the user places it.
+
+## 3c. M7 is LOSSY, and the loss is bounded by the audit log
+
+Reducing the CHECK constraint means every existing `ACTIVE` and `CLOSED` plan must become something,
+and both map to `APPROVED` — a plan that was started or finished was, by construction, past drafting.
+`closed_at` is dropped with the state that filled it.
+
+**The down-migration cannot restore which plans were closed**, and this product has a real
+deployment (§58), so that is a live concern rather than a theoretical one. What bounds it: the audit
+log already carries `plan.started`, `plan.reopened` and `plan.closed` events, so *the history
+survives where history belongs* even though the current-state column stops carrying it. The
+migration must say so in its header, because the next reader will otherwise assume the information
+was thrown away.
+
+**§82's `requireApprovedPlanToStart` goes with them**, and not as collateral: `PlanStatusService:182`
+records that the gate binds **only** on `DRAFT → ACTIVE`, and after M7 there is no such edge. §82's
+finding — *"the plan rule is an EDGE, not a target"*, which cost a whole slice to discover and whose
+naive reading made every closed plan permanently un-reopenable — becomes **moot rather than wrong**.
+It is written down here because a finding that expensive should not vanish silently when the states
+it was about are deleted.
+
+**`PlanDeleteService`'s partition goes too** — *"delete a plan nobody executed, close one somebody
+did"*. With no `CLOSED`, a plan somebody executed against has no terminal state, and delete stays
+refused while a run names it. That leaves such a plan permanently `APPROVED`, which is correct under
+M7 (its execution state lives on its runs) and is the sentence the handoff has to carry.
+
 ## 3a. Validation against TestNG (2026-08-05)
 
 The user validated the model against TestNG, which is the right instrument: it is the same
