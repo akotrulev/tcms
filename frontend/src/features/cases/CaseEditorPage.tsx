@@ -45,6 +45,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import { CaseSchema, isBlankStep, liveSteps, type CaseInput } from './caseSchema';
 import { ClassificationPicker } from './ClassificationPicker';
+import { ConditionEditDialog } from './ConditionEditDialog';
+import { ConditionsPanel } from './ConditionsPanel';
 import { SharedStepPicker } from './SharedStepPicker';
 import { resolveStepMove } from './stepReorder';
 import {
@@ -61,7 +63,7 @@ import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
 import { automationLabels, priorityLabels, stepFormatLabels } from '../../lib/labels';
 import { selectTestId } from '../../lib/muiTestIds';
-import type { StepSuggestion, TestCase } from '../../api/types';
+import type { CaseConditionRef, Condition, StepSuggestion, TestCase } from '../../api/types';
 
 /**
  * Case authoring form.
@@ -306,6 +308,19 @@ export function CaseEditorPage({ mode }: { mode: 'create' | 'edit' }) {
   return <CaseEditorForm mode="create" projectId={projectId} existing={undefined} />;
 }
 
+/**
+ * The case's OWN attached condition ids, in order — what the editor binds.
+ *
+ * Inherited rows are the folder's and are dropped: submitting one would attach the folder's
+ * condition directly to the case. Inline rows carry no `conditionId` and are dropped too, on the
+ * server's terms — nothing can render one, so nothing can round-trip one either.
+ */
+function ownConditionIds(refs: readonly CaseConditionRef[] | undefined): string[] {
+  return (refs ?? [])
+    .filter((ref) => !ref.inherited && !!ref.conditionId)
+    .map((ref) => ref.conditionId as string);
+}
+
 function CaseEditorForm({
   mode,
   projectId,
@@ -319,6 +334,32 @@ function CaseEditorForm({
   const { enqueueSnackbar } = useSnackbar();
   const suites = useSuites(projectId);
   const dimensions = useClassification(projectId);
+
+  /*
+    Which panel the condition dialog is for, and whether it is creating or editing. One piece of
+    state rather than two booleans and a nullable entry: "open for editing X" and "open to create a
+    PRE" are the two shapes it has, and separate flags make a third — open, editing nothing,
+    for no kind — representable.
+  */
+  const [conditionDialog, setConditionDialog] = useState<{
+    kind: 'PRE' | 'POST';
+    condition: Condition | null;
+  } | null>(null);
+
+  /*
+    Entries created in this editor session, so a row can render the moment it is attached.
+
+    The library lists are cached per search term, so invalidating them does not make the new entry
+    resolvable synchronously — and the row in between would render the author's own condition as
+    "Unknown condition" on the screen they just created it from. Not server state in a client store:
+    these are handed to the panel as a rendering fallback and the query remains the source.
+  */
+  const [createdConditions, setCreatedConditions] = useState<Condition[]>([]);
+
+  // The folder's conditions, rendered read-only beside the case's own. Filtered here rather than in
+  // the panel so the panel takes exactly what it renders and nothing that needs interpreting.
+  const inheritedPre = (existing?.preconditions ?? []).filter((ref) => ref.inherited);
+  const inheritedPost = (existing?.postconditions ?? []).filter((ref) => ref.inherited);
 
   const createCase = useCreateCase(projectId);
   const updateCase = useUpdateCase(projectId, existing?.id ?? '');
@@ -371,6 +412,13 @@ function CaseEditorForm({
       // deliberately does not read that absence as an instruction to delete it. See
       // `TestCaseInput.classificationValueIds` in the contract for the whole rule.
       classificationValueIds: existing?.classificationValueIds ?? [],
+      // OWN attachments only — `inherited` rows are the folder's and are shown, not edited, here.
+      // Seeding one would attach the folder's condition directly to the case on the first save,
+      // permanently, and the two render almost identically so nobody would see it happen. An
+      // inline row carries no `conditionId` and is dropped for the same reason the server refuses
+      // one: nothing can render it.
+      preconditionIds: ownConditionIds(existing?.preconditions),
+      postconditionIds: ownConditionIds(existing?.postconditions),
       changeComment: '',
     },
   });
@@ -492,6 +540,10 @@ function CaseEditorForm({
       // where sending the field's natural empty value and omitting the field are different
       // instructions, which is why this is not `|| undefined` like the nullable scalars above.
       classificationValueIds: data.classificationValueIds,
+      // Always sent, including as `[]`, for the reason above — the server reads absent as "leave
+      // them alone", so detaching the last condition would silently do nothing.
+      preconditions: data.preconditionIds.map((conditionId) => ({ conditionId })),
+      postconditions: data.postconditionIds.map((conditionId) => ({ conditionId })),
       changeComment: data.changeComment || null,
     };
 
@@ -1049,6 +1101,51 @@ function CaseEditorForm({
               </Stack>
             </Panel>
 
+            {/*
+              Conditions sit between Classification and Automation deliberately: they are part of
+              what the case IS to a person running it — the setup they must have done before the
+              first step — where automation is about how it is executed. Placing them below the
+              step list would put the setup after the procedure that assumes it.
+            */}
+            <Panel title="Conditions" testId={`${TestIdPrefix}.Conditions`}>
+              <Stack sx={{ gap: 3 }}>
+                <Controller
+                  control={control}
+                  name="preconditionIds"
+                  render={({ field }) => (
+                    <ConditionsPanel
+                      kind="PRE"
+                      projectId={projectId}
+                      testId={`${TestIdPrefix}.Preconditions`}
+                      value={field.value}
+                      inherited={inheritedPre}
+                      onChange={field.onChange}
+                      known={createdConditions}
+                      onCreate={() => setConditionDialog({ kind: 'PRE', condition: null })}
+                      onEdit={(condition) => setConditionDialog({ kind: 'PRE', condition })}
+                    />
+                  )}
+                />
+                <Controller
+                  control={control}
+                  name="postconditionIds"
+                  render={({ field }) => (
+                    <ConditionsPanel
+                      kind="POST"
+                      projectId={projectId}
+                      testId={`${TestIdPrefix}.Postconditions`}
+                      value={field.value}
+                      inherited={inheritedPost}
+                      onChange={field.onChange}
+                      known={createdConditions}
+                      onCreate={() => setConditionDialog({ kind: 'POST', condition: null })}
+                      onEdit={(condition) => setConditionDialog({ kind: 'POST', condition })}
+                    />
+                  )}
+                />
+              </Stack>
+            </Panel>
+
             <Panel title="Automation" testId={`${TestIdPrefix}.Automation`}>
               <Stack sx={{ gap: 2 }}>
                 <Controller
@@ -1156,6 +1253,31 @@ function CaseEditorForm({
           ensureTrailingBlank();
         }}
       />
+
+      {/*
+        Keyed on the entry (or 'new'), which is what makes the dialog's own state reset between
+        opens: it seeds its fields from props in `useState`, so without a key, editing one
+        condition and then another would show the first one's text in the second one's form.
+        Rendered only when open for the same reason — there is no cache here to preserve.
+      */}
+      {conditionDialog && (
+        <ConditionEditDialog
+          key={conditionDialog.condition?.id ?? 'new'}
+          projectId={projectId}
+          open
+          condition={conditionDialog.condition}
+          defaultType={conditionDialog.kind}
+          onClose={() => setConditionDialog(null)}
+          onCreated={(created) => {
+            // Attached to the list it was created from. Creating an entry and leaving the author to
+            // find it in the picker they just left is the kind of half-finished flow `ui-rules`
+            // calls a workflow defect — they asked for a condition HERE.
+            setCreatedConditions((current) => [...current, created]);
+            const field = conditionDialog.kind === 'PRE' ? 'preconditionIds' : 'postconditionIds';
+            setValue(field, [...getValues(field), created.id], { shouldDirty: true });
+          }}
+        />
+      )}
     </Box>
   );
 }

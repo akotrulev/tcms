@@ -67,7 +67,14 @@ export {
   type CaseHistoryResponse,
   type CaseVersion,
 } from './cases';
-export { useConditions, useCreateSharedStep, useSharedSteps, useStepSuggestions } from './library';
+export {
+  useConditions,
+  useCreateCondition,
+  useCreateSharedStep,
+  useSharedSteps,
+  useStepSuggestions,
+  useUpdateCondition,
+} from './library';
 export {
   useAddReviewComment,
   useAssignReviewer,

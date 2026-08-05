@@ -106,6 +106,27 @@ export const CaseSchema = z
     // control's shape rather than by refusing a submission the user could not have made. The server
     // and V2's trigger hold the line for anything that is not the SPA.
     classificationValueIds: z.array(z.string()),
+    /**
+     * The case's OWN attached conditions, by library id, in the author's order — one array per
+     * kind (§95).
+     *
+     * **Ids, not objects.** The contract takes `[{conditionId}]` and the submit maps to it; the
+     * form binds the ids because that is what the two controls produce and what reordering moves.
+     *
+     * **Own, never inherited.** `TestCaseDetail.preconditions` carries the folder's conditions too,
+     * marked `inherited` — and those must never be seeded into this array. Submitting one would
+     * attach the folder's condition *directly* to the case, permanently and invisibly, since an
+     * inherited row and an own row render almost identically. The defaults filter on `inherited`
+     * for exactly that.
+     *
+     * **Deliberately not validated here.** There is no rule a static schema could hold: whether an
+     * id is one this project offers needs the library, which is a runtime value. The picker only
+     * offers live entries, and the server refuses anything else with a field error.
+     *
+     * Order is the content — these are arrays and are never sorted.
+     */
+    preconditionIds: z.array(z.string()),
+    postconditionIds: z.array(z.string()),
     changeComment: z.string().nullable(),
   })
   // Cross-field rules the server also enforces. Both live in the schema rather than in the

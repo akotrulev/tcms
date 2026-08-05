@@ -49,6 +49,69 @@ import {
 // ------------------------------------------------------------ classification ----
 
 /**
+ * Reconciles one of a case's two condition lists against a submitted payload — the server's
+ * `CaseConditions.reconcile`, in the mock, with the same four rules.
+ *
+ * Written from the SERVER's rules rather than from what the editor happens to send (§52), which is
+ * what makes each of these able to fail here rather than only in live mode:
+ *
+ *  - **reference form only** — an entry carrying `inlineBody` is a field error, not a stored row,
+ *    because nothing renders an inline attachment, so accepting one would be a save that succeeds
+ *    and a condition the author can never see again;
+ *  - **the library bound** — an id that is not a live entry is refused. In live mode that also
+ *    catches a sibling project's entry, which satisfies the foreign key and would otherwise be
+ *    stored; this mock has one project, so the reachable half here is the unknown id;
+ *  - **inherited rows are NOT the case's own and survive untouched** — the editor submits only what
+ *    the case attaches directly, so folding the inherited ones in would attach every folder's
+ *    condition to the case itself on the first save, permanently and invisibly, since they already
+ *    render;
+ *  - **duplicates within one list collapse**, while the same entry in BOTH lists is legitimate.
+ *
+ * Returns the field error, or null on success — the target is mutated in place.
+ */
+function applyConditions(
+  target: TestCase,
+  kind: 'preconditions' | 'postconditions',
+  submitted: unknown,
+): string | null {
+  if (!Array.isArray(submitted)) return 'Send an array of conditions.';
+
+  const ids: string[] = [];
+  for (const entry of submitted) {
+    if (entry == null || typeof entry !== 'object') continue;
+    const row = entry as { conditionId?: unknown; inlineBody?: unknown };
+    if (row.inlineBody != null) {
+      return 'Attach a condition from the library. Inline conditions are not supported yet.';
+    }
+    if (typeof row.conditionId !== 'string') return 'Choose a condition.';
+    const id = row.conditionId;
+    if (!db.conditions.some((c) => c.id === id)) {
+      return 'That condition is not one this project offers.';
+    }
+    if (!ids.includes(id)) ids.push(id);
+  }
+
+  const inherited = (target[kind] ?? []).filter((ref) => ref.inherited);
+  target[kind] = [
+    ...inherited,
+    ...ids.map((conditionId, index) => {
+      const entry = db.conditions.find((c) => c.id === conditionId)!;
+      return {
+        id: `${conditionId}-att-${index}`,
+        conditionId,
+        title: entry.title,
+        body: entry.body,
+        position: inherited.length + index,
+        inline: false,
+        inherited: false,
+        inheritedFrom: null,
+      };
+    }),
+  ];
+  return null;
+}
+
+/**
  * Applies a submitted classification to a case, or returns the message that refuses it.
  *
  * The mock enforces the server's rules rather than merely storing what it is given. A mock that
@@ -444,13 +507,7 @@ export const caseHandlers = [
       divergence that let the SPA put `lockVersion` in the PATCH body for months, because no server
       read either. Absent means unchanged; present means 400, in both modes.
     */
-    for (const field of [
-      'ownerId',
-      'tags',
-      'automationTags',
-      'preconditions',
-      'postconditions',
-    ]) {
+    for (const field of ['ownerId', 'tags', 'automationTags']) {
       if (body[field] != null) errors[field] = ['This field cannot be changed here yet.'];
     }
     if (Object.keys(errors).length) {
@@ -519,6 +576,16 @@ export const caseHandlers = [
       if (refusal) {
         return problem(400, 'Validation failed', 'Check the highlighted fields.', {
           classificationValueIds: [refusal],
+        });
+      }
+    }
+
+    for (const kind of ['preconditions', 'postconditions'] as const) {
+      if (body[kind] === undefined) continue;
+      const refusal = applyConditions(created, kind, body[kind]);
+      if (refusal) {
+        return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+          [kind]: [refusal],
         });
       }
     }
@@ -808,13 +875,7 @@ export const caseHandlers = [
     // applied below, with the same three rules the server enforces, because a mock that merely
     // stopped refusing would let mock mode accept a sibling project's value that live mode rejects
     // — the divergence this comment exists to prevent, arriving through the other door.
-    const unsupported = [
-      'ownerId',
-      'tags',
-      'automationTags',
-      'preconditions',
-      'postconditions',
-    ] as const;
+    const unsupported = ['ownerId', 'tags', 'automationTags'] as const;
     const refused = unsupported.filter((field) => body[field] !== undefined);
     if (refused.length > 0) {
       return problem(
@@ -869,11 +930,30 @@ export const caseHandlers = [
       }
     }
 
+    // Absent means "leave them alone" and an empty array means "detach everything" — the server's
+    // split, and reading absent as "detach" is what would make every save that does not render the
+    // panel quietly strip the case's setup.
+    let conditionsChanged = false;
+    for (const kind of ['preconditions', 'postconditions'] as const) {
+      if (body[kind] === undefined) continue;
+      const refusal = applyConditions(next, kind, body[kind]);
+      if (refusal) {
+        return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+          [kind]: [refusal],
+        });
+      }
+      conditionsChanged = true;
+    }
+
     // A version is written on explicit save only, and skipped when nothing changed.
     const substantive =
       writable.some((f) => body[f] !== undefined)
       || Array.isArray(body.steps)
-      || classificationChanged;
+      || classificationChanged
+      // Conditions are authored content and the server's CaseEdit hashes them, so a save that
+      // only moves a condition must still write a version — otherwise the next unrelated save is
+      // credited with the change.
+      || conditionsChanged;
     if (substantive) next.currentVersionNo = (next.currentVersionNo ?? 1) + 1;
     next.lockVersion = (next.lockVersion ?? 1) + 1;
 

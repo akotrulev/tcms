@@ -5,7 +5,7 @@ import { Route, Routes } from 'react-router-dom'
 import { SessionRecoveryContext } from '../../auth/sessionRecoveryContextValue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
-import type { StepSuggestion, Suite, TestCase } from '../../api/types'
+import type { Condition, StepSuggestion, Suite, TestCase } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
@@ -61,10 +61,36 @@ const corpus: StepSuggestion[] = [
   { action: 'Refund it twice', testData: null, expectedResult: null, useCount: 2 },
 ]
 
+/*
+  Declared as `Condition[]` and NOT cast — §79's rule again. §95 added two required fields to this
+  shape, and the whole point is that the next one is a build error here.
+*/
+const library: Condition[] = [
+  {
+    id: 'cond-1',
+    title: 'Log in as standard user',
+    type: 'PRE',
+    body: ['Open the application'],
+    usageCount: 4,
+    suiteUsageCount: 3,
+    lockVersion: 2,
+  },
+  {
+    id: 'cond-2',
+    title: 'Navigate to Billing',
+    type: 'PRE',
+    body: ['Open the account menu'],
+    usageCount: 0,
+    suiteUsageCount: 0,
+    lockVersion: 0,
+  },
+]
+
 function mockReads(permissions: string[] = ['case:create']) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions, {}, PROJECT)
     if (path.includes('/step-suggestions')) return corpus
+    if (path.includes('/conditions')) return library
     if (path.includes('/suites')) return suites
     if (path.includes('/classification')) return []
     return []
@@ -305,5 +331,160 @@ describe('CaseEditorPage — completing from the project corpus', () => {
     // value behind would attach it to a step it was never written for.
     await waitFor(() => expect(actionFields()[0]).toHaveValue('Refund it twice'))
     expect(screen.getAllByTestId('CaseEditor.Steps.Field.TestData')[0]).toHaveValue('')
+  })
+})
+
+/**
+ * The conditions panels (§95).
+ *
+ * What these exist to catch, none of it visible to `tsc` or the linter:
+ *
+ *   1. **An inherited condition being submitted as the case's own.** The folder's conditions render
+ *      in this panel, and an own row and an inherited row look almost identical. Seeding one into
+ *      the form would attach the folder's condition *directly* to the case on the first save —
+ *      permanently, invisibly, and on every case anybody edits.
+ *   2. **The two lists sent as absent instead of empty.** The server reads absent as "leave the
+ *      attachments alone", so detaching the last condition would report success and change nothing.
+ *   3. **The impact warning missing before an edit that rewrites every case using the entry.**
+ */
+describe('CaseEditorPage — conditions', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('offers the project library, and drops an entry once it is attached', async () => {
+    const user = userEvent.setup()
+    mockReads()
+    renderEditor()
+
+    const attach = await screen.findByTestId('CaseEditor.Preconditions.Attach')
+    await user.click(attach)
+    expect(await screen.findByRole('option', { name: /log in as standard user/i })).toBeVisible()
+
+    await user.click(screen.getByRole('option', { name: /log in as standard user/i }))
+
+    // Attaching the same entry twice in one list is a row with no meaning and the server collapses
+    // it silently. Removing it from the picker is the honest version: the mistake is unavailable.
+    await user.click(screen.getByTestId('CaseEditor.Preconditions.Attach'))
+    await waitFor(() =>
+      expect(screen.queryByRole('option', { name: /log in as standard user/i })).not.toBeInTheDocument(),
+    )
+  })
+
+  it('sends the attached ids as objects, and sends an EMPTY list rather than omitting it', async () => {
+    const user = userEvent.setup()
+    mockReads()
+    const post = vi.spyOn(api, 'post').mockResolvedValue({ id: 'c9', key: 'TC-9', currentVersionNo: 1 } as never)
+    renderEditor()
+
+    await fillHeader(user)
+    await user.type(actionFields()[0], 'Refund the payment')
+
+    await user.click(screen.getByTestId('CaseEditor.Preconditions.Attach'))
+    await user.click(await screen.findByRole('option', { name: /log in as standard user/i }))
+
+    await user.click(screen.getByTestId('CaseEditor.Submit'))
+
+    await waitFor(() => expect(post).toHaveBeenCalled())
+    const body = post.mock.calls[0][1] as {
+      preconditions: { conditionId: string }[]
+      postconditions: unknown[]
+    }
+    expect(body.preconditions).toEqual([{ conditionId: 'cond-1' }])
+    // Present and empty, never absent — the distinction the server acts on.
+    expect(body.postconditions).toEqual([])
+  })
+
+  it('reorders through the ▲▼ path, which is the keyboard and screen-reader route', async () => {
+    const user = userEvent.setup()
+    mockReads()
+    const post = vi.spyOn(api, 'post').mockResolvedValue({ id: 'c9', key: 'TC-9', currentVersionNo: 1 } as never)
+    renderEditor()
+
+    await fillHeader(user)
+    await user.type(actionFields()[0], 'Refund the payment')
+
+    await user.click(screen.getByTestId('CaseEditor.Preconditions.Attach'))
+    await user.click(await screen.findByRole('option', { name: /log in as standard user/i }))
+    await user.click(screen.getByTestId('CaseEditor.Preconditions.Attach'))
+    await user.click(await screen.findByRole('option', { name: /navigate to billing/i }))
+
+    // Move the second one up. Order IS the content here — a condition list is a procedure.
+    const up = screen.getAllByTestId('CaseEditor.Preconditions.Up')
+    await user.click(up[1])
+
+    await user.click(screen.getByTestId('CaseEditor.Submit'))
+    await waitFor(() => expect(post).toHaveBeenCalled())
+
+    const body = post.mock.calls[0][1] as { preconditions: { conditionId: string }[] }
+    expect(body.preconditions).toEqual([{ conditionId: 'cond-2' }, { conditionId: 'cond-1' }])
+  })
+
+  it('detaching removes it from the payload', async () => {
+    const user = userEvent.setup()
+    mockReads()
+    const post = vi.spyOn(api, 'post').mockResolvedValue({ id: 'c9', key: 'TC-9', currentVersionNo: 1 } as never)
+    renderEditor()
+
+    await fillHeader(user)
+    await user.type(actionFields()[0], 'Refund the payment')
+
+    await user.click(screen.getByTestId('CaseEditor.Preconditions.Attach'))
+    await user.click(await screen.findByRole('option', { name: /log in as standard user/i }))
+    await user.click(screen.getByTestId('CaseEditor.Preconditions.Remove'))
+
+    await user.click(screen.getByTestId('CaseEditor.Submit'))
+    await waitFor(() => expect(post).toHaveBeenCalled())
+
+    expect((post.mock.calls[0][1] as { preconditions: unknown[] }).preconditions).toEqual([])
+  })
+
+  it('states the blast radius BEFORE an edit, naming the object and both counts', async () => {
+    const user = userEvent.setup()
+    mockReads()
+    renderEditor()
+
+    await user.click(await screen.findByTestId('CaseEditor.Preconditions.Attach'))
+    await user.click(await screen.findByRole('option', { name: /log in as standard user/i }))
+    await user.click(screen.getByTestId('CaseEditor.Preconditions.Edit'))
+
+    const impact = await screen.findByTestId('CaseEditor.Condition.Impact')
+    // Names the object (ui-rules §4), and keeps the two counts apart: 4 + 3 = 7 must not appear.
+    expect(impact).toHaveTextContent('Log in as standard user')
+    expect(impact).toHaveTextContent('Used by 4 cases')
+    expect(impact).toHaveTextContent('3 suites')
+    expect(impact).not.toHaveTextContent('7')
+
+    // Verb-labeled and naming the consequence, not a neutral "Save".
+    expect(screen.getByTestId('CaseEditor.Condition.Save')).toHaveTextContent('Change everywhere')
+  })
+
+  it('creating a condition attaches it to the list it was created from', async () => {
+    const user = userEvent.setup()
+    mockReads()
+    vi.spyOn(api, 'post').mockImplementation((async (path: string) => {
+      if (path.includes('/conditions')) {
+        return {
+          id: 'cond-new',
+          title: 'Seed a captured payment',
+          type: 'PRE',
+          body: ['Insert it'],
+          usageCount: 0,
+          suiteUsageCount: 0,
+          lockVersion: 0,
+        }
+      }
+      return { id: 'c9', key: 'TC-9', currentVersionNo: 1 }
+    }) as never)
+    renderEditor()
+
+    await user.click(await screen.findByTestId('CaseEditor.Preconditions.Create'))
+    await user.type(screen.getByTestId('CaseEditor.Condition.Title'), 'Seed a captured payment')
+    await user.type(screen.getByTestId('CaseEditor.Condition.Body'), 'Insert it')
+    await user.click(screen.getByTestId('CaseEditor.Condition.Save'))
+
+    // Leaving the author to find it in the picker they just left is the workflow defect —
+    // they asked for a condition HERE.
+    expect(await screen.findByText('Seed a captured payment')).toBeVisible()
   })
 })

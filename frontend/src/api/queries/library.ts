@@ -11,13 +11,29 @@ import {
   type UseQueryResult,
 } from '@tanstack/react-query';
 import { TIMEOUTS, api, qs } from '../client';
-import type { Condition, SharedStep, SharedStepInput, StepSuggestion } from '../types';
+import type {
+  Condition,
+  ConditionInput,
+  SharedStep,
+  SharedStepInput,
+  StepSuggestion,
+} from '../types';
 import { base, keys } from './keys';
 
+/**
+ * The project's condition library.
+ *
+ * `enabled` is a parameter rather than always-on because this hook has two jobs with different
+ * appetites. As a **picker** it is search-as-you-type and should fire whenever the box is used; as
+ * a **resolver** — turning a case's attached ids into titles — it is pointless when the case has no
+ * attachments, which is every new case. Firing it there is §94's rule about the step corpus one
+ * endpoint over: a read of a list nobody has asked a question of.
+ */
 export function useConditions(
   projectId: string,
   q: string,
   type?: 'PRE' | 'POST',
+  enabled = true,
 ): UseQueryResult<Condition[]> {
   return useQuery({
     queryKey: keys.conditions(projectId, q, type),
@@ -27,6 +43,10 @@ export function useConditions(
         // Search-as-you-type: a 10s budget here would be a broken experience.
         timeoutMs: TIMEOUTS.typeahead,
       }),
+    enabled,
+    // The library changes only when somebody edits it, so re-asking within a minute answers what
+    // is already on screen — and the two panels ask for the same unfiltered list.
+    staleTime: 60_000,
   });
 }
 
@@ -97,5 +117,66 @@ export function useCreateSharedStep(projectId: string) {
     meta: { handled: true },
     onSuccess: () =>
       client.invalidateQueries({ queryKey: ['projects', projectId, 'shared-steps'] }),
+  });
+}
+
+/**
+ * Adds an entry to the condition library. `library:manage`.
+ *
+ * `useCreateSharedStep`'s shape, prefix-invalidated for its reason: the key carries the search
+ * term, so an entry created while the box reads "refund" must also appear once the box is cleared,
+ * and those are two different cached lists.
+ */
+export function useCreateCondition(projectId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ConditionInput) =>
+      api.post<Condition>(`${base(projectId)}/conditions`, input),
+    meta: { handled: true },
+    onSuccess: () => client.invalidateQueries({ queryKey: ['projects', projectId, 'conditions'] }),
+  });
+}
+
+/**
+ * Edits a library condition — **and every case and suite attaching it**. `library:manage`.
+ *
+ * ## This is the one mutation in the app whose blast radius is not the thing you are editing
+ *
+ * An attachment is a reference, so the edit lands everywhere the entry is used, with no prompt and
+ * no fork. The caller is therefore expected to have stated the impact *before* calling — see
+ * `ConditionEditDialog`, which reads `usageCount` and `suiteUsageCount` off the entry and puts them
+ * in front of the author. Nothing here can do that: by the time this runs the decision is made.
+ *
+ * ## `If-Match`, and why the 409 is handed back rather than notified
+ *
+ * The entry carries a `lockVersion` and it is sent as the precondition, so an author who read the
+ * impact figures cannot apply their edit to a row somebody else has since changed underneath them.
+ * The dialog renders the 409 in place — `handled` — because the recovery is "reload the condition
+ * and reapply", which is an action on the dialog and not a toast.
+ *
+ * Invalidates the CASE cache as well as the library. That is the whole point of the operation: the
+ * editor is showing condition titles resolved through this entry, and leaving them stale would
+ * show the author the old text on the very screen the edit was made from.
+ */
+export function useUpdateCondition(projectId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      conditionId,
+      lockVersion,
+      input,
+    }: {
+      conditionId: string;
+      lockVersion: number;
+      input: ConditionInput;
+    }) =>
+      api.put<Condition>(`${base(projectId)}/conditions/${conditionId}`, input, {
+        headers: { 'If-Match': String(lockVersion) },
+      }),
+    meta: { handled: true },
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ['projects', projectId, 'conditions'] });
+      client.invalidateQueries({ queryKey: ['projects', projectId, 'cases'] });
+    },
   });
 }

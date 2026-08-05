@@ -48,6 +48,8 @@ export type TestCaseSummary = S['TestCaseSummary'];
 export type TestStep = S['TestStep'];
 export type Condition = S['Condition'];
 export type CaseConditionRef = S['CaseConditionRef'];
+export type ConditionInput = S['ConditionInput'];
+export type CaseConditionInput = S['CaseConditionInput'];
 export type SharedStep = S['SharedStep'];
 /**
  * One entry in the project's derived step corpus (§94).

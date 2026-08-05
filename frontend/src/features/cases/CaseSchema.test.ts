@@ -35,6 +35,12 @@ const valid = () => ({
   // the server reads an absent field as "leave the classification alone" and an empty array as
   // "clear it", so a form value that could be undefined would make "unclassified" unexpressible.
   classificationValueIds: [],
+  // Present and empty for the same reason, and it is the same distinction one field over: the
+  // server reads an absent condition list as "leave the attachments alone" and an empty array as
+  // "detach everything", so a form value that could be undefined would make "no conditions"
+  // unexpressible — and would silently preserve attachments the author had just removed.
+  preconditionIds: [],
+  postconditionIds: [],
   changeComment: null,
 })
 
