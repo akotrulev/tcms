@@ -2,10 +2,15 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-05 (§97 phase 3b)
-**Baseline commit:** `923086c` (§97 phase 3a) **+ §97 phase 3b, the commit this line ships in** (its
-own SHA cannot be written into itself; per `CLAUDE.md`, trust the body over the header and re-grep
-what a later commit could have moved).
+**Last verified:** 2026-08-05 (§97 phase 6 — the slice's last)
+**Baseline commit:** `723ab2e` (§97 phase 6) **+ the doc commit this line ships in** (its own SHA
+cannot be written into itself; per `CLAUDE.md`, trust the body over the header and re-grep what a
+later commit could have moved).
+**§97 phases 4, 5 and 6 touched NO backend file** — they are the frontend's form spine, its tabs and
+its Test cases tab. The backend half of the slice is phases 3a–3c, and the body below already
+records it (`V32`, the three-armed `scopeMatch`, the plan ladder's reduction to three states, and
+`PUT`/`DELETE` on the plan's document). This header lagged at phase 3b while 3c updated the body,
+which is the normal shape and the reason the rule is to trust the body.
 **Fingerprint files:** `backend/build.gradle.kts`, `backend/gradle/libs.versions.toml`, `backend/gradle/wrapper/gradle-wrapper.properties`
 
 > Authoritative docs win over this file. `CLAUDE.md`, `docs/HANDOFF.md` (an index — sections live in
