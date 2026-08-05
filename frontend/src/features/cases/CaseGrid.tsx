@@ -107,9 +107,21 @@ export function CaseGrid({
       headerName: 'Suite',
       width: 150,
       renderCell: ({ row }) => (
-        <Tooltip title={row.suiteName} enterDelay={600}>
-          <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} data-testid={`${TestIdPrefix}.Row.Suite`}>
-            {row.suiteName}
+        // `suiteName` is null for an unfiled case (§96) — a real answer, not a missing value, so
+        // the cell says so rather than rendering blank. A blank here reads as a row whose suite
+        // failed to load, which is the one reading that would send somebody looking for a bug.
+        <Tooltip title={row.suiteName ?? 'Filed in no suite'} enterDelay={600}>
+          <Box
+            sx={{
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              color: row.suiteName === null ? 'text.secondary' : undefined,
+              fontStyle: row.suiteName === null ? 'italic' : undefined,
+            }}
+            data-testid={`${TestIdPrefix}.Row.Suite`}
+          >
+            {row.suiteName ?? 'Not filed'}
           </Box>
         </Tooltip>
       ),

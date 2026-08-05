@@ -76,6 +76,51 @@ describe('useCaseFilters — reading the URL', () => {
   })
 })
 
+describe('useCaseFilters — tags and the unfiled toggle (§96)', () => {
+  it('reads repeated tags as an array — the server ANDs them', () => {
+    const { result } = harness('/projects/p/cases?tag=smoke&tag=regression')
+
+    expect(result.current.filters.tag).toEqual(['smoke', 'regression'])
+    expect(result.current.hasActiveFilters).toBe(true)
+  })
+
+  it('round-trips a tag list', () => {
+    const { result } = harness('/projects/p/cases')
+
+    act(() => result.current.setFilter('tag', ['smoke', 'regression']))
+
+    expect(search(result).getAll('tag')).toEqual(['smoke', 'regression'])
+    expect(result.current.filters.tag).toEqual(['smoke', 'regression'])
+  })
+
+  it('writes `unfiled` as a bare true and reads it back as a boolean', () => {
+    const { result } = harness('/projects/p/cases')
+
+    act(() => result.current.setFilter('unfiled', true))
+
+    expect(search(result).get('unfiled')).toBe('true')
+    expect(result.current.filters.unfiled).toBe(true)
+    expect(result.current.hasActiveFilters).toBe(true)
+  })
+
+  it('treats `unfiled=false` as absent rather than as a filter that narrows nothing', () => {
+    // A `false` on the URL would count as an active filter — the empty state would then say "no
+    // rows match your filters" over a list that is not filtered, and Clear filters would be the
+    // only way to make a sentence true that already was.
+    const { result } = harness('/projects/p/cases?unfiled=false')
+
+    expect(result.current.filters.unfiled).toBeUndefined()
+  })
+
+  it('removes `unfiled` when toggled off, rather than writing false', () => {
+    const { result } = harness('/projects/p/cases?unfiled=true')
+
+    act(() => result.current.setFilter('unfiled', undefined))
+
+    expect(search(result).has('unfiled')).toBe(false)
+  })
+})
+
 describe('useCaseFilters — writing the URL', () => {
   it('round-trips a value it wrote', () => {
     const { result } = harness('/projects/p/cases')

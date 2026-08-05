@@ -36,6 +36,8 @@ const FILTER_PARAMS = [
   'automationStatus',
   'priority',
   'healthSignal',
+  'tag',
+  'unfiled',
   'releaseVersion',
 ] as const;
 
@@ -44,7 +46,7 @@ export interface CaseFilterState {
   sort: string;
   /** True when any filter narrows the result — drives no-records vs no-filter-match. */
   hasActiveFilters: boolean;
-  setFilter: (key: keyof CaseFilters, value: string | string[] | undefined) => void;
+  setFilter: (key: keyof CaseFilters, value: string | string[] | boolean | undefined) => void;
   setPage: (page: number) => void;
   setSize: (size: number) => void;
   setSort: (sort: string) => void;
@@ -70,6 +72,11 @@ export function useCaseFilters(): CaseFilterState {
       automationStatus: multi('automationStatus') as AutomationStatus[] | undefined,
       priority: multi('priority') as Priority[] | undefined,
       healthSignal: multi('healthSignal') as HealthSignal[] | undefined,
+      tag: multi('tag'),
+      // Present-and-'true' only. `?unfiled=false` would be an active filter by FILTER_PARAMS'
+      // reckoning while narrowing nothing, so the "no rows match your filters" empty state would
+      // claim a filter that does not exist.
+      unfiled: params.get('unfiled') === 'true' ? true : undefined,
       releaseVersion: params.get('releaseVersion') ?? undefined,
       page: Number(params.get('page') ?? 0),
       size: Number(params.get('size') ?? DEFAULT_SIZE),
@@ -81,13 +88,16 @@ export function useCaseFilters(): CaseFilterState {
   const hasActiveFilters = FILTER_PARAMS.some((key) => params.getAll(key).some(Boolean));
 
   const setFilter = useCallback(
-    (key: keyof CaseFilters, value: string | string[] | undefined) => {
+    (key: keyof CaseFilters, value: string | string[] | boolean | undefined) => {
       setParams(
         (previous) => {
           const next = new URLSearchParams(previous);
           next.delete(key);
           if (Array.isArray(value)) {
             for (const v of value) if (v) next.append(key, v);
+          } else if (value === true) {
+            // A boolean filter is present or absent, never `=false` — see the parse above.
+            next.set(key, 'true');
           } else if (value) {
             next.set(key, value);
           }

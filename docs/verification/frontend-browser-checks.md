@@ -991,3 +991,19 @@ structurally unreachable in it.
 | 71 | Try to save a condition with a blank title, then with an all-blank body. | Both refused, with the message on the field. The all-blank body matters more than it looks: an empty condition is a picker row that attaches nothing and cannot be told apart from one that failed to load — and it would appear in every case attaching the entry. |
 | 72 | Open the editor as a user **without `library:manage`**. | Attach, detach and reorder still work — attaching is a case edit, not a library edit — while **create and edit are refused**. Check the refusal is legible rather than a bare 403. *(Live-ish: mock mode holds every key.)* |
 | 73 | Break the condition endpoint (`tcmsFaults.only('/conditions')`, then `tcmsFaults.status(503, 30)`) and open the editor. | The panel shows its own warning and **the rest of the case still saves**. A failed library read must not take the editor down with it — the failure is scoped to the region that depends on it. |
+
+## §96 phase 5 — the case side: tags, and a case filed nowhere
+
+Built and unverified. Rows written per §65; **none of them run.** Row 79 is **live-only** — mock
+mode has one project, so a case moving between projects' vocabularies is unreachable in it.
+
+| # | Drive | Expect |
+|---|---|---|
+| 74 | Create a case and leave the Suite select on **Not filed**. Save, then find it in the grid. | It saves (no "Choose a suite"), the Suite column reads **Not filed** in muted italics, and the case is **in the unfiltered grid** — not hidden. `suite_id IN (…)` is never true of NULL, so a grid without an explicit arm for it drops every unfiled case with no error and a total that still counts it. |
+| 75 | With that case saved, click the **Not filed** chip in the filter bar. | Only unfiled cases. The URL carries `unfiled=true` and is shareable; **Clear filters** removes it. This is the only way to reach a case that appears under no node of the tree. |
+| 76 | Apply a **suite** filter, then look at the **Not filed** chip. | Disabled, with the reason on hover — "a case cannot be both in a folder and in none". Not hidden (§31), and not enabled-but-inert: the server ignores the pair, so an active-looking chip that changed nothing is the worse half of render-then-reject. |
+| 77 | Tag a case `smoke` and `regression` in the editor, save, reopen. | Both chips survive. Typing `smoke` a second time adds **no second chip** — a tag list is a set, and a duplicate is the same request rather than an error about a chip you cannot see twice. |
+| 78 | In the filter bar, add tag `smoke`, then add `regression`. | Each Enter adds a removable chip and narrows further — **AND, not OR**: the second tag must *shorten* the list. Deliberately the opposite of a suite's tag rules, which union. Deleting a chip widens it back. |
+| 79 | **Live.** Retag a case (add a tag, save), then open its version timeline. | **No new version.** A tag is not authored content — the server keeps tags off `CaseEdit` and out of the content hash — so retagging must not write a version whose diff says nothing about the test having changed. A version here is the empty-diff noise §6j added the hash to keep out. |
+| 80 | Open the editor on a case that **is** filed, change the suite to **Not filed**, save, reload. | It is unfiled, and the detail page's breadcrumb reads **Not filed** and links to the grid's unfiled filter — not to `?suiteId=null`, which renders every case in the project and reads as a broken crumb. |
+| 81 | Type a 61-character tag in the editor and save. | Refused with the message on the tags field, never truncated. A silently shortened tag stops matching the suite rule it was written for, and the case leaves that collection with no symptom. |

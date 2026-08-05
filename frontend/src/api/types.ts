@@ -210,6 +210,18 @@ export interface CaseFilters {
   automationStatus?: AutomationStatus[];
   priority?: Priority[];
   healthSignal?: HealthSignal[];
+  /**
+   * Tags the case must carry — **all of them** (§96). The parameter repeats, and the server ANDs,
+   * which is deliberately the opposite of a suite's tag rules: a second chip here narrows a list
+   * somebody is searching, a second rule there widens a collection somebody is assembling.
+   */
+  tag?: string[];
+  /**
+   * Only cases filed in **no** suite. The grid's one way of reaching a case that appears under no
+   * node of the tree. Sent only when true — the server ignores it beside `suiteId`, so the pair is
+   * harmless, but a `false` on the URL is noise in a link people paste to each other.
+   */
+  unfiled?: boolean;
   releaseVersion?: string;
   page?: number;
   size?: number;

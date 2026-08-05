@@ -278,6 +278,73 @@ describe('CaseEditorPage — what reaches the API', () => {
   })
 })
 
+describe('CaseEditorPage — tags and the unfiled case (§96)', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('sends the tags it was given, trimmed and de-duplicated', async () => {
+    const user = userEvent.setup()
+    mockReads()
+    const post = vi
+      .spyOn(api, 'post')
+      .mockResolvedValue({ id: 'c1', key: 'TC-1', currentVersionNo: 1 } as unknown as TestCase)
+    renderEditor()
+
+    await fillHeader(user)
+    await user.type(actionFields()[0], 'Refund the payment')
+
+    const tags = screen.getByTestId('CaseEditor.Field.Tags')
+    await user.type(tags, 'smoke{Enter}  smoke  {Enter}regression{Enter}')
+
+    await user.click(screen.getByTestId('CaseEditor.Submit'))
+
+    await waitFor(() => expect(post).toHaveBeenCalled())
+    const body = post.mock.calls[0][1] as { tags: string[] }
+    // The whole array: `smoke` typed twice is one chip, because case_tag's key says a tag list is
+    // a set — a duplicate is the same request, not a mistake to report.
+    expect(body.tags).toEqual(['smoke', 'regression'])
+  })
+
+  it('sends an EMPTY tag list rather than omitting it', async () => {
+    // The server reads absent as "leave them alone", so a case whose last tag was removed would
+    // keep it — a removal that reports success and does nothing.
+    const user = userEvent.setup()
+    mockReads()
+    const post = vi
+      .spyOn(api, 'post')
+      .mockResolvedValue({ id: 'c1', key: 'TC-1', currentVersionNo: 1 } as unknown as TestCase)
+    renderEditor()
+
+    await fillHeader(user)
+    await user.type(actionFields()[0], 'Refund the payment')
+    await user.click(screen.getByTestId('CaseEditor.Submit'))
+
+    await waitFor(() => expect(post).toHaveBeenCalled())
+    const body = post.mock.calls[0][1] as Record<string, unknown>
+    expect(body.tags).toEqual([])
+  })
+
+  it('saves with no suite at all, sending null rather than an empty string', async () => {
+    // '' is a 400 on a uuid field, so the mapping is not cosmetic. And the form must not require
+    // a suite any more: a case may be written before anybody has decided where it goes.
+    const user = userEvent.setup()
+    mockReads()
+    const post = vi
+      .spyOn(api, 'post')
+      .mockResolvedValue({ id: 'c1', key: 'TC-1', currentVersionNo: 1 } as unknown as TestCase)
+    renderEditor()
+
+    await user.type(screen.getByTestId('CaseEditor.Field.Title'), 'Unfiled for now')
+    await user.type(actionFields()[0], 'Refund the payment')
+    await user.click(screen.getByTestId('CaseEditor.Submit'))
+
+    await waitFor(() => expect(post).toHaveBeenCalled())
+    const body = post.mock.calls[0][1] as Record<string, unknown>
+    expect(body.suiteId).toBeNull()
+  })
+})
+
 describe('CaseEditorPage — completing from the project corpus', () => {
   beforeEach(() => {
     vi.restoreAllMocks()

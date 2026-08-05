@@ -41,6 +41,9 @@ const valid = () => ({
   // unexpressible — and would silently preserve attachments the author had just removed.
   preconditionIds: [],
   postconditionIds: [],
+  // Same three-way distinction again, one field over (§96) — and the one that a bulk action
+  // depends on, since it reconstructs a request without mentioning tags.
+  tags: [],
   changeComment: null,
 })
 
@@ -55,6 +58,30 @@ const messageOn = (input: unknown, path: string): string | undefined => {
   if (result.success) return undefined
   return result.error.issues.find((issue) => issue.path.join('.') === path)?.message
 }
+
+describe('CaseSchema — the unfiled case and its tags (§96)', () => {
+  it('accepts an empty suiteId — a case may be filed nowhere', () => {
+    // Not a missing field: a suite is a resolvable collection, so a case may be written before
+    // anybody has decided where it goes. The submit maps '' to null, which is what the contract
+    // calls unfiled.
+    expect(CaseSchema.safeParse({ ...valid(), suiteId: '' }).success).toBe(true)
+  })
+
+  it('accepts tags, including none at all', () => {
+    expect(CaseSchema.safeParse({ ...valid(), tags: ['smoke', 'regression'] }).success).toBe(true)
+    expect(CaseSchema.safeParse({ ...valid(), tags: [] }).success).toBe(true)
+  })
+
+  it('refuses a tag longer than the server accepts, on the tag itself', () => {
+    // Truncating instead would be worse than refusing: a shortened tag stops matching the suite
+    // rule it was written for, and the case vanishes from a collection with no symptom.
+    const input = { ...valid(), tags: ['x'.repeat(61)] }
+
+    expect(CaseSchema.safeParse(input).success).toBe(false)
+    expect(pathsOf(input)).toContain('tags.0')
+    expect(messageOn(input, 'tags.0')).toBe('Keep each tag under 60 characters.')
+  })
+})
 
 describe('CaseSchema — the baseline', () => {
   it('accepts a minimally valid structured case', () => {

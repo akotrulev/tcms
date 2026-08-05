@@ -379,6 +379,8 @@ function CaseEditorForm({
     mode: 'onBlur',
     defaultValues: {
       title: existing?.title ?? '',
+      // '' is UNFILED, not "missing" (§96) — see caseSchema. `?? ''` therefore covers both a new
+      // case and an existing one filed nowhere, and the submit maps '' back to null.
       suiteId: existing?.suiteId ?? '',
       objective: existing?.objective ?? '',
       description: existing?.description ?? '',
@@ -419,6 +421,9 @@ function CaseEditorForm({
       // one: nothing can render it.
       preconditionIds: ownConditionIds(existing?.preconditions),
       postconditionIds: ownConditionIds(existing?.postconditions),
+      // Served on TestCaseSummary and therefore on TestCase — the editor could not author them
+      // until §96 and the update endpoint refused them, so this is the field's first binding.
+      tags: existing?.tags ?? [],
       changeComment: '',
     },
   });
@@ -511,7 +516,8 @@ function CaseEditorForm({
     // stale in the record, and the next reader can't tell which is authoritative.
     const payload: Record<string, unknown> = {
       title: data.title.trim(),
-      suiteId: data.suiteId,
+      // null, not '', for an unfiled case: the field is a uuid on the contract and '' is a 400.
+      suiteId: data.suiteId || null,
       objective: data.objective || null,
       description: data.description || null,
       expectedOutcome: data.expectedOutcome || null,
@@ -540,6 +546,11 @@ function CaseEditorForm({
       // where sending the field's natural empty value and omitting the field are different
       // instructions, which is why this is not `|| undefined` like the nullable scalars above.
       classificationValueIds: data.classificationValueIds,
+      // Always sent, including as `[]`, for the reason above — the server reads absent as "leave
+      // them alone", so removing a case's last tag would silently do nothing. Trimmed and
+      // de-duplicated here as well as in the control, because the control is not the only way a
+      // value can get into the form (a draft restored from state, a future paste handler).
+      tags: [...new Set(data.tags.map((tag) => tag.trim()).filter((tag) => tag !== ''))],
       // Always sent, including as `[]`, for the reason above — the server reads absent as "leave
       // them alone", so detaching the last condition would silently do nothing.
       preconditions: data.preconditionIds.map((conditionId) => ({ conditionId })),
@@ -1001,18 +1012,34 @@ function CaseEditorForm({
                   <TextField
                     select
                     label="Suite"
-                    required
                     fullWidth
                     value={field.value}
                     onChange={field.onChange}
                     onBlur={field.onBlur}
                     error={!!fieldState.error}
-                    helperText={fieldState.error?.message}
+                    helperText={
+                      fieldState.error?.message ??
+                      (field.value
+                        ? undefined
+                        : 'Unfiled. It still appears in the grid, and any suite whose tags it carries.')
+                    }
                     slotProps={{
                       select: { native: false, SelectDisplayProps: selectTestId(`${TestIdPrefix}.Field.Suite`) },
                       formHelperText: { role: fieldState.error ? 'alert' : undefined },
                     }}
                   >
+                    {/*
+                      An explicit choice rather than an empty first row (§96). A suite is a
+                      resolvable collection now — a case reaches one by being filed, by being added
+                      to it, or by carrying its tags — so "nowhere" is a real answer and not a
+                      field somebody forgot. A blank option reads as the latter, which is exactly
+                      the impression this slice exists to remove.
+                    */}
+                    <MenuItem value="">
+                      <Box component="span" sx={{ color: 'text.secondary' }}>
+                        Not filed
+                      </Box>
+                    </MenuItem>
                     {(suites.data ?? []).map((suite) => (
                       <MenuItem key={suite.id} value={suite.id}>
                         <Box component="span" sx={{ pl: (suite.path.split('.').length - 1) * 1.5 }}>
@@ -1021,6 +1048,59 @@ function CaseEditorForm({
                       </MenuItem>
                     ))}
                   </TextField>
+                )}
+              />
+              <Controller
+                control={control}
+                name="tags"
+                render={({ field, fieldState }) => (
+                  <Autocomplete
+                    multiple
+                    freeSolo
+                    // No options list. Tags are free text with no vocabulary anywhere — there is
+                    // no endpoint that lists the ones in use, and offering a curated set is
+                    // exactly what left `shared_step` empty (authoring-rework decision 2). A
+                    // suggestion source is a slice of its own, and inventing one here would be a
+                    // second, drifting answer to "what tags does this project use".
+                    options={[]}
+                    value={field.value}
+                    onChange={(_event, value) =>
+                      // Trimmed and de-duplicated as they are entered, because `case_tag`'s key
+                      // says a tag list is a set: `smoke` typed twice is one chip, not an error
+                      // about a chip the author cannot see twice.
+                      field.onChange([
+                        ...new Set(value.map((tag) => tag.trim()).filter((tag) => tag !== '')),
+                      ])
+                    }
+                    onBlur={field.onBlur}
+                    renderValue={(values, getItemProps) =>
+                      values.map((tag, index) => {
+                        const { key, ...rest } = getItemProps({ index });
+                        return <Chip key={key} {...rest} size="small" label={tag} />;
+                      })
+                    }
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Tags"
+                        error={!!fieldState.error}
+                        helperText={
+                          fieldState.error?.message ??
+                          'Press Enter after each. A suite claiming one of these holds this case.'
+                        }
+                        slotProps={{
+                          // Merged into the params MUI already built rather than replacing them:
+                          // Autocomplete puts its own ref and ARIA wiring on the input, and a
+                          // fresh object here silently unbinds the popup from the field.
+                          htmlInput: {
+                            ...params.slotProps?.htmlInput,
+                            'data-testid': `${TestIdPrefix}.Field.Tags`,
+                          },
+                          formHelperText: { role: fieldState.error ? 'alert' : undefined },
+                        }}
+                      />
+                    )}
+                  />
                 )}
               />
             </Panel>

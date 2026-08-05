@@ -457,6 +457,18 @@ function stepCorpus(fragment: string | null): StepSuggestion[] {
     .slice(0, 50);
 }
 
+/**
+ * Trimmed, blanks dropped, duplicates collapsed — `CaseEdit.normalizeTags`, in the mock.
+ *
+ * `undefined` in, `undefined` out: absent means "leave them alone", which is the one instruction a
+ * reconcile must be able to tell from "clear them".
+ */
+function normalizeTags(value: unknown): string[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((tag) => String(tag).trim()).filter((tag) => tag !== ''))];
+}
+
 export const caseHandlers = [
   http.get(`${API}/projects/:projectId/step-suggestions`, async ({ request }) => {
     const denied = requireAuth(request);
@@ -504,13 +516,21 @@ export const caseHandlers = [
 
     const body = (await request.json()) as Record<string, unknown>;
     const title = String(body.title ?? '').trim();
-    const suiteId = String(body.suiteId ?? '');
+    // null (or absent) is UNFILED since §96, not a missing field — a suite is a resolvable
+    // collection and filing is one way of belonging.
+    const suiteId = body.suiteId == null ? null : String(body.suiteId);
+    const tags = normalizeTags(body.tags);
 
     // Field-keyed errors, so the form can land them on the right inputs rather than
     // dumping one banner over a form the user can't fix.
     const errors: Record<string, string[]> = {};
     if (!title) errors.title = ['Enter a title.'];
-    if (!suiteId) errors.suiteId = ['Choose a suite.'];
+    if (suiteId !== null && !db.suites.some((s) => s.id === suiteId)) {
+      errors.suiteId = ['That suite is not in this project.'];
+    }
+    if ((tags ?? []).some((tag) => tag.length > 60)) {
+      errors.tags = ['Keep each tag under 60 characters.'];
+    }
     /*
       The six fields the real endpoint refuses, refused here in the same words.
 
@@ -520,7 +540,10 @@ export const caseHandlers = [
       divergence that let the SPA put `lockVersion` in the PATCH body for months, because no server
       read either. Absent means unchanged; present means 400, in both modes.
     */
-    for (const field of ['ownerId', 'tags', 'automationTags']) {
+    // `tags` left this list in §96 — the same removal the server made, in the same commit, because
+    // a mock that still refused them would make the editor's new control untestable in the one
+    // mode it can be driven in without a backend.
+    for (const field of ['ownerId', 'automationTags']) {
       if (body[field] != null) errors[field] = ['This field cannot be changed here yet.'];
     }
     if (Object.keys(errors).length) {
@@ -543,7 +566,9 @@ export const caseHandlers = [
       keySeq,
       title,
       suiteId,
-      suiteName: db.suites.find((s) => s.id === suiteId)?.name ?? '',
+      // Null TOGETHER with the id, never '' beside a null id — the contract marks the pair
+      // nullable together, and the grid renders "Not filed" off the id.
+      suiteName: suiteId === null ? null : (db.suites.find((s) => s.id === suiteId)?.name ?? ''),
       priority: (body.priority as TestCase['priority']) ?? 'MEDIUM',
       lifecycleStatus: 'DRAFT',
       automationStatus: (body.automationStatus as TestCase['automationStatus']) ?? 'MANUAL',
@@ -563,7 +588,7 @@ export const caseHandlers = [
       testType: null,
       testLevel: null,
       features: [],
-      tags: [],
+      tags: tags ?? [],
       healthSignals: ['NEVER_EXECUTED'],
       lastResult: null,
       updatedAt: new Date().toISOString(),
@@ -888,7 +913,8 @@ export const caseHandlers = [
     // applied below, with the same three rules the server enforces, because a mock that merely
     // stopped refusing would let mock mode accept a sibling project's value that live mode rejects
     // — the divergence this comment exists to prevent, arriving through the other door.
-    const unsupported = ['ownerId', 'tags', 'automationTags'] as const;
+    // `tags` left this list in §96 too, and is applied below.
+    const unsupported = ['ownerId', 'automationTags'] as const;
     const refused = unsupported.filter((field) => body[field] !== undefined);
     if (refused.length > 0) {
       return problem(
@@ -929,8 +955,26 @@ export const caseHandlers = [
     if (Array.isArray(body.steps)) {
       next.steps = (body.steps as TestStep[]).map((s, i) => ({ ...s, id: s.id ?? newId(), position: i }));
     }
-    if (typeof body.suiteId === 'string') {
-      next.suiteName = db.suites.find((s) => s.id === body.suiteId)?.name ?? next.suiteName;
+    if (body.suiteId !== undefined) {
+      // Null unfiles the case, and the NAME goes null with the id — never '' beside a null id,
+      // which is the one combination the contract forbids and the grid would render as a suite
+      // that failed to load.
+      next.suiteName =
+        body.suiteId === null
+          ? null
+          : (db.suites.find((s) => s.id === body.suiteId)?.name ?? next.suiteName);
+    }
+
+    // Absent leaves them alone, [] clears them — the split every collection on this shape uses,
+    // and the one a bulk action depends on: it reconstructs a request without mentioning tags.
+    if (body.tags !== undefined) {
+      const tags = normalizeTags(body.tags) ?? [];
+      if (tags.some((tag) => tag.length > 60)) {
+        return problem(400, 'Validation failed', 'Check the highlighted fields.', {
+          tags: ['Keep each tag under 60 characters.'],
+        });
+      }
+      next.tags = tags;
     }
 
     const classificationChanged = body.classificationValueIds !== undefined;
@@ -963,6 +1007,11 @@ export const caseHandlers = [
       writable.some((f) => body[f] !== undefined)
       || Array.isArray(body.steps)
       || classificationChanged
+      // A tag change is deliberately NOT in this list. A tag is not authored content, so
+      // retagging a case must not write a version whose diff says nothing about the test having
+      // changed — the server puts tags beside CaseEdit rather than on it for exactly that reason
+      // (§6j's empty-diff noise), and a mock that bumped the version here would teach the timeline
+      // a behaviour the product does not have.
       // Conditions are authored content and the server's CaseEdit hashes them, so a save that
       // only moves a condition must still write a version — otherwise the next unrelated save is
       // credited with the change.

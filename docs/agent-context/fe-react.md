@@ -36,7 +36,7 @@ describes, and it has now been caught twice running.
 - **`npm run build` is THE gate** (`tsc -b` + vite build). **Do not trust `tsc --noEmit`** — it has
   reported 0 errors while the build failed with nine (working agreement). `#confirmed`
 - `npm run lint` — oxlint, must stay at **0 warnings**; it prints nothing when clean.
-- `npm run test:run` — Vitest + RTL. **805/805** at this baseline (§94; 770 at §91, 783 before this
+- `npm run test:run` — Vitest + RTL. **831/831** at §96 phase 5 (805 at §94; 770 at §91, 783 before this
   slice). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
 - `npm run gen:api` — regenerate `src/api/schema.d.ts` after **any** `openapi.yaml` change. Runs
   through `npx` on purpose (the scaffold pins TS 6, the tool peer-requires 5.x); do not "fix" it.
@@ -70,6 +70,25 @@ directly above the switcher) and the wordmark links there too.
 
 ## Seams to reuse
 
+- **A CASE MAY BE FILED NOWHERE, AND TAGS ARE AUTHORABLE (§96 phase 5).**
+  `caseSchema.ts`: `suiteId` lost its `.min(1)` — **`''` IS THE UNFILED VALUE**, not a missing one
+  (MUI's `Select` treats `null` as uncontrolled and warns), and the submit maps it to **`null`**
+  because `''` is a 400 on a uuid field. New `tags: z.array(z.string().max(60))`.
+  `CaseEditorPage`: a **Not filed** `MenuItem` with an explicit label rather than a blank first row
+  (a blank reads as a field somebody forgot), and a `freeSolo multiple` `Autocomplete` for tags with
+  **no options list** — there is no tag vocabulary anywhere, and offering a curated set is what left
+  `shared_step` empty. Tags are trimmed and de-duplicated **in the control and again at submit**.
+  `CaseGrid` renders `suiteName === null` as muted italic **"Not filed"**, never blank — a blank
+  cell reads as a suite that failed to load.
+  `useCaseFilters`/`CaseFilters`: **`tag` (repeats, ANDs)** and **`unfiled` (boolean, written only
+  when true)**. `?unfiled=false` parses as *absent* — otherwise it counts as an active filter that
+  narrows nothing and the empty state claims a filter that does not exist. The **Not filed** chip is
+  **disabled beside a suite filter** with the reason on hover (§31), because the server ignores the
+  pair and an active-looking chip that changed nothing is the worse half of render-then-reject.
+  The tag filter box commits on **Enter and is not debounced** like the search box: a half-typed tag
+  is not a narrower filter, it is an exact match against nothing.
+  Mock: `tags` left the refused list in the same commit, `suiteId: null` is accepted, and a tag
+  change deliberately **does not bump the version** — mirroring the server's decision.
 - **THE CONDITION PANELS, AND THE INHERITED ROW THAT MUST NOT BE SUBMITTED (§95 phase 3).**
   `features/cases/ConditionsPanel.tsx` (one component, `kind="PRE"|"POST"` — two would be
   `ui-rules` §8's "hundred slightly different pages" in miniature) + `ConditionEditDialog.tsx` +

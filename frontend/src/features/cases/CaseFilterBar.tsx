@@ -68,6 +68,15 @@ export function CaseFilterBar({
   // keystroke into history would make the back button useless.
   const [search, setSearch] = useState(filters.q ?? '');
 
+  /**
+   * The tag box is local until Enter, and deliberately NOT debounced like the search box.
+   *
+   * A half-typed tag is not a narrower filter, it is a different one that matches nothing — tags
+   * are matched exactly by both the grid and a suite's rules — so pushing keystrokes to the URL
+   * would empty the grid on the way to every filter anybody applies.
+   */
+  const [tagDraft, setTagDraft] = useState('');
+
   // Keep the box in step when the URL changes from elsewhere — a dashboard tile link, or
   // the browser's back button.
   useEffect(() => {
@@ -185,6 +194,74 @@ export function CaseFilterBar({
             </Box>
           );
         })}
+      </Stack>
+
+      {/*
+        Tags and the unfiled toggle (§96). Both are narrowing filters over things the grid shows,
+        which is this bar's own rule — the tags column has been on the grid since Phase 1 with no
+        way to filter by it, and an unfiled case appears under no node of the tree, so without the
+        toggle the only way to find one is to page through the project.
+
+        The tag input commits on Enter and renders as removable chips. There is no option list
+        because there is no vocabulary — see the editor's own tags control for why offering a
+        curated set is the thing that left `shared_step` empty.
+      */}
+      <Stack direction="row" sx={{ gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+        <TextField
+          size="small"
+          label="Tag"
+          placeholder="Add a tag and press Enter"
+          value={tagDraft}
+          onChange={(event) => setTagDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            const tag = tagDraft.trim();
+            if (!tag) return;
+            const current = filters.tag ?? [];
+            // Adding one already applied is a no-op rather than a duplicate parameter: the
+            // server ANDs, so `?tag=smoke&tag=smoke` narrows to the same rows twice.
+            if (!current.includes(tag)) setFilter('tag', [...current, tag]);
+            setTagDraft('');
+          }}
+          sx={{ minWidth: 220 }}
+          slotProps={{
+            htmlInput: { 'data-testid': `${TestIdPrefix}.TagInput`, 'aria-label': 'Filter by tag' },
+          }}
+        />
+        {(filters.tag ?? []).map((tag) => (
+          <Chip
+            key={tag}
+            size="small"
+            label={tag}
+            onDelete={() =>
+              setFilter(
+                'tag',
+                (filters.tag ?? []).filter((value) => value !== tag),
+              )
+            }
+            data-testid={`${TestIdPrefix}.Tag.${tag}`}
+          />
+        ))}
+        <Chip
+          size="small"
+          label="Not filed"
+          onClick={() => setFilter('unfiled', filters.unfiled ? undefined : true)}
+          variant={filters.unfiled ? 'filled' : 'outlined'}
+          color={filters.unfiled ? 'primary' : 'default'}
+          aria-pressed={!!filters.unfiled}
+          // Disabled beside a suite filter rather than hidden (§31): the server ignores the pair,
+          // so a chip that looked active and changed nothing would be the worse half of
+          // render-then-reject. The reason is on the tooltip, not inferred from the greying.
+          disabled={!!filters.suiteId}
+          title={
+            filters.suiteId
+              ? 'Clear the suite filter first — a case cannot be both in a folder and in none.'
+              : 'Only cases filed in no suite'
+          }
+          data-testid={`${TestIdPrefix}.Unfiled`}
+          sx={{ cursor: filters.suiteId ? 'not-allowed' : 'pointer' }}
+        />
       </Stack>
 
       {/*

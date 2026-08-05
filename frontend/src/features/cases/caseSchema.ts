@@ -76,7 +76,19 @@ export const liveSteps = <T extends StepLike>(steps: readonly T[]): T[] =>
 export const CaseSchema = z
   .object({
     title: z.string().min(1, 'Enter a title.').max(300, 'Keep the title under 300 characters.'),
-    suiteId: z.string().min(1, 'Choose a suite.'),
+    /**
+     * The folder the case is **filed** in, or `''` for an unfiled case (§96).
+     *
+     * No `.min(1)` any more, and the empty string is the unfiled value rather than a missing one:
+     * a suite is a resolvable collection — filed ∪ added ∪ tagged — so filing is one way of
+     * belonging rather than a precondition for existing, and a case may be written before anybody
+     * has decided where it goes. The submit maps `''` to `null`, which is what the contract calls
+     * unfiled; sending `''` would be a 400 on a uuid field.
+     *
+     * `''` rather than `null` in the form because MUI's `Select` treats `null` as "uncontrolled"
+     * and logs a warning on every render of an unfiled case.
+     */
+    suiteId: z.string(),
     objective: z.string().nullable(),
     description: z.string().nullable(),
     expectedOutcome: z.string().nullable(),
@@ -127,6 +139,21 @@ export const CaseSchema = z
      */
     preconditionIds: z.array(z.string()),
     postconditionIds: z.array(z.string()),
+    /**
+     * The case's organisational tags (§96) — free text, a set, and the thing a suite's tag rules
+     * resolve against.
+     *
+     * **Not `automationTags`**, which are CI selection tags on a different table (§6c) and are
+     * still refused by the update endpoint. The editor cannot author those.
+     *
+     * Trimmed and de-duplicated by the control rather than by a refinement: a duplicate is not a
+     * mistake to report, it is the same request — `case_tag`'s key says a tag list is a set — and
+     * an error message about a chip the author cannot see twice is unactionable.
+     *
+     * Length is validated because the server caps it, and a silently truncated tag stops matching
+     * the suite rule it was written for, which removes the case from a collection with no symptom.
+     */
+    tags: z.array(z.string().max(60, 'Keep each tag under 60 characters.')),
     changeComment: z.string().nullable(),
   })
   // Cross-field rules the server also enforces. Both live in the schema rather than in the
