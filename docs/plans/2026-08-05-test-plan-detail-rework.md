@@ -80,22 +80,34 @@ mechanism and its own storage, and only one of them is prose in a `DocPage`. Tha
   and `outOfScopeText`, columns `scope_text` / `out_of_scope_text`, and both carry a description
   naming the other meaning. The UI labels stay "Scope" and "Out of scope", because that is what a
   test plan calls them and the tab strip disambiguates by position.
-- **D7 — sub-feature sections are LABELS on scope items, expanded at add time.** `plan_scope_item`
-  gains `section_name` and `ordinal`. Adding a suite or a tag to a section **resolves it once, at
-  add time, into individual case rows** carrying that section's name.
-  **The accepted cost, stated plainly:** the section does not track the suite or the tag, so a case
-  added to that suite or given that tag *later* does not appear in the plan. A plan is a release
-  checklist and a checklist that grows under the reader is arguably worse — but this is the
-  trade being made, not a limitation nobody noticed.
-  **The benefit that decided it:** no third copy of §96's resolution predicate. §96 writes
-  filed ∪ added ∪ tagged twice already (`SuiteMembership` for the tree and the grid, `CaseFacts` for
-  plan scope and suite history) because ERD §0.2 forbids the cross-module call, with
-  `SuiteScopeAgreementTest` keeping them honest. A live-resolving plan section would be a **third**,
-  in a third module, with a three-way agreement test.
+- ~~**D7 — sub-feature sections are LABELS on scope items, expanded at add time.** Adding a suite or
+  a tag to a section resolves it once, at add time, into individual case rows. The benefit that
+  decided it: no third copy of §96's resolution predicate, which a live-resolving section would need
+  in a third module with a three-way agreement test.~~
+  → **superseded 2026-08-05 by the TestNG validation.** See D7′.
+- **D7′ — sub-feature sections are LIVE SELECTORS, resolved at read time.** `plan_scope_item` gains
+  `section_name`, `ordinal` and a **`tag`** arm. A section holds *references* — case ids, suite ids,
+  tags — and its membership is a query, exactly as a suite's is.
+  **What decided it:** TestNG's `<test>` block is this exact level — a named subdivision carrying
+  its own `<classes>` list and its own `<groups>` filter — and it re-resolves on every run. The user
+  validated the whole model against TestNG and this is the one place the two disagreed. The analogy
+  won.
+  **D7's justification does not survive contact with the code, which is what makes the reversal
+  affordable.** D7 feared a *third* copy of the resolution predicate in a *third* module. But
+  `CaseFacts` is already in `com.tcms.execution` and **already owns `casesInPlanScope`** — the
+  plan's scope expansion, `inSubtreeOf` and all. Live sections extend a method that exists, in the
+  module that already holds the seam. The count of copies stays at **two**, and
+  `SuiteScopeAgreementTest` keeps them honest exactly as it already does.
+  **The accepted cost, stated plainly:** a plan's contents can change between approval and
+  execution — tag a case `checkout` and it joins every section claiming that tag. That is §82's
+  gating concern, and it is **narrower than it first looks**: `requireApprovedCaseForRun` resolves
+  at *run-create* time over the resolved set (§82's own decision), so an unapproved case arriving by
+  tag is still refused at the moment it would run. What goes stale is the **plan's own approval**,
+  not the case gate — and that is the thing to say on screen and in the handoff.
 - **D8 — "feature tag" means §96's `case_tag`,** not the Feature classification dimension. Same
   mechanism a suite's `tagRules` use, so "add by tag" on a section and "add by tag" on a suite are
-  the same act with the same semantics — and D7 means the section keeps the *result* rather than
-  the rule.
+  the same act with the same semantics — and under D7′ the section keeps the **rule**, not a
+  snapshot of its result, which is what makes the two genuinely identical.
   **This forces a new endpoint.** §96 shipped both tag controls with an empty option list and named
   a "tags in use" endpoint as the obvious follow-up. It stops being optional here: a tag is now a
   *fill mechanism* for a section, and a picker that cannot tell you which tags exist makes it
@@ -191,10 +203,12 @@ not render an upload control for a thing that 400s.
 
 A list of **named sections** in author order, each holding case rows.
 
-**Section mechanics.** A section is a name and an ordinal, carried on its member rows (D7). Sections
-are created, renamed, reordered and deleted on this tab; deleting one asks what happens to its cases
-(remove from plan / move to unsectioned) rather than guessing. An **unsectioned** group holds items
-with a null `section_name`, which is what every plan created before this slice has.
+**Section mechanics.** A section is a name and an ordinal carried on its member rows (D7′), and its
+members are **references, not cases**: case ids, suite ids and tags. Its contents are a query.
+Sections are created, renamed, reordered and deleted on this tab; deleting one asks what happens to
+its references (remove from plan / move to unsectioned) rather than guessing. An **unsectioned**
+group holds items with a null `section_name`, which is what every plan created before this slice
+has.
 
 **Four ways to fill a section**, exactly as stated in §1a:
 
@@ -208,66 +222,39 @@ with a null `section_name`, which is what every plan created before this slice h
    - **nothing is created until Save**, which retires §93's `useCreateDraftCase` and the
      idempotency-key-per-row problem along with the bar it existed for.
 2. **An existing case**, searched by key or title.
-3. **A whole suite** — resolved once, at add time, into its member case rows (D7).
-4. **A tag** — same, over `case_tag` (D8), needing `GET /projects/{projectId}/tags`.
+3. **A whole suite** — stored as a suite reference and resolved on every read (D7′).
+4. **A tag** — stored as a tag reference, over `case_tag` (D8), needing
+   `GET /projects/{projectId}/tags`.
 
-3 and 4 are **add-time expansions and the UI must say so at the moment of the click**: "adds the 12
-cases in this suite now" is a different promise from "keeps this plan in step with this suite", and
-the reader cannot tell them apart afterwards. A count and a sentence, on the button.
+3 and 4 are **live, and the UI must say so wherever the section's count appears**: this plan grows
+when the suite grows and when somebody tags a case. Under D7 the sentence had to be on the *button*,
+at the moment of the click, because nothing afterwards recorded where a row came from. Under D7′ the
+reference is still there to be shown, so the section lists what defines it — "Smoke suite · tag
+`checkout` · 3 cases added directly" — and the count is derived beside it.
 
 **The blank row must not count.** `CaseSchema`'s "at least one step" refine had exactly this defect
 in §94 and it is the same shape: any "the plan has cases" or "this section is empty" check must
 count non-blank rows, or a permanently-present trailing blank satisfies it.
 
 **Duplicates across sections are legal and must be visible.** A case can be added to Create and also
-arrive via a suite expansion in Navigation. The plan's case count dedupes (it always has — a suite
+arrive through a suite reference in Navigation. The plan's case count dedupes (it always has — a suite
 and one of its cases were already two ways of saying one thing), so the sections' counts **do not
 sum to the plan's total**, which is §96's lesson arriving one slice later: say it on the tooltip, or
 a reader subtracts and reports a bug in a correct number.
 
-## 5a. RESOLVED — the existing suite arm expands at READ time, and D7 expands at ADD time
+## 5a. DISSOLVED — the read-time/add-time mismatch no longer exists
 
-**Resolved 2026-08-05: (a), keep both.** D7 was reaffirmed by the user in the same round that took
-the organization-model decisions (`2026-08-05-organization-model-restatement.md` M4), so the
-mismatch below is real and has to be lived with rather than designed away.
+This section asked how to reconcile `plan_scope_item.suite_id`, which the contract defines as
+**live** (*"the folder and everything beneath it — the plan's `caseCount` expands it"*), with D7's
+add-time snapshots. It was resolved on 2026-08-05 as *(a) keep both, and label the live one*.
 
-(a) is taken because the other two each cost more than the confusion they remove: **(b)** silently
-changes what existing plans contain the next time a suite grows, which is a behaviour change nobody
-observes until a release checklist is short; **(c)** costs the third copy of §96's resolution
-predicate in a third module, which is the exact thing D7 was chosen to avoid.
+**D7′ dissolves the question rather than answering it.** Sections are live too, so there is one
+behaviour on the screen and not two: every arm — the legacy suite item, a section's suite reference,
+a section's tag, an explicit case — resolves at read time. Nothing needs a "grows as the suite
+grows" label because everything does, and the two-group rendering (a) called for is not built.
 
-So the Test cases tab renders **two groups**, and the labels are load-bearing:
-
-- **From suites (live)** — today's `plan_scope_item.suite_id` items, above the sections, labelled as
-  live, with the sentence *"grows as the suite grows"*. Not sectionable, because one row stands for
-  many cases.
-- **Sections** — D7's labelled case rows, snapshotted at add time.
-
-A plan created after this slice need never have a row in the first group; every plan created before
-it has only that group. The asymmetry is therefore mostly a migration-shaped one, and it is
-**named on screen rather than smoothed over**, because a reader who cannot tell a live group from a
-snapshotted one will misread both.
-
-**Original statement of the problem, kept:** `plan_scope_item.suite_id` exists today and the contract
-defines it as live: *"A suite item means the folder and everything beneath it — the plan's
-`caseCount` expands it."* D7's sections snapshot instead. So one screen would show two behaviours:
-
-| | Today's suite item | D7's section |
-|---|---|---|
-| Storage | `suite_id` row | N `case_id` rows + `section_name` |
-| A case added to the suite later | **appears** | does not |
-| Can it be sectioned? | no — it is one row for many cases | yes |
-
-Three ways out, none free:
-
-- **(a) Keep both.** Suite items render as their own live group above the sections, labelled as
-  live. Honest, and asks every reader to hold two models.
-- **(b) Migrate suite items to expanded rows.** `V32` expands every existing `suite_id` item into
-  case rows and the arm is retired from the contract. One model, and it **silently changes what
-  existing plans contain** the next time a suite grows — which is the behaviour change nobody
-  observes until a release checklist is short.
-- **(c) Sections hold suite items too, live.** Reverses D7 for the suite arm only, keeps it for
-  tags. Needs the read-time resolution D7 was chosen to avoid, so it costs the third copy.
+That is the second-order benefit of following TestNG here, and it is worth naming: the awkwardness
+§5a existed to manage was **created by D7** and disappeared with it.
 
 ## 6. Scope
 
@@ -278,11 +265,15 @@ Three ways out, none free:
    `POST /plans/{planId}/document`. Regenerate `schema.d.ts`.
    *(`PUT`/`DELETE` on the plan document — shipped, phase 1, `eb548d2`.)*
 2. **Migration `V32`** — `test_plan.scope_text`, `test_plan.out_of_scope_text`,
-   `plan_scope_item.section_name`, `plan_scope_item.ordinal`. No new table, so **no new RLS policy**:
-   the count stays at 61. Plus whatever §5a's decision requires.
-3. **Backend**: the plan `PATCH` accepts both texts and sectioned scope items; add-time expansion of
-   a suite and of a tag into case rows; the tags-in-use query; `PlanDocumentTemplate` deleted with
-   its `POST`; the link/unlink service and its three refusals (phase 1's contract).
+   `plan_scope_item.section_name`, `plan_scope_item.ordinal`, and **`plan_scope_item.tag`**, which
+   requires widening `ck_plan_scope_target` from a two-way XOR (`(suite_id IS NULL) <> (case_id IS
+   NULL)`) to a **three-way exactly-one** over suite / case / tag. That constraint is the one thing
+   in this migration that can silently admit a nonsense row, so it gets its own assertion rather
+   than being trusted to review. No new table, so **no new RLS policy**: the count stays at 61.
+3. **Backend**: the plan `PATCH` accepts both texts and sectioned scope items; **`CaseFacts.casesInPlanScope`
+   extended with the tag arm and grouped by section** — the existing method, not a new one; the
+   tags-in-use query; `PlanDocumentTemplate` deleted with its `POST`; the link/unlink service and
+   its three refusals (phase 1's contract).
 4. **Frontend**: the plan detail becomes one form — state above the tabs, one Save, the ordered
    pair, per-step partial-failure reporting, the dirty banner naming dirty tabs,
    `useUnsavedWork` registration.
@@ -290,8 +281,9 @@ Three ways out, none free:
    requirements tab rendering the linked page read-only with link/unlink; the Test artefacts tab
    over the existing register; the two text tabs.
 6. **Frontend**: the Test cases tab — named sections, four fill mechanisms, auto-append, trim,
-   blank-row drop, deferred creation, the add-time sentence on the suite and tag buttons.
-7. **Tests** — backend for link/unlink, both expansions, the tags query, and the section round-trip;
+   blank-row drop, deferred creation, and each section showing **what defines it** beside its count.
+7. **Tests** — backend for link/unlink, the extended plan-scope resolution over all three arms, the
+   widened CHECK constraint, the tags query, and the section round-trip;
    Vitest/RTL for auto-append, trimming, blank-row drop, the dirty banner, and the ordered save with
    an injected failure at step 2.
 8. Both verification queue rows, the handoff section, both orientation caches.
@@ -338,13 +330,18 @@ Both are in `docs/plans/2026-08-05-organization-model-restatement.md`. The filin
 
 ## 8. Traps
 
-- ~~**§5a is unresolved and phase 3 cannot be written without it.**~~ → resolved, (a). The tab shows
-  two groups and must label the live one as live.
+- ~~**§5a is unresolved and phase 3 cannot be written without it.**~~ → **dissolved** by D7′: with
+  sections live, there is one behaviour on the screen rather than two, and the two-group rendering
+  is not built.
 - **Two meanings of "scope" on one screen.** `plan_scope_item` is the case list; `scopeText` is
   prose. A contract field, a column and a UI label each have to survive a reader who knows only one.
-- **Add-time expansion is invisible after the fact.** Once a suite is expanded, nothing records that
-  it came from a suite. The sentence on the button is the only place the reader is told, so it is
-  load-bearing rather than polish.
+- **`casesInPlanScope` is the method that grows, and §96 already found four silent joins in it.**
+  §96's whole finding was that a nullable FK drops rows in four places and every one is silent —
+  `casesInPlanScope` was one of them. Adding a tag arm to it is editing the exact method that class
+  of defect lives in. **Grep for `JOIN suite` before adding one** — §96's standing rule, and this is
+  the slice it was written for.
+- **A plan can now change between approval and execution** (D7′). Say so on the screen; the case
+  gate still fires at run-create time, but the plan's own approval goes stale silently.
 - **The blank row must not satisfy a non-empty check** — §94's refine defect, same shape.
 - **Section counts do not sum to the plan's total** — §96's lesson, one slice later.
 - **`PlanEditDialog` is deleted, not orphaned.** A dialog nobody opens that still compiles is the

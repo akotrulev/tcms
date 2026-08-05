@@ -44,7 +44,47 @@ another with no contradiction anywhere, and no history is rewritten when it is r
 - **M3 — a run is scoped by suites, cases AND tags, with no plan required.** `TestRunInput` gains
   `suiteIds` and `tags` beside `caseIds`; `test_run.plan_id` is already nullable, so a plan-less run
   needs no migration. **§99.**
-- **M4 — the plan's sub-feature sections stay labels** (§97's D7, reaffirmed). They are not suites.
+- ~~**M4 — the plan's sub-feature sections stay labels** (§97's D7, reaffirmed). They are not suites.~~
+  → **superseded 2026-08-05 by M5**, later the same day, when the model was validated against TestNG.
+- **M5 — the plan's sub-feature sections are LIVE selectors, and are still not suites.** §97's D7′.
+  TestNG's `<test>` block is exactly this level — a named subdivision of a suite carrying its own
+  `<classes>` list and its own `<groups>` filter, re-resolved on every run. Sections stay
+  **plan-local** (they are not promoted to suites), and they stop snapshotting.
+- **M6 — an EXCLUDE arm is a known gap, recorded and not built.** TestNG's
+  `<exclude name="flaky"/>` has no equivalent anywhere in this product: `suite_tag_rule` is
+  union-only (V31 settles OR-vs-AND and never raises negation), a section's tag arm inherits that,
+  and run scoping under M3 will too. *"Everything tagged smoke except the flaky ones"* is common and
+  cannot be expressed. Named here so the next reader finds a decision rather than an oversight;
+  the shape when it is built is a flag on `suite_tag_rule` and a subtraction applied **after** all
+  arms resolve.
+
+## 3a. Validation against TestNG (2026-08-05)
+
+The user validated the model against TestNG, which is the right instrument: it is the same
+vocabulary with a working implementation behind it.
+
+| TestNG | TCMS | |
+|---|---|---|
+| `@Test` method | test step | ✅ `test_case_step` |
+| class | test case | ✅ |
+| `@Test(groups={"auth"})` | tag naming a feature area | ✅ `case_tag` |
+| `<class name="…"/>` | case by id | ✅ `suite_case` |
+| `<groups><include name="smoke"/>` | case by tag | ✅ `suite_tag_rule` |
+| `<packages>` | the filing arm | ✅ `test_case.suite_id` (M1) |
+| running the suite | the run | ✅ `test_run` + `test_execution` |
+
+**Two structural confirmations.** TestNG never writes pass/fail back into `testng.xml` — the
+definition and the results are separate artifacts, which is exactly `test_case` having no status
+column while `test_execution.status_id` carries it per (run, case). And a `<suite>` is a *named
+selection document, not a folder in a folder tree*, which is independent support for M2.
+
+**One vocabulary correction.** The user wrote *"test run = test execution"*. This product splits
+them and the split is load-bearing: `test_run` is the **event** (status, configuration, build
+number, commit sha), `test_execution` is **one case's result inside it** (`uq_execution_run_case`).
+§86's fact log and every report are built on the per-case row.
+
+**Two disagreements, and they became M5 and M6.** TestNG's `<test>` re-resolves every run, where
+§97's D7 snapshotted; and TestNG can `<exclude>`, where nothing here can.
 
 ## 4. M2 and M3 each overturn a recorded decision, and both reversals are written down
 
