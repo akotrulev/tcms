@@ -240,6 +240,41 @@ export function useCaseHistory(
 }
 
 /**
+ * Creates one case for the plan detail form's Save — **the key comes from the caller**.
+ *
+ * ## The third shape, and the two it is not
+ *
+ * `useCreateCase` holds one key per mounted editor (one intent, one case). `useCreateDraftCase`
+ * mints one per submit (many intents, one at a time, retries unprotected). This caller is neither:
+ * §97's Save writes **N cases in one loop**, so a per-hook key would make the server read rows 2…N
+ * as replays of row 1 and return the first case each time — five titles typed, one case created,
+ * four scope entries pointing at it, and nothing on screen that looks wrong. A per-call
+ * `newIntentKey()` would avoid that and give up the protection that matters most here: a save that
+ * fails at the plan step is one the author will press again, and the second press must not write
+ * the cases twice.
+ *
+ * So the key is **the draft row's**, minted when the row appeared and carried until it is saved —
+ * one key per row per intent to create *that* case. See `planDraft.NewCaseRow`.
+ */
+export function useCreatePlanCase(projectId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      intentKey,
+      ...input
+    }: { intentKey: string; title: string; suiteId: string | null }) =>
+      api.post<TestCase>(`${base(projectId)}/cases`, input, { idempotencyKey: intentKey }),
+    // The form renders the per-step outcome itself, naming what was created before the failure.
+    meta: { handled: true },
+    onSuccess: (created) => {
+      client.setQueryData(keys.case(projectId, created.id), created);
+      void client.invalidateQueries({ queryKey: ['projects', projectId, 'cases'] });
+      void client.invalidateQueries({ queryKey: keys.suites(projectId) });
+    },
+  });
+}
+
+/**
  * Creates a draft case from a title alone — the plan document's "Add case".
  *
  * ## Why this is not `useCreateCase`

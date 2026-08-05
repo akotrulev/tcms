@@ -4,6 +4,7 @@ import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '../../api/client'
 import type { PlanStatus, TestPlan } from '../../api/types'
+import { SessionRecoveryContext } from '../../auth/sessionRecoveryContextValue'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
@@ -51,6 +52,11 @@ function planBody(overrides: Partial<TestPlan> = {}): TestPlan {
     configurations: [],
     suiteIds: ['suite-1'],
     caseIds: ['case-9'],
+    // Required on `TestPlan` since §97 phase 2 — see PlanLifecycle.test.tsx's note on the cast.
+    tags: [],
+    sections: [],
+    scopeText: null,
+    outOfScopeText: null,
     currentVersionNo: 1,
     lockVersion: 7,
     ...overrides,
@@ -89,12 +95,26 @@ function mockReads(plan: TestPlan, permissions: string[] = ['project:read', 'pla
   }) as never)
 }
 
+/*
+  The plan detail registers unsaved work since §97 phase 4 (its draft lives above the tabs), and
+  `useUnsavedWork` throws without the session-recovery context by design — stubbed here the way
+  `CaseEditorPage.test.tsx` and `DocPageEditorPage.test.tsx` stub it.
+*/
+const sessionRecovery = {
+  reportUnauthorized: () => {},
+  registerUnsavedWork: () => () => {},
+  hasUnsavedWork: () => false,
+  registerReauthHandler: () => () => {},
+}
+
 function renderPage() {
   return render(
     <TestProviders client={createTestQueryClient()} route={`/projects/${PROJECT}/plans/${PLAN}`}>
-      <Routes>
-        <Route path="/projects/:projectId/plans/:planId" element={<PlanStatisticsPage />} />
-      </Routes>
+      <SessionRecoveryContext.Provider value={sessionRecovery}>
+        <Routes>
+          <Route path="/projects/:projectId/plans/:planId" element={<PlanStatisticsPage />} />
+        </Routes>
+      </SessionRecoveryContext.Provider>
     </TestProviders>,
   )
 }

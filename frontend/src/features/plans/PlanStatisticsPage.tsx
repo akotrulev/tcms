@@ -1,5 +1,6 @@
 import {
   Alert,
+  AlertTitle,
   Box,
   Button,
   Chip,
@@ -13,6 +14,7 @@ import {
   TableHead,
   TableRow,
   Tabs,
+  TextField,
   Tooltip,
   Typography,
 } from '@mui/material';
@@ -22,7 +24,24 @@ import HelpOutlineIcon from '@mui/icons-material/HelpOutlineOutlined';
 import { useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { AggregationPolicy, Criterion, PlanStatistics, PlanStatus, TestPlan } from '../../api/types';
-import { usePlan, usePlanStatistics, useProject, useSetPlanStatus } from '../../api/queries';
+import {
+  useArtifacts,
+  usePlan,
+  usePlanStatistics,
+  useProject,
+  useSetPlanStatus,
+} from '../../api/queries';
+import { useUnsavedWork } from '../../auth/useSessionRecovery';
+import { ArtifactTable } from '../artifacts/ArtifactTable';
+import {
+  PLAN_TABS,
+  draftFromPlan,
+  dirtyTabs,
+  planTabLabels,
+  type PlanDraft,
+  type PlanTabId,
+} from './planDraft';
+import { usePlanSave, type SaveOutcome } from './usePlanSave';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
@@ -74,7 +93,10 @@ export function PlanStatisticsPage() {
     `progress` is the default because this route was the statistics page before it had a document,
     and every link to it that already exists means the numbers.
   */
-  const tab = params.get('tab') === 'document' ? 'document' : 'progress';
+  const requested = params.get('tab') ?? '';
+  const tab: PlanTabId = (PLAN_TABS as string[]).includes(requested)
+    ? (requested as PlanTabId)
+    : 'progress';
   const selectTab = (next: string) => {
     const updated = new URLSearchParams(params);
     if (next === 'progress') updated.delete('tab');
@@ -150,25 +172,41 @@ export function PlanStatisticsPage() {
       <Tabs
         value={tab}
         onChange={(_event, next: string) => selectTab(next)}
+        variant="scrollable"
+        scrollButtons="auto"
         sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
         data-testid="PlanStats.Tabs"
       >
-        <Tab value="progress" label="Progress" data-testid="PlanStats.Tab.Progress" />
-        <Tab value="document" label="Document" data-testid="PlanStats.Tab.Document" />
+        {PLAN_TABS.map((id) => (
+          <Tab key={id} value={id} label={planTabLabels[id]} data-testid={`PlanStats.Tab.${id}`} />
+        ))}
       </Tabs>
 
       {/*
-        Unmounted rather than hidden. The document tab holds unsaved text in per-block field state
-        and the progress tab holds a query per aggregation policy; keeping both mounted would mean
-        a screen that refetches statistics nobody is looking at, and a draft that survives a tab
-        switch the author cannot see they made.
+        Progress keeps its own lifecycle and is the one tab outside the form: it is a report, it
+        holds no draft, and it must keep working for a reader with no write permission at all —
+        this page is what gets pasted into a release thread, and turning it into a form must not put
+        a disabled editor in front of somebody who came to read numbers.
       */}
-      {tab === 'progress' ? (
+      {/*
+        Mounted for every tab, INCLUDING Progress, and that is the whole of §97's reversal of §93's
+        unmounting: the draft lives here, so a form that unmounted while the reader glanced at the
+        numbers would discard what they had typed. On Progress it renders the banner alone — an
+        author who edited Scope and switched away still sees that Scope is unsaved, which is what
+        makes an off-screen edit visible.
+
+        Rendered on `plan.data` rather than through a `DataRegion`: the region below reports a
+        failed load, the header already falls back to "Test plan", and a skeleton for the form above
+        the numbers would be a second loading state for one page.
+      */}
+      {plan.data && (
+        <PlanForm key={plan.data.id} projectId={projectId} planId={planId} plan={plan.data} tab={tab} />
+      )}
+
+      {tab === 'progress' && (
         <DataRegion testId="PlanStats.Content" state={{ ...statistics, refetch: () => void statistics.refetch() }}>
           {(data) => <StatisticsBody data={data} projectId={projectId} aggregation={aggregation} />}
         </DataRegion>
-      ) : (
-        <PlanDocumentPanel projectId={projectId} planId={planId} />
       )}
 
       {/*
@@ -189,6 +227,377 @@ export function PlanStatisticsPage() {
       </Box>
     </Box>
   );
+}
+
+/**
+ * The form spine — **the draft, the dirty banner and the one Save**, above the tabs.
+ *
+ * ## The seed is a snapshot, not the live query
+ *
+ * `base` is the plan as it was when the draft was seeded, and every comparison and every payload is
+ * against *it* rather than against the live `plan` prop. A background refetch that arrives while
+ * somebody is typing would otherwise change what "dirty" means underneath them — a field they
+ * edited could stop being dirty because another author saved the same value — and the `lockVersion`
+ * they save against would silently become the newer one, which is optimistic concurrency turned off
+ * at exactly the moment it was needed. Held this way, a concurrent edit is a **409 that says to
+ * reload**, which is the answer.
+ *
+ * ## Two tabs write outside this Save, deliberately
+ *
+ * Business requirements adopts and releases a page (`doc:edit`, its own `PUT`/`DELETE`), and Test
+ * artefacts registers rows (`artifact:edit`). Neither waits for Save and neither can make the
+ * banner appear — see {@link dirtyTabs}.
+ */
+function PlanForm({
+  projectId,
+  planId,
+  plan,
+  tab,
+}: {
+  projectId: string;
+  planId: string;
+  plan: TestPlan;
+  tab: PlanTabId;
+}) {
+  const [base, setBase] = useState<TestPlan>(plan);
+  const [draft, setDraft] = useState<PlanDraft>(() => draftFromPlan(plan));
+  const [outcome, setOutcome] = useState<SaveOutcome | null>(null);
+  const { save, saving } = usePlanSave(projectId, planId);
+
+  const dirty = dirtyTabs(draft, base);
+
+  /*
+    Tells the app this surface is holding work a navigation or a reload would destroy: the
+    deploy-skew handler prompts instead of reloading, and a mid-session 401 shows the in-place
+    re-auth dialog rather than redirecting off the draft.
+  */
+  useUnsavedWork(dirty.length > 0 && !saving, 'an edited test plan');
+
+  const edit = (patch: Partial<PlanDraft>) => setDraft((current) => ({ ...current, ...patch }));
+
+  const submit = async () => {
+    const result = await save(draft, base);
+    setOutcome(result);
+    if (result.kind === 'saved') {
+      // Reseeded from the server's own response, not from the draft: the plan comes back with a new
+      // `lockVersion`, the ids of the cases just created, and every section's recomputed count.
+      setBase(result.plan);
+      setDraft(draftFromPlan(result.plan));
+    }
+  };
+
+  return (
+    <Stack sx={{ gap: 2 }}>
+      {dirty.length > 0 && (
+        <Alert
+          severity="info"
+          data-testid="PlanStats.Dirty"
+          action={
+            <Stack direction="row" sx={{ gap: 1 }}>
+              <Button
+                size="small"
+                data-testid="PlanStats.Discard"
+                disabled={saving}
+                onClick={() => {
+                  setDraft(draftFromPlan(base));
+                  setOutcome(null);
+                }}
+              >
+                Discard
+              </Button>
+              {/* Disabled with a reason, never hidden (§31) — and the reason is the permission,
+                  which is why the gate wraps the button rather than the banner. */}
+              <PermissionGate projectId={projectId} permission="plan:edit">
+                {({ allowed }) => (
+                  <Tooltip title={allowed ? '' : 'You need plan:edit on this project.'}>
+                    <Box>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        data-testid="PlanStats.Save"
+                        disabled={!allowed || saving}
+                        onClick={() => void submit()}
+                      >
+                        {saving ? 'Saving…' : 'Save'}
+                      </Button>
+                    </Box>
+                  </Tooltip>
+                )}
+              </PermissionGate>
+            </Stack>
+          }
+        >
+          Unsaved changes in {dirty.map((id) => planTabLabels[id]).join(', ')}.
+        </Alert>
+      )}
+
+      {outcome && <SaveReport outcome={outcome} onDismiss={() => setOutcome(null)} />}
+
+      {tab === 'plan' && <PlanFieldsTab plan={base} />}
+      {tab === 'requirements' && <PlanDocumentPanel projectId={projectId} planId={planId} />}
+      {tab === 'artefacts' && <ArtefactsTab projectId={projectId} planId={planId} />}
+      {tab === 'scope' && (
+        <ScopeTextTab
+          testId="PlanStats.ScopeText"
+          title="Scope"
+          hint="What this release undertakes to test. Prose — the cases themselves are the Test cases tab."
+          value={draft.scopeText}
+          onChange={(scopeText) => edit({ scopeText })}
+        />
+      )}
+      {tab === 'outOfScope' && (
+        <ScopeTextTab
+          testId="PlanStats.OutOfScopeText"
+          title="Out of scope"
+          hint="What this release deliberately does not cover, so nobody has to infer it from an absence."
+          value={draft.outOfScopeText}
+          onChange={(outOfScopeText) => edit({ outOfScopeText })}
+        />
+      )}
+      {tab === 'cases' && <PlanCasesTab plan={base} />}
+    </Stack>
+  );
+}
+
+/**
+ * What the Save did, named per step.
+ *
+ * **The middle arm is the one this component exists for.** A plan step that fails after the case
+ * step wrote three cases leaves those three loose in the project, and an author told only "could not
+ * save" will press Save again — which is safe (the row keys make it a retry) but tells them nothing
+ * about the three cases they cannot see. So they are named, by key.
+ */
+function SaveReport({ outcome, onDismiss }: { outcome: SaveOutcome; onDismiss: () => void }) {
+  const created = outcome.created.map((row) => row.key).join(', ');
+
+  if (outcome.kind === 'saved') {
+    return (
+      <Alert severity="success" onClose={onDismiss} data-testid="PlanStats.SaveReport">
+        Plan saved
+        {outcome.created.length > 0 && ` — ${formatCount(outcome.created.length)} cases created (${created})`}.
+      </Alert>
+    );
+  }
+
+  return (
+    <Alert severity="error" role="alert" onClose={onDismiss} data-testid="PlanStats.SaveReport">
+      <AlertTitle>
+        {outcome.kind === 'planFailed' ? 'The plan was not saved' : 'The cases were not all created'}
+      </AlertTitle>
+      {outcome.kind === 'planFailed' ? (
+        <>
+          {describeError(outcome.error).body}
+          {outcome.created.length > 0 && (
+            <>
+              {' '}
+              {formatCount(outcome.created.length)} cases were created before this failed
+              ({created}) — they are in the project but not in this plan. Pressing Save again
+              will not create them a second time.
+            </>
+          )}
+        </>
+      ) : (
+        <>
+          {describeError(outcome.error).body} Stopped at “{outcome.failedTitle}”.
+          {outcome.created.length > 0
+            && ` ${formatCount(outcome.created.length)} cases before it were created (${created}).`}
+        </>
+      )}
+    </Alert>
+  );
+}
+
+/** One prose field, which is the whole of the Scope and Out of scope tabs (§97 D6). */
+function ScopeTextTab({
+  testId,
+  title,
+  hint,
+  value,
+  onChange,
+}: {
+  testId: string;
+  title: string;
+  hint: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <Panel title={title} testId={`${testId}.Panel`}>
+      <TextField
+        multiline
+        minRows={8}
+        fullWidth
+        label={title}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        helperText={hint}
+        slotProps={{ htmlInput: { 'data-testid': testId } }}
+      />
+    </Panel>
+  );
+}
+
+/**
+ * The Plan tab, **read-only in phase 4** — editing is still the header's dialog until phase 5 moves
+ * these fields onto the page. It renders what the plan holds rather than a placeholder, because a
+ * tab that says "coming soon" is one nobody opens twice.
+ */
+function PlanFieldsTab({ plan }: { plan: TestPlan }) {
+  return (
+    <Stack sx={{ gap: 3 }}>
+      <Panel title="Plan" testId="PlanStats.PlanFields">
+        <Stack sx={{ gap: 1.5 }}>
+          <Field label="Name">{plan.name}</Field>
+          <Field label="Description">{plan.description || '—'}</Field>
+          <Field label="Milestone">
+            {plan.milestoneName || '—'}
+            {plan.milestoneDate && ` · due ${plan.milestoneDate}`}
+          </Field>
+        </Stack>
+      </Panel>
+      <CriteriaList title="Entry criteria" testId="PlanStats.EntryCriteria" criteria={plan.entryCriteria} />
+      <CriteriaList title="Exit criteria" testId="PlanStats.PlanExitCriteria" criteria={plan.exitCriteria} />
+    </Stack>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <Stack direction="row" sx={{ gap: 2, alignItems: 'baseline' }}>
+      <Typography variant="caption" sx={{ color: 'text.secondary', width: 110, flexShrink: 0 }}>
+        {label}
+      </Typography>
+      <Typography variant="body2" sx={{ minWidth: 0 }}>
+        {children}
+      </Typography>
+    </Stack>
+  );
+}
+
+/**
+ * The authored gates, **without their verdicts**. The Progress tab evaluates the exit criteria
+ * against real results; repeating a met/unmet mark here would be a second answer to one question,
+ * computed from a different response, on a screen where nobody can see both at once.
+ */
+function CriteriaList({
+  title,
+  testId,
+  criteria,
+}: {
+  title: string;
+  testId: string;
+  criteria: Criterion[];
+}) {
+  return (
+    <Panel title={title} testId={testId}>
+      {criteria.length === 0 ? (
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          None set.
+        </Typography>
+      ) : (
+        <Stack sx={{ gap: 0.75 }}>
+          {criteria.map((criterion, index) => (
+            <Stack
+              key={`${criterion.metric}-${index}`}
+              direction="row"
+              sx={{ gap: 1.5, alignItems: 'baseline' }}
+              data-testid={`${testId}.Item`}
+            >
+              <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }}>
+                {criterion.label}
+              </Typography>
+              <Identifier variant="muted">
+                {criterion.metric} {criterion.op} {criterion.value}
+              </Identifier>
+            </Stack>
+          ))}
+        </Stack>
+      )}
+    </Panel>
+  );
+}
+
+/** The plan's own register, through the same table the Artifacts page renders (`ui-rules` §8). */
+function ArtefactsTab({ projectId, planId }: { projectId: string; planId: string }) {
+  const artifacts = useArtifacts(projectId, 'PLAN', planId);
+
+  return (
+    <Panel testId="PlanStats.Artefacts" dense>
+      <DataRegion
+        testId="PlanStats.Artefacts.List"
+        state={{ ...artifacts, refetch: () => void artifacts.refetch() }}
+        isEmpty={(rows) => rows.length === 0}
+        empty={{
+          kind: 'no-records',
+          title: 'No artifacts',
+          body: 'This plan has no artifacts of its own, and the project has none to inherit. Register them on the project’s Artifacts page.',
+        }}
+      >
+        {(rows) => <ArtifactTable rows={rows} showInheritance projectId={projectId} />}
+      </DataRegion>
+    </Panel>
+  );
+}
+
+/**
+ * The Test cases tab, **read-only in phase 4** — the four fill mechanisms land in phase 6. What it
+ * already tells the truth about is the shape: a plan's cases are named sections plus an unsectioned
+ * group, every arm is a **live selector**, and the counts do not sum.
+ */
+function PlanCasesTab({ plan }: { plan: TestPlan }) {
+  const unsectioned =
+    plan.suiteIds.length + plan.caseIds.length + plan.tags.length > 0 || plan.sections.length === 0;
+
+  return (
+    <Panel
+      title="Test cases"
+      testId="PlanStats.Cases"
+      actions={
+        <Tooltip title="A case can be named directly in one section and arrive through a suite or a tag in another, so the sections' counts add up to more than the plan's total.">
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+            {formatCount(plan.caseCount)} cases in scope
+          </Typography>
+        </Tooltip>
+      }
+    >
+      <Stack sx={{ gap: 2 }}>
+        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+          Every reference below is resolved on each read: this plan grows when a referenced suite
+          grows and when somebody tags a case.
+        </Typography>
+        {plan.sections.map((section) => (
+          <Stack key={section.name} sx={{ gap: 0.25 }} data-testid="PlanStats.Cases.Section">
+            <Stack direction="row" sx={{ gap: 1, alignItems: 'baseline' }}>
+              <Typography variant="subtitle2">{section.name}</Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                {formatCount(section.caseCount)} cases
+              </Typography>
+            </Stack>
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+              {describeReferences(section.suiteIds.length, section.caseIds.length, section.tags)}
+            </Typography>
+          </Stack>
+        ))}
+        {unsectioned && (
+          <Stack sx={{ gap: 0.25 }} data-testid="PlanStats.Cases.Unsectioned">
+            <Typography variant="subtitle2">Not in a section</Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+              {describeReferences(plan.suiteIds.length, plan.caseIds.length, plan.tags)}
+            </Typography>
+          </Stack>
+        )}
+      </Stack>
+    </Panel>
+  );
+}
+
+/** What defines a group, beside its count (§97 §5) — the references, never the resolved cases. */
+function describeReferences(suites: number, cases: number, tags: string[]): string {
+  const parts: string[] = [];
+  if (suites > 0) parts.push(`${formatCount(suites)} suites`);
+  if (cases > 0) parts.push(`${formatCount(cases)} cases added directly`);
+  if (tags.length > 0) parts.push(`tags ${tags.join(', ')}`);
+  return parts.length === 0 ? 'Nothing referenced yet.' : parts.join(' · ');
 }
 
 /**

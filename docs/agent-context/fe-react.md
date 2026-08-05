@@ -2,8 +2,8 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-05 (§100 phase C)
-**Baseline commit:** `0e58651` (§100 phase C) **+ the doc commit this line ships in** (its own SHA
+**Last verified:** 2026-08-05 (§97 phase 4)
+**Baseline commit:** `f0279de` (§97 phase 3c) **+ the doc commit this line ships in** (its own SHA
 cannot be written into itself; trust the body over the header and re-grep what a later commit
 could have moved).
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
@@ -35,8 +35,7 @@ could have moved).
 - **`npm run build` is THE gate** (`tsc -b` + vite build). **Do not trust `tsc --noEmit`** — it has
   reported 0 errors while the build failed with nine (working agreement). `#confirmed`
 - `npm run lint` — oxlint, must stay at **0 warnings**; it prints nothing when clean.
-- `npm run test:run` — Vitest + RTL. **849/849** across 60 files at §100 (828 before it; 834/56 was
-  recorded at §96 phase 6 and the §97 phases moved it). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
+- `npm run test:run` — Vitest + RTL. **880/880** across 63 files at §97 phase 4 (849/60 at §100). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
 - `npm run gen:api` — regenerate `src/api/schema.d.ts` after **any** `openapi.yaml` change. Runs
   through `npx` on purpose (the scaffold pins TS 6, the tool peer-requires 5.x); do not "fix" it.
 - **Live mode:** `VITE_API_MODE=live` in `.env.local` proxies `/api` to `localhost:8080`.
@@ -221,10 +220,46 @@ directly above the switcher) and the wordmark links there too.
   they are unreachable from a component test — `move(i, i)` marks the form dirty and offers a new
   version of an unchanged case. Bundle cost measured, **+2.9% total and +0.03 kB on the entry
   chunk**: all of it lands in the lazy route. `#confirmed`
+- **THE PLAN DETAIL IS ONE FORM WITH SEVEN TABS (§97 phase 4).** `features/plans/planDraft.ts`
+  (pure: `draftFromPlan` · `dirtyTabs` · `planPayload` · `liveCaseRows`) + `usePlanSave.ts` +
+  `useCreatePlanCase` + `PlanForm` inside `PlanStatisticsPage.tsx`. **The draft lives ABOVE the
+  tabs and this reverses §93**: that screen unmounted the inactive tab, arguing a draft surviving a
+  tab switch is one the author cannot see they made — under one Save, unmounting *discards* what
+  was typed, so the state is hoisted and the **banner names which tabs are dirty** instead.
+  `PlanForm` is mounted on **every** tab including Progress, which is what makes that true.
+  **Comparisons are against the SEED (`base`), never the live query** — a background refetch would
+  otherwise change what "dirty" means under a typing author and silently save against a newer
+  `lockVersion`, which is optimistic concurrency switched off at the one moment it matters. A
+  concurrent edit is a **409 that says reload**.
+  **`planPayload` sends only the DIRTY tabs' fields.** Every list on `PATCH /plans` is three-state
+  (absent = leave alone, `[]` = clear), so a whole-draft payload is a full replace dressed as a
+  patch — `PlanEditDialog` avoided that by hand, one field at a time.
+  **The save is two endpoints in a fixed order**: `POST /cases` ×N, then the `PATCH` carrying the
+  ids just created. A case that exists outside a plan is findable; a scope entry naming a case that
+  was never created cannot exist. Three outcomes, not two: `saved` · `casesFailed` (stopped
+  partway, names the row) · `planFailed` (**the cases are loose in the project** and are named by
+  key, or the author presses Save again and cannot account for them).
+  **`useCreatePlanCase` is the THIRD idempotency shape in `cases.ts` and the key is the ROW's** —
+  per-hook (`useCreateCase`) makes the server read rows 2…N as replays of row 1, per-call
+  (`useCreateDraftCase`) gives up the retry protection a two-step save needs most. The key is
+  minted with the row and survives a failed save, which is what makes pressing Save again safe.
+  **The trailing blank row must never satisfy a non-empty check** (§94's refine defect): every such
+  question goes through `liveCaseRows`, or the banner is up on every plan page ever rendered.
+  **Three tabs can never be dirty** — Progress holds no draft, Business requirements is the linked
+  page's own `PUT`/`DELETE`, Test artefacts writes itself.
+  **A test rendering this page now needs `SessionRecoveryContext`** (`useUnsavedWork` throws
+  without it, by design) — `PlanEdit`/`PlanLifecycle`/`PlanForm` tests all stub it the way
+  `CaseEditorPage.test.tsx` does. And **`as unknown as TestPlan` fixtures hid four required
+  contract fields**: `tags`/`sections`/`scopeText`/`outOfScopeText` were missing from both existing
+  plan fixtures and the page crashed on mount reading them — §65's cast class, third sighting.
+  `#confirmed`
+
 - **THE PLAN DOCUMENT TAB (§93).** `features/plans/PlanDocumentPanel.tsx` +
   `usePlanDocument`/`useStartPlanDocument`/`useLinkBlock`/`useUnlinkBlock` +
   `useCreateDraftCase` + `keys.planDocument`; `PlanStatisticsPage` gained **Tabs** with the selection
-  in the URL (`?tab=document`), the two halves **unmounted rather than hidden**.
+  in the URL (~~`?tab=document`~~ → **`?tab=requirements`, and seven of them, since §97 phase 4**),
+  the two halves ~~**unmounted rather than hidden**~~ → **the form is mounted on every tab now; see
+  the seam above for why that reversed**.
   **`usePlanDocument` turns the server's 404 into `null`** — a plan with no document is the ordinary
   first state, and letting it reach the query client raises a global "Something didn't load" on a
   screen whose correct rendering is an invitation.
@@ -621,6 +656,17 @@ directly above the switcher) and the wordmark links there too.
 
 ## Session log
 
+- 2026-08-05 · EXTEND · **The plan detail's form spine** (§97 phase 4) — state above the tabs, one
+  Save, the ordered pair, the banner. New: `features/plans/{planDraft,usePlanSave}.ts` + three test
+  files · `useCreatePlanCase` · `features/artifacts/ArtifactTable.tsx` (extracted so the plan's
+  artefacts tab and `/artifacts` share one renderer). No contract change, no `gen:api`.
+  `TestPlanUpdateInput` widened by hand to the four fields phase 2 added, and
+  `SetPlanStatus.overrideApprovalGate` **deleted** — M7 removed the edge it was meaningful on and
+  the contract no longer declares it. **The build, not the runner, found the one defect** (a section
+  fixture missing `position`: 29 green tests, one type error) — §85's lesson verbatim. Departure
+  from the phase plan, recorded: the two prose tabs ship here rather than in phase 5, because a
+  Save nothing can enable is a spine that cannot be driven. **880/880 across 63 files, lint 0,
+  build clean. Zero browser rows run; 15 queued (114–128).**
 - 2026-08-05 · EXTEND · **The design comp lands** (§100 phases A–C) — three proposals from
   `TCMS.dc.html`, imported through the design MCP. The comp is **mostly a portrait of what is already
   built** (its own first note is headed "Now matches the code"), so the deliverable was four

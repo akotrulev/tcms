@@ -4,6 +4,7 @@ import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '../../api/client'
 import type { PlanStatus, TestPlan } from '../../api/types'
+import { SessionRecoveryContext } from '../../auth/sessionRecoveryContextValue'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
@@ -46,6 +47,14 @@ function planBody(status: PlanStatus): TestPlan {
     entryCriteria: [],
     exitCriteria: [],
     configurations: [],
+    // Required on `TestPlan` since §97 phase 2. The `as unknown as TestPlan` cast below is what let
+    // them go missing, and the page crashed on mount reading them — §65's fixture-cast class again.
+    suiteIds: [],
+    caseIds: [],
+    tags: [],
+    sections: [],
+    scopeText: null,
+    outOfScopeText: null,
     currentVersionNo: 1,
     lockVersion: 1,
   } as unknown as TestPlan
@@ -80,12 +89,26 @@ function mockReads(
   }) as never)
 }
 
+/*
+  The plan detail registers unsaved work since §97 phase 4 (its draft lives above the tabs), and
+  `useUnsavedWork` throws without the session-recovery context by design — stubbed here the way
+  `CaseEditorPage.test.tsx` and `DocPageEditorPage.test.tsx` stub it.
+*/
+const sessionRecovery = {
+  reportUnauthorized: () => {},
+  registerUnsavedWork: () => () => {},
+  hasUnsavedWork: () => false,
+  registerReauthHandler: () => () => {},
+}
+
 function renderPage() {
   return render(
     <TestProviders client={createTestQueryClient()} route={`/projects/${PROJECT}/plans/${PLAN}`}>
-      <Routes>
-        <Route path="/projects/:projectId/plans/:planId" element={<PlanStatisticsPage />} />
-      </Routes>
+      <SessionRecoveryContext.Provider value={sessionRecovery}>
+        <Routes>
+          <Route path="/projects/:projectId/plans/:planId" element={<PlanStatisticsPage />} />
+        </Routes>
+      </SessionRecoveryContext.Provider>
     </TestProviders>,
   )
 }

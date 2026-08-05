@@ -2,7 +2,7 @@
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { useRef } from 'react';
 import { TIMEOUTS, api, newIntentKey, qs } from '../client';
-import type { PlanStatistics, PlanStatus, TestPlan } from '../types';
+import type { PlanSectionInput, PlanStatistics, PlanStatus, TestPlan } from '../types';
 import { base, keys } from './keys';
 
 export function usePlans(projectId: string): UseQueryResult<TestPlan[]> {
@@ -87,6 +87,16 @@ export interface TestPlanUpdateInput {
   milestoneDate?: string | null;
   suiteIds?: string[];
   caseIds?: string[];
+  /** §96's case tags as a scope arm — a tag is a live selector, not a snapshot of what it caught. */
+  tags?: string[];
+  /**
+   * **The whole section list is replaced when this is present** — sections have no ids, so there is
+   * nothing to match a partial update against. Absent leaves them alone; `[]` removes them all.
+   */
+  sections?: PlanSectionInput[];
+  /** The prose half of "scope"; `suiteIds`/`caseIds`/`tags`/`sections` are the executable half. */
+  scopeText?: string | null;
+  outOfScopeText?: string | null;
   entryCriteria?: CriterionInput[];
   exitCriteria?: CriterionInput[];
 }
@@ -136,7 +146,7 @@ export function useUpdatePlan(projectId: string, planId: string) {
 }
 
 /**
- * Submits, approves, starts, closes or reopens a plan.
+ * Submits a plan for review, approves it, or returns it to draft.
  *
  * `meta: { handled: true }` for `useSetRunStatus`' reason: "submit it for review first" and
  * "close the plan instead" are answers about the button that was just pressed, and a corner
@@ -146,26 +156,23 @@ export function useUpdatePlan(projectId: string, planId: string) {
  * server's question (`PlanLifecycle`), and a second copy of that ladder here would be one applied
  * to a `status` the cache may hold one save out of date.
  */
-/** The argument to {@link useSetPlanStatus} — the target, plus §6g's opt-in override (§82). */
+/**
+ * The argument to {@link useSetPlanStatus} — the target, and nothing else.
+ *
+ * ~~Plus §6g's opt-in override (§82).~~ → **removed in §97 (M7)**, with the `DRAFT → ACTIVE` edge it
+ * was meaningful on: no remaining plan transition has a gate, `PlanStatusInput` no longer declares
+ * the field, and a client that kept sending it would be asking to bypass a rule that no longer
+ * exists. §6g's override survives where its rule does — on run creation (`RunCreateDialog`).
+ */
 export interface SetPlanStatus {
   status: PlanStatus;
-  overrideApprovalGate?: boolean;
 }
 
 export function useSetPlanStatus(projectId: string, planId: string) {
   const client = useQueryClient();
   return useMutation({
-    /*
-      `overrideApprovalGate` (§82) is meaningful on exactly one move — starting a plan on a project
-      that requires approved plans — and is read-and-ignored on the other four. Sent as an optional
-      second argument rather than a second hook, so the ladder's buttons keep one call site and no
-      caller has to hold a copy of which edge the rule binds on.
-    */
-    mutationFn: ({ status, overrideApprovalGate }: SetPlanStatus) =>
-      api.put<TestPlan>(`${base(projectId)}/plans/${planId}/status`, {
-        status,
-        ...(overrideApprovalGate ? { overrideApprovalGate: true } : {}),
-      }),
+    mutationFn: ({ status }: SetPlanStatus) =>
+      api.put<TestPlan>(`${base(projectId)}/plans/${planId}/status`, { status }),
     meta: { handled: true },
     onSuccess: (updated) => {
       client.setQueryData(keys.plan(projectId, planId), updated);
