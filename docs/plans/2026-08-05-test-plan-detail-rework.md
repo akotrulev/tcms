@@ -225,9 +225,30 @@ and one of its cases were already two ways of saying one thing), so the sections
 sum to the plan's total**, which is §96's lesson arriving one slice later: say it on the tooltip, or
 a reader subtracts and reports a bug in a correct number.
 
-## 5a. OPEN — the existing suite arm expands at READ time, and D7 expands at ADD time
+## 5a. RESOLVED — the existing suite arm expands at READ time, and D7 expands at ADD time
 
-**This needs a decision before phase 2.** `plan_scope_item.suite_id` exists today and the contract
+**Resolved 2026-08-05: (a), keep both.** D7 was reaffirmed by the user in the same round that took
+the organization-model decisions (`2026-08-05-organization-model-restatement.md` M4), so the
+mismatch below is real and has to be lived with rather than designed away.
+
+(a) is taken because the other two each cost more than the confusion they remove: **(b)** silently
+changes what existing plans contain the next time a suite grows, which is a behaviour change nobody
+observes until a release checklist is short; **(c)** costs the third copy of §96's resolution
+predicate in a third module, which is the exact thing D7 was chosen to avoid.
+
+So the Test cases tab renders **two groups**, and the labels are load-bearing:
+
+- **From suites (live)** — today's `plan_scope_item.suite_id` items, above the sections, labelled as
+  live, with the sentence *"grows as the suite grows"*. Not sectionable, because one row stands for
+  many cases.
+- **Sections** — D7's labelled case rows, snapshotted at add time.
+
+A plan created after this slice need never have a row in the first group; every plan created before
+it has only that group. The asymmetry is therefore mostly a migration-shaped one, and it is
+**named on screen rather than smoothed over**, because a reader who cannot tell a live group from a
+snapshotted one will misread both.
+
+**Original statement of the problem, kept:** `plan_scope_item.suite_id` exists today and the contract
 defines it as live: *"A suite item means the folder and everything beneath it — the plan's
 `caseCount` expands it."* D7's sections snapshot instead. So one screen would show two behaviours:
 
@@ -303,9 +324,22 @@ none of them.
 | 6 | Frontend — the Test cases tab: sections, four fill mechanisms, auto-append, deferred creation | both |
 | 7 | Handoff section, index row, both orientation caches, verification queue rows | both |
 
+## 7a. What this slice is NOT, after the organization-model restatement
+
+The user's model restatement (2026-08-05) produced two further slices, and neither belongs here:
+
+- **§98 — suites become flat.** `parent_id` and `path LTREE` go. §97 is unaffected **because §96's
+  seam absorbs it**: this slice asks `SuiteMembership` to resolve a suite's members and never asks
+  how, so flattening changes the seam's body and not its signature.
+- **§99 — a run is scoped by suites, cases and tags directly.**
+
+Both are in `docs/plans/2026-08-05-organization-model-restatement.md`. The filing arm
+(`test_case.suite_id`) **stays** — §96 as shipped is unchanged by any of this.
+
 ## 8. Traps
 
-- **§5a is unresolved and phase 3 cannot be written without it.**
+- ~~**§5a is unresolved and phase 3 cannot be written without it.**~~ → resolved, (a). The tab shows
+  two groups and must label the live one as live.
 - **Two meanings of "scope" on one screen.** `plan_scope_item` is the case list; `scopeText` is
   prose. A contract field, a column and a UI label each have to survive a reader who knows only one.
 - **Add-time expansion is invisible after the fact.** Once a suite is expanded, nothing records that
