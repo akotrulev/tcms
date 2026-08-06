@@ -378,3 +378,69 @@ pre-`V33` database, already flagged unreachable on this instance).
 (version/lock-conflict rows), `M3-16`…`M3-39` (the linked-document half — needs a `/docs` page
 authored first), `M3-40`…`M3-62` remaining live-resolution and viewer-tier rows, `M3-13`/`L2-5`/
 `L2-6`/`L3-6`/`M4-27` (confirmed unreachable by `M3-1`, not separately driven).
+
+---
+
+## F10 — The local dev `compose.yaml` has no volume for evidence/reports, so attach fails outright
+
+**Severity: low (dev environment, not product).** Found attaching evidence for `M4-7`.
+
+`POST .../evidence` 500'd: `AccessDeniedException: /var/lib/tcms` — `FilesystemEvidenceStore` tried
+to `Files.createDirectories` under `/var/lib/tcms/evidence` (the default from `application.yml`) and
+the container's `app` user (uid 10001) has no write permission on `/var/lib` itself, which is
+root-owned in the base image.
+
+**Production is not affected** — `deploy/compose.prod.yaml` bind-mounts
+`/var/lib/tcms/evidence` and `/var/lib/tcms/reports` from the host explicitly, with a comment
+recording exactly why (§107's finding: the evidence root is stateful and backup-critical). The root
+`compose.yaml` this pass's setup section points to has **no such volume at all** — not even an
+unmounted named volume, the directory simply does not exist in the container and nothing creates it.
+
+**Worked around for this session**: `docker compose exec -u root backend mkdir -p
+/var/lib/tcms/evidence /var/lib/tcms/reports && chown app:app /var/lib/tcms` — the exact recipe
+`compose.prod.yaml`'s own comment gives for the host side, run inside the container instead since
+local dev has no bind mount to prepare. This does not survive `docker compose down`.
+
+**Not fixed in the compose file itself** — that's a setup-doc / compose change, not something this
+verification pass should make unasked. Worth adding to `CLAUDE.md`'s local-stack instructions or to
+the root `compose.yaml` directly: any pass or session doing evidence/report work needs this before
+`M4-7` and `A6`'s report generation will succeed. Recorded here rather than fixed so the next person
+sees it before losing time to the same 500.
+
+---
+
+## A3 — execution: results
+
+`TR-1` against `TP-1` (7 Passed, 2 Failed, 3 Blocked — mix built deliberately), `TR-2 gated` (created
+via the case-approval-gate override), `TR-3 clean` (gate satisfied, no override), plus two 1-case
+seed runs for the health scheduler. 24 of 26 cases bulk-approved (`TC-25`/`TC-26` left `DRAFT`
+on purpose, for later permission-tier rows).
+
+| Row | Verdict | Note |
+|---|---|---|
+| `M4-30` | ✅ PASS | Plan select: "No plan — scope it below" as its own row above the plans, not a blank option. |
+| `L0-2` | ✅ PASS | New run: chip "Not started", coloured (not grey fall-through). |
+| `M4-1` | ✅ PASS | Empty run: Complete disabled; Abort enabled. |
+| `M4-13`/`14`/`15` | ✅ PASS | Split default, three-segment switch; Failed gains a heavier border + "Failed" tooltip, every other verdict stays enabled; P/F/B/S fixed squares. |
+| `M4-48` | ✅ PASS exactly | "2 cases failed · 3 blocked" — blocked excluded from the failed count. |
+| `M4-49` | ✅ PASS, both shapes | `TC-1` (fully marked): "1 of 1 steps failed", no "not marked" clause. `TC-6` (case-level status only): "0 of 1 steps failed · 1 not marked" — three numbers. |
+| Blocked-list sentence | ✅ PASS | *"Blocked — nobody could get far enough to find out whether these pass. Not counted as failures."* |
+| `M4-2` | ✅ PASS | Complete run → `COMPLETED`, counts frozen (7/2/3/0/0). |
+| `M4-3` | ✅ PASS exactly | Four verdict buttons + Attach disabled, *"This run has ended, so its results can no longer change."*; attached evidence still lists and opens. |
+| `M4-4` | ✅ PASS | Reopen → `IN_PROGRESS`, `completedAt` null, `startedAt` unchanged. |
+| `M3-15` | ✅ PASS exactly | Deleting `TP-1` (has a run) → 409 *"1 test run has been executed against this plan…"* |
+| `M4-7` | ✅ PASS (after **F10**'s workaround) | 201, thumbnail renders, correct size/name/attributor. |
+| `M3-3` | ✅ PASS | Review settings: only **one** gate switch (cases); no plan-gating control anywhere. |
+| `M4-22` | ✅ PASS | Amber warning appears while the gate is on. |
+| `M4-23`/`M4-24` | ✅ PASS exactly | 409 in the dialog banner naming the count and first keys; "Create it anyway" (held `case:approve`) creates the run under the **edited** name. |
+| `M4-26` | ✅ PASS | With no unapproved cases in scope: 201, no gate mention anywhere. |
+| `L4-41` | ✅ PASS (caught opportunistically) | After the scheduler's first tick: *"Figures as of HH:MM (7m ago) — updated every 15 minutes."* |
+
+**`L4-40` missed** — its window is *before the first scheduler tick*, and by the time Progress was
+re-checked the tick had already run (this session had been going long enough). Recorded honestly
+rather than claimed; `L4-41`'s confirmation is the next best evidence the two paths agree.
+
+**Not driven this pass**: `M4-5`/`M4-6` (abort/stale-tab 409), `M4-8`…`M4-12`, `L4-18` (evidence
+delete/dup-upload/multipart — F10 unblocks these for a future pass), `M4-16`…`M4-19` (Grid mode),
+`M4-41`…`M4-47` (grid link pairs), `M4-50`…`M4-58` remaining "What failed" rows, `M4-20`/`21`/`25`/
+`27`/`28`/`29`, `M4-38` (remaining gate rows — `M4-27` is confirmed unreachable per `M3-1`).
