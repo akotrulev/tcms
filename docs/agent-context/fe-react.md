@@ -2,8 +2,8 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-06 (§99 phase 3 — the run dialog offers all three scope arms)
-**Baseline commit:** `38df750` (§99 phase 3) **+ the doc commit this line ships in** (its own SHA
+**Last verified:** 2026-08-06 (§101 phase 5 — the two screens say how old their arithmetic is)
+**Baseline commit:** `7f43c28` (§101 phase 5) **+ the doc commit this line ships in** (its own SHA
 cannot be written into itself; trust the body over the header and re-grep what a later commit
 could have moved).
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
@@ -111,6 +111,19 @@ directly above the switcher) and the wordmark links there too.
   until this slice, so mock mode showed red and green gates no server produces. That is §73's own
   recorded trap (*"the mock always supplied a boolean, so the null branch was unreachable"*) still
   live one layer up. `#confirmed`
+- **`formatComputedAt` (`lib/format.ts`) — how old the ARITHMETIC on a screen is (§101).** Rendered
+  on `PlanStatisticsPage` and `SuiteHistoryPage`, whose counts now come from the `plan_snapshot` /
+  `suite_run_summary` rollups and can lag by up to one scheduler tick. **Null renders as "Computed
+  now" — a positive statement, not the absence of a warning**: it means the server computed from the
+  executions themselves, so it is *more* current than a timestamp, and a screen that says nothing
+  when it is current leaves the reader unable to tell current from unlabelled.
+  **DELIBERATELY NOT MERGED WITH `PlanStatistics.stale`, and they render on separate lines.** `stale`
+  is about the EXECUTIONS (nothing run in 14 days); this is about the SUMS. A plan executed an hour
+  ago and rolled up ten minutes ago is fresh by one measure and behind by the other — one line would
+  have to pick, and whichever it picked would be wrong half the time (§65's shape with the
+  contradiction hidden). **Mock mode structurally cannot show the rollup branch**: the mock computes
+  from fixtures per request, so it truthfully answers `computedAt: null` on both endpoints — which is
+  why every one of §101's browser rows is live-only.
 - **`compareCaseKeys` (`lib/format.ts`) — display keys sort numerically.** `caseKey.localeCompare`
   puts `TC-10` ahead of `TC-9`; `RunDetailPage`'s tiebreaker did, and `compareReleaseVersions` had
   *already named* the class ("the same class of bug as ordering by case key") without anyone

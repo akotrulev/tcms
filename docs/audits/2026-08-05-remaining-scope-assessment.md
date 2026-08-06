@@ -182,7 +182,7 @@ report. §2.2 row 4 is scored on that distinction and not on the module's file c
 | 5 | CSV / XLSX export | M2.5 | `ReportFormat` declares both, no `ReportRenderer` claims either |
 | 6 | Doc-structured reports · Mermaid blocks + SVG pre-render (§6i) | M2.5 | no code, no `Mermaid` reference anywhere |
 | 7 | Evidence-bundle export | M2.5 | no code; its two dependencies (evidence §67, the pipeline §87) are now both closed |
-| 8 | `SuiteRunSummary` + `PlanSnapshot` rollups | M2 | **both tables comment-only — new to this list, see §1.1** |
+| ~~8~~ | ~~`SuiteRunSummary` + `PlanSnapshot` rollups~~ → **CLOSED 2026-08-06 by §101** | M2 | ~~both tables comment-only~~ — both now have writers (`reporting.RollupRefreshService`) and both are read by the screens §6p designed them for. **M2 re-scores 85% → 92%**; the milestone's remaining gap is the nested-suite rollup, which §98 made **not applicable** — suites are flat, so there is no subtree to sum |
 | 9 | Plan templates + clone case / plan / run (§6v) | M1–M2 | no code, no table. *(Distinct from §97's retired plan-document template.)* |
 | 10 | SSO / OIDC (Cognito · Entra · Google · Okta · Keycloak) + LDAP | M4 | no `oidc`/`saml` reference in main |
 | 11 | Issue trackers ×4 (Jira · GitHub · GitLab · Azure DevOps) | M4 | no code |
@@ -258,18 +258,22 @@ Weighted by the plan's own milestone estimates (midpoints of its ranges).
 | M0.5 — Identity & access | 2.00 | 95% | 100% | 100% | 0.00 |
 | M1 — Test repository | 4.50 | 75% | 88% | **92%** | 0.36 |
 | M1.5 — Reuse & review | 3.00 | 45% | 85% | **95%** | 0.15 |
-| M2 — Execution | 5.50 | 65% | 90% | **85%** | 0.83 |
+| M2 — Execution | 5.50 | 65% | 90% | ~~85%~~ **92%** (§101) | 0.44 |
 | M2.5 — Docs, artifacts & reporting | 7.50 | 50% | 50% | **72%** | 2.10 |
 | M3 — Automation ingestion | 2.50 | 0% | 0% | 0% | 2.50 |
 | M4 — Integrations & workflow | 9.00 | 12% | 18% | **24%** | 6.84 |
 | M5 — Hardening & release | 2.00 | 40% | 35% | **30%** | 1.40 |
 | M6 — Multi-company activation | 1.75 | 35% | 40% | 40% | 1.05 |
-| **Total** | **40.25** | | | | **15.23** |
+| **Total** | **40.25** | | | | ~~15.23~~ **14.84** (§101) |
 
 **Two milestones went backwards and neither is an error.**
 
 - **M2, 90% → 85%**, because §1.1's comment filter revealed that its rollup deliverable has no code.
   Nothing was un-built; the previous figure was wrong.
+  **→ closed 2026-08-06 by §101, and M2 re-scores to 92%.** Both tables have writers, both screens
+  read them, and the milestone's last named gap — §6p's nested-suite rollup — is **not applicable**
+  since §98 flattened suites: there is no subtree to sum. What survives of that paragraph is the
+  reason the columns are counts rather than percentages, which is still right.
 - **M5, 35% → 30%**, because the verification queues grew from 13 slices each to **30 and 32**, and
   §78's Helm chart and its S3 prerequisite are still both unstarted. §100 ran a browser pass and it
   was **mock mode only**, which the queue header itself says is not the one that counts. The
@@ -284,7 +288,7 @@ infrastructure; a report-count-weighted reading would put it nearer 60%.
 ### The headline numbers
 
 - **~38% of the full plan remains** — 15.2 of 40.25 weeks (**37.8%**; 43.5% at round 2, 53.0% at
-  round 1).
+  round 1). **→ 14.8 weeks (36.9%) after §101 closed the M2 rollups.**
 - **~37% remains to M5**, which the plan calls a legitimate release point: *"a single-company v1.0
   can ship and be used in production while M6 is built"* (14.2 of 38.5 weeks, **36.8%**).
 - **~25% remains to a core TCMS without the M4 integrations block** (7.3 of 29.5 weeks, **24.9%**).

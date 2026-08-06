@@ -213,6 +213,34 @@ structural. And the union's **ordering** by `key_seq` is asserted nowhere: `case
 every row above. Recorded rather than papered over — the display order is the view's, so the cost is
 insertion order only.
 
+## 13. §101's M2 rollups — eleven mutations, none run
+
+Two `V1` tables get their first writers and two screens stop scanning. **The risk is concentrated in
+three places and all three fail silently in production**, which is why 13a, 13b and 13c are the rows
+that must not be skipped: each is one of the slice's own findings, armed.
+
+**None was run**, per §65.
+
+| # | Mutation | What must redden |
+|---|---|---|
+| 13a | `ExecutionSource.correctSuiteRunCounts` — join `test_execution` on the suite's **current** membership instead of on the row's `membership_snapshot` | **Finding 1, armed.** `SuiteRunSummaryRefreshTest.Freeze.aLaterTagDoesNotRewriteAPastRun`. Nothing else should move: `anAmendedVerdictIsCorrected` must stay green, and if it also reddens the mutation broke the correcting statement rather than the freeze, which is a different (and less interesting) result |
+| 13b | `RollupRefreshService.refresh` — delete the `source.prunePlanSnapshot()` call | **Finding 2, armed.** `PlanSnapshotRefreshTest.Prune.prunesACaseThatLeftTheScope` **and** `prunesASoftDeletedCase`. Both, or the prune is pinned only in the direction that some other filter also covers. `theSiblingIsNotPruned` must stay green — it asserts the asymmetry, not the prune |
+| 13c | `PlanStatisticsService.compute` — make `fromRollup` depend on `servedFromRollup(policy)` alone, dropping the `snapshotIsComplete` conjunct | **Finding 3, armed — the defect the oracle test caught before it shipped.** `RollupAgreementTest.anEmptyRollupDoesNotReportEveryCaseAsNotRun` and `aSnapshotMissingOneCaseFallsBackToLive`. A green run here means the repair is described and not asserted, and the behaviour it restores is a plan that has been executed reporting that nothing has been executed |
+| 13d | `ExecutionSource.insertNewSuiteRunSummaries` — replace the three-arm predicate with `c.suite_id = s.id` | `SuiteRunSummaryRefreshTest.summarisesATagDefinedSuite`, `Agreement.theSnapshotAgreesWithTheRepositorysUnion`, and `RollupAgreementTest.suiteHistoryAgrees`. `aTagDefinedSuiteFilesNothing` is the guard on the property — **if 13d goes green, run that first**, because a fixture where the two readings agree makes every row here vacuous |
+| 13e | Same statement — change the `LEFT JOIN case_status` to an inner join | `anUnrecordedExecutionIsNotRunRatherThanMissing`. This is the one place the rollup deliberately differs from `execution_fact`, whose header says coverage denominators can never come from it; the inner spelling makes `total` exclude the un-run cases and a run of 3 of 47 read as 100% |
+| 13f | `ExecutionSource.correctSuiteRunCounts` — drop the trailing `IS DISTINCT FROM` guard | `updatedAtDoesNotMoveWhenNothingChanges`. Predicted to redden exactly one test; recorded because the consequence is not a wrong count but a `computedAt` that always says "just now", which is a freshness field that says nothing |
+| 13g | `ExecutionSource.refreshPlanSnapshot` — reverse the tiebreak to `e.executed_at ASC` | `PlanSnapshotRefreshTest.keepsTheLatestExecutionPerCasePerConfiguration` and `RollupAgreementTest.planStatisticsAgreeUnderLatest`. The fixture's `CASE_TWICE` is what makes this observable — with one execution per case it reddens nothing |
+| 13h | Same statement — drop `AND r.deleted_at IS NULL` from the `test_run` join | Suspected **weak**: no fixture here soft-deletes a run of a plan. If nothing reddens, that is the finding and the repair is a fixture row, not a claim of coverage. The behaviour matters — counting a withdrawn run restores a result somebody meant to retract |
+| 13i | `ExecutionSource.prunePlanSnapshot` — drop the `c.deleted_at IS NULL` conjunct | `prunesASoftDeletedCase` alone. If `prunesACaseThatLeftTheScope` also reddens, the two predicates are not independent and the row's split is wrong |
+| 13j | `RollupFacts.runsWithoutSummary` — return `List.of()` unconditionally | `RollupAgreementTest.aRunNewerThanTheRollupIsStillInTheHistory`. The mutation is exactly "serve the suite history from the rollup alone", and what it produces is an **absent** run rather than a stale one |
+| 13k | `SuiteHistoryService.computedAt` / `PlanStatisticsService.computedAt` — take the newest `updated_at` instead of the oldest | Predicted to redden **nothing**, and that is the row rather than a shortfall: no fixture here has two rollup rows written at measurably different instants. The decision is argued in both javadocs and the honest repair is a test that writes two rows a second apart, listed under **Tests to write** below |
+
+**One thing this slice's suite structurally cannot observe**, stated rather than implied: whether the
+rollup is *faster*. Every row above is about correctness. The argument for the rollup is structural —
+aggregate in Postgres over an indexed table rather than materialising N rows into JVM objects — and
+`CLAUDE.md`'s *"measure bundle changes before believing them"* applies to this exactly as it does to
+a bundle. **It was not measured.**
+
 ---
 
 # CLOSED — no longer owed
@@ -269,6 +297,14 @@ Also owed on a real box: `EXPLAIN (ANALYZE)` on the step-suggestion query, to co
   (`deletingATeamCascadesOntoItsRequests`) is green.
 
 ## Tests to write
+
+
+- **§101 — two rollup rows written a second apart**, so `computedAt`'s oldest-not-newest
+  decision becomes assertable. Row 13k predicts zero reds today: both services pick the minimum
+  `updated_at` across the rows they used, and no fixture produces two distinct instants, so the
+  choice is argued in javadoc and pinned by nothing. It matters because the page mixes rolled-up rows
+  with a live tail, and the newest is a claim true of one row and false of the others — false in the
+  reassuring direction.
 
 Each is a gap this pass measured rather than a guess. Numbered findings above give the reasoning.
 

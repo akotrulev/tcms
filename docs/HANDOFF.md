@@ -1,6 +1,61 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-06 (latest section: **§99, a run is scoped by suites, cases and tags** — M3 of the
+**Date:** 2026-08-06 (latest section: **§101, the M2 rollups** — the two `V1` tables that had been
+discussed in javadoc and written by nothing since M0, **six phases, six commits**, and the slice
+that closes the finding which moved **M2 backwards, 90% → 85%** in round 3 of the scope assessment.
+Nothing was un-built; the earlier figure was wrong, because round 2's check was a plain `grep` and
+**a table named in a comment is not a table with a writer**. `V34__rollup_read_indexes.sql` and
+`V35__rollup_freshness_columns.sql`, `V36` next free; policy count **unchanged at 61** — both tables
+have been in `V1`'s `company_owned` array since M0, so they were protected for eight months before
+there was a row to protect. **THE FIRST FINDING IS THAT `suite_run_summary` MUST FREEZE ITS
+MEMBERSHIP.** A run's executions are fixed at create (§42), but *which suites claim those cases*
+moves every time somebody adds a tag — so a recompute that re-derives membership rewrites last
+March's pass rate, 43 → 44, **with both numbers looking equally correct and nobody able to name when
+it changed**. §6p settled it as open question **#32** before the table had a writer, and
+`membership_snapshot` is the column that exists to hold it: §86's frozen-dimension argument reaching
+a second table. **The freeze is STRUCTURAL** — two statements, the correcting `UPDATE` tallying over
+the row's own stored snapshot, so the frozen columns are unreachable from it rather than merely
+omitted; §86 holds fifteen columns by a set-list a reviewer has to notice. **THE SECOND FINDING IS
+THE ASYMMETRY**: `plan_snapshot` is `V1`'s *"CURRENT latest result per case per configuration"*, so
+it needs the delete pass its sibling **must never grow** — a suite that stops claiming a case does not
+un-run it, but a plan must not argue readiness from a case it no longer covers, and a recompute with
+no prune leaves the totals permanently too high **with no row anywhere that looks wrong**. Two tables
+one migration apart, discussed in one paragraph of §6p, and the same recompute written twice is wrong
+for one of them. **THE THIRD FINDING IS THE ONE THE ORACLE TEST CAUGHT BEFORE IT SHIPPED, WHICH IS
+WHAT IT WAS FOR.** Choosing the source from the aggregation policy alone is a claim about what the
+rollup *can* serve, not what it *has* been written for: a plan whose first results landed since the
+last tick — and **every plan on a deployment where the job has never run** — read an empty
+`plan_snapshot` and reported **every case as not-run**. Not staleness: a plan that has been executed
+reporting that nothing has been executed, **rendering exactly like a plan nobody has started** (§47,
+§53, §72, §81's shape through a merely cold cache). The rollup is now used only when it covers every
+in-scope case with a recorded result; **falling back is the safe direction** — the live path is the
+specification and the failure it replaces is a *wrong* number, where the cost is a *slow correct*
+one. `PlanStatisticsService`'s own header named this slice's specification in one sentence — *"the
+migration path is to feed the rollup and read it here, with this class as the definition of what the
+rollup must produce"* — which is why `RollupAgreementTest` asserts **equality between two
+computations** rather than fresh expected numbers. **Two things the plan under-specified**, both
+found in the building: `suite_run_summary` had no `last_executed_at`, the entry's **required** sort
+key, and serving the suite history from the rollup alone would **DROP** a run recorded since the last
+tick — an absence, not a stale number, met first by the person who has just finished the run (hence
+rollup ∪ tail). **`execution.RollupFacts` is the module's SECOND seam** — the rule was never one seam
+per module but one per **foreign** module — and the `reporting` edge now runs **both ways at the
+table level and in neither direction at the Java level**, which is the only level ArchUnit checks;
+the cost, that nothing verifies the two sides agree about a column, is closed by the agreement test
+rather than by a comment. **`plan_snapshot` serves two of five policies**: `WORST`, `BEST` and `ALL`
+each need every execution and stay live, asserted in **both** directions because serving `WORST` from
+a latest-only table is wrong in the one direction nobody checks — it makes a plan look **better**
+than it is. **Freshness is on the wire**: `computedAt`, required and nullable, and it is the
+**OLDEST** `updated_at` rather than the newest, because both responses mix rolled-up rows with a live
+tail and the newest would be false in the reassuring direction. **Two ages, two lines** — `stale` is
+about the executions, `computedAt` about the arithmetic — and the contract's *"computed per request"*
+clause is **struck through with its reversal** rather than deleted, because the distinction it drew
+is now the reason there are two fields. Gates: backend **BUILD SUCCESSFUL — 1795 across 360 classes,
+0 failures, 0 skipped** (1761 → 1795); frontend **919/919 across 67 files** (913 → 919, exactly the
+six written — no `api.*` call site added, so the hygiene checks generate nothing). **Zero
+verification run**: 9 browser rows, **all structurally live-only** because the mock truthfully
+answers `computedAt: null` and mock mode can only ever render the "Computed now" branch, and 11
+mutation rows. **Built and unverified.**
+Before that: **§99, a run is scoped by suites, cases and tags** — M3 of the
 organization-model restatement and the slice that **completes it**, **three phases, three commits**.
 **No migration (`V33` still head, `V34` still free), no table, no column, no key, no route**, policy
 count unchanged at **61**: the whole slice is two fields on `TestRunInput` and one query behind them,
@@ -1628,3 +1683,4 @@ See [`docs/plans/2026-07-31-parallel-execution-rework.md`](plans/2026-07-31-para
 | [§98](handoff/98-suites-become-flat.md) | Suites become flat — the count and the grid that have answered different questions since §96, the frozen path that outlived the column it copied, and the agreement test the plan expected to retire **(built and unverified — 12 browser rows, 6 mutation rows plus a `V33` row on the Hetzner list, none run)** |
 | [§99](handoff/99-a-run-is-scoped-by-suites-cases-and-tags.md) | A run is scoped by suites, cases and tags — the suite arm that reads right and resolves to nothing, the gate that needed no edit, and the hand-written type that failed exactly as its own comment predicted **(built and unverified — 11 browser rows, 7 mutation rows, none run; two record checks weaker than they look)** |
 | [§100](handoff/100-the-design-comp-lands.md) | The design comp lands — the contract that declared a shape nobody served, the mock that evaluated gates the server never evaluates, and the bulk surface that re-asks every per-row rule **(browser pass RUN inline by direction — mock mode only; 3 rows still queued, one of them live-only)** |
+| [§101](handoff/101-the-m2-rollups.md) | The M2 rollups — the membership that freezes, the prune its sibling must not have, and the cold cache that read as a plan nobody had started **(built and unverified — 9 browser rows, all structurally live-only, and 11 mutation rows, none run)** |

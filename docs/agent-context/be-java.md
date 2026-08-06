@@ -2,10 +2,12 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-06 (§99 phase 2 — a run is scoped by suites, cases and tags)
-**Baseline commit:** `38df750` (§99 phase 3) **+ the doc commit this line ships in** (its own SHA
+**Last verified:** 2026-08-06 (§101 phases 1–4 — the M2 rollups)
+**Baseline commit:** `7f43c28` (§101 phase 5) **+ the doc commit this line ships in** (its own SHA
 cannot be written into itself; per `CLAUDE.md`, trust the body over the header and re-grep what a
 later commit could have moved).
+**§101's backend half is phases 1, 2 and 4** — `V34` + `V35`, both rollup writers, and the read
+switch. Phase 3 is contract-only and phase 5 is the client. The seam list's first entry records it.
 **§99's backend half is phase 2 alone** — two request fields, one union query, and no migration;
 the seam list's first entry records it. §98's note is kept below because its shape recurs.
 **§98 phase 2 was the backend half of the flattening** — `V33`, the entity, the two services, the
@@ -63,11 +65,56 @@ exist**, and the slice plan's decision E declines to create it for two storage p
 
 ## Seams to reuse
 
+- **THE M2 ROLLUPS HAVE WRITERS SINCE §101, AND THE TWO ARE NOT THE SAME SHAPE.**
+  `reporting.RollupRefreshService` (a sibling of `ExecutionFactRefreshService`, driven by the same
+  15-minute company loop in `ExecutionFactScheduler`, fact log **first**) runs four statements in
+  `ExecutionSource`. **Migrations now run to `V35`; `V36` is the next free number.** Policy count
+  still **61** — both tables were already in `V1`'s `company_owned` array.
+  - `suite_run_summary` is **HISTORY**: `insertNewSuiteRunSummaries` (`ON CONFLICT DO NOTHING`,
+    capturing `membership_snapshot` + `suite_version_no`) and `correctSuiteRunCounts` (tallying over
+    **the row's own stored snapshot**). **The freeze is structural, not a set-list** — the correcting
+    statement cannot reach the frozen columns. **Nothing deletes.** Re-deriving membership would
+    rewrite a past run's pass rate the day somebody adds a tag (§6p open question #32).
+  - `plan_snapshot` is **CURRENT STATE**: `refreshPlanSnapshot` (`DISTINCT ON` = the conflict target,
+    `e.id` tiebreak, **every column moves** on conflict) **plus `prunePlanSnapshot`, which its sibling
+    must never grow** — written as the insert's scope predicate negated, so the pair is total by
+    construction. Without it a plan's totals stay too high for ever with no row that looks wrong.
+  - **`ExecutionSource` holds a THIRD copy of `memberOf`'s three-arm union.** Held to
+    `SuiteMembership` by `SuiteRunSummaryRefreshTest.Agreement`, through the `membership_snapshot`
+    column the shipping statement writes — not through a resolution method added for the test.
+- **`execution.RollupFacts` IS THE MODULE'S SECOND SEAM (§101)** — `suiteRunSummaries`,
+  `runsWithoutSummary`, `planSnapshot`, `planTrend`. **The rule was never one seam per module but one
+  per FOREIGN module**: `CaseFacts` reads `repository`, this reads `reporting`. **The `reporting` edge
+  runs both ways at the TABLE level and in neither direction at the Java level**, which is the only
+  level ArchUnit sees; `RollupAgreementTest` is what holds the two sides to each other.
+  - **A ROLLUP IS USED ONLY WHEN IT IS COMPLETE, AND THAT IS A DEFECT REPAIR.** `servedFromRollup`
+    (the policy) is **not sufficient** — it says what the rollup *can* serve, not what it *has* been
+    written for. `snapshotIsComplete` is the second condition; without it a cold `plan_snapshot`
+    reported **every case as not-run**, rendering as a plan nobody had started. Falling back to the
+    live path is the safe direction: the failure it replaces is a wrong number, the cost is a slow
+    correct one.
+  - **The suite history is rollup ∪ TAIL.** `runsWithoutSummary` is not an optimisation — the rollup
+    alone would **drop** a run recorded since the last tick, which is an absence rather than a stale
+    number and something the live path never did.
+  - **`plan_snapshot` serves 2 of 5 policies.** `LATEST` / `LATEST_PER_CONFIG` only; `WORST`, `BEST`
+    and `ALL` need every execution and stay live, saying so with `computedAt: null`.
+  - **Neither rollup may answer a denominator** — coverage, not-run and the scope size still come
+    from `CaseFacts.casesInPlanScope` (§46, §6p).
+  - **The unrecorded half stays live** (`TestExecutionRepository.findUnrecordedForPlan`). Bounded by
+    (cases × configurations); dropping it makes a configuration with an opened-but-unrecorded run
+    **vanish from `byConfiguration`**.
+  - **The trend is written twice on purpose** — `plan_snapshot` is per case, a trend is per run, so
+    the rollup path reads `execution_fact`. Held by the agreement test.
+- **`computedAt` IS THE OLDEST `updated_at`, NEVER THE NEWEST (§101).** Both responses mix rolled-up
+  rows with a live tail, so the newest is a claim true of one row and false of the others — false in
+  the reassuring direction. Null on the wire means **computed live**, which is a positive statement;
+  the contract marks it required for that reason. **Distinct from `PlanStatistics.stale`**: that is
+  about the EXECUTIONS, this is about the ARITHMETIC.
 - **A RUN'S SCOPE IS THREE ARMS SINCE §99 — `caseIds` ∪ `suiteIds` ∪ `tags`, RESOLVED ONCE.**
   `CaseFacts.caseIdsInRunScope(projectId, caseIds, suiteIds, tags)` is the whole resolution: one
   query, three `OR`s over one `test_case` scan, ordered by `key_seq`, **each arm appended to the SQL
   only when non-empty** (`IN ()` is a syntax error; `IN (NULL)` compiles and is never true). No
-  migration — `V33` is still the head, `V34` still free, policy count still 61.
+  migration — ~~`V33` is still the head, `V34` still free~~ → **`V35` is the head since §101**; policy count still 61.
   **THE SUITE ARM IS `memberOf` AND NEVER `c.suite_id IN (…)`** — a suite defined by a tag rule files
   nothing, so the column reading resolves it to the empty set and produces a run of zero cases that
   renders as 0 of 0, 100%, complete. Same class as §98's grid-vs-count defect, one screen over.
@@ -81,8 +128,8 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   `SuiteEdit`'s rule). The emptiness check is what catches a typo, and its message lands on **every
   arm the caller used**, `caseIds` only as the fallback for a body naming no scope at all.
   `RunEdit.MAX_TAG` is a third copy of `CaseEdit`'s cap, spelled out for `APPROVE_CASE`'s reason.
-- **A SUITE IS FLAT SINCE §98 — `parent_id`, `path` and `suite_path_idx` ARE GONE (`V33`, the head;
-  `V34` next free; policy count still 61).** A suite is a named collection, not a folder: no
+- **A SUITE IS FLAT SINCE §98 — `parent_id`, `path` and `suite_path_idx` ARE GONE (`V33`; ~~the
+  head; `V34` next free~~ → **`V35` is the head since §101, `V36` next free**; policy count still 61).** A suite is a named collection, not a folder: no
   `Suite.getParentId()`/`getPath()`, no `parentId` on `SuiteView`/`SuiteWriteRequest`,
   `SuiteEdit.validateCreate`+`validateRename` collapsed to one `validate`, and
   `SuiteRepository.findLiveForProject` orders by **`keySeq`** (it ordered by `path` to make the flat
@@ -110,7 +157,7 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   **filed** in it and deliberately **not** the other two arms.
 - **A SUITE IS A RESOLVABLE COLLECTION SINCE §96 phase 1, AND A CASE MAY BE FILED NOWHERE.**
   ~~`V31__suite_membership.sql` (**head**, `V32` next free)~~ → ~~`V32` is the head since §97 phase
-  3a~~ → **`V33` is the head since §98; `V34` next free. Policy count stays 61** — neither adds a table. `V31` (**policy count 59 →
+  3a~~ → ~~**`V33` is the head since §98; `V34` next free**~~ → **`V35` is the head since §101; `V36` next free. Policy count stays 61** — neither adds a table. `V31` (**policy count 59 →
   61**) creates
   `suite_case` (added individually) and `suite_tag_rule` (matched by tag, **unioned never
   intersected**), and relaxes `test_case.suite_id` to nullable — so membership is three arms:

@@ -640,6 +640,29 @@ absent: L4-1 creates the first one this company has ever had.*
 | L4-38 | A member **not on the team** opens its board | It renders. Membership is not a requirement (§6k) — a team board a lead's manager cannot open is a board for nobody. | §85-22 |
 | L4-39 | Footer: `npm run dev`; then `VITE_APP_VERSION=9.9.9 npm run build && npm run preview`; then after a real `gh workflow run deploy.yml -f version=<v>`, hard-reload the deployed site; then deploy a second version | **`TCMS dev`** (a plausible number here means a hardcoded literal is back — the exact defect this replaced), then **`TCMS 9.9.9`** proving the `define` reaches the emitted bundle, then **`TCMS <v>`** matching the dispatched input and the GHCR tag, then a **changing** number. One correct reading is consistent with a literal that happens to match; two are not. The `web` job greps `dist/assets/` for the dispatched version, so the automated half is covered — the deployed reads are the part a human must see. | footer 1–4 |
 
+### The M2 rollups — §101 (live only, and structurally so)
+
+*Every row here is live-only, and not by preference. **The mock computes from fixtures on every
+request, so it truthfully answers `computedAt: null` on both endpoints** — which means mock mode can
+render the "Computed now" branch and nothing else. The rollup branch, the two ages side by side, and
+the stale-arithmetic wording cannot be produced there at all. That is §67's and §68's live-only
+argument arriving through a **field** rather than through a fixture gap.*
+
+*These rows need the **scheduler tick** — `PT3M` initial delay, then `PT15M` — so they belong beside
+L4-30's report-worker wait and cannot be hurried from the app.*
+
+| # | Drive | Expect | src |
+|---|---|---|---|
+| L4-40 | Record a result against a plan's run, then open **Plan → Progress** immediately, before any tick | Counts include the result just recorded, and the caption reads **"Computed now"**. **This is §101's third finding as a screen**: the first cut read the empty rollup and reported every case as not-run, which renders exactly like a plan nobody has started. The absence of "updated every 15 minutes" is the assertion — a cadence sentence beside a live figure is a false claim. | §101-13c |
+| L4-41 | Wait for one tick (or restart the app to take the `PT3M` delay), reload the same page | Same numbers, and the caption now reads **"Figures as of HH:MM (Nm ago)" — updated every 15 minutes**. Two loads of one page answering the same numbers from two sources is the whole point; a difference here is a rollup that disagrees with the live path and `RollupAgreementTest` failed to see it. | §101-1c |
+| L4-42 | On the same page, switch the aggregation dropdown to **Worst**, then back to **Latest** | Worst answers **"Computed now"**; Latest answers a timestamp. The same screen legitimately has two staleness behaviours depending on a dropdown, and this row is the check that the reader can *tell* — §65's two-contradictory-percentages defect is this with the difference hidden. | §101-4 |
+| L4-43 | A plan whose executions are **older than 14 days** but whose rollup ran minutes ago | **Two lines, both true, neither styled as the other.** "nothing has been executed against this plan in over two weeks" in the blocked colour, and "Figures as of …" in secondary text below it. One line would have to pick which age it meant, and whichever it picked would be wrong half the time. | §101-5 |
+| L4-44 | Open a **suite history** for a tag-defined suite after a tick | Rows for every run its cases ran in, with the caption's timestamp. **A tag-defined suite is the discriminator** — the one-column arm would show an empty history here and a populated one for a folder, and the two look equally plausible. Compare the pass rates against the same suite's grid count. | §101-13d |
+| L4-45 | Record a result in a **new run** of that suite, then reload the history **before** the next tick | The new run **appears**, at the top. Not a stale number — a row that is not there is what the rollup alone would give, and the person who has just finished a run is the first to meet it. | §101-13j |
+| L4-46 | On a suite whose runs are **all** newer than the last tick | Every row present, caption **"Computed now"**. The all-tail case: `computedAt` is the oldest rollup instant *used*, so with none used the honest answer is null. | §101-2 |
+| L4-47 | Tag a case that ran in an **old** run into a tag-defined suite, wait a tick, reopen that suite's history | **The old run's totals do NOT move.** §101's first finding, and the only place it is visible: `membership_snapshot` freezes what the suite held when the run happened (§6p open question #32). A total that moves from 43 to 44 is a past pass rate rewritten, and both readings look equally correct. | §101-13a |
+| L4-48 | Remove a case from a plan's scope, wait a tick, reload Plan → Progress | The case is gone from the totals and from **Not run**. The prune its sibling must never grow — without it the plan's totals stay too high for ever with no row that looks wrong. Cross-check `SELECT count(*) FROM plan_snapshot WHERE plan_id = …` in `psql` before and after. | §101-13b |
+
 ---
 
 # Not reproducible in a browser — recorded so the absence does not read as an oversight
