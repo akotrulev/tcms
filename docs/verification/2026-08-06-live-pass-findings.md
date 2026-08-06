@@ -538,3 +538,26 @@ through `M6-16` beyond what's listed (the download's actual bytes were not inspe
 two-cards-in-parallel, `M6-13`/`M6-14` failure states), `M6-19`/`M6-20` (building state, drift fault),
 `L4-31`…`L4-35` beyond `L4-34` (offline reload, print preview, XSS in a title, the two-account
 saved-definition isolation).
+
+---
+
+## L1/L2/L3 — results
+
+| Row | Verdict | Note |
+|---|---|---|
+| `L1-6` | ✅ PASS exactly | `TC-1` (own, engineer): 204. `TC-2` (lead's): 403 *"You can only delete test cases you created. Ask a test lead to delete this one."* `TC-3` (`created_by IS NULL`): same 403 — the code-only arm. |
+| `L1-19` | ✅ PASS | A Test Type value added while scoped to `OLB` (company-wide dimension) is visible reading `MOB`'s classification tree. |
+| `L1-18` | ✅ PASS (fixture built along the way) | `Cart` taken Draft → In review → Approved as `lead`. |
+| `L2-2` | ✅ PASS | `POST /classification/values` on `OLB` naming `MOB`'s own Feature dimension id: 404, not 403. |
+| `L2-3` | ✅ PASS exactly | Recording a result on `TR-1` after `COMPLETED`: 409 *"This run has ended, so its results and evidence can no longer change. Reopen the run to make changes."* |
+| `L2-4` | ✅ PASS exactly | `PUT .../suites/{id}/status` → `IN_REVIEW` on an `APPROVED` suite: 409 *"Only a draft suite can be submitted for review. Return this suite to draft first."* |
+| `L2-9` | ✅ PASS exactly | `GET /work-items` with no parameters: 400 *"Ask for a project's board with projectId, or your own work across every project with mine=true."* |
+| `L3-1` | ✅ PASS | `TC-1`'s `deleted_at` is set — soft delete, matching the dialog's claim. |
+| `L3-7` (name half) | ✅ PASS | Renaming `TP-1` alone: `current_version_no` unchanged (3→3). |
+| `L3-9` | ✅ PASS (after a false start) | Retagging `TC-6` with `severity` held constant: `current_version_no` unchanged (2→2). **First attempt was contaminated**: an incomplete `PATCH` body omitted `severity`, which cleared it to `null` and *did* bump the version — a real content change from my own test, not a tags-triggered one. Corrected and re-run cleanly. |
+
+**Not driven this pass**: the bulk of `L1` (most Viewer/Engineer/Lead-tier UI-disabled-vs-enabled rows —
+`L1-1`…`L1-5`, `L1-7`…`L1-17`), `L2-1`, `L2-5`…`L2-8`, `L2-10`, `L2-11` (blocked, `F5`), `L2-13`, and
+most of `L3` (`L3-2`…`L3-6`, `L3-8`, `L3-10`…`L3-13`). Given time remaining in this pass, coverage was
+concentrated on the rows most likely to catch a real defect (permission-tier deletes, 404-vs-403,
+409 refusal wording, version-bump invariants) rather than walked exhaustively persona by persona.
