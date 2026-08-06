@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -136,5 +138,98 @@ record ReportParameters(JsonNode node) {
             return Optional.empty();
         }
         return Optional.of(value.asText());
+    }
+
+    /**
+     * An optional list of ids — a selection facet (R6), empty when the caller did not narrow on it.
+     *
+     * <h2>Absent and empty are the same answer here, and that is the opposite of the usual rule</h2>
+     *
+     * <p>Everywhere a filter is a <em>list</em>, "not sent" and "sent empty" must both mean
+     * <strong>do not narrow on this</strong>. The alternative reading — an empty list selects
+     * nothing — turns {@code {"planIds": []}} into a report of zero executions that renders as a
+     * clean report of a project where nothing has been tested. §99 paid for the same shape from the
+     * SQL side: {@code IN ()} does not parse and the form that survives compilation,
+     * {@code IN (NULL)}, is never true and reads as an arm that matched.
+     *
+     * <p>A single string is accepted where a list is expected, because a saved definition written by
+     * hand routinely carries one. It is the one leniency here: everything else is refused.
+     *
+     * @throws IllegalArgumentException when the value is neither an array nor a string, or when any
+     *     element is not a uuid. A mistyped id must not be silently dropped — a selection that
+     *     quietly narrowed to four of five plans is a wrong number with nothing on the page to
+     *     suggest it.
+     */
+    List<UUID> idList(String name) {
+        List<String> raw = textList(name);
+        List<UUID> ids = new ArrayList<>();
+        for (String value : raw) {
+            try {
+                ids.add(UUID.fromString(value));
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException(
+                        "'" + name + "' contains something that is not a valid id: " + value, e);
+            }
+        }
+        return List.copyOf(ids);
+    }
+
+    /**
+     * An optional list of strings, with the same absent-is-empty reading as {@link #idList}.
+     *
+     * <p>Blank elements are dropped rather than refused: a trailing comma in a hand-written
+     * definition is a typo whose correct handling is obvious, where a malformed id is not.
+     */
+    List<String> textList(String name) {
+        JsonNode value = node.get(name);
+        if (value == null || value.isNull()) {
+            return List.of();
+        }
+        List<String> out = new ArrayList<>();
+        if (value.isTextual()) {
+            if (!value.asText().isBlank()) {
+                out.add(value.asText().trim());
+            }
+            return List.copyOf(out);
+        }
+        if (!value.isArray()) {
+            throw new IllegalArgumentException("'" + name + "' must be a list");
+        }
+        for (JsonNode element : value) {
+            if (element == null || element.isNull()) {
+                continue;
+            }
+            if (!element.isTextual()) {
+                throw new IllegalArgumentException(
+                        "'" + name + "' must be a list of text values");
+            }
+            if (!element.asText().isBlank()) {
+                out.add(element.asText().trim());
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * An optional instant bound on the selection's date range.
+     *
+     * <p><strong>Refused rather than ignored when unparseable</strong>, which is the whole reason
+     * this is not a one-line {@code Instant.parse} at the call site. A date range silently dropped
+     * because somebody wrote {@code 2026-08-01} instead of {@code 2026-08-01T00:00:00Z} produces a
+     * report over <em>every</em> execution ever recorded, printed under a header whose selection
+     * block still says the range was applied — the numbers are wrong and the page says they are
+     * right, which is the failure §6e's printed header exists to make impossible.
+     */
+    Optional<Instant> optionalInstant(String name) {
+        Optional<String> value = optionalText(name);
+        if (value.isEmpty()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(Instant.parse(value.get()));
+        } catch (DateTimeParseException e) {
+            throw new IllegalArgumentException(
+                    "'" + name + "' must be an ISO-8601 instant such as 2026-08-01T00:00:00Z", e);
+        }
     }
 }
