@@ -2,8 +2,8 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-06 (§102 — every tag control suggests, and none of them validates)
-**Baseline commit:** `180a8c3` (§101 phase 6) **+ the doc commit this line ships in** (its own SHA
+**Last verified:** 2026-08-06 (§103 — the references show the cases they catch)
+**Baseline commit:** `4ee9150` (§102) **+ the doc commit this line ships in** (its own SHA
 cannot be written into itself; trust the body over the header and re-grep what a later commit
 could have moved).
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
@@ -35,7 +35,7 @@ could have moved).
 - **`npm run build` is THE gate** (`tsc -b` + vite build). **Do not trust `tsc --noEmit`** — it has
   reported 0 errors while the build failed with nine (working agreement). `#confirmed`
 - `npm run lint` — oxlint, must stay at **0 warnings**; it prints nothing when clean.
-- `npm run test:run` — Vitest + RTL. **925/925** across 67 files at §102 (913/65 at §99 phase 3, 909 at §98, 895/64 at §97 phase 5, 849/60 at §100). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
+- `npm run test:run` — Vitest + RTL. **936/936** across 68 files at §103 (the §102 line said **925/67** and the measured baseline was **928/67** — this figure is carried forward by hand and has drifted at least twice; read it off a run before trusting it). Earlier: 913/65 at §99 phase 3, 909 at §98, 895/64 at §97 phase 5, 849/60 at §100. **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
 - `npm run gen:api` — regenerate `src/api/schema.d.ts` after **any** `openapi.yaml` change. Runs
   through `npx` on purpose (the scaffold pins TS 6, the tool peer-requires 5.x); do not "fix" it.
 - **Live mode:** `VITE_API_MODE=live` in `.env.local` proxies `/api` to `localhost:8080`.
@@ -68,6 +68,39 @@ directly above the switcher) and the wordmark links there too.
 
 ## Seams to reuse
 
+- **A PLAN GROUP'S REFERENCES NOW LIST THE CASES THEY CATCH, AND THE SERVER DOES EVERY RESOLUTION
+  (§103).** `useReferencedCases` (`api/queries/cases.ts`, **the first `useQueries` in this codebase**)
+  + `resolveReferences` (`lib/planScope.ts`) + `features/plans/ResolvedScope.tsx`, mounted per
+  `GroupCard` under the chips. Testids `PlanCases.Resolved.<group>` / `.List` / `.Row` / `.Truncated`
+  plus `DataRegion`'s own `.Loading` / `.Error` / `.Empty` / `.Stale`.
+  **NEVER `cases.filter((c) => c.suiteId === id)`.** A suite is filed ∪ added ∪ tagged since §98, so
+  that filter is the *filed* arm alone — §96 shipped exactly it and produced a tag-defined suite
+  showing a **count of 2 over a grid of 0 rows**. `?suiteId=` is the only thing that answers the
+  union, and this list sits directly under the group's served count, so the same defect here would
+  put the contradiction on one line of one card.
+  **ONE READ PER REFERENCE, unioned client-side.** References *widen* a group; `?tag=` repeats and
+  **ANDs**, and `GET /cases` takes one `suiteId`. A single request carrying every reference answers
+  the **intersection** — usually empty, and empty in a way that reads as *catches nothing*. The key
+  is `keys.cases`, shared with the grid, so the case-write invalidations already move this list.
+  **The combine is pessimistic both ways** — pending while ANY arm is pending (a half-arrived union
+  looks complete), failed if ANY arm failed (the arms that answered are a shorter list with nothing
+  saying so) — and `dataUpdatedAt` is the **oldest** arm, since a union is only as current as its
+  laggard. `ReferencedCasesState` is declared in `cases.ts`, not imported from `components/`.
+  **This is NOT D7's add-time snapshot returning:** nothing here or on the server remembers a case
+  id; the rows are derived on every render and vanish with the reference.
+  **Three deliberate omissions.** *Individually named cases* — no by-ids read exists (`?q=` matches a
+  **key**), and reusing the chips' 200-row catalogue would put its accepted truncation inside a list
+  presented as complete; the caption says they are not repeated. *A count* — the heading already
+  carries the server's `caseCount` over all three arms, and a second number would read as a
+  contradiction (§52/§65). *New case rows* — they do not exist yet.
+  **`dirty` moves the count and the list in OPPOSITE directions, and `GroupCard` takes both props for
+  that reason.** The served count hides (it is the server's arithmetic over the plan *it* holds); the
+  list stays and re-captions to *"what these references **would** catch … Nothing is in the plan until
+  you press Save"*, because it is computed from the **draft**. Collapsing the two props is the obvious
+  tidy-up and makes one of them wrong.
+  **`ResolvedScope` does not memoize the merge on purpose** — the parent re-renders per keystroke and
+  `labelFor` is a fresh closure, so a `useMemo` keyed on it never hits and one keyed on `state.data`
+  goes stale when a suite name arrives. `#confirmed`
 - **EVERY TAG CONTROL SUGGESTS FROM `useProjectTags` SINCE §102 — AND EVERY ONE STAYS `freeSolo`.**
   Four consumers now: `PlanCasesTab`'s `TagPicker` (§97 phase 6), plus the three §96 shipped with
   `options={[]}` — `CaseEditorPage`'s **Tags**, `SuiteDialogs`' **Tag rules** (`SuiteFormDialog`
@@ -770,6 +803,14 @@ directly above the switcher) and the wordmark links there too.
 
 ## Session log
 
+- 2026-08-06 · EXTEND · **The references show their cases** (§103) — a read-only, live-resolved case
+  list under each plan group's chips. New `lib/planScope.ts` (`resolveReferences`) + its 5 tests,
+  new `useReferencedCases` (**the first `useQueries` in this codebase**), new
+  `features/plans/ResolvedScope.tsx`; `GroupCard` now takes `dirty` as well as `count`. **No contract
+  change, no `gen:api`, no mock handler change** — `?suiteId=` (the §98 union) and `?tag=` were
+  already served by both the server and the mock, and TP-1's fixture already exercises the union.
+  **936/936 across 68 files, lint 0, build clean. Zero browser rows run; 11 M3 rows queued
+  (M3-52…M3-62).** The baseline was **928**, not the **925** this file recorded at §102 — corrected.
 - 2026-08-06 · EXTEND · **Tags become reusable** (§102) — the three tag controls §96 shipped with
   `options={[]}` now read `useProjectTags`; `SuiteFormDialog` gained `projectId`. No contract change,
   no migration, no `gen:api`, no new query key. **925/925 across 67 files, lint 0, build clean. Zero

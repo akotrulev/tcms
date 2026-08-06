@@ -2,6 +2,7 @@
 import {
   keepPreviousData,
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient,
   type UseMutationResult,
@@ -57,6 +58,127 @@ export function useCases(
      * the answer to the filter you typed, would be a lie the staleness marker cannot fix.
      */
     placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * A **collection** reference on a plan group — a suite or a tag (§103).
+ *
+ * Deliberately not the plan's third arm. A directly-named case id has no read on the contract that
+ * resolves it (`?q=` matches a *key*, not an id), and it is already drawn in full by its own chip.
+ */
+export type CaseReference = { kind: 'suite'; id: string } | { kind: 'tag'; value: string };
+
+/**
+ * One page is the ceiling for a resolved reference, and the caller is told when it bit.
+ *
+ * 200 rather than "everything": there is no all-pages read, and a list nobody can scroll to the end
+ * of is not more honest than one that says where it stopped. `resolveReferences` compares `total`
+ * against what arrived and surfaces the difference.
+ */
+const REFERENCE_PAGE = 200;
+
+function referenceFilters(reference: CaseReference): CaseFilters {
+  return reference.kind === 'suite'
+    ? { suiteId: reference.id, size: REFERENCE_PAGE }
+    : { tag: [reference.value], size: REFERENCE_PAGE };
+}
+
+/** What one reference's read produced, in the order the references were given. */
+export interface ReferenceCases {
+  reference: CaseReference;
+  cases: TestCaseSummary[];
+  total: number;
+}
+
+/**
+ * Structurally a `DataRegionState<ReferenceCases[]>`, spelled out here so the data module does not
+ * import from `components/`. `DataRegion` accepts it by shape; a drift between the two is a build
+ * error at the call site, which is where it belongs.
+ */
+export interface ReferencedCasesState {
+  data: ReferenceCases[] | undefined;
+  isPending: boolean;
+  isError: boolean;
+  error: unknown;
+  isFetching: boolean;
+  dataUpdatedAt: number | undefined;
+  refetch: () => void;
+}
+
+/**
+ * **Resolves a plan group's suite and tag references to the cases they currently catch (§103).**
+ *
+ * ## One read per reference, and that is the design
+ *
+ * The references **union** — a section naming two suites wants both — while `GET /cases` narrows,
+ * and its `tag` parameter repeats and *ANDs*. One request carrying every reference therefore
+ * answers the intersection: usually empty, and empty in a way that reads as "this section catches
+ * nothing". N references are N reads, unioned in `lib/planScope.ts`.
+ *
+ * ## And the server does the resolving, always
+ *
+ * A suite is filed ∪ added ∪ tagged since §98. Filtering `case.suiteId` in the client is the filed
+ * arm alone — §96 shipped it and produced a tag-defined suite whose count said 2 over a grid of 0.
+ * `?suiteId=` is the endpoint that answers the union, and it is the only thing that can.
+ *
+ * The key is `keys.cases`, shared with the grid: a resolution and a filtered list asking the same
+ * question are one cache entry, and `useCreateCase`/`useUpdateCase` already invalidate the
+ * `['projects', p, 'cases']` prefix, so a case that gains a tag moves this list with no extra wiring.
+ */
+export function useReferencedCases(
+  projectId: string,
+  references: CaseReference[],
+): ReferencedCasesState {
+  return useQueries({
+    queries: references.map((reference) => {
+      const filters = referenceFilters(reference);
+      return {
+        queryKey: keys.cases(projectId, filters, 'key,asc'),
+        queryFn: ({ signal }: { signal: AbortSignal }) =>
+          api.get<Paged<TestCaseSummary>>(`${base(projectId)}/cases${qs({ ...filters, sort: 'key,asc' })}`, {
+            signal,
+            timeoutMs: TIMEOUTS.interactive,
+          }),
+      };
+    }),
+    /*
+      Combined into ONE region state rather than N, because the reader's question is about the group
+      and not about an arm of it. The combination is deliberately pessimistic in both directions:
+
+        - **pending while ANY arm is pending** — a half-arrived union rendered as a list is a set of
+          rows that is wrong and looks complete;
+        - **failed if ANY arm failed** — the union of the arms that *did* answer is a shorter list
+          with nothing on screen saying so, which is the same defect one layer down.
+
+      `data` is still handed back when a later refetch fails, which is what lets `DataRegion` keep
+      the rows and mark them stale rather than blanking them.
+    */
+    combine: (results): ReferencedCasesState => {
+      const failed = results.find((result) => result.isError);
+      const loaded = results.every((result) => result.data !== undefined);
+      const oldest = results.reduce(
+        (soFar, result) => Math.min(soFar, result.dataUpdatedAt || Infinity),
+        Infinity,
+      );
+      return {
+        data: loaded
+          ? results.map((result, index) => ({
+              reference: references[index],
+              cases: result.data?.items ?? [],
+              total: result.data?.total ?? 0,
+            }))
+          : undefined,
+        isPending: results.some((result) => result.isPending),
+        isError: failed !== undefined,
+        error: failed?.error,
+        isFetching: results.some((result) => result.isFetching),
+        // The OLDEST arm, not the newest: the stale marker names how old the list is, and a union
+        // is only as current as the arm that last refreshed successfully.
+        dataUpdatedAt: Number.isFinite(oldest) ? oldest : undefined,
+        refetch: () => results.forEach((result) => void result.refetch()),
+      };
+    },
   });
 }
 

@@ -378,6 +378,109 @@ describe('the Test cases tab', () => {
     expect(screen.getByTestId('PlanStats.Save')).toBeDisabled()
   })
 
+  /*
+    §103 — the references now list the cases they CATCH, and the two properties that decide whether
+    that list is right are both about the request, not the markup.
+
+    The suite arm is a `?suiteId=` read and never `cases.filter(c => c.suiteId === id)`: a suite is
+    filed ∪ added ∪ tagged since §98, so the client-side filter is the filed arm alone. §96 shipped
+    exactly that and produced a tag-defined suite showing a count of 2 over a grid of 0 rows — and
+    it would pass a rendering assertion on any fixture whose cases happen to be filed.
+
+    The references UNION and `?tag=` ANDs, so N references are N reads. One request carrying both
+    would answer the intersection: usually empty, and empty in a way that reads as "catches nothing".
+  */
+  it('resolves each reference through the SERVER, one read per reference, and lists the union', async () => {
+    const paths: string[] = []
+    const plan = planBody({ suiteIds: ['suite-1'], tags: ['smoke'] } as Partial<TestPlan>)
+    vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
+      if (path.startsWith('/me/permissions')) return heldPermissions(['project:read', 'plan:edit'])
+      if (path.includes(`/plans/${PLAN}/statistics`)) return { counts: {}, exitCriteria: [], bySuite: [], byConfiguration: [], blockers: [], notRun: [], trend: [], stale: false, coveragePercent: 0, latestExecutionAt: null }
+      if (path.includes(`/plans/${PLAN}`)) return plan
+      if (path.includes('/suites')) return SUITES
+      if (path.includes('/tags')) return [{ tag: 'smoke', caseCount: 9 }]
+      if (path.includes('/cases')) {
+        paths.push(path)
+        // The suite read answers a case the tag read does not, and one they share. The shared row
+        // is what makes the dedupe observable; without it a naive concat also passes.
+        if (path.includes('suiteId=suite-1')) {
+          return { items: [CASES[0], { id: 'case-9', key: 'TC-9', title: 'Partial refund', suiteId: 'suite-1', tags: [] }], page: 0, size: 200, total: 2 }
+        }
+        if (path.includes('tag=smoke')) {
+          return { items: [{ id: 'case-9', key: 'TC-9', title: 'Partial refund', suiteId: 'suite-1', tags: ['smoke'] }, { id: 'case-7', key: 'TC-7', title: 'Retry a failed capture', suiteId: null, tags: ['smoke'] }], page: 0, size: 200, total: 2 }
+        }
+        return { items: CASES, page: 0, size: 20, total: CASES.length }
+      }
+      if (path.endsWith('/plans')) return [plan]
+      if (path.startsWith('/projects/')) return { id: PROJECT, name: 'Banking' }
+      return []
+    }) as never)
+    renderPage()
+
+    const list = await screen.findByTestId('PlanCases.Resolved.unsectioned.List')
+    await waitFor(() =>
+      expect(within(screen.getByTestId('PlanCases.Resolved.unsectioned.List'))
+        .getAllByTestId('PlanCases.Resolved.unsectioned.Row')).toHaveLength(3))
+
+    // Three rows from two reads of two: TC-9 arrives through both and is ONE row.
+    const rows = within(list).getAllByTestId('PlanCases.Resolved.unsectioned.Row')
+    expect(rows.map((row) => row.textContent)).toEqual([
+      expect.stringContaining('TC-1'),
+      expect.stringContaining('TC-7'),
+      expect.stringContaining('TC-9'),
+    ])
+    // Numeric key order, and the shared row names both references that brought it in.
+    expect(rows[2].textContent).toContain('Suite Payments')
+    expect(rows[2].textContent).toContain('Tag smoke')
+
+    // The request, which is the part a rendering assertion cannot see.
+    const resolving = paths.filter((p) => p.includes('suiteId=suite-1') || p.includes('tag=smoke'))
+    expect(resolving.some((p) => p.includes('suiteId=suite-1'))).toBe(true)
+    expect(resolving.some((p) => p.includes('tag=smoke'))).toBe(true)
+    // Separate reads. One request carrying both parameters answers the intersection.
+    expect(resolving.some((p) => p.includes('suiteId=suite-1') && p.includes('tag=smoke'))).toBe(false)
+  })
+
+  /*
+    The other half of the ask: taking a reference off drops its rows again, live, with no save. That
+    is what makes this a resolution rather than the add-time snapshot D7 reversed — nothing on this
+    screen remembers a case id, so removing the reference that produced it leaves nothing behind.
+  */
+  it('drops a reference’s cases the moment the reference comes off, and says the plan does not hold them yet', async () => {
+    mockReads(planBody({ tags: ['smoke'] } as Partial<TestPlan>))
+    renderPage()
+
+    await waitFor(() =>
+      expect(within(screen.getByTestId('PlanCases.Resolved.unsectioned.List'))
+        .getAllByTestId('PlanCases.Resolved.unsectioned.Row').length).toBeGreaterThan(0))
+
+    const group = screen.getByTestId('PlanCases.Unsectioned')
+    await userEvent.click(within(group).getByTestId('PlanCases.TagChip').querySelector('svg')!)
+
+    // No references left, so the whole region goes — not an empty list under a caption about
+    // references there are none of.
+    await waitFor(() =>
+      expect(screen.queryByTestId('PlanCases.Resolved.unsectioned')).not.toBeInTheDocument())
+  })
+
+  it('resolves a reference the author has just added, and says it is not in the plan yet', async () => {
+    mockReads(planBody())
+    renderPage()
+
+    await userEvent.click(await screen.findByRole('combobox', { name: /add a suite/i }))
+    await userEvent.click(await screen.findByRole('option', { name: 'Payments' }))
+
+    // The rows are live server data for a reference the plan does not hold — which is the point,
+    // and why the served count beside the heading is hidden while this list is not. The caption is
+    // the thing that keeps it from claiming a state of the plan that does not exist.
+    const region = await screen.findByTestId('PlanCases.Resolved.unsectioned')
+    await waitFor(() =>
+      expect(within(screen.getByTestId('PlanCases.Resolved.unsectioned'))
+        .getAllByTestId('PlanCases.Resolved.unsectioned.Row').length).toBeGreaterThan(0))
+    expect(region).toHaveTextContent(/would catch/i)
+    expect(region).toHaveTextContent(/Nothing is in the plan until you press Save/i)
+  })
+
   it('disables the new-case rows, with the reason, for a caller without case:create', async () => {
     mockReads(planBody(), ['project:read', 'plan:edit'])
     renderPage()

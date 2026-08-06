@@ -63,10 +63,14 @@ export {
   useCreatePlanCase,
   useProjectTags,
   useDeleteCase,
+  useReferencedCases,
   useUpdateCase,
   type BulkInput,
   type CaseHistoryResponse,
+  type CaseReference,
   type CaseVersion,
+  type ReferenceCases,
+  type ReferencedCasesState,
 } from './cases';
 export {
   useConditions,

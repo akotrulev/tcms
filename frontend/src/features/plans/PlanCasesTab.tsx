@@ -20,12 +20,13 @@ import ArrowDownwardIcon from '@mui/icons-material/ArrowDownwardOutlined';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpwardOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import { useMemo, useState } from 'react';
-import { useCases, useProjectTags, useSuites } from '../../api/queries';
+import { useCases, useProjectTags, useSuites, type CaseReference } from '../../api/queries';
 import type { TestCaseSummary, TestPlan } from '../../api/types';
 import { Identifier } from '../../components/Identifier';
 import { PermissionGate } from '../../components/PermissionGate';
 import { Panel } from '../../components/PageHeader';
 import { formatCount } from '../../lib/format';
+import { ResolvedScope } from './ResolvedScope';
 import {
   addReference,
   addSection,
@@ -53,8 +54,14 @@ import {
  * case, with nothing written to the plan. TestNG's `<test>` block is the shape the user validated
  * the model against, and it is why D7's add-time snapshots were reversed.
  *
- * The screen therefore shows **what defines a group** rather than what it currently catches, and the
- * count is beside it rather than instead of it.
+ * The screen therefore shows **what defines a group** ~~rather than what it currently catches~~, and
+ * the count is beside it rather than instead of it.
+ *
+ * → **§103: it shows both.** The selector is still the model and still the only thing saved, but the
+ * cases it currently resolves to are listed beneath it, read-only, re-read on every render and gone
+ * the moment a reference comes off. That is the opposite of D7's add-time snapshot rather than a
+ * partial return of it — nothing here or on the server remembers one of those case ids. See
+ * `ResolvedScope`, and note that the suite arm **cannot** be a client-side filter on `suiteId`.
  *
  * ## The counts do not sum, and the tooltip says so
  *
@@ -153,6 +160,7 @@ export function PlanCasesTab({
             index={position - 1}
             draft={draft}
             count={dirty ? null : servedCount(group)}
+            dirty={dirty}
             suitesById={suitesById}
             casesById={casesById}
             suiteOptions={suites.data ?? []}
@@ -257,6 +265,7 @@ function GroupCard({
   index,
   draft,
   count,
+  dirty,
   suitesById,
   casesById,
   suiteOptions,
@@ -271,6 +280,15 @@ function GroupCard({
   draft: PlanDraft;
   /** The server's resolved count, or null when the draft has moved past it. */
   count: number | null;
+  /**
+   * Whether this tab's draft has diverged from the plan as served.
+   *
+   * Passed as well as `count` because the two react to it in OPPOSITE directions, which is the
+   * point worth not collapsing: the served count is the server's arithmetic over the plan it holds,
+   * so it is hidden; the resolved list is computed from the DRAFT's references, so it stays and
+   * changes its caption to say the plan does not hold them yet.
+   */
+  dirty: boolean;
   suitesById: Map<string, { key: string; name: string }>;
   casesById: Map<string, TestCaseSummary>;
   suiteOptions: { id: string; key: string; name: string }[];
@@ -282,6 +300,16 @@ function GroupCard({
   const references =
     section ?? { caseIds: draft.caseIds, suiteIds: draft.suiteIds, tags: draft.tags };
   const rows = caseRowsIn(draft, group);
+
+  /*
+    The two arms whose membership is a SERVER query, in the order they are drawn as chips. A case
+    id is not one of them: it names exactly one case, that case is already fully drawn by its chip,
+    and there is no by-ids read to resolve it with (`?q=` matches a key, not an id).
+  */
+  const collectionReferences: CaseReference[] = [
+    ...references.suiteIds.map((id) => ({ kind: 'suite' as const, id })),
+    ...references.tags.map((value) => ({ kind: 'tag' as const, value })),
+  ];
 
   const add = (reference: Reference) => onChange(addReference(draft, group, reference));
   const remove = (reference: Reference) => onChange(removeReference(draft, group, reference));
@@ -408,6 +436,25 @@ function GroupCard({
               </Typography>
             )}
         </Stack>
+
+        {/*
+          …and what those references currently CATCH (§103). Read-only, resolved by the server on
+          every read, and gone the moment a reference comes off. See `ResolvedScope` for why this
+          does not reintroduce D7's add-time snapshot and why the suite arm cannot be a client-side
+          filter on `suiteId`.
+        */}
+        <ResolvedScope
+          projectId={projectId}
+          group={group}
+          references={collectionReferences}
+          labelFor={(reference) =>
+            reference.kind === 'suite'
+              ? `Suite ${suitesById.get(reference.id)?.name ?? '…'}`
+              : `Tag ${reference.value}`
+          }
+          namedCaseCount={references.caseIds.length}
+          dirty={dirty}
+        />
 
         <Stack direction={{ xs: 'column', md: 'row' }} sx={{ gap: 1 }}>
           <SuitePicker
