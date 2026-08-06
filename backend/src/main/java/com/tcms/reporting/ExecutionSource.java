@@ -546,20 +546,160 @@ class ExecutionSource {
     }
 
     /**
-     * Phase 2 fills this — {@code plan_snapshot}'s upsert.
+     * Upsert the current latest recorded result per {@code (plan, case, configuration)} for the open
+     * company.
+     *
+     * <h2>Every column moves on conflict, which is the opposite of {@code execution_fact} and correct</h2>
+     *
+     * <p>{@link #projectRecordedExecutions()}'s set-list names seven columns and freezes fifteen,
+     * because a fact's dimensions are as-of the fact. <strong>This table has no dimensions.</strong>
+     * {@code V1}: "The CURRENT latest result per case per configuration." Every column on it is part
+     * of the answer to <em>which result is current</em>, so a frozen column here would be a row that
+     * had stopped following the executions it claims to summarise.
+     *
+     * <p>Read the two set-lists together and the rule is visible: freeze what describes the past,
+     * move what describes the present. The two tables are one migration apart and the same recompute
+     * written twice is wrong for one of them.
+     *
+     * <h2>The scope is the plan's own, never "cases with an execution naming this plan"</h2>
+     *
+     * <p>{@code plan_scope_item}'s three arms, the same expansion {@code CaseFacts#scopeMatch}
+     * makes — case, suite (through the membership union), tag. A case that ran <em>inside</em> one of
+     * the plan's runs without being in its scope is not evidence about that plan, and a scope-blind
+     * statement would file it as readiness. §46 established the direction for the live path and it
+     * holds here: a plan's numbers are argued from what it covers.
+     *
+     * <p>The mirror follows without a special case: <strong>a case in scope that has never run is
+     * ABSENT from this table</strong> rather than present with a null status, because the join to
+     * {@code case_status} is inner. Coverage and not-run are the reader's difference against the
+     * scope (§6p), and a null-status row here would be a second, disagreeing source for a number the
+     * plan already knows.
+     *
+     * <h2>Deleted runs are EXCLUDED, and that is the opposite call from the fact log</h2>
+     *
+     * <p>{@code TestExecutionRepository#findForPlan} excludes them and its javadoc says why: §6p's
+     * "deleted runs must not orphan history" is about the case timeline, where the entry is marked
+     * and kept, while a <em>current-state</em> figure is the other case and counting a withdrawn run
+     * there would restore a result the person deleting it meant to retract. This statement is the
+     * current-state one, so it matches — and {@code RollupAgreementTest} is what holds the two to
+     * each other rather than this paragraph.
+     *
+     * <h2>{@code DISTINCT ON} and the tiebreak</h2>
+     *
+     * <p>The distinct key is exactly the conflict target. That is not tidiness: with two source rows
+     * mapping to one conflict target Postgres raises <em>"ON CONFLICT DO UPDATE command cannot
+     * affect row a second time"</em>, and a case reachable through two scope items — named directly
+     * and matched by a tag — is the ordinary way to produce one.
+     *
+     * <p>{@code e.id DESC} after {@code executed_at DESC} is not decoration. Two results recorded in
+     * the same microsecond must resolve the same way on every tick, or this statement is not
+     * idempotent in exactly the case where a CI batch lands. {@code NULLS LAST} keeps an undated
+     * execution from displacing real history at the head, the same defence
+     * {@link #recomputeFailingRepeatedly(int, java.time.Instant)} makes.
      *
      * @return rows inserted or corrected
      */
     int refreshPlanSnapshot() {
-        return 0;
+        return entities.createNativeQuery("""
+                INSERT INTO plan_snapshot (
+                        company_id, plan_id, case_id, configuration_id, execution_id,
+                        status_kind, counts_as_pass, executed_at, release_version)
+                SELECT DISTINCT ON (i.plan_id, e.case_id, r.configuration_id)
+                       e.company_id, i.plan_id, e.case_id, r.configuration_id, e.id,
+                       st.kind, st.counts_as_pass, e.executed_at, e.release_version
+                  FROM plan_scope_item i
+                  JOIN test_plan p ON p.id = i.plan_id
+                  LEFT JOIN suite s ON s.id = i.suite_id
+                  JOIN test_case c ON c.project_id = p.project_id
+                                  AND c.deleted_at IS NULL
+                                  AND ( (i.case_id IS NOT NULL AND c.id = i.case_id)
+                                     OR (i.suite_id IS NOT NULL
+                                         AND ( c.suite_id = s.id
+                                               OR EXISTS (SELECT 1 FROM suite_case sc
+                                                           WHERE sc.suite_id = s.id
+                                                             AND sc.case_id = c.id)
+                                               OR EXISTS (SELECT 1 FROM suite_tag_rule tr
+                                                            JOIN case_tag ct ON ct.tag = tr.tag
+                                                                            AND ct.case_id = c.id
+                                                           WHERE tr.suite_id = s.id) ))
+                                     OR (i.tag IS NOT NULL
+                                         AND EXISTS (SELECT 1 FROM case_tag pt
+                                                      WHERE pt.case_id = c.id
+                                                        AND pt.tag = i.tag)) )
+                  JOIN test_execution e ON e.case_id = c.id
+                  JOIN test_run       r ON r.id = e.run_id
+                                       AND r.plan_id = i.plan_id
+                                       AND r.deleted_at IS NULL
+                  JOIN case_status   st ON st.id = e.status_id
+                 ORDER BY i.plan_id, e.case_id, r.configuration_id,
+                          e.executed_at DESC NULLS LAST, e.id DESC
+                    ON CONFLICT (plan_id, case_id, configuration_id) DO UPDATE
+                   SET execution_id    = EXCLUDED.execution_id,
+                       status_kind     = EXCLUDED.status_kind,
+                       counts_as_pass  = EXCLUDED.counts_as_pass,
+                       executed_at     = EXCLUDED.executed_at,
+                       release_version = EXCLUDED.release_version
+                """)
+                .executeUpdate();
     }
 
     /**
-     * Phase 2 fills this — {@code plan_snapshot}'s delete pass.
+     * Delete {@code plan_snapshot} rows whose case is no longer in the plan's scope, has been
+     * soft-deleted, or whose execution has gone.
+     *
+     * <h2>The asymmetry with {@code suite_run_summary}, stated where somebody would copy the wrong one</h2>
+     *
+     * <p>Its sibling has <strong>no delete pass and must never grow one</strong>: a
+     * {@code suite_run_summary} row is history — how one suite did in one run — and a suite that
+     * stops claiming a case does not un-run it. This table is current state, so the same
+     * recompute-with-no-prune leaves a plan arguing readiness from a case it no longer covers, with
+     * its totals permanently too high and <em>nothing on screen that looks wrong</em>.
+     *
+     * <p>{@code PlanStatisticsService.rowsInScope} has done this filter in Java since §46 and that
+     * class's header calls the mirror case "easier to miss". Moving the computation into a table
+     * moves the filter into a {@code DELETE}, and losing it in the move is this slice's second
+     * finding.
+     *
+     * <h2>Written as the negation of the insert's own predicate, not as a shorter one</h2>
+     *
+     * <p>The tempting spelling is "delete rows the insert did not touch this tick", which needs a
+     * timestamp column this table does not have, and would delete everything the first time an
+     * insert failed. The predicate below is the insert's scope expansion negated — so the pair is
+     * total by construction, and a scope arm added to one and not the other fails
+     * {@code PlanSnapshotRefreshTest} rather than quietly accumulating rows.
      *
      * @return rows deleted
      */
     int prunePlanSnapshot() {
-        return 0;
+        return entities.createNativeQuery("""
+                DELETE FROM plan_snapshot ps
+                 WHERE NOT EXISTS (
+                           SELECT 1
+                             FROM plan_scope_item i
+                             JOIN test_plan p ON p.id = i.plan_id
+                             LEFT JOIN suite s ON s.id = i.suite_id
+                             JOIN test_case c ON c.id = ps.case_id
+                                             AND c.project_id = p.project_id
+                                             AND c.deleted_at IS NULL
+                                             AND ( (i.case_id IS NOT NULL AND c.id = i.case_id)
+                                                OR (i.suite_id IS NOT NULL
+                                                    AND ( c.suite_id = s.id
+                                                          OR EXISTS (SELECT 1 FROM suite_case sc
+                                                                      WHERE sc.suite_id = s.id
+                                                                        AND sc.case_id = c.id)
+                                                          OR EXISTS (SELECT 1 FROM suite_tag_rule tr
+                                                                       JOIN case_tag ct
+                                                                            ON ct.tag = tr.tag
+                                                                           AND ct.case_id = c.id
+                                                                      WHERE tr.suite_id = s.id) ))
+                                                OR (i.tag IS NOT NULL
+                                                    AND EXISTS (SELECT 1 FROM case_tag pt
+                                                                 WHERE pt.case_id = c.id
+                                                                   AND pt.tag = i.tag)) )
+                            WHERE i.plan_id = ps.plan_id)
+                    OR NOT EXISTS (SELECT 1 FROM test_execution e
+                                    WHERE e.id = ps.execution_id)
+                """)
+                .executeUpdate();
     }
 }
