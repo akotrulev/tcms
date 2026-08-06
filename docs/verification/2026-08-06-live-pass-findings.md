@@ -496,3 +496,24 @@ review rows — comment-as-one/resolve-as-other, team-membership-expansion-on-re
 core mechanics (submit, comment, ask, approve, the submitter-can't-approve gate) are confirmed; the
 staleness half of the review panel (`M5-11`) and the reviewer-inbox/board rows are left for a later
 pass or `A5`.
+
+---
+
+## A5 — the frame and the boards: results
+
+| Row | Verdict | Note |
+|---|---|---|
+| `L4-26` | ✅ PASS (opportunistic) | `CASE_MAINTENANCE` cards render on My Work, one per never-executed case, naming the signal. |
+| `M1-3` | ✅ PASS | My Work (as `lead`, granted on both projects): cards from both `OLB` and `MOB`, each stamped with its project key. |
+| `M1-4` | ✅ PASS | A `MOB` card's key resolves to `/projects/<MOB-id>/cases/<id>` — correct project, address bar checked. |
+| `M1-6` | ✅ PASS exactly | Clicking a transition button on a derived (`Maintenance`/`linked`) card: refused in place — *"TC-17 mirrors a test case, so it can't be moved to In progress. Update the case and the card follows."* |
+| `M1-24` | ✅ PASS (by contrast) | The derived cards render with **no drag handle**; a real task card does. |
+| task transitions | ✅ PASS | A created task moved `To do → In progress` via the transition button and landed correctly, board-wide count updated. |
+| `L4-16` | ✅ PASS (found without seeking it) | Requested review from `engineer` on `TP-1` (row exists in `review_assignment`), then approved the plan (`A4`). Reloading `engineer`'s board afterward showed **no review card at all** — correct: the review had ended, and `L4-16` says every asked person's card should be gone once the artifact is approved or rejected. |
+
+**Not driven this pass**: `M1-1`/`M1-2`/`M1-7`…`M1-29` (rail structure, collapsed state, keyboard nav,
+the full drag gesture with `@dnd-kit` — only button-driven transitions were exercised, not the pointer
+drag itself), `M1-10`…`M1-13` (team boards), `M5-28`/`M5-29`/`M5-30` (the review-card-while-open state
+was missed — approval happened first in `A4`, so only the post-approval "gone" state was observed).
+A follow-up pass should request a review, check the board **before** approving, to see the card `M5-28`
+actually describes.
