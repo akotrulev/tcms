@@ -9,8 +9,8 @@
  * ad hoc in a component is where the wrong denominator gets chosen. There are exactly two
  * legitimate ones and both are named here.
  */
-import type { ResultCounts } from '../api/types';
-import { percentOf } from './format';
+import type { CaseStatus, ResultCounts, StatusKind, StepResult, TestExecutionSummary } from '../api/types';
+import { compareCaseKeys, percentOf } from './format';
 
 /** Which denominator a pass rate is taken against. */
 export type Denominator = 'EXECUTED' | 'TOTAL';
@@ -109,4 +109,90 @@ export function criterionStateLabel(state: CriterionState): string {
   if (state === 'MET') return 'met';
   if (state === 'UNMET') return 'not met';
   return 'not evaluated';
+}
+
+/**
+ * ---------------------------------------------------------------- failures ---
+ *
+ * "What actually broke?" — the question a lead reads a finished run to answer, and the one the
+ * counts above cannot answer on their own because they are totals rather than a list.
+ *
+ * Two distinctions are load-bearing here, and both have already cost this project a defect
+ * elsewhere:
+ *
+ * **A blocked case is not a failed case.** Blocked means the tester could not get far enough to
+ * find out — a missing environment, a precondition that did not hold. `RunDetailPage`'s
+ * "Needs attention" chip merges the two on purpose (both need somebody), but a *failure* summary
+ * that merged them would report the product as broken in places nobody has tested. They are
+ * partitioned, counted separately, and labelled with different sentences.
+ *
+ * **An unmarked step is not a passed step.** `StepResult.statusId` is nullable, and null means
+ * nobody recorded anything — which is the ordinary state of every step *after* the one a tester
+ * stopped on. `suggestedVerdict` shipped the mirror-image of this defect (a vacuous `[].every()`
+ * proposing Passed from no evidence at all), and `criterionState` above exists for the same
+ * reason one field over. So the step summary reports THREE numbers and never two.
+ */
+
+/** A run's executions split by what its verdict actually claims. */
+export interface RunFailures {
+  /** The product did something wrong. */
+  failed: TestExecutionSummary[];
+  /** Nobody could find out. */
+  blocked: TestExecutionSummary[];
+}
+
+/**
+ * Partition a run's executions into the two kinds of bad news, each in a stable order.
+ *
+ * Sorted by `compareCaseKeys` rather than left in the run's own order: this list is read as a
+ * report, and a report whose rows move between two refetches is one nobody can quote. (The plain
+ * `localeCompare` puts `TC-10` ahead of `TC-9` — §100's finding, and the reason that helper
+ * exists.)
+ *
+ * Everything else is dropped, including `SKIPPED`: a case somebody deliberately declined to run
+ * is not a finding, and putting it here would pad the answer to "what broke" with things that
+ * did not.
+ */
+export function runFailures(executions: TestExecutionSummary[]): RunFailures {
+  const of = (kind: StatusKind) =>
+    executions
+      .filter((execution) => execution.status?.kind === kind)
+      .sort((a, b) => compareCaseKeys(a.caseKey, b.caseKey));
+
+  return { failed: of('FAILED'), blocked: of('BLOCKED') };
+}
+
+/** What a case's step checklist actually says, in the three numbers it takes to say it. */
+export interface StepOutcome {
+  /** Steps whose recorded status is FAILED — the ones worth reading. */
+  failed: StepResult[];
+  /** Steps carrying no status at all. Never folded into `failed` and never into "passed". */
+  unmarkedCount: number;
+  /** Steps on the pinned case version. Zero for an unstructured (exploratory) case. */
+  totalCount: number;
+}
+
+/**
+ * Resolve a pinned case's steps against the project's status vocabulary.
+ *
+ * `StepResult` carries a `statusId` and not a kind, because a project names its own statuses; the
+ * vocabulary is the only thing that can say which id means FAILED. An id the vocabulary does not
+ * know resolves to **no kind**, which counts as neither failed nor unmarked — it is a result this
+ * client cannot interpret, and guessing either way would be worse than leaving it out of both.
+ *
+ * `unmarkedCount` keys on `statusId == null` alone, deliberately not on "did not resolve": those
+ * are two different situations (nobody recorded anything vs. somebody recorded something we
+ * cannot read) and only the first is the tester's unfinished work.
+ */
+export function stepOutcome(steps: StepResult[], statuses: CaseStatus[]): StepOutcome {
+  const kindOf = (statusId: string | null | undefined) =>
+    statusId == null ? null : (statuses.find((status) => status.id === statusId)?.kind ?? null);
+
+  return {
+    failed: steps
+      .filter((step) => kindOf(step.statusId) === 'FAILED')
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0)),
+    unmarkedCount: steps.filter((step) => step.statusId == null).length,
+    totalCount: steps.length,
+  };
 }

@@ -25,10 +25,46 @@ export function runExecutions(runId: string): TestExecution[] {
   ];
 
   const pool = db.cases.filter((c) => c.lifecycleStatus !== 'DEPRECATED');
+  /*
+    How many FAILED executions have been emitted so far, used only to alternate the two shapes a
+    failed checklist comes in — see `stepStatusId` below. A counter rather than the global `i`
+    because `order` puts the passes first, so `i % 2` over the whole run would give whichever
+    parity the pass count happened to land on and could produce a run with only one shape in it.
+  */
+  let failureOrdinal = 0;
   const built = order.map((kind, i) => {
     const source = pool[i % pool.length];
     const detail = caseDetail(source.id);
     const status = kind === 'UNTESTED' ? null : statusByKind[kind];
+    const stepCount = detail?.steps?.length ?? 0;
+    /*
+      Which step a failed case failed on, and whether the tester carried on afterwards.
+
+      **Both shapes are seeded deliberately (§72's fixture rule), because the second one is the
+      only thing that makes "not marked" reachable in mock mode.** Until §105 every failed case
+      here failed on its LAST step with every earlier step passed — so a checklist with an
+      unmarked step could not be produced without a backend, and a summary that counted unmarked
+      steps as passed would have looked correct in every mock pass. That is the same shape as
+      §100's exit-criteria finding (the mock always supplied a boolean, so the null branch was
+      unreachable) and §64's usage counts.
+
+      Alternating failures: one stops at the failure and leaves the rest of the checklist
+      untouched, which is what a tester actually does; the next marks the whole list and fails at
+      the end.
+    */
+    const stopsAtFailure = kind === 'FAILED' && failureOrdinal % 2 === 1;
+    const failedAt =
+      kind !== 'FAILED' ? -1 : stopsAtFailure ? Math.min(1, Math.max(stepCount - 1, 0)) : stepCount - 1;
+    if (kind === 'FAILED') failureOrdinal += 1;
+
+    const stepStatusId = (p: number): string | null => {
+      if (status === null) return null;
+      if (p === failedAt) return statusByKind.FAILED.id;
+      // Past the step the tester stopped on: nobody recorded anything, which is NOT a pass.
+      if (stopsAtFailure && p > failedAt) return null;
+      return statusByKind.PASSED.id;
+    };
+
     return {
       id: uid(900 + i, 'x'),
       caseId: source.id,
@@ -53,13 +89,7 @@ export function runExecutions(runId: string): TestExecution[] {
         action: step.action,
         testData: step.testData ?? null,
         expectedResult: step.expectedResult ?? null,
-        // A failing case fails on its last step; everything before it passed.
-        statusId:
-          status === null
-            ? null
-            : kind === 'FAILED' && p === (detail?.steps?.length ?? 1) - 1
-              ? statusByKind.FAILED.id
-              : statusByKind.PASSED.id,
+        statusId: stepStatusId(p),
         comment: null,
         evidence: [],
       })),

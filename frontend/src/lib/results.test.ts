@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { ResultCounts } from '../api/types'
-import { criterionState, executedCount, passRate, sumCounts } from './results'
+import type { CaseStatus, ResultCounts, StepResult, TestExecutionSummary } from '../api/types'
+import { criterionState, executedCount, passRate, runFailures, stepOutcome, sumCounts } from './results'
 
 /**
  * Count arithmetic. Every number on the dashboard, the run detail, the plan statistics screen
@@ -195,5 +195,149 @@ describe('criterionState', () => {
 
     expect(unmet).toHaveLength(1)
     expect(naive).toHaveLength(3)
+  })
+})
+
+/**
+ * ------------------------------------------------------------------ failures ---
+ *
+ * The two distinctions §105's summary rests on. Both are invisible on a happy fixture and both
+ * have a sibling defect already recorded in this repo.
+ */
+
+/*
+  Declared return types and no `as` anywhere — §79's rule, which paid for itself in §80: a
+  required field added to one of these contract types must be ONE build error here, not eleven
+  green types and eleven red runtime assertions.
+*/
+const status = (kind: CaseStatus['kind']): CaseStatus => ({
+  id: `st-${kind}`,
+  name: kind,
+  kind,
+  color: '#000000',
+  countsAsPass: kind === 'PASSED',
+  isFinal: true,
+})
+
+const execution = (
+  caseKey: string,
+  kind: 'PASSED' | 'FAILED' | 'BLOCKED' | 'SKIPPED' | null,
+): TestExecutionSummary => ({
+  id: `exec-${caseKey}`,
+  caseId: `case-${caseKey}`,
+  caseKey,
+  caseTitle: `The ${caseKey} case`,
+  caseVersionNo: 1,
+  status: kind === null ? null : status(kind),
+  assignee: null,
+  executedBy: null,
+  executedAt: null,
+  durationMs: null,
+  defects: [],
+})
+
+const statuses: CaseStatus[] = [status('PASSED'), status('FAILED')]
+
+const step = (position: number, statusId: string | null): StepResult => ({
+  stepId: `step-${position}`,
+  position,
+  keyword: null,
+  action: `Step ${position}`,
+  testData: null,
+  expectedResult: null,
+  statusId,
+  comment: null,
+  evidence: [],
+})
+
+describe('runFailures', () => {
+  it('does NOT count a blocked case as a failed one', () => {
+    // The defect this exists to stop: "needs attention" is a workload question and "what failed"
+    // is a product question, and merging them reports breakage where nobody tested.
+    const { failed, blocked } = runFailures([
+      execution('TC-1', 'FAILED'),
+      execution('TC-2', 'BLOCKED'),
+      execution('TC-3', 'BLOCKED'),
+    ])
+
+    expect(failed.map((e) => e.caseKey)).toEqual(['TC-1'])
+    expect(blocked.map((e) => e.caseKey)).toEqual(['TC-2', 'TC-3'])
+  })
+
+  it('drops passed, skipped and unexecuted cases from both lists', () => {
+    // A skipped case is a decision, not a finding; an unexecuted one is not an answer at all.
+    const { failed, blocked } = runFailures([
+      execution('TC-1', 'PASSED'),
+      execution('TC-2', 'SKIPPED'),
+      execution('TC-3', null),
+    ])
+
+    expect(failed).toHaveLength(0)
+    expect(blocked).toHaveLength(0)
+  })
+
+  it('orders by case key numerically, so the report reads the same twice', () => {
+    // `localeCompare` puts TC-10 ahead of TC-9 — §100's finding, invisible under ten cases.
+    const { failed } = runFailures([
+      execution('TC-10', 'FAILED'),
+      execution('TC-9', 'FAILED'),
+      execution('TC-2', 'FAILED'),
+    ])
+
+    expect(failed.map((e) => e.caseKey)).toEqual(['TC-2', 'TC-9', 'TC-10'])
+  })
+})
+
+describe('stepOutcome', () => {
+  it('reports failed, unmarked and total as three separate numbers', () => {
+    const outcome = stepOutcome(
+      [step(0, 'st-PASSED'), step(1, 'st-FAILED'), step(2, null), step(3, null)],
+      statuses,
+    )
+
+    expect(outcome.failed.map((s) => s.position)).toEqual([1])
+    expect(outcome.unmarkedCount).toBe(2)
+    expect(outcome.totalCount).toBe(4)
+  })
+
+  /** The defect, stated as the inference a two-number summary invites. */
+  it('never lets an unmarked step be read as a passed one', () => {
+    const steps = [step(0, 'st-FAILED'), step(1, null), step(2, null)]
+    const outcome = stepOutcome(steps, statuses)
+
+    // The naive reading: "1 of 3 failed" implies two passed. It is 1 failed, 0 passed, 2 unknown.
+    const impliedPasses = outcome.totalCount - outcome.failed.length
+    expect(impliedPasses).toBe(2)
+    expect(outcome.unmarkedCount).toBe(2)
+    // So the panel must state the unmarked count; this asserts it is available to state.
+    expect(outcome.unmarkedCount).toBeGreaterThan(0)
+  })
+
+  it('counts a step whose status the vocabulary does not know as neither failed nor unmarked', () => {
+    // Somebody recorded something this client cannot interpret. Guessing either way is worse than
+    // leaving it out of both — and it is NOT the tester's unfinished work, which is what
+    // `unmarkedCount` means.
+    const outcome = stepOutcome([step(0, 'st-FROM-ANOTHER-PROJECT')], statuses)
+
+    expect(outcome.failed).toHaveLength(0)
+    expect(outcome.unmarkedCount).toBe(0)
+    expect(outcome.totalCount).toBe(1)
+  })
+
+  it('is empty and non-vacuous on a case with no structured steps', () => {
+    // `[].every()` proposing a verdict from no evidence is `suggestedVerdict`'s recorded defect;
+    // here the guard is that totalCount is 0, so the panel can say "no structured steps" rather
+    // than "0 of 0 failed".
+    const outcome = stepOutcome([], statuses)
+
+    expect(outcome.totalCount).toBe(0)
+    expect(outcome.failed).toHaveLength(0)
+    expect(outcome.unmarkedCount).toBe(0)
+  })
+
+  it('returns failed steps in position order regardless of the order they arrive in', () => {
+    const outcome = stepOutcome([step(5, 'st-FAILED'), step(1, 'st-FAILED')], statuses)
+
+    expect(outcome.failed.map((s) => s.position)).toEqual([1, 5])
   })
 })

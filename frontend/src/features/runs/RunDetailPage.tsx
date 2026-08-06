@@ -26,6 +26,7 @@ import { compareCaseKeys, formatCount, formatDateTime, formatDuration } from '..
 import { isRunClosed, runStatusColors, runStatusLabels, statusLabels } from '../../lib/labels';
 import { ScrollX } from '../../components/ScrollX';
 import { CaseKeyLink, ExecuteCaseLink } from './ExecutionRowLinks';
+import { FailureSummary } from './FailureSummary';
 
 /** The row's static locator — never interpolated with an execution id (`test-ids` rule 6). */
 const RowTestId = 'RunDetail.Executions.Row';
@@ -271,6 +272,15 @@ function RunBody({ data, projectId, runId }: { data: TestRunDetail; projectId: s
           </Stack>
         </Stack>
       </Panel>
+
+      {/*
+        Between the rollup and the checklist, because it is the question asked in between: the
+        summary above says how much went wrong, this says what, and the list below is where the
+        work continues. It is rendered on every run including a clean one — a panel that appears
+        only when there is bad news is one whose absence a reader cannot distinguish from a panel
+        that failed to render.
+      */}
+      <FailureSummary data={data} projectId={projectId} runId={runId} />
 
       <Panel
         title="Executions"

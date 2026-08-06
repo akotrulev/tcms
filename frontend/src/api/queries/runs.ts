@@ -1,5 +1,5 @@
 /** Runs, the executions inside them, and the one write that records a result. */
-import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { useRef } from 'react';
 import { api, newIntentKey, qs } from '../client';
 import type {
@@ -125,6 +125,87 @@ export function executionQueryOptions(projectId: string, runId: string, executio
     queryFn: ({ signal }: { signal?: AbortSignal }) =>
       api.get<TestExecution>(`${base(projectId)}/runs/${runId}/executions/${executionId}`, { signal }),
   };
+}
+
+/**
+ * The maximum number of executions the failure summary will open to read step detail.
+ *
+ * **The bound is on the READS, not on the answer.** The case-level half of the summary — which
+ * cases failed, which were blocked — is complete at every run size and costs nothing: it is
+ * already in the `TestRunDetail` the page has. Only the *step* half needs a request per case,
+ * because `steps` lives on `TestExecution` and the contract publishes no step rollup at run
+ * level (see the handoff for why that was not fixed by widening the contract in this slice).
+ *
+ * 25 is a judgement, and the number matters less than the fact that the screen **says when it
+ * has been reached**. A run with 300 failures is a run whose first question is not "which step",
+ * and firing 300 parallel reads to answer a question nobody asked would take the page down on
+ * exactly the runs that are already going badly.
+ */
+export const STEP_DETAIL_LIMIT = 25;
+
+/** One execution's step detail, as the failure summary reads it. */
+export interface ExecutionSteps {
+  executionId: string;
+  steps: TestExecution['steps'];
+}
+
+export interface ExecutionStepsState {
+  data: ExecutionSteps[] | undefined;
+  isPending: boolean;
+  isError: boolean;
+  error: unknown;
+  isFetching: boolean;
+  dataUpdatedAt: number | undefined;
+  refetch: () => void;
+}
+
+/**
+ * Step detail for a set of executions — one read each, combined into one region state.
+ *
+ * The second `useQueries` in this codebase after §103's `useReferencedCases`, and combined the
+ * same pessimistic way for the same reason: the reader's question is about the *run*, so a
+ * half-arrived answer rendered as a list is a set of findings that is wrong and looks complete,
+ * and a partial failure is a **shorter** list with nothing on screen saying so.
+ *
+ * The keys are `keys.execution(...)` — the same ones the execution screen reads and the grid
+ * writes — so opening a case warms this panel, marking a result moves it, and no second copy of
+ * an execution can exist in the cache.
+ *
+ * `dataUpdatedAt` is the **oldest** arm: a combined answer is only as current as its laggard.
+ */
+export function useExecutionSteps(
+  projectId: string,
+  runId: string,
+  executionIds: string[],
+): ExecutionStepsState {
+  return useQueries({
+    queries: executionIds.map((executionId) => executionQueryOptions(projectId, runId, executionId)),
+    combine: (results): ExecutionStepsState => {
+      const failed = results.find((result) => result.isError);
+      const loaded = results.every((result) => result.data !== undefined);
+      const oldest = results.reduce(
+        (soFar, result) => Math.min(soFar, result.dataUpdatedAt || Infinity),
+        Infinity,
+      );
+      return {
+        data: loaded
+          ? results.map((result, index) => ({
+              executionId: executionIds[index],
+              steps: result.data?.steps ?? [],
+            }))
+          : undefined,
+        // `useQueries` over an EMPTY list answers `[]`, and `[].some()` is false — so an empty
+        // set is "loaded with nothing", never "pending for ever". That is the state a run with
+        // no failures is in, and it is the common one.
+        isPending: results.some((result) => result.isPending),
+        isError: failed !== undefined,
+        error: failed?.error,
+        isFetching: results.some((result) => result.isFetching),
+        dataUpdatedAt: Number.isFinite(oldest) ? oldest : undefined,
+        refetch: () => results.forEach((result) => void result.refetch()),
+      };
+    },
+  });
 }
 
 export function useExecution(

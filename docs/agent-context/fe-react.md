@@ -2,8 +2,8 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-06 (§104 — two links per execution row)
-**Baseline commit:** `87a8b01` (§103) **+ the doc commit this line ships in** (its own SHA
+**Last verified:** 2026-08-06 (§105 — what failed)
+**Baseline commit:** `edc5a37` (§104) **+ the doc commit this line ships in** (its own SHA
 cannot be written into itself; trust the body over the header and re-grep what a later commit
 could have moved).
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
@@ -35,7 +35,7 @@ could have moved).
 - **`npm run build` is THE gate** (`tsc -b` + vite build). **Do not trust `tsc --noEmit`** — it has
   reported 0 errors while the build failed with nine (working agreement). `#confirmed`
 - `npm run lint` — oxlint, must stay at **0 warnings**; it prints nothing when clean.
-- `npm run test:run` — Vitest + RTL. **941/941** across 69 files at §104 (936/68 at §103) (the §102 line said **925/67** and the measured baseline was **928/67** — this figure is carried forward by hand and has drifted at least twice; read it off a run before trusting it). Earlier: 913/65 at §99 phase 3, 909 at §98, 895/64 at §97 phase 5, 849/60 at §100. **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
+- `npm run test:run` — Vitest + RTL. **958/958** across 70 files at §105 (941/69 at §104) (the §102 line said **925/67** and the measured baseline was **928/67** — this figure is carried forward by hand and has drifted at least twice; read it off a run before trusting it). Earlier: 913/65 at §99 phase 3, 909 at §98, 895/64 at §97 phase 5, 849/60 at §100. **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
 - `npm run gen:api` — regenerate `src/api/schema.d.ts` after **any** `openapi.yaml` change. Runs
   through `npx` on purpose (the scaffold pins TS 6, the tool peer-requires 5.x); do not "fix" it.
 - **Live mode:** `VITE_API_MODE=live` in `.env.local` proxies `/api` to `localhost:8080`.
@@ -67,6 +67,42 @@ directly above the switcher) and the wordmark links there too.
 > slice's shape. `docs/handoff/00-plugin-skills-are-mandatory.md` step 0 now states the protocol.
 
 ## Seams to reuse
+
+- **THE RUN SAYS WHAT BROKE, AND THE TWO HALVES HAVE DIFFERENT COSTS (§105).**
+  `features/runs/FailureSummary.tsx` on `RunDetailPage`, over `runFailures` + `stepOutcome`
+  (`lib/results.ts`) and `useExecutionSteps` + `STEP_DETAIL_LIMIT` (`api/queries/runs.ts`, **the
+  second `useQueries` in this codebase**). Testids `RunDetail.Failures` / `.Headline` / `.None` /
+  `.Truncated` / `.Blocked` / `.Case` / `.Step` / `.Step.Counts` / `.Step.Comment` / `.Step.None`
+  plus `DataRegion`'s `RunDetail.Failures.Steps.*`.
+  **THE CONTRACT HAS NO RUN-LEVEL STEP ROLLUP.** `TestRunDetail.executions` is
+  `TestExecutionSummary[]` with **no steps**; `StepResult[]` exists only on `TestExecution`, one
+  read per execution. So the **case** half (which failed, which were blocked) is free and complete
+  at any run size, and the **step** half is one read per failed case, capped at
+  `STEP_DETAIL_LIMIT = 25` with the cap **stated on screen**. The bound is on the READS, never on
+  the answer — every failed case is always listed. Widening the contract is the right long-term fix
+  and was deliberately not done here: it is a server slice, and it would move these numbers into
+  §101's rollup lane where they inherit `formatComputedAt`.
+  **A BLOCKED CASE IS NOT A FAILED CASE.** The "Needs attention" chip on the same screen merges
+  FAILED+BLOCKED on purpose (both need a person); copying that merge here reports the product broken
+  where nobody managed to test. Partitioned, counted separately, different sentences. SKIPPED and
+  unexecuted are in neither list.
+  **AN UNMARKED STEP IS NOT A PASSED STEP** — `stepOutcome` returns **three** numbers (failed,
+  unmarked, total) because "1 of 5 failed" invites the reader to infer four passes. `criterionState`'s
+  rule one field over, and the mirror of `suggestedVerdict`'s vacuous `[].every()`. A step whose
+  `statusId` the vocabulary does not know counts as **neither** — that is not the tester's
+  unfinished work.
+  **NO PERCENTAGE AND NO STALENESS MARKER, both deliberate.** The pass rate is directly above
+  (§65's two-percentages defect); and nothing here is a rollup, so a "computed at" would be a false
+  claim in the other direction.
+  **The `DataRegion` wraps the STEP LAYER ONLY and renders as a strip** (`{() => null}` loaded
+  branch) — the first draft put the case list inside it and its own test caught 25 in-flight reads
+  hiding every failure. Combine is pessimistic both ways, keys are `keys.execution(...)` so the
+  execution screen and Grid mode share the cache.
+  **The mock's failed executions now come in TWO shapes** (`runExecutions` alternates: one stops at
+  the failure leaving trailing steps unmarked, the next marks the whole list). Before §105 every
+  failed case failed on its LAST step with everything before it passed, so **"not marked" was
+  unreachable in mock mode** — §100's exit-criteria finding and §64's usage counts, third sighting.
+  `#confirmed`
 
 - **AN EXECUTION ROW IS TWO LINKS TO TWO PLACES, AND `ExecutionRowLinks.tsx` DECIDES BOTH (§104).**
   `CaseKeyLink` (key → `/cases/{caseId}`) and `ExecuteCaseLink` (title → the execution, carrying
@@ -831,6 +867,16 @@ directly above the switcher) and the wordmark links there too.
   with the reasoning recorded in `vite.config.ts`.
 
 ## Session log
+
+- 2026-08-06 · EXTEND · **What failed** (§105) — the run detail's failures and the steps inside
+  them, on one panel. New `features/runs/FailureSummary.tsx` + 9 tests, `runFailures`/`stepOutcome`
+  in `lib/results.ts` + 8 tests, `useExecutionSteps` + `STEP_DETAIL_LIMIT`. **No contract change,
+  no `gen:api`, no backend file touched** — and the *reason* is the slice's main finding: the
+  contract publishes **no run-level step rollup**, so the case half is free and the step half is a
+  bounded read per failure. Mock changed: failed executions alternate two checklist shapes, because
+  **"not marked" was unreachable in mock mode** before this. **958/958 across 70 files, lint 0,
+  build clean. Zero browser rows run; 11 M4 rows queued (M4-48…M4-58).** The first draft put the
+  failed-case list inside the step `DataRegion` and its own test caught it.
 
 - 2026-08-06 · EXTEND · **Two links per execution row** (§104) — the key opens the test case (with
   the tooltip that says so), the title opens the verdict screen. New `features/runs/ExecutionRowLinks.tsx`
