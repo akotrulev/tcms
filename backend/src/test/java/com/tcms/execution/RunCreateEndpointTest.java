@@ -181,6 +181,11 @@ class RunCreateEndpointTest extends IntegrationTestBase {
 
         caseA = createCase(LEAD, ACME, ACME_BANKING, "Refund the whole captured amount", REFUNDS);
         caseB = createCase(LEAD, ACME, ACME_BANKING, "Partial refund rounds correctly", SPARE);
+
+        // What PAYMENTS' tag rule claims (§98) — caseA only. caseB stays in SPARE and untagged,
+        // so the two scope arms answer different sets and a run scoped on the suite is not the
+        // same list as a run scoped on the plan's cases.
+        tagCase(caseA, "refunds");
         mobileCase = createCase(LEAD, ACME, ACME_MOBILE, "Mobile login", MOBILE_SUITE);
 
         // The plans are authored through the REAL POST /plans, so this class's fixture is checked
@@ -1268,7 +1273,14 @@ class RunCreateEndpointTest extends IntegrationTestBase {
             seedProjectDefaults(connection, ACME, ACME_MOBILE);
 
             suite(connection, PAYMENTS, ACME, ACME_BANKING, null, "TS-1", 1, "Payments", "s1");
-            suite(connection, REFUNDS, ACME, ACME_BANKING, PAYMENTS, "TS-2", 2, "Refunds", "s1.s2");
+            suite(connection, REFUNDS, ACME, ACME_BANKING, null, "TS-2", 2, "Refunds", "s2");
+            // §98: REFUNDS was a CHILD of PAYMENTS, and the plan below is scoped on PAYMENTS — so
+            // every case in this fixture reached the plan through the subtree. Suites are flat, so
+            // PAYMENTS claims them by TAG instead: the arm is different, the property is the same
+            // one the fixture was built for (a suite arm reaching cases that are filed elsewhere),
+            // and a tag rule is LIVE, which also preserves the later-authored case entering scope
+            // with no edit to the plan.
+            tagRule(connection, PAYMENTS, "refunds");
             suite(connection, SPARE, ACME, ACME_BANKING, null, "TS-3", 3, "Spare", "s3");
             suite(connection, MOBILE_SUITE, ACME, ACME_MOBILE, null, "TS-4", 4, "Mobile", "s4");
         }
@@ -1289,26 +1301,51 @@ class RunCreateEndpointTest extends IntegrationTestBase {
         }
     }
 
+    /** One tag rule on a suite — the membership arm that replaced this fixture's subtree (§98). */
+    private void tagRule(Connection connection, UUID suiteId, String tag) throws SQLException {
+        try (var statement = connection.prepareStatement("""
+                INSERT INTO suite_tag_rule (company_id, suite_id, tag)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), ?)
+                ON CONFLICT DO NOTHING
+                """)) {
+            statement.setString(1, ACME.toString());
+            statement.setString(2, suiteId.toString());
+            statement.setString(3, tag);
+            statement.executeUpdate();
+        }
+    }
+
+    /** One tag on a case, so a suite's rule can claim it. */
+    private void tagCase(UUID caseId, String tag) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+             var statement = connection.prepareStatement("""
+                INSERT INTO case_tag (company_id, case_id, tag)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), ?)
+                ON CONFLICT DO NOTHING
+                """)) {
+            statement.setString(1, ACME.toString());
+            statement.setString(2, caseId.toString());
+            statement.setString(3, tag);
+            statement.executeUpdate();
+        }
+    }
+
     private void suite(
             Connection connection, UUID id, UUID companyId, UUID projectId, UUID parentId,
             String key, long keySeq, String name, String path) throws SQLException {
 
         try (var statement = connection.prepareStatement("""
                 INSERT INTO suite
-                    (id, company_id, project_id, parent_id, key, key_seq, path, name,
-                     position, lifecycle_status)
-                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?,
-                        CAST(? AS ltree), ?, 0, 'APPROVED')
+                    (id, company_id, project_id, key, key_seq, name, position, lifecycle_status)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?, ?, 0, 'APPROVED')
                 ON CONFLICT (id) DO NOTHING
                 """)) {
             statement.setString(1, id.toString());
             statement.setString(2, companyId.toString());
             statement.setString(3, projectId.toString());
-            statement.setString(4, parentId == null ? null : parentId.toString());
-            statement.setString(5, key);
-            statement.setLong(6, keySeq);
-            statement.setString(7, path);
-            statement.setString(8, name);
+            statement.setString(4, key);
+            statement.setLong(5, keySeq);
+            statement.setString(6, name);
             statement.executeUpdate();
         }
     }

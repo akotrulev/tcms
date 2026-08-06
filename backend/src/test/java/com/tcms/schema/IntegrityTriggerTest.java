@@ -62,8 +62,8 @@ class IntegrityTriggerTest extends IntegrationTestBase {
                 INSERT INTO project (id, company_id, key, name) VALUES ('%s', '%s', 'TRG', 'Triggers')
                 """.formatted(PROJECT, COMPANY));
         execute("""
-                INSERT INTO suite (id, company_id, project_id, key, key_seq, path, name)
-                VALUES ('%s', '%s', '%s', 'TS-1', 1, 'root', 'Root')
+                INSERT INTO suite (id, company_id, project_id, key, key_seq, name)
+                VALUES ('%s', '%s', '%s', 'TS-1', 1, 'Root')
                 """.formatted(SUITE, COMPANY, PROJECT));
         execute("""
                 INSERT INTO test_case (id, company_id, project_id, suite_id, key, key_seq, title)

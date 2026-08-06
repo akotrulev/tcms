@@ -140,7 +140,8 @@ SaaS (companies are provisioned by an operator script).
 
 The hierarchy is load-bearing and easy to get wrong: **Instance → Company** (a separate client
 organisation; the isolation boundary) **→ Project** (a whole client product, *not* a feature area)
-**→ suite tree**. "Payments" is a Feature or a suite folder, never a project.
+**→ suites**. "Payments" is a Feature or a suite, never a project. **A suite is FLAT since §98** —
+a named collection whose members are three arms (filed ∪ added ∪ tagged), not a folder in a tree.
 
 ### Tenancy — the invariant everything else rests on
 

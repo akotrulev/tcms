@@ -2,10 +2,13 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-05 (§97 phase 6 — the slice's last)
-**Baseline commit:** `723ab2e` (§97 phase 6) **+ the doc commit this line ships in** (its own SHA
+**Last verified:** 2026-08-06 (§98 phase 2 — suites become flat)
+**Baseline commit:** `f904e9d` (§98 phase 1) **+ the doc commit this line ships in** (its own SHA
 cannot be written into itself; per `CLAUDE.md`, trust the body over the header and re-grep what a
 later commit could have moved).
+**§98 phase 2 is the backend half of the flattening** — `V33`, the entity, the two services, the
+membership seams and a 35-file test-fixture sweep. §97's own note is kept below because its shape
+recurs.
 **§97 phases 4, 5 and 6 touched NO backend file** — they are the frontend's form spine, its tabs and
 its Test cases tab. The backend half of the slice is phases 3a–3c, and the body below already
 records it (`V32`, the three-armed `scopeMatch`, the plan ladder's reduction to three states, and
@@ -58,9 +61,36 @@ exist**, and the slice plan's decision E declines to create it for two storage p
 
 ## Seams to reuse
 
+- **A SUITE IS FLAT SINCE §98 — `parent_id`, `path` and `suite_path_idx` ARE GONE (`V33`, the head;
+  `V34` next free; policy count still 61).** A suite is a named collection, not a folder: no
+  `Suite.getParentId()`/`getPath()`, no `parentId` on `SuiteView`/`SuiteWriteRequest`,
+  `SuiteEdit.validateCreate`+`validateRename` collapsed to one `validate`, and
+  `SuiteRepository.findLiveForProject` orders by **`keySeq`** (it ordered by `path` to make the flat
+  payload constructible into a tree; what an order must still be is *total and stable*, which a name
+  is not). `countLiveChildren` + `countLiveCasesInSubtree` collapsed to **`countLiveCasesFiledIn`**.
+  **THE DELETE GATE IS THE FILED ARM ALONE AND THAT IS THE NARROWER OF TWO READINGS** — a case
+  merely added or tag-matched lives elsewhere, so deleting the collection takes a claim and never a
+  case.
+  **THE DEFECT §98 FOUND PREDATES IT BY TWO SLICES: `caseCount` and the grid's `?suiteId=` filter
+  answered different questions.** The count has been the §96 union since §96 while
+  `CaseSpecifications.suiteScope` matched `suite_id IN (subtree)` — the FILED arm — so a tag-defined
+  suite showed a count of twelve over a grid of none. `CaseScope` now carries **`memberCaseIds`**,
+  resolved once by `CaseService` through `SuiteMembership.caseIdsIn`, and the predicate is on the
+  case's own id. **Check both numbers together when either moves.**
+  **`execution_fact.suite_path` OUTLIVED `suite.path` DELIBERATELY.** It is frozen history — where a
+  case was filed *when it ran* — so `V33` touches no fact row and old rows keep dotted paths that
+  describe a hierarchy that no longer exists. `ExecutionSource` writes **`('s' || s.key_seq)::ltree`**
+  for new rows, which is exactly the path a *root* suite always had, and every suite is a root now.
+  Do not "fix" a report that prints both shapes. The **`ltree` extension stays** — `doc_page.path`,
+  `classification_value.path` and this column still use it.
+  **`CaseFacts.inSubtreeOf` → `memberOf`, and `SuiteScopeAgreementTest` SURVIVES** — the §98 plan
+  expected it retired, but the duplicated predicate is caused by ERD §0.2's module boundary, not by
+  the subtree, so the two are now supposed to be *identical* rather than merely equivalent.
+  `CaseConditions.ancestry` is a lookup rather than a walk: a suite's conditions reach the cases
+  **filed** in it and deliberately **not** the other two arms.
 - **A SUITE IS A RESOLVABLE COLLECTION SINCE §96 phase 1, AND A CASE MAY BE FILED NOWHERE.**
-  ~~`V31__suite_membership.sql` (**head**, `V32` next free)~~ → **`V32` is the head since §97 phase
-  3a; `V33` next free. Policy count stays 61** — `V32` adds no table. `V31` (**policy count 59 →
+  ~~`V31__suite_membership.sql` (**head**, `V32` next free)~~ → ~~`V32` is the head since §97 phase
+  3a~~ → **`V33` is the head since §98; `V34` next free. Policy count stays 61** — neither adds a table. `V31` (**policy count 59 →
   61**) creates
   `suite_case` (added individually) and `suite_tag_rule` (matched by tag, **unioned never
   intersected**), and relaxes `test_case.suite_id` to nullable — so membership is three arms:
@@ -71,8 +101,8 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   error, a tick that logs success, and every report over the log quietly short. `RunSummaryReport`
   prints the NULL group as `RunSummaryReport.NOT_FILED` (`"(not filed)"`) rather than dropping it,
   which would be the same defect one layer up.
-  `SuiteRepository.countLiveCasesBySuite` gained `AND tc.suite_id IS NOT NULL`: the tree counts what
-  is **filed**, and the other two arms are resolved separately rather than summed into that number.
+  `SuiteRepository.countLiveCasesBySuite` gained `AND tc.suite_id IS NOT NULL`: it counts what is
+  **filed**, and the other two arms are resolved separately rather than summed into that number.
   ~~Still true after this phase: nothing can yet create an unfiled case through the API~~ →
   **phase 2 opened it.**
 - **THE CASE SIDE OF §96 (phase 2) — `suiteId` IS OPTIONAL AND `tags` ARE WRITABLE.**

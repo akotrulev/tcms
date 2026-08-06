@@ -15,16 +15,20 @@ import org.hibernate.annotations.ColumnTransformer;
 import org.hibernate.annotations.Filter;
 
 /**
- * One folder of one project's test tree — "Payments" › "Refunds" › "Partial refund".
+ * One named collection of one project's test cases — "Payments", "Refunds", "Smoke".
+ *
+ * <p><strong>FLAT since §98 ({@code V33}).</strong> This was a folder in a tree, with a
+ * {@code parent_id} and a materialized {@code ltree} {@code path}; both columns are gone. A suite
+ * now says only what it holds, through the three membership arms {@link SuiteMembership} unions:
+ * cases <em>filed</em> here ({@code test_case.suite_id}), cases <em>added</em> here
+ * ({@code suite_case}), and cases <em>matched</em> by one of its tag rules
+ * ({@code suite_tag_rule}). None of the three is a containment, which is why nothing here can move
+ * a case and why deleting a suite can never delete one.
  *
  * <p>Soft-deleted ({@link #deletedAt}), like everything a run can have executed against: past
- * executions reference the cases beneath a suite, and {@code suite_run_summary} keys on the suite
- * id, so hard-deleting one would rewrite what a past run covered. Every read must exclude deleted
- * rows explicitly — see {@link SuiteRepository#findLiveForProject}.
- *
- * <p>The factory and the two mutators arrived with {@link SuiteWriteService}, which is the endpoint
- * the older header here said to wait for. {@link #path} is still read-only after construction, and
- * that remains the harder half: nothing moves a suite yet (see below).
+ * executions reference the cases filed under a suite, and {@code suite_run_summary} keys on the
+ * suite id, so hard-deleting one would rewrite what a past run covered. Every read must exclude
+ * deleted rows explicitly — see {@link SuiteRepository#findLiveForProject}.
  */
 @Entity
 @Table(name = "suite")
@@ -41,10 +45,6 @@ public class Suite {
     @Column(name = "project_id", nullable = false, updatable = false)
     private UUID projectId;
 
-    /** Null for a root folder. The client builds the tree from this, not from {@link #path}. */
-    @Column(name = "parent_id")
-    private UUID parentId;
-
     /** {@code TS-1} — company-scoped and immutable (plan §6t). Displayed; never sorted on. */
     @Column(name = "key", nullable = false, updatable = false)
     private String key;
@@ -60,47 +60,17 @@ public class Suite {
     @Column(name = "key_seq", nullable = false, updatable = false)
     private long keySeq;
 
-    /**
-     * Materialized path, so "run this folder" reads a subtree in one indexed query (ERD §4).
-     *
-     * <p><strong>{@code columnDefinition} is load-bearing, not decoration</strong> — the second
-     * {@code ltree} column in the codebase, and it fails exactly as the first one does. See
-     * {@link com.tcms.project.ClassificationValue#getPath()} for the full account: {@code ltree}
-     * reports as {@code Types#OTHER} while a {@code String} field maps to {@code varchar}, so
-     * {@code ddl-auto: validate} rejects the mismatch and the application context fails to build
-     * at all. That is the good kind of failure — at boot rather than at the first query.
-     *
-     * <p>It is not the display name. {@code ltree} labels admit only {@code [A-Za-z0-9_]}, so a
-     * suite called "UI / E2E" has a path that does not spell it. Render {@link #name}; use the
-     * path for subtree matching.
-     *
-     * <p>Reparenting rewrites every descendant's path in one statement, which is the reason there
-     * is no setter here and the reason the rename/move endpoint is a slice of its own rather than
-     * a field assignment.
-     *
-     * <p><strong>{@code @ColumnTransformer} is the other half of {@code columnDefinition}, and it
-     * is needed the moment anything <em>writes</em> a suite.</strong> Reading works without it —
-     * Postgres renders {@code ltree} as text on the way out — but an insert binds this field as
-     * {@code varchar} and Postgres refuses the assignment outright: <em>column "path" is of type
-     * ltree but expression is of type character varying</em>. A hard error rather than a silent
-     * one, which is the good version, and it only appeared when {@link #create} did: every fixture
-     * that wrote a suite before then spelled the {@code CAST} itself in raw SQL.
-     *
-     * <p>{@code ClassificationValue.path} has the same mapping and not this annotation. It is not
-     * broken today because nothing in Java inserts one — V2's seed function writes them with its
-     * own cast — and it will fail exactly like this on the day something does.
-     */
-    @Column(name = "path", nullable = false, columnDefinition = "ltree")
-    @ColumnTransformer(write = "CAST(? AS ltree)")
-    private String path;
-
     @Column(name = "name", nullable = false)
     private String name;
 
     @Column(name = "description")
     private String description;
 
-    /** Sibling order within one parent. Not exposed — see {@link SuiteView}. */
+    /**
+     * Order within the project — it was order within a parent until §98, and nothing has ever
+     * written or read it. Kept by {@code V33} rather than dropped: removing an unused column is
+     * its own change, and this migration's subject is the hierarchy.
+     */
     @Column(name = "position", nullable = false)
     private int position;
 
@@ -149,29 +119,17 @@ public class Suite {
     }
 
     /**
-     * A new folder.
+     * A new suite.
      *
-     * <h2>The path label is the key sequence, and that is the decision in this method</h2>
-     *
-     * <p>{@code V2} ships {@code tcms_ltree_label()}, which slugs a <em>name</em> into a path label,
-     * and it is the wrong tool here. Classification values are seeded once and never renamed; suites
-     * are renamed constantly, and a name-derived path makes <strong>every rename a subtree
-     * rewrite</strong> — which contradicts this class's own account of paths, where reparenting is
-     * the thing that rewrites them. A slug is also not unique ("UI / E2E" and "ui e2e" produce the
-     * same label under one parent) and can be empty ("…" slugs to {@code ''}, which is not a valid
-     * {@code ltree} label at all and fails at insert with a message about nothing).
-     *
-     * <p>So the label is {@code s} + {@link #keySeq}: unique by construction, stable across renames,
-     * never empty, and valid without escaping. The leading letter is not superstition about
-     * {@code ltree} accepting digits — it is so a path segment is recognisable as a suite when it
-     * turns up in {@code execution_fact.suite_path} beside other trees.
-     *
-     * @param parentPath the parent's {@link #path}, or null for a root folder
+     * <p>It used to derive an {@code ltree} path here, and the decision that lived in this javadoc
+     * — label the path {@code s}+{@code keySeq} rather than slugging the <em>name</em>, because a
+     * name-derived path makes every rename a subtree rewrite, is not unique ("UI / E2E" and
+     * "ui e2e" slug alike) and can be empty — went with the column in {@code V33}. It is worth
+     * knowing about only because {@code execution_fact.suite_path} still holds paths written under
+     * that rule, and they are frozen history that must keep rendering.
      */
     static Suite create(
             UUID projectId,
-            UUID parentId,
-            String parentPath,
             String key,
             long keySeq,
             SuiteEdit edit,
@@ -182,25 +140,18 @@ public class Suite {
         created.id = UUID.randomUUID();
         created.companyId = CompanyContext.require();
         created.projectId = projectId;
-        created.parentId = parentId;
         created.key = key;
         created.keySeq = keySeq;
-        created.path = parentPath == null ? label(keySeq) : parentPath + "." + label(keySeq);
         created.lifecycleStatus = LifecycleStatus.DRAFT;
         created.currentVersionNo = 1;
-        // Sibling order is not exposed and nothing reorders yet; the flat list is ordered by path
-        // (SuiteRepository.findLiveForProject). Left at the column's own default rather than
-        // invented here, so the slice that adds reordering has one place to start assigning it.
+        // Order is not exposed and nothing reorders; the rail sorts by name. Left at the column's
+        // own default rather than invented here, so the slice that adds reordering has one place
+        // to start assigning it.
         created.position = 0;
         created.createdAt = now;
         created.createdBy = creatorId;
         created.applyEdit(edit, creatorId, now);
         return created;
-    }
-
-    /** The {@code ltree} label for a suite — see {@link #create}. */
-    private static String label(long keySeq) {
-        return "s" + keySeq;
     }
 
     /**
@@ -210,11 +161,10 @@ public class Suite {
      * possible to change the name without stamping who did it and when. A setter-based rename is one
      * call site away from a row that was silently edited by nobody at no time.
      *
-     * <p>{@link #parentId} and {@link #path} are read from the edit but never re-assigned here.
-     * {@link SuiteEdit#validateRename} has already refused any payload that asked to move, so this
-     * method has nothing to enforce — and if it did assign them, it would assign a parent without
-     * rewriting a single descendant path, which is the corrupted-tree version of the feature rather
-     * than the feature.
+     * <p>It never re-assigned {@code parentId} or {@code path} either, back when a suite had them:
+     * {@link SuiteEdit} refused any payload that asked to move, because assigning a parent without
+     * rewriting every descendant path is the corrupted-tree version of the feature rather than the
+     * feature. §98 removed the tree, so there is nothing left to refuse.
      *
      * <p>{@code lifecycleStatus} is absent for the reason it is absent from {@link TestCase}: a
      * status an ordinary edit can set is an approval anyone can grant themselves by saving (§6g).
@@ -269,20 +219,12 @@ public class Suite {
         return projectId;
     }
 
-    public UUID getParentId() {
-        return parentId;
-    }
-
     public String getKey() {
         return key;
     }
 
     public long getKeySeq() {
         return keySeq;
-    }
-
-    public String getPath() {
-        return path;
     }
 
     public String getName() {

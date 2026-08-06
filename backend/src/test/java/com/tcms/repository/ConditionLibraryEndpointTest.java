@@ -923,9 +923,8 @@ class ConditionLibraryEndpointTest extends IntegrationTestBase {
             throws SQLException {
 
         try (var statement = connection.prepareStatement("""
-                INSERT INTO suite (id, company_id, project_id, key, key_seq, path, name)
-                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?,
-                        CAST(? AS ltree), ?)
+                INSERT INTO suite (id, company_id, project_id, key, key_seq, name)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?, ?)
                 ON CONFLICT (id) DO NOTHING
                 """)) {
             statement.setString(1, id.toString());
@@ -935,8 +934,7 @@ class ConditionLibraryEndpointTest extends IntegrationTestBase {
             statement.setLong(5, 1L);
             // The path is an ltree label, so it may carry only [A-Za-z0-9_] — a raw UUID with its
             // hyphens is rejected at insert with a syntax error that reads like a schema fault.
-            statement.setString(6, id.toString().replace("-", ""));
-            statement.setString(7, name);
+            statement.setString(6, name);
             statement.executeUpdate();
         }
     }

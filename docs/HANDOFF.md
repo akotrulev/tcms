@@ -1,6 +1,43 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-05 (latest section: **§96, tags become real and a suite resolves from them** —
+**Date:** 2026-08-06 (latest section: **§98, suites become flat** — M2 of the organization-model
+restatement, **two phases, two commits**, and the slice that finishes what §96 started: a suite
+stops being a folder in a tree and is only ever a **named collection**. **`V33__flatten_suites.sql`**
+drops `suite.parent_id`, `suite.path` and `suite_path_idx`; `V34` next free; policy count unchanged
+at **61**. **THE FINDING IS THAT THE COUNT AND THE GRID HAVE ANSWERED DIFFERENT QUESTIONS SINCE
+§96.** Clicking a suite filtered on `suite_id IN (…)` — the *filed* arm — while the number beside it
+was the resolved union, so a **tag-defined suite showed a count of two over a grid of none**, and
+neither number looks wrong alone. It survived two slices because **every fixture suite was a folder
+people filed into**, where the union and the filed arm answer identically; §98 makes a tag rule the
+ordinary way to define a suite, so the defect would have moved from one fixture row to most of them.
+Both ends now resolve through **one query returning ids** — `CaseScope.memberCaseIds` on the server,
+`suiteMemberCaseIds` in the mock — and the new `mocks/db/suites.test.ts` asserts the **non-vacuity
+first**, because without a suite that claims a case it does not file, every assertion below is
+equally true of the defective implementation. **`execution_fact.suite_path` OUTLIVES `suite.path` ON
+PURPOSE**: it is frozen history, so `V33` touches no fact row and old runs keep dotted paths
+describing a hierarchy that no longer exists — correct, and not to be "fixed". New rows get
+`'s' || key_seq`, **exactly the path a root suite always had**, and every suite is a root now. The
+`ltree` extension stays — checked, not assumed: three other columns use it. **THE PLAN IS WRONG
+ABOUT `SuiteScopeAgreementTest` AND THE CORRECTION IS THE USEFUL PART** — it expected the class
+retired, but the duplicated predicate is **ERD §0.2's module boundary**, not the subtree, so the two
+are now supposed to be *identical* rather than merely equivalent and the test gets **stricter**.
+**Only the FILED arm blocks a delete**, and only it carries condition inheritance: a case added or
+tag-matched lives elsewhere, so deleting the collection takes a claim and never a case. **"New suite
+inside" is REMOVED, not disabled** — disable-don't-hide is about an action the *state* forbids, and
+no state nests a suite. **The plan's five phases are two**: a contract-only commit cannot pass its
+own gate, and `ddl-auto: validate` refuses a migration split from its entity — and the ordering is
+client-first, because an extra field a client ignores beats a missing one it reads. The test sweep
+touched **35 files** through a script that renumbers JDBC parameter indices (editing only the SQL
+leaves every fixture compiling while binding the wrong values); **three fixtures needed judgement**,
+all because they used nesting to reach cases. Gates: frontend **909/909 across 65 files**, lint 0;
+backend **BUILD SUCCESSFUL — 1746 across 347 classes,
+0 failures, 0 skipped** (1741 → 1746), counted from the XML. **Seventeen tests went red on the first
+full run and every one asserted the tree** rather than a defect in the change; a run before them
+reported **1672 failures of 1748** and was Testcontainers failing to launch under two overlapping
+`gradlew` invocations — §86's lesson through a new door, and the reason a catastrophic count is a
+signal to check the harness before reading an assertion. **Zero verification run**: 12 browser rows and 6 mutation rows
+queued, plus a `V33` row on the Hetzner list. **Built and unverified.**
+Before that: **§96, tags become real and a suite resolves from them** —
 the last of the authoring rework's three slices, **six phases, six commits**, and the structural
 one: a suite stops being a filing decision and becomes a **resolvable collection** — filed ∪ added ∪
 tagged, unioned and deduped — while a case may be created carrying no suite at all.
@@ -1544,4 +1581,5 @@ See [`docs/plans/2026-07-31-parallel-execution-rework.md`](plans/2026-07-31-para
 | [§95](handoff/95-conditions-get-a-writer.md) | Conditions get a writer — the library nothing could fill, the edit that propagates, and the usage count that was always zero one slice before it became an impact warning **(built and unverified — 12 browser rows, 9 mutation rows, none run; 3 of them are tests not yet written)** |
 | [§96](handoff/96-tags-become-real.md) | Tags become real, and a suite resolves from them — the nullable key that drops rows in four places, the union written twice on purpose, and the tag that must not write a version **(built and unverified — 14 browser rows, 20 mutation rows, none run; one names a test not yet written, two record checks weaker than they look)** |
 | [§97](handoff/97-the-plan-detail-rework.md) | The test plan detail becomes one form — the tabs that cannot be headings, the sections that resolve on every read, and the rename that would have moved a case out of its own section **(built and unverified — 32 browser rows written or restated across the M3 lane, plus 3a/3b's mutation rows, none run)** |
+| [§98](handoff/98-suites-become-flat.md) | Suites become flat — the count and the grid that have answered different questions since §96, the frozen path that outlived the column it copied, and the agreement test the plan expected to retire **(built and unverified — 12 browser rows, 6 mutation rows plus a `V33` row on the Hetzner list, none run)** |
 | [§100](handoff/100-the-design-comp-lands.md) | The design comp lands — the contract that declared a shape nobody served, the mock that evaluated gates the server never evaluates, and the bulk surface that re-asks every per-row rule **(browser pass RUN inline by direction — mock mode only; 3 rows still queued, one of them live-only)** |

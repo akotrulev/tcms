@@ -102,6 +102,23 @@ class ExecutionSource {
      * statement to change and a moving dimension that should have been frozen has already destroyed
      * the history it rewrote.
      *
+     * <h2>{@code suite_path} after §98, and why the column outlived the column it copied</h2>
+     *
+     * <p>{@code suite.path} is <strong>gone</strong> ({@code V33}) and {@code execution_fact.suite_path}
+     * is not. That is deliberate on both sides: the fact log's copy is history — it says where the
+     * case was filed <em>when it ran</em> — and rows written before the flattening carry dotted
+     * paths describing a hierarchy that no longer exists. They are correct and must not be
+     * rewritten; the migration touches no {@code execution_fact} row.
+     *
+     * <p>New rows still need a value, and the one written here is {@code 's' || key_seq} — which is
+     * <strong>exactly the path a ROOT suite always had</strong>. {@link com.tcms.repository.Suite}
+     * derived its {@code ltree} label that way (unique by construction, stable across renames, never
+     * empty, and prefixed with a letter so a segment is recognisable as a suite when it turns up
+     * here beside other trees), and a flat suite is a root. So the column's contents stay
+     * type-correct, unique and comparable, and a report spanning the flattening prints deep paths
+     * for old runs and single labels for new ones — which is the truth about how the project was
+     * organised at each of those moments.
+     *
      * <h2>"Recorded" is the join to {@code case_status}, and that is not an accident of the query</h2>
      *
      * <p>{@code execution_fact.status_kind} is {@code NOT NULL} while {@code test_execution.status_id}
@@ -178,7 +195,7 @@ class ExecutionSource {
                         automation_status, source, executed_by, executed_at, duration_ms,
                         test_type_id, test_level_id, feature_ids)
                 SELECT e.id, e.company_id, e.project_id, e.case_id, e.case_version_id,
-                       c.suite_id, s.path, r.plan_id, e.run_id, r.configuration_id,
+                       c.suite_id, ('s' || s.key_seq)::ltree, r.plan_id, e.run_id, r.configuration_id,
                        e.release_version, e.release_sort_key, st.kind, st.counts_as_pass,
                        c.automation_status, r.source, e.executed_by, e.executed_at, e.duration_ms,
                        cls.test_type_id, cls.test_level_id, cls.feature_ids

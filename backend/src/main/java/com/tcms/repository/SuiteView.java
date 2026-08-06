@@ -13,20 +13,19 @@ import java.util.UUID;
  * {@code position} is dropped because the array's order carries it and two authorities for order
  * is one too many.
  *
- * @param parentId  null for a root folder. <strong>This is what the tree is built from</strong>,
- *                  not {@link #path} — the contract says so explicitly ("a flat list with
- *                  parentId, client builds the tree"), and the two are independent: reparenting
- *                  rewrites paths, and a consumer that parsed the path would have to know the
- *                  label-sanitizing rules to get back to a row.
- * @param path      the materialized {@code ltree} path, <strong>not</strong> a display string.
- *                  Labels admit only {@code [A-Za-z0-9_]}, so a suite named "UI / E2E" has a path
- *                  that does not spell it. Render {@link #name}; use the path for subtree matching.
- * @param caseCount the suite's <strong>own</strong> resolved membership, not its subtree's — the
- *                  cases filed in it, plus those added individually, plus every live case carrying
- *                  any of its {@link #tagRules}, unioned and deduped by {@link SuiteMembership}.
- *                  The SPA's tree sums a node's count with its children's to get the rollup, so a
- *                  subtree count here would be counted again at every ancestor.
- *                  <p><strong>These counts no longer sum to the project's case count</strong>, and
+ * <p><strong>{@code parentId} and {@code path} left this record in §98</strong>, with the tree.
+ * They are worth a line because the pair was load-bearing and is easy to reach for again: the tree
+ * was built from {@code parentId} and never from {@code path} (the two were independent —
+ * reparenting rewrote paths, and a consumer parsing a path would have needed the label-sanitizing
+ * rules to get back to a row). A suite is a flat collection now, so a client assembles nothing.
+ *
+ * @param caseCount the suite's resolved membership — the cases filed in it, plus those added
+ *                  individually, plus every live case carrying any of its {@link #tagRules},
+ *                  unioned and deduped by {@link SuiteMembership}. Since §98 there is no subtree
+ *                  for it to be confused with, and it is also exactly what the case grid's
+ *                  {@code suiteId} filter selects: one query, so the number beside a suite and the
+ *                  length of the list you get by clicking it cannot disagree.
+ *                  <p><strong>These counts do not sum to the project's case count</strong>, and
  *                  that is the design rather than a defect: a case can be in three suites at once.
  * @param tagRules  the tags this suite claims, <strong>unioned</strong> — either, not both. The
  *                  opposite of the case grid's {@code tag} filter, which ANDs, because a collection
@@ -40,10 +39,8 @@ import java.util.UUID;
 public record SuiteView(
         UUID id,
         String key,
-        UUID parentId,
         String name,
         String description,
-        String path,
         long caseCount,
         List<String> tagRules,
         List<UUID> caseIds,

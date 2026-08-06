@@ -223,10 +223,8 @@ class PlanScopeConstraintTest extends IntegrationTestBase {
 
     private void suite(Connection connection) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
-                INSERT INTO suite (id, company_id, project_id, key, key_seq, path, name, position,
-                                   lifecycle_status)
-                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), 'TS-1', 1,
-                        CAST('root' AS ltree), 'Root', 0, 'APPROVED')
+                INSERT INTO suite (id, company_id, project_id, key, key_seq, name, position, lifecycle_status)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), 'TS-1', 1, 'Root', 0, 'APPROVED')
                     ON CONFLICT (id) DO NOTHING
                 """)) {
             statement.setString(1, SUITE.toString());

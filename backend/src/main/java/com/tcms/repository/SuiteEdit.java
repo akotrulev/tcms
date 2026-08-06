@@ -16,15 +16,16 @@ import java.util.UUID;
  * before anything acts on it, so no service, entity or query re-derives whether the input was
  * acceptable. A rule enforced half here and half in the entity is a rule with two answers.
  *
- * <p>Two entry points rather than one {@code validate} with a nullable "current suite", because the
- * rules genuinely differ and the difference is the one an author gets wrong: on a create
- * {@code parentId} <em>chooses</em> the parent, and on a rename it may only repeat the stored one.
- * A single method taking a nullable current would make "no current" — the create case — silently
- * skip the check that a rename depends on.
+ * <p><strong>One entry point since §98, where there were two.</strong> They existed because the
+ * rules genuinely differed on the field an author gets wrong: on a create {@code parentId} chose
+ * the parent, and on a rename it could only repeat the stored one, so a single method taking a
+ * nullable "current suite" would have let the create case silently skip the check the rename
+ * depended on. With the tree gone the two validations are character-for-character identical, and
+ * keeping them apart would be two places for one rule to drift — which is this class's own opening
+ * argument.
  */
 record SuiteEdit(
         String name,
-        UUID parentId,
         String description,
         // Null for "leave them alone", which the rename dialog sends and the create path never
         // does. Both are normalized by #normalizeTagRules / #normalizeCaseIds before they get here.
@@ -59,73 +60,27 @@ record SuiteEdit(
     }
 
     /**
-     * Validates a create.
+     * Validates a create or a rename — one method, because since §98 they have the same rules.
      *
-     * @param liveSuiteIds the project's live suite ids. A {@code parentId} outside this set is
-     *                     refused rather than accepted: an unchecked parent puts the new folder
-     *                     under another <em>project's</em> suite (or a deleted one), and since every
-     *                     read is scoped by {@code project_id} the folder would then appear in no
-     *                     tree at all — created successfully and immediately invisible.
+     * <p>What used to differ is recorded on the record above. The half worth keeping in mind here
+     * is why a differing {@code parentId} was <em>refused</em> rather than ignored: dropping a
+     * field silently is what lets a client show a suite in its new place, reload, and find it back
+     * where it was, with the server having reported success. That reasoning outlives the field.
+     *
+     * @param liveCaseIds the project's live case ids, for the explicitly-added membership arm. A
+     *                    {@code caseId} outside this set is a field error rather than a silent
+     *                    drop, for the same reason.
      */
-    static Outcome validateCreate(
-            SuiteWriteRequest request, Set<UUID> liveSuiteIds, Set<UUID> liveCaseIds) {
+    static Outcome validate(SuiteWriteRequest request, Set<UUID> liveCaseIds) {
         Map<String, List<String>> errors = new LinkedHashMap<>();
 
         String name = validName(request, errors);
-
-        UUID parentId = request.parentId();
-        if (parentId != null && !liveSuiteIds.contains(parentId)) {
-            // Not 404: the project resolved fine and the caller submitted a value this project does
-            // not offer, so the message belongs on the parent picker rather than on the page.
-            errors.computeIfAbsent("parentId", key -> new ArrayList<>())
-                    .add("That suite is not in this project.");
-        }
-
         List<String> tagRules = normalizeTagRules(request.tagRules(), errors);
         List<UUID> caseIds = normalizeCaseIds(request.caseIds(), liveCaseIds, errors);
 
         return errors.isEmpty()
                 ? new Outcome.Valid(new SuiteEdit(
-                        name, parentId, trimToNull(request.description()), tagRules, caseIds))
-                : new Outcome.Invalid(errors);
-    }
-
-    /**
-     * Validates a rename.
-     *
-     * <h2>A differing {@code parentId} is refused, not ignored</h2>
-     *
-     * <p>Moving a suite rewrites every descendant's {@code path} and needs cycle prevention — see
-     * {@link Suite#getPath()}, which calls that a slice of its own. Until it exists, the only two
-     * honest answers to a payload asking for a move are "done" and "refused". Dropping the field
-     * silently is the third one, and it is the one that lets a client show a folder in its new place,
-     * reload, and find it back where it was — with the server having reported success.
-     *
-     * <p>Null is accepted as "unchanged" as well as matching a null parent, because the SPA's rename
-     * dialog edits a name and has no parent to send. Only a <em>differing non-null</em> value is a
-     * move.
-     *
-     * @param currentParentId the suite's stored parent, null for a root
-     */
-    static Outcome validateRename(
-            SuiteWriteRequest request, UUID currentParentId, Set<UUID> liveCaseIds) {
-        Map<String, List<String>> errors = new LinkedHashMap<>();
-
-        String name = validName(request, errors);
-
-        UUID parentId = request.parentId();
-        if (parentId != null && !parentId.equals(currentParentId)) {
-            errors.computeIfAbsent("parentId", key -> new ArrayList<>())
-                    .add("Moving a suite is not supported yet. Leave the parent unchanged.");
-        }
-
-        List<String> tagRules = normalizeTagRules(request.tagRules(), errors);
-        List<UUID> caseIds = normalizeCaseIds(request.caseIds(), liveCaseIds, errors);
-
-        return errors.isEmpty()
-                ? new Outcome.Valid(new SuiteEdit(
-                        name, currentParentId, trimToNull(request.description()),
-                        tagRules, caseIds))
+                        name, trimToNull(request.description()), tagRules, caseIds))
                 : new Outcome.Invalid(errors);
     }
 

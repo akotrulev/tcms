@@ -16,25 +16,26 @@ import org.springframework.transaction.annotation.Transactional;
 public interface SuiteRepository extends JpaRepository<Suite, UUID> {
 
     /**
-     * One project's live suites, parents before children.
+     * One project's live suites.
      *
      * <p>{@code deletedAt IS NULL} is not optional: a suite is soft-deleted because past runs
-     * reference the cases beneath it, so without this predicate a deleted folder comes back in the
-     * tree — and its cases are already gone from the case list, which reads as data loss rather
+     * reference the cases filed in it, so without this predicate a deleted suite comes back in the
+     * rail — and its cases are already gone from the case list, which reads as data loss rather
      * than as a stale row.
      *
-     * <p><strong>Ordered by {@code path}, not by {@code position}.</strong> Position is sibling
-     * order <em>within one parent</em>, so ordering the flat list by it interleaves depths and a
-     * child can precede its own parent. An {@code ltree} compares element-wise, so path order is
-     * depth-first with every parent ahead of its descendants — which is what a consumer building
-     * the tree in one pass needs. The SPA re-sorts siblings by name after building, so this
-     * ordering is about being <em>constructible</em>, not about the final display order.
+     * <p><strong>Ordered by {@code keySeq} since §98.</strong> It was ordered by {@code path},
+     * which made the flat list <em>constructible</em> into a tree — an {@code ltree} compares
+     * element-wise, so path order is depth-first with every parent ahead of its descendants, where
+     * {@code position} (sibling order within one parent) would have interleaved depths and let a
+     * child precede its own parent. There is no tree to construct now, and the SPA sorts by name
+     * for display either way; what an order still has to be is <strong>total and stable</strong>,
+     * which is what {@code key_seq} gives and what a name does not (two suites may share one).
      */
     @Query("""
             SELECT s FROM Suite s
              WHERE s.projectId = :projectId
                AND s.deletedAt IS NULL
-             ORDER BY s.path ASC
+             ORDER BY s.keySeq ASC
             """)
     List<Suite> findLiveForProject(@Param("projectId") UUID projectId);
 
@@ -45,14 +46,12 @@ public interface SuiteRepository extends JpaRepository<Suite, UUID> {
      * {@code GROUP BY} cannot invent rows for groups that do not exist — so the caller defaults a
      * missing suite to 0. An empty folder is the normal state of a tree, not an edge case.
      *
-     * <h2>Direct cases only, deliberately</h2>
+     * <h2>Filed cases only, deliberately</h2>
      *
-     * <p>This counts the cases whose {@code suite_id} <em>is</em> the suite, not the cases in its
-     * subtree. That is what the contract's consumer expects: the SPA's tree adds each node's own
-     * count to its children's to get a rollup, so returning a subtree count here would count every
-     * case once per ancestor and a two-level tree would report roughly double. The fixture in the
-     * SPA says the same thing out loud — a parent folder with children carries {@code caseCount:
-     * 0}.
+     * <p>This counts the cases whose {@code suite_id} <em>is</em> the suite. It counted "not the
+     * subtree" for the SPA's rollup until §98; what it still is not is the resolved membership —
+     * {@link SuiteMembership#countsBySuite} is that, and it is what the wire's {@code caseCount}
+     * carries. This one feeds the internal reads that mean <em>filing</em> specifically.
      *
      * <h2>Why native, and why the two tenancy predicates cannot be tested — but stay</h2>
      *
@@ -127,55 +126,33 @@ public interface SuiteRepository extends JpaRepository<Suite, UUID> {
             @Param("projectId") UUID projectId, @Param("suiteId") UUID suiteId);
 
     /**
-     * How many live child suites this suite has — <strong>direct children only.</strong>
+     * How many live cases are <strong>filed</strong> in this suite — the delete's emptiness check.
      *
-     * <p>Direct rather than subtree-wide because that is all the emptiness check needs: a suite with
-     * a grandchild necessarily has a child, so refusing on direct children refuses every non-empty
-     * subtree, one level at a time, in the order a person would clear them. The message it produces
-     * is also the more useful one — "3 folders" names what is visible in the tree under this node,
-     * not a total the user cannot see the parts of.
+     * <p>Two queries collapsed into this one by §98. There was a {@code countLiveChildren} over
+     * {@code parent_id} (direct children only: a suite with a grandchild necessarily has a child,
+     * so refusing on direct children refused every non-empty subtree, one level at a time, in the
+     * order a person would clear them) and a {@code countLiveCasesInSubtree} spelled with
+     * {@code ltree}'s {@code <@} against the GiST index. Both are gone with the tree.
+     *
+     * <p><strong>The filing arm alone, and that is the narrower of two available readings.</strong>
+     * A case merely added to this suite, or matched by one of its tag rules, is not held here — it
+     * lives elsewhere and only appears in this collection, so deleting the collection takes a claim
+     * and never a case. {@link SuiteMembership} is the other reading and is deliberately not what
+     * this asks.
+     *
+     * <p>JPQL rather than native: {@code TestCase} is an entity in this module, so the Hibernate
+     * company filter applies and the tenancy predicate does not have to be spelled out. The
+     * {@code projectId} predicate that {@code countLiveCasesInSubtree} needed — paths were unique
+     * only within a project, so two projects of one company routinely both had a suite at
+     * {@code s1} — is not needed here either: {@code suite_id} is a foreign key, and a case cannot
+     * be filed in a suite belonging to another project.
      */
     @Query("""
-            SELECT COUNT(s) FROM Suite s
-             WHERE s.parentId = :suiteId
-               AND s.deletedAt IS NULL
+            SELECT COUNT(c) FROM TestCase c
+             WHERE c.suiteId = :suiteId
+               AND c.deletedAt IS NULL
             """)
-    long countLiveChildren(@Param("suiteId") UUID suiteId);
-
-    /**
-     * How many live cases sit <strong>in the whole subtree</strong> beneath and including this
-     * suite.
-     *
-     * <p>Subtree-wide here, unlike the child count above, and the asymmetry is deliberate rather
-     * than an oversight: the child check already guarantees a refused delete whenever descendants
-     * exist, so by the time this number is read the suite is a leaf and "subtree" and "own" are the
-     * same set. It is written as a subtree match anyway so the query stays correct if a later slice
-     * relaxes the child rule — a count that silently becomes wrong under a rule change is how a
-     * "delete is safe" guarantee turns into deleting somebody's cases.
-     *
-     * <p>Native and {@code <@}: the {@code ltree} containment operator has no JPQL spelling, and it
-     * is served by {@code suite_path_idx}, the GiST index V1 created for exactly this shape. Both
-     * tenancy predicates are spelled out because a Hibernate filter does not apply to a native
-     * query — the same note {@link #countLiveCasesBySuite} carries. Unlike that one, though,
-     * <strong>{@code project_id} here is observable</strong> and has a test: paths are unique only
-     * within a project, so two projects of one company routinely both have a suite at {@code s1},
-     * and dropping the predicate makes an empty folder undeletable because a different project's
-     * folder has cases in it.
-     */
-    @Query(nativeQuery = true, value = """
-            SELECT COUNT(*)
-              FROM test_case tc
-              JOIN suite s ON s.id = tc.suite_id
-             WHERE tc.company_id = :companyId
-               AND tc.project_id = :projectId
-               AND tc.deleted_at IS NULL
-               AND s.deleted_at IS NULL
-               AND s.path <@ CAST(:path AS ltree)
-            """)
-    long countLiveCasesInSubtree(
-            @Param("companyId") UUID companyId,
-            @Param("projectId") UUID projectId,
-            @Param("path") String path);
+    long countLiveCasesFiledIn(@Param("suiteId") UUID suiteId);
 
     /** A {@code (suiteId, caseCount)} row from {@link #countLiveCasesBySuite}. */
     interface SuiteCaseCount {

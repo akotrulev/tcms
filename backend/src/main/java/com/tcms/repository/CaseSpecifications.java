@@ -99,8 +99,9 @@ final class CaseSpecifications {
     }
 
     /**
-     * The suites this request may draw from — the {@code suiteId} filter's subtree when one is
-     * given, and the project's whole live tree otherwise.
+     * The cases this request may draw from — one suite's resolved membership when a
+     * {@code suiteId} is given (§98), and the project's whole live suite set plus the unfiled
+     * otherwise.
      *
      * <h2>Bounding every request by the live tree is a decision, not a side effect</h2>
      *
@@ -130,6 +131,14 @@ final class CaseSpecifications {
      * suites at all — the state of every freshly provisioned one — can now hold cases.
      */
     private static Predicate suiteScope(CaseScope scope, Root<TestCase> root, CriteriaBuilder cb) {
+        // §98: a named suite is already resolved to the cases it holds — filed ∪ added ∪ tagged —
+        // so the predicate is on the case's own id and the three arms are not re-derived here.
+        // It matched `suite_id IN (subtree)` until then, which is the FILED arm alone, so a suite
+        // defined by a tag rule listed nothing under a count of twelve.
+        if (scope.memberCaseIds() != null) {
+            return root.get("id").in(scope.memberCaseIds());
+        }
+
         Path<UUID> suiteId = root.get("suiteId");
         if (!scope.includeUnfiled()) {
             return suiteId.in(scope.liveSuiteIds());

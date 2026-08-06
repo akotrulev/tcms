@@ -62,7 +62,7 @@ import org.springframework.stereotype.Component;
  *       (plan §6p), and reading it here rather than calling {@code repository}'s own
  *       {@code GET /versions} is the point of the seam: this module reads rows it holds ids into,
  *       it does not call the other module.</li>
- *   <li><strong>Which cases sit under one suite</strong> — {@link #caseIdsInSuiteSubtree}. A suite's
+ *   <li><strong>Which cases sit under one suite</strong> — {@link #caseIdsInSuite}. A suite's
  *       execution history is a query over this module's tables, but <em>which executions belong to
  *       the suite</em> is a {@code repository} fact and only the {@code ltree} path answers it for a
  *       folder's descendants.</li>
@@ -145,22 +145,28 @@ class CaseFacts {
      * resolutions answer the same set over one fixture — the same device
      * {@code PlanStatisticsTest} uses for the three expansions below.
      *
-     * @param suiteAlias the alias of the <em>root</em> suite of the subtree — {@code s} for a plan
-     *                   scope item's suite, {@code root} for a suite's own history
+     * <p><strong>§98 removed the subtree and the correction to the plan that came with it.</strong>
+     * The predicate used to wrap all three arms in {@code EXISTS (SELECT 1 FROM suite d … d.path <@
+     * s.path …)}, because a suite arm meant a folder and everything under it. The plan for this
+     * slice expected the whole method to disappear — "with no subtree it becomes membership, which
+     * {@code SuiteMembership} already answers, so one of §96's two duplicated predicates
+     * disappears". <strong>It does not.</strong> The duplication was never caused by the subtree;
+     * it is caused by the module boundary in the paragraph above, which §98 does not touch. What
+     * flattening changes is that the two predicates are now supposed to be <em>identical</em>
+     * rather than merely equivalent — which makes {@code SuiteScopeAgreementTest} more useful,
+     * not less, and it stays.
+     *
+     * @param suiteAlias the alias of the suite — {@code s} for a plan scope item's suite,
+     *                   {@code root} for a suite's own history
      */
-    private static String inSubtreeOf(String suiteAlias) {
+    private static String memberOf(String suiteAlias) {
         return """
-                EXISTS (
-                    SELECT 1 FROM suite d
-                     WHERE d.project_id = %1$s.project_id
-                       AND d.deleted_at IS NULL
-                       AND d.path <@ %1$s.path
-                       AND ( c.suite_id = d.id
-                          OR EXISTS (SELECT 1 FROM suite_case m
-                                      WHERE m.suite_id = d.id AND m.case_id = c.id)
-                          OR EXISTS (SELECT 1 FROM suite_tag_rule r
-                                       JOIN case_tag t ON t.tag = r.tag AND t.case_id = c.id
-                                      WHERE r.suite_id = d.id) ))
+                ( c.suite_id = %1$s.id
+                  OR EXISTS (SELECT 1 FROM suite_case m
+                              WHERE m.suite_id = %1$s.id AND m.case_id = c.id)
+                  OR EXISTS (SELECT 1 FROM suite_tag_rule r
+                               JOIN case_tag t ON t.tag = r.tag AND t.case_id = c.id
+                              WHERE r.suite_id = %1$s.id) )
                 """.formatted(suiteAlias);
     }
 
@@ -176,7 +182,7 @@ class CaseFacts {
      * three times; the third arm is the point at which copying stops being survivable.
      *
      * <p><strong>The tag arm is an exact match on {@code case_tag}</strong> — the same comparison
-     * {@code suite_tag_rule} makes inside {@link #inSubtreeOf}, so "add by tag" on a plan section
+     * {@code suite_tag_rule} makes inside {@link #memberOf}, so "add by tag" on a plan section
      * and "add by tag" on a suite genuinely are one act. It is a plain {@code EXISTS} and never a
      * join to {@code case_tag} in the {@code FROM} list: a case carrying three of the plan's tags
      * would otherwise multiply into three rows, which {@code COUNT(DISTINCT …)} survives and
@@ -195,7 +201,7 @@ class CaseFacts {
                   OR (i.tag IS NOT NULL AND EXISTS (SELECT 1 FROM case_tag pt
                                                      WHERE pt.case_id = c.id
                                                        AND pt.tag = i.tag)) )
-                """.formatted(inSubtreeOf("s").strip());
+                """.formatted(memberOf("s").strip());
     }
 
     /**
@@ -718,12 +724,15 @@ class CaseFacts {
      * exists cannot be the subject of this page, and its cases are reachable through wherever they
      * live now.
      *
+     * <p><strong>The scope is the suite, not a subtree, since §98</strong> — the contract says so,
+     * and the argument the old shape rested on ("§6p's rollup rule is to sum leaf counts, so a
+     * parent's entry covers every case beneath it; the alternative makes every intermediate folder
+     * report an empty history") has no subject left: there are no intermediate folders.
+     *
      * <p><strong>Membership is the whole union since §96</strong> — filed, added individually, or
-     * matched by a descendant's tag rule ({@link #inSubtreeOf}). A folder whose members are entirely
+     * matched by its own tag rule ({@link #memberOf}). A suite whose members are entirely
      * tag-resolved used to report an empty history, which reads as "never executed" for a suite that
-     * runs nightly: the same defect this method's first paragraph exists to prevent, arriving
-     * through the arms rather than through the depth. {@code DISTINCT} because a case can qualify
-     * through two of them.
+     * runs nightly. {@code DISTINCT} because a case can qualify through two arms.
      *
      * <p><strong>Membership is read as it is now, not as it was.</strong> A case moved between suites
      * takes its whole execution history with it, because {@code test_execution} pins the case
@@ -735,7 +744,7 @@ class CaseFacts {
      * <p>Empty is an ordinary answer — an empty folder — and the caller has already established the
      * suite is reachable, so it cannot be confused with absence.
      */
-    List<UUID> caseIdsInSuiteSubtree(UUID projectId, UUID suiteId) {
+    List<UUID> caseIdsInSuite(UUID projectId, UUID suiteId) {
         @SuppressWarnings("unchecked")
         List<UUID> ids = entities.createNativeQuery("""
                         SELECT DISTINCT c.id
@@ -746,7 +755,7 @@ class CaseFacts {
                         WHERE root.project_id = :projectId
                           AND root.deleted_at IS NULL
                           AND root.id = :suiteId
-                        """.formatted(inSubtreeOf("root")))
+                        """.formatted(memberOf("root")))
                 .setParameter("projectId", projectId)
                 .setParameter("suiteId", suiteId)
                 .getResultList();

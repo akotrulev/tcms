@@ -452,10 +452,8 @@ class FailingRepeatedlyTest extends IntegrationTestBase {
     private void suite(Connection connection, UUID id, UUID companyId, UUID projectId)
             throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
-                INSERT INTO suite (id, company_id, project_id, parent_id, key, key_seq, path, name,
-                                   position, lifecycle_status, deleted_at)
-                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), NULL, 'TS-1', 1,
-                        CAST('root' AS ltree), 'Root', 0, 'APPROVED', NULL)
+                INSERT INTO suite (id, company_id, project_id, key, key_seq, name, position, lifecycle_status, deleted_at)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), 'TS-1', 1, 'Root', 0, 'APPROVED', NULL)
                     ON CONFLICT (id) DO NOTHING
                 """)) {
             statement.setString(1, id.toString());

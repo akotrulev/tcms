@@ -102,7 +102,7 @@ public class SuiteHistoryService {
 
     private SuiteHistoryView compute(UUID companyId, UUID projectId, UUID suiteId) {
         List<CaseFacts.VersionMark> marks = cases.suiteVersionMarkers(suiteId);
-        List<UUID> caseIds = cases.caseIdsInSuiteSubtree(projectId, suiteId);
+        List<UUID> caseIds = cases.caseIdsInSuite(projectId, suiteId);
 
         return new SuiteHistoryView(entries(projectId, caseIds, marks), markers(companyId, marks));
     }

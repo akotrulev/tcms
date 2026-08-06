@@ -119,16 +119,23 @@ class SuiteHistoryEndpointTest extends IntegrationTestBase {
     @Autowired
     private TransactionTemplate tx;
 
-    /** The folder under test — holds one case of its own and one child folder. */
+    /**
+     * The suite under test — one case FILED in it, and one more CLAIMED from another suite.
+     *
+     * <p>The claim was a child folder until §98. The numbers below are unchanged by that, and
+     * deliberately so: the point of this fixture is a suite whose history covers more than the
+     * cases filed in it, and after the flattening the second arm is {@code suite_case} instead of
+     * the subtree. What it proves is the same sentence with a different mechanism under it.
+     */
     private UUID payments;
 
-    /** Beneath {@link #payments}. Its case must count toward the parent and not the sibling. */
+    /** Holds the case {@link #payments} claims. Its own history must NOT gain Payments' case. */
     private UUID refunds;
 
-    /** A root folder beside {@link #payments}, in the same project. The leak this catches. */
+    /** A suite beside {@link #payments} that it does not claim from. The leak this catches. */
     private UUID login;
 
-    /** A folder with no cases at all — the 200-with-nothing branch, which must not be a 404. */
+    /** A suite with no cases at all — the 200-with-nothing branch, which must not be a 404. */
     private UUID empty;
 
     /** In the sibling project. Reachable to LEAD, and still a 404 through this project's path. */
@@ -181,18 +188,25 @@ class SuiteHistoryEndpointTest extends IntegrationTestBase {
         clearMutableRows();
         seedProjectDefaults();
 
-        // Through the real POST /suites, so the ltree paths this endpoint's subtree query depends on
-        // are built by the writer that builds them in production — and so each folder gets the v1
-        // suite_version row the marker rail reads.
-        payments = createSuite("Payments", null);
-        refunds = createSuite("Refunds", payments);
-        login = createSuite("Login", null);
-        empty = createSuite("Reporting", null);
-        mobileSuite = createSuite(ACME_MOBILE, "Mobile", null);
+        // Through the real POST /suites, so each suite gets the v1 suite_version row the marker
+        // rail reads from the writer that writes it in production.
+        payments = createSuite("Payments");
+        refunds = createSuite("Refunds");
+        login = createSuite("Login");
+        empty = createSuite("Reporting");
+        mobileSuite = createSuite(ACME_MOBILE, "Mobile");
 
         paymentsCase = createCase(ACME_BANKING, "Capture a payment", payments);
         refundsCase = createCase(ACME_BANKING, "Refund the whole captured amount", refunds);
         loginCase = createCase(ACME_BANKING, "Sign in with a password", login);
+
+        // The second membership arm, and it is what makes this fixture non-trivial (§98). Before
+        // the flattening `refunds` was a CHILD of `payments`, so the refunds case reached Payments'
+        // history through the subtree. Payments now CLAIMS it explicitly. Every count below is
+        // unchanged, which is the property worth having: an implementation that resolved only the
+        // filed arm would answer 1 where these assertions expect 2, exactly as an implementation
+        // that ignored the subtree used to.
+        claimCase(payments, refundsCase);
 
         defaultConfiguration = configurationOf(ACME_BANKING);
 
@@ -211,8 +225,8 @@ class SuiteHistoryEndpointTest extends IntegrationTestBase {
      *           R5  refunds only        PASSED, then withdrawn
      * </pre>
      *
-     * <p>So Payments' subtree sees five runs; Login sees the three that recorded it; and the counts
-     * differ from every own-cases-only or whole-project reading.
+     * <p>So Payments' membership sees five runs; Login sees the three that recorded it; and the
+     * counts differ from every filed-arm-only or whole-project reading.
      */
     private void buildTheHistory() throws Exception {
         // The suites were created moments ago and every run below is displaced into the past, so
@@ -257,25 +271,28 @@ class SuiteHistoryEndpointTest extends IntegrationTestBase {
     }
 
     // =====================================================================
-    // The subtree — the scope decision the contract states
+    // Membership — the scope decision the contract states
     // =====================================================================
 
     @Nested
-    @DisplayName("Scope — a folder's history is the folder AND everything beneath it")
-    class Subtree {
+    @DisplayName("Scope — a suite's history is its resolved membership, and nothing else")
+    class Membership {
 
         /**
-         * <strong>The assertion this endpoint was written for.</strong> Payments holds one case; its
-         * child holds another. Own-cases-only answers 1 per run and whole-project answers 3.
+         * <strong>The assertion this endpoint was written for.</strong> Payments holds one case of
+         * its own and claims another. Filed-arm-only answers 1 per run and whole-project answers 3.
+         *
+         * <p>It read "its child holds another" until §98 — same numbers, same failure modes, a
+         * different second arm.
          */
         @Test
-        @DisplayName("the parent counts its own cases and its child's, and no others")
-        void theParentCoversItsSubtree() throws Exception {
+        @DisplayName("a suite counts the cases it holds and the ones it claims, and no others")
+        void theSuiteCoversItsMembership() throws Exception {
             JsonNode entry = entryFor(payments, "Nightly 1");
 
             assertThat(entry.get("counts").get("total").asInt())
-                    .as("Payments' own case plus Refunds' — and NOT Login's, which is a root "
-                            + "folder beside it in the same project")
+                    .as("Payments' own case plus the one it claims from Refunds — and NOT "
+                            + "Login's, which is a suite beside it in the same project")
                     .isEqualTo(2);
             assertThat(entry.get("counts").get("passed").asInt()).isEqualTo(2);
             assertThat(entry.get("counts").get("failed").asInt())
@@ -284,8 +301,8 @@ class SuiteHistoryEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("the child covers only itself — the subtree does not run upwards")
-        void theChildCoversOnlyItself() throws Exception {
+        @DisplayName("the claimed-from suite covers only itself — a claim does not run backwards")
+        void theClaimedFromSuiteCoversOnlyItself() throws Exception {
             assertThat(entryFor(refunds, "Nightly 1").get("counts").get("total").asInt())
                     .isEqualTo(1);
         }
@@ -450,22 +467,22 @@ class SuiteHistoryEndpointTest extends IntegrationTestBase {
 
         /**
          * One row per run, never one per execution — and the two suites answer different sets,
-         * which is what shows the entry list is derived from the subtree rather than from the
-         * project's runs.
+         * which is what shows the entry list is derived from the suite's membership rather than
+         * from the project's runs.
          */
         @Test
         @DisplayName("one entry per run, and only the runs that covered the suite")
         void oneEntryPerRun() throws Exception {
             assertThat(runNames(payments))
-                    .as("the withdrawn run covered Refunds, which is BENEATH Payments, so it "
-                            + "counts here too")
+                    .as("the withdrawn run covered the refunds case, which Payments CLAIMS, so "
+                            + "it counts here too")
                     .containsExactlyInAnyOrder(
                             "Nightly 1", "Nightly 2", "Nightly 3", "Opened, not started",
                             "Withdrawn run");
 
             assertThat(runNames(login))
-                    .as("Login is a root folder beside Payments; the run that covered only "
-                            + "Refunds never touched it")
+                    .as("Login is a suite beside Payments that it claims nothing from; the run "
+                            + "that covered only the refunds case never touched it")
                     .containsExactlyInAnyOrder("Nightly 1", "Nightly 2", "Nightly 3",
                             "Opened, not started");
         }
@@ -611,18 +628,51 @@ class SuiteHistoryEndpointTest extends IntegrationTestBase {
     // helpers — the fixture
     // =====================================================================
 
-    private UUID createSuite(String name, UUID parentId) throws Exception {
-        return createSuite(ACME_BANKING, name, parentId);
+    private UUID createSuite(String name) throws Exception {
+        return createSuite(ACME_BANKING, name);
     }
 
-    private UUID createSuite(UUID projectId, String name, UUID parentId) throws Exception {
+    private UUID createSuite(UUID projectId, String name) throws Exception {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("name", name);
-        payload.put("parentId", parentId == null ? null : parentId.toString());
 
         return UUID.fromString(created(
                 "/api/v1/projects/" + projectId + "/suites", LEAD, ACME, payload)
                 .get("id").asText());
+    }
+
+    /**
+     * Adds one case to a suite through the endpoint's own {@code caseIds} arm.
+     *
+     * <p>A PATCH rather than an INSERT, so the membership this class asserts over is written by the
+     * writer production uses — the same argument the create above makes about {@code suite_version}.
+     */
+    private void claimCase(UUID suiteId, UUID caseId) throws Exception {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("name", nameOfSuite(suiteId));
+        payload.put("caseIds", List.of(caseId.toString()));
+
+        MvcResult result = mvc.perform(MockMvcRequestBuilders
+                        .patch("/api/v1/projects/" + ACME_BANKING + "/suites/" + suiteId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(LEAD, ACME))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(payload)))
+                .andReturn();
+
+        assertThat(result.getResponse().getStatus())
+                .as("the fixture depends on the real PATCH /suites/{id}; %s",
+                        result.getResponse().getContentAsString())
+                .isEqualTo(200);
+    }
+
+    private String nameOfSuite(UUID suiteId) throws Exception {
+        for (JsonNode suite : raw(LEAD, ACME, "/projects/" + ACME_BANKING + "/suites")) {
+            if (suite.get("id").asText().equals(suiteId.toString())) {
+                return suite.get("name").asText();
+            }
+        }
+        throw new IllegalStateException("no such suite: " + suiteId);
     }
 
     private UUID createCase(UUID projectId, String title, UUID suiteId) throws Exception {

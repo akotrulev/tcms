@@ -485,14 +485,13 @@ class CaseListEndpointTest extends IntegrationTestBase {
         @Test
         @DisplayName("unfiled is IGNORED beside a suiteId rather than answering nothing")
         void unfiledIsIgnoredBesideASuite() throws Exception {
-            // The pair is unsatisfiable — a case cannot be inside a subtree and outside every
-            // folder — and refusing it with a 400 would break the tree's own "clear the filter"
-            // affordance. It matters internally too: with the folder dropped AND unfiled cases
-            // excluded there would be no suite arm left, and an empty `IN ()` is a syntax error.
+            // The pair is unsatisfiable — a case cannot be filed somewhere and filed nowhere —
+            // and refusing it with a 400 would break the rail's own "clear the filter" affordance.
             assertThat(keysOf(itemsAs(LEAD, ACME, ACME_BANKING, "&suiteId=" + REFUNDS + "&unfiled=true")))
-                    .as("the folder's subtree, exactly as though `unfiled` had not been sent — "
-                            + "and TC-8, which IS unfiled, is not in it")
-                    .containsExactlyInAnyOrder("TC-1", "TC-2", "TC-3", "TC-4", "TC-10");
+                    .as("the suite's membership, exactly as though `unfiled` had not been sent — "
+                            + "and TC-8, which IS unfiled, is not in it. TC-4 left this list with "
+                            + "the subtree: it is filed in PARTIAL, which REFUNDS used to contain")
+                    .containsExactlyInAnyOrder("TC-1", "TC-2", "TC-3", "TC-10");
         }
 
         @Test
@@ -555,16 +554,33 @@ class CaseListEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("suiteId includes descendant suites, per the contract")
-        void suiteFilterIncludesDescendants() throws Exception {
-            // Payments holds no cases of its own; Refunds and Partial refunds beneath it do.
-            // Without the subtree walk, picking a parent folder shows nothing and the tree reads
-            // as broken.
-            assertThat(keysOf(itemsAs(LEAD, ACME, ACME_BANKING, "&suiteId=" + PAYMENTS)))
-                    .containsExactly("TC-1", "TC-2", "TC-3", "TC-4", "TC-10");
+        @DisplayName("suiteId selects the suite's RESOLVED MEMBERSHIP, not just what is filed in it")
+        void theSuiteFilterIsTheResolvedMembership() throws Exception {
+            /*
+              §98's fix, and the assertion the defect it fixed would fail.
+
+              This read "suiteId includes descendant suites, per the contract": PAYMENTS held no
+              cases of its own and the cases beneath it were reached by walking the subtree, so
+              without the walk a parent folder showed nothing.
+
+              There is no subtree now, and the filter resolves the same three arms `Suite.caseCount`
+              counts — so the number in the rail and the length of this list are two readings of one
+              query. **That is what was broken from §96 to §98**: the count was the union while this
+              filter matched `suite_id IN (…)`, the filed arm alone, so a suite defined by a tag
+              rule listed nothing under a count of twelve.
+
+              PARTIAL files TC-4. The tag arm is the half a filed-only implementation fails.
+            */
             assertThat(keysOf(itemsAs(LEAD, ACME, ACME_BANKING, "&suiteId=" + PARTIAL)))
-                    .as("a leaf is its own subtree")
+                    .as("what is filed here")
                     .containsExactly("TC-4");
+
+            // PAYMENTS files NOTHING and claims `smoke` — TC-1, TC-5 and TC-8, each filed in a
+            // different suite. A filter matching `suite_id IN (…)` answers EMPTY here, which is
+            // exactly what the grid did between §96 and §98 while the rail said three.
+            assertThat(keysOf(itemsAs(LEAD, ACME, ACME_BANKING, "&suiteId=" + PAYMENTS)))
+                    .as("a suite that only claims by tag still lists what it claims")
+                    .containsExactlyInAnyOrder("TC-1", "TC-5", "TC-8");
         }
 
         @Test
@@ -631,13 +647,11 @@ class CaseListEndpointTest extends IntegrationTestBase {
         @Test
         @DisplayName("different filters are an AND")
         void differentFiltersAnd() throws Exception {
-            // MANUAL alone gives TC-2, TC-4 and TC-5; the Refunds subtree alone gives TC-1,
-            // TC-2, TC-3, TC-4 and TC-10. Only the intersection may come back — and note that
-            // TC-4 is in Partial refunds, BENEATH Refunds, so the subtree rule is doing work here
-            // rather than being incidental.
+            // MANUAL alone gives TC-2, TC-4 and TC-5; REFUNDS' membership alone gives TC-2 and
+            // TC-3. Only the intersection may come back.
             assertThat(keysOf(itemsAs(LEAD, ACME, ACME_BANKING,
                     "&automationStatus=MANUAL&suiteId=" + REFUNDS)))
-                    .containsExactly("TC-2", "TC-4");
+                    .containsExactly("TC-2");
         }
 
         @Test
@@ -1281,6 +1295,10 @@ class CaseListEndpointTest extends IntegrationTestBase {
         try (Connection connection = appConnection(ACME)) {
             suite(connection, PAYMENTS, ACME, ACME_BANKING, null, "TS-1", 1,
                     "Payments", "Payments", false);
+            // §98: PAYMENTS was the ROOT this fixture's subtree test walked down from, and it files
+            // nothing. It now claims by TAG instead — which is what makes the suite filter's tag
+            // arm reachable at all, and that arm is the half the pre-§98 filter got wrong.
+            tagRule(connection, PAYMENTS, "smoke");
             suite(connection, REFUNDS, ACME, ACME_BANKING, PAYMENTS, "TS-2", 2,
                     "Refunds", "Payments.Refunds", false);
             suite(connection, PARTIAL, ACME, ACME_BANKING, REFUNDS, "TS-3", 3,
@@ -1476,21 +1494,17 @@ class CaseListEndpointTest extends IntegrationTestBase {
 
         try (var statement = connection.prepareStatement("""
                 INSERT INTO suite
-                    (id, company_id, project_id, parent_id, key, key_seq, path, name,
-                     position, lifecycle_status, deleted_at)
-                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?,
-                        CAST(? AS ltree), ?, 0, 'APPROVED', CAST(? AS timestamptz))
+                    (id, company_id, project_id, key, key_seq, name, position, lifecycle_status, deleted_at)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?, ?, 0, 'APPROVED', CAST(? AS timestamptz))
                 ON CONFLICT (id) DO NOTHING
                 """)) {
             statement.setString(1, id.toString());
             statement.setString(2, companyId.toString());
             statement.setString(3, projectId.toString());
-            statement.setString(4, parentId == null ? null : parentId.toString());
-            statement.setString(5, key);
-            statement.setLong(6, keySeq);
-            statement.setString(7, path);
-            statement.setString(8, name);
-            statement.setString(9, deleted ? "2026-01-01T00:00:00Z" : null);
+            statement.setString(4, key);
+            statement.setLong(5, keySeq);
+            statement.setString(6, name);
+            statement.setString(7, deleted ? "2026-01-01T00:00:00Z" : null);
             statement.executeUpdate();
         }
     }
@@ -1573,6 +1587,20 @@ class CaseListEndpointTest extends IntegrationTestBase {
             statement.setString(3, ACME.toString());
             statement.setString(4, dimensionKey);
             statement.setString(5, valueName);
+            statement.executeUpdate();
+        }
+    }
+
+    /** One tag rule on a suite — the membership arm the `suiteId` filter must resolve (§98). */
+    private void tagRule(Connection connection, UUID suiteId, String tag) throws SQLException {
+        try (var statement = connection.prepareStatement("""
+                INSERT INTO suite_tag_rule (company_id, suite_id, tag)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), ?)
+                ON CONFLICT DO NOTHING
+                """)) {
+            statement.setString(1, ACME.toString());
+            statement.setString(2, suiteId.toString());
+            statement.setString(3, tag);
             statement.executeUpdate();
         }
     }

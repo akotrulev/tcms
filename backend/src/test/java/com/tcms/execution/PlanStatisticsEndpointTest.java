@@ -144,7 +144,7 @@ class PlanStatisticsEndpointTest extends IntegrationTestBase {
     /** In REFUNDS, and authored AFTER every run. In scope, with no execution row at all. */
     private UUID caseD;
 
-    /** Scope: the PAYMENTS folder (covering REFUNDS) plus caseB directly. */
+    /** Scope: the PAYMENTS suite (claiming the `refunds`-tagged cases) plus caseB directly. */
     private UUID plan;
     /** In ACME_MOBILE — reachable to LEAD, and still a 404 from ACME_BANKING's path. */
     private UUID mobilePlan;
@@ -198,6 +198,11 @@ class PlanStatisticsEndpointTest extends IntegrationTestBase {
         caseB = createCase(LEAD, ACME, ACME_BANKING, "Partial refund rounds correctly", SPARE);
         caseC = createCase(LEAD, ACME, ACME_BANKING, "Refund a disputed charge", REFUNDS);
 
+        // What PAYMENTS' tag rule claims. caseB is in SPARE and untagged: it reaches the plan
+        // through the explicit caseIds arm, which is what keeps the two arms distinguishable.
+        tagCase(caseA, "refunds");
+        tagCase(caseC, "refunds");
+
         plan = createPlan(ACME_BANKING, "Release 4.3", List.of(PAYMENTS), List.of(caseB));
         mobilePlan = createPlan(ACME_MOBILE, "Mobile 1.0", List.of(MOBILE_SUITE), List.of());
         untouchedPlan = createPlan(ACME_BANKING, "Release 4.4", List.of(PAYMENTS), List.of());
@@ -208,9 +213,10 @@ class PlanStatisticsEndpointTest extends IntegrationTestBase {
         recordTheFixtureRuns();
 
         // AFTER every run — §6p's "cases added to the plan after the last run appear as not-run".
-        // It is in REFUNDS, which the plan covers through the PAYMENTS subtree, so it enters the
+        // It carries PAYMENTS' tag rule, which the plan covers, so it enters the
         // scope without anybody touching plan_scope_item.
         caseD = createCase(LEAD, ACME, ACME_BANKING, "Refund a partially shipped order", REFUNDS);
+        tagCase(caseD, "refunds");
     }
 
     /**
@@ -462,7 +468,8 @@ class PlanStatisticsEndpointTest extends IntegrationTestBase {
             bySuite.forEach(row -> rows.put(row.get("suiteName").asText(), row));
 
             assertThat(rows.keySet())
-                    .as("PAYMENTS holds no cases of its own; the breakdown is flat, not rolled up")
+                    .as("PAYMENTS files no cases of its own — it claims them by tag — and the "
+                            + "breakdown groups by where a case is FILED, so every row is REFUNDS")
                     .containsExactlyInAnyOrder("Refunds", "Spare");
 
             // Refunds: caseA (failed), caseC (owed), caseD (owed).
@@ -1019,7 +1026,14 @@ class PlanStatisticsEndpointTest extends IntegrationTestBase {
             seedProjectDefaults(connection, ACME, ACME_MOBILE);
 
             suite(connection, PAYMENTS, ACME, ACME_BANKING, null, "TS-1", 1, "Payments", "s1");
-            suite(connection, REFUNDS, ACME, ACME_BANKING, PAYMENTS, "TS-2", 2, "Refunds", "s1.s2");
+            suite(connection, REFUNDS, ACME, ACME_BANKING, null, "TS-2", 2, "Refunds", "s2");
+            // §98: REFUNDS was a CHILD of PAYMENTS, and the plan below is scoped on PAYMENTS — so
+            // every case in this fixture reached the plan through the subtree. Suites are flat, so
+            // PAYMENTS claims them by TAG instead: the arm is different, the property is the same
+            // one the fixture was built for (a suite arm reaching cases that are filed elsewhere),
+            // and a tag rule is LIVE, which also preserves the later-authored case entering scope
+            // with no edit to the plan.
+            tagRule(connection, PAYMENTS, "refunds");
             suite(connection, SPARE, ACME, ACME_BANKING, null, "TS-3", 3, "Spare", "s3");
             suite(connection, MOBILE_SUITE, ACME, ACME_MOBILE, null, "TS-4", 4, "Mobile", "s4");
         }
@@ -1039,26 +1053,51 @@ class PlanStatisticsEndpointTest extends IntegrationTestBase {
         }
     }
 
+    /** One tag rule on a suite — the membership arm that replaced this fixture's subtree (§98). */
+    private void tagRule(Connection connection, UUID suiteId, String tag) throws SQLException {
+        try (var statement = connection.prepareStatement("""
+                INSERT INTO suite_tag_rule (company_id, suite_id, tag)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), ?)
+                ON CONFLICT DO NOTHING
+                """)) {
+            statement.setString(1, ACME.toString());
+            statement.setString(2, suiteId.toString());
+            statement.setString(3, tag);
+            statement.executeUpdate();
+        }
+    }
+
+    /** One tag on a case, so a suite's rule can claim it. */
+    private void tagCase(UUID caseId, String tag) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+             var statement = connection.prepareStatement("""
+                INSERT INTO case_tag (company_id, case_id, tag)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), ?)
+                ON CONFLICT DO NOTHING
+                """)) {
+            statement.setString(1, ACME.toString());
+            statement.setString(2, caseId.toString());
+            statement.setString(3, tag);
+            statement.executeUpdate();
+        }
+    }
+
     private void suite(
             Connection connection, UUID id, UUID companyId, UUID projectId, UUID parentId,
             String key, long keySeq, String name, String path) throws SQLException {
 
         try (var statement = connection.prepareStatement("""
                 INSERT INTO suite
-                    (id, company_id, project_id, parent_id, key, key_seq, path, name,
-                     position, lifecycle_status)
-                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?,
-                        CAST(? AS ltree), ?, 0, 'APPROVED')
+                    (id, company_id, project_id, key, key_seq, name, position, lifecycle_status)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?, ?, 0, 'APPROVED')
                 ON CONFLICT (id) DO NOTHING
                 """)) {
             statement.setString(1, id.toString());
             statement.setString(2, companyId.toString());
             statement.setString(3, projectId.toString());
-            statement.setString(4, parentId == null ? null : parentId.toString());
-            statement.setString(5, key);
-            statement.setLong(6, keySeq);
-            statement.setString(7, path);
-            statement.setString(8, name);
+            statement.setString(4, key);
+            statement.setLong(5, keySeq);
+            statement.setString(6, name);
             statement.executeUpdate();
         }
     }

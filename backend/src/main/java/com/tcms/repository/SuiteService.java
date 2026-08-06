@@ -26,15 +26,14 @@ import org.springframework.transaction.annotation.Transactional;
  * method, and it is the case the method was extracted for. The failure it prevents is not the
  * dramatic one: an endpoint that checks only that the project exists in the caller's company
  * passes every cross-company test in the suite — the rows genuinely are in the caller's company —
- * and hands a member who was granted nothing the client's entire test tree. A suite tree names
- * what a client tests, folder by folder, which is a fair sketch of what they are building.
+ * and hands a member who was granted nothing the client's entire suite list. A suite list names
+ * what a client tests, collection by collection, which is a fair sketch of what they are building.
  *
- * <h2>Flat, because the client builds the tree</h2>
+ * <h2>Flat, and since §98 that is the data rather than a serialization choice</h2>
  *
- * <p>The contract is explicit: "a flat list with parentId (client builds the tree)". Nesting it
- * server-side would put a second tree-shaped contract beside the one the SPA already implements in
- * {@code SuiteTree.tsx}, and a nested response is also strictly worse to filter — the case list's
- * suite filter needs to find one node, not walk to it.
+ * <p>It was already flat on the wire — "a flat list with parentId (client builds the tree)" —
+ * because nesting server-side would have put a second tree-shaped contract beside the one the SPA
+ * implemented, and a nested response is strictly worse to filter. There is no tree to nest now.
  *
  * <h2>Three queries, never one per suite</h2>
  *
@@ -149,12 +148,10 @@ public class SuiteService {
                 .map(suite -> new SuiteView(
                         suite.getId(),
                         suite.getKey(),
-                        suite.getParentId(),
                         suite.getName(),
                         suite.getDescription(),
-                        suite.getPath(),
                         // A suite with no members has no GROUP BY row at all, so this default is
-                        // the normal path for an empty folder rather than a fallback for a broken
+                        // the normal path for an empty suite rather than a fallback for a broken
                         // query.
                         caseCounts.getOrDefault(suite.getId(), 0L),
                         // [] and never null, for `conditions`' reason below: both are required by

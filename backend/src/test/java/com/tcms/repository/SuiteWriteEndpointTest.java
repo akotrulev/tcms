@@ -51,14 +51,11 @@ import org.springframework.transaction.support.TransactionTemplate;
  *       fixed</em>. Collapsed, a Test Engineer can delete the tree. Nothing else in the suite would
  *       notice, because every other assertion about the delete would still pass — a lead can still
  *       do it.</li>
- *   <li><strong>A path derived from the name.</strong> It works until the first rename, at which
- *       point every descendant's path names a folder that no longer exists — and paths are what
- *       subtree matching reads, so the tree keeps rendering while "run this folder" quietly stops
- *       finding cases. Asserted by renaming and re-reading the descendants.</li>
- *   <li><strong>A silently ignored move.</strong> {@code SuiteInput} carries {@code parentId} on
- *       both verbs, so a {@code PATCH} that drops it answers 200 and the client shows the folder in
- *       its new place until the next reload.</li>
- *   <li><strong>A delete that cascades.</strong> Removing a folder holding cases soft-deletes other
+ *   <li>~~<strong>A path derived from the name</strong>, and <strong>a silently ignored
+ *       move</strong>.~~ → both went with the tree in §98. What replaced them is an assertion that
+ *       neither field is served, and that a stale client still sending {@code parentId} is ignored
+ *       rather than refused.</li>
+ *   <li><strong>A delete that cascades.</strong> Removing a suite holding filed cases soft-deletes other
  *       people's work through a permission whose sibling is {@code OWN}-qualified precisely to stop
  *       that, with no preview. Asserted as a 409 <em>and</em> as the cases still being there.</li>
  *   <li><strong>A key burned by a rejected payload.</strong> The counter only moves forward, so a
@@ -111,8 +108,8 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
      * <p>The one fixture that isolates the child check: every other non-empty folder here also has
      * cases in its subtree, so the case count refuses it too and a missing child check survives.
      */
+    /** Two empty suites, a parent and its child until §98 flattened them. Both simply delete. */
     private static final UUID NEST_PARENT = UUID.fromString("f1004000-0000-4000-8000-000000000007");
-    /** Empty child of {@link #NEST_PARENT} — no cases anywhere beneath it. */
     private static final UUID NEST_CHILD = UUID.fromString("f1004000-0000-4000-8000-000000000008");
     /** Root in the sibling project, granted to nobody. */
     /** One suite per {@link LifecycleStatus}, for the ladder tests. TS-94 … TS-97. */
@@ -237,7 +234,7 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         @Test
         @DisplayName("a Test Lead creates a suite and gets 201 with the whole suite")
         void leadCanCreate() throws Exception {
-            MvcResult result = post(LEAD, ACME, ACME_BANKING, suiteInput("Onboarding", null));
+            MvcResult result = post(LEAD, ACME, ACME_BANKING, suiteInput("Onboarding"));
 
             assertThat(result.getResponse().getStatus()).isEqualTo(201);
             assertThat(body(result).get("name").asText()).isEqualTo("Onboarding");
@@ -246,11 +243,11 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         @Test
         @DisplayName("a Test Engineer may create and rename — organising the tree is not restricted")
         void engineerCanManage() throws Exception {
-            MvcResult created = post(ENGINEER, ACME, ACME_BANKING, suiteInput("Engineer's", null));
+            MvcResult created = post(ENGINEER, ACME, ACME_BANKING, suiteInput("Engineer's"));
             assertThat(created.getResponse().getStatus()).isEqualTo(201);
 
             UUID id = UUID.fromString(body(created).get("id").asText());
-            assertThat(patch(ENGINEER, ACME, ACME_BANKING, id, suiteInput("Renamed", null), null)
+            assertThat(patch(ENGINEER, ACME, ACME_BANKING, id, suiteInput("Renamed"), null)
                     .getResponse().getStatus())
                     .isEqualTo(200);
         }
@@ -275,7 +272,7 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
             // Without this the test above passes just as well against a delete route that does not
             // exist, or a caller whose token is wrong.
             assertThat(patch(ENGINEER, ACME, ACME_BANKING, SPARE,
-                    suiteInput("Still writable", null), null).getResponse().getStatus())
+                    suiteInput("Still writable"), null).getResponse().getStatus())
                     .isEqualTo(200);
         }
 
@@ -296,9 +293,9 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
                     .as("the read gate every role passes — otherwise the 403s below prove nothing")
                     .isEqualTo(200);
 
-            assertThat(post(VIEWER, ACME, ACME_BANKING, suiteInput("Nope", null))
+            assertThat(post(VIEWER, ACME, ACME_BANKING, suiteInput("Nope"))
                     .getResponse().getStatus()).isEqualTo(403);
-            assertThat(patch(VIEWER, ACME, ACME_BANKING, SPARE, suiteInput("Nope", null), null)
+            assertThat(patch(VIEWER, ACME, ACME_BANKING, SPARE, suiteInput("Nope"), null)
                     .getResponse().getStatus()).isEqualTo(403);
             assertThat(delete(VIEWER, ACME, ACME_BANKING, SPARE)
                     .getResponse().getStatus()).isEqualTo(403);
@@ -307,7 +304,7 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         @Test
         @DisplayName("a 403 body names no permission key")
         void theRefusalDoesNotPublishTheCatalogue() throws Exception {
-            String refused = post(VIEWER, ACME, ACME_BANKING, suiteInput("Nope", null))
+            String refused = post(VIEWER, ACME, ACME_BANKING, suiteInput("Nope"))
                     .getResponse().getContentAsString();
 
             assertThat(refused)
@@ -323,9 +320,9 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         void membershipConveysNoWrite() throws Exception {
             // The rows are in this caller's own company, so no cross-company assertion reaches
             // them. A 403 here would confirm the project id names something real.
-            assertThat(post(NO_GRANT, ACME, ACME_BANKING, suiteInput("Nope", null))
+            assertThat(post(NO_GRANT, ACME, ACME_BANKING, suiteInput("Nope"))
                     .getResponse().getStatus()).isEqualTo(404);
-            assertThat(patch(NO_GRANT, ACME, ACME_BANKING, SPARE, suiteInput("Nope", null), null)
+            assertThat(patch(NO_GRANT, ACME, ACME_BANKING, SPARE, suiteInput("Nope"), null)
                     .getResponse().getStatus()).isEqualTo(404);
             assertThat(delete(NO_GRANT, ACME, ACME_BANKING, SPARE)
                     .getResponse().getStatus()).isEqualTo(404);
@@ -337,7 +334,7 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
             UUID absent = UUID.randomUUID();
 
             for (UUID projectId : List.of(ACME_LOCKED, UMBRA_BANKING, absent)) {
-                MvcResult result = post(LEAD, ACME, projectId, suiteInput("Nope", null));
+                MvcResult result = post(LEAD, ACME, projectId, suiteInput("Nope"));
                 assertThat(result.getResponse().getStatus())
                         .as("project %s", projectId)
                         .isEqualTo(404);
@@ -353,7 +350,7 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
             // LOCKED_SUITE is in ACME_LOCKED. The caller passes the gate on ACME_BANKING, so only
             // the suite query's own project predicate separates them — drop it and a lead granted
             // one project renames folders in another.
-            assertThat(patch(LEAD, ACME, ACME_BANKING, LOCKED_SUITE, suiteInput("Stolen", null),
+            assertThat(patch(LEAD, ACME, ACME_BANKING, LOCKED_SUITE, suiteInput("Stolen"),
                     null).getResponse().getStatus())
                     .isEqualTo(404);
             assertThat(nameOf(ACME, LOCKED_SUITE)).isEqualTo("Internal");
@@ -362,7 +359,7 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         @Test
         @DisplayName("the other client's suite is 404 even with an identical display key")
         void writesDoNotCrossCompanies() throws Exception {
-            assertThat(patch(LEAD, ACME, ACME_BANKING, UMBRA_SUITE, suiteInput("Stolen", null),
+            assertThat(patch(LEAD, ACME, ACME_BANKING, UMBRA_SUITE, suiteInput("Stolen"),
                     null).getResponse().getStatus())
                     .isEqualTo(404);
             assertThat(delete(LEAD, ACME, ACME_BANKING, UMBRA_SUITE)
@@ -377,7 +374,7 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
             assertThat(mvc.perform(MockMvcRequestBuilders
                             .post("/api/v1/projects/" + ACME_BANKING + "/suites")
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content(suiteInput("Nope", null)))
+                            .content(suiteInput("Nope")))
                     .andReturn().getResponse().getStatus())
                     .isEqualTo(401);
             assertThat(mvc.perform(MockMvcRequestBuilders
@@ -402,9 +399,9 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
             // MAX(key_seq)+1 would also answer TS-4 here — that is exactly why this is not the
             // assertion that catches the racing implementation, and DisplayKeyAllocationTest owns
             // that. What this pins is that the key is allocated at all and is not, say, the name.
-            assertThat(keyOf(post(LEAD, ACME, ACME_BANKING, suiteInput("Fourth", null))))
+            assertThat(keyOf(post(LEAD, ACME, ACME_BANKING, suiteInput("Fourth"))))
                     .isEqualTo("TS-4");
-            assertThat(keyOf(post(LEAD, ACME, ACME_BANKING, suiteInput("Fifth", null))))
+            assertThat(keyOf(post(LEAD, ACME, ACME_BANKING, suiteInput("Fifth"))))
                     .isEqualTo("TS-5");
         }
 
@@ -413,9 +410,9 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         void keysAreCompanyScoped() throws Exception {
             // Plan §6t. Per-project numbering was the superseded decision, and it fails here: both
             // creates would answer TS-4.
-            assertThat(keyOf(post(LEAD, ACME, ACME_BANKING, suiteInput("In banking", null))))
+            assertThat(keyOf(post(LEAD, ACME, ACME_BANKING, suiteInput("In banking"))))
                     .isEqualTo("TS-4");
-            assertThat(keyOf(post(LEAD, ACME, ACME_MOBILE, suiteInput("In mobile", null))))
+            assertThat(keyOf(post(LEAD, ACME, ACME_MOBILE, suiteInput("In mobile"))))
                     .isEqualTo("TS-5");
         }
 
@@ -423,61 +420,50 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         @DisplayName("each company numbers from its own counter, so TS-1 exists twice")
         void countersDoNotCrossCompanies() throws Exception {
             // Umbra's tree is one suite, seeded at TS-1, so its next is TS-2 while Acme is at TS-4.
-            assertThat(keyOf(post(OUTSIDER, UMBRA, UMBRA_BANKING, suiteInput("Theirs", null))))
+            assertThat(keyOf(post(OUTSIDER, UMBRA, UMBRA_BANKING, suiteInput("Theirs"))))
                     .isEqualTo("TS-2");
         }
 
         @Test
         @DisplayName("a rejected payload burns no key")
         void aRefusedCreateDoesNotConsumeANumber() throws Exception {
-            assertThat(post(LEAD, ACME, ACME_BANKING, suiteInput("   ", null))
+            assertThat(post(LEAD, ACME, ACME_BANKING, suiteInput("   "))
                     .getResponse().getStatus()).isEqualTo(400);
 
             // The counter only moves forward, so a burned number is a permanent hole in the
             // company's key sequence for every failed attempt.
-            assertThat(keyOf(post(LEAD, ACME, ACME_BANKING, suiteInput("Now valid", null))))
+            assertThat(keyOf(post(LEAD, ACME, ACME_BANKING, suiteInput("Now valid"))))
                     .isEqualTo("TS-4");
         }
 
         @Test
-        @DisplayName("the path is derived from the key sequence, not from the name")
-        void thePathIsNotASlugOfTheName() throws Exception {
-            MvcResult created = post(LEAD, ACME, ACME_BANKING, suiteInput("UI / E2E", null));
+        @DisplayName("a created suite carries no parent and no path")
+        void theTreeFieldsAreGone() throws Exception {
+            /*
+              What §98 removed, and the three tests that stood here are worth naming because each
+              pinned a decision rather than a field:
 
-            assertThat(body(created).get("path").asText())
-                    .as("a name-derived label is not unique, can be empty, and makes every "
-                            + "rename a subtree rewrite")
-                    .isEqualTo("s4")
-                    .doesNotContain("ui")
-                    .doesNotContain("e2e");
-        }
+                - the path was derived from the KEY SEQUENCE and never from the name, because a
+                  name-derived label is not unique ("UI / E2E" and "ui e2e" slug alike), can be
+                  empty, and makes every rename a subtree rewrite;
+                - a child's path was its parent's plus its own label;
+                - a root's `parentId` was null EXPLICITLY rather than by omission, because the SPA
+                  bucketed on `parentId ?? null`.
 
-        @Test
-        @DisplayName("a child's path is the parent's path plus its own label")
-        void aChildHangsOffItsParentsPath() throws Exception {
-            MvcResult created = post(LEAD, ACME, ACME_BANKING, suiteInput("Under refunds", REFUNDS));
+              A create is the place to assert the absence: it is the one path that used to DERIVE
+              both values, so a leftover derivation would show up here first.
+            */
+            JsonNode created = body(post(LEAD, ACME, ACME_BANKING, suiteInput("UI / E2E")));
 
-            assertThat(body(created).get("path").asText())
-                    .isEqualTo(pathOf(ACME, REFUNDS) + ".s4");
-            assertThat(body(created).get("parentId").asText()).isEqualTo(REFUNDS.toString());
-        }
-
-        @Test
-        @DisplayName("a root suite says parentId is null, explicitly rather than by omission")
-        void aRootHasAnExplicitNullParent() throws Exception {
-            JsonNode created = body(post(LEAD, ACME, ACME_BANKING, suiteInput("A root", null)));
-
-            assertThat(created.has("parentId")).isTrue();
-            assertThat(created.get("parentId").isNull())
-                    .as("the SPA buckets on `parentId ?? null` — an absent key would work, and "
-                            + "the contract marks the field present-and-nullable")
-                    .isTrue();
+            assertThat(created.has("path")).isFalse();
+            assertThat(created.has("parentId")).isFalse();
+            assertThat(created.get("key").asText()).isEqualTo("TS-4");
         }
 
         @Test
         @DisplayName("a new suite is DRAFT — a create cannot grant its own approval")
         void aCreatedSuiteIsDraft() throws Exception {
-            assertThat(body(post(LEAD, ACME, ACME_BANKING, suiteInput("Fresh", null)))
+            assertThat(body(post(LEAD, ACME, ACME_BANKING, suiteInput("Fresh")))
                     .get("lifecycleStatus").asText())
                     .isEqualTo("DRAFT");
         }
@@ -488,7 +474,7 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
             // §29's precedent, one entity over: SuiteVersions.writeInitial numbers this 1
             // explicitly. A decide()-style currentVersionNo + 1 would answer 2 on a fresh row,
             // whose column defaults to 1, and every suite in the product would be missing its v1.
-            UUID id = UUID.fromString(body(post(LEAD, ACME, ACME_BANKING, suiteInput("V1", null)))
+            UUID id = UUID.fromString(body(post(LEAD, ACME, ACME_BANKING, suiteInput("V1")))
                     .get("id").asText());
 
             assertThat(versionNumbersOf(ACME, id)).containsExactly(1);
@@ -501,10 +487,10 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
             // explicitly not content, "otherwise every case edit bumps every ancestor suite". A
             // name is content. Bumping here is the start of that spiral, and it looks like
             // diligence.
-            UUID id = UUID.fromString(body(post(LEAD, ACME, ACME_BANKING, suiteInput("Before", null)))
+            UUID id = UUID.fromString(body(post(LEAD, ACME, ACME_BANKING, suiteInput("Before")))
                     .get("id").asText());
 
-            patch(LEAD, ACME, ACME_BANKING, id, suiteInput("After", null), null);
+            patch(LEAD, ACME, ACME_BANKING, id, suiteInput("After"), null);
 
             assertThat(versionNumbersOf(ACME, id)).containsExactly(1);
         }
@@ -512,7 +498,7 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         @Test
         @DisplayName("a create writes an audit row naming the key and the name")
         void theCreateIsAudited() throws Exception {
-            post(LEAD, ACME, ACME_BANKING, suiteInput("Audited", null));
+            post(LEAD, ACME, ACME_BANKING, suiteInput("Audited"));
 
             Map<String, String> events = auditEvents(ACME);
             assertThat(events).containsKey("suite.created");
@@ -539,7 +525,7 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         @Test
         @DisplayName("Location names the created suite")
         void locationIsSet() throws Exception {
-            MvcResult created = post(LEAD, ACME, ACME_BANKING, suiteInput("Located", null));
+            MvcResult created = post(LEAD, ACME, ACME_BANKING, suiteInput("Located"));
             String id = body(created).get("id").asText();
 
             assertThat(created.getResponse().getHeader(HttpHeaders.LOCATION))
@@ -549,7 +535,7 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         @Test
         @DisplayName("the created suite appears in the tree the next read serves")
         void theCreateIsVisibleToTheRead() throws Exception {
-            UUID id = UUID.fromString(body(post(LEAD, ACME, ACME_BANKING, suiteInput("Listed", null)))
+            UUID id = UUID.fromString(body(post(LEAD, ACME, ACME_BANKING, suiteInput("Listed")))
                     .get("id").asText());
 
             assertThat(liveSuiteIds(ACME, ACME_BANKING)).contains(id);
@@ -560,9 +546,9 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         void theCreateResponseIsTheReadShape() throws Exception {
             // Served through SuiteService's own renderer rather than assembled by the write path,
             // so a field cannot show one value on create and another on the reload after it.
-            JsonNode created = body(post(LEAD, ACME, ACME_BANKING, suiteInput("Shaped", null)));
+            JsonNode created = body(post(LEAD, ACME, ACME_BANKING, suiteInput("Shaped")));
 
-            assertThat(List.of("id", "key", "name", "path", "caseCount", "lifecycleStatus",
+            assertThat(List.of("id", "key", "name", "caseCount", "lifecycleStatus",
                     "conditions", "lockVersion"))
                     .allSatisfy(field -> assertThat(created.has(field))
                             .as("Suite.%s is required by openapi.yaml", field)
@@ -612,7 +598,7 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
 
             // The rename dialog's payload: a name and nothing else. Reading that as "clear them"
             // would empty a collection somebody assembled, through a save that never mentioned it.
-            patch(LEAD, ACME, ACME_BANKING, id, suiteInput("Renamed", null), null);
+            patch(LEAD, ACME, ACME_BANKING, id, suiteInput("Renamed"), null);
             assertThat(storedTagRules(ACME, id))
                     .as("a rename must not empty a collection it never mentioned")
                     .containsExactly("smoke");
@@ -661,7 +647,7 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         @Test
         @DisplayName("a blank name is a 400 keyed on `name`")
         void aBlankNameIsRefused() throws Exception {
-            MvcResult refused = post(LEAD, ACME, ACME_BANKING, suiteInput("   ", null));
+            MvcResult refused = post(LEAD, ACME, ACME_BANKING, suiteInput("   "));
 
             assertThat(refused.getResponse().getStatus()).isEqualTo(400);
             assertThat(body(refused).get("errors").has("name"))
@@ -684,34 +670,13 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         void anOverLongNameIsRefused() throws Exception {
             String tooLong = "x".repeat(SuiteEdit.MAX_NAME + 1);
 
-            assertThat(post(LEAD, ACME, ACME_BANKING, suiteInput(tooLong, null))
+            assertThat(post(LEAD, ACME, ACME_BANKING, suiteInput(tooLong))
                     .getResponse().getStatus()).isEqualTo(400);
-            assertThat(post(LEAD, ACME, ACME_BANKING, suiteInput("x".repeat(SuiteEdit.MAX_NAME),
-                    null)).getResponse().getStatus())
+            assertThat(post(LEAD, ACME, ACME_BANKING,
+                    suiteInput("x".repeat(SuiteEdit.MAX_NAME))).getResponse().getStatus())
                     .as("the boundary itself is accepted — otherwise the cap is off by one and "
                             + "nothing says so")
                     .isEqualTo(201);
-        }
-
-        @Test
-        @DisplayName("a parent from another project is refused as a field error, not a 404")
-        void aForeignParentIsRefused() throws Exception {
-            // Unchecked, the folder is created under another project's suite and, since every read
-            // is scoped by project_id, appears in no tree at all — created successfully and
-            // immediately invisible.
-            MvcResult refused =
-                    post(LEAD, ACME, ACME_BANKING, suiteInput("Orphan", LOCKED_SUITE));
-
-            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
-            assertThat(body(refused).get("errors").has("parentId")).isTrue();
-        }
-
-        @Test
-        @DisplayName("a parent that does not exist at all is refused the same way")
-        void anUnknownParentIsRefused() throws Exception {
-            assertThat(post(LEAD, ACME, ACME_BANKING, suiteInput("Orphan", UUID.randomUUID()))
-                    .getResponse().getStatus())
-                    .isEqualTo(400);
         }
 
         @Test
@@ -747,57 +712,31 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("a rename does NOT change the path, of the suite or of its descendants")
-        void renamingLeavesEveryPathAlone() throws Exception {
-            // The whole argument for a key-derived label. With a name-derived one this rename
-            // rewrites PAYMENTS' path and orphans REFUNDS' — and the tree keeps rendering, because
-            // it is built from parentId, while subtree matching silently stops finding cases.
-            String parentPathBefore = pathOf(ACME, PAYMENTS);
-            String childPathBefore = pathOf(ACME, REFUNDS);
+        @DisplayName("an unknown field in the body is ignored, not a 400")
+        void anUnknownFieldIsIgnored() throws Exception {
+            /*
+              This replaces §98's four deleted rename tests, and it is the one that still has a
+              defect to catch. They were: a rename leaves every path alone (the whole argument for
+              a key-derived label — a name-derived one rewrote PAYMENTS' path and orphaned REFUNDS',
+              while the tree kept rendering because it was built from parentId and only subtree
+              matching silently stopped finding cases); a payload asking to MOVE was a 400 rather
+              than a silently ignored field; repeating the current parent was accepted because it
+              is not a move; and omitting it on a root was accepted.
 
-            assertThat(patch(LEAD, ACME, ACME_BANKING, PAYMENTS,
-                    suiteInput("Completely different", null), null)
+              `parentId` is off `SuiteInput` now, so an SPA that has not been rebuilt — or an
+              importer written against the old contract — still sends it. It must be IGNORED, not
+              refused: Jackson is configured to ignore unknown properties, and a 400 here would
+              break every stale client on a field the server no longer has an opinion about.
+            */
+            String withStaleField =
+                    "{\"name\":\"Renamed anyway\",\"parentId\":\"" + PAYMENTS + "\"}";
+
+            assertThat(patch(LEAD, ACME, ACME_BANKING, SPARE, withStaleField, null)
                     .getResponse().getStatus())
+                    .as("an unknown property is ignored — a stale client must not be refused on a "
+                            + "field that no longer exists")
                     .isEqualTo(200);
-
-            assertThat(pathOf(ACME, PAYMENTS)).isEqualTo(parentPathBefore);
-            assertThat(pathOf(ACME, REFUNDS)).isEqualTo(childPathBefore);
-        }
-
-        @Test
-        @DisplayName("a payload asking to move the suite is a 400, not a silently ignored field")
-        void aMoveIsRefusedAndSaidSo() throws Exception {
-            // SuiteInput carries parentId on both verbs, so the tempting implementation drops it on
-            // PATCH and answers 200 — after which the client shows the folder in its new place
-            // until the next reload, with the server having reported success.
-            MvcResult refused =
-                    patch(LEAD, ACME, ACME_BANKING, SPARE, suiteInput("Moved", PAYMENTS), null);
-
-            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
-            assertThat(body(refused).get("errors").has("parentId")).isTrue();
-            assertThat(parentOf(ACME, SPARE)).isNull();
-            assertThat(nameOf(ACME, SPARE))
-                    .as("the refused request changed nothing at all, name included")
-                    .isEqualTo("Spare");
-        }
-
-        @Test
-        @DisplayName("repeating the current parent is accepted — it is not a move")
-        void resendingTheSameParentIsFine() throws Exception {
-            // The SPA's dialog may round-trip the whole suite. Refusing an unchanged parent would
-            // make an ordinary rename fail for a client that sent one more field than it had to.
-            assertThat(patch(LEAD, ACME, ACME_BANKING, REFUNDS, suiteInput("Still a child", PAYMENTS),
-                    null).getResponse().getStatus())
-                    .isEqualTo(200);
-        }
-
-        @Test
-        @DisplayName("omitting parentId on a root is accepted")
-        void omittingTheParentIsUnchanged() throws Exception {
-            assertThat(patch(LEAD, ACME, ACME_BANKING, PAYMENTS, suiteInput("Root renamed", null),
-                    null).getResponse().getStatus())
-                    .isEqualTo(200);
-            assertThat(parentOf(ACME, PAYMENTS)).isNull();
+            assertThat(nameOf(ACME, SPARE)).isEqualTo("Renamed anyway");
         }
 
         @Test
@@ -806,7 +745,7 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
             long current = lockVersionOf(ACME, SPARE);
 
             MvcResult refused = patch(LEAD, ACME, ACME_BANKING, SPARE,
-                    suiteInput("Overwritten", null), String.valueOf(current + 7));
+                    suiteInput("Overwritten"), String.valueOf(current + 7));
 
             assertThat(refused.getResponse().getStatus()).isEqualTo(409);
             assertThat(nameOf(ACME, SPARE)).isEqualTo("Spare");
@@ -817,14 +756,14 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         void aCurrentPreconditionIsAccepted() throws Exception {
             long current = lockVersionOf(ACME, SPARE);
 
-            assertThat(patch(LEAD, ACME, ACME_BANKING, SPARE, suiteInput("Bare", null),
+            assertThat(patch(LEAD, ACME, ACME_BANKING, SPARE, suiteInput("Bare"),
                     String.valueOf(current)).getResponse().getStatus())
                     .isEqualTo(200);
 
             long next = lockVersionOf(ACME, SPARE);
             assertThat(next).as("the version moved, so the second call is a real second read")
                     .isNotEqualTo(current);
-            assertThat(patch(LEAD, ACME, ACME_BANKING, SPARE, suiteInput("Quoted", null),
+            assertThat(patch(LEAD, ACME, ACME_BANKING, SPARE, suiteInput("Quoted"),
                     "\"" + next + "\"").getResponse().getStatus())
                     .as("HTTP defines If-Match as carrying entity tags, which are quoted — a "
                             + "client library that formats it correctly is not wrong")
@@ -836,7 +775,7 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         void aMalformedPreconditionIsNotAConflict() throws Exception {
             // 409 would send a client with a malformed header into a reload-and-retry loop that
             // cannot succeed.
-            MvcResult refused = patch(LEAD, ACME, ACME_BANKING, SPARE, suiteInput("Nope", null),
+            MvcResult refused = patch(LEAD, ACME, ACME_BANKING, SPARE, suiteInput("Nope"),
                     "not-a-version");
 
             assertThat(refused.getResponse().getStatus()).isEqualTo(400);
@@ -846,7 +785,7 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         @Test
         @DisplayName("no If-Match at all is last-write-wins")
         void anAbsentPreconditionIsAllowed() throws Exception {
-            assertThat(patch(LEAD, ACME, ACME_BANKING, SPARE, suiteInput("Importer", null), null)
+            assertThat(patch(LEAD, ACME, ACME_BANKING, SPARE, suiteInput("Importer"), null)
                     .getResponse().getStatus())
                     .as("right for an importer with no prior read; the SPA always sends one")
                     .isEqualTo(200);
@@ -855,7 +794,7 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         @Test
         @DisplayName("a rename writes an audit row")
         void theRenameIsAudited() throws Exception {
-            patch(LEAD, ACME, ACME_BANKING, SPARE, suiteInput("Audited rename", null), null);
+            patch(LEAD, ACME, ACME_BANKING, SPARE, suiteInput("Audited rename"), null);
 
             assertThat(auditEvents(ACME).get("suite.renamed")).contains("Audited rename");
         }
@@ -864,7 +803,7 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         @DisplayName("a suite that does not exist is a 404")
         void anUnknownSuiteIsNotFound() throws Exception {
             assertThat(patch(LEAD, ACME, ACME_BANKING, UUID.randomUUID(),
-                    suiteInput("Ghost", null), null).getResponse().getStatus())
+                    suiteInput("Ghost"), null).getResponse().getStatus())
                     .isEqualTo(404);
         }
     }
@@ -915,42 +854,38 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("a suite holding child suites is refused with the count")
-        void aSuiteWithChildrenIsRefused() throws Exception {
-            MvcResult refused = delete(LEAD, ACME, ACME_BANKING, PAYMENTS);
+        @DisplayName("a suite that only CLAIMS cases deletes — the claim goes, the cases stay")
+        void aSuiteThatOnlyClaimsCasesIsDeletable() throws Exception {
+            /*
+              §98 replaced two tests here, and this is the decision that replaced them.
 
-            assertThat(refused.getResponse().getStatus()).isEqualTo(409);
-            assertThat(body(refused).get("detail").asText()).contains("1 suite");
-            assertThat(liveSuiteIds(ACME, ACME_BANKING)).contains(PAYMENTS);
-        }
+              They were "a suite holding child suites is refused with the count" and "a suite whose
+              only occupant is an EMPTY child is still refused" — the latter existing because every
+              other non-empty folder in this fixture also held cases somewhere beneath, so the
+              subtree case count refused those too and a deleted child check SURVIVED the mutation.
+              Both are gone with the tree.
 
-        @Test
-        @DisplayName("a suite whose only occupant is an EMPTY child is still refused")
-        void anEmptyChildStillBlocksTheDelete() throws Exception {
-            // The child check's own test, and the reason it has one: every other non-empty folder
-            // in this fixture also holds cases somewhere beneath, so the subtree case count refuses
-            // those too and a deleted child check SURVIVES the mutation. Here the case count is
-            // zero and only the child count stands in the way — remove it and this folder is
-            // deleted while the tree still renders a child hanging off it.
-            MvcResult refused = delete(LEAD, ACME, ACME_BANKING, NEST_PARENT);
+              What is left is the narrowing that came with it: only the FILED arm blocks. PAYMENTS
+              files nothing; it is given a tag rule here that claims a case filed in REFUNDS, so it
+              resolves to one member and still deletes — and that case must still be there
+              afterwards. Deleting a collection takes a claim, never a case. If this 409s, the gate
+              has widened from the filed arm to the resolved membership, which would make a
+              tag-defined suite undeletable because somebody else tagged a case.
+            */
+            tagCase(ACME, seededCase(0), "claimed");
+            assertThat(patch(LEAD, ACME, ACME_BANKING, PAYMENTS,
+                    "{\"name\":\"Payments\",\"tagRules\":[\"claimed\"]}", null)
+                    .getResponse().getStatus())
+                    .isEqualTo(200);
 
-            assertThat(refused.getResponse().getStatus()).isEqualTo(409);
-            assertThat(body(refused).get("detail").asText())
-                    .contains("1 suite")
-                    .doesNotContain("case");
-            assertThat(liveSuiteIds(ACME, ACME_BANKING)).contains(NEST_PARENT, NEST_CHILD);
-        }
-
-        @Test
-        @DisplayName("the empty child itself deletes, and then its parent does too")
-        void clearingTheChildUnblocksTheParent() throws Exception {
-            // Without this the assertion above passes against a delete that refuses every folder
-            // with a parent — a working endpoint and a useless one.
-            assertThat(delete(LEAD, ACME, ACME_BANKING, NEST_CHILD).getResponse().getStatus())
+            assertThat(delete(LEAD, ACME, ACME_BANKING, PAYMENTS).getResponse().getStatus())
                     .isEqualTo(204);
-            assertThat(delete(LEAD, ACME, ACME_BANKING, NEST_PARENT).getResponse().getStatus())
-                    .isEqualTo(204);
+            assertThat(liveSuiteIds(ACME, ACME_BANKING)).doesNotContain(PAYMENTS);
+            assertThat(liveCaseCount(ACME, ACME_BANKING, REFUNDS))
+                    .as("the claimed case survives the collection that claimed it")
+                    .isEqualTo(2);
         }
+
 
         @Test
         @DisplayName("emptying a suite makes it deletable — the refusal is about state, not identity")
@@ -993,7 +928,7 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         void aDeletedSuiteIsGoneFromEveryWrite() throws Exception {
             delete(LEAD, ACME, ACME_BANKING, SPARE);
 
-            assertThat(patch(LEAD, ACME, ACME_BANKING, SPARE, suiteInput("Zombie", null), null)
+            assertThat(patch(LEAD, ACME, ACME_BANKING, SPARE, suiteInput("Zombie"), null)
                     .getResponse().getStatus())
                     .isEqualTo(404);
         }
@@ -1279,9 +1214,8 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         return body(result).get("key").asText();
     }
 
-    private static String suiteInput(String name, UUID parentId) {
-        String parent = parentId == null ? "" : ",\"parentId\":\"" + parentId + "\"";
-        return "{\"name\":\"" + name + "\"" + parent + "}";
+    private static String suiteInput(String name) {
+        return "{\"name\":\"" + name + "\"}";
     }
 
     // =====================================================================
@@ -1310,14 +1244,6 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
 
     private String nameOf(UUID companyId, UUID suiteId) throws SQLException {
         return suiteColumn(companyId, suiteId, "name");
-    }
-
-    private String pathOf(UUID companyId, UUID suiteId) throws SQLException {
-        return suiteColumn(companyId, suiteId, "CAST(path AS text)");
-    }
-
-    private String parentOf(UUID companyId, UUID suiteId) throws SQLException {
-        return suiteColumn(companyId, suiteId, "CAST(parent_id AS text)");
     }
 
     private String deletedAtOf(UUID companyId, UUID suiteId) throws SQLException {
@@ -1518,12 +1444,12 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
 
             suite(connection, PAYMENTS, ACME, ACME_BANKING, null, "TS-1", 1, "Payments", "s1",
                     "DRAFT");
-            suite(connection, REFUNDS, ACME, ACME_BANKING, PAYMENTS, "TS-2", 2, "Refunds", "s1.s2",
+            suite(connection, REFUNDS, ACME, ACME_BANKING, null, "TS-2", 2, "Refunds", "s1.s2",
                     "DRAFT");
             suite(connection, SPARE, ACME, ACME_BANKING, null, "TS-3", 3, "Spare", "s3", "DRAFT");
             suite(connection, NEST_PARENT, ACME, ACME_BANKING, null, "TS-92", 92, "Nest", "s92",
                     "DRAFT");
-            suite(connection, NEST_CHILD, ACME, ACME_BANKING, NEST_PARENT, "TS-93", 93,
+            suite(connection, NEST_CHILD, ACME, ACME_BANKING, null, "TS-93", 93,
                     "Nest child", "s92.s93", "DRAFT");
 
             // One suite per status, so every edge of the ladder has a start row and no test has to
@@ -1606,21 +1532,17 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
 
         try (var statement = connection.prepareStatement("""
                 INSERT INTO suite
-                    (id, company_id, project_id, parent_id, key, key_seq, path, name,
-                     position, lifecycle_status)
-                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?,
-                        CAST(? AS ltree), ?, 0, ?)
+                    (id, company_id, project_id, key, key_seq, name, position, lifecycle_status)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?, ?, 0, ?)
                 ON CONFLICT (id) DO NOTHING
                 """)) {
             statement.setString(1, id.toString());
             statement.setString(2, companyId.toString());
             statement.setString(3, projectId.toString());
-            statement.setString(4, parentId == null ? null : parentId.toString());
-            statement.setString(5, key);
-            statement.setLong(6, keySeq);
-            statement.setString(7, path);
-            statement.setString(8, name);
-            statement.setString(9, status);
+            statement.setString(4, key);
+            statement.setLong(5, keySeq);
+            statement.setString(6, name);
+            statement.setString(7, status);
             statement.executeUpdate();
         }
     }

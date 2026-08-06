@@ -79,11 +79,13 @@ public class SuiteVersions {
      * the view would make the hash move on a rename and on any case edit beneath — which is exactly
      * the coupling the schema comment refuses.
      *
-     * @param parentId the nesting, which is the whole of a suite's structural position
-     * @param caseIds  the membership, in order. Empty at creation, and empty is the value: a folder
+     * @param caseIds  the membership, in order. Empty at creation, and empty is the value: a suite
      *                 with no cases is the normal state of a new one, not a missing measurement.
+     *                 <p>It was preceded by a {@code parentId} — "the nesting, which is the whole
+     *                 of a suite's structural position" — until §98 removed the nesting. A suite's
+     *                 structural position is now entirely its membership.
      */
-    record Composition(UUID parentId, List<UUID> caseIds) {
+    record Composition(List<UUID> caseIds) {
     }
 
     /**
@@ -96,7 +98,7 @@ public class SuiteVersions {
     void writeInitial(Suite suite, UUID authorId, Instant now) {
         // Empty membership, not "unknown": a suite is created before anything can be put in it, so
         // there is no window in which this could be a partial reading of a fuller composition.
-        Composition composition = new Composition(suite.getParentId(), List.of());
+        Composition composition = new Composition(List.of());
 
         versions.save(SuiteVersion.of(
                 suite.getId(),

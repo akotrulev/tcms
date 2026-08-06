@@ -71,6 +71,7 @@ public class CaseService {
     private final ProjectService projects;
     private final ProjectConfigurationService configuration;
     private final SuiteRepository suites;
+    private final SuiteMembership membership;
     private final CaseSearch search;
     private final CaseSummaries summaries;
 
@@ -78,12 +79,14 @@ public class CaseService {
             ProjectService projects,
             ProjectConfigurationService configuration,
             SuiteRepository suites,
+            SuiteMembership membership,
             CaseSearch search,
             CaseSummaries summaries) {
 
         this.projects = projects;
         this.configuration = configuration;
         this.suites = suites;
+        this.membership = membership;
         this.search = search;
         this.summaries = summaries;
     }
@@ -113,33 +116,34 @@ public class CaseService {
         List<ClassificationDimensionView> vocabularies =
                 configuration.findClassification(userId, projectId).orElse(List.of());
 
-        Collection<UUID> suiteIds = suiteScope(request, liveSuites);
-        // Unfiled cases are in scope unless the request named a folder — a case cannot be both
-        // inside a subtree and outside every folder — and `unfiled=true` asks for them alone.
-        // Before §96 the suite scope WAS the bound, so an empty one meant "no case can match";
-        // now it means that only when unfiled cases are excluded too.
+        // §98: a named suite resolves to CASES, through the one union that also produces its
+        // `caseCount`. Unnamed, the bound stays the project's live suites plus the unfiled.
+        Collection<UUID> memberCaseIds = request.suiteId() == null
+                ? null
+                : membership.caseIdsIn(companyId, projectId, request.suiteId());
+
+        // Unfiled cases are in scope unless the request named a suite — a case cannot be both
+        // filed somewhere and filed nowhere — and `unfiled=true` asks for them alone.
         boolean includeUnfiled = request.suiteId() == null;
-        // `unfiled` is IGNORED when a folder is named, per the contract, rather than refused with a
-        // 400: the pair is unsatisfiable, and refusing it would break the tree's own "clear the
-        // filter" affordance. It matters here for a second reason — with the folder's subtree
-        // dropped AND unfiled cases excluded there would be no suite arm at all, and an empty
-        // `IN ()` is a syntax error.
+        // `unfiled` is IGNORED when a suite is named, per the contract, rather than refused with a
+        // 400: the pair is unsatisfiable, and refusing it would break the rail's own "clear the
+        // filter" affordance.
         boolean unfiledOnly = request.unfiled() && includeUnfiled;
-        if (suiteIds.isEmpty() && !includeUnfiled) {
-            // A suiteId naming a folder that is deleted or belongs elsewhere, or a subtree that is
-            // entirely deleted. Both mean "no case can match", identically — and the guard is not
-            // optional, because an empty collection bound into SQL `IN ()` is a syntax error rather
-            // than an empty result. A project with no suites at all used to land here and no longer
-            // does: since §96 it can hold cases, all of them unfiled, and answering an empty page
-            // would hide every case in a freshly provisioned project.
+        if (memberCaseIds != null && memberCaseIds.isEmpty()) {
+            // A suiteId naming a suite that is deleted, belongs elsewhere or never existed, and a
+            // live suite that currently resolves to nothing. All mean "no case can match",
+            // identically — telling them apart would make the parameter an oracle for suite ids the
+            // caller cannot otherwise reach. The guard is not optional either: an empty collection
+            // bound into SQL `IN ()` is a syntax error rather than an empty result.
             return empty(request);
         }
 
         CaseScope scope = new CaseScope(
                 projectId,
+                memberCaseIds,
                 // Only the unfiled ones when the caller asked for those: the filter is a narrowing,
-                // so it drops the suite arm rather than adding to it.
-                unfiledOnly ? List.of() : suiteIds,
+                // so it drops the filed arm rather than adding to it.
+                unfiledOnly ? List.of() : liveSuites.stream().map(Suite::getId).toList(),
                 includeUnfiled,
                 subtreeOf(request.featureId(), DimensionKeys.FEATURE, vocabularies),
                 subtreeOf(request.testTypeId(), DimensionKeys.TEST_TYPE, vocabularies),
@@ -179,42 +183,6 @@ public class CaseService {
     // =====================================================================
     // scope resolution
     // =====================================================================
-
-    /**
-     * The suite ids a request may draw cases from: the {@code suiteId} filter's subtree, or the
-     * whole live tree.
-     *
-     * <p>Walked from {@code parentId} in memory rather than through {@code ltree}'s {@code <@}
-     * operator. The tree is already loaded — its names are needed for every row — so the walk is
-     * free, whereas the operator needs a native query that would drop the Hibernate company filter.
-     * And the set is folders, which a project has tens of, not cases, which it has thousands of.
-     *
-     * <p><strong>Only live suites are ever in the set</strong>, filter or no filter — see
-     * {@link CaseSpecifications#where} for why a soft-deleted folder's cases must leave the list
-     * with it.
-     */
-    private Collection<UUID> suiteScope(CaseQuery request, List<Suite> liveSuites) {
-        if (request.suiteId() == null) {
-            return liveSuites.stream().map(Suite::getId).toList();
-        }
-
-        Map<UUID, List<UUID>> children = new HashMap<>();
-        Set<UUID> live = new HashSet<>();
-        for (Suite suite : liveSuites) {
-            live.add(suite.getId());
-            if (suite.getParentId() != null) {
-                children.computeIfAbsent(suite.getParentId(), key -> new ArrayList<>())
-                        .add(suite.getId());
-            }
-        }
-        if (!live.contains(request.suiteId())) {
-            // A deleted folder, one in another project, or one that never existed. All three mean
-            // no cases, identically — telling them apart would make the parameter an oracle for
-            // suite ids the caller cannot otherwise reach.
-            return List.of();
-        }
-        return descendants(request.suiteId(), children);
-    }
 
     /**
      * One classification filter's value <em>and its descendants</em>, per the contract ("includes

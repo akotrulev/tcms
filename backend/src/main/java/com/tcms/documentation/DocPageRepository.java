@@ -58,7 +58,8 @@ public interface DocPageRepository extends JpaRepository<DocPage, UUID> {
     /**
      * How many live child pages this page has — direct children only.
      *
-     * <p>Direct rather than subtree-wide for {@code SuiteRepository#countLiveChildren}'s reason: a
+     * <p>Direct rather than subtree-wide, and the reason was {@code SuiteRepository}'s until §98
+     * flattened suites and took that method with it — so it is spelled out here now: a
      * page with a grandchild necessarily has a child, so this refuses every non-empty subtree one
      * level at a time, and the count it reports is the one visible in the tree.
      */

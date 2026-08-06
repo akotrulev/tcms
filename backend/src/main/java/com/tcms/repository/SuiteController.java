@@ -265,23 +265,16 @@ public class SuiteController {
     /**
      * Names what is standing in the way of a delete.
      *
-     * <p>The counts rather than "the suite is not empty", because the two are different amounts of
-     * help: a user looking at a collapsed folder cannot see that it holds four cases, and "move or
-     * delete them first" is only actionable once they know there are four.
+     * <p>The count rather than "the suite is not empty", because the two are different amounts of
+     * help: a user cannot see from the rail that a suite holds four cases, and "move or delete them
+     * first" is only actionable once they know there are four.
+     *
+     * <p>It named a child-suite count too, until §98 left a suite with no children to hold.
      */
     private static String describe(SuiteWriteService.Outcome.NotEmpty notEmpty) {
-        StringBuilder detail = new StringBuilder("This suite still holds ");
-        if (notEmpty.childSuites() > 0) {
-            detail.append(notEmpty.childSuites())
-                    .append(notEmpty.childSuites() == 1 ? " suite" : " suites");
-        }
-        if (notEmpty.childSuites() > 0 && notEmpty.cases() > 0) {
-            detail.append(" and ");
-        }
-        if (notEmpty.cases() > 0) {
-            detail.append(notEmpty.cases()).append(notEmpty.cases() == 1 ? " case" : " cases");
-        }
-        return detail.append(". Move or delete them first.").toString();
+        return "This suite still holds " + notEmpty.cases()
+                + (notEmpty.cases() == 1 ? " case" : " cases")
+                + ". Move or delete them first.";
     }
 
     /**

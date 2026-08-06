@@ -123,6 +123,9 @@ public class DashboardService {
         CaseQuery unfiltered = CaseQuery.unfiltered();
         CaseScope scope = new CaseScope(
                 projectId,
+                // No suite filter here — the dashboard is the whole project — so no resolved
+                // membership to bound it with (§98).
+                null,
                 liveSuites.stream().map(Suite::getId).toList(),
                 // Unfiled cases count on the dashboard, and NOT counting them is why the empty-tree
                 // guard that used to stand here is gone (§96). A project with no suites can hold

@@ -450,18 +450,15 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
     private void suite(Connection connection, UUID id, UUID companyId, UUID projectId, String name)
             throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
-                INSERT INTO suite (id, company_id, project_id, parent_id, key, key_seq, path, name,
-                                   position, lifecycle_status, deleted_at)
-                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), NULL, ?, 1,
-                        CAST(? AS ltree), ?, 0, 'APPROVED', NULL)
+                INSERT INTO suite (id, company_id, project_id, key, key_seq, name, position, lifecycle_status, deleted_at)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, 1, ?, 0, 'APPROVED', NULL)
                 ON CONFLICT (id) DO NOTHING
                 """)) {
             statement.setString(1, id.toString());
             statement.setString(2, companyId.toString());
             statement.setString(3, projectId.toString());
             statement.setString(4, "TS-1");
-            statement.setString(5, "s" + id.toString().substring(0, 8).replace("-", "_"));
-            statement.setString(6, name);
+            statement.setString(5, name);
             statement.executeUpdate();
         }
     }

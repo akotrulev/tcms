@@ -414,20 +414,19 @@ class CaseDetailEndpointTest extends IntegrationTestBase {
         @Test
         @DisplayName("THE assertion: the whole precondition list, in order, with its markers")
         void preconditionsResolveInTheDocumentedOrder() throws Exception {
-            // Every rule in one list. Reading it top to bottom:
-            //   Payments (root)      — "Accept the cookie banner" at position 0, "Log in" at 1;
-            //                          the position order is the reverse of the insert order.
-            //                        — "Confirm the terms" is attached here and OPTED OUT: absent.
-            //                        — an INLINE attachment is here too: absent, no title to serve.
-            //   Refunds              — "Seed a settled payment".
-            //                        — "Log in" AGAIN: deduped, and the copy that survives is the
-            //                          one from further up, which is the one carrying a name.
-            //   Partial refunds      — a RETIRED library entry: absent.
-            //                        — "Reset the test payment data".
-            //   the case's own       — "Seed a settled payment" again: deduped against the
-            //                          inherited copy, which wins because it carries the warning.
-            //                        — "Check the merchant is verified": the only own entry left.
-            // Walked nearest-first instead, this list would come back exactly reversed by folder.
+            // Every rule in one list. Reading it top to bottom — all inherited from the case's
+            // own suite since §98, in `position` order:
+            //   pos 0 — "Accept the cookie banner"; inserted SECOND, so a dropped ORDER BY shows.
+            //   pos 1 — "Log in as standard user".
+            //   pos 2 — "Confirm the terms": OPTED OUT, absent.
+            //   pos 3 — an INLINE attachment: absent, no title to serve.
+            //   pos 4 — "Seed a settled payment".
+            //   pos 5 — "Log in" AGAIN: deduped against pos 1, which wins by being first.
+            //   pos 6 — a RETIRED library entry: absent.
+            //   pos 7 — "Reset the test payment data".
+            //   the case's own — "Seed a settled payment" again: deduped against the inherited
+            //                    copy, which wins because it carries the warning.
+            //                  — "Check the merchant is verified": the only own entry left.
             List<JsonNode> pre = arrayOf(
                     detailAs(LEAD, ACME, ACME_BANKING, caseId("full")), "preconditions");
 
@@ -438,7 +437,9 @@ class CaseDetailEndpointTest extends IntegrationTestBase {
                     "Reset the test payment data",
                     "Check the merchant is verified");
             assertThat(pre.stream().map(node -> node.get("inheritedFrom").asText("")).toList())
-                    .containsExactly("Payments", "Payments", "Refunds", "Partial refunds", "");
+                    .as("one suite now names them all — the case's own")
+                    .containsExactly("Partial refunds", "Partial refunds", "Partial refunds",
+                            "Partial refunds", "");
             assertThat(pre.stream().map(node -> node.get("inherited").asBoolean()).toList())
                     .containsExactly(true, true, true, true, false);
         }
@@ -456,11 +457,11 @@ class CaseDetailEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("a condition on the case's OWN folder is inherited, not local")
+        @DisplayName("a condition on the case's OWN suite is inherited, not local")
         void theCasesOwnFolderStillInherits() throws Exception {
-            // The case did not attach it, and editing it still reaches every sibling in that
-            // folder — which is the whole point of the marker. Marking it local removes the
-            // warning from the commonest case there is.
+            // The case did not attach it, and editing it still reaches every sibling filed in that
+            // suite — which is the whole point of the marker. Marking it local removes the
+            // warning from the commonest case there is, and since §98 that is the ONLY case.
             JsonNode nearest = byTitle(
                     arrayOf(detailAs(LEAD, ACME, ACME_BANKING, caseId("full")), "preconditions"),
                     "Reset the test payment data");
@@ -483,7 +484,7 @@ class CaseDetailEndpointTest extends IntegrationTestBase {
         @Test
         @DisplayName("an opt-out binds to ONE attachment, not to the condition everywhere")
         void optOutsAreKeyedOnTheAttachment() throws Exception {
-            // The same library entry is attached at Payments (opted out by this case) and again at
+            // The same library entry is attached at PARTIAL (opted out by this case) and again at
             // Checkout, where a different case inherits it and must keep it. Keying the opt-out on
             // condition_id would make one toggle mean "never inherit this from anywhere".
             assertThat(titlesOf(arrayOf(
@@ -1032,23 +1033,39 @@ class CaseDetailEndpointTest extends IntegrationTestBase {
      */
     private void seedAttachments() throws SQLException {
         try (Connection connection = appConnection(ACME)) {
-            // Payments (root of the chain).
-            suiteCondition(connection, attachmentId("payments-login"), PAYMENTS, "PRE", 1, LOGIN);
-            suiteCondition(connection, attachmentId("payments-banner"), PAYMENTS, "PRE", 0, BANNER);
-            suiteCondition(connection, DECLINED_ATTACHMENT, PAYMENTS, "PRE", 2, DECLINED);
-            suiteCondition(connection, attachmentId("payments-cleanup"), PAYMENTS, "POST", 0,
+            /*
+              §98 COLLAPSED THREE SUITES INTO ONE HERE, AND ALMOST NOTHING WAS LOST.
+
+              These attachments used to hang off a three-level chain — Payments › Refunds ›
+              Partial refunds — because inheritance walked `suite.path` upward and the list was
+              asserted OUTERMOST-FIRST. There is no chain now: a suite's conditions reach the cases
+              FILED in it and nothing else, so every attachment moves onto PARTIAL, the case's own
+              suite.
+
+              What that costs is exactly one rule — the between-suite ordering. Everything else the
+              class was written for is a rule WITHIN one suite or between the suite and the case,
+              and all of it still bites: `position` order (the entries are inserted in the wrong
+              order on purpose, so a query dropping ORDER BY comes back wrong rather than right by
+              luck), dedupe against the case's own attachments with the inherited copy winning,
+              opt-outs keyed on the attachment, retired entries dropping out, inline attachments
+              excluded, and the two kinds deduping separately.
+            */
+            suiteCondition(connection, attachmentId("payments-login"), PARTIAL, "PRE", 1, LOGIN);
+            suiteCondition(connection, attachmentId("payments-banner"), PARTIAL, "PRE", 0, BANNER);
+            suiteCondition(connection, DECLINED_ATTACHMENT, PARTIAL, "PRE", 2, DECLINED);
+            suiteCondition(connection, attachmentId("payments-cleanup"), PARTIAL, "POST", 0,
                     CLEANUP);
             // Inline: legal in the schema, unrepresentable in the contract, excluded at the query.
-            inlineSuiteCondition(connection, attachmentId("payments-inline"), PAYMENTS, "PRE", 3);
+            inlineSuiteCondition(connection, attachmentId("payments-inline"), PARTIAL, "PRE", 3);
 
-            // Refunds — one new entry, and "Log in" a second time to be deduped away.
-            suiteCondition(connection, attachmentId("refunds-settled"), REFUNDS, "PRE", 0, SETTLED);
-            suiteCondition(connection, attachmentId("refunds-login"), REFUNDS, "PRE", 1, LOGIN);
+            suiteCondition(connection, attachmentId("refunds-settled"), PARTIAL, "PRE", 4, SETTLED);
+            // "Log in" a second time on the SAME suite — still deduped away, and the surviving row
+            // is the earlier position, which is the one the assertions name.
+            suiteCondition(connection, attachmentId("refunds-login"), PARTIAL, "PRE", 5, LOGIN);
 
-            // Partial refunds — the case's OWN folder, which still counts as inherited.
-            suiteCondition(connection, attachmentId("partial-retired"), PARTIAL, "PRE", 0,
+            suiteCondition(connection, attachmentId("partial-retired"), PARTIAL, "PRE", 6,
                     RETIRED_CONDITION);
-            suiteCondition(connection, attachmentId("partial-reset"), PARTIAL, "PRE", 1, RESET);
+            suiteCondition(connection, attachmentId("partial-reset"), PARTIAL, "PRE", 7, RESET);
 
             // Checkout — the SECOND attachment of the condition `full` opted out of, inherited by
             // `bystander`, which must keep it.
@@ -1117,21 +1134,17 @@ class CaseDetailEndpointTest extends IntegrationTestBase {
 
         try (var statement = connection.prepareStatement("""
                 INSERT INTO suite
-                    (id, company_id, project_id, parent_id, key, key_seq, path, name,
-                     position, lifecycle_status, deleted_at)
-                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?,
-                        CAST(? AS ltree), ?, 0, 'APPROVED', CAST(? AS timestamptz))
+                    (id, company_id, project_id, key, key_seq, name, position, lifecycle_status, deleted_at)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?, ?, 0, 'APPROVED', CAST(? AS timestamptz))
                 ON CONFLICT (id) DO NOTHING
                 """)) {
             statement.setString(1, id.toString());
             statement.setString(2, companyId.toString());
             statement.setString(3, projectId.toString());
-            statement.setString(4, parentId == null ? null : parentId.toString());
-            statement.setString(5, key);
-            statement.setLong(6, keySeq);
-            statement.setString(7, path);
-            statement.setString(8, name);
-            statement.setString(9, deleted ? "2026-01-01T00:00:00Z" : null);
+            statement.setString(4, key);
+            statement.setLong(5, keySeq);
+            statement.setString(6, name);
+            statement.setString(7, deleted ? "2026-01-01T00:00:00Z" : null);
             statement.executeUpdate();
         }
     }

@@ -2,8 +2,8 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-05 (§97 phase 6)
-**Baseline commit:** `1b398fd` (§97 phase 5) **+ the doc commit this line ships in** (its own SHA
+**Last verified:** 2026-08-06 (§98 phase 1)
+**Baseline commit:** `8e71010` (§97 phase 7) **+ the doc commit this line ships in** (its own SHA
 cannot be written into itself; trust the body over the header and re-grep what a later commit
 could have moved).
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
@@ -127,6 +127,23 @@ directly above the switcher) and the wordmark links there too.
   assertion passes. §96 phase 6 shipped this and fixed it; the step-action `Autocomplete`
   (`CaseEditorPage:281`) had it right since §94 and is the precedent to copy.
   **Assert a chip is VISIBLE, not just in the payload** — that is the only check that fails.
+- **THE SUITE RAIL IS A FLAT LIST SINCE §98 — `SuiteTree.tsx` IS `SuiteList.tsx`.**
+  `Suite.parentId`/`Suite.path` and `SuiteInput.parentId` left the contract, so there is no
+  `SimpleTreeView`, no `TreeItem`, no expand state and no rollup: the count rendered is
+  `suite.caseCount` verbatim. Testids are **`SuiteList.*`** (`SuiteList`, `.Item`, `.ItemMenu`,
+  `.Item.Status`, `.AllCases`, `.NewSuite`, `.Empty.NewSuite`, `.StatusError`, `.Menu.*`), and
+  `SuiteList.Menu.NewChild` is **removed rather than disabled** — disable-don't-hide is about an
+  action the *state* forbids, and no state nests a suite. `lib/suites.ts` (`subtreeCaseCount`) is
+  **deleted**; `SuiteHistoryPage` reads `suite.caseCount` directly, which closes §52's
+  two-numbers-on-one-screen defect by there being one number. The case editor's suite picker no
+  longer indents by `path` depth. **`lib/classification.ts` still walks a real tree** — §98 is about
+  suites only, and doc pages and classification values still nest.
+  **The mock's count and the grid's `?suiteId=` filter are ONE function** (`suiteMemberCaseIds`,
+  returning ids) because they answered different questions from §96 to §98 — the count was the union
+  and the filter was the filed arm, so a tag-defined suite showed a count of 2 over a grid of 0.
+  `mocks/db/suites.test.ts` is a **new file** and its first assertion is the non-vacuity one: the
+  fixture must hold a suite claiming a case it does not file, or everything below it is also true of
+  the defective implementation.
 - **THE SUITE DIALOG CLAIMS CASES BY TAG (§96 phase 6).** `SuiteDialogs.tsx` gains `tagRules` to
   its Zod schema and a chips `Autocomplete`; `SuiteInput` (`api/queries/suites.ts`) gains
   `tagRules` and `caseIds`. The rename dialog **seeds from the suite and always sends the field** —
@@ -135,8 +152,8 @@ directly above the switcher) and the wordmark links there too.
   `SuiteDialogs.test.tsx` (**new file**, this dialog had none) covers each.
   `caseIds` is **on the type and authored by no screen**: the endpoint validates it, the dialog
   offers tag rules only. Named rather than left to be found missing.
-  `SuiteTree`'s count carries a tooltip saying membership is filed ∪ added ∪ tagged **and that the
-  counts do not sum to the project total** — a case can be in several folders, and a reader who
+  `SuiteList`'s count carries a tooltip saying membership is filed ∪ added ∪ tagged **and that the
+  counts do not sum to the project total** — a case can be in several suites, and a reader who
   subtracts otherwise finds a discrepancy in a correct number.
 - **A CASE MAY BE FILED NOWHERE, AND TAGS ARE AUTHORABLE (§96 phase 5).**
   `caseSchema.ts`: `suiteId` lost its `.min(1)` — **`''` IS THE UNFILED VALUE**, not a missing one
@@ -971,7 +988,7 @@ directly above the switcher) and the wordmark links there too.
   justification was false**: no leaf-only rule exists in any spec, and a parent IS assignable.
   `buildValueTree` lives in `lib/` because exporting a function beside a component defeats Fast
   Refresh (the `caseSchema.ts` trade) and it **surfaces orphans AND cycle members at the root**
-  where `SuiteTree` drops cycle members — in a picker, a value with no control on screen is silently
+  where the old `SuiteTree` dropped cycle members (§98 deleted that walk with the tree) — in a picker, a value with no control on screen is silently
   deselected by the next save. Mock now **enforces** the server's three rules rather than storing
   what it is given, and `buildCaseDetail` DERIVES its ids from the summary's names so no fixture can
   carry ids and names that disagree. §62's lesson again in the test: a bare `data-testid` on a MUI

@@ -33,26 +33,29 @@ import org.springframework.transaction.annotation.Transactional;
  * <h2>Two permissions, and collapsing them would erase a boundary the spec called out</h2>
  *
  * <p>{@code suite:manage} (create, rename) is held by Test Engineer and above; {@code suite:delete}
- * by leads only. The roles spec states the reason in one line: deleting a subtree is the most
- * destructive repository action, so it sits with leads while contributors keep organising the tree
- * freely. It also lists that split as a boundary that was <em>previously wrong</em> and got fixed —
+ * by leads only. The roles spec states the reason in one line: deleting is the most destructive
+ * repository action, so it sits with leads while contributors keep organising freely. It also lists that split as a boundary that was <em>previously wrong</em> and got fixed —
  * so gating both on {@code suite:manage} would not be a simplification, it would be the reversion.
  *
  * <h2>What this class refuses, and why refusing is the feature</h2>
  *
  * <ol>
- *   <li><strong>Moving.</strong> {@link SuiteEdit#validateRename} rejects a payload whose
- *       {@code parentId} differs from the stored one. Reparenting rewrites every descendant's
- *       {@code path} and needs cycle prevention; until that exists the only honest answers are "done"
- *       and "refused", and silently dropping the field is the third one — the one where a client
- *       shows the folder in its new place, reloads, and finds it back.</li>
- *   <li><strong>Deleting anything that is not empty.</strong> {@code suite:delete} is specced
- *       "folder + subtree", and the cascade is deliberately not built here. A folder delete that
- *       soft-deletes the cases beneath it unmakes <em>other people's</em> work through a permission
- *       whose sibling, {@code case:delete}, carries an {@code OWN} qualifier precisely to prevent
- *       that — and it does so with no preview of what it is about to touch. A non-empty suite answers
- *       409 naming the counts. The cascade belongs to a slice that can show its work; the contract
- *       already has the shape for it in {@code BulkResult}.</li>
+ *   <li><strong>Deleting a suite that still holds FILED cases.</strong> The cascade is
+ *       deliberately not built here: a delete that soft-deletes the cases in a suite unmakes
+ *       <em>other people's</em> work through a permission whose sibling, {@code case:delete},
+ *       carries an {@code OWN} qualifier precisely to prevent that — and with no preview of what it
+ *       is about to touch. A non-empty suite answers 409 naming the count. The cascade belongs to a
+ *       slice that can show its work; the contract already has the shape for it in
+ *       {@code BulkResult}.
+ *       <p><strong>Only the filing arm blocks (§98), and the other two deliberately do not.</strong>
+ *       A case merely <em>added</em> here, or <em>matched</em> by a tag rule, lives elsewhere and
+ *       only appears in this collection — deleting it loses a claim on the case and never the case.
+ *       Filing is different in kind: {@code test_case.suite_id} is where the case <em>is</em>.</li>
+ *   <li><strong>Moving</strong> — until §98, where the thing to move to stopped existing. A payload
+ *       whose {@code parentId} differed from the stored one was <em>refused rather than ignored</em>,
+ *       because silently dropping a field is what lets a client show a suite in its new place,
+ *       reload, and find it back, with the server having reported success. Worth keeping in mind
+ *       the next time a field looks droppable.</li>
  * </ol>
  *
  * <h2>What commits together</h2>
@@ -127,12 +130,14 @@ public class SuiteWriteService {
         }
 
         /**
-         * The delete was refused because the folder is not empty.
+         * The delete was refused because the suite still holds filed cases.
          *
-         * <p>Carries the counts rather than a rendered sentence: the message is the controller's,
+         * <p>Carries the count rather than a rendered sentence: the message is the controller's,
          * and a service that returns prose is a service two callers eventually word differently.
+         *
+         * <p>It carried a {@code childSuites} count too until §98 — the other half of "empty".
          */
-        record NotEmpty(long childSuites, long cases) implements Outcome {
+        record NotEmpty(long cases) implements Outcome {
         }
 
         /** A new suite. 201. */
@@ -168,31 +173,14 @@ public class SuiteWriteService {
     private Outcome applyCreate(
             UUID companyId, UUID userId, Project project, SuiteWriteRequest request) {
 
-        List<Suite> live = suites.findLiveForProject(project.getId());
-
-        Set<UUID> liveIds = new HashSet<>();
-        for (Suite suite : live) {
-            liveIds.add(suite.getId());
-        }
-
+        // The project's live suites are no longer read here: they existed only to resolve and
+        // validate the parent (§98). A create now touches no other suite at all.
         SuiteEdit.Outcome validated =
-                SuiteEdit.validateCreate(request, liveIds, liveCaseIds(project.getId(), request));
+                SuiteEdit.validate(request, liveCaseIds(project.getId(), request));
         if (validated instanceof SuiteEdit.Outcome.Invalid invalid) {
             return new Outcome.Invalid(invalid.errors());
         }
         SuiteEdit edit = ((SuiteEdit.Outcome.Valid) validated).edit();
-
-        // The parent's path, resolved from the list already fetched rather than by a second query.
-        // Null for a root, which is what Suite.create expects.
-        String parentPath = null;
-        if (edit.parentId() != null) {
-            for (Suite suite : live) {
-                if (suite.getId().equals(edit.parentId())) {
-                    parentPath = suite.getPath();
-                    break;
-                }
-            }
-        }
 
         // AFTER validation, so a rejected payload does not burn a number — §29's rule, and the
         // counter only ever moves forward, so a burned number is a permanent hole.
@@ -201,8 +189,6 @@ public class SuiteWriteService {
         Instant now = clock.instant();
         Suite created = Suite.create(
                 project.getId(),
-                edit.parentId(),
-                parentPath,
                 allocated.keyAt(0),
                 allocated.seqAt(0),
                 edit,
@@ -251,8 +237,8 @@ public class SuiteWriteService {
                 return new Outcome.Stale();
             }
 
-            SuiteEdit.Outcome validated = SuiteEdit.validateRename(
-                    request, suite.getParentId(), liveCaseIds(project.getId(), request));
+            SuiteEdit.Outcome validated =
+                    SuiteEdit.validate(request, liveCaseIds(project.getId(), request));
             if (validated instanceof SuiteEdit.Outcome.Invalid invalid) {
                 return new Outcome.Invalid(invalid.errors());
             }
@@ -320,11 +306,12 @@ public class SuiteWriteService {
             }
             Suite suite = found.get();
 
-            long children = suites.countLiveChildren(suite.getId());
-            long cases = suites.countLiveCasesInSubtree(
-                    companyId, project.getId(), suite.getPath());
-            if (children > 0 || cases > 0) {
-                return new Outcome.NotEmpty(children, cases);
+            // FILED cases only — see the class header. The child-suite half of this check went
+            // with the tree, and the case half narrowed from the subtree to this suite's own
+            // filing arm in the same slice.
+            long cases = suites.countLiveCasesFiledIn(suite.getId());
+            if (cases > 0) {
+                return new Outcome.NotEmpty(cases);
             }
 
             Instant now = clock.instant();

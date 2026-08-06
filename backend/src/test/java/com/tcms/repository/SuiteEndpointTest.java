@@ -58,7 +58,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  *
  * <p>Two companies whose suites carry <strong>the same names and the same display keys</strong>, so
  * only ids can prove the scoping. Two projects in one company, so a sibling tree exists to leak in
- * from. A three-level tree, so path ordering and {@code parentId} both have something to be wrong
+ * from. Three suites that were a three-level tree until §98 flattened them — the nesting is gone
  * about. A soft-deleted suite, a suite whose cases are all soft-deleted, and an empty parent whose
  * children hold the cases. Plus three condition attachments — one live reference, one inline, one
  * pointing at a retired library entry — because the two exclusions are decisions and an
@@ -200,44 +200,58 @@ class SuiteEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("a parent always precedes its own descendants")
-        void orderingIsConstructible() throws Exception {
-            // The failure this catches: ordering by `position`, which is sibling order WITHIN one
-            // parent, so depths interleave and a child can arrive before the parent it hangs off.
-            // Every node here has position 0, so a position-ordered query returns an arbitrary
-            // order and this assertion is what notices.
-            List<String> order = namesOf(treeAs(LEAD, ACME, ACME_BANKING));
+        @DisplayName("the order is total and stable, so the rail cannot reshuffle between loads")
+        void orderingIsTotalAndStable() throws Exception {
+            /*
+              §98 replaced what this asserted, and the replacement is a weaker claim about a
+              stronger guarantee.
 
-            assertThat(order.indexOf("Payments")).isLessThan(order.indexOf("Refunds"));
-            assertThat(order.indexOf("Refunds")).isLessThan(order.indexOf("Partial refunds"));
+              It used to be "a parent always precedes its own descendants", which is what made a
+              flat payload CONSTRUCTIBLE into a tree — the query ordered by `path`, an ltree that
+              compares element-wise, where ordering by `position` (sibling order WITHIN one parent)
+              interleaves depths and lets a child arrive before the parent it hangs off. Every node
+              in this fixture has position 0, so a position-ordered query returned an arbitrary
+              order and that assertion was what noticed.
+
+              There is no tree to construct now. What an order still has to be is total and stable,
+              because the client sorts by NAME for display and two suites may share a name — so the
+              server's order is the tiebreaker underneath it. `key_seq` is unique per company and
+              monotonic, which is why the query orders on it; asserting the ids come back in
+              key_seq order is what fails if it goes back to `position`, where every row is 0 and
+              Postgres may return them in any order at all.
+            */
+            List<JsonNode> suites = treeAs(LEAD, ACME, ACME_BANKING);
+
+            List<String> keys = suites.stream().map(node -> node.get("key").asText()).toList();
+            assertThat(keys)
+                    .as("ordered by key_seq — a total order, where `position` is 0 on every row")
+                    .isSorted();
+            assertThat(keys).doesNotHaveDuplicates();
         }
 
         @Test
-        @DisplayName("parentId reconstructs the tree, and a root says so explicitly")
-        void theTreeIsReconstructible() throws Exception {
-            List<JsonNode> tree = treeAs(LEAD, ACME, ACME_BANKING);
+        @DisplayName("no suite carries a parent or a path any more")
+        void theTreeIsGone() throws Exception {
+            /*
+              The inverse of two tests §98 deleted: `theTreeIsReconstructible` (a root's `parentId`
+              was null EXPLICITLY rather than by omission, because the SPA bucketed on
+              `parentId ?? null`) and `pathIsCarriedAndIsNotTheName` (the path was the materialized
+              ltree and legitimately disagreed with the display name, since labels admit only
+              [A-Za-z0-9_]).
 
-            assertThat(byName(tree, "Payments").get("parentId").isNull())
-                    .as("a root has no parent, explicitly rather than by omission — the SPA "
-                            + "buckets on `parentId ?? null`")
-                    .isTrue();
-            assertThat(byName(tree, "Refunds").get("parentId").asText())
-                    .isEqualTo(PAYMENTS.toString());
-            assertThat(byName(tree, "Partial refunds").get("parentId").asText())
-                    .isEqualTo(REFUNDS.toString());
-        }
-
-        @Test
-        @DisplayName("path is the materialized ltree path, independent of parentId")
-        void pathIsCarriedAndIsNotTheName() throws Exception {
-            List<JsonNode> tree = treeAs(LEAD, ACME, ACME_BANKING);
-
-            assertThat(byName(tree, "Partial refunds").get("path").asText())
-                    .isEqualTo("Payments.Refunds.Partial");
-            assertThat(byName(tree, "Partial refunds").get("name").asText())
-                    .as("the path is not a display string — ltree labels admit only "
-                            + "[A-Za-z0-9_], so the two legitimately disagree")
-                    .isNotEqualTo("Partial");
+              Asserting their absence is not bookkeeping. Both fields were dropped from the wire
+              while `V33` dropped the columns, and a serializer that re-added either — a leftover
+              getter, a @JsonProperty, a mapper that reached for the entity — would be serving a
+              field no client reads and no column backs.
+            */
+            for (JsonNode suite : treeAs(LEAD, ACME, ACME_BANKING)) {
+                assertThat(suite.has("parentId"))
+                        .as("%s still carries parentId", suite.get("key").asText())
+                        .isFalse();
+                assertThat(suite.has("path"))
+                        .as("%s still carries path", suite.get("key").asText())
+                        .isFalse();
+            }
         }
 
         @Test
@@ -256,7 +270,7 @@ class SuiteEndpointTest extends IntegrationTestBase {
         void requiredFieldsArePresent() throws Exception {
             JsonNode suite = byName(treeAs(LEAD, ACME, ACME_BANKING), "Refunds");
 
-            assertThat(List.of("id", "key", "name", "path", "caseCount", "lifecycleStatus",
+            assertThat(List.of("id", "key", "name", "caseCount", "lifecycleStatus",
                     "conditions", "lockVersion"))
                     .allSatisfy(field -> assertThat(suite.has(field))
                             .as("Suite.%s is required by openapi.yaml", field)
@@ -893,25 +907,21 @@ class SuiteEndpointTest extends IntegrationTestBase {
 
         try (var statement = connection.prepareStatement("""
                 INSERT INTO suite
-                    (id, company_id, project_id, parent_id, key, key_seq, path, name,
-                     position, lifecycle_status, deleted_at)
-                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?,
-                        CAST(? AS ltree), ?, ?, ?, CAST(? AS timestamptz))
+                    (id, company_id, project_id, key, key_seq, name, position, lifecycle_status, deleted_at)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?, ?, ?, ?, CAST(? AS timestamptz))
                 ON CONFLICT (id) DO NOTHING
                 """)) {
             statement.setString(1, id.toString());
             statement.setString(2, companyId.toString());
             statement.setString(3, projectId.toString());
-            statement.setString(4, parentId == null ? null : parentId.toString());
-            statement.setString(5, key);
-            statement.setLong(6, keySeq);
-            statement.setString(7, path);
-            statement.setString(8, name);
-            statement.setInt(9, position);
-            statement.setString(10, lifecycle);
+            statement.setString(4, key);
+            statement.setLong(5, keySeq);
+            statement.setString(6, name);
+            statement.setInt(7, position);
+            statement.setString(8, lifecycle);
             // A fixed instant rather than now(): nothing asserts the value, and a deterministic
             // fixture is one less thing that can differ between runs.
-            statement.setString(11, deleted ? "2026-01-01T00:00:00Z" : null);
+            statement.setString(9, deleted ? "2026-01-01T00:00:00Z" : null);
             statement.executeUpdate();
         }
     }

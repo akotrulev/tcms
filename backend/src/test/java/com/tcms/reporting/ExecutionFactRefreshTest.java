@@ -155,8 +155,8 @@ class ExecutionFactRefreshTest extends IntegrationTestBase {
             featureValue(acme, FEATURE_SEARCH, ACME, ACME_PROJECT, "Search", 1);
             featureValue(acme, FEATURE_LATER, ACME, ACME_PROJECT, "Reporting", 2);
 
-            suite(acme, ACME_SUITE, ACME, ACME_PROJECT, "Root", "root");
-            suite(acme, ACME_OTHER_SUITE, ACME, ACME_PROJECT, "Elsewhere", "elsewhere");
+            suite(acme, ACME_SUITE, ACME, ACME_PROJECT, "Root", 1);
+            suite(acme, ACME_OTHER_SUITE, ACME, ACME_PROJECT, "Elsewhere", 2);
 
             testCase(acme, RICH, ACME, ACME_PROJECT, ACME_SUITE, "TC-1", 1, "AUTOMATED", false);
             testCase(acme, PLANNED, ACME, ACME_PROJECT, ACME_SUITE, "TC-2", 2, "MANUAL", false);
@@ -186,7 +186,7 @@ class ExecutionFactRefreshTest extends IntegrationTestBase {
         try (Connection umbra = appConnection(UMBRA)) {
             seedCompanyDefaults(umbra, UMBRA);
             seedProjectDefaults(umbra, UMBRA, UMBRA_PROJECT);
-            suite(umbra, UMBRA_SUITE, UMBRA, UMBRA_PROJECT, "Root", "root");
+            suite(umbra, UMBRA_SUITE, UMBRA, UMBRA_PROJECT, "Root", 1);
             testCase(umbra, FOREIGN, UMBRA, UMBRA_PROJECT, UMBRA_SUITE, "TC-1", 1, "MANUAL", false);
             run(umbra, UMBRA_RUN, UMBRA, UMBRA_PROJECT, "TR-1", 1);
             execution(umbra, UMBRA, UMBRA_PROJECT, UMBRA_RUN, FOREIGN, "Passed", EXECUTED_AT, null);
@@ -300,9 +300,11 @@ class ExecutionFactRefreshTest extends IntegrationTestBase {
                     .isNull();
             assertThat(fact.get("suite_id")).isEqualTo(ACME_SUITE);
             assertThat(fact.get("suite_path"))
-                    .as("ltree, carried through as text by the driver — the GIST index on this "
-                            + "column is what a suite-subtree selection reads")
-                    .isEqualTo("root");
+                    .as("ltree, carried through as text by the driver. Since §98 it is "
+                            + "`s` + key_seq — written by ExecutionSource rather than copied from a "
+                            + "suite.path column that no longer exists, and exactly the label a "
+                            + "ROOT suite always had, which every suite now is")
+                    .isEqualTo("s1");
             assertThat(fact.get("configuration_id")).isNotNull();
             assertThat(fact.get("status_kind")).isEqualTo("PASSED");
             assertThat(fact.get("counts_as_pass")).isEqualTo(true);
@@ -390,7 +392,7 @@ class ExecutionFactRefreshTest extends IntegrationTestBase {
                     .as("suite_path is frozen for the same reason and the plan did not say so — "
                             + "a moved dimension that should have been frozen has already destroyed "
                             + "the history it rewrote")
-                    .isEqualTo("root");
+                    .isEqualTo("s1");
         }
     }
 
@@ -685,22 +687,25 @@ class ExecutionFactRefreshTest extends IntegrationTestBase {
         }
     }
 
+    /**
+     * One suite. The {@code path} argument went with the column in §98 — {@code key_seq} is now
+     * both the key's number and the label {@code ExecutionSource} writes into
+     * {@code execution_fact.suite_path}, so it is passed explicitly rather than hashed out of a
+     * name: the expected {@code s1} in the assertions has to be readable from the fixture.
+     */
     private void suite(Connection connection, UUID id, UUID companyId, UUID projectId, String name,
-            String path) throws SQLException {
+            long keySeq) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
-                INSERT INTO suite (id, company_id, project_id, parent_id, key, key_seq, path, name,
-                                   position, lifecycle_status, deleted_at)
-                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), NULL, ?, ?,
-                        CAST(? AS ltree), ?, 0, 'APPROVED', NULL)
+                INSERT INTO suite (id, company_id, project_id, key, key_seq, name, position, lifecycle_status, deleted_at)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?, ?, 0, 'APPROVED', NULL)
                     ON CONFLICT (id) DO NOTHING
                 """)) {
             statement.setString(1, id.toString());
             statement.setString(2, companyId.toString());
             statement.setString(3, projectId.toString());
-            statement.setString(4, "TS-" + path);
-            statement.setLong(5, path.hashCode() & 0xffff);
-            statement.setString(6, path);
-            statement.setString(7, name);
+            statement.setString(4, "TS-" + keySeq);
+            statement.setLong(5, keySeq);
+            statement.setString(6, name);
             statement.executeUpdate();
         }
     }

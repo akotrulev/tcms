@@ -2064,12 +2064,8 @@ class ReviewEndpointTest extends IntegrationTestBase {
         try (Connection connection = appConnection(ACME)) {
             try (var statement = connection.prepareStatement("""
                     INSERT INTO suite
-                        (id, company_id, project_id, parent_id, key, key_seq, path, name,
-                         description, position, lifecycle_status, current_version_no, lock_version,
-                         created_at, updated_at, deleted_at)
-                    VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), NULL, 'TS-1', 1,
-                            CAST('payments' AS ltree), 'Payments', NULL, 0, 'DRAFT', 1, 0,
-                            now(), now(), NULL)
+                        (id, company_id, project_id, key, key_seq, name, description, position, lifecycle_status, current_version_no, lock_version, created_at, updated_at, deleted_at)
+                    VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), 'TS-1', 1, 'Payments', NULL, 0, 'DRAFT', 1, 0, now(), now(), NULL)
                     ON CONFLICT (id) DO NOTHING
                     """)) {
                 statement.setString(1, PAYMENTS.toString());

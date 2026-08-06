@@ -410,9 +410,8 @@ class TagEndpointTest extends IntegrationTestBase {
 
         try (var statement = connection.prepareStatement("""
                 INSERT INTO suite
-                    (id, company_id, project_id, parent_id, key, key_seq, name, path, position)
-                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), NULL, ?, ?, ?,
-                        CAST(? AS ltree), 0)
+                    (id, company_id, project_id, key, key_seq, name, position)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?, ?, 0)
                 ON CONFLICT (id) DO NOTHING
                 """)) {
             statement.setString(1, id.toString());
@@ -421,7 +420,6 @@ class TagEndpointTest extends IntegrationTestBase {
             statement.setString(4, key);
             statement.setLong(5, keySeq);
             statement.setString(6, "Suite " + key);
-            statement.setString(7, "n" + id.toString().replace("-", ""));
             statement.executeUpdate();
         }
     }

@@ -804,9 +804,8 @@ class ConditionWriteEndpointTest extends IntegrationTestBase {
 
     private void suite(Connection connection, UUID id, UUID projectId) throws SQLException {
         try (var statement = connection.prepareStatement("""
-                INSERT INTO suite (id, company_id, project_id, key, key_seq, path, name)
-                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?,
-                        CAST(? AS ltree), ?)
+                INSERT INTO suite (id, company_id, project_id, key, key_seq, name)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?, ?)
                 ON CONFLICT (id) DO NOTHING
                 """)) {
             statement.setString(1, id.toString());
@@ -815,8 +814,7 @@ class ConditionWriteEndpointTest extends IntegrationTestBase {
             statement.setString(4, "CWOLB-S1");
             statement.setLong(5, 1L);
             // ltree labels allow only [A-Za-z0-9_], so the hyphens have to come out.
-            statement.setString(6, id.toString().replace("-", ""));
-            statement.setString(7, "Payments");
+            statement.setString(6, "Payments");
             statement.executeUpdate();
         }
     }

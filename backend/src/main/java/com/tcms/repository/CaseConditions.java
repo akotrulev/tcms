@@ -283,28 +283,32 @@ public class CaseConditions {
      * rather than inheriting from whatever survives above the gap. Half a chain is not a rule
      * anyone wrote.
      *
-     * <p>The walk is bounded by the number of live suites, not by the chain length, so a
-     * {@code parent_id} cycle — which no constraint in {@code V1} prevents — terminates instead of
-     * hanging the request. A cycle is a corrupt tree and this is not the place that repairs it;
-     * it is the place that must not spin on it.
+     * <p><strong>It is no longer a walk (§98), and the method survives its own name.</strong> It
+     * climbed {@code parent_id} to the root, guarded against a cycle — which no constraint in
+     * {@code V1} prevented — by bounding on the number of live suites rather than the chain length.
+     * A flat suite has no ancestors, so the chain is the case's own suite or nothing, and what was
+     * a loop is a lookup. Kept as a method, and kept returning a list, because everything below
+     * reads a chain and the shape of an inheritance that could one day widen is a list.
+     *
+     * <p><strong>Inheritance deliberately did NOT widen to the other two membership arms.</strong>
+     * A case added to a suite, or matched by one of its tag rules, does not pick up that suite's
+     * conditions — only the case's filing does. Filing says where a case lives and the standing
+     * rules of that place apply to it; a tag rule says a collection wants to see it, which is not a
+     * claim about how it is run. Widening is a decision with a slice behind it, not a side effect
+     * of flattening — and it would make a case's preconditions depend on who tagged what, changing
+     * under an author who never touched the case.
      */
     private static List<Suite> ancestry(UUID suiteId, List<Suite> liveSuites) {
-        Map<UUID, Suite> live = new HashMap<>();
-        liveSuites.forEach(suite -> live.put(suite.getId(), suite));
-
-        List<Suite> upward = new ArrayList<>();
-        Set<UUID> seen = new HashSet<>();
-        UUID next = suiteId;
-        while (next != null && seen.add(next)) {
-            Suite suite = live.get(next);
-            if (suite == null) {
-                break;
-            }
-            upward.add(suite);
-            next = suite.getParentId();
+        if (suiteId == null) {
+            return List.of();
         }
-
-        return upward.reversed();
+        for (Suite suite : liveSuites) {
+            if (suite.getId().equals(suiteId)) {
+                return List.of(suite);
+            }
+        }
+        // The case's suite is soft-deleted, or belongs to another project. Nothing inherits.
+        return List.of();
     }
 
     private List<SuiteCondition> withoutOptouts(UUID caseId, List<SuiteCondition> attachments) {

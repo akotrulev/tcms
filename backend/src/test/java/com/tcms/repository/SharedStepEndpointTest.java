@@ -841,9 +841,8 @@ class SharedStepEndpointTest extends IntegrationTestBase {
     private void suite(Connection connection) throws SQLException {
         try (var statement = connection.prepareStatement("""
                 INSERT INTO suite
-                    (id, company_id, project_id, parent_id, key, key_seq, name, path, position)
-                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), NULL, ?, ?, ?,
-                        CAST(? AS ltree), ?)
+                    (id, company_id, project_id, key, key_seq, name, position)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?, ?, ?)
                 ON CONFLICT (id) DO NOTHING
                 """)) {
             statement.setString(1, SUITE.toString());
@@ -852,8 +851,7 @@ class SharedStepEndpointTest extends IntegrationTestBase {
             statement.setString(4, "ABOLB-S1");
             statement.setLong(5, 1);
             statement.setString(6, "Refunds");
-            statement.setString(7, "n" + SUITE.toString().replace("-", ""));
-            statement.setInt(8, 0);
+            statement.setInt(7, 0);
             statement.executeUpdate();
         }
     }

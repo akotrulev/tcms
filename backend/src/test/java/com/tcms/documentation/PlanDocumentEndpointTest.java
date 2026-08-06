@@ -896,16 +896,15 @@ class PlanDocumentEndpointTest extends IntegrationTestBase {
             String name) throws SQLException {
 
         try (var statement = connection.prepareStatement("""
-                INSERT INTO suite (id, company_id, project_id, key, key_seq, path, name)
-                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?, CAST(? AS ltree), ?)
+                INSERT INTO suite (id, company_id, project_id, key, key_seq, name)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?, ?)
                 """)) {
             statement.setString(1, id.toString());
             statement.setString(2, ACME.toString());
             statement.setString(3, projectId.toString());
             statement.setString(4, key);
             statement.setLong(5, seq);
-            statement.setString(6, "s" + seq + "x" + Math.abs(projectId.hashCode() % 1000));
-            statement.setString(7, name);
+            statement.setString(6, name);
             statement.executeUpdate();
         }
     }

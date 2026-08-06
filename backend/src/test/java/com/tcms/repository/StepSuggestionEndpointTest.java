@@ -550,9 +550,8 @@ class StepSuggestionEndpointTest extends IntegrationTestBase {
 
         try (var statement = connection.prepareStatement("""
                 INSERT INTO suite
-                    (id, company_id, project_id, parent_id, key, key_seq, name, path, position)
-                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), NULL, ?, ?, ?,
-                        CAST(? AS ltree), ?)
+                    (id, company_id, project_id, key, key_seq, name, position)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?, ?, ?)
                 ON CONFLICT (id) DO NOTHING
                 """)) {
             statement.setString(1, id.toString());
@@ -561,8 +560,7 @@ class StepSuggestionEndpointTest extends IntegrationTestBase {
             statement.setString(4, key);
             statement.setLong(5, keySeq);
             statement.setString(6, "Refunds");
-            statement.setString(7, "n" + id.toString().replace("-", ""));
-            statement.setInt(8, 0);
+            statement.setInt(7, 0);
             statement.executeUpdate();
         }
     }

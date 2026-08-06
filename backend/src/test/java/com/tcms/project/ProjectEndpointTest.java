@@ -641,8 +641,8 @@ class ProjectEndpointTest extends IntegrationTestBase {
         try (var connection = superuserConnection()) {
             UUID suiteId = UUID.nameUUIDFromBytes(("suite:" + projectId).getBytes());
             try (var suite = connection.prepareStatement("""
-                    INSERT INTO suite (id, company_id, project_id, key, key_seq, name, path)
-                    VALUES (?, ?, ?, ?, 1, 'Root', 'Root')
+                    INSERT INTO suite (id, company_id, project_id, key, key_seq, name)
+                    VALUES (?, ?, ?, ?, 1, 'Root')
                     ON CONFLICT (id) DO NOTHING
                     """)) {
                 suite.setObject(1, suiteId);

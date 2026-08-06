@@ -65,9 +65,9 @@ public class SuiteMembership {
     /**
      * How many live cases each of a project's suites holds, by the whole union.
      *
-     * <p><strong>The suite's OWN membership, not its subtree's</strong> — {@code SuiteView}'s
-     * contract, unchanged by this slice: the SPA's tree sums a node with its children, so a subtree
-     * count here would be counted again at every ancestor.
+     * <p>The suite's own membership. It said "not its subtree's" until §98, because the SPA's tree
+     * summed a node with its children and a subtree count would have been counted again at every
+     * ancestor; there is no subtree left for it to be confused with.
      *
      * <p><strong>These counts no longer sum to the project's case count, and that is not a defect
      * to fix by summing differently.</strong> A case can be in three suites — filed in one, added
@@ -110,47 +110,38 @@ public class SuiteMembership {
     }
 
     /**
-     * Every live case in one suite's <strong>subtree</strong>, by the whole union — the set a run
-     * scoped on a folder covers.
+     * Every live case in one suite, by the whole union — the set a run scoped on that suite covers,
+     * and the set the case grid's {@code suiteId} filter selects.
      *
-     * <p>The subtree, not the suite, because {@code plan_scope_item.suite_id} has always meant
-     * "this folder and everything under it" and a tag rule on a child folder is as much a claim as
-     * a case filed in one. {@code <@} is the {@code ltree} descendant-or-self operator, the same one
-     * {@code CaseFacts} expands a plan's scope with.
-     *
-     * <p><strong>This is what makes "run everything tagged smoke" work with no new mechanism</strong>
-     * (the plan's own line): such a run is a suite whose tag rule is {@code smoke}, scoped into a
-     * plan the way suites already are. There is no tag option on plan scope and
-     * {@code ck_plan_scope_target} is untouched.
+     * <p><strong>The suite, not a subtree, since §98.</strong> This walked {@code d.path <@
+     * root.path} — {@code ltree}'s descendant-or-self operator — because
+     * {@code plan_scope_item.suite_id} had always meant "this folder and everything under it", and
+     * a tag rule on a child folder was as much a claim as a case filed in one. With no tree, a
+     * suite arm resolves to what that suite itself holds.
      *
      * <p>Ordered by {@code key_seq} rather than by id: a scope is read as a work list, and
      * {@code TC-10000} sorts before {@code TC-9999} as text.
      */
     @Transactional(readOnly = true)
-    public List<UUID> caseIdsInSubtree(UUID companyId, UUID projectId, UUID suiteId) {
+    public List<UUID> caseIdsIn(UUID companyId, UUID projectId, UUID suiteId) {
         @SuppressWarnings("unchecked")
         List<UUID> ids = entities.createNativeQuery("""
                         SELECT DISTINCT c.id, c.key_seq
-                          FROM suite root
-                          JOIN suite d
-                            ON d.company_id = root.company_id
-                           AND d.project_id = root.project_id
-                           AND d.deleted_at IS NULL
-                           AND d.path <@ root.path
+                          FROM suite s
                           JOIN test_case c
-                            ON c.company_id = d.company_id
-                           AND c.project_id = d.project_id
+                            ON c.company_id = s.company_id
+                           AND c.project_id = s.project_id
                            AND c.deleted_at IS NULL
-                           AND ( c.suite_id = d.id
+                           AND ( c.suite_id = s.id
                               OR EXISTS (SELECT 1 FROM suite_case m
-                                          WHERE m.suite_id = d.id AND m.case_id = c.id)
+                                          WHERE m.suite_id = s.id AND m.case_id = c.id)
                               OR EXISTS (SELECT 1 FROM suite_tag_rule r
                                            JOIN case_tag t ON t.tag = r.tag AND t.case_id = c.id
-                                          WHERE r.suite_id = d.id) )
-                         WHERE root.company_id = :companyId
-                           AND root.project_id = :projectId
-                           AND root.deleted_at IS NULL
-                           AND root.id = :suiteId
+                                          WHERE r.suite_id = s.id) )
+                         WHERE s.company_id = :companyId
+                           AND s.project_id = :projectId
+                           AND s.deleted_at IS NULL
+                           AND s.id = :suiteId
                          ORDER BY c.key_seq
                         """)
                 .setParameter("companyId", companyId)
