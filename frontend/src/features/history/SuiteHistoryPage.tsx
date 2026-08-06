@@ -9,7 +9,6 @@ import { PageHeader, Panel } from '../../components/PageHeader';
 import { DenominatorToggle, ResultBar, ResultCountsCell } from '../../components/ResultBar';
 import { executedCount, type Denominator } from '../../lib/results';
 import { formatCount, formatDateTime } from '../../lib/format';
-import { subtreeCaseCount } from '../../lib/suites';
 import { ScrollX } from '../../components/ScrollX';
 
 /**
@@ -48,14 +47,17 @@ export function SuiteHistoryPage() {
               <Identifier variant="strong">{suite.key}</Identifier>
               <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                 {/*
-                  The SUBTREE's count, because that is what the grid below is reporting on — the
-                  endpoint scopes a folder's history to the folder and everything beneath it. This
-                  read `suite.caseCount`, the folder's own rows, so a parent folder announced "3
-                  cases now" above a table of runs covering 47 (§52).
+                  `suite.caseCount` — the wire field, read directly, because since §98 it IS the
+                  scope of the grid below: the endpoint scopes a suite's history to the suite's
+                  resolved membership, and that is the number the contract says this field carries.
+
+                  It used to be a rollup through `lib/suites.subtreeCaseCount`, and that helper is
+                  deleted with the tree. §52's defect is what it existed for — this read
+                  `suite.caseCount` when the endpoint reported on a whole subtree, so a parent
+                  folder announced "3 cases now" above a table of runs covering 47. The two numbers
+                  agree again for the strongest available reason: **there is only one of them.**
                 */}
-                <Identifier variant="muted">
-                  {formatCount(subtreeCaseCount(suites.data ?? [], suiteId))}
-                </Identifier>{' '}
+                <Identifier variant="muted">{formatCount(suite.caseCount)}</Identifier>{' '}
                 cases now
               </Typography>
             </>

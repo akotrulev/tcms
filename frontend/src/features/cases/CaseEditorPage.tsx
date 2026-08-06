@@ -1040,13 +1040,18 @@ function CaseEditorForm({
                         Not filed
                       </Box>
                     </MenuItem>
-                    {(suites.data ?? []).map((suite) => (
-                      <MenuItem key={suite.id} value={suite.id}>
-                        <Box component="span" sx={{ pl: (suite.path.split('.').length - 1) * 1.5 }}>
+                    {/*
+                      No indentation any more (§98): the depth came from `suite.path`, and a flat
+                      suite has no depth to draw. What is left is a plain list of names, sorted the
+                      same way the rail sorts them so the picker and the rail read alike.
+                    */}
+                    {[...(suites.data ?? [])]
+                      .sort((a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key))
+                      .map((suite) => (
+                        <MenuItem key={suite.id} value={suite.id}>
                           {suite.name}
-                        </Box>
-                      </MenuItem>
-                    ))}
+                        </MenuItem>
+                      ))}
                   </TextField>
                 )}
               />

@@ -501,39 +501,57 @@ export const configurations: Configuration[] = [
 
 // -------------------------------------------------------------------- suites ----
 
+/*
+  Flat since §98 — `parentId` and `path` are off the contract, so what was a four-level tree is
+  ten sibling collections.
+
+  **The names are unchanged and that is deliberate.** `Card capture` and `Refunds` used to read as
+  *Payments › Card capture* and *Payments › Refunds*, with the parent supplying half the meaning;
+  standing alone they still name what they hold, which is the claim the flattening makes and the
+  fixture is the cheapest place to check it. `Partial refunds` is the one that reads worst on its
+  own, kept for exactly that reason — a fixture that only holds comfortable rows proves the easy
+  half (§96's own "the awkward rows the UI must handle").
+
+  `Payments` and `Checkout` were pure containers: 0 cases of their own, meaningful only as the root
+  of a subtree. They keep their names and gain a **tag rule apiece**, which is what a grouping
+  suite becomes when there is nothing to nest — the intended replacement for a parent folder, put
+  in front of the mock pass rather than described in a handoff.
+*/
 export const suites: Suite[] = [
-  { id: uid(1, 'q'), key: 'TS-1', parentId: null, name: 'Payments', description: 'All payment flows', path: 'Payments', caseCount: 0, tagRules: [], caseIds: [], lifecycleStatus: 'APPROVED', conditions: [], lockVersion: 3 },
-  { id: uid(2, 'q'), key: 'TS-2', parentId: uid(1, 'q'), name: 'Card capture', description: null, path: 'Payments.Capture', caseCount: 8, tagRules: [], caseIds: [], lifecycleStatus: 'APPROVED', conditions: [], lockVersion: 1 },
+  { id: uid(1, 'q'), key: 'TS-1', name: 'Payments', description: 'All payment flows', caseCount: 0, tagRules: ['payments'], caseIds: [], lifecycleStatus: 'APPROVED', conditions: [], lockVersion: 3 },
+  { id: uid(2, 'q'), key: 'TS-2', name: 'Card capture', description: null, caseCount: 8, tagRules: [], caseIds: [], lifecycleStatus: 'APPROVED', conditions: [], lockVersion: 1 },
   {
-    id: uid(3, 'q'), key: 'TS-3', parentId: uid(1, 'q'), name: 'Refunds',
-    description: 'Full and partial refund handling', path: 'Payments.Refunds', caseCount: 12, tagRules: [], caseIds: [],
+    id: uid(3, 'q'), key: 'TS-3', name: 'Refunds',
+    description: 'Full and partial refund handling', caseCount: 12, tagRules: [], caseIds: [],
     lifecycleStatus: 'APPROVED',
+    // The one suite carrying a condition, and since §98 it is inherited by the cases FILED here
+    // and by nothing else — there is no chain below it to walk, and the other two membership arms
+    // deliberately do not inherit.
     conditions: [
       { id: uid(90, 'x'), position: 0, conditionId: uid(1, 'n'), title: 'Log in as standard user', body: ['Open the application', 'Enter valid credentials', 'Confirm the dashboard is shown'], inline: false, inherited: false, inheritedFrom: null },
     ],
     lockVersion: 5,
   },
-  { id: uid(4, 'q'), key: 'TS-4', parentId: uid(3, 'q'), name: 'Partial refunds', description: null, path: 'Payments.Refunds.Partial', caseCount: 6, tagRules: [], caseIds: [], lifecycleStatus: 'IN_REVIEW', conditions: [], lockVersion: 2 },
-  { id: uid(5, 'q'), key: 'TS-5', parentId: null, name: 'Checkout', description: null, path: 'Checkout', caseCount: 0, tagRules: [], caseIds: [], lifecycleStatus: 'APPROVED', conditions: [], lockVersion: 1 },
-  { id: uid(6, 'q'), key: 'TS-6', parentId: uid(5, 'q'), name: 'Cart', description: null, path: 'Checkout.Cart', caseCount: 9, tagRules: [], caseIds: [], lifecycleStatus: 'DRAFT', conditions: [], lockVersion: 1 },
-  { id: uid(7, 'q'), key: 'TS-7', parentId: null, name: 'Settlement', description: 'Nightly settlement and reconciliation', path: 'Settlement', caseCount: 7, tagRules: [], caseIds: [], lifecycleStatus: 'APPROVED', conditions: [], lockVersion: 1 },
-  { id: uid(8, 'q'), key: 'TS-8', parentId: null, name: 'Unmatched automation', description: 'Quarantine for CI results with no matching case', path: 'Quarantine', caseCount: 3, tagRules: [], caseIds: [], lifecycleStatus: 'DRAFT', conditions: [], lockVersion: 1 },
+  { id: uid(4, 'q'), key: 'TS-4', name: 'Partial refunds', description: null, caseCount: 6, tagRules: [], caseIds: [], lifecycleStatus: 'IN_REVIEW', conditions: [], lockVersion: 2 },
+  { id: uid(5, 'q'), key: 'TS-5', name: 'Checkout', description: null, caseCount: 0, tagRules: ['checkout'], caseIds: [], lifecycleStatus: 'APPROVED', conditions: [], lockVersion: 1 },
+  { id: uid(6, 'q'), key: 'TS-6', name: 'Cart', description: null, caseCount: 9, tagRules: [], caseIds: [], lifecycleStatus: 'DRAFT', conditions: [], lockVersion: 1 },
+  { id: uid(7, 'q'), key: 'TS-7', name: 'Settlement', description: 'Nightly settlement and reconciliation', caseCount: 7, tagRules: [], caseIds: [], lifecycleStatus: 'APPROVED', conditions: [], lockVersion: 1 },
+  { id: uid(8, 'q'), key: 'TS-8', name: 'Unmatched automation', description: 'Quarantine for CI results with no matching case', caseCount: 3, tagRules: [], caseIds: [], lifecycleStatus: 'DRAFT', conditions: [], lockVersion: 1 },
   // The one suite that resolves rather than merely holds (§96): its members are the cases tagged
-  // `smoke` — TC-1, filed under Refunds, and TC-13, filed under Card capture — and NOT the cases
-  // filed here, because nothing is. It exists so the tree, the counts and the editor can be driven
-  // against a collection whose membership is a query, which is the whole of this slice and is
-  // otherwise unreachable in mock mode: every other folder answers the same number under both the
-  // old rule and the new one.
-  { id: uid(10, 'q'), key: 'TS-10', parentId: null, name: 'Smoke', description: 'Everything tagged smoke, wherever it is filed', path: 'Smoke', caseCount: 0, tagRules: ['smoke'], caseIds: [], lifecycleStatus: 'APPROVED', conditions: [], lockVersion: 1 },
-  // The only DEPRECATED folder, and it is here so the one edge that leaves that state — "Restore
+  // `smoke` — TC-1 and TC-13, filed elsewhere — and NOT the cases filed here, because nothing is.
+  // It exists so the rail, the counts and the editor can be driven against a collection whose
+  // membership is a query. It is also the row that proves §98's grid fix: clicking it must list
+  // two cases, where before §98 it listed none under a count of two.
+  { id: uid(10, 'q'), key: 'TS-10', name: 'Smoke', description: 'Everything tagged smoke, wherever it is filed', caseCount: 0, tagRules: ['smoke'], caseIds: [], lifecycleStatus: 'APPROVED', conditions: [], lockVersion: 1 },
+  // The only DEPRECATED suite, and it is here so the one edge that leaves that state — "Restore
   // to draft" — can be driven in mock mode at all. §68's retired-classification-value argument:
   // a state no fixture sits in is a state whose only transition is untestable without a backend.
   //
   // The mix above is worth reading in the other direction too. These fixtures have carried
-  // APPROVED and IN_REVIEW folders since Phase 1, while `Suite.create` was the only writer
-  // `lifecycle_status` had — so mock mode has been showing a signed-off suite tree that the
+  // APPROVED and IN_REVIEW suites since Phase 1, while `Suite.create` was the only writer
+  // `lifecycle_status` had — so mock mode has been showing a signed-off suite list that the
   // product could not produce on any real instance. §74's exit criteria, one aggregate over.
-  { id: uid(9, 'q'), key: 'TS-9', parentId: null, name: 'Legacy card flows', description: 'Superseded by Payments; kept for the audit trail', path: 'Legacy', caseCount: 0, tagRules: [], caseIds: [], lifecycleStatus: 'DEPRECATED', conditions: [], lockVersion: 2 },
+  { id: uid(9, 'q'), key: 'TS-9', name: 'Legacy card flows', description: 'Superseded by Payments; kept for the audit trail', caseCount: 0, tagRules: [], caseIds: [], lifecycleStatus: 'DEPRECATED', conditions: [], lockVersion: 2 },
 ];
 
 // ---------------------------------------------------------------- conditions ----

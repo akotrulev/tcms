@@ -12,7 +12,7 @@ import { formatCount } from '../../lib/format';
 import { BulkActionDialog } from './BulkActionDialog';
 import { CaseFilterBar } from './CaseFilterBar';
 import { CaseGrid } from './CaseGrid';
-import { SuiteTree } from './SuiteTree';
+import { SuiteList } from './SuiteList';
 import { useCaseFilters } from './useCaseFilters';
 
 /**
@@ -57,7 +57,7 @@ export function CaseListPage() {
         ]}
         subtitle={
           selectedSuite
-            ? `Scoped to ${selectedSuite.name} and everything beneath it.`
+            ? `Scoped to ${selectedSuite.name} — cases filed here, added here, or carrying one of its tags.`
             : 'Everything in this project. Pick a suite to narrow it, or filter below.'
         }
         actions={
@@ -83,7 +83,7 @@ export function CaseListPage() {
           <Panel title="Suites" testId="Cases.SuitePanel" dense>
             <Box sx={{ p: 1, maxHeight: { md: '70vh' }, overflowY: 'auto' }}>
               <DataRegion
-                testId="Cases.SuiteTree"
+                testId="Cases.SuiteList"
                 state={{ ...suites, refetch: () => void suites.refetch() }}
                 /*
                   No `isEmpty` here, deliberately, and this is the one place a region opts out.
@@ -97,7 +97,7 @@ export function CaseListPage() {
                 */
               >
                 {(rows) => (
-                  <SuiteTree
+                  <SuiteList
                     suites={rows}
                     selectedSuiteId={filters.suiteId}
                     onSelect={(suiteId) => setFilter('suiteId', suiteId)}

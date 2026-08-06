@@ -40,8 +40,6 @@ const suites: Suite[] = [
   {
     id: 'suite-1',
     name: 'Refunds',
-    path: 'refunds',
-    parentId: null,
     caseCount: 3,
     lifecycleStatus: 'DRAFT',
   } as Suite,

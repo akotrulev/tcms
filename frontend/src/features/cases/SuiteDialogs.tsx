@@ -81,9 +81,9 @@ function applyServerError(
         landed = true;
       }
     }
-    // `parentId` and `If-Match` are keyed fields with no input on this form — a move the server
-    // refused, or a precondition it could not parse. Dropping them silently would leave a
-    // rejected save with nothing shown at all.
+    // `If-Match` is a keyed field with no input on this form — a precondition the server could
+    // not parse. Dropping it silently would leave a rejected save with nothing shown at all.
+    // (`parentId` was the other one until §98 removed it from the contract.)
     if (landed) return;
   }
   setError('root', describeError(error).body);
@@ -245,14 +245,11 @@ export function CreateSuiteDialog({
   open,
   onClose,
   projectId,
-  parent,
   onCreated,
 }: {
   open: boolean;
   onClose: () => void;
   projectId: string;
-  /** The folder the new one goes under, or null for a root. */
-  parent: Suite | null;
   onCreated: (suite: Suite) => void;
 }) {
   const create = useCreateSuite(projectId);
@@ -261,9 +258,10 @@ export function CreateSuiteDialog({
     <SuiteFormDialog
       open={open}
       onClose={onClose}
-      title={parent ? `New suite in ${parent.name}` : 'New suite'}
+      // One title, because there is one kind of suite. It was `New suite in <parent>` when a
+      // create could land somewhere the user had not chosen deliberately; §98 removed the place.
+      title="New suite"
       submitLabel="Create suite"
-      // Keyed on the parent so opening the dialog from a different node resets the form.
       defaults={{ name: '', description: '', tagRules: [] }}
       isPending={create.isPending}
       testId={`${TestIdPrefix}.Create`}
@@ -272,7 +270,6 @@ export function CreateSuiteDialog({
           const created = await create.mutateAsync({
             name: values.name.trim(),
             description: values.description?.trim() || null,
-            parentId: parent?.id ?? null,
             tagRules: values.tagRules,
           });
           onCreated(created);
@@ -317,10 +314,6 @@ export function RenameSuiteDialog({
           const renamed = await rename.mutateAsync({
             name: values.name.trim(),
             description: values.description?.trim() || null,
-            // parentId is deliberately NOT sent. The server accepts it only when it repeats the
-            // stored parent and refuses a differing one with a field error — so sending it buys
-            // nothing here and would make an ordinary rename fail the day moving is implemented
-            // and this form still echoes a stale value.
             // Always sent, including as []: the server reads absent as "leave them alone", so
             // clearing a suite's last rule would otherwise report success and change nothing —
             // and the collection would keep holding cases nobody could see why.

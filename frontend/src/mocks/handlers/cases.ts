@@ -22,7 +22,7 @@ import {
   caseDetail,
   caseVersions,
   db,
-  descendantSuiteIds,
+  suiteMemberCaseIds,
   newId,
   reviewMoved,
   recordCaseVersion,
@@ -234,11 +234,15 @@ function filterCases(url: URL): TestCaseSummary[] {
 
   const suiteId = p.get('suiteId');
   if (suiteId) {
-    const scope = descendantSuiteIds(suiteId);
-    rows = rows.filter((c) => c.suiteId !== null && scope.has(c.suiteId));
+    // The suite's RESOLVED membership, which is the same set its rail count reports — one
+    // function, so the two cannot answer differently (§98). This walked the subtree of the
+    // *filed* arm until then, so a suite defined by a tag rule listed nothing under a count of
+    // twelve.
+    const members = suiteMemberCaseIds(suiteId);
+    rows = rows.filter((c) => members.has(c.id));
   } else if (p.get('unfiled') === 'true') {
-    // Only meaningful without a folder — a case cannot be both inside a subtree and outside every
-    // folder — and the server ignores the pair in exactly this direction rather than refusing it.
+    // Only meaningful without a suite — a case cannot be both filed somewhere and filed nowhere —
+    // and the server ignores the pair in exactly this direction rather than refusing it.
     rows = rows.filter((c) => c.suiteId === null);
   }
 

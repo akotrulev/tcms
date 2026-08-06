@@ -14,7 +14,7 @@ export {
   allocateRunKey,
   allocateSuiteKey,
 } from './keys';
-export { descendantSuiteIds, suiteCaseCount, suiteOwnCaseCount, suiteTree } from './suites';
+export { suiteCaseCount, suiteList, suiteMemberCaseIds, suiteOwnCaseCount } from './suites';
 export { caseDetail, caseVersions, recordCaseVersion, writeCase } from './cases';
 export {
   materialiseRun,

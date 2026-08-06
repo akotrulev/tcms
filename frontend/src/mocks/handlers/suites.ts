@@ -1,4 +1,4 @@
-/** The suite tree, its three writes, and its history. */
+/** The suite list, its three writes, and its history. */
 import { HttpResponse, delay, http } from 'msw';
 import type { LifecycleStatus, Suite } from '../../api/types';
 import { lifecycleLabels } from '../../lib/labels';
@@ -9,15 +9,14 @@ import {
   reporting,
   reviewMoved,
   suiteCaseCount,
+  suiteList,
   suiteOwnCaseCount,
-  suiteTree,
 } from '../db';
 import { decide, needsApproval, standingOf } from '../lifecycleLadder';
 import { API, LATENCY, MAX_SUITE_NAME, meRef, notFound, permissionsOn, problem } from './shared';
 
 interface SuiteBody {
   name?: string;
-  parentId?: string | null;
   description?: string | null;
   tagRules?: string[];
   caseIds?: string[];
@@ -32,7 +31,7 @@ function normalizeTagRules(rules: string[] | undefined): string[] | undefined {
 export const suiteHandlers = [
   http.get(`${API}/projects/:projectId/suites`, async () => {
     await delay(LATENCY);
-    return HttpResponse.json(suiteTree());
+    return HttpResponse.json(suiteList());
   }),
 
   /*
@@ -53,27 +52,21 @@ export const suiteHandlers = [
       errors.name = [`Keep the name under ${MAX_SUITE_NAME} characters.`];
     }
 
-    const parent = body.parentId ? db.suites.find((s) => s.id === body.parentId) : null;
-    // A parent outside the project is a FIELD error, not a 404: the project resolved, and the
-    // message belongs on the picker. Unchecked, the folder is created under another project's
-    // suite and appears in no tree at all.
-    if (body.parentId && !parent) errors.parentId = ['That suite is not in this project.'];
+    // §98: no parent to validate. This used to reject a `parentId` from outside the project as a
+    // FIELD error rather than a 404 — the project resolved, and the message belonged on the
+    // picker; unchecked, the folder was created under another project's suite and appeared in no
+    // tree at all. There is no tree and no picker now.
 
     if (Object.keys(errors).length > 0) {
       return problem(400, 'Validation failed', 'Check the highlighted fields.', errors);
     }
 
-    const { key, keySeq } = allocateSuiteKey();
+    const { key } = allocateSuiteKey();
     const suite: Suite = {
       id: newId(),
       key,
-      parentId: body.parentId ?? null,
       name,
       description: body.description?.trim() || null,
-      // Derived from the key sequence, exactly as the server does, and NOT from the name: a
-      // name-derived label is not unique, can be empty, and would make every rename a subtree
-      // rewrite.
-      path: parent ? `${parent.path}.s${keySeq}` : `s${keySeq}`,
       caseCount: 0,
       // Absent means "none yet" on a create — there is nothing to leave alone. On the PATCH below
       // absent means "leave them alone", which is not the same instruction and is the one a rename
@@ -89,7 +82,7 @@ export const suiteHandlers = [
   }),
 
   http.get(`${API}/projects/:projectId/suites/:suiteId`, ({ params }) => {
-    const suite = suiteTree().find((s) => s.id === params.suiteId);
+    const suite = suiteList().find((s) => s.id === params.suiteId);
     return suite ? HttpResponse.json(suite) : notFound('That suite');
   }),
 
@@ -126,11 +119,10 @@ export const suiteHandlers = [
     else if (name.length > MAX_SUITE_NAME) {
       errors.name = [`Keep the name under ${MAX_SUITE_NAME} characters.`];
     }
-    // Refused, not ignored. Dropping it silently is the answer that lets a client show the folder
-    // in its new place, reload, and find it back — with the server having reported success.
-    if (body.parentId !== undefined && body.parentId !== null && body.parentId !== suite.parentId) {
-      errors.parentId = ['Moving a suite is not supported yet. Leave the parent unchanged.'];
-    }
+    // §98: the move refusal is gone with the parent. It used to reject a differing `parentId`
+    // rather than ignore it, because dropping it silently lets a client show the folder in its
+    // new place, reload, and find it back — with the server having reported success. There is no
+    // longer anywhere to move a suite to, so the field is not on the contract and not read here.
     if (Object.keys(errors).length > 0) {
       return problem(400, 'Validation failed', 'Check the highlighted fields.', errors);
     }
@@ -209,20 +201,20 @@ export const suiteHandlers = [
     if (index < 0) return notFound('That suite');
     const suite = db.suites[index];
 
-    // Empty means empty of BOTH: a folder can hold no cases and still hold folders, and either
-    // one removed silently is a node the tree still renders children under. A cascade would
-    // delete other people's cases through a folder action with no preview, which is why the
-    // server refuses it rather than offering a "delete everything" flag.
-    const childSuites = db.suites.filter((s) => s.parentId === suite.id).length;
+    // Empty means empty of FILED cases, and only those (§98).
+    //
+    // The child-suite half of this check went with the tree. The other half narrowed at the same
+    // time and deliberately: a case merely *added* to this suite, or matched by one of its tag
+    // rules, lives somewhere else and only appears here, so deleting the collection loses a claim
+    // and never a case. A cascade would delete other people's cases through a collection action
+    // with no preview, which is why the server refuses instead of offering a "delete everything"
+    // flag — and that argument only ever applied to the cases this suite actually holds.
     const cases = suiteCaseCount(suite.id);
-    if (childSuites > 0 || cases > 0) {
-      const parts: string[] = [];
-      if (childSuites > 0) parts.push(`${childSuites} ${childSuites === 1 ? 'suite' : 'suites'}`);
-      if (cases > 0) parts.push(`${cases} ${cases === 1 ? 'case' : 'cases'}`);
+    if (cases > 0) {
       return problem(
         409,
         'Suite is not empty',
-        `This suite still holds ${parts.join(' and ')}. Move or delete them first.`,
+        `This suite still holds ${cases} ${cases === 1 ? 'case' : 'cases'}. Move or delete them first.`,
       );
     }
 

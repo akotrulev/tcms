@@ -1084,7 +1084,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Suite tree */
+        /** Suites */
         get: {
             parameters: {
                 query?: never;
@@ -1096,7 +1096,11 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Suites, as a flat list with parentId (client builds the tree) */
+                /**
+                 * @description The project's live suites. **A flat list, and flat all the way down** — a suite is a
+                 *     named collection, not a folder in a tree, so there is nothing for a client to assemble
+                 *     and no order but the server's.
+                 */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -1113,8 +1117,11 @@ export interface paths {
         /**
          * Create a suite
          * @description `key` is server-allocated from the company's counter (`TS-n`, sequential per **company**,
-         *     §6t), and `path` is derived from it — **not** from the name, so a rename never rewrites a
-         *     path. Requires `suite:manage`.
+         *     §6t). Requires `suite:manage`.
+         *
+         *     ~~`path` is derived from the key — **not** from the name, so a rename never rewrites a
+         *     path.~~ → **superseded (§98): suites are flat and `path` is gone.** It existed to place a
+         *     folder in a tree; with no tree, a per-suite path is a second spelling of the key.
          *
          *     `lifecycleStatus` is always `DRAFT`, for the reason a created case is: a status an ordinary
          *     create could set is an approval its author granted themselves (§6g).
@@ -1201,14 +1208,22 @@ export interface paths {
          *     they can organise the tree freely without being able to unmake someone else's work
          *     (roles spec §6b).
          *
-         *     **The suite must be empty**, subtree included: a suite holding live cases, or having live
-         *     child suites, answers `409` naming what is in the way. A cascade would soft-delete other
-         *     people's *cases* through a folder action with no preview, routing around the `OWN` qualifier
-         *     that `case:delete` carries for exactly that reason. Cascading deletion waits for a slice that
-         *     can show what it is about to touch.
+         *     **The suite must be empty**: a suite holding live *filed* cases answers `409` naming how
+         *     many. A cascade would soft-delete other people's *cases* through a collection action with no
+         *     preview, routing around the `OWN` qualifier that `case:delete` carries for exactly that
+         *     reason. Cascading deletion waits for a slice that can show what it is about to touch.
          *
-         *     Soft, not hard: past runs reference the cases beneath a suite and `suite_run_summary` keys on
-         *     the suite id, so removing the row rewrites what a past run covered.
+         *     **Only the filing arm blocks, and the other two deliberately do not** (§98). A case *added*
+         *     to this suite, or *matched* by one of its `tagRules`, is not held here — it lives elsewhere
+         *     and merely appears in this collection, so deleting the collection loses a claim on it and
+         *     never the case. Filing is different in kind: `test_case.suite_id` is where the case is, and
+         *     deleting its suite would leave it reachable only through the unfiled list.
+         *
+         *     ~~Child suites also stand in the way.~~ → **gone with the tree (§98)**; a suite has no
+         *     children to hold.
+         *
+         *     Soft, not hard: past runs reference the cases filed under a suite and `suite_run_summary`
+         *     keys on the suite id, so removing the row rewrites what a past run covered.
          */
         delete: {
             parameters: {
@@ -1232,8 +1247,8 @@ export interface paths {
                 403: components["responses"]["Forbidden"];
                 404: components["responses"]["NotFound"];
                 /**
-                 * @description The suite is not empty. `detail` names the live case and child-suite counts standing in
-                 *     the way, so the client can say what to clear rather than "could not delete".
+                 * @description The suite is not empty. `detail` names the live filed-case count standing in the way,
+                 *     so the client can say what to clear rather than "could not delete".
                  */
                 409: {
                     headers: {
@@ -1251,10 +1266,13 @@ export interface paths {
          * Rename a suite
          * @description Renames a suite and edits its description. Requires `suite:manage`.
          *
-         *     **Moving is not supported here yet.** `parentId` is accepted only when it matches the
+         *     ~~**Moving is not supported here yet.** `parentId` is accepted only when it matches the
          *     suite's current parent; a different value is a `400` rather than a silently ignored field,
-         *     because reparenting rewrites every descendant's `path` and needs cycle prevention — see
-         *     `Suite.path`. A client must not be able to believe a move happened.
+         *     because reparenting rewrites every descendant's `path` and needs cycle prevention.~~
+         *     → **superseded (§98): there is nowhere to move a suite to.** A flat suite has no parent, so
+         *     the refusal, the cycle check and the `path` rewrite it was protecting all stop existing.
+         *     What a client wants when it reaches for a move — *this case belongs over there* — is the
+         *     case's own `suiteId`, or a `caseIds` / `tagRules` entry on the target suite.
          *
          *     Send the suite's `lockVersion` as `If-Match`. Omitting it is last-write-wins, which is right
          *     for an importer with no prior read; the SPA always sends it, so a concurrent rename is a
@@ -1373,10 +1391,19 @@ export interface paths {
          *     summarized as counts. Percentages are derived client-side so the
          *     "of executed" vs "of total" toggle works without a round trip (plan §6p).
          *
-         *     **Scope is the suite and its descendants.** A folder's history means the folder's, and
-         *     §6p's rollup rule is to sum leaf counts — so a parent's entry covers every case beneath
-         *     it. The alternative (own cases only) makes every intermediate folder report an empty
-         *     history, which reads as "never executed" for a subtree that runs nightly.
+         *     **Scope is the suite's resolved membership** — filed ∪ added ∪ tagged, the same union
+         *     `Suite.caseCount` reports, so the history covers exactly the cases the suite claims.
+         *
+         *     ~~Scope is the suite and its descendants; §6p's rollup rule is to sum leaf counts, so a
+         *     parent's entry covers every case beneath it, and the alternative makes every intermediate
+         *     folder report an empty history.~~ → **superseded (§98)**: there are no intermediate folders
+         *     left to report an empty history, so the argument that forced the rollup has no subject.
+         *     §6p's rollup rule still holds wherever a tree remains (features, classification values).
+         *
+         *     **The rows already stored under the old shape are not rewritten**, and neither is what they
+         *     say: `execution_fact.suite_id` / `suite_path` record where a case was filed *when it ran*
+         *     (§86 froze them on conflict for exactly this), so a history from before the flattening may
+         *     name a path that no longer describes anything. That is correct and must not be "fixed".
          */
         get: {
             parameters: {
@@ -1446,12 +1473,12 @@ export interface paths {
                     tag?: string[];
                     /**
                      * @description `true` returns **only cases filed in no suite** (`suite_id IS NULL`, possible since the
-                     *     suite became a resolvable collection). The grid needs it because an unfiled case appears
-                     *     under no node of the tree, so without this filter the only way to find one is to page
+                     *     suite became a resolvable collection). The grid needs it because an unfiled case is
+                     *     filed under no suite, so without this filter the only way to find one is to page
                      *     through every case in the project.
                      *
-                     *     Ignored when `suiteId` is present — a case cannot be both in a folder's subtree and in
-                     *     no folder, and refusing the pair with a 400 would break the tree's own "clear the
+                     *     Ignored when `suiteId` is present — a case cannot be both filed somewhere and filed
+                     *     nowhere, and refusing the pair with a 400 would break the suite list's own "clear the
                      *     filter" affordance for no gain.
                      */
                     unfiled?: boolean;
@@ -2429,9 +2456,15 @@ export interface paths {
          *     the read gate every role passes must not be the write gate.
          *
          *     `suiteIds` and `caseIds` become the plan's **scope items**. A suite item means the
-         *     folder *and everything beneath it* — the plan's `caseCount` expands it — so adding
-         *     a folder and one of its cases is not a mistake, it is two ways of saying the same
-         *     thing and the count dedupes them.
+         *     suite's resolved membership — filed ∪ added ∪ tagged, the same union `Suite.caseCount`
+         *     reports — and the plan's `caseCount` expands it, so naming a suite and one of its
+         *     cases is not a mistake: it is two ways of saying the same thing and the count dedupes
+         *     them.
+         *
+         *     ~~A suite item means the folder *and everything beneath it*.~~ → **superseded (§98)**,
+         *     when suites stopped being folders. Nothing about scope changes in *effect* for a plan
+         *     that named a leaf; a plan that named a parent to reach its children now reaches only
+         *     what that suite itself resolves, which is the whole point of the flattening.
          */
         post: {
             parameters: {
@@ -3289,9 +3322,10 @@ export interface paths {
         /**
          * Delete a page
          * @description Soft-deletes a page and its blocks. Requires `doc:edit` — deleting is not split off into a
-         *     permission of its own the way `suite:delete` is, because a page has no subtree of other
-         *     people's work beneath it; the destructive-folder-action reasoning that split those two does
-         *     not apply here.
+         *     permission of its own the way `suite:delete` is, because deleting a page cannot reach other
+         *     people's *cases*; the destructive-collection-action reasoning that split those two does not
+         *     apply here. (Since §98 a suite has no subtree either — what `suite:delete` still guards is
+         *     the filed cases standing behind it.)
          *
          *     **The page must have no child pages**, which answer `409` naming the count. A cascade would
          *     remove pages the request never mentioned.
@@ -5583,16 +5617,12 @@ export interface components {
             id: string;
             /** @example TS-1 */
             key: string;
-            /** Format: uuid */
-            parentId?: string | null;
             name: string;
             description?: string | null;
-            path: string;
             /**
-             * @description The suite's **own** resolved membership — the cases filed in it, plus the cases added to
-             *     it individually, plus every live case carrying any of its `tagRules`, unioned and
-             *     deduped. Not its subtree's: the tree sums a node with its children, so a subtree count
-             *     here would be counted again at every ancestor.
+             * @description The suite's resolved membership — the cases filed in it, plus the cases added to it
+             *     individually, plus every live case carrying any of its `tagRules`, unioned and deduped.
+             *     Since §98 there is no subtree for it to be confused with.
              *
              *     **These counts do not sum to the project's case count, and that is the design.** A case
              *     can belong to three suites — filed in one, added to another, tagged into a third — so
@@ -5618,19 +5648,22 @@ export interface components {
              */
             caseIds: string[];
             lifecycleStatus: components["schemas"]["LifecycleStatus"];
-            /** @description Suite-level conditions inherited by every case beneath (plan §6f). */
+            /**
+             * @description Suite-level conditions, inherited by the cases **filed** in this suite (plan §6f).
+             *
+             *     ~~and by every case beneath it~~ → **§98**: with no subtree there is no chain to walk,
+             *     so a suite's conditions reach exactly its own filed cases. Inheritance deliberately did
+             *     **not** widen to the other two membership arms — a case *added* to a suite, or matched
+             *     by one of its `tagRules`, does not pick up its preconditions. Filing says where a case
+             *     lives and the standing rules of that place apply to it; a tag rule says a collection
+             *     wants to see it, which is not a claim about how it is run. Widening is a decision with a
+             *     slice behind it, not a side effect of flattening.
+             */
             conditions: components["schemas"]["CaseConditionRef"][];
             lockVersion: number;
         };
         SuiteInput: {
             name: string;
-            /**
-             * Format: uuid
-             * @description The parent folder, or null for a root. **Set on create; on `PATCH` it may only repeat
-             *     the suite's current parent** — a different value is refused rather than ignored, because
-             *     moving is not implemented yet (see the `PATCH` description).
-             */
-            parentId?: string | null;
             description?: string | null;
             /**
              * @description The suite's tag rules, as a **complete set** — every tag it should claim after this
@@ -5905,16 +5938,22 @@ export interface components {
             /**
              * @description Suites attaching this entry (`suite_condition`). **A second number rather than a bigger
              *     first one**, and that is the resolution of the design question `/shared-steps` posed:
-             *     a condition's usage spans two tables and the suite side propagates *by inheritance* down
-             *     the whole ancestor chain, so a suite attachment reaches every case beneath it — a figure
-             *     no join here can produce, since the walk is over `suite.path` (`ltree`) and this module's
-             *     library queries are HQL precisely so the Hibernate company filter survives.
+             *     a condition's usage spans two tables, and blending them would be a guess.
+             *
+             *     ~~The suite side propagates by inheritance down the whole ancestor chain, so a suite
+             *     attachment reaches every case beneath it — a figure no join here can produce, since the
+             *     walk is over `suite.path` (`ltree`).~~ → **§98: the reason changed and the shape did
+             *     not.** A flat suite's conditions reach exactly the cases **filed** in it, which *is* a
+             *     plain join — so the figure that was impossible is now merely unwritten. It stays
+             *     unwritten deliberately: the two numbers still do not add up (a case can be filed under
+             *     an attaching suite *and* attach the entry itself), so one blended count would be the
+             *     same guess it always was, just a cheaper one to compute.
              *
              *     Blending the two into one count would be a **guess presented as a measurement**, and it
              *     would understate: the direction that matters, because this is what the pre-edit impact
              *     warning is computed from (plan §6f) and an edit warned as touching 3 cases while touching
              *     300 is the failure the warning exists to prevent. Two honest numbers instead, and the
-             *     client says "attached to N suites — every case beneath inherits it" rather than
+             *     client says "attached to N suites — every case filed in one inherits it" rather than
              *     inventing a case count for them.
              */
             suiteUsageCount: number;
@@ -6868,7 +6907,9 @@ export interface components {
              *     `PATCH` it must match the page's current parent — a different value is a `400` rather
              *     than a silently ignored field, because reparenting rewrites every descendant's `path`
              *     and a client must not be able to believe a move happened. Same rule, and the same
-             *     reason, as `SuiteInput.parentId`.
+             *     reason, as `ClassificationValueInput.parentId`. (It was `SuiteInput.parentId`'s twin
+             *     until §98 flattened suites; the doc tree and the classification tree are unaffected —
+             *     §98 is about suites and nothing else, and a page genuinely nests.)
              */
             parentId?: string | null;
             /**

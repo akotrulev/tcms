@@ -1,4 +1,4 @@
-/** The suite tree and its three writes. */
+/** The suite list and its three writes. */
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { api } from '../client';
 import type { LifecycleStatus, Suite, SuiteHistoryResponse } from '../types';
@@ -13,13 +13,14 @@ export function useSuites(projectId: string): UseQueryResult<Suite[]> {
 
 /**
  * The three suite writes share one input shape, because the contract declares one `SuiteInput`
- * for both verbs. `parentId` means different things on each: on a create it chooses the parent,
- * and on a rename the server accepts it only when it repeats the stored one — moving is refused
- * with a field error rather than silently dropped, so the rename dialog does not send it at all.
+ * for both verbs.
+ *
+ * `parentId` was on it until §98 and is the field the two verbs disagreed about — a create chose
+ * the parent, a rename could only repeat it. Suites are flat now, so the disagreement and the
+ * field are both gone.
  */
 export type SuiteInput = {
   name: string;
-  parentId?: string | null;
   description?: string | null;
   /**
    * The tags this suite claims (§96). **Absent means "leave them alone" and `[]` means "clear
@@ -93,7 +94,7 @@ export function useDeleteSuite(projectId: string) {
 export function useSetSuiteStatus(projectId: string) {
   const client = useQueryClient();
   return useMutation({
-    // The suite is a MUTATION VARIABLE, not a hook argument, because the one caller is the tree's
+    // The suite is a MUTATION VARIABLE, not a hook argument, because the one caller is the list's
     // kebab menu — which acts on whichever folder it was opened on. `useRenameSuite` takes its id
     // up front for the opposite reason: its caller is a dialog mounted per suite.
     mutationFn: ({ suiteId, status }: { suiteId: string; status: LifecycleStatus }) =>
@@ -102,7 +103,7 @@ export function useSetSuiteStatus(projectId: string) {
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: keys.suites(projectId) });
       // A case's own screen renders the folder it sits in, and the case list's suite filter reads
-      // the tree — both show a status that has just moved.
+      // the list — both show a status that has just moved.
       void client.invalidateQueries({ queryKey: ['projects', projectId, 'cases'] });
     },
   });

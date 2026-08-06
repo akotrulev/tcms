@@ -29,10 +29,8 @@ const PROJECT = 'p-1'
 const suite: Suite = {
   id: 's-1',
   key: 'TS-1',
-  parentId: null,
   name: 'Payments',
   description: null,
-  path: 'Payments',
   caseCount: 4,
   tagRules: ['smoke'],
   caseIds: [],
@@ -52,7 +50,6 @@ function renderCreate() {
         open
         onClose={() => {}}
         projectId={PROJECT}
-        parent={null}
         onCreated={() => {}}
       />
     </TestProviders>,

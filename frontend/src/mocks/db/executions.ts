@@ -188,20 +188,19 @@ function resolveArms(rawSuiteIds: string[], rawCaseIds: string[], rawTags: strin
   const caseIds = new Set(rawCaseIds);
   const tags = new Set(rawTags);
 
-  const roots = db.suites.filter((suite) => suiteIds.includes(suite.id));
-  const covered = new Set(
-    db.suites
-      .filter((suite) => roots.some((root) => suite.path === root.path || suite.path.startsWith(`${root.path}.`)))
-      .map((suite) => suite.id),
-  );
+  // §98: a suite arm is the named suites themselves. It used to be their whole `path` subtree —
+  // `suite.path === root.path || suite.path.startsWith(root.path + '.')` — which is the expansion
+  // the flattening removes. Naming a suite that once had children now reaches what that suite
+  // itself resolves, which is the change the plan says out loud rather than hides.
+  const covered = new Set(suiteIds);
   // A suite's own `caseIds` and `tagRules` reach the plan through the suite, exactly as they reach
-  // the tree — the union §96 made the suite mean.
+  // the rail — the union §96 made the suite mean.
   const claimed = db.suites.filter((suite) => covered.has(suite.id));
 
   return db.cases
     .filter((row) => {
       if (row.lifecycleStatus === 'DEPRECATED') return false;
-      // An unfiled case is in no suite's subtree, so a suite arm never covers it by filing. It
+      // An unfiled case is filed in no suite, so a suite arm never covers it by filing. It
       // reaches the plan by being named, by carrying a tag, or by a suite claiming it.
       if (row.suiteId !== null && covered.has(row.suiteId)) return true;
       if (caseIds.has(row.id)) return true;
