@@ -182,6 +182,19 @@ export function sectionCaseCount(section: {
   return resolveArms(section.suiteIds ?? [], section.caseIds ?? [], section.tags ?? []).length;
 }
 
+/**
+ * The live cases a **run's** three arms resolve to (§99) — the same union, a third caller.
+ *
+ * A run's scope and a plan's scope are written in the same words and are not the same thing: this
+ * is resolved **once**, here, and the executions are written from it, where a plan's arms are
+ * re-resolved on every read. That difference is a property of *when* the function is called and
+ * not of the function, which is why there is one of it — a second implementation is how a suite
+ * comes to mean one set on the plan screen and another on the run dialog.
+ */
+export function runScopeCaseIds(suiteIds: string[], caseIds: string[], tags: string[]): string[] {
+  return resolveArms(suiteIds, caseIds, tags);
+}
+
 /** The union itself, over one set of arms. Shared so a plan and a section cannot disagree. */
 function resolveArms(rawSuiteIds: string[], rawCaseIds: string[], rawTags: string[]): string[] {
   const suiteIds = rawSuiteIds;

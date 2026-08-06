@@ -7,6 +7,7 @@ import {
   materialiseRun,
   newId,
   planScopeCaseIds,
+  runScopeCaseIds,
   recountRun,
   runExecutions,
   settingsForProject,
@@ -55,9 +56,10 @@ export const runHandlers = [
    * mock-proves-a-property-live-mode-lacks divergence §29 and §38 each found, and it would have
    * hidden the one behaviour this slice exists to deliver.
    *
-   * Now the scope resolves the same way the server's does — explicit `caseIds`, else the plan's
-   * expanded scope, never the union — and a run that would materialise nothing is refused, because
-   * an empty run renders as 0 of 0, 100%, complete.
+   * Now the scope resolves the same way the server's does — the three explicit arms (`caseIds`,
+   * `suiteIds`, `tags`) unioned, else the plan's expanded scope, never the two together — and a run
+   * that would materialise nothing is refused, because an empty run renders as 0 of 0, 100%,
+   * complete.
    */
   http.post(`${API}/projects/:projectId/runs`, async ({ params, request }) => {
     await delay(LATENCY);
@@ -89,15 +91,46 @@ export const runHandlers = [
       });
     }
 
-    const requested = (body.caseIds as string[] | undefined) ?? [];
-    const caseIds =
-      requested.length > 0 ? requested : plan ? planScopeCaseIds(plan) : [];
+    /*
+      §99 — three arms, unioned, and they SUBSTITUTE for the plan's scope rather than adding to it.
+      Same rule as before the arms existed, extended: the arms are how the caller says what this
+      run covers, the plan is the default for when they did not say.
+    */
+    const requestedCases = (body.caseIds as string[] | undefined) ?? [];
+    const requestedSuites = (body.suiteIds as string[] | undefined) ?? [];
+    const requestedTags = ((body.tags as string[] | undefined) ?? [])
+      .map((tag) => tag.trim())
+      .filter((tag) => tag.length > 0);
+    const named = requestedCases.length + requestedSuites.length + requestedTags.length > 0;
+
+    const caseIds = named
+      ? runScopeCaseIds(requestedSuites, requestedCases, requestedTags)
+      : plan
+        ? planScopeCaseIds(plan)
+        : [];
 
     if (caseIds.length === 0) {
+      // On every arm the caller used — a run scoped only by a mistyped tag, answered on `caseIds`,
+      // sends somebody to a control they never touched. The server's rule, and the dialog has a
+      // control for each of the three now, so a wrong field is a message with nowhere to go.
+      const fields = named
+        ? [
+            ...(requestedCases.length > 0 ? ['caseIds'] : []),
+            ...(requestedSuites.length > 0 ? ['suiteIds'] : []),
+            ...(requestedTags.length > 0 ? ['tags'] : []),
+          ]
+        : [plan ? 'planId' : 'caseIds'];
+
       return problem(400, 'Validation failed', 'Check the highlighted fields.', {
-        [plan ? 'planId' : 'caseIds']: [
-          'This run would have nothing to execute. Choose cases, or a plan whose scope still has some.',
-        ],
+        ...Object.fromEntries(
+          fields.map((field) => [
+            field,
+            [
+              'This run would have nothing to execute. Choose cases, suites or tags that match ' +
+                'something, or a plan whose scope still has some.',
+            ],
+          ]),
+        ),
       });
     }
 

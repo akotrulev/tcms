@@ -1,5 +1,7 @@
 import {
   Alert,
+  Autocomplete,
+  Box,
   Button,
   Dialog,
   DialogActions,
@@ -12,10 +14,16 @@ import {
 } from '@mui/material';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { ApiError } from '../../api/client';
-import { useCreateRun, usePlans } from '../../api/queries';
+import {
+  useCases,
+  useCreateRun,
+  usePlans,
+  useProjectTags,
+  useSuites,
+} from '../../api/queries';
 import type { TestRun } from '../../api/types';
 import { PermissionGate } from '../../components/PermissionGate';
 import { describeError } from '../../lib/describeError';
@@ -24,47 +32,106 @@ import { formatCount } from '../../lib/format';
 /**
  * Starting a run — **the affordance that materialises a checklist**.
  *
- * Creating a run is not creating a row. The server resolves the plan's scope, resolves each case's
+ * Creating a run is not creating a row. The server resolves the scope, resolves each case's
  * current version, and writes one execution per case pinned to it. That is the point of the whole
  * slice: until it existed, the execution screen — the product's most important one — could not be
  * reached from the UI at all, because nothing could produce a thing to record against.
  *
- * ## The plan is required by this form, and optional in the contract
+ * ## ~~The plan is required by this form, and optional in the contract~~
  *
- * `test_run.plan_id` is nullable and the API accepts an ad-hoc run scoped by `caseIds`. That path
+ * ~~`test_run.plan_id` is nullable and the API accepts an ad-hoc run scoped by `caseIds`. That path
  * belongs to a "run selected cases" affordance on the case grid, where a selection already exists.
  * Offering it here would mean building a second case picker whose only use is to reconstruct, by
  * hand, the set a plan already names — and a run created that way is one nobody can later ask
- * "against which plan?" of.
+ * "against which plan?" of.~~
  *
- * So the picker lists plans, and a project with none says so rather than presenting an empty
- * select the user cannot act on. The plan's own case count is shown beside it, because "how long
- * will this run be" is the question somebody is actually asking at this moment, and a plan whose
- * scope is empty is refused by the server — visible here before the click rather than after it.
+ * → **superseded by §99.** The argument was about *reconstructing* a plan's scope by hand, and it
+ * held while a case list was the only other way to say what a run covers. It stops holding once
+ * suites and tags are arms: "everything tagged `smoke`" is not a plan written out longhand, it is
+ * a scope no plan in the project need express, and the whole reason the arms were added is that
+ * people ask for exactly that run.
+ *
+ * So the plan is now **one of four ways** to scope a run and no longer required — and a project
+ * with no plans is no longer a dead end, which is the change a new project feels first. Its case
+ * count is still shown beside it, because "how long will this run be" is the question somebody is
+ * actually asking at this moment.
+ *
+ * ## The arms replace the plan's scope, and the form has to say so
+ *
+ * The server unions the three arms and, when any is present, ignores the plan's scope — the plan
+ * stays recorded as the association. Nothing about a form with four filled-in controls suggests
+ * that, so the helper text under the scope block states it, and the plan select's own text changes
+ * when an arm is in play. A rule the client cannot see is one it teaches by producing surprises.
  */
 
 /** Mirrors `RunEdit.MAX_NAME`. */
 const MAX_NAME = 200;
 /** Mirrors `RunEdit.MAX_RELEASE`. */
 const MAX_RELEASE = 100;
+/** Mirrors `RunEdit.MAX_TAG`, itself a copy of `CaseEdit`'s cap. */
+const MAX_TAG = 60;
 
-const RunSchema = z.object({
-  name: z
-    .string()
-    .min(1, 'Enter a run name.')
-    .max(MAX_NAME, `Keep the name under ${MAX_NAME} characters.`),
-  planId: z.string().min(1, 'Choose the plan this run executes.'),
-  releaseVersion: z.string().max(MAX_RELEASE).optional(),
-  buildNumber: z.string().max(MAX_RELEASE).optional(),
-});
+const RunSchema = z
+  .object({
+    name: z
+      .string()
+      .min(1, 'Enter a run name.')
+      .max(MAX_NAME, `Keep the name under ${MAX_NAME} characters.`),
+    // No longer `.min(1)` — §99. Empty means "not against a plan", which is a run this product
+    // now supports and the reason the arms exist.
+    planId: z.string(),
+    caseIds: z.array(z.string()),
+    suiteIds: z.array(z.string()),
+    tags: z.array(z.string().max(MAX_TAG, `Keep each tag under ${MAX_TAG} characters.`)),
+    releaseVersion: z.string().max(MAX_RELEASE).optional(),
+    buildNumber: z.string().max(MAX_RELEASE).optional(),
+  })
+  /*
+    A run needs somewhere to get its cases from, and this is the one rule the client can check
+    without guessing: it is about what the form *says*, not about what anything resolves to. The
+    server still owns "and does that resolve to something", which the client cannot know — a tag
+    nobody has used and a tag everybody uses look identical here.
+
+    On `caseIds` because it is the first scope control on the form, and a message with no control
+    under it is one nobody reads.
+  */
+  .superRefine((values, ctx) => {
+    const empty =
+      values.planId === '' &&
+      values.caseIds.length === 0 &&
+      values.suiteIds.length === 0 &&
+      values.tags.length === 0;
+    if (empty) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['caseIds'],
+        message: 'Choose a plan, or the cases, suites or tags this run covers.',
+      });
+    }
+  });
 
 type RunFormInput = z.infer<typeof RunSchema>;
 
 const TestId = 'Runs.Create';
 
-type FormField = 'name' | 'planId' | 'releaseVersion' | 'buildNumber';
+type FormField =
+  | 'name'
+  | 'planId'
+  | 'caseIds'
+  | 'suiteIds'
+  | 'tags'
+  | 'releaseVersion'
+  | 'buildNumber';
 
-const FIELDS: readonly FormField[] = ['name', 'planId', 'releaseVersion', 'buildNumber'];
+const FIELDS: readonly FormField[] = [
+  'name',
+  'planId',
+  'caseIds',
+  'suiteIds',
+  'tags',
+  'releaseVersion',
+  'buildNumber',
+];
 
 function applyServerError(
   error: unknown,
@@ -78,8 +145,10 @@ function applyServerError(
         setError(field as FormField, messages.join(' '));
         landed = true;
       } else {
-        // `caseIds`, `configurationId` and `assigneeId` have no control on this form, so their
-        // sentences go to the banner rather than nowhere.
+        // `configurationId` and `assigneeId` have no control on this form, so their sentences go
+        // to the banner rather than nowhere. §99 moved `caseIds`, `suiteIds` and `tags` OUT of
+        // this branch by giving each of them a control — which is what makes the server's
+        // "every arm the caller used" rule visible instead of collapsing into one banner line.
         stray.push(messages.join(' '));
       }
     }
@@ -105,17 +174,46 @@ export function RunCreateDialog({
 }) {
   const create = useCreateRun(projectId);
   const plans = usePlans(projectId);
+  const suites = useSuites(projectId);
+  const tags = useProjectTags(projectId);
+  /*
+    The case picker's catalogue, and its limit is `PlanCasesTab`'s, stated for the same reason:
+    there is no by-ids read on the contract, so this is the first page and a project past it has
+    cases this control cannot offer. That is the acceptable half of the trade — a run of two
+    hundred hand-picked cases is what the suite and tag arms exist to replace.
+  */
+  const catalogue = useCases(projectId, { size: 200 }, 'key,asc');
+
   const {
     register,
+    control,
+    watch,
     handleSubmit,
     setError,
     setFocus,
     formState: { errors },
   } = useForm<RunFormInput>({
     resolver: zodResolver(RunSchema),
-    defaultValues: { name: '', planId: '', releaseVersion: '', buildNumber: '' },
+    defaultValues: {
+      name: '',
+      planId: '',
+      caseIds: [],
+      suiteIds: [],
+      tags: [],
+      releaseVersion: '',
+      buildNumber: '',
+    },
     mode: 'onBlur',
   });
+
+  /*
+    Whether the plan's scope is in play. Watched rather than computed at submit, because it decides
+    what the plan control SAYS — the server's substitution rule is invisible in a form where all
+    four controls look equally live, and the first time somebody meets it should not be a run half
+    the length they expected.
+  */
+  const armed =
+    watch('caseIds').length > 0 || watch('suiteIds').length > 0 || watch('tags').length > 0;
 
   useEffect(() => {
     if (open) setFocus('name');
@@ -138,12 +236,16 @@ export function RunCreateDialog({
     try {
       const created = await create.mutateAsync({
         name: values.name.trim(),
-        planId: values.planId,
+        // Null, not '' — `planId` is a nullable uuid on the wire and an empty string is a 400 on
+        // format rather than the "no plan" this control means.
+        planId: values.planId || null,
         // Absent means "the project's default configuration", which every project is seeded with.
         configurationId: null,
         releaseVersion: values.releaseVersion?.trim() || null,
         buildNumber: values.buildNumber?.trim() || null,
-        caseIds: [],
+        caseIds: values.caseIds,
+        suiteIds: values.suiteIds,
+        tags: values.tags,
         assigneeId: null,
         // Omitted rather than sent false, so an ordinary create is byte-identical to what every
         // caller sent before this slice.
@@ -206,8 +308,8 @@ export function RunCreateDialog({
             )}
             {plans.isSuccess && available.length === 0 && (
               <Alert severity="info" data-testid={`${TestId}.NoPlans`}>
-                This project has no test plans yet. A run executes a plan&apos;s scope, so create a
-                plan first.
+                This project has no test plans yet — choose the suites, tags or cases this run
+                covers instead.
               </Alert>
             )}
             <TextField
@@ -221,17 +323,28 @@ export function RunCreateDialog({
             />
             <TextField
               label="Plan"
-              required
               select
               defaultValue=""
               error={!!errors.planId}
               helperText={
                 errors.planId?.message ??
-                'Every case in the plan’s scope becomes a row to record against.'
+                (armed
+                  ? 'Recorded as this run’s plan. Its scope is not used — the choices below are.'
+                  : 'Every case in the plan’s scope becomes a row to record against.')
               }
               slotProps={{ htmlInput: { 'data-testid': `${TestId}.Plan` } }}
               {...register('planId')}
             >
+              {/*
+                An explicit "no plan" row rather than a blank one, for `CaseEditorPage`'s reason:
+                since §99 a run against no plan is a supported thing to want, and a blank first
+                option reads as a field somebody forgot to fill in.
+              */}
+              <MenuItem value="" data-testid={`${TestId}.Plan.None`}>
+                <Box component="span" sx={{ color: 'text.secondary' }}>
+                  No plan — scope it below
+                </Box>
+              </MenuItem>
               {available.map((plan) => (
                 <MenuItem key={plan.id} value={plan.id} data-testid={`${TestId}.Plan.${plan.key}`}>
                   <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1 }}>
@@ -245,6 +358,146 @@ export function RunCreateDialog({
                 </MenuItem>
               ))}
             </TextField>
+
+            {/*
+              §99's three arms. Unioned by the server and deduped, so a case reached by two of them
+              is one row on the checklist — which is why nothing here tries to add up a total: the
+              honest number is the server's, after resolution, and a client-side sum of three
+              overlapping sets is the "two contradictory percentages" defect in a new place.
+            */}
+            <Controller
+              control={control}
+              name="suiteIds"
+              render={({ field, fieldState }) => (
+                <Autocomplete
+                  multiple
+                  options={[...(suites.data ?? [])].sort(
+                    (a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key),
+                  )}
+                  getOptionLabel={(suite) => suite.name}
+                  isOptionEqualToValue={(option, value) => option.id === value.id}
+                  value={(suites.data ?? []).filter((suite) => field.value.includes(suite.id))}
+                  onChange={(_event, value) => field.onChange(value.map((suite) => suite.id))}
+                  onBlur={field.onBlur}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Suites"
+                      error={!!fieldState.error}
+                      helperText={
+                        fieldState.error?.message ??
+                        'A suite’s whole membership — filed, added, and claimed by its tags.'
+                      }
+                      slotProps={{
+                        // `...params.slotProps` FIRST — §96's defect, which cost a whole slice:
+                        // replacing the object drops `input.startAdornment`, so every chip is
+                        // held, sent and invisible, with both gates green.
+                        ...params.slotProps,
+                        htmlInput: {
+                          ...params.slotProps?.htmlInput,
+                          'data-testid': `${TestId}.Suites`,
+                        },
+                        formHelperText: { role: fieldState.error ? 'alert' : undefined },
+                      }}
+                    />
+                  )}
+                />
+              )}
+            />
+            <Controller
+              control={control}
+              name="tags"
+              render={({ field, fieldState }) => (
+                <Autocomplete
+                  multiple
+                  freeSolo
+                  /*
+                    Suggested from the project's own vocabulary and still free text — the tag may
+                    be one nobody has used yet, and `GET /tags` lists only tags with a live case.
+                    The count beside each is what makes this picker answer the question the person
+                    is actually asking, which is how long the run will be.
+                  */
+                  options={(tags.data ?? []).map((usage) => usage.tag)}
+                  value={field.value}
+                  onChange={(_event, value) =>
+                    field.onChange([
+                      ...new Set(value.map((tag) => tag.trim()).filter((tag) => tag !== '')),
+                    ])
+                  }
+                  onBlur={field.onBlur}
+                  renderOption={(props, option) => {
+                    const { key, ...rest } = props;
+                    const usage = (tags.data ?? []).find((row) => row.tag === option);
+                    return (
+                      <li key={key} {...rest}>
+                        <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1 }}>
+                          <Typography variant="body2">{option}</Typography>
+                          {usage && (
+                            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                              {formatCount(usage.caseCount)} cases
+                            </Typography>
+                          )}
+                        </Stack>
+                      </li>
+                    );
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Tags"
+                      error={!!fieldState.error}
+                      helperText={
+                        fieldState.error?.message ??
+                        // The one place the union/intersection split is visible to a user, and it
+                        // points the opposite way from the case grid's filter on purpose.
+                        'Any of these — a case carrying one of them is in the run.'
+                      }
+                      slotProps={{
+                        ...params.slotProps,
+                        htmlInput: {
+                          ...params.slotProps?.htmlInput,
+                          'data-testid': `${TestId}.Tags`,
+                        },
+                        formHelperText: { role: fieldState.error ? 'alert' : undefined },
+                      }}
+                    />
+                  )}
+                />
+              )}
+            />
+            <Controller
+              control={control}
+              name="caseIds"
+              render={({ field, fieldState }) => (
+                <Autocomplete
+                  multiple
+                  options={catalogue.data?.items ?? []}
+                  getOptionLabel={(row) => `${row.key} · ${row.title}`}
+                  isOptionEqualToValue={(option, value) => option.id === value.id}
+                  value={(catalogue.data?.items ?? []).filter((row) =>
+                    field.value.includes(row.id),
+                  )}
+                  onChange={(_event, value) => field.onChange(value.map((row) => row.id))}
+                  onBlur={field.onBlur}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Cases"
+                      error={!!fieldState.error}
+                      helperText={fieldState.error?.message ?? 'Named individually. Optional.'}
+                      slotProps={{
+                        ...params.slotProps,
+                        htmlInput: {
+                          ...params.slotProps?.htmlInput,
+                          'data-testid': `${TestId}.Cases`,
+                        },
+                        formHelperText: { role: fieldState.error ? 'alert' : undefined },
+                      }}
+                    />
+                  )}
+                />
+              )}
+            />
             <Stack direction="row" spacing={2}>
               <TextField
                 label="Release"
@@ -280,7 +533,15 @@ export function RunCreateDialog({
           <Button
             type="submit"
             variant="contained"
-            disabled={create.isPending || available.length === 0}
+            /*
+              §99 dropped `|| available.length === 0`. It was right while a plan was the only
+              scope: a submit that can only ever be refused should not be offered. It is now the
+              opposite — a project with no plans is exactly the one whose first run is scoped by a
+              suite or a tag, and disabling the button there would hide the feature from the
+              project that needs it most. The empty-scope rule moved into the schema, where it
+              answers on a control instead of on the button.
+            */
+            disabled={create.isPending}
             data-testid={`${TestId}.Submit`}
           >
             {create.isPending ? 'Starting…' : 'Start run'}

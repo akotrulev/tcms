@@ -117,6 +117,7 @@ export type PlanSectionInput = S['PlanSectionInput'];
 export type TestPlanSummary = S['TestPlanSummary'];
 export type TestRun = S['TestRun'];
 export type TestRunDetail = S['TestRunDetail'];
+export type TestRunInput = S['TestRunInput'];
 /**
  * The run lifecycle. Read off `TestRun` rather than a named component because the contract
  * declares it inline — and named here so `lib/labels.ts` can `satisfies Record<RunStatus, string>`

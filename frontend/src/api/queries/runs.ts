@@ -2,7 +2,13 @@
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { useRef } from 'react';
 import { api, newIntentKey, qs } from '../client';
-import type { Evidence, TestExecution, TestRun, TestRunDetail } from '../types';
+import type {
+  Evidence,
+  TestExecution,
+  TestRun,
+  TestRunDetail,
+  TestRunInput as TestRunInputShape,
+} from '../types';
 import { base, keys } from './keys';
 
 export function useRuns(projectId: string, planId?: string): UseQueryResult<TestRun[]> {
@@ -21,29 +27,31 @@ export function useRun(projectId: string, runId: string | undefined): UseQueryRe
 }
 
 /**
- * The body of `POST /runs` — `TestRunInput`.
+ * The body of `POST /runs` — the contract's `TestRunInput`, generated.
  *
- * Hand-written rather than `S['TestRunInput']`, which predates this slice and is a divergence
+ * ~~Hand-written rather than `S['TestRunInput']`, which predates this slice and is a divergence
  * risk worth naming: nothing mechanically checks it against the contract, so a property added to
  * the spec is invisible here until somebody notices. Left as it is (a minimal change), recorded as
- * a follow-up in the handoff.
+ * a follow-up in the handoff.~~
+ *
+ * → **closed in §99, by the risk it named happening.** Two properties were added to the spec, the
+ * generated type grew them, and this one did not — so the dialog sending `suiteIds` was a type
+ * error against a hand-written copy that was simply out of date. It is the whole of the recorded
+ * risk, arriving the first time the shape changed after the note was written. The lead-override
+ * paragraph the old declaration carried is on the schema itself, where `gen:api` copies it here.
+ *
+ * **One property is corrected rather than taken as generated, and the correction is the interesting
+ * part.** `openapi-typescript` renders a property carrying a `default` as **required** — true of a
+ * *response*, where the server has already applied the default, and false of a *request body*,
+ * which is the only thing this type is ever used as. Taken literally it would force every caller to
+ * send `overrideApprovalGate: false`, and §82's whole point is that an ordinary create is
+ * byte-identical to what callers sent before the override existed. Narrowed here, once, with the
+ * reason — the alternative is dropping `default:` from the contract, which would delete a true
+ * statement about the server to satisfy a generator.
  */
-export interface TestRunInput {
-  name: string;
-  planId?: string | null;
-  configurationId?: string | null;
-  releaseVersion?: string | null;
-  buildNumber?: string | null;
-  caseIds?: string[];
-  assigneeId?: string | null;
-  /**
-   * §6g's lead override (§82) — sent only by the affordance the refusal itself offers, never on a
-   * first attempt. It is not a permission the client claims: the server consults it only where the
-   * approval gate would otherwise refuse, and only for a caller holding `case:approve`, so sending
-   * it can neither widen reach nor turn an acceptable request into a refused one.
-   */
+export type TestRunInput = Omit<TestRunInputShape, 'overrideApprovalGate'> & {
   overrideApprovalGate?: boolean;
-}
+};
 
 /**
  * Creates a run — **and, server-side, its whole checklist**: one execution per case in scope,

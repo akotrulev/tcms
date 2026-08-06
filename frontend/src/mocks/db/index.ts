@@ -21,6 +21,7 @@ export {
   planScopeCaseIds,
   recountRun,
   runExecutions,
+  runScopeCaseIds,
   sectionCaseCount,
 } from './executions';
 export { addWorkItem, personalBoard, teamBoard, workItems } from './workItems';
