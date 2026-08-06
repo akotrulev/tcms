@@ -617,3 +617,146 @@ deliberately sequencing to produce them — recorded as gaps for a follow-up pas
 curl-only rows, `L3`'s remaining psql invariants, most of `L4` (rollup-tick rows `L4-42`…`L4-48`
 particularly — they need a clean sequence of scheduler ticks this sitting's other work kept
 interrupting), and essentially all of `F` (needs its own focused pass, armed correctly, last).
+
+---
+
+# §110, second sitting — the F lane, driven
+
+The previous sitting closed with *"essentially all of `F` … needs its own focused pass, armed
+correctly, last."* This sitting is that pass. **Six of the nine rows driven, five of them to a full
+confirmation; no product defect found in any of them.** That is the lane's whole point: these are
+the resilience claims that had been asserted everywhere and *seen* nowhere.
+
+**Instance unchanged**: company `v109`, project `OLB`, signed in as `lead@acme.test`, schema V35.
+Nothing was written — the lane injects failures and reads what the screen does, and this sitting
+made **no mutation at all**.
+
+## Results
+
+| Row | Verdict | What was actually observed |
+|---|---|---|
+| `M7-1` | ✅ **PASS** (My Work arm) | Skeleton, then the region fails: *"That took too long — The server did not respond in time. It may be under load — try again."* with **Try again**, plus the global notification *"Something didn't load"* carrying its own retry. **The chrome stayed on screen throughout** — the header bar, the "My work" title, the subtitle and the footer are all outside the region, exactly as the row requires. `__tcmsErrors[0]` reads `TimeoutError: The server did not respond within 10 seconds.`, so the budget is named by the error rather than inferred from the wait. **Not an endless spinner.** *(Team-board and plan arms not driven — same mechanism, ~100 s each.)* |
+| `M7-2` | ✅ **PASS exactly, including the clause it exists for** | 503 + `Retry-After: 30` on a **cold** team board: *"Couldn't load this — The server ran into a problem. Try again in a moment."*, a **Try again**, and a copyable `Reference fault-3up98wc2`. It does **not** read "No such team" — the wrong sentence that would send a reader after a team that is still there. `tcmsFaults.off()` + **Try again** then loaded the board (To do 17 / In progress 0). |
+| `M7-3` | ✅ **PASS exactly** | With the board loaded, a failed **refetch** (500) **kept all 17 cards** and marked them: *"Showing data from 17:05 UTC — the latest refresh failed."* Not blanked. On My Work the same marker appeared behind the `M7-4` dialog — a blanked refetch there would read as "your queue is clear". |
+| `M7-4` | ⚠️ **PASS on everything observable to an agent; one half needs a human** | `expire()` aimed at a mounted query raises the ladder's rung 3 **in place**: *"Your session has expired. Sign in again to continue. **Nothing you have typed has been lost** — this page is still exactly where you left it. Signed in as lead@acme.test"*, with a Password field, **Sign out instead** and **Continue working**. No redirect; the route stayed mounted and **My Work's cards and its stale marker are visible behind the dialog**, so the dialog's claim is verifiable on screen rather than merely asserted. **The remaining half — type the password, press Continue working, watch the failed queries refetch — was not driven: entering a password into a field is outside what this agent may do.** It needs one human keystroke sequence to close. Session restored afterwards by reloading (the 401 is fabricated; the stored token is still valid). |
+| `M7-5` | ✅ **PASS exactly** | `only('/teams')` + `status(500)`, `["teams"]` evicted so the read is genuinely cold: the heading falls back to **"Team board"** and **the board still renders all 17 cards**. Gating the board on the name would have blanked a board that loaded fine; it does not. |
+| `M7-6` | ⚠️ **PASS on the first half; second half not driven** | `only('/conditions')` + `status(503, 30)` in the case editor for `TC-6`: the picker shows *"Loading…"*, and after the retries exhaust **the panel carries its own warning** — *"The condition library did not load, so nothing can be attached right now."* — under **both** Preconditions and Postconditions, while every other section of the editor (title, steps, placement, tags, classification, automation) renders untouched. **A failed library read does not take the editor down.** The row's second clause — *"the rest of the case still saves"* — was **not** driven: it needs a real write, and the sitting ended before one was made. `Save changes` was disabled only because the form was never dirtied, which is **not** evidence either way. |
+| `M7-7` | ⬜ **Not driven** | The 390 px responsive sweep. |
+| `F-1` | ⬜ **Not driven** | The hand resize below `lg` on an execution screen. |
+| `M7-8` | ⬜ **Partial** | `window.__tcmsErrors` held only the errors this lane injected on purpose, and no unexplained client error appeared at any point. Not a whole-pass statement, because this sitting drove one lane. |
+
+`tcmsFaults.off()` was run at the end and `state()` confirmed all six switches clear.
+
+---
+
+## F12 — The F lane is undriveable in a background tab, and it fails by looking like a product defect
+
+**Severity: medium.** **Harness, not product.** This is very probably why the previous sitting's F
+lane produced nothing.
+
+A Chrome tab that is not the active tab has `document.visibilityState === 'hidden'`, and Chrome
+throttles its timers. **`AbortSignal.timeout` is throttled far harder than `setTimeout`**, measured
+in the hidden tab:
+
+| Budget | Fired after |
+|---|---|
+| `AbortSignal.timeout(0)` | 1 ms |
+| `AbortSignal.timeout(100)` | 789 ms |
+| `AbortSignal.timeout(3000)` | **did not fire within 15 s** |
+| `setTimeout(15000)` | 15 043 ms — on time |
+
+`client.ts`'s `budget()` is built on `AbortSignal.timeout`, so in a hidden tab **the timeout budget
+effectively does not fire**. The first `M7-1` attempt sat on skeletons for over 90 seconds with an
+empty `__tcmsErrors` — which reads *exactly* like the defect the row exists to catch, an endless
+spinner. It is not; it is the tab.
+
+Made visible (`osascript -e 'tell application "Google Chrome" to set active tab index of window 1 to N'`),
+`AbortSignal.timeout(3000)` fired at **3002 ms** and `M7-1` completed correctly.
+
+**What the charter must say**: the F lane requires the tab under test to be the **active tab in a
+foreground window**, checked with `document.visibilityState === 'visible'` before the first row and
+not assumed. A row that times out slowly in a hidden tab is unattributable, and the failure mode is
+a **false positive for a real defect**, which is the expensive direction.
+
+---
+
+## F13 — A reload clears the fault switch, so the obvious way to drive every F row is self-defeating
+
+**Severity: low.** **Harness, not product** — and the behaviour is correct and documented
+(`devFaults.ts` keeps its state in module scope precisely so a reload is a clean slate).
+
+But every F row is worded *"arm the fault, **reload** X"*, and doing that literally clears the fault
+before the page's first request. The previous sitting recorded exactly this: *"the one `hang()` arm
+attempted was wiped by a navigate that followed it."*
+
+The method that works, and that this sitting used for all six rows:
+
+1. Land on some other route and let it finish loading.
+2. Arm the fault from the console.
+3. Reach the target route by **in-SPA navigation** — click a real link, or
+   `history.pushState(...)` + `dispatchEvent(new PopStateEvent('popstate'))`. The module state
+   survives, and a route whose query is not in cache gets a genuine **cold** failed load.
+
+For a *second* read that a previous screen already cached (`/teams` for `M7-5`), evict it first. The
+live `QueryClient` is reachable from the React fiber:
+
+```js
+const root = document.getElementById('root');
+const key = Object.keys(root).find(k => k.startsWith('__reactContainer'));
+let qc = null;
+(function walk(f, d) {
+  if (!f || d > 60 || qc) return;
+  const p = f.memoizedProps;
+  if (p && p.client && typeof p.client.getQueryCache === 'function') { qc = p.client; return; }
+  walk(f.child, d + 1); walk(f.sibling, d + 1);
+})(root[key], 0);
+qc.removeQueries({ queryKey: ['teams'] });
+```
+
+**The rows should be reworded from "reload" to "arm, then navigate in-SPA"**, or the next sitting
+pays for this a third time.
+
+---
+
+## F14 — `expire()` armed before a route mount is silently swallowed, and the row reads as failed
+
+**Severity: low.** **Dev-mode artifact, not a product defect** — but it produces a **false negative**
+that a future sitting would reasonably record as a bug.
+
+Driving `M7-4` the obvious way — arm `expire()`, then navigate to a route whose query is not
+cached — gave, three times running:
+
+- `expireOnce` **consumed** (so a request really did receive the fabricated 401), and
+- **no dialog**, and
+- **no query holding an error**, and
+- the page rendering its data normally.
+
+That looks precisely like "a mid-session 401 is swallowed and the user is never told", which would
+be a serious defect. It is not. The route's query is mounted twice under React's StrictMode
+double-invoke in dev: the faulted attempt is superseded by a second fetch that succeeds, so the
+recovery ladder never has to run. `expire()` fabricates **one** 401 and then clears itself, so the
+second attempt is healthy by construction.
+
+Aimed instead at an **already-mounted** query —
+
+```js
+tcmsFaults.only('/work-items'); tcmsFaults.expire();
+qc.refetchQueries({ queryKey: ['work-items'] });
+```
+
+— the ladder fires correctly and the dialog appears, which is the `M7-4` result recorded above.
+
+**What the row must say**: drive `expire()` against a screen that is **already on the page**, never
+across a navigation. Note this is a statement about *dev*; nothing here says the production build
+behaves this way, and nothing in this sitting tested that.
+
+---
+
+## What a next F sitting owes
+
+- **`M7-4`'s second half** — the password, **Continue working**, and the refetch. Needs a human.
+- **`M7-6`'s second half** — dirty the case and save it while `/conditions` is 503ing.
+- **`M7-1`'s team-board and plan arms** — same mechanism, ~100 s each (4 attempts × the 10 s budget
+  plus 1/2/4 s backoff; the plan's read is on the 60 s `long` budget, so budget minutes for it).
+- **`M7-7`** (390 px) and **`F-1`** (hand resize below `lg`) — neither started.
+- **`M7-8`** as a whole-pass statement rather than a one-lane one.

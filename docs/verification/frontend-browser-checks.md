@@ -871,6 +871,16 @@ the first tick, which is why `A3-3` reads it in the execution lane and this row 
 is off, so a failure in an earlier lane run after this one would be unattributable. Disarm between
 rows with `tcmsFaults.off()`.*
 
+> **How to drive these — §110's second sitting paid for all three of these.** ~~"arm the fault, then
+> reload X"~~ → **superseded**: a reload clears the switch before the page's first request (F13), so
+> arm the fault and reach the target by **in-SPA navigation** (click a real link, or `pushState` +
+> a `popstate` event); evict the query first if an earlier screen already cached it. The tab under
+> test **must be the active tab in a foreground window** — a hidden tab throttles
+> `AbortSignal.timeout` so hard that a 3 s budget does not fire in 15 s, and every timeout row then
+> renders as the endless spinner it exists to catch (F12). And drive `expire()` against a screen
+> **already on the page**, never across a navigation, or dev's StrictMode double-mount supersedes
+> the fabricated 401 and the row falsely reads as "the 401 was swallowed" (F14).
+
 **These are strictly stronger than they were.** The switches used to be an MSW handler, so they could
 only fault the mock — the one place the failures they simulate could not occur. Since §107 the seam
 is in front of `fetch` in `src/api/client.ts`, so everything downstream of the injected response is
