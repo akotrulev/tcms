@@ -444,3 +444,55 @@ rather than claimed; `L4-41`'s confirmation is the next best evidence the two pa
 delete/dup-upload/multipart — F10 unblocks these for a future pass), `M4-16`…`M4-19` (Grid mode),
 `M4-41`…`M4-47` (grid link pairs), `M4-50`…`M4-58` remaining "What failed" rows, `M4-20`/`21`/`25`/
 `27`/`28`/`29`, `M4-38` (remaining gate rows — `M4-27` is confirmed unreachable per `M3-1`).
+
+---
+
+## F11 — Submitting a plan for review does not invalidate the review panel's query
+
+**Severity: medium.** **Product defect**, found driving `M5-8`.
+
+Clicked "Submit for review" on `TP-1` (`plan:edit`, status ladder DRAFT → IN_REVIEW). The status chip
+at the top of the page updated correctly to "In review". The **Review panel**, on the same page,
+continued reading *"Not in review — This plan has never been submitted for review."*
+
+Checked it wasn't a delay: `psql` showed the `review` row had already been written
+(`state=IN_REVIEW`, `subject_version_no=3`, `created_by` the caller) at the same instant the mutation
+returned. A hard reload of the same URL immediately showed the correct panel — submitted by, trail,
+reviewer picker, verdict buttons all present.
+
+**So the write is correct and the read is stale**: the `Submit for review` mutation invalidates
+whatever query feeds the status chip but not the one the Review panel reads (a `review`/`review-panel`
+query keyed on subject id, most likely). This is the same shape as §110's F7 from the teams-and-roles
+screen — a mutation that changes what a sibling panel should show, on the same page, without telling
+that panel's query to refetch.
+
+**Consequence**: a lead who submits a plan and immediately wants to ask a reviewer or leave a comment
+sees "this has never been submitted" on the very screen where they just submitted it, and would
+reasonably conclude the submit failed — even though it visibly succeeded one section up.
+
+**Not fixed here.** The fix is one invalidation added to the submit-for-review mutation (or a broader
+query key covering both the status chip and the review panel).
+
+---
+
+## A4 — review: results
+
+Review turned on for plans (`M5-1`), `TP-1` submitted and approved. One comment thread, two reviewer
+requests (a person + a team), one LGTM verdict, one genuine 409 found along the way.
+
+| Row | Verdict | Note |
+|---|---|---|
+| `M5-1` | ✅ PASS | Saved; only Test plans review turns on artifact panels — Test cases/Suites stay off. |
+| `M5-8` | ⚠️ PASS on content, **fails on freshness — see F11** | After a hard reload: chip In review, "Submitted by L. Lead", version pinned, empty trail, no Approve button on the panel. **Before the reload**: panel wrongly read "Not in review" although the DB row existed at the same instant. |
+| `M5-9` | ✅ PASS | Comment posted, box cleared; "Looks good" entry added, plan stays In review. |
+| `M5-23` | ✅ PASS | Reviewer picker excludes the submitter (`L. Lead` absent); already-asked people drop out of the list on the next open. |
+| `M5-24` | ✅ PASS | Person and team both askable; team chip carries the group icon and no member names. |
+| `M5-22` | ✅ PASS | Two "asked" chips (person + team), neither has spoken; the submitter's own LGTM sits in the trail despite never being asked — the two lists are visibly independent. |
+| `L2-7` | ✅ PASS (found without going looking for it) | Lead tried to approve the plan **they submitted**: 409 in place, *"You submitted this plan for review, and this project asks somebody else to approve it."* Not a 403 — permission held, policy refused. |
+| `M5-10` | ✅ PASS | Approved as `admin` (did not submit it): chip → Approved, "Return to draft" + Delete only. |
+
+**Not driven this pass**: `M5-2`…`M5-7`, `M5-11`…`M5-21`, `M5-25`…`M5-30`, `L4-8`…`L4-16` (the two-account
+review rows — comment-as-one/resolve-as-other, team-membership-expansion-on-read, board cards). A4's
+core mechanics (submit, comment, ask, approve, the submitter-can't-approve gate) are confirmed; the
+staleness half of the review panel (`M5-11`) and the reviewer-inbox/board rows are left for a later
+pass or `A5`.
