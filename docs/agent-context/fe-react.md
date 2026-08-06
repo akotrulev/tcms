@@ -2,8 +2,8 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-06 (§105 — what failed)
-**Baseline commit:** `edc5a37` (§104) **+ the doc commit this line ships in** (its own SHA
+**Last verified:** 2026-08-06 (§106 — the board learns to be dragged)
+**Baseline commit:** `da3d351` (§105) **+ the doc commit this line ships in** (its own SHA
 cannot be written into itself; trust the body over the header and re-grep what a later commit
 could have moved).
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
@@ -25,7 +25,11 @@ could have moved).
   the element `userEvent.type` drives. With X DataGrid / TreeView, **React Router 7**,
   **TanStack Query v5**.
 - **`@dnd-kit` since §94** (`core` 6.3 · `sortable` 10.0 · `utilities` 3.2 · `modifiers`) — the
-  first runtime dependency added since the scaffold. One consumer: the case editor's step list.
+  first runtime dependency added since the scaffold. **Two consumers, and they use different
+  primitives on purpose**: the case editor's step list is `SortableContext` + `useSortable` (a
+  reorder *within* one list), the kanban board is `useDraggable` + `useDroppable` since §106 (a move
+  *between* containers, with no within-column order to preserve). **Do not add a second DnD
+  library**, and do not reach for `SortableContext` on the board — see the seam.
 - Package manager **npm**. `erasableSyntaxOnly` is on, which forbids TS constructor parameter
   properties — see `api/client.ts:35` for the recorded workaround. `#confirmed`
 
@@ -35,7 +39,7 @@ could have moved).
 - **`npm run build` is THE gate** (`tsc -b` + vite build). **Do not trust `tsc --noEmit`** — it has
   reported 0 errors while the build failed with nine (working agreement). `#confirmed`
 - `npm run lint` — oxlint, must stay at **0 warnings**; it prints nothing when clean.
-- `npm run test:run` — Vitest + RTL. **958/958** across 70 files at §105 (941/69 at §104) (the §102 line said **925/67** and the measured baseline was **928/67** — this figure is carried forward by hand and has drifted at least twice; read it off a run before trusting it). Earlier: 913/65 at §99 phase 3, 909 at §98, 895/64 at §97 phase 5, 849/60 at §100. **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
+- `npm run test:run` — Vitest + RTL. **976/976** across 72 files at §106 (958/70 at §105) (the §102 line said **925/67** and the measured baseline was **928/67** — this figure is carried forward by hand and has drifted at least twice; read it off a run before trusting it). Earlier: 913/65 at §99 phase 3, 909 at §98, 895/64 at §97 phase 5, 849/60 at §100. **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
 - `npm run gen:api` — regenerate `src/api/schema.d.ts` after **any** `openapi.yaml` change. Runs
   through `npx` on purpose (the scaffold pins TS 6, the tool peer-requires 5.x); do not "fix" it.
 - **Live mode:** `VITE_API_MODE=live` in `.env.local` proxies `/api` to `localhost:8080`.
@@ -67,6 +71,54 @@ directly above the switcher) and the wordmark links there too.
 > slice's shape. `docs/handoff/00-plugin-skills-are-mandatory.md` step 0 now states the protocol.
 
 ## Seams to reuse
+
+- **THE BOARD IS DRAGGED WITH `@dnd-kit`, AND THE WRITE IS OPTIMISTIC (§106).**
+  `features/board/{cardMove,boardKeyboard}.ts` + `BoardPage.tsx`'s `BoardColumn`/`WorkCard`, over
+  `useMoveWorkItem` (`api/queries/workItems.ts`). Testids `Board.Card.DragHandle`,
+  `Board.Column.<STATUS>` (also the **droppable id**), `Board.RejectedMove`.
+  **DnD ALREADY EXISTED HERE AND WAS NATIVE HTML5** (`draggable` + `onDrop`, §53). It works with a
+  desktop mouse and **has no touch support whatsoever** — a board could not be moved on a tablet,
+  with nothing on screen saying so — no keyboard path, and it was a second DnD implementation
+  beside §94's (`ui-rules` §8). Check what a screen already does before building the ask.
+  **`useDraggable` + `useDroppable`, NOT `SortableContext`.** A step drag reorders within one list;
+  a card drag moves between containers and the board has no within-column order to preserve (cards
+  sort overdue → priority → id). Sortable would have to invent a rank the model does not have.
+  Collision is **`pointerWithin`, not `closestCenter`** — a column is a big rectangle and a card is
+  small, so closest-centre lands a release near a wide column's left edge in its neighbour.
+  A **`DragOverlay`** copy follows the cursor and the original stays and fades (removing it
+  collapses the column under the pointer). A **handle**, not a draggable card — §94's rule.
+  **THE KEYBOARD IS TWO PATHS AND BOTH ARE LOAD-BEARING.** The "→ column" buttons are the simpler
+  one (one per legal target, disabled-with-reason for the rest) and are unchanged. The handle is
+  operable too, because §94's rule is that a focusable handle doing nothing on Space is worse than
+  none — and that needed **new code**: `sortableKeyboardCoordinates` needs a `SortableContext` this
+  screen has none of, and the default getter nudges **25px per keypress**. `boardKeyboardCoordinates`
+  makes ←/→ **jump a whole column** and returns **null at either end** rather than wrapping. The
+  arithmetic is `stepToAdjacentColumn`, pure and tested, resolving the current column by **nearest
+  centre rather than containment** (mid-drag the card is routinely over a gutter).
+  **`resolveCardMove` has FOUR outcomes and three are not moves** — outside every column, back where
+  it started, an `over` that is not a column. §94's `move(i,i)` in board spelling, and worse here: it
+  would be a `PATCH` writing an **unchanged status**. The fourth is a **legal refusal**, decided at
+  drop time and never sent (`ui-rules`), and a derived card is **not draggable at all** rather than
+  lifting and being refused on release.
+  **THE REFUSAL SENTENCES LIVE IN `cardMove.ts` BECAUSE TWO AFFORDANCES MUST AGREE** — they had
+  already drifted (the drop said *"mirrors a review… update the review"*, the tooltip said *"This
+  card follows its source"*). One test exists only to hold `refusalFor` equal to the drop's.
+  **THE WRITE IS OPTIMISTIC ACROSS EVERY BOARD KEY, and the DRAG is why.** A button press with
+  300ms of latency reads as the button working; a *release* that springs back and re-appears
+  elsewhere reads as the drop having missed, and users repeat it. `cancelQueries` first (a read in
+  flight would otherwise resolve after the write and undo it); `onError` restores the **snapshot**
+  rather than reversing the edit; `onSettled` re-reads on **both** paths. The failure **announces**
+  as well as showing a persistent alert — the snap-back is silent to a screen reader.
+  **The mock now answers the contract's SECOND 409** (`allowedTransitions`), which it had answered
+  200 to from Phase 1: unreachable while the only mover was a button the board already disabled.
+  **TWO TESTING TRAPS.** A `@dnd-kit` drag **cannot be driven in jsdom** — `fireEvent.dragStart`
+  meant something to the old native implementation and means nothing now, so two tests were
+  rewritten to read the sentence off the disabled button's tooltip (hover the **span**, not the
+  button). And **a never-resolving query breaks RTL, not the product**: a permanently pending query
+  leaves `act` waiting so **no state update after it is ever flushed**. The rollback is asserted at
+  the hook level with **no `useWorkItems` mounted** — an invalidation with no observer fetches
+  nothing, which is the only way that assertion is non-vacuous (`onSettled` refetches on failure
+  too, and the mocked board answers with the card where it started). `#confirmed`
 
 - **THE RUN SAYS WHAT BROKE, AND THE TWO HALVES HAVE DIFFERENT COSTS (§105).**
   `features/runs/FailureSummary.tsx` on `RunDetailPage`, over `runFailures` + `stepOutcome`
@@ -867,6 +919,18 @@ directly above the switcher) and the wordmark links there too.
   with the reasoning recorded in `vite.config.ts`.
 
 ## Session log
+
+- 2026-08-06 · EXTEND · **The board learns to be dragged** (§106) — the ask was for drag-and-drop on
+  the kanban board, **which already had it**: native HTML5, working on a desktop mouse and on
+  nothing else. Replaced with `@dnd-kit` (`useDraggable`/`useDroppable`, not sortable), plus a
+  column-jumping `KeyboardSensor` getter, a pure `resolveCardMove`, and an optimistic
+  `useMoveWorkItem` with a snapshot rollback and an announcement. New
+  `features/board/{cardMove,boardKeyboard}.ts` + their tests. **No contract change, no `gen:api`,
+  no backend file touched** — `PATCH /work-items/{id}` and `allowedTransitions` were built in §53.
+  Mock taught the contract's second 409, which it had answered 200 to since Phase 1. **976/976
+  across 72 files, lint 0, build clean. Zero browser rows run; 11 M1 rows queued (M1-19…M1-29) and
+  2 mutation rows.** An hour went on a rollback test whose hanging refetch broke RTL's `act`, not
+  the product — recorded in the seam.
 
 - 2026-08-06 · EXTEND · **What failed** (§105) — the run detail's failures and the steps inside
   them, on one panel. New `features/runs/FailureSummary.tsx` + 9 tests, `runFailures`/`stepOutcome`

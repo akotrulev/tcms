@@ -3,7 +3,7 @@ import { HttpResponse, delay, http } from 'msw';
 import type { WorkItem } from '../../api/types';
 import { addWorkItem, db, newId, personalBoard, teamBoard, workItems } from '../db';
 import { currentUser, projects } from '../fixtures/core';
-import { workItemColumns } from '../../lib/labels';
+import { workItemColumns, workItemStatusLabels } from '../../lib/labels';
 import { API, LATENCY, notFound, problem, projectMembers } from './shared';
 
 /**
@@ -178,6 +178,26 @@ export const workItemHandlers = [
         'This card mirrors an execution or review. Update the execution or review itself and the card follows.',
       );
     }
+    /*
+      **The transition is enforced here, because the contract says the server enforces it.**
+
+      `PATCH /work-items/{id}` declares a 409 for two situations — a derived id (above) and *"the
+      requested column is not in the card's `allowedTransitions`"* — and this handler answered 200
+      to the second from Phase 1 until §106. It did not matter while the only way to move a card
+      was a button the board had already disabled: the illegal request was unreachable from the
+      UI, so the mock's leniency was never exercised. A drag makes it reachable the moment the
+      client-side guard is wrong, and a mock that accepts what the server refuses is a mock that
+      certifies the bug (§52 — handlers are written from the server's rules, not from what one
+      client happens to send).
+    */
+    if (body.status && body.status !== item.status && !item.allowedTransitions.includes(body.status)) {
+      return problem(
+        409,
+        "That card can't be moved there",
+        `${workItemStatusLabels[item.status]} → ${workItemStatusLabels[body.status]} is not a move this card allows.`,
+      );
+    }
+
     if (body.status) item.status = body.status;
     return HttpResponse.json(item);
   }),

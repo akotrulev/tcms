@@ -1,6 +1,20 @@
-import { Alert, Box, Button, Chip, Stack, Tooltip, Typography } from '@mui/material';
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import { Alert, Box, Button, Chip, IconButton, Stack, Tooltip, Typography } from '@mui/material';
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  pointerWithin,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
 import { useSnackbar } from 'notistack';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
+import { useAnnounce } from '../../a11y/useAnnounce';
 import { PermissionGate } from '../../components/PermissionGate';
 import { TaskCreateDialog } from './TaskCreateDialog';
 import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
@@ -12,6 +26,8 @@ import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { formatCount } from '../../lib/format';
 import { healthLabels, priorityLabels, workItemColumns, workItemStatusLabels } from '../../lib/labels';
+import { boardKeyboardCoordinates } from './boardKeyboard';
+import { refusalFor, resolveCardMove } from './cardMove';
 
 /**
  * The kanban board (plan §6l).
@@ -56,22 +72,6 @@ type Column = WorkItemStatus;
  */
 const _everyStatusHasAColumn: Record<Exclude<WorkItemStatus, (typeof COLUMNS)[number]>, never> = {};
 void _everyStatusHasAColumn;
-
-/**
- * What a derived card mirrors, in the sentence that refuses a drop.
- *
- * `satisfies Record<Union, string>`'s shape one level down: a new `kind` is a compile error here
- * rather than a card whose refusal names the wrong source, which is what §81 found — every derived
- * card that was not an execution was called a review.
- */
-const derivedNouns: Record<WorkItem['kind'], { indefinite: string; bare: string }> = {
-  TASK: { indefinite: 'a task', bare: 'task' },
-  EXECUTION: { indefinite: 'an execution', bare: 'execution' },
-  REVIEW: { indefinite: 'a review', bare: 'review' },
-  DOC_UPDATE: { indefinite: 'a documentation page', bare: 'page' },
-  CASE_MAINTENANCE: { indefinite: 'a test case', bare: 'case' },
-  DEFECT: { indefinite: 'a defect', bare: 'defect' },
-};
 
 const kindLabels: Record<WorkItem['kind'], string> = {
   TASK: 'Task',
@@ -266,147 +266,234 @@ function linkFor(item: WorkItem): string {
  */
 export function Board({ items, crossProject = false }: { items: WorkItem[]; crossProject?: boolean }) {
   const { enqueueSnackbar } = useSnackbar();
+  const announce = useAnnounce();
   const move = useMoveWorkItem();
   const [dragging, setDragging] = useState<WorkItem | null>(null);
   const [rejected, setRejected] = useState<string | null>(null);
 
-  const handleDrop = async (item: WorkItem, column: Column) => {
-    setDragging(null);
-    if (item.status === column) return;
+  /*
+    Pointer + keyboard, and the pointer one needs the 5px constraint for §94's reason one screen
+    over: without it a click on the handle is a zero-distance drag, so the handle swallows the
+    click and the card's own links and buttons become unreachable from a pointer that started
+    there. `PointerSensor` also brings **touch**, which the native HTML5 drag this replaces never
+    had at all — a board is exactly the screen somebody opens on a tablet in a stand-up.
+  */
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: boardKeyboardCoordinates(COLUMNS) }),
+  );
 
-    // Checked before the request, not just after: a card the source won't allow to move
-    // should never appear to move at all.
-    if (!item.allowedTransitions.includes(column)) {
-      setRejected(
-        item.derived
-          ? // The noun is the card's own kind. It read "an execution or a review" for every
-            // derived card until §81, which named the wrong source on maintenance cards — harmless
-            // while reviews were not a real card kind, and misleading the moment they were.
-            `${item.linkedKey ?? 'That card'} mirrors ${derivedNouns[item.kind].indefinite}, so it can't be moved to ${
-              workItemStatusLabels[column]
-            }. Update the ${derivedNouns[item.kind].bare} and the card follows.`
-          : `That card can't move to ${workItemStatusLabels[column]} from ${workItemStatusLabels[item.status]}.`,
-      );
+  /**
+   * A finished drag and a pressed "→ column" button end in the same place.
+   *
+   * The decision — including the three ways a drag ends in nothing and the one way it is refused —
+   * is `resolveCardMove`'s, so it can be asked directly rather than through a jsdom pointer.
+   */
+  const commit = async (item: WorkItem | null, over: string | number | null | undefined) => {
+    const outcome = resolveCardMove(item, over, COLUMNS);
+    if (outcome.outcome === 'NONE') return;
+    if (outcome.outcome === 'REFUSED') {
+      setRejected(outcome.reason);
+      // The alert is `role="alert"`, but a refusal at the end of a *keyboard* drag arrives while
+      // focus is still on the card — announcing it puts the sentence where the user is.
+      announce(outcome.reason);
       return;
     }
 
     setRejected(null);
+    const item_ = item as WorkItem;
     try {
-      await move.mutateAsync({ id: item.id, status: column });
+      await move.mutateAsync({ id: item_.id, status: outcome.to });
+      announce(`Moved ${item_.title} to ${workItemStatusLabels[outcome.to]}`);
     } catch (error) {
-      setRejected(
-        error instanceof ApiError ? error.detail : "Couldn't move that card. Check your connection and try again.",
-      );
+      /*
+        The card is already back where it was — `useMoveWorkItem` restores its snapshot in
+        `onError`. So this says what happened rather than doing the undo, and it says it twice on
+        purpose: the alert persists (a toast about a card that has visibly snapped back is gone
+        before the eye returns to it) and the announcement reaches a screen reader, for whom the
+        snap-back is otherwise completely silent.
+      */
+      const reason =
+        error instanceof ApiError ? error.detail : "Couldn't move that card. Check your connection and try again.";
+      setRejected(reason);
+      announce(`${item_.title} did not move. ${reason}`);
       enqueueSnackbar("Couldn't move that card", { variant: 'error' });
     }
   };
 
   return (
-    <Stack sx={{ gap: 2 }}>
-      {rejected && (
-        <Alert severity="warning" role="alert" onClose={() => setRejected(null)} data-testid="Board.RejectedMove">
-          <Typography variant="body2">{rejected}</Typography>
-        </Alert>
-      )}
+    <DndContext
+      sensors={sensors}
+      /*
+        `pointerWithin` rather than `closestCenter`, which is what the step list uses. A column is
+        a big rectangle and a card is small: closest-centre picks the column whose *centre* is
+        nearest, so releasing near the left edge of a wide column can land in its neighbour. For
+        containers, "the pointer is inside it" is the rule the user believes they are following.
+      */
+      collisionDetection={pointerWithin}
+      onDragStart={(event) => setDragging(items.find((item) => item.id === event.active.id) ?? null)}
+      onDragCancel={() => setDragging(null)}
+      onDragEnd={({ active, over }: DragEndEvent) => {
+        const item = items.find((row) => row.id === active.id) ?? null;
+        // Cleared BEFORE the await: the column highlighting keys on it, and leaving it set for the
+        // length of the request paints the board as mid-drag while the write is in flight.
+        setDragging(null);
+        void commit(item, over?.id);
+      }}
+    >
+      <Stack sx={{ gap: 2 }}>
+        {rejected && (
+          <Alert severity="warning" role="alert" onClose={() => setRejected(null)} data-testid="Board.RejectedMove">
+            <Typography variant="body2">{rejected}</Typography>
+          </Alert>
+        )}
 
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: `repeat(${COLUMNS.length}, 1fr)` },
-          gap: 2,
-          alignItems: 'start',
-        }}
-      >
-        {COLUMNS.map((column) => {
-          const columnItems = items
-            .filter((item) => item.status === column)
-            // Overdue first, then by priority, with the id as a unique tiebreaker so cards
-            // don't reshuffle on every refetch.
-            .sort((a, b) => {
-              const rank = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
-              return (
-                Number(b.overdue) - Number(a.overdue) ||
-                rank[a.priority] - rank[b.priority] ||
-                a.id.localeCompare(b.id)
-              );
-            });
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: `repeat(${COLUMNS.length}, 1fr)` },
+            gap: 2,
+            alignItems: 'start',
+          }}
+        >
+          {COLUMNS.map((column) => {
+            const columnItems = items
+              .filter((item) => item.status === column)
+              // Overdue first, then by priority, with the id as a unique tiebreaker so cards
+              // don't reshuffle on every refetch.
+              .sort((a, b) => {
+                const rank = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+                return (
+                  Number(b.overdue) - Number(a.overdue) ||
+                  rank[a.priority] - rank[b.priority] ||
+                  a.id.localeCompare(b.id)
+                );
+              });
 
-          const canAccept = dragging ? dragging.allowedTransitions.includes(column) : false;
-
-          return (
-            <Box
-              key={column}
-              onDragOver={(event) => {
-                if (canAccept) event.preventDefault();
-              }}
-              onDrop={() => {
-                if (dragging) void handleDrop(dragging, column);
-              }}
-              data-testid={`Board.Column.${column}`}
-            >
-              <Panel
-                dense
-                title={
-                  <Stack direction="row" sx={{ alignItems: 'center', gap: 1 }}>
-                    <Typography variant="h5" component="h2">
-                      {workItemStatusLabels[column]}
-                    </Typography>
-                    <Identifier variant="muted">{formatCount(columnItems.length)}</Identifier>
-                  </Stack>
-                }
+            return (
+              <BoardColumn
+                key={column}
+                column={column}
+                count={columnItems.length}
+                // Only a column that can legally accept the dragged card highlights, so the
+                // invalid drop is discouraged before it is attempted rather than refused after.
+                canAccept={dragging ? dragging.allowedTransitions.includes(column) : false}
+                dragging={dragging !== null}
               >
-                <Stack
-                  sx={{
-                    p: 1,
-                    gap: 1,
-                    minHeight: 120,
-                    // Only a column that can legally accept the dragged card highlights, so
-                    // the invalid drop is discouraged before it's attempted.
-                    bgcolor: dragging ? (canAccept ? 'action.hover' : 'transparent') : 'transparent',
-                    opacity: dragging && !canAccept ? 0.5 : 1,
-                    transition: 'background-color 120ms ease',
-                  }}
-                >
-                  {columnItems.length === 0 ? (
-                    <Typography variant="caption" sx={{ color: 'text.secondary', p: 1 }}>
-                      Nothing here
-                    </Typography>
-                  ) : (
-                    columnItems.map((item) => (
-                      <WorkCard
-                        key={item.id}
-                        item={item}
-                        crossProject={crossProject}
-                        onDragStart={() => setDragging(item)}
-                        onDragEnd={() => setDragging(null)}
-                        onMove={(target) => void handleDrop(item, target)}
-                      />
-                    ))
-                  )}
-                </Stack>
-              </Panel>
-            </Box>
-          );
-        })}
-      </Box>
-    </Stack>
+                {columnItems.length === 0 ? (
+                  <Typography variant="caption" sx={{ color: 'text.secondary', p: 1 }}>
+                    Nothing here
+                  </Typography>
+                ) : (
+                  columnItems.map((item) => (
+                    <WorkCard
+                      key={item.id}
+                      item={item}
+                      crossProject={crossProject}
+                      onMove={(target) => void commit(item, target)}
+                    />
+                  ))
+                )}
+              </BoardColumn>
+            );
+          })}
+        </Box>
+      </Stack>
+
+      {/*
+        The card follows the cursor instead of the browser's ghost image. It is not decoration:
+        with `useDraggable` alone the card stays in its column while an invisible drag happens, so
+        the gesture gives no feedback at all until the drop.
+
+        `dragging={false}` on the copy — the overlay is not the draggable, and passing the live
+        card would register a second draggable with the same id.
+      */}
+      <DragOverlay>
+        {dragging && <WorkCard item={dragging} crossProject={crossProject} onMove={() => {}} overlay />}
+      </DragOverlay>
+    </DndContext>
+  );
+}
+
+/**
+ * A column, and the thing a card is dropped **on**.
+ *
+ * A component rather than a `map` body because `useDroppable` is a hook — the same reason
+ * `GridRow` and `StepActionField` exist. Its droppable id is the column's own status code, which
+ * is what lets `resolveCardMove` treat an `over` that is not a column as a stale id.
+ */
+function BoardColumn({
+  column,
+  count,
+  canAccept,
+  dragging,
+  children,
+}: {
+  column: Column;
+  count: number;
+  canAccept: boolean;
+  dragging: boolean;
+  children: ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: column, disabled: dragging && !canAccept });
+
+  return (
+    <Box ref={setNodeRef} data-testid={`Board.Column.${column}`} data-over={isOver ? 'true' : undefined}>
+      <Panel
+        dense
+        title={
+          <Stack direction="row" sx={{ alignItems: 'center', gap: 1 }}>
+            <Typography variant="h5" component="h2">
+              {workItemStatusLabels[column]}
+            </Typography>
+            <Identifier variant="muted">{formatCount(count)}</Identifier>
+          </Stack>
+        }
+      >
+        <Stack
+          sx={{
+            p: 1,
+            gap: 1,
+            minHeight: 120,
+            bgcolor: dragging ? (canAccept ? 'action.hover' : 'transparent') : 'transparent',
+            // Not colour alone: a column that cannot accept the card also dims, and the card's
+            // own buttons carry the reason in words.
+            opacity: dragging && !canAccept ? 0.5 : 1,
+            outline: isOver && canAccept ? '2px solid' : 'none',
+            outlineColor: 'primary.main',
+            borderRadius: 1,
+            transition: 'background-color 120ms ease',
+          }}
+        >
+          {children}
+        </Stack>
+      </Panel>
+    </Box>
   );
 }
 
 function WorkCard({
   item,
   crossProject,
-  onDragStart,
-  onDragEnd,
   onMove,
+  overlay = false,
 }: {
   item: WorkItem;
   /** Show which project the card belongs to — true only on the cross-project board (§83). */
   crossProject: boolean;
-  onDragStart: () => void;
-  onDragEnd: () => void;
   onMove: (column: Column) => void;
+  /** The copy inside `DragOverlay`: no draggable registration, no hiding of the original. */
+  overlay?: boolean;
 }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: item.id,
+    // A derived card follows its source and cannot be moved from here at all, so it is not
+    // draggable in the first place — `ui-rules`, rather than letting it lift and be refused on
+    // release. Its "→ column" buttons are disabled with the same reason, so the refusal is still
+    // discoverable; it just is not reachable by a gesture that cannot succeed.
+    disabled: overlay || item.allowedTransitions.length === 0,
+  });
+
   const priorityColor =
     item.priority === 'CRITICAL'
       ? 'var(--color-failed)'
@@ -414,11 +501,11 @@ function WorkCard({
         ? 'var(--color-blocked)'
         : 'var(--color-border-strong)';
 
+  const movable = item.allowedTransitions.length > 0;
+
   return (
     <Box
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
+      ref={overlay ? undefined : setNodeRef}
       data-testid="Board.Card"
       sx={{
         p: 1.25,
@@ -428,10 +515,33 @@ function WorkCard({
         borderLeftColor: priorityColor,
         borderRadius: 1,
         bgcolor: 'background.paper',
-        cursor: 'grab',
+        // The original stays in place and fades while the overlay copy follows the cursor;
+        // removing it would collapse the column under the pointer mid-drag.
+        opacity: isDragging ? 0.4 : 1,
+        boxShadow: overlay ? 4 : 'none',
       }}
     >
       <Stack direction="row" sx={{ alignItems: 'center', gap: 0.75, mb: 0.5, flexWrap: 'wrap' }}>
+        {/*
+          A handle rather than a draggable card, and for the same reason §94 gave the step rows
+          one: the card carries a link and six buttons, and making the whole card draggable turns
+          every attempt to press one into the start of a drag.
+        */}
+        {movable && !overlay && (
+          <Tooltip title="Drag to another column. The → buttons below do the same thing.">
+            <IconButton
+              size="small"
+              disableRipple
+              {...attributes}
+              {...listeners}
+              aria-label={`Move ${item.title}`}
+              data-testid="Board.Card.DragHandle"
+              sx={{ cursor: 'grab', touchAction: 'none', ml: -0.5 }}
+            >
+              <DragIndicatorIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
         <Chip size="small" variant="outlined" label={kindLabels[item.kind]} data-testid="Board.Card.Kind" />
         {/*
           Which project this card is from — the field §83 finally reads.
@@ -572,11 +682,10 @@ function WorkCard({
             </Box>
           );
 
-          const title = allowed
-            ? `Move to ${workItemStatusLabels[column]}`
-            : item.derived
-              ? `This card follows its source, so it can't be moved to ${workItemStatusLabels[column]}`
-              : `Not a valid move from ${workItemStatusLabels[item.status]}`;
+          // The same sentence a refused DROP produces (`cardMove.refusalFor`). Two affordances,
+          // one rule, one wording — they were two hand-written strings until §106 and had already
+          // drifted apart in tense and in what they named.
+          const title = allowed ? `Move to ${workItemStatusLabels[column]}` : refusalFor(item, column);
 
           return (
             <Tooltip key={column} title={title}>

@@ -93,7 +93,54 @@ export function useMoveWorkItem() {
     // The board says which card failed to move and where it snapped back to; that is strictly
     // more useful than "couldn't save", so the global handler stays out.
     meta: { handled: true },
-    onSuccess: () => client.invalidateQueries({ queryKey: WORK_ITEM_ROOT }),
+
+    /*
+      **Optimistic, and it became necessary the moment the move became a drag (§106).**
+
+      Before, a card moved by pressing a button; a beat of latency before it re-drew read as the
+      button working. A drag has a *release*, and a card that springs back to the column it came
+      from and re-appears in the new one 300ms later reads as the drop having missed. Users repeat
+      a drop that looks like it failed, which is how one intent becomes three writes.
+
+      Every board key is patched, not just the one on screen: the same card is on the project
+      board, My Work and a team board, and `keys.myWork` already records what happens when only
+      the board you were looking at is refreshed.
+    */
+    onMutate: async ({ id, status }) => {
+      // Cancel first, or a read already in flight resolves *after* this write and puts the card
+      // back — an optimistic update overwritten by a response that predates it.
+      await client.cancelQueries({ queryKey: WORK_ITEM_ROOT });
+
+      const snapshot = client.getQueriesData<WorkItem[]>({ queryKey: WORK_ITEM_ROOT });
+      for (const [key, board] of snapshot) {
+        if (!board) continue;
+        client.setQueryData<WorkItem[]>(
+          key,
+          board.map((card) => (card.id === id ? { ...card, status } : card)),
+        );
+      }
+      return { snapshot };
+    },
+
+    /*
+      Rollback. Restoring the *snapshot* rather than reversing the edit, because between the drop
+      and the failure another write may have landed on the same board — and re-deriving "what it
+      was" from the current cache would reinstate a stale row for a card nobody touched.
+
+      The **announcement** is the board's (`Board` calls `useAnnounce`), not this hook's: a hook
+      cannot know whether the failure is on screen, and this one deliberately keeps its errors out
+      of the global notification surface.
+    */
+    onError: (_error, _variables, context) => {
+      for (const [key, board] of context?.snapshot ?? []) {
+        client.setQueryData(key, board);
+      }
+    },
+
+    // On both paths: success re-reads the server's own answer (a move can change `overdue`,
+    // `allowedTransitions` and, on a derived card, nothing at all), and a failure re-reads because
+    // the rolled-back cache is now a guess about a server that just refused something.
+    onSettled: () => client.invalidateQueries({ queryKey: WORK_ITEM_ROOT }),
   });
 }
 

@@ -241,6 +241,22 @@ aggregate in Postgres over an indexed table rather than materialising N rows int
 `CLAUDE.md`'s *"measure bundle changes before believing them"* applies to this exactly as it does to
 a bundle. **It was not measured.**
 
+## 14. §106's board drag — one frontend row, and the backend rows it does NOT owe
+
+§106 replaced the board's native HTML5 drag with `@dnd-kit` and made the move optimistic. **No
+backend file was touched and no contract moved**, so the Java suite owes nothing here — recorded
+explicitly, because a slice that writes to `PATCH /work-items/{id}` and adds no rows to this file
+otherwise reads as a slice that forgot.
+
+What it *did* expose is on the mock side, and it is the row worth keeping:
+
+| # | Mutation | What must redden |
+|---|---|---|
+| 14a | *(frontend)* `mocks/handlers/workItems.ts` — delete the `allowedTransitions` 409 §106 added | Nothing in the Vitest suite, **and that is the finding**. No component test drives the mock handlers; the check is browser row **M1-29**. The handler answered `200` to an illegal transition from Phase 1 to §106 because the only mover was a button the board had already disabled — a mock leniency that becomes a certified bug the moment a drag can reach it |
+| 14b | *(backend, unrun)* `WorkItemService`'s move — accept a status outside `allowedTransitions` | Whichever `WorkItemEndpointTest` case pins the 409 the contract declares. **Not verified to exist.** If nothing reddens, the server's half of the rule this slice now relies on client-side is unasserted, and that is a test to write rather than a mutation that failed |
+
+**Neither was run**, per §65.
+
 ---
 
 # CLOSED — no longer owed

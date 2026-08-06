@@ -1,11 +1,16 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, render, renderHook, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { SnackbarProvider } from 'notistack'
-import { describe, expect, it } from 'vitest'
+import { Route, Routes } from 'react-router-dom'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ApiError, api } from '../../api/client'
+import { useMoveWorkItem } from '../../api/queries'
 import type { WorkItem } from '../../api/types'
 import { createTestQueryClient } from '../../test/queryClient'
+import { heldPermissions } from '../../test/permissions'
 import { TestProviders } from '../../test/TestProviders'
 import { workItemColumns } from '../../lib/labels'
-import { Board } from './BoardPage'
+import { Board, BoardPage } from './BoardPage'
 
 /**
  * The board had **zero tests** until §53, and that is why this file leads with the reason.
@@ -117,12 +122,22 @@ describe('Board columns', () => {
 })
 
 describe('Moving a card', () => {
-  it('refuses a dragged derived card and names the action that works', async () => {
-    // DRAGGED, not clicked — and writing this test is what showed why. The move buttons for a
-    // disallowed column are `disabled`, so `onClick` never fires and the rejection banner is
-    // unreachable through them. Dragging is the only path that reaches `handleDrop`'s refusal,
-    // which makes it the only path worth asserting: a `user.click` here passes vacuously against
-    // a button that cannot be pressed.
+  it('refuses a derived card and names the action that works', async () => {
+    /*
+      **This test used to drive `fireEvent.dragStart` + `drop`, and §106 took that away.** The
+      board's native HTML5 drag became a `@dnd-kit` one, which cannot be driven in jsdom at all —
+      so the drag path's refusal is now pinned directly in `cardMove.test.ts`, and what is
+      asserted *here* is the same sentence on the surface a user can still reach without a
+      pointer: the disabled button's tooltip.
+
+      The two are the same string by construction — `refusalFor` — and `cardMove.test.ts` has a
+      test whose only job is to hold that equality. Without it this assertion would be about a
+      tooltip while the drop said something else, which is exactly the drift §106 found.
+
+      The **hover has to land on the span**, not the button: MUI sets `pointer-events: none` on a
+      disabled control, so a `Tooltip` wrapped straight around one never opens. That trap is what
+      `WorkCard`'s comment is about, and this is the test that would catch its removal.
+    */
     renderBoard([
       card({
         id: 'execution:abc',
@@ -136,14 +151,13 @@ describe('Moving a card', () => {
       }),
     ])
 
-    fireEvent.dragStart(screen.getByTestId('Board.Card'))
-    fireEvent.drop(screen.getByTestId('Board.Column.DONE'))
+    await userEvent.hover(screen.getByTestId('Board.Card.MoveTo.DONE').parentElement!)
 
-    const rejection = await screen.findByTestId('Board.RejectedMove')
-    expect(rejection.textContent).toContain('TC-42')
+    const tip = await screen.findByRole('tooltip')
+    expect(tip.textContent).toContain('TC-42')
     // The sentence has to point somewhere. "You can't do that" leaves the user with a card they
     // believe is broken rather than one that is following its source.
-    expect(rejection.textContent).toContain('follows')
+    expect(tip.textContent).toContain('follows')
   })
 
   it('disables the move buttons a card is not allowed to make', () => {
@@ -352,15 +366,12 @@ describe('Refusing a review card’s move (§81)', () => {
       }),
     ])
 
-    // Dragged, not clicked, for the reason the refusal test above records: the move button for a
-    // disallowed column is `disabled`, so a click passes vacuously against a control that cannot
-    // be pressed.
-    fireEvent.dragStart(screen.getByTestId('Board.Card'))
-    fireEvent.drop(screen.getByTestId('Board.Column.DONE'))
+    // Read off the disabled button's tooltip, for the reason the refusal test above records: a
+    // `@dnd-kit` drag cannot be driven in jsdom, and the drop path is pinned to produce this exact
+    // string in `cardMove.test.ts`.
+    await userEvent.hover(screen.getByTestId('Board.Card.MoveTo.DONE').parentElement!)
 
-    expect((await screen.findByTestId('Board.RejectedMove')).textContent).toContain(
-      'TC-20 mirrors a review',
-    )
+    expect((await screen.findByRole('tooltip')).textContent).toContain('TC-20 mirrors a review')
   })
 })
 
@@ -378,5 +389,122 @@ describe('Card ordering', () => {
       .map((node) => node.textContent)
 
     expect(titles).toEqual(['Medium and late', 'Critical but on time'])
+  })
+})
+
+/**
+ * The write, and the two things a **drag** made necessary that a button did not (§106).
+ *
+ * A button press with 300ms of latency reads as the button working. A drag has a *release*, and a
+ * card that snaps back to where it came from and re-appears elsewhere a beat later reads as the
+ * drop having missed — which is how one intent becomes three writes. So the move is optimistic,
+ * and therefore it has to roll back.
+ *
+ * Driven through `BoardPage` rather than `Board`, because the optimistic update lives in the query
+ * cache and `Board` is handed its cards as a prop: a `Board`-only test cannot see it, and a build
+ * with no optimistic update at all would pass one.
+ */
+describe('Moving a card writes optimistically and rolls back (§106)', () => {
+  const TODO_CARD = card({ id: 'wi-1', title: 'Reconcile the file', status: 'TODO' })
+
+  function renderPage() {
+    return render(
+      <TestProviders client={createTestQueryClient()} route="/projects/p1/board">
+        <SnackbarProvider>
+          <Routes>
+            <Route path="/projects/:projectId/board" element={<BoardPage />} />
+          </Routes>
+        </SnackbarProvider>
+      </TestProviders>,
+    )
+  }
+
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
+      if (path.startsWith('/me/permissions')) return heldPermissions(['project:read'])
+      if (path.startsWith('/work-items')) return [TODO_CARD]
+      if (path.startsWith('/projects/')) return { id: 'p1', name: 'Banking' }
+      return []
+    }) as never)
+  })
+
+  it('shows the card in its new column before the server has answered', async () => {
+    // A deferred patch, so the assertion happens strictly DURING the request. Resolving it first
+    // would assert the refetch instead, which passes with no optimistic update at all.
+    let settle: (value: unknown) => void = () => {}
+    vi.spyOn(api, 'patch').mockImplementation(
+      (() => new Promise((resolve) => { settle = resolve })) as never,
+    )
+
+    renderPage()
+    await userEvent.click(await screen.findByTestId('Board.Card.MoveTo.DONE'))
+
+    await waitFor(() =>
+      expect(within(screen.getByTestId('Board.Column.DONE')).getByTestId('Board.Card')).toBeInTheDocument(),
+    )
+    expect(within(screen.getByTestId('Board.Column.TODO')).queryByTestId('Board.Card')).toBeNull()
+
+    settle({ ...TODO_CARD, status: 'DONE' })
+  })
+
+  it('puts the card back and says why when the server refuses', async () => {
+    vi.spyOn(api, 'patch').mockRejectedValue(
+      // (status, detail, fieldErrors, correlationId, retryAfter, title) — the board renders
+      // `detail`, which is the sentence about THIS card rather than the kind of problem.
+      new ApiError(409, 'TODO → Done is not a move this card allows.', null, null, null, "That card can't be moved there"),
+    )
+
+    renderPage()
+    await userEvent.click(await screen.findByTestId('Board.Card.MoveTo.DONE'))
+
+    /*
+      **The reason PERSISTS, and it is the server's own sentence.** A toast about a card that has
+      visibly snapped back is gone before the eye gets back to it; this alert is still there when
+      it does. `detail`, not `title` — "That card can't be moved there" is the *kind* of problem,
+      "TODO → Done is not a move this card allows" is what happened to this card.
+    */
+    expect((await screen.findByTestId('Board.RejectedMove')).textContent).toContain(
+      'not a move this card allows',
+    )
+
+    // The card is back where it came from — the visible half of the rollback. The CACHE half is
+    // asserted below, where the refetch cannot make it vacuous.
+    await waitFor(() =>
+      expect(within(screen.getByTestId('Board.Column.TODO')).getByTestId('Board.Card')).toBeInTheDocument(),
+    )
+    expect(within(screen.getByTestId('Board.Column.DONE')).queryByTestId('Board.Card')).toBeNull()
+  })
+
+  /*
+    The rollback, asserted where it cannot be faked.
+
+    **The obvious version of this test is vacuous, and the first draft of it was.** `onSettled`
+    invalidates on failure too, and the mocked board read answers with the card in the column it
+    started in — so a build with `onError` deleted looks correct a beat later and every screen
+    assertion still passes. Holding the refetch open to prove otherwise is worse: a never-resolving
+    query leaves RTL's `act` wrapper waiting and **no state update after it is ever flushed**, so
+    the banner this file asserts stops appearing for a reason that has nothing to do with the
+    product. That cost an hour and is recorded so the next author does not spend it.
+
+    So this drives the hook with **no `useWorkItems` mounted**. An invalidation with no observer
+    marks the key stale and fetches nothing, which leaves `onError`'s snapshot restore as the only
+    thing that can put the card back — and makes the assertion synchronous.
+  */
+  it('restores the exact cache snapshot rather than guessing what the card was', async () => {
+    const client = createTestQueryClient()
+    const key = ['work-items', 'p1', false]
+    client.setQueryData(key, [TODO_CARD])
+    vi.spyOn(api, 'patch').mockRejectedValue(new ApiError(409, 'no'))
+
+    const { result } = renderHook(() => useMoveWorkItem(), {
+      wrapper: ({ children }) => <TestProviders client={client}>{children}</TestProviders>,
+    })
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: 'wi-1', status: 'DONE' }).catch(() => {})
+    })
+
+    expect(client.getQueryData<WorkItem[]>(key)?.[0].status).toBe('TODO')
   })
 })
