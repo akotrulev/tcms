@@ -517,3 +517,24 @@ drag itself), `M1-10`…`M1-13` (team boards), `M5-28`/`M5-29`/`M5-30` (the revi
 was missed — approval happened first in `A4`, so only the post-approval "gone" state was observed).
 A follow-up pass should request a review, check the board **before** approving, to see the card `M5-28`
 actually describes.
+
+---
+
+## A6 — reports: results
+
+| Row | Verdict | Note |
+|---|---|---|
+| `L4-30` | ✅ PASS | The job seeded at `A3-2` reached `COMPLETED` between stages, with no polling — real worker clock. |
+| `M6-1` | ✅ PASS (from `A3-2`) | 202, all seven contract fields, no `id`/`requestedAt`. |
+| `M6-9` | ✅ PASS | Header, Generate, Saved reports panel (correctly empty — no saved-definition feature yet). |
+| `M6-10` | ✅ PASS | Card appears immediately at "Queued" on 202's body, no skeleton. |
+| `M6-18` | ✅ PASS | Report-view URL is durable — opened directly by id, full header renders. |
+| `L4-34` | ✅ PASS | Header carries the real company (`Acme Test Co`), `OLB — Acme Online Banking` project scope, the scope sentence, `L. Lead` as generator, and a UTC-labelled timestamp. |
+| `L2-12` | ✅ PASS | The raw artifact-content URL, hit directly (no bearer token): 401. |
+| `M6-17` | ✅ PASS | Bars scaled to the series' own max (Passed=7 full width, Blocked=3, Failed=2, shorter in proportion), exact percentages (`58.3%`, not `58%`). |
+
+**Not driven this pass**: `M6-3`…`M6-8` (PDF/DOCX refusal, saved-definition round trip), `M6-11`
+through `M6-16` beyond what's listed (the download's actual bytes were not inspected, `M6-12`'s
+two-cards-in-parallel, `M6-13`/`M6-14` failure states), `M6-19`/`M6-20` (building state, drift fault),
+`L4-31`…`L4-35` beyond `L4-34` (offline reload, print preview, XSS in a title, the two-account
+saved-definition isolation).
