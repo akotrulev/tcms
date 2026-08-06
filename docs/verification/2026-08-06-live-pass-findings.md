@@ -351,3 +351,30 @@ GET), `M2-29`…`M2-53`'s remaining tag-picker micro-behaviors beyond `M2-38`/`M
 ordering, re-pick no-op, free-text acceptance, 61-char refusal), `L4-17`/`L4-19`/`L4-20`/`L4-21`
 (needs the corpus just built — retarget to `A1` re-pass or later stage), `M2-48` (needs a
 pre-`V33` database, already flagged unreachable on this instance).
+
+---
+
+## A2 — plans: results
+
+`TP-1` (scope: suites Payments+Cart, tag smoke — built for `M3-6`'s overlap), `TP-2` (In review),
+`TP-3` (Approved), `TP-4` (deleted for `M3-14`), `TP-5` (Draft) — the ladder-ordering fixture.
+
+| Row | Verdict | Note |
+|---|---|---|
+| `M3-1` | ✅ PASS — **settles the box's question** | Three states only: Draft → *Submit for review*; In review → (not directly observed, inferred from ladder); Approved → *Return to draft*. **No Start, Close, Reopen anywhere.** `M3-13`, `L2-5`, `L2-6`, `L3-6`, `M4-27` are confirmed unreachable — the five-state ladder is gone, not merely hidden. |
+| `L0-3` | ✅ PASS | New plans render "Draft" in the draft colour; `TP-2` "In review" (teal), `TP-3` "Approved" (green) — no grey fall-through. |
+| `L0-5` | ✅ PASS | New plan's exit-criteria panel: "None set" under both Entry and Exit. |
+| `M3-4` | ✅ PASS | List order: Drafts (`TP-1`, `TP-5`), then In review (`TP-2`), then Approved (`TP-3`). |
+| `M3-12` | ✅ PASS | Metric dropdown: "Pass rate (%)", "Coverage (%)", "Open critical defects", "Cases approved (%)", "Build available" — five readable labels, not raw enum spellings. |
+| `M3-2` | ✅ PASS | `TP-3` (Approved) → Plan tab: fields editable (Name input live), only "Return to draft" + "Delete", no reopen tooltip. |
+| `M3-14` | ✅ PASS | Draft plan delete → 204; the following `GET` is a 404. |
+| `M3-21` | ✅ PASS | Seven tabs, Progress default. |
+| `M3-52` | ✅ PASS | Test cases tab lists what each reference currently catches, with the reference(s) named per row. |
+| `M3-53` | ✅ PASS | `TC-6`/`TC-7` (in both Cart and tagged `smoke`) show `(Suite Cart, Tag smoke)` — once, both references named. |
+| `M3-46`/`M3-56` | ✅ PASS | Editing the tab shows *"The counts are the server's... recomputed when this plan is saved"* and *"Unsaved changes in Test cases"*; the served count is absent while dirty and the live list is not. |
+| `M3-6` | ✅ PASS | Total stays 12 after adding a `smoke` tag reference that only re-catches cases already in scope via Cart — not 14, confirming the deduped union. |
+
+**Not driven this pass**: `M3-3` (plan-gating switch is gone), `M3-7`/`M3-9`/`M3-10`/`M3-11`/`M3-35`
+(version/lock-conflict rows), `M3-16`…`M3-39` (the linked-document half — needs a `/docs` page
+authored first), `M3-40`…`M3-62` remaining live-resolution and viewer-tier rows, `M3-13`/`L2-5`/
+`L2-6`/`L3-6`/`M4-27` (confirmed unreachable by `M3-1`, not separately driven).
