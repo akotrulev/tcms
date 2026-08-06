@@ -271,8 +271,21 @@ tried to break is a claim and not a test.
 **What this section is really reporting**: four of the seven queued rows are expected to redden
 **nothing**, and that is the finding rather than a shortfall. The cross-check guards the *policy
 resolution* well (R6-1/R6-2 prove it) and guards the *selection* and the *feature section* not at
-all. R6's remaining phases should close R6-5 (a second configuration in the fixture) and R6-7/R6-8/
-R6-9 (a selection test that is not the cross-check), or say why not.
+all. ~~R6's remaining phases should close R6-5 (a second configuration in the fixture) and R6-7/
+R6-8/R6-9 (a selection test that is not the cross-check), or say why not.~~ → **closed by phase 4
+(`AggregateSelectionTest`), and every one of them was re-run against its mutant rather than assumed:**
+
+| # | Re-run after phase 4 | Result |
+|---|---|---|
+| R6-3 | `verdictFirst()` dropped from `WORST` | ✅ **RED** — `Verdicts`. The fixture now records a `RETEST`, which is what the cross-check's does not. |
+| R6-5 | `LATEST_PER_CONFIG`'s partition drops `configuration_id` | ✅ **RED** — `Configurations`. A second configuration is all it needed. |
+| R6-7 | the `planIds` arm emitted unconditionally | ✅ **RED**, and loudly — 16 tests. |
+| R6-8 | the `CASE … ARRAY[NULL]` removed from the lateral | ⚠️ **GREEN — and this is phase 4's finding.** `LEFT JOIN LATERAL … ON true` **already** preserves a row whose `unnest` yields nothing, so the `CASE` is not the guard the code's own comment said it was. The mutation that matters is the **join kind**: `CROSS JOIN LATERAL` reddens three tests. The comment is corrected in place, struck through with its correction, because a reviewer protecting the `CASE` would be protecting the wrong half. |
+| R6-9 | `optionalInstant` swallows a bad date | ✅ **RED** — `Dates`. |
+
+**Still not covered, and named rather than implied**: R6-4 stays unreachable (a CHECK constraint
+guards `case_status.kind`), and nothing asserts that the policy the *dialog* sends is the one the
+server resolves under — that crosses the wire and neither suite can see it.
 
 ---
 

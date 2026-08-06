@@ -459,8 +459,16 @@ class AggregateExecutionReport implements ReportComputation {
      * plain one drops the row entirely when the array is empty or NULL, so every unclassified
      * execution would vanish and the section would read as a project that classified everything —
      * §96's {@code JOIN suite} defect in a second shape, and the reason the orientation cache's
-     * standing rule is to check what a join does to the empty side <em>before</em> adding one. The
-     * {@code CASE} substituting a one-element {@code ARRAY[NULL]} is what keeps that row.
+     * standing rule is to check what a join does to the empty side <em>before</em> adding one.
+     *
+     * <p>~~The {@code CASE} substituting a one-element {@code ARRAY[NULL]} is what keeps that
+     * row.~~ → <strong>corrected in R6 phase 4, by the mutant that proved it.</strong> Removing the
+     * {@code CASE} reddens <em>nothing</em>: {@code LEFT JOIN LATERAL … ON true} already preserves
+     * the left row when {@code unnest} yields no rows. It is the <strong>join kind</strong> that
+     * carries the guarantee — swapping this for a {@code CROSS JOIN LATERAL} drops every
+     * unclassified execution and reddens three tests. The {@code CASE} is kept because it states
+     * the intent at the point of the array, but a reader must not believe it is the check: the
+     * thing to protect in review is the word {@code LEFT}.
      *
      * <p><strong>The label is resolved in Java, not joined in SQL.</strong> {@code execution_fact}
      * is the only table this class may name — {@link ExecutionSource} is the module's declared seam

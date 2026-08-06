@@ -2,8 +2,9 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-06 (**R6 phase 1** — the aggregate execution report; §108 before it)
-**Baseline commit:** `7f43c28` (§101 phase 5) **+ the doc commit this line ships in** (its own SHA
+**Last verified:** 2026-08-06 (**R6 phases 2–4, §111** — the aggregate report's contract, form and
+selection tests; R6 phase 1 and §108 before it)
+**Baseline commit:** `8a095cd` (R6 phase 3) **+ the doc commit this line ships in** (its own SHA
 cannot be written into itself; per `CLAUDE.md`, trust the body over the header and re-grep what a
 later commit could have moved).
 **§101's backend half is phases 1, 2 and 4** — `V34` + `V35`, both rollup writers, and the read
@@ -1286,8 +1287,24 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   **two mutants were run and the second proved the fixture vacuous**, which is why `UNBLOCKED`
   exists. **§19's prefix collision, sixth instance**: `6a` is `CaseListEndpointTest`'s and the full
   suite went red in 64 tests of an unrelated class before the move to `c1`. Gate: **1806 across 363
-  classes, 0 failures, 0 skipped** (1795 → 1806). **Still owed by R6: the contract's `parameters`
-  schema for this type**, and R7/R8 remain unstarted.
+  classes, 0 failures, 0 skipped** (1795 → 1806). ~~**Still owed by R6: the contract's `parameters`
+  schema for this type**~~ → **shipped in phase 2.**
+- 2026-08-06 · EXTEND · **R6 phases 2–4 (§111)** — the report becomes askable and its selection
+  becomes tested. Phase 2: the contract names `aggregate_execution` and documents the selection
+  (**prose only** — two descriptions and a `gen:api`; no schema, no operation, no field). Phase 3:
+  `GenerateReportDialog` grows the second entry and its form, and **the run gate stops being
+  global** — a project with no runs may ask for this report, asserted `toBeEnabled()` because the
+  natural direction passes against the pre-R6 dialog. Phase 4: **`AggregateSelectionTest`**
+  (prefix `c2`, slug `aes-`, 18 tests) closes the four queued mutation rows the oracle could not
+  see, each re-run against its mutant. **The finding is R6-8 coming back GREEN**: the
+  `CASE … ARRAY[NULL]::uuid[]` in `featureGroups` is *not* what keeps the unclassified row —
+  `LEFT JOIN LATERAL … ON true` is, and `CROSS JOIN LATERAL` is the mutation that reddens. The
+  javadoc claiming otherwise is struck through in place; **protect the word `LEFT`, not the
+  `CASE`.** Also corrected: `AggregateSelection`'s *"a 400 at request time"* — a report's own
+  parameters are refused by the **worker**, as a `FAILED` job, which is why the dialog makes the two
+  reachable mistakes unexpressible. Gate: **1824 across 370 classes, 0 failures, 0 skipped**
+  (1806/363 → 1824/370); frontend 958/958. **Nine mutations run across the three phases; 5 browser rows
+  queued, none run.** R7/R8 remain unstarted.
 - 2026-08-04 · EXTEND · The HTML renderer and the report header (§88) — **R4**, three phases, three
   commits, backend 1615 → **1628** (320 classes), frontend 705/705. New: `ReportHeader`,
   `ReportDocument`, `ReportHeaders`, `HtmlReportRenderer`; `ReportRenderer.render` takes a document;
