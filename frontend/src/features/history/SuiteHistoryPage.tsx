@@ -8,7 +8,7 @@ import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { DenominatorToggle, ResultBar, ResultCountsCell } from '../../components/ResultBar';
 import { executedCount, type Denominator } from '../../lib/results';
-import { formatCount, formatDateTime } from '../../lib/format';
+import { formatComputedAt, formatCount, formatDateTime } from '../../lib/format';
 import { ScrollX } from '../../components/ScrollX';
 
 /**
@@ -67,7 +67,12 @@ export function SuiteHistoryPage() {
 
       <DataRegion testId="SuiteHistory.Content" state={{ ...history, refetch: () => void history.refetch() }}>
         {(data) => (
-          <SuiteHistoryBody entries={data.entries} markers={data.versionMarkers} projectId={projectId} />
+          <SuiteHistoryBody
+            entries={data.entries}
+            markers={data.versionMarkers}
+            computedAt={data.computedAt}
+            projectId={projectId}
+          />
         )}
       </DataRegion>
     </Box>
@@ -77,10 +82,12 @@ export function SuiteHistoryPage() {
 function SuiteHistoryBody({
   entries,
   markers,
+  computedAt,
   projectId,
 }: {
   entries: SuiteRunSummary[];
   markers: VersionMarker[];
+  computedAt: string | null;
   projectId: string;
 }) {
   const [denominator, setDenominator] = useState<Denominator>('EXECUTED');
@@ -105,6 +112,24 @@ function SuiteHistoryBody({
 
   return (
     <Stack sx={{ gap: 3 }}>
+      {/*
+        How old these sums are (§101). Since the counts come from the `suite_run_summary` rollup
+        they can lag by up to one scheduler tick — and unlike the plan page, this screen has no
+        second staleness signal to be confused with, so the line stands alone.
+
+        Always rendered, including the null case: "Computed now" is a positive statement rather
+        than the absence of a warning. A screen that says nothing when it is current leaves the
+        reader unable to tell current from unlabelled, which is the whole reason the contract makes
+        the field required rather than optional.
+      */}
+      <Typography
+        variant="caption"
+        sx={{ color: 'text.secondary' }}
+        data-testid="SuiteHistory.ComputedAt"
+      >
+        {formatComputedAt(computedAt)}
+        {computedAt && ' — updated every 15 minutes'}
+      </Typography>
       {/*
         The caveat that makes the table honest. It fires from the data rather than being
         written by hand, so it appears whenever it is true and never when it isn't.

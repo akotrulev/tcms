@@ -97,6 +97,30 @@ export function formatAge(iso: string | null | undefined, now = Date.now()): str
   return `${Math.floor(days / 365)}y ago`;
 }
 
+/**
+ * How old the *arithmetic* on a screen is — the sentence for `computedAt` (§101).
+ *
+ * Here rather than in the two pages that render it, per `CLAUDE.md`: new display logic goes in the
+ * shared layer, and a second implementation of this is how two screens come to word the same fact
+ * differently.
+ *
+ * **Null is a positive statement and gets a positive sentence.** It means the server computed these
+ * numbers from the executions themselves on this request — the `WORST` / `BEST` / `ALL` policies,
+ * and any plan or suite whose rollup has not been written yet — so it is *more* current than a
+ * timestamp, not less. Rendering it as "unknown", or rendering nothing at all, would make the
+ * freshest possible answer look like a missing one.
+ *
+ * Deliberately NOT merged with `PlanStatistics.stale`, which is a different claim about a different
+ * subject: `stale` says nothing has been *executed* in fourteen days, this says how old the *sums*
+ * are. A plan executed an hour ago and rolled up ten minutes ago is fresh by one measure and behind
+ * by the other, and collapsing them into one signal is §65's two-contradictory-percentages defect
+ * with the contradiction hidden.
+ */
+export function formatComputedAt(iso: string | null | undefined, now = Date.now()): string {
+  if (!iso) return 'Computed now';
+  return `Figures as of ${formatDateTime(iso)} (${formatAge(iso, now)})`;
+}
+
 /** `87.4%` — one decimal, one spacing rule, everywhere. */
 export function formatPercent(value: number | null | undefined, decimals = 1): string {
   if (value === null || value === undefined || Number.isNaN(value)) return EM_DASH;

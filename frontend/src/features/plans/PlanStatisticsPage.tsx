@@ -60,7 +60,7 @@ import { DenominatorToggle, PassRateSummary, ResultBar, ResultCountsCell } from 
 import { criterionColor, criterionState, type Denominator } from '../../lib/results';
 import { StatusChip } from '../../components/StatusChip';
 import { describeError } from '../../lib/describeError';
-import { formatCount, formatDateTime, formatPercent } from '../../lib/format';
+import { formatComputedAt, formatCount, formatDateTime, formatPercent } from '../../lib/format';
 import {
   aggregationHelp,
   aggregationLabels,
@@ -746,12 +746,17 @@ function StatisticsBody({
               {data.latestExecutionAt && (
                 /*
                   This caption used to read "the read model is catching up, so counts may lag by
-                  a few seconds" — the opposite warning to the one `stale` carries. The figures
-                  are recomputed per request and never lag; `stale` means NOTHING HAS BEEN
-                  EXECUTED IN TWO WEEKS, and plan §6p calls a page showing old numbers as current
-                  the most dangerous screen in the product. Reassuring the reader was exactly the
-                  wrong response, and it went unnoticed because until the endpoint went live the
-                  mock never set the flag.
+                  a few seconds" — the opposite warning to the one `stale` carries. `stale` means
+                  NOTHING HAS BEEN EXECUTED IN TWO WEEKS, and plan §6p calls a page showing old
+                  numbers as current the most dangerous screen in the product. Reassuring the
+                  reader was exactly the wrong response, and it went unnoticed because until the
+                  endpoint went live the mock never set the flag.
+
+                  ~~The figures are recomputed per request and never lag.~~ → SUPERSEDED by §101:
+                  under LATEST and LATEST_PER_CONFIG they now come from the `plan_snapshot` rollup
+                  and CAN lag, by up to one scheduler tick. That is not a reason to bring the old
+                  sentence back — it was wrong then and would be wrong now, because it conflated
+                  two ages. The lag has its own line below, its own field, and its own subject.
                 */
                 <Typography
                   variant="caption"
@@ -764,6 +769,23 @@ function StatisticsBody({
                       + ' numbers describe the past, not the build you are about to ship.'}
                 </Typography>
               )}
+              {/*
+                The OTHER age, and a separate line on purpose. `stale` above is about the
+                executions; this is about the sums. Rendering them in one sentence — or styling
+                this one like a warning — would put two different claims behind one signal, which
+                is exactly the ambiguity the second field was added to remove. Always rendered,
+                because "Computed now" is a positive statement rather than the absence of a
+                warning: a screen that says nothing when it is current is a screen where the reader
+                cannot tell current from unlabelled.
+              */}
+              <Typography
+                variant="caption"
+                sx={{ color: 'text.secondary' }}
+                data-testid="PlanStats.ComputedAt"
+              >
+                {formatComputedAt(data.computedAt)}
+                {data.computedAt && ' — updated every 15 minutes'}
+              </Typography>
             </Stack>
           </Panel>
 
