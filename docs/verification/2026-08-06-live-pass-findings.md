@@ -561,3 +561,59 @@ saved-definition isolation).
 most of `L3` (`L3-2`…`L3-6`, `L3-8`, `L3-10`…`L3-13`). Given time remaining in this pass, coverage was
 concentrated on the rows most likely to catch a real defect (permission-tier deletes, 404-vs-403,
 409 refusal wording, version-bump invariants) rather than walked exhaustively persona by persona.
+
+---
+
+## L4 — results
+
+| Row | Verdict | Note |
+|---|---|---|
+| `L4-16` | ✅ PASS (recorded under A5) | See A5's results. |
+| `L4-26` | ✅ PASS (recorded under A5) | See A5's results. |
+| `L4-30` | ✅ PASS (recorded under A6) | See A6's results. |
+| `L4-41` | ✅ PASS (recorded under A3) | See A3's results. |
+| `L4-23` | ⚠️ **Overtaken by the pass's own later actions, not a defect** | `A3-1`'s seed (three `Failed` results for `TC-1` across three runs) was the fixture for this row, but `TC-1` was subsequently **deleted** while driving `L1-6` in the same sitting. By the time the dashboard was checked, "Failing repeatedly" correctly shows nothing — consistent with `L4-27` (a deleted flagged case drops out), not a failure of `L4-23` itself. The row needs a fresh seed on a case that survives to be checked. |
+
+**Not driven this pass**: `L4-1`…`L4-22` (mostly recorded under `A0`/`A1`/`A3`/`A4` already), `L4-24`,
+`L4-25`, `L4-27`…`L4-29`, `L4-31`…`L4-39`, `L4-42`…`L4-48` (the M2 rollup rows — `L4-40`'s window was
+missed, and the rest need a fresh sequence of ticks this pass did not have time to wait out cleanly).
+
+---
+
+## F — faults and responsive: results
+
+| Row | Verdict | Note |
+|---|---|---|
+| `tcmsFaults` presence | ✅ PASS | `window.tcmsFaults` is a real object in the dev build, confirming the fault seam described in `CLAUDE.md` exists in this running instance. |
+
+**Not meaningfully driven this pass.** The first `hang()` arm was wiped by a subsequent `navigate` —
+correct behavior per the fault switch's own documented reset-on-reload, but it means no fault-injected
+row (`M7-1`…`M7-7`, `F-1`, `M7-8`) was actually observed misbehaving or recovering correctly. This
+entire lane is effectively **undriven** and should be run as its own focused pass, arming each fault
+strictly after the target page has finished loading.
+
+---
+
+# §110 — session summary (this sitting)
+
+**All thirteen lanes touched; eleven driven to some depth, two (`F`, and parts of `L1`/`L4`) barely
+started.** Fixture built from scratch through the real UI and API: ten suites, 26+3 cases, three
+conditions, five plans, four runs, one report, one review cycle, three teams. Roughly 60 individual
+queue rows confirmed against their exact worded expectations; several dozen more explicitly recorded
+as not driven rather than silently skipped.
+
+**New findings this sitting: F9, F10, F11.**
+- **F9** — a suite's conditions can be read but never written (no UI control, no contract field).
+- **F10** — local dev's `compose.yaml` has no evidence/reports volume; production is unaffected.
+- **F11** — submitting a plan for review doesn't invalidate the Review panel's own query (same shape
+  as the earlier session's F7).
+
+**Confirmed-by-accident, not by design**: `L4-16` (review card vanishes on approval) and `L4-26`
+(`CASE_MAINTENANCE` cards render) were caught as side effects of doing A4/A5 in this order, not by
+deliberately sequencing to produce them — recorded as gaps for a follow-up pass to close cleanly
+(check the board *before* approving, to see `M5-28`'s "card present" state that this sitting missed).
+
+**What is left for a next sitting**: the bulk of `L1`'s persona-by-persona walk, `L2`'s remaining
+curl-only rows, `L3`'s remaining psql invariants, most of `L4` (rollup-tick rows `L4-42`…`L4-48`
+particularly — they need a clean sequence of scheduler ticks this sitting's other work kept
+interrupting), and essentially all of `F` (needs its own focused pass, armed correctly, last).
