@@ -78,7 +78,31 @@ tcms:
       # No default, deliberately: a signing key in the repository is a forged session for
       # anyone who can read it, and it is the kind of default that reaches production
       # because nothing ever fails because of it. Compose and the runbook both set it.
-      secret: ${TCMS_JWT_SECRET:?a JWT signing secret of at least 32 characters is required}
+      #
+      # ############################################################################
+      # THIS LINE READ `${TCMS_JWT_SECRET:?a JWT signing secret of at least 32
+      # characters is required}` UNTIL 2026-08-06, AND THAT IS NOT WHAT IT LOOKS LIKE.
+      #
+      # `${VAR:?message}` is POSIX-shell and Docker-Compose syntax for "fail if unset".
+      # **Spring has no such form.** Spring splits on the FIRST `:` and takes everything
+      # after it as the DEFAULT VALUE — so the effective signing key, whenever the
+      # environment variable was absent, was the literal 59-character string:
+      #
+      #     ?a JWT signing secret of at least 32 characters is required
+      #
+      # which clears @NotBlank and @Size(min = 32) in JwtProperties and starts the
+      # application without a murmur. The comment directly above was true as an
+      # intention and false as a description, the validation was real but satisfied,
+      # and the production instance ran on that key — a value committed to this
+      # repository — from §18 until it was found. Exactly the failure the comment
+      # predicts, delivered by the line meant to prevent it.
+      #
+      # `${TCMS_JWT_SECRET}` with NO colon is the spelling that actually refuses: an
+      # unresolvable placeholder throws at bind time and the context does not start.
+      # IntegrationTestBase supplies its own value via @DynamicPropertySource, so the
+      # suite is unaffected. Do not "helpfully" add a default back.
+      # ############################################################################
+      secret: ${TCMS_JWT_SECRET}
       issuer: ${TCMS_JWT_ISSUER:tcms}
       ttl: PT8H
       remember-me-ttl: P30D

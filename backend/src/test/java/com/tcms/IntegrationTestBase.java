@@ -104,6 +104,15 @@ public abstract class IntegrationTestBase {
         // The signing key has no default in application.yml — deliberately, so no
         // deployment can start with one taken from this repository. The suite supplies its
         // own, and it is not a value any environment would plausibly reuse.
+        //
+        // That was TRUE AS AN INTENTION AND FALSE AS A DESCRIPTION until 2026-08-06.
+        // application.yml said `${TCMS_JWT_SECRET:?…}`, which is shell syntax Spring does not
+        // implement — it took the message after the colon as the default, so every deployment
+        // without the variable signed sessions with a string from this repository, production
+        // included. Worth recording HERE, at the line that hid it: this override replaces the
+        // placeholder outright, so no test in the suite has ever evaluated the expression that
+        // actually ships. A green suite said nothing about it and could not have.
+        // `ConfigConventionTest` now checks the shipped text instead of the resolved property.
         registry.add("tcms.auth.jwt.secret",
                 () -> "test-only-signing-key-not-for-any-real-deployment");
 
