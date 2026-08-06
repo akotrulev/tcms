@@ -1458,7 +1458,13 @@ export interface paths {
                      *     pattern (TC-n) short-circuits to an exact lookup (plan §6q).
                      */
                     q?: string;
-                    /** @description Includes descendant suites by default. */
+                    /**
+                     * @description Narrows to the suite's **resolved membership** — filed here, added here individually,
+                     *     or carrying one of its `tagRules`. The same union `Suite.caseCount` counts, so the
+                     *     number in the rail and the length of this list are two readings of one query.
+                     *
+                     *     ~~Includes descendant suites by default.~~ → **§98**, with the tree.
+                     */
                     suiteId?: string;
                     /**
                      * @description Cases carrying **every** tag listed — repeat the parameter to narrow. AND, not OR, and
@@ -2797,17 +2803,37 @@ export interface paths {
          *     **Creating a run materialises its executions.** One `test_execution` per case in
          *     scope, each pinned to that case's *current* `case_version_id` at this moment — which
          *     is what makes the run a record of what was tested rather than of what the cases say
-         *     today (plan §6j). The scope is `caseIds` when the body carries them, otherwise the
-         *     plan's expanded scope; a run that would materialise **nothing** is a 400 on the
-         *     field, not an empty run, because an empty run looks finished.
+         *     today (plan §6j). A run that would materialise **nothing** is a 400 on the field,
+         *     not an empty run, because an empty run looks finished.
+         *
+         *     **The scope has three arms and they are UNIONED** (§99): `caseIds`, `suiteIds` —
+         *     resolved through the suite's whole membership, filed ∪ added ∪ tag-matched — and
+         *     `tags`, every live case carrying **any** of them. Deduped, and resolved **once**,
+         *     here: the executions are written now, so a suite that grows tomorrow does not grow
+         *     this run and a tag removed tomorrow does not shrink it. That is the opposite of a
+         *     plan's scope, which is a set of references re-resolved on every read, and it is why
+         *     the two can be described in the same words and behave differently.
+         *
+         *     `tags` unions rather than intersects, unlike `GET /cases?tag=`. A run is a
+         *     collection being assembled — the same reading `suite_tag_rule` takes — where a grid
+         *     filter is a list being narrowed. Two ways now exist to say "run everything tagged
+         *     smoke" (a suite whose tag rule is `smoke`, or this), which is accepted rather than
+         *     denied: create-time resolution makes the two indistinguishable after the fact.
+         *
+         *     **Otherwise the plan's expanded scope**, as before. The arms are a *substitution*
+         *     for it and never an addition to it: a body carrying a plan and any arm means "this
+         *     run is against that plan, and here is the subset we are doing this pass", and
+         *     unioning them would silently add back what somebody explicitly narrowed away. The
+         *     run still records its `planId`, so the narrowing reads as a run shorter than its
+         *     plan rather than as a lost association.
          *
          *     `configurationId` defaults to the project's default configuration — every project is
          *     seeded with one, so the field is optional and the column stays `NOT NULL`.
          *
          *     **§6g's gating rule (§82).** On a project with `requireApprovedCaseForRun` on, a run
          *     whose resolved case set contains anything that is not `APPROVED` is a `409` naming the
-         *     offending keys — the *resolved* set, so naming a plan instead of the cases is not a way
-         *     round it, and the whole run rather than a trimmed one, because a checklist quietly
+         *     offending keys — the *resolved* set, so neither naming a plan nor naming a tag is a
+         *     way round it, and the whole run rather than a trimmed one, because a checklist quietly
          *     shorter than the one that was asked for reports a pass rate over a denominator nobody
          *     chose. A holder of `case:approve` may pass `overrideApprovalGate`.
          */
@@ -6386,7 +6412,31 @@ export interface components {
             configurationId?: string | null;
             releaseVersion?: string | null;
             buildNumber?: string | null;
+            /**
+             * @description Named cases. Every id must be a live case *in this project* — one from a sibling
+             *     project satisfies the foreign key, the company column and RLS alike, so only this
+             *     check refuses it, and it is a field error rather than a silent drop.
+             */
             caseIds?: string[];
+            /**
+             * @description Whole suites, resolved through the membership `GET /suites` describes — filed,
+             *     added individually, and matched by the suite's own tag rules. Not "the cases filed
+             *     under it": a suite defined entirely by a tag rule would otherwise resolve to
+             *     nothing and create a run of zero cases, reported as a success.
+             *
+             *     Live suites in this project, on `caseIds`' terms and for its reason.
+             */
+            suiteIds?: string[];
+            /**
+             * @description Every live case carrying **any** of these — union, not intersection; see the
+             *     operation's own description for why this points the opposite way from
+             *     `GET /cases?tag=`.
+             *
+             *     Matched exactly, and an unknown tag is not an error: there is no vocabulary to
+             *     check it against, and a run that also names a suite is not wrong because one of
+             *     its tags is unused. What *is* refused is the run resolving to nothing at all.
+             */
+            tags?: string[];
             /** Format: uuid */
             assigneeId?: string | null;
             /**
