@@ -53,6 +53,7 @@ import {
   useCase,
   useClassification,
   useCreateCase,
+  useProjectTags,
   useStepSuggestions,
   useSuites,
   useUpdateCase,
@@ -334,6 +335,15 @@ function CaseEditorForm({
   const { enqueueSnackbar } = useSnackbar();
   const suites = useSuites(projectId);
   const dimensions = useClassification(projectId);
+  /*
+    The tags this project's cases already carry — a SUGGESTION source, never a vocabulary.
+
+    Optional by construction: the control is `freeSolo`, so a failed or still-loading read leaves an
+    empty option list and the author types the tag exactly as they did before. That is the whole
+    reason this is not gated on `isSuccess` — a picker that refused unlisted tags could never accept
+    the first use of a new one, which is what `case_tag` being free text means.
+  */
+  const projectTags = useProjectTags(projectId);
 
   /*
     Which panel the condition dialog is for, and whether it is creating or editing. One piece of
@@ -1063,18 +1073,21 @@ function CaseEditorForm({
                     multiple
                     freeSolo
                     /*
-                      No options list. Tags are free text and a curated vocabulary is exactly what
-                      left `shared_step` empty (authoring-rework decision 2).
+                      The tags already in use, most-used first — `GET /projects/{id}/tags`.
 
-                      ~~There is no endpoint that lists the ones in use.~~ → **there is, since §97
-                      phase 3b**: `GET /projects/{id}/tags`, whose first consumer is the plan's
-                      Test cases tab (`useProjectTags`, §97 phase 6). Suggesting them here is a
-                      three-line change and is deliberately NOT made in that slice — this control
-                      and its two siblings (`SuiteDialogs`, `BulkActionDialog`) are three screens
-                      §97 does not own, and a suggestion list is a behaviour change that wants its
-                      own browser row. Recorded as a gap rather than left reading as impossible.
+                      ~~No options list.~~ → **suggested since the tag-reuse slice.** The原 note
+                      original note said a curated vocabulary is what left `shared_step` empty, and that is
+                      still true and still the reason this list is DERIVED: a tag appears here
+                      because a case carries it, so it cannot disagree with the grid, and nobody has
+                      to populate it. `freeSolo` stays, so an unlisted tag is still typeable — the
+                      endpoint is a picker's list and never a validator's.
+
+                      `filterSelectedOptions` keeps a tag already on this case out of the dropdown;
+                      re-picking it is a no-op the `Set` below would swallow silently, which reads
+                      as a dead menu row.
                     */
-                    options={[]}
+                    options={(projectTags.data ?? []).map((usage) => usage.tag)}
+                    filterSelectedOptions
                     value={field.value}
                     onChange={(_event, value) =>
                       // Trimmed and de-duplicated as they are entered, because `case_tag`'s key

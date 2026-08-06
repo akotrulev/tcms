@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
-import type { Suite } from '../../api/types'
+import type { Suite, TagUsage } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { CreateSuiteDialog, RenameSuiteDialog } from './SuiteDialogs'
@@ -39,8 +39,9 @@ const suite: Suite = {
   lockVersion: 3,
 }
 
-function mockReads() {
-  vi.spyOn(api, 'get').mockImplementation((async () => []) as never)
+function mockReads(tags: TagUsage[] = []) {
+  vi.spyOn(api, 'get').mockImplementation((async (path: string) =>
+    path.includes('/tags') ? tags : []) as never)
 }
 
 function renderCreate() {
@@ -88,6 +89,32 @@ describe('SuiteDialogs — tag rules', () => {
     await waitFor(() => expect(post).toHaveBeenCalled())
     const body = post.mock.calls[0][1] as { tagRules: string[] }
     expect(body.tagRules).toEqual(['smoke'])
+  })
+
+  it('suggests the project tags as rules, and still accepts one no case carries yet', async () => {
+    const user = userEvent.setup()
+    mockReads([
+      { tag: 'smoke', caseCount: 9 },
+      { tag: 'regression', caseCount: 4 },
+    ])
+    const post = vi.spyOn(api, 'post').mockResolvedValue(suite as never)
+    renderCreate()
+
+    await user.type(screen.getByTestId('Suites.Dialog.Name'), 'Smoke')
+    await user.type(screen.getByTestId('Suites.Dialog.TagRules'), 'smo')
+    await user.click(await screen.findByRole('option', { name: 'smoke' }))
+
+    /*
+      A RULE MAY NAME A TAG NOTHING CARRIES YET, and that is not an edge case — it is how a suite
+      gets written before the cases it will hold. Suggesting from the tags in use must not narrow
+      what a rule may say, so `freeSolo` stays and this half of the test is what keeps it.
+    */
+    await user.type(screen.getByTestId('Suites.Dialog.TagRules'), 'not-yet-used{Enter}')
+    await user.click(screen.getByTestId('Suites.Dialog.Submit'))
+
+    await waitFor(() => expect(post).toHaveBeenCalled())
+    const body = post.mock.calls[0][1] as { tagRules: string[] }
+    expect(body.tagRules).toEqual(['smoke', 'not-yet-used'])
   })
 
   it('seeds the stored rules on a rename, and sends them back unchanged', async () => {

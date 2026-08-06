@@ -17,7 +17,7 @@ import { z } from 'zod';
 import type { Suite } from '../../api/types';
 import { ApiError } from '../../api/client';
 import { Identifier } from '../../components/Identifier';
-import { useCreateSuite, useDeleteSuite, useRenameSuite } from '../../api/queries';
+import { useCreateSuite, useDeleteSuite, useProjectTags, useRenameSuite } from '../../api/queries';
 import { describeError } from '../../lib/describeError';
 
 /**
@@ -96,6 +96,7 @@ function applyServerError(
 function SuiteFormDialog({
   open,
   onClose,
+  projectId,
   title,
   submitLabel,
   defaults,
@@ -105,6 +106,8 @@ function SuiteFormDialog({
 }: {
   open: boolean;
   onClose: () => void;
+  /** Scopes the tag suggestions; a suite's rules are only ever about its own project's tags. */
+  projectId: string;
   title: string;
   submitLabel: string;
   defaults: SuiteFormInput;
@@ -112,6 +115,7 @@ function SuiteFormDialog({
   isPending: boolean;
   testId: string;
 }) {
+  const projectTags = useProjectTags(projectId);
   const {
     register,
     control,
@@ -182,10 +186,11 @@ function SuiteFormDialog({
                 <Autocomplete
                   multiple
                   freeSolo
-                  // No option list, for the case editor's reason — and see its note: the
-                  // tags-in-use endpoint exists since §97 phase 3b and this control is one of the
-                  // three that could suggest from it and does not yet.
-                  options={[]}
+                  // The tags in use, most-used first, for the case editor's reason and with its
+                  // caveat: derived rather than curated, and `freeSolo` so a rule may still name a
+                  // tag no case carries yet — which is how a suite gets written before its cases.
+                  options={(projectTags.data ?? []).map((usage) => usage.tag)}
+                  filterSelectedOptions
                   value={field.value}
                   onChange={(_event, value) =>
                     field.onChange([
@@ -258,6 +263,7 @@ export function CreateSuiteDialog({
     <SuiteFormDialog
       open={open}
       onClose={onClose}
+      projectId={projectId}
       // One title, because there is one kind of suite. It was `New suite in <parent>` when a
       // create could land somewhere the user had not chosen deliberately; §98 removed the place.
       title="New suite"
@@ -301,6 +307,7 @@ export function RenameSuiteDialog({
     <SuiteFormDialog
       open={open}
       onClose={onClose}
+      projectId={projectId}
       title={`Rename ${suite.name}`}
       submitLabel="Save changes"
       // The suite's OWN rules, served on every read since §96. Seeding them is what makes a

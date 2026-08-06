@@ -2,8 +2,8 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-06 (§101 phase 5 — the two screens say how old their arithmetic is)
-**Baseline commit:** `7f43c28` (§101 phase 5) **+ the doc commit this line ships in** (its own SHA
+**Last verified:** 2026-08-06 (§102 — every tag control suggests, and none of them validates)
+**Baseline commit:** `180a8c3` (§101 phase 6) **+ the doc commit this line ships in** (its own SHA
 cannot be written into itself; trust the body over the header and re-grep what a later commit
 could have moved).
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
@@ -35,7 +35,7 @@ could have moved).
 - **`npm run build` is THE gate** (`tsc -b` + vite build). **Do not trust `tsc --noEmit`** — it has
   reported 0 errors while the build failed with nine (working agreement). `#confirmed`
 - `npm run lint` — oxlint, must stay at **0 warnings**; it prints nothing when clean.
-- `npm run test:run` — Vitest + RTL. **913/913** across 65 files at §99 phase 3 (909 at §98, 895/64 at §97 phase 5, 849/60 at §100). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
+- `npm run test:run` — Vitest + RTL. **925/925** across 67 files at §102 (913/65 at §99 phase 3, 909 at §98, 895/64 at §97 phase 5, 849/60 at §100). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
 - `npm run gen:api` — regenerate `src/api/schema.d.ts` after **any** `openapi.yaml` change. Runs
   through `npx` on purpose (the scaffold pins TS 6, the tool peer-requires 5.x); do not "fix" it.
 - **Live mode:** `VITE_API_MODE=live` in `.env.local` proxies `/api` to `localhost:8080`.
@@ -68,6 +68,21 @@ directly above the switcher) and the wordmark links there too.
 
 ## Seams to reuse
 
+- **EVERY TAG CONTROL SUGGESTS FROM `useProjectTags` SINCE §102 — AND EVERY ONE STAYS `freeSolo`.**
+  Four consumers now: `PlanCasesTab`'s `TagPicker` (§97 phase 6), plus the three §96 shipped with
+  `options={[]}` — `CaseEditorPage`'s **Tags**, `SuiteDialogs`' **Tag rules** (`SuiteFormDialog`
+  gained a `projectId` prop for it), `BulkActionDialog`'s **Add tags**. All pass
+  `(projectTags.data ?? []).map((u) => u.tag)` + `filterSelectedOptions`.
+  **THE LIST IS A PICKER'S AND NEVER A VALIDATOR'S** — `case_tag` is free text, so `freeSolo` is
+  load-bearing: a control that refused an unlisted tag makes the first use of any new tag impossible
+  and closes the vocabulary silently. One test per control pins it.
+  **The read is deliberately ungated** (no `enabled`, no `isSuccess`, no spinner): a failed or slow
+  `/tags` must leave the field working as plain free text. **The server's order is preserved** —
+  most-used first; MUI's default `filterOptions` keeps it and nothing client-side re-sorts.
+  **`BulkActionDialog`'s tags locator was on the `TextField` ROOT until this slice**, so the field
+  could not be typed into at all — §96's `slotProps` trap in the form that hides longest, because
+  **the two tests over that field only ever read the POST body**. A payload-only assertion passes
+  against a control no caller can reach; it took a suggestion list to expose it. `#confirmed`
 - **THE EXECUTION SCREEN HAS THREE MODES OVER ONE QUEUE (§100 phase C).** `?mode=focus|split|grid`
   on the execution route, parsed by `features/runs/executionMode.ts` (**falls back rather than
   trusting the value** — an unrecognised mode reaching the layout renders neither rail nor detail,
@@ -305,8 +320,9 @@ directly above the switcher) and the wordmark links there too.
   moved past it. **Deleting a section asks** what happens to its references (keep them in the plan ·
   remove them) instead of guessing — the plan's total moves in one case and not the other.
   `useProjectTags` (`GET /projects/{id}/tags`, shipped consumerless in phase 3b) is the tag picker's
-  source; the case editor's, `SuiteDialogs`' and `BulkActionDialog`'s tag controls **still pass
-  `options={[]}`** and are the named follow-up.
+  source; ~~the case editor's, `SuiteDialogs`' and `BulkActionDialog`'s tag controls **still pass
+  `options={[]}`** and are the named follow-up.~~ → **all four read it since §102** (see the tag
+  entry below).
   **A captured DOM node goes stale across a permission verdict** — `PermissionGate`'s denied branch
   wraps the control in a tooltip span, so when the answer lands React mints a **new** button and
   `waitFor(() => expect(captured).toBeEnabled())` waits for ever on a detached one. Re-query inside
@@ -754,6 +770,14 @@ directly above the switcher) and the wordmark links there too.
 
 ## Session log
 
+- 2026-08-06 · EXTEND · **Tags become reusable** (§102) — the three tag controls §96 shipped with
+  `options={[]}` now read `useProjectTags`; `SuiteFormDialog` gained `projectId`. No contract change,
+  no migration, no `gen:api`, no new query key. **925/925 across 67 files, lint 0, build clean. Zero
+  browser rows run; 5 M2 rows queued (M2-49…M2-53).** Found and fixed on the way: `BulkActionDialog`'s
+  tags `data-testid` was on the `TextField` root, so the field had never been typeable by any test —
+  exposed only because a suggestion list gave it something to filter. Also added two `PlanCasesTab`
+  tests (add-then-see, remove-only-that) that **passed on arrival**: written to reproduce a reported
+  defect that turned out to be a different ask (resolve references to visible cases — not built).
 - 2026-08-05 · EXTEND · **The plan's scope becomes editable** (§97 phase 6, the last build phase) —
   `features/plans/PlanCasesTab.tsx` + ten pure helpers in `planDraft.ts` + `useProjectTags` +
   `keys.tags`. Sections created, renamed, reordered and deleted (with the reference question asked);

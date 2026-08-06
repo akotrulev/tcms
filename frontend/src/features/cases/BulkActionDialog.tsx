@@ -30,6 +30,7 @@ import {
   useBulkCases,
   useConditions,
   useProjectMembers,
+  useProjectTags,
   useSuites,
 } from '../../api/queries';
 import { describeError } from '../../lib/describeError';
@@ -144,6 +145,7 @@ export function BulkActionDialog({
   const conditions = useConditions(projectId, '', 'PRE');
   const suites = useSuites(projectId);
   const members = useProjectMembers(projectId, action === 'SET_OWNER');
+  const projectTags = useProjectTags(projectId);
   const bulk = useBulkCases(projectId);
 
   /**
@@ -445,7 +447,12 @@ export function BulkActionDialog({
               <Autocomplete
                 multiple
                 freeSolo
-                options={[]}
+                // The project's tags in use, most-used first — the third of the three controls
+                // §96 shipped with an empty list. A bulk tag is the one most worth suggesting:
+                // it is applied to every selected case at once, so a typo here is a typo on all
+                // of them, and the fix is a second bulk action nobody knows they need.
+                options={(projectTags.data ?? []).map((usage) => usage.tag)}
+                filterSelectedOptions
                 value={tags}
                 onChange={(_event, value) => setTags(value as string[])}
                 renderInput={(params) => (
@@ -454,7 +461,24 @@ export function BulkActionDialog({
                     id="bulk-tags"
                     size="small"
                     placeholder="Type a tag and press Enter"
-                    data-testid={`${TestIdPrefix}.Field.Tags`}
+                    slotProps={{
+                      /*
+                        §96's slot trap, in the form that hides longer: an inline `data-testid` on
+                        a `TextField` lands on the ROOT div, not the input, so the locator resolved
+                        to an element `userEvent.type` cannot type into. Nothing failed — the two
+                        tests here never typed a tag, they only read the payload — and it surfaced
+                        only when a suggestion list gave the field something to filter.
+
+                        `...params.slotProps` FIRST, for this control's siblings' reason: MUI keeps
+                        the selected chips in `slotProps.input.startAdornment`, and an object that
+                        merely adds a testid replaces the lot.
+                      */
+                      ...params.slotProps,
+                      htmlInput: {
+                        ...params.slotProps?.htmlInput,
+                        'data-testid': `${TestIdPrefix}.Field.Tags`,
+                      },
+                    }}
                   />
                 )}
               />

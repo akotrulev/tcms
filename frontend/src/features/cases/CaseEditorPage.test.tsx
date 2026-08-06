@@ -5,7 +5,7 @@ import { Route, Routes } from 'react-router-dom'
 import { SessionRecoveryContext } from '../../auth/sessionRecoveryContextValue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
-import type { Condition, StepSuggestion, Suite, TestCase } from '../../api/types'
+import type { Condition, StepSuggestion, Suite, TagUsage, TestCase } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
@@ -84,6 +84,18 @@ const library: Condition[] = [
   },
 ]
 
+/**
+ * `GET /projects/{id}/tags` — most-used first, which is the order the picker must preserve.
+ *
+ * Declared as `TagUsage[]` and not cast, §79's rule: a field added to the shape is a build error
+ * here rather than a fixture that quietly disagrees with the contract.
+ */
+const projectTags: TagUsage[] = [
+  { tag: 'smoke', caseCount: 9 },
+  { tag: 'smoke-extended', caseCount: 2 },
+  { tag: 'regression', caseCount: 4 },
+]
+
 function mockReads(permissions: string[] = ['case:create']) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions, {}, PROJECT)
@@ -91,6 +103,7 @@ function mockReads(permissions: string[] = ['case:create']) {
     if (path.includes('/conditions')) return library
     if (path.includes('/suites')) return suites
     if (path.includes('/classification')) return []
+    if (path.includes('/tags')) return projectTags
     return []
   }) as never)
 }
@@ -309,6 +322,58 @@ describe('CaseEditorPage — tags and the unfiled case (§96)', () => {
     // The whole array: `smoke` typed twice is one chip, because case_tag's key says a tag list is
     // a set — a duplicate is the same request, not a mistake to report.
     expect(body.tags).toEqual(['smoke', 'regression'])
+  })
+
+  it('suggests the tags the project already uses, and still takes an unlisted one', async () => {
+    const user = userEvent.setup()
+    mockReads()
+    const post = vi
+      .spyOn(api, 'post')
+      .mockResolvedValue({ id: 'c1', key: 'TC-1', currentVersionNo: 1 } as unknown as TestCase)
+    renderEditor()
+
+    await fillHeader(user)
+    await user.type(actionFields()[0], 'Refund the payment')
+
+    // Typing FILTERS the served list rather than replacing it — both `smoke` tags match `smo`,
+    // and the endpoint's most-used-first order is what decides which is offered first.
+    await user.type(screen.getByTestId('CaseEditor.Field.Tags'), 'smo')
+    expect(await screen.findByRole('option', { name: 'smoke' })).toBeVisible()
+    expect(screen.getByRole('option', { name: 'smoke-extended' })).toBeVisible()
+    // `regression` is in the project but does not match what was typed.
+    expect(screen.queryByRole('option', { name: 'regression' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('option', { name: 'smoke' }))
+
+    /*
+      A PICKER'S LIST AND NEVER A VALIDATOR'S. `case_tag` is free text, so a tag no case carries
+      yet must still be typeable — otherwise the first use of any new tag is impossible and the
+      vocabulary is closed, which is precisely what this endpoint is not.
+    */
+    await user.type(screen.getByTestId('CaseEditor.Field.Tags'), 'brand-new-tag{Enter}')
+
+    await user.click(screen.getByTestId('CaseEditor.Submit'))
+
+    await waitFor(() => expect(post).toHaveBeenCalled())
+    const body = post.mock.calls[0][1] as { tags: string[] }
+    expect(body.tags).toEqual(['smoke', 'brand-new-tag'])
+  })
+
+  it('does not offer a tag this case already carries', async () => {
+    // Re-picking one is a no-op the de-duplicating `Set` swallows in silence, which reads as a
+    // dead menu row: the author clicks it, nothing happens, and nothing says why.
+    const user = userEvent.setup()
+    mockReads()
+    renderEditor()
+
+    await fillHeader(user)
+    await user.type(screen.getByTestId('CaseEditor.Field.Tags'), 'smo')
+    await user.click(await screen.findByRole('option', { name: 'smoke' }))
+
+    await user.type(screen.getByTestId('CaseEditor.Field.Tags'), 'smo')
+
+    expect(await screen.findByRole('option', { name: 'smoke-extended' })).toBeVisible()
+    expect(screen.queryByRole('option', { name: 'smoke' })).not.toBeInTheDocument()
   })
 
   it('sends an EMPTY tag list rather than omitting it', async () => {

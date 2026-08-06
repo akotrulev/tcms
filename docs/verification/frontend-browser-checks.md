@@ -167,6 +167,11 @@ the same value", which is invisible from a single project.
 | M2-46 | Open a suite's **Execution history** and compare the header's "N cases now" with the runs below | The header count is the suite's `caseCount` **verbatim** and the grid reports on the same set. §52's defect was these two disagreeing (3 cases over a table covering 47); the rollup helper that fixed it is deleted, so this is the check that it stayed fixed by the flattening rather than broken by it. | §98-10 |
 | M2-47 | Scope a plan on a suite (M3 lane fixtures) and read its case count | The suite's own resolved membership. Naming a suite that used to have children reaches **only what that suite resolves** — the change the plan states out loud. | §98-11 |
 | M2-48 | **Live only.** Open a report over a run recorded **before** the migration, on a suite-grouped section | Rows still print the **dotted** suite paths (`s1.s3`) those runs were recorded under, beside single labels (`s7`) for anything run after. Both are correct: `execution_fact.suite_path` is frozen history and says where a case was filed **when it ran**. Anyone "fixing" this is destroying the history. Needs a database that migrated in place — Testcontainers cannot show it. | §98-12 |
+| M2-49 | Case editor → **Tags**, type `sm` | A dropdown of the project's tags that match, **most-used first** (the endpoint's order, which the control must not re-sort — alphabetical puts the project's one stray tag above the one on half its cases). Fixture: `smoke` before `smoke-extended`. An empty dropdown here means the read failed or the join lost its project scope. | §102-1 |
+| M2-50 | Pick `smoke` from the list, then open the dropdown again with `sm` | `smoke` is **no longer offered**; `smoke-extended` still is. Re-picking a tag the case already carries is a no-op the de-duplicating `Set` swallows in silence, which reads as a dead menu row. | §102-2 |
+| M2-51 | Type a tag **no case carries** (`brand-new-tag`) and press Enter | Accepted as a chip and saved. **THE ROW THIS SLICE MUST NOT BREAK**: `case_tag` is free text and this endpoint is a picker's list, never a validator's — a control that refused an unlisted tag makes the first use of any new tag impossible and closes the vocabulary. | §102-3 |
+| M2-52 | Same three checks on **suite rename → Tag rules** and on **Bulk actions → Add tags** | Same list, same order, same freedom to type an unlisted one. A suite rule especially: it may legitimately name a tag nothing carries yet, which is how a collection gets written before its cases. **Bulk is the one to drive hardest** — its field's testid was on the wrapper until this slice, so it had never been typed into by anything. | §102-4 |
+| M2-53 | Open the case editor on a project with **no tags at all** (or with the tags read failing — `tcmsFaults.only('/tags')` then `tcmsFaults.status(503)`) | The field still works as free text: type a tag, press Enter, chip appears, save succeeds. **No spinner, no error, no "no options" popup** — the suggestion list is an optional call and its absence must cost nothing. | §102-5 |
 
 ---
 
@@ -701,10 +706,14 @@ L4-30's report-worker wait and cannot be hurried from the app.*
   by-ids read on the contract, so a plan naming an individual case outside that page shows *"a case
   outside the loaded list"* — removable, but unnamed. Not reproducible without a project of that
   size; the fix is a server-side read.
-- **Three tag controls still offer an empty option list** — the case editor's, `SuiteDialogs`'
+- ~~**Three tag controls still offer an empty option list** — the case editor's, `SuiteDialogs`'
   `tagRules` and `BulkActionDialog`'s. `GET /projects/{id}/tags` exists since §97 phase 3b and has a
   consumer since phase 6; wiring the other three is a three-line change §97 deliberately did not make
-  in a slice that does not own those screens.
+  in a slice that does not own those screens.~~
+  → **superseded by §102**: all three now read `useProjectTags`. It was not quite the three-line
+  change this entry predicted — `BulkActionDialog`'s locator turned out to sit on the `TextField`
+  root rather than the input, so the field could never be typed into and no suggestion could have
+  been driven; §96's slot trap in the form that hides longest. See M2-49…M2-52.
 
 - **The artifact register's plan filter is `useState`, not the URL**, so a plan's register cannot be
   linked to while every other filtered screen can. An older gap than §65; tracked here.

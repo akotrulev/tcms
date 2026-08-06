@@ -45,6 +45,7 @@ const committedResult = { ...previewResult, dryRun: false, auditEventId: 'audit-
 function mockReads(permissions: string[]) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
+    if (path.includes('/tags')) return [{ tag: 'smoke', caseCount: 9 }, { tag: 'regression', caseCount: 4 }]
     // Conditions, suites and members — all pickers this test does not drive.
     return []
   }) as never)
@@ -258,6 +259,27 @@ describe('BulkActionDialog', () => {
 
       await waitFor(() => expect(post).toHaveBeenCalled())
       expect(post.mock.calls[0][1]).toMatchObject({ action: 'SET_OWNER', payload: { ownerId: null } })
+    })
+
+    it('ADD_TAGS suggests the tags the project already uses', async () => {
+      /*
+        The bulk tag is the one most worth suggesting: it lands on every selected case at once, so
+        a tag typed slightly differently from the one already in use splits the vocabulary across
+        the whole selection, and the repair is a second bulk action nobody knows to run.
+      */
+      const post = vi.spyOn(api, 'post').mockResolvedValue(previewResult as never)
+      renderDialog()
+      await waitFor(() => expect(api.get).toHaveBeenCalled())
+
+      await openSelect('Cases.BulkDialog.Operation')
+      await userEvent.click(await screen.findByRole('option', { name: 'Add tags' }))
+
+      await userEvent.type(screen.getByTestId('Cases.BulkDialog.Field.Tags'), 'smo')
+      await userEvent.click(await screen.findByRole('option', { name: 'smoke' }))
+      await userEvent.click(screen.getByTestId('Cases.BulkDialog.Preview'))
+
+      await waitFor(() => expect(post).toHaveBeenCalled())
+      expect(post.mock.calls[0][1]).toMatchObject({ action: 'ADD_TAGS', payload: { tags: ['smoke'] } })
     })
 
     it('asks for a reason only when the automation status is NOT_AUTOMATABLE', async () => {

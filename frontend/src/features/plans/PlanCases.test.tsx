@@ -222,6 +222,77 @@ describe('the Test cases tab', () => {
     expect(body.caseIds).toEqual(['case-1'])
   })
 
+  /*
+    The add path's VISIBILITY, which the test above does not cover: it asserts the saved payload,
+    and the one that renders chips seeds them from the server. So a reference that was added but
+    never drawn would pass both — the author picks a suite, sees nothing appear, and picks it again.
+
+    The second half is the sibling defect: removing one reference must take only that one. A remove
+    that also drops the suite added beside it is invisible until Save, by which point the plan is
+    missing an arm the author put in.
+  */
+  it('draws an added suite and tag immediately, and a removed tag takes only itself', async () => {
+    mockReads(planBody())
+    renderPage()
+
+    await userEvent.click(await screen.findByRole('combobox', { name: /add a suite/i }))
+    await userEvent.click(await screen.findByRole('option', { name: 'Payments' }))
+
+    await userEvent.type(screen.getByTestId('PlanCases.AddTag.unsectioned'), 'smo')
+    await userEvent.click(await screen.findByRole('option', { name: 'smoke' }))
+
+    const group = await screen.findByTestId('PlanCases.Unsectioned')
+    await waitFor(() =>
+      expect(within(screen.getByTestId('PlanCases.Unsectioned')).getByTestId('PlanCases.SuiteChip'))
+        .toHaveTextContent('Payments'))
+    expect(within(group).getByTestId('PlanCases.TagChip')).toHaveTextContent('smoke')
+
+    await userEvent.click(within(group).getByTestId('PlanCases.TagChip').querySelector('svg')!)
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('PlanCases.TagChip')).not.toBeInTheDocument())
+    // The suite added beside it survives — the whole point of the second half.
+    expect(within(screen.getByTestId('PlanCases.Unsectioned')).getByTestId('PlanCases.SuiteChip'))
+      .toHaveTextContent('Payments')
+  })
+
+  /*
+    The same two properties inside a NAMED section, which is a different code path: the unsectioned
+    group's references live on the draft's own three arrays, a section's on a row of `draft.sections`
+    matched by name. A defect in one is invisible in the other.
+  */
+  it('draws a reference added to a named section, and removes only the one taken off', async () => {
+    mockReads(
+      planBody({
+        sections: [
+          { name: 'Create', position: 0, caseIds: [], suiteIds: [], tags: [], caseCount: 0 },
+        ],
+      } as unknown as Partial<TestPlan>),
+    )
+    renderPage()
+
+    const section = await screen.findByTestId('PlanCases.Section')
+    // Scoped to the section: with one present there are two of every picker on screen, and an
+    // unscoped query resolves to the unsectioned group's — testing the path already covered above.
+    await userEvent.click(within(section).getByRole('combobox', { name: /add a suite/i }))
+    await userEvent.click(await screen.findByRole('option', { name: 'Payments' }))
+
+    await userEvent.type(screen.getByTestId('PlanCases.AddTag.Create'), 'smo')
+    await userEvent.click(await screen.findByRole('option', { name: 'smoke' }))
+
+    await waitFor(() =>
+      expect(within(screen.getByTestId('PlanCases.Section')).getByTestId('PlanCases.SuiteChip'))
+        .toHaveTextContent('Payments'))
+    expect(within(section).getByTestId('PlanCases.TagChip')).toHaveTextContent('smoke')
+
+    await userEvent.click(within(section).getByTestId('PlanCases.TagChip').querySelector('svg')!)
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('PlanCases.TagChip')).not.toBeInTheDocument())
+    expect(within(screen.getByTestId('PlanCases.Section')).getByTestId('PlanCases.SuiteChip'))
+      .toHaveTextContent('Payments')
+  })
+
   it('shows what defines a group, and lets a reference be taken back off', async () => {
     mockReads(
       planBody({
