@@ -11,8 +11,27 @@ resolve; the per-slice originals are in git history at `4b582ec`.
 
 | Pass | Lanes | Shape |
 |---|---|---|
-| **The mock pass** | `M1 → M7` | One `npm run dev`, one persona, no sign-ins, no backend. |
+| ~~**The mock pass**~~ | ~~`M1 → M7`~~ | ~~One `npm run dev`, one persona, no sign-ins, no backend.~~ |
 | **The live pass** | `L0 → L4` | One provisioned company, five personas, two scheduler waits. |
+
+> ## ⚠ THE MOCK PASS HAS NO LANE TO RUN IN — §107, 2026-08-06
+>
+> **`src/mocks/` was deleted.** MSW, its handlers, its fixtures and `VITE_API_MODE` are gone now that
+> the API is complete, so `npm run dev` requires `docker compose up` and a provisioned company. The
+> `M1 → M7` lanes below were written against a fixture store that no longer exists: their seeded
+> data, their "sign in with any 4+ char password", and every row whose expectation names a specific
+> fixture row are **not executable as written**.
+>
+> They are struck through rather than deleted because most of them check a *screen*, not a *mock* —
+> the observation is still worth making, it just has to be made against real data now. Whoever runs
+> this queue must **fold the surviving M-rows into the live pass**, re-deriving each row's setup from
+> `provision-company` output instead of the fixtures, and drop the ones that only ever asserted mock
+> behaviour. That is a real re-write and it is not done here.
+>
+> **`M7` (the fault switches) survives intact and moves to the live pass**, where it is strictly
+> better: `tcmsFaults` now injects in front of `fetch` against the real backend rather than inside a
+> mock handler, so what those rows exercise is the production error path. Keep it last — it still
+> poisons everything after it.
 
 **Each pass is a single agent working its lanes in order, start to finish.** They are not a menu and
 they do not interleave: within a pass the lanes share one accumulating state, later lanes read what

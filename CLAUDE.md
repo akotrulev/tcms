@@ -24,7 +24,7 @@ Authoritative documents, in precedence order where they overlap:
 | Document | Authority over |
 |---|---|
 | `docs/specs/2026-07-30-tcms-roles-permissions-naming.md` | The permission catalogue, the six roles, grants, naming. The ERD defers to it. |
-| `docs/specs/openapi.yaml` | The REST contract. Source of frontend types (`src/api/schema.d.ts`) and mock handlers. |
+| `docs/specs/openapi.yaml` | The REST contract. Source of frontend types (`src/api/schema.d.ts`). |
 | `docs/specs/2026-07-30-tcms-erd.md` | Entity design. **§0.1 is the `company_id` rule and the RLS exception list** — the most important part. |
 | `docs/plans/2026-07-30-tcms-high-level-plan.md` | The master design doc: §6a–§6v decisions, milestones M0–M6, open questions. Section references (`§6p`) throughout the repo point here. |
 | `docs/audits/` | Audit evidence, including the first real execution of V1 and the Kiwi TCMS gap analysis. |
@@ -62,10 +62,14 @@ docker compose run --rm backend provision-company --slug=acme --name="Acme" \
   --admin-email=ops@acme.test --admin-name="A. Admin"
 ```
 
-The frontend is deliberately **not** in compose: `npm run dev` with MSW needs no backend, and
-starting one would slow the loop without making it more real. It can nonetheless be pointed at the
-real API — `VITE_API_MODE=live` in `frontend/.env.local` proxies `/api` to `localhost:8080` (see
-`frontend/.env.example`). Mock stays the default. **After changing `.env.local`, kill vite and
+The frontend is still **not** in compose, but ~~`npm run dev` with MSW needs no backend~~ →
+**superseded 2026-08-06: there is no mock API.** The MSW layer (`src/mocks/`, ~9,300 lines of
+handlers and fixtures) was early-phase scaffolding that let the SPA be built before the API
+existed; with the API complete it was deleted outright, along with `VITE_API_MODE` — there is no
+mode to choose any more. `npm run dev` proxies `/api` to `localhost:8080` and **requires
+`docker compose up` at the repo root plus a provisioned company**. Sign in by redeeming the
+`/accept-invitation` link `provision-company` prints; there is no "any password of 4+ chars".
+Point it elsewhere with `VITE_API_PROXY_TARGET`. **After changing `.env.local`, kill vite and
 `rm -rf node_modules/.vite`**: an in-place restart leaves a stale optimize-deps hash and the page
 renders blank with an empty console.
 
@@ -81,13 +85,14 @@ cd backend
 ```
 
 ```bash
-# Frontend — no backend needed; MSW intercepts /api/v1 in dev
+# Frontend — REQUIRES the backend running (docker compose up) since 2026-08-06; no mock lane
 cd frontend
 npm install
-npm run dev          # http://localhost:5173 — mock mode: sign in with any password of 4+ chars
-                     # live mode: redeem the /accept-invitation link provision-company prints
+npm run dev          # http://localhost:5173 — proxies /api to localhost:8080
+                     # sign in by redeeming the /accept-invitation link provision-company prints
 npm run build        # THE gate: tsc -b + vite build
 npm run lint         # oxlint, must stay at 0 warnings — a gate, not advisory
+npm run test:run     # Vitest + RTL, 954 tests — also a gate
 npm run gen:api      # regenerate src/api/schema.d.ts after ANY openapi.yaml change
 ```
 
@@ -113,7 +118,9 @@ version floor, already pinned via `systemProperty("api.version", …)` in `build
 `npm run gen:api` runs `openapi-typescript` through `npx` on purpose — the Vite scaffold pins
 TypeScript 6 and the tool peer-requires 5.x. Do not "fix" this by downgrading TypeScript.
 
-No frontend test runner is installed yet (Vitest + RTL is the not-yet-started Phase 4).
+~~No frontend test runner is installed yet (Vitest + RTL is the not-yet-started Phase 4).~~ →
+**superseded.** Vitest + RTL are installed and green: 954 tests across 70 files, `npm run test:run`.
+Config in `frontend/vitest.config.ts`, shared helpers in `src/test/`.
 
 ### Driving resilience behaviour (dev only, from the browser console)
 
@@ -130,6 +137,15 @@ tcmsFaults.off()
 
 Faults live in module state, so a page reload clears them — arm the fault *after* load when testing a
 failed refetch. Caught client errors are readable at `window.__tcmsErrors` in dev.
+
+**These now fault the real backend.** They used to be an MSW handler, so they could only be driven
+against the mock — the one place the failures they simulate could not actually occur. Since the
+mock layer was deleted (2026-08-06) the seam sits in front of `fetch` in `src/api/client.ts`, fed
+by `src/lib/devFaults.ts`, and everything downstream of the injected response is the production
+path. **Both guards are a literal `import.meta.env.DEV`** so Rollup drops the module from a
+production build; route that check through an imported constant and it ships, silently, exactly as
+the mock layer once did as a 485 kB chunk. `deploy.yml`'s `web` job greps `dist/` for `tcmsFaults`
+to catch the regression.
 
 ## Architecture
 
@@ -236,9 +252,13 @@ project-scoped routes under `/projects/:projectId/*`.
 - **`src/app/Providers.tsx` nesting order is load-bearing** and documented in the file: the query
   client is constructed *innermost* because its global error handlers consume the notification and
   session-recovery providers.
-- **Mock API is stateful** (`src/mocks/db.ts` + `handlers.ts`) — handlers read *and write* a cloned
-  fixture store, so create/edit/result round-trips land in the list. Fixtures deliberately carry the
-  awkward rows the UI must handle. Resets on reload.
+- ~~**Mock API is stateful** (`src/mocks/db.ts` + `handlers.ts`) — handlers read *and write* a
+  cloned fixture store, so create/edit/result round-trips land in the list.~~ → **superseded
+  2026-08-06: `src/mocks/` is deleted.** It was scaffolding for building the SPA ahead of the API,
+  and it outlived its purpose — what it mostly bought by the end was a second implementation of the
+  server's rules that could disagree with it (§52's `entries`/`runs`, §81's review cards, §98's
+  suite arms: three defects that mock mode hid by agreeing with itself). Dev now runs against the
+  real backend, so the round-trip being tested is the real one.
 - **Errors are centralized:** `lib/describeError.ts` is the one place an error becomes user-facing
   copy (and owns `isTransient()`); `app/queryClient.ts` is the one place a failure raises a
   notification; `components/ErrorBoundaries.tsx` provides the root/route/region tiers.
@@ -278,7 +298,8 @@ a doc as collateral, and a stale re-application wiping a later change — with n
 and a clean `git status` throughout.
 
 The reworks that came out of those attempts shipped and are worth having on their own terms: the
-per-section handoff, the split `api/queries/` and `mocks/` directories, and the second stack.
+per-section handoff, the split `api/queries/` and `mocks/` directories, and the second stack. (The
+split `mocks/` directory went with the mock layer itself on 2026-08-06; the other two stand.)
 
 **If a second checkout is ever genuinely needed** — the concurrency-worktree exception to "do not
 branch per task" — these still bind, and are still not sufficient:

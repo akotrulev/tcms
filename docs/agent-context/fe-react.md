@@ -2,10 +2,17 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-06 (§106 — the board learns to be dragged)
-**Baseline commit:** `da3d351` (§105) **+ the doc commit this line ships in** (its own SHA
+**Last verified:** 2026-08-06 (§107 — the mock layer is deleted; the deploy stops eating evidence)
+**Baseline commit:** `3f2dab3` (§106) **+ the doc commit this line ships in** (its own SHA
 cannot be written into itself; trust the body over the header and re-grep what a later commit
 could have moved).
+
+> **§107 invalidated a lot of this file at once.** `src/mocks/` is gone — every "the mock does X"
+> statement in the slice entries below is now history rather than current state, and is left in
+> place because the *failure class* it records is the durable part. `VITE_API_MODE` is gone too:
+> `npm run dev` requires a running backend. Test count is **954 across 70 files** (the two deleted
+> files were `mocks/db/{suites,workItems}.test.ts`, which asserted the mock's own rules).
+
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
 `frontend/vite.config.ts`
 
@@ -35,21 +42,24 @@ could have moved).
 
 ## Build, run & test
 
-- `npm run dev` — MSW mock mode by default, **no backend needed**; sign in with any 4+ char password.
+- `npm run dev` — **requires the backend.** `docker compose up` at the repo root plus a company from
+  `provision-company`; sign in by redeeming the `/accept-invitation` link it prints. ~~MSW mock mode
+  by default, no backend needed, any 4+ char password~~ → **the mock layer was deleted in §107.**
 - **`npm run build` is THE gate** (`tsc -b` + vite build). **Do not trust `tsc --noEmit`** — it has
   reported 0 errors while the build failed with nine (working agreement). `#confirmed`
 - `npm run lint` — oxlint, must stay at **0 warnings**; it prints nothing when clean.
-- `npm run test:run` — Vitest + RTL. **976/976** across 72 files at §106 (958/70 at §105) (the §102 line said **925/67** and the measured baseline was **928/67** — this figure is carried forward by hand and has drifted at least twice; read it off a run before trusting it). Earlier: 913/65 at §99 phase 3, 909 at §98, 895/64 at §97 phase 5, 849/60 at §100. **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
+- `npm run test:run` — Vitest + RTL. **954/954 across 70 files at §107** (976/72 at §106, before the two mock-rule test files went with the mock) (958/70 at §105) (the §102 line said **925/67** and the measured baseline was **928/67** — this figure is carried forward by hand and has drifted at least twice; read it off a run before trusting it). Earlier: 913/65 at §99 phase 3, 909 at §98, 895/64 at §97 phase 5, 849/60 at §100. **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
 - `npm run gen:api` — regenerate `src/api/schema.d.ts` after **any** `openapi.yaml` change. Runs
   through `npx` on purpose (the scaffold pins TS 6, the tool peer-requires 5.x); do not "fix" it.
-- **Live mode:** `VITE_API_MODE=live` in `.env.local` proxies `/api` to `localhost:8080`.
+- **There is no mode switch.** `VITE_API_MODE` is gone with the mock (§107); `/api` always proxies to
+  `VITE_API_PROXY_TARGET` (default `localhost:8080`).
   **After changing `.env.local`, kill vite and `rm -rf node_modules/.vite`** — an in-place restart
   leaves a stale optimize-deps hash and the page renders **blank with an empty console**. Hit and
   confirmed in §61's live pass; the remedy works. `#confirmed`
 
 ## Layout
 
-`src/{api,app,auth,components,features,lib,mocks,notifications,a11y,test}`. Feature folders under
+`src/{api,app,auth,components,features,lib,notifications,a11y,test}` — **no `mocks/` since §107**. Feature folders under
 `features/<area>/`; routes are project-scoped under `/projects/:projectId/*` (`app/router.tsx`, lazy).
 **Four routes are NOT** — `/` (project list), `/admin/teams` (company), `/my-work` (§83, the
 cross-project personal board) and `/teams/:teamId/board` (§85, the team board). A screen whose
@@ -767,13 +777,34 @@ directly above the switcher) and the wordmark links there too.
   (the single raise point; opt out per-call with `meta: { handled: true }`),
   `components/ErrorBoundaries.tsx` (root / route / region tiers). `DataRegion` owns the
   loading/loaded/failed/empty/stale matrix.
+- **The dev fault seam is `lib/devFaults.ts`, called from `api/client.ts` (§107).** `window.tcmsFaults`
+  — `.status(503,30)` `.hang()` `.expire()` `.drift()` `.only(path)` `.off()` — is how the resilience
+  claims get *seen*, and it now injects in front of `fetch` against the **real** backend instead of
+  inside an MSW handler against the mock. Both call sites guard on a **literal** `import.meta.env.DEV`;
+  that literal is load-bearing, not stylistic — routing the check through an imported constant is what
+  once shipped the mock layer as a 485 kB production chunk, and the build stays green either way.
+  `deploy.yml`'s `web` job greps `dist/assets/` for `tcmsFaults` to catch the regression. The module
+  must stay **free of top-level side effects** or tree-shaking cannot drop it. `#confirmed`
 - **Shared display layer, not per-page:** `lib/labels.ts` (each `satisfies Record<Union,string>`, so a
   new enum member is a compile error until labeled), `lib/format.ts`, `lib/results.ts`,
   `lib/permissions.ts`, `Identifier` for monospace, `ScrollX` for wide content.
-- **Mock API is stateful** — `mocks/db/` + `mocks/handlers/*.ts` read *and write* a cloned fixture
+- ~~**Mock API is stateful** — `mocks/db/` + `mocks/handlers/*.ts` read *and write* a cloned fixture
   store, so round-trips land in lists. Handlers are written from the **server's** rules, not from what
-  one client sends (§52). Resets on reload.
-  **And a mock generator can invent a whole feature — §81, the most expensive instance so far.**
+  one client sends (§52). Resets on reload.~~
+  → **DELETED IN §107. `src/mocks/` does not exist.** Every mock finding recorded in the slice
+  entries above is history, not current state: there is no fixture store, no handler to keep honest,
+  and no `?mock` lane to reproduce a bug in. Dev runs against the real backend.
+
+  **Read the entries anyway, for the failure class rather than the code.** The recurring defect was
+  never a bug in a handler — it was *a second implementation of the server's rules that agreed with
+  the client instead of the server*, and it produced §52 (`entries`/`runs`), §81 (a reviewer inbox no
+  deployment could produce), §98 (a suite count and a grid filter answering different questions) and
+  several more, every one of them typechecking and testing green. That class is what deleting the
+  layer removes. The same class returns the moment anything re-derives a server rule client-side.
+
+  **The fault switch survived the deletion**, moved out of MSW into `lib/devFaults.ts` behind
+  `api/client.ts` — see the seam below.
+  **A mock generator could invent a whole feature — §81, the most expensive instance.**
   `mocks/db/workItems.ts` drew a board card for every case whose `lifecycleStatus` was `IN_REVIEW`,
   in the `IN_REVIEW` column, assigned to the case's **owner** — while the server produced no review
   cards at all and, once it did, refuses the artifact's own submitter as a reviewer. Mock mode
