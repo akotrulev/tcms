@@ -24,6 +24,15 @@
 | `A0-2` | ✅ **PASS** | `MOB` created, `lead` granted on both projects, `engineer` on `OLB` only. |
 | `A0-3` | ❌ **BLOCKED — see F5** | The custom role cannot be created. `/roles` is GET-only. |
 | `L1-20`, `L2-11` | ❌ **BLOCKED by F5** | The persona they are about cannot exist in a real deployment. |
+| `L4-1` | ✅ **PASS** | "Platform" created; `team` holds **exactly one row across the whole instance** — 22 throwaway companies and not one of them has a team, so this really is `team`'s first writer ever. `parent_team_id` null, `company_id` the caller's. |
+| `L4-3` | ✅ **PASS** (all three arms) | Blank name → *"Enter a name for the team."* on the field, dialog open. "qa" after "QA" → *"This company already has a team called "QA"."* — it quotes the **stored** spelling, which is the arm an exact-match check passes anyway. Editing Alpha's parent offers **No parent · Platform · QA** and withholds both Beta (its descendant) and Alpha itself. |
+| `L4-4` | ✅ **PASS** | Alpha → "No parent" → Save moves it to the root, Beta following. The PUT-not-PATCH decision holds: clearing a parent is expressible. |
+| `A0-4` | ✅ **PASS** (with F4) | Payments Squad = `lead` + `engineer`; Checkout Squad = `newbie` + **`viewer2`**, not `viewer` — F4's substitution, and the two boards still hold different people. Member counts on the tree update from the mutation's invalidation. |
+| `L4-2` | ✅ **PASS**, and **stronger than the row asks** | Driven against a **fixed bearer token** captured *before* the grant: engineer saw `OLB` only; after Platform got Test Engineer on `MOB` and engineer was ticked in, **the same token** returned `MOB` + `OLB`; after unticking, `OLB` only. So grants are evaluated per request and nothing is baked into the token — "without signing out and in" proven at the strongest available level. Untick done; `L4-37`'s precondition (engineer on one project) is preserved. *(Aside: a team grant renders with **`—`** in the "Who" column and the team named under "Granted via". Correct — there is no person — but a reader scanning "Who" meets an em-dash.)* |
+| `L4-6` | ⚠️ **PASS on content, FAIL on freshness — see F7** | Copy is right after a reload: *"This team holds a role on Acme Mobile. Anyone you add here gets it immediately."* The **Leads** checkbox is wrapped per row in *"Add them to the team first."* and refuses until "In team" is ticked. But the banner was **absent** when the dialog was opened straight after making the grant. |
+| `L4-5` | ✅ **PASS** (both arms) | Grant-holding team → *"1 role grant is made through this team. Revoke it first — deleting the team would revoke it silently."*, dialog stays open, Cancel leaves the grant in Role assignments. Parent with a child → *"1 team sits below this one. Move or delete it first."*; Beta then Alpha → 204 each. |
+| `L3-12` | ✅ **PASS** | Watcher ticked into QA (one `team_membership` row), survived close-and-reopen, unticked (row gone). No duplicate. |
+| `L4-7` | 🚫 **UNDRIVEABLE — see F8** | Neither the orphan nor the cycle can be created, **including from `psql`**: a database trigger refuses both. |
 
 ---
 
@@ -167,3 +176,95 @@ the gates are now asserted only against personas that **cannot exist outside the
 "Company settings" and which nothing currently schedules. What this finding changes is the
 *reason* to do it: it is not only an administration convenience, it is what makes an already-built
 permission split real.
+
+---
+
+## F6 — There is no password reset anywhere in the product, and it stopped the pass dead
+
+**Severity: medium.** **Product gap**, plus a pass-design lesson this file has now paid for.
+
+Resuming the pass, every multi-account row was unreachable: `A0-1` redeemed five invitations and
+chose five passwords, and **none of them was written down**. There is no way to recover from that:
+
+- **No API path.** `openapi.yaml` mentions `password` in exactly two places — `POST /auth/login` and
+  the accept-invitation body. There is no reset, no change-password, no forgot-password.
+- **No operator path, and the CLI says so itself.** `IssueInvitationCommand`'s own header: it
+  *"does nothing for a member who has already accepted; they need a password reset, **which this
+  command is not**."* `IssueInvitationService` returns `ALREADY_ACTIVE` and exits non-zero.
+
+So a password exists only in the head of whoever typed it. For a real deployment that is a person
+locked out of a self-hosted instance with no path back short of SQL; for this pass it was five
+personas and every row that needs two of them.
+
+**Worked around, and the workaround is recorded because it is a deviation.** A known BCrypt hash
+(cost 12, `{bcrypt}`-prefixed, matching `IdentityConfiguration`) was written directly onto the five
+ACTIVE accounts, and `viewer2` — which had been invited in `A0-1` and never redeemed — was redeemed
+properly through a fresh `issue-invitation` link. **All six personas now sign in with the same
+password**, and the pass can be resumed by anyone:
+
+| Accounts | Password |
+|---|---|
+| `admin` · `lead` · `engineer` · `newbie` · `watcher` · `viewer2` — all `@acme.test` | `Charter-v109!` |
+
+`viewer@acme.test` was **left alone**: it belongs to a §62-era company as well (F4), and this pass
+has no business changing another company's credential. `viewer2` is the charter's Viewer.
+
+**The queue's charter must state the password it uses**, next to the addresses F4 already told it to
+namespace. A pass that cannot be resumed after a break is a pass that must be run in one sitting by
+one person who remembers what they typed, which is exactly what §65's batching was supposed to stop.
+
+---
+
+## F7 — Granting a role to a team leaves the teams query stale, so the warning that exists to
+prevent surprise access is missing at the one moment it matters
+
+**Severity: medium.** **Product defect.** Found by `L4-6`, and it would have read as a missing feature.
+
+Granted Test Engineer on `MOB` to **Platform (team)**, then opened Platform's Members dialog. **No
+warning banner.** The banner is real and correct — after `F5`-style suspicion the server was checked
+directly, and `GET /teams` returns Platform's `projects: [{Acme Mobile, Test Engineer}]` — so the
+client was rendering a **cached, pre-grant** team object. `TeamMembersDialog.tsx:106` gates the
+banner on `team.projects.length > 0`; the grant mutation does not invalidate the teams query.
+
+A reload fixes it, and fixes **two** things at once: the banner appears, *and* so does the tree's
+`Acme Mobile: Test Engineer` chip on the Platform row, which had also been absent.
+
+**Why this is worse than an ordinary staleness bug.** The natural sequence is *grant the role to the
+team, then add people to it* — one screen, two clicks apart. That is precisely the window in which
+the cache is stale, so the warning is missing **exactly when somebody is about to do the thing it
+warns about**. Its own words are *"Anyone you add here gets it immediately"*; there is no second
+place that says so, and the delete confirmation's *"Nobody is in it"* is about members, not grants.
+
+**Not fixed here** (this sitting is a verification pass, not a slice). The fix is one invalidation on
+the grant mutation, and it should invalidate the teams key, not just the assignments list — the chip
+and the banner are both fed by `GET /teams`.
+
+---
+
+## F8 — `L4-7` cannot be driven, because the invariant is enforced in a third place the row did not know about
+
+**Severity: none — this is the product being right.** The **queue row is wrong**, like F2.
+
+`L4-7` says the API refuses an orphaned parent and a cycle "twice over, so `psql` is the only way
+in", and asks that both surface **at the root** rather than being dropped from the chart. Neither
+can be produced:
+
+```
+update team set parent_team_id = gen_random_uuid() where name='Platform';
+ERROR:  parent team 373e074f-… is not visible in this company
+CONTEXT: PL/pgSQL function tcms_enforce_team_hierarchy() line 17
+
+-- and, having nested Payments Squad under Checkout Squad, the closing edge:
+ERROR:  team 1fe523cf-… is already an ancestor of 0076a4cf-…, so this edge would create a cycle
+CONTEXT: PL/pgSQL function tcms_enforce_team_hierarchy() line 41
+```
+
+`tcms_enforce_team_hierarchy` has been in **`V2`** since M0 (`V2__search_vectors_triggers_and_seed_functions.sql`
+:281 and :305). So the guard is three-deep — client, service, and a database trigger under RLS — and
+the corrupt state the row wanted to observe **cannot exist in this schema at all**.
+
+**The row is retargeted rather than deleted**, because what it was really asking — *does the chart
+drop a row it cannot place?* — is still a fair question, it just cannot be reached from the data
+side. It now records the trigger as the reason, and the tree's tolerance of an unplaceable row stays
+unobserved and unreachable. The edge that did land (Payments Squad under Checkout Squad, before the
+closing edge was refused) was undone; all four teams are back at the root.

@@ -76,25 +76,39 @@ alone does not produce.
 
 ### The six accounts
 
-`POST /api/v1/users` invites; the response carries **no link** (it must not — see
-`MembershipInviteService`). With no SMTP relay configured the link is printed by:
+**Invite them from the screen, not the console** — Teams & roles → People → **Invite a person**
+(§110 F3: the console recipe here was wrong, there has been a screen all along). The response
+carries **no link** and must not (see `MembershipInviteService`), so with no SMTP relay the link is
+printed by:
 
 ```bash
-docker compose run --rm backend issue-invitation --slug=acme --email=lead@acme.test
+docker compose run --rm backend issue-invitation --slug=<slug> --email=lead@<slug>.test
 ```
+
+**Namespace the addresses per pass, and write the password down.** `app_user.email` is
+**instance-unique** — one account, many companies (§6s) — so a second pass reusing `…@acme.test`
+inherits accounts whose passwords belong to whoever ran the first one (§110 F4, which cost a
+persona). Use the company slug: `lead@v109.test`. And **fix one password for every persona and
+record it here**, because there is **no password reset anywhere in this product** — not in the API,
+not in the CLI, which says so itself (§110 F6). A pass whose passwords are lost cannot be resumed.
 
 | Account | Grant | Rows that need it |
 |---|---|---|
-| `admin@acme.test` | Company Admin (from `provision-company`) | L1-19, the settings lanes, every grant |
-| `lead@acme.test` | Test Lead on **OLB and MOB** | most of the authoring pass; the "control is live" half of L1 |
-| `engineer@acme.test` | Test Engineer on **OLB only** | L1-5…L1-16, the second account in every two-person row, L4-37's narrower view |
-| `viewer@acme.test` | Viewer on OLB | L1-1…L1-4 |
-| `watcher@acme.test` | a **custom role**: `project:read` + `report:view`, **no `report:export`** | L1-20, L2-11, A6's split. No built-in role has this shape; §87 built it for the suite and it has to be built again here. |
-| `newbie@acme.test` | company member, **no project grant at all** | L4-36 |
+| `admin@…` | Company Admin (from `provision-company`) | L1-19, the settings lanes, every grant |
+| `lead@…` | Test Lead on **OLB and MOB** | most of the authoring pass; the "control is live" half of L1 |
+| `engineer@…` | Test Engineer on **OLB only** | L1-5…L1-16, the second account in every two-person row, L4-37's narrower view |
+| `viewer@…` | Viewer on OLB | L1-1…L1-4 |
+| `watcher@…` | a **custom role**: `project:read` + `report:view`, **no `report:export`** | L1-20, L2-11, A6's split. No built-in role has this shape; §87 built it for the suite. **§110 F5 found it cannot be built here either** — `/roles` is GET-only — so this account and its three rows are blocked until role authoring exists. |
+| `newbie@…` | company member, **no project grant at all** | L4-36 |
 
-**The custom role is made through the product**: Admin → Roles → new role, `project:read` +
-`report:view`, then grant it to `watcher` on OLB. If the role editor cannot express it, record that
-as the finding — it is §87's split arriving on a screen for the first time.
+~~**The custom role is made through the product**: Admin → Roles → new role, `project:read` +
+`report:view`, then grant it to `watcher` on OLB.~~ → **superseded by §110 F5**: there is no role
+editor and no `POST /roles`; all six built-ins that hold `report:view` also hold `report:export`.
+The split §6e designed cannot be expressed by any real deployment, so `A0-3`, `L1-20` and `L2-11`
+are **undriveable**, not merely undriven. Recorded as the finding the old wording asked for.
+
+**The run in progress (2026-08-06) used company `v109`, addresses `…@acme.test`, and the password
+`Charter-v109!` for all six** — see `2026-08-06-live-pass-findings.md`.
 
 ### The fixture charter — what this pass authors, and under which keys
 
@@ -176,7 +190,7 @@ that `provision-company` does not create — they are checked at creation instea
 | # | Drive | Expect | src |
 |---|---|---|---|
 | L0-1 | Company Admin → Teams & roles | "Team structure" **empty**, no-records copy. `team` has never had a writer on this instance. | §71-1 |
-| L0-7 | The one project, before anything is authored in it | **No Review panel anywhere** — not an empty panel, not a placeholder. `psql`: one `project_settings` row for the project, all three `review_enabled_*` false. This is the only chance to see the off state; `A4` switches it on and nothing switches it back. | §77-1 |
+| L0-7 | The one project, before anything is authored in it | **No Review panel anywhere** — not an empty panel, not a placeholder. This is the only chance to see the off state; `A4` switches it on and nothing switches it back. ~~`psql`: one `project_settings` row for the project, all three `review_enabled_*` false.~~ → **superseded by §110 F2**: expect **zero** rows. `V23` backfilled the projects that existed when it ran; every project created since has no row until settings are saved, and `ProjectSettingsService` says so in three places (`.orElseGet(ProjectSettings::defaults)`). The old assertion encoded a migration artifact of §77's database. | §77-1 |
 | L0-8 | The project dashboard **within 3 minutes of the first boot** | "Needs attention" reads **"not computed yet"**, not "nothing needs attention". `healthComputedAt` is the only thing separating them and §86 shrank the window to the first three minutes — so this row expires faster than any other in the file. | §86-5 |
 
 ---
@@ -197,9 +211,9 @@ constraints only fit in this order.
 | L4-4 | Edit a nested team → "Sits under" → "No parent" → Save | It moves to the root. **The PUT-not-PATCH decision is this row**: under PATCH the operation is unreachable. | §71-8 |
 | A0-4 | Create **Payments Squad** (`lead`, `engineer`) and **Checkout Squad** (`viewer`, `newbie`) | Two more teams. `M1-11` needs the two boards to hold **different** people's cards, so the membership split is the fixture — put them in different teams and keep them there. | §85 |
 | L4-2 | Grant a role → subject **Platform (team)** → Test Engineer on `MOB` → Members → tick `engineer` | `engineer`'s own session (second window) lists `MOB` on `/projects` **without signing out and in**; unticking removes it from their rail on the next navigation. **This is §71**: the team-grant path has existed since M0 and could never be exercised, because no team could be created for a grant to name. Untick afterwards — `L4-37` needs `engineer` on one project. | §71-3 |
-| L4-6 | Members dialog on a team that holds a grant | The **warning banner** names the projects and says anyone added gets them immediately. Ticking a person survives close-and-reopen (the list refetches from the mutation's invalidation, not a snapshot). Ticking "Leads" for a non-member is **disabled with a tooltip** until "In team" is ticked. | §71-11,12 |
+| L4-6 | Members dialog on a team that holds a grant — **open it immediately after making the grant, and then again after a reload** | The **warning banner** names the projects and says anyone added gets them immediately. **§110 F7: it is absent on the first opening** — the grant mutation does not invalidate the teams query, so the dialog renders a pre-grant `team.projects` (and the tree's grant chip is missing too). The two openings are the row now, because the copy is right and the freshness is not. Ticking a person survives close-and-reopen (the list refetches from the mutation's invalidation, not a snapshot). Ticking "Leads" for a non-member is **disabled with a tooltip** until "In team" is ticked. | §71-11,12 |
 | L4-5 | Delete a team that holds a grant; then one with children | **409** listing *"1 role grant is made through this team…"* — cancel and the grant is still in the Role assignments table. Then 409 naming the child count; delete the child first, then the parent → 204. | §71-9,10 |
-| L4-7 | `UPDATE team SET parent_team_id = gen_random_uuid() WHERE name = 'Platform';` — and then a cycle | Both surface **at the root** rather than being dropped. The tree is the **only** place a team can be edited or deleted, so a row it drops is a row nobody can fix. The API refuses both twice over, so `psql` is the only way in. Undo both afterwards. | §71 note |
+| L4-7 | ~~`UPDATE team SET parent_team_id = gen_random_uuid() WHERE name = 'Platform';` — and then a cycle~~ | 🚫 **UNDRIVEABLE — §110 F8, and the product is the reason.** The row assumed *"the API refuses both twice over, so `psql` is the only way in"*. There is a **third** guard: `tcms_enforce_team_hierarchy`, a trigger in **`V2` since M0**, refuses the orphan (*"parent team … is not visible in this company"*) and the cycle (*"… is already an ancestor of …, so this edge would create a cycle"*) at the database. The state this row wanted to observe **cannot exist in this schema**. Kept, not deleted: the question it asks — does the chart drop a row it cannot place? — is fair and simply unreachable from the data side. | §71 note |
 | L3-12 | Members dialog: tick a person, close, reopen, untick | 204 both times, no duplicate row: `team_membership` gained one row and lost it. Moved out of `L3` because it is a write, and this is where the writes to `team` happen. | §71-13 |
 
 ---
