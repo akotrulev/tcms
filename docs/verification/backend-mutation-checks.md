@@ -241,6 +241,41 @@ aggregate in Postgres over an indexed table rather than materialising N rows int
 `CLAUDE.md`'s *"measure bundle changes before believing them"* applies to this exactly as it does to
 a bundle. **It was not measured.**
 
+## 15. R6 phase 1's aggregate report — nine mutations, **two of them already run**
+
+The aggregate execution report resolves the aggregation policy in SQL, a second implementation of a
+rule `PlanStatisticsService.resolve` already owns. `AggregateExecutionCrossCheckTest` is the guard,
+so the question this section answers is **whether that guard can actually fail** — and unusually,
+two of the rows below were run during the slice rather than queued, because a cross-check nobody has
+tried to break is a claim and not a test.
+
+**Run, and recorded as run:**
+
+| # | Mutation | Result |
+|---|---|---|
+| R6-1 | `WORST`'s `severityRank(...) ASC` → `DESC` (worst becomes best) | ✅ **RED, as designed** — reddens both `policy=WORST`'s agreement and `theFixtureDiscriminates`, the latter because `WORST` collapses onto `BEST`. |
+| R6-2 | `LATEST`'s `executed_at DESC` → `ASC` (each case resolved to its **oldest** result — the policy inverted) | ⚠️ **GREEN on the first fixture — the oracle was vacuous.** `RECOVERED` (fail→pass) and `REGRESSED` (pass→fail) were exact mirrors, so reversing time swapped *which* case was passing and changed **no total at all**. `UNBLOCKED` (blocked→passed) was added to break the symmetry; the mutant now reddens `LATEST` **and** `LATEST_PER_CONFIG`. **The lesson generalises: a fixture built from mirrored pairs is symmetric under exactly the mutation an ordering test exists to catch.** |
+
+**Queued, not run:**
+
+| # | Mutation | Expected |
+|---|---|---|
+| R6-3 | Drop `verdictFirst()` from `WORST`'s ordering | An `UNTESTED` row outranks `PASSED`, so a case that passed in every run it was recorded in reads as owed a verdict. Should redden `policy=WORST`. **Cannot be observed on the current fixture** — every execution in it carries a verdict, so this is expected to redden **nothing** until the fixture grows a recorded non-verdict status. Recorded as a *gap*, not as coverage. |
+| R6-4 | `severityRank`'s `ELSE -1` → `ELSE 99` (an unknown kind ranks best rather than worst) | Unreachable today: `case_status.kind` has a CHECK. Recorded so the choice of direction is not mistaken for arbitrary. |
+| R6-5 | `LATEST_PER_CONFIG`'s partition drops `configuration_id` | Collapses to `LATEST`. **Expected to redden nothing on the current fixture**, which has one configuration — §46's "byConfiguration collapsing to a single column" is *not* yet guarded here. A second configuration is the repair. |
+| R6-6 | `AggregateSelection.where()` emits `IN (:planIds)` even when the list is empty | §99's defect: `IN ()` fails to parse, `IN (NULL)` is never true and reads as an arm that matched. Should redden every test, loudly. |
+| R6-7 | `idList`/`textList` treat an empty array as "select nothing" rather than "do not narrow" | `{"planIds": []}` becomes a clean report of zero executions. **No test names this today.** |
+| R6-8 | `featureGroups`' `LEFT JOIN LATERAL unnest` → a plain `unnest` in the select list | The unclassified row vanishes and the section reads as a project that classified everything (§96's `JOIN suite`, second shape). **No test names this today** — the cross-check does not read the feature section. |
+| R6-9 | `optionalInstant` swallows a bad date instead of refusing | A report over *every* execution ever recorded, printed under a header still claiming the range. **No test names this today.** |
+
+**What this section is really reporting**: four of the seven queued rows are expected to redden
+**nothing**, and that is the finding rather than a shortfall. The cross-check guards the *policy
+resolution* well (R6-1/R6-2 prove it) and guards the *selection* and the *feature section* not at
+all. R6's remaining phases should close R6-5 (a second configuration in the fixture) and R6-7/R6-8/
+R6-9 (a selection test that is not the cross-check), or say why not.
+
+---
+
 ## 14. §106's board drag — one frontend row, and the backend rows it does NOT owe
 
 §106 replaced the board's native HTML5 drag with `@dnd-kit` and made the move optimistic. **No
