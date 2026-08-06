@@ -128,17 +128,24 @@ class AggregateExecutionReport implements ReportComputation {
     private static final List<StatusKind> NOT_A_VERDICT =
             List.of(StatusKind.UNTESTED, StatusKind.RETEST, StatusKind.WIP);
 
+    /** What the callout prints for a case whose pass and failure are the same cell — a real flake. */
+    static final String WITHIN_ONE_CONFIGURATION_AND_VERSION =
+            "Within one configuration and version";
+
     private final EntityManager entities;
     private final ProjectRepository projects;
     private final ClassificationValueRepository features;
+    private final ExecutionSource source;
 
     AggregateExecutionReport(
             EntityManager entities,
             ProjectRepository projects,
-            ClassificationValueRepository features) {
+            ClassificationValueRepository features,
+            ExecutionSource source) {
         this.entities = entities;
         this.projects = projects;
         this.features = features;
+        this.source = source;
     }
 
     @Override
@@ -163,8 +170,13 @@ class AggregateExecutionReport implements ReportComputation {
 
         List<ReportModel.Section> sections = new ArrayList<>();
         sections.add(resultsSection(selection, totals, statuses));
+        // Second, immediately under the headline, because §6e calls it "the single most valuable
+        // section" and because a reader who stops after the totals is the reader it is written for.
+        sections.add(inconsistencySection(projectId, selection, totals));
         sections.add(suiteSection(projectId, selection));
         sections.add(featureSection(projectId, selection));
+        sections.add(automationSection(projectId, selection, totals));
+        sections.add(retrySection(projectId, selection, totals));
 
         return new ReportModel(
                 "Aggregate execution report", metadata(projectId, selection, totals), sections);
@@ -300,9 +312,253 @@ class AggregateExecutionReport implements ReportComputation {
                         List.of("Feature", "Executions", "Failed", "Failure rate"), rows));
     }
 
+    /**
+     * <strong>The inconsistency callout</strong> — §6e's <em>"single most valuable section"</em>:
+     * cases that both passed <em>and</em> failed inside the selection, which is
+     * <em>"the flaky-test and environment-instability signal, and it's invisible in any single-run
+     * report."</em>
+     *
+     * <h2>It reads the un-collapsed rows, and that is the whole slice</h2>
+     *
+     * <p>Every other section in this report reads {@link #resolvedCte}, which applies the aggregation
+     * policy. This one reads {@link #selectedCte}, which does not — and the difference is not a
+     * refinement, it is the difference between a section that works and one that is permanently
+     * empty. Under {@code LATEST}, the <strong>default</strong> and the policy nearly every report
+     * will be generated under, each case has exactly one resolved row. A case cannot disagree with
+     * itself. So a callout computed over the resolved set prints <em>"no case both passed and
+     * failed"</em> for every project, for ever, and the failure renders as a reassuring sentence in
+     * a section that looks like it is working (§47, §53, §72, §81 — the same shape, fifth time).
+     *
+     * <p>Read the other way round: <strong>the policy exists to hide exactly what this section is
+     * about.</strong> Collapsing many results into one is how the rest of the report answers "where
+     * do we stand"; this section is the one that says what was collapsed. It therefore answers
+     * identically under all five policies, which
+     * {@code AggregateVariabilityTest.theCalloutSurvivesTheDefaultPolicy} asserts in the direction
+     * that fails against the tempting implementation.
+     *
+     * <h2>A pass and a BLOCK is not an inconsistency, and the slice plan's own query shape says it is</h2>
+     *
+     * <p>The plan proposed <em>"a {@code HAVING} over distinct {@code counts_as_pass} values"</em>.
+     * That is one predicate too wide: {@code counts_as_pass} is false for {@code BLOCKED},
+     * {@code SKIPPED}, {@code RETEST} and {@code UNTESTED}, so a case that passed once and was
+     * blocked once would be listed as flaky. It is not — nothing failed; somebody could not run it.
+     * §105 settled the general form (<em>blocked stays out of the failure count</em>) and this is that
+     * rule one report over. The predicate here is <strong>at least one pass and at least one
+     * {@code FAILED}</strong>, and inflating the most-quoted section of the release report is exactly
+     * the direction §46 says never to fail in.
+     *
+     * <h2>Where the disagreement is, is a finding of its own</h2>
+     *
+     * <p>§6p's rule for the case timeline: <em>"pass/fail alternation within a single version and
+     * configuration, which is the only scoping under which flakiness means anything. Alternation
+     * across versions is just change, and reporting it as flake is a false signal."</em> A case that
+     * fails on Chrome and passes on Firefox is a real finding and a completely different one from a
+     * case that fails and passes on the same browser at the same version.
+     *
+     * <p>So the row is <em>listed</em> either way — a reader must not have to guess which cases were
+     * filtered out — and the last column names which it is, resolved from a per-cell aggregate where
+     * a cell is (case, configuration, case version). Collapsing the two into one number would be a
+     * flake count that is wrong in whichever direction the reader assumes.
+     *
+     * <p>Ordered instability first, then by failures — this table is read to decide what to look at.
+     */
+    private ReportModel.Section inconsistencySection(
+            UUID projectId, AggregateSelection selection, Totals totals) {
+
+        List<InconsistentCase> cases = inconsistentCases(projectId, selection);
+        if (cases.isEmpty()) {
+            return ReportModel.Section.text("Inconsistent results", totals.executions() == 0
+                    ? "No results contribute to this selection."
+                    // A positive statement, not a blank table: this section saying nothing is a
+                    // finding, and it must be distinguishable from the section having failed.
+                    : "No case in this selection both passed and failed. Every recorded result for "
+                            + "a case agrees with that case's other results, so there is no "
+                            + "instability here to chase.");
+        }
+
+        Map<UUID, ExecutionSource.CaseLabel> labels = source.caseLabels(
+                projectId, cases.stream().map(InconsistentCase::caseId).toList());
+
+        List<List<String>> rows = new ArrayList<>();
+        for (InconsistentCase row : cases) {
+            ExecutionSource.CaseLabel label = labels.get(row.caseId());
+            rows.add(List.of(
+                    // A hard-deleted case prints its id rather than vanishing — featureSection's
+                    // reason, and dropping the row would take the finding with it.
+                    label == null ? row.caseId().toString() : label.display(),
+                    count(row.executions()),
+                    count(row.passed()),
+                    count(row.failed()),
+                    row.disagreement()));
+        }
+
+        return ReportModel.Section.of(
+                "Inconsistent results",
+                "Cases with at least one pass and at least one failure. This section reads every "
+                        + "contributing execution and deliberately ignores the aggregation policy — "
+                        + "the policy's job is to collapse exactly the disagreement listed here, so "
+                        + "under it every case has one result and none of them can differ. A case "
+                        + "that was blocked and later passed is not listed: nothing failed. "
+                        + "Instability within one configuration and version first.",
+                new ReportModel.Table(
+                        List.of("Case", "Executions", "Passed", "Failed", "Disagreement"), rows));
+    }
+
+    /**
+     * <strong>The manual and automated split</strong> — §6e's <em>"manual vs automated split"</em>,
+     * and it is a cross-tab because the fact log holds <em>two</em> columns that both read like the
+     * answer and mean different things.
+     *
+     * <ul>
+     *   <li>{@code automation_status} is <strong>the case's</strong> status as it stood when the
+     *       result was recorded (a frozen dimension, §86) — where that test sits on the road to being
+     *       automated (§6c).
+     *   <li>{@code source} is <strong>the result's</strong> provenance — a {@code MANUAL} run somebody
+     *       executed, or an {@code INGESTED} one a CI job posted (§6e's <em>"both manual and
+     *       CI-ingested results"</em>).
+     * </ul>
+     *
+     * <p>Picking either one and labelling the table "manual vs automated" is a report that answers a
+     * question nobody asked with a number that looks like the answer to the one they did. They
+     * disagree in both directions and each disagreement is real: an automated case triaged by hand
+     * during a release, or a case still marked {@code MANUAL} whose results have been arriving from
+     * CI for a month. The second is a data-quality signal about the repository, not a category of
+     * testing — said in the narrative, because a reader who does not know that reads it as a third
+     * kind of test.
+     *
+     * <h2>Alphabetical, not the enum's own order, and that is a constraint rather than a preference</h2>
+     *
+     * <p>{@link #statuses} orders by {@code StatusKind}'s declaration order for a stated reason: two
+     * reports from one project are read side by side, so a table's row order must not move when its
+     * numbers do. The same argument applies here and the same mechanism is unavailable —
+     * {@code AutomationStatus} lives in {@code repository} and {@code RunSource} in
+     * {@code execution}, neither of which this module may import at any width plan §3 permits (ERD
+     * §0.2). Alphabetical on both columns delivers what that argument actually needs — an order that
+     * is total, stable and independent of the data — and gives up only the enums' semantic ordering,
+     * which no reader of this table is relying on. A third copy of two enums to recover it would be
+     * the trade §95 and decision E both refused.
+     */
+    private ReportModel.Section automationSection(
+            UUID projectId, AggregateSelection selection, Totals totals) {
+
+        List<SplitRow> split = automationSplit(projectId, selection);
+        if (split.isEmpty()) {
+            return ReportModel.Section.text("Manual and automated", totals.executions() == 0
+                    ? "No results contribute to this selection."
+                    : "No contributing execution carries an automation status or a source.");
+        }
+
+        List<List<String>> rows = new ArrayList<>();
+        for (SplitRow row : split) {
+            rows.add(List.of(
+                    row.automationStatus(),
+                    row.source(),
+                    count(row.executions()),
+                    count(row.passed()),
+                    share(row.passed(), row.executions())));
+        }
+
+        return ReportModel.Section.of(
+                "Manual and automated",
+                "Two dimensions, because the fact log holds two: the automation status is the "
+                        + "case's, as it stood when the result was recorded, and the source is how "
+                        + "that result arrived. They disagree in both directions — an automated case "
+                        + "executed by hand, or a case still marked manual whose results come from "
+                        + "CI — and such a row is a signal about the repository, not a category of "
+                        + "testing. Shares are of each row's own executions.",
+                new ReportModel.Table(
+                        List.of("Automation status", "Source", "Executions", "Passed", "Pass rate"),
+                        rows));
+    }
+
+    /**
+     * <strong>First attempt and retries</strong> — §6e's <em>"first-attempt vs after-retry pass
+     * rate"</em>, and the second section that must not read the resolved rows.
+     *
+     * <p>The reason is {@link #inconsistencySection}'s, in a second shape: a retry is only visible
+     * where the retries still exist. Under {@code LATEST} every group holds one attempt, which is by
+     * definition the first, so <em>"passed only after a retry"</em> would be zero everywhere and the
+     * report would describe a project whose tests all pass first time.
+     *
+     * <h2>The unit is a cell, not a case, and the column heading has to say so</h2>
+     *
+     * <p>Attempts are ordered inside (case, configuration, case version) — §6p's scoping again: a
+     * failure on Chrome followed by a pass on Firefox is not a retry, and a failure before an edit
+     * followed by a pass after it is not a retry either, it is a fix. So one case can contribute
+     * several groups, these counts do not sum to the distinct-case count, and the column is named
+     * <em>Case, configuration and version</em> rather than "Cases" so that nobody adds it to the
+     * headline. §96's rule: say it in the table, rather than let a reader find it by subtraction.
+     *
+     * <p>The three outcomes are exhaustive and disjoint by construction, so they sum to the number of
+     * groups — which is what makes this table checkable rather than three numbers to take on trust.
+     * <em>Never passed</em> includes a group that was only ever blocked; that is what the words say.
+     * An attempt with no timestamp sorts <strong>last</strong>, for {@link #resolvedCte}'s reason: a
+     * row nobody timed is not the earliest attempt, it is the absence of a time.
+     */
+    private ReportModel.Section retrySection(
+            UUID projectId, AggregateSelection selection, Totals totals) {
+
+        RetryOutcomes outcomes = retryOutcomes(projectId, selection);
+        long groups = outcomes.total();
+        if (groups == 0) {
+            return ReportModel.Section.text("First attempt and retries", totals.executions() == 0
+                    ? "No results contribute to this selection."
+                    : "No contributing execution can be ordered into attempts.");
+        }
+
+        List<List<String>> rows = new ArrayList<>();
+        List<ReportModel.Point> points = new ArrayList<>();
+        for (Map.Entry<String, Long> outcome : outcomes.byLabel().entrySet()) {
+            rows.add(List.of(
+                    outcome.getKey(),
+                    count(outcome.getValue()),
+                    share(outcome.getValue(), groups)));
+            points.add(new ReportModel.Point(outcome.getKey(), outcome.getValue()));
+        }
+
+        return new ReportModel.Section(
+                "First attempt and retries",
+                "Each group is one case, on one configuration, at one version — the only unit under "
+                        + "which a retry means anything: a failure on one configuration followed by "
+                        + "a pass on another is not a retry, and neither is a failure before an edit "
+                        + "followed by a pass after it. One case can therefore appear in several "
+                        + "groups, so these do not add up to the distinct-case count above. Like the "
+                        + "inconsistency callout, this section ignores the aggregation policy, which "
+                        + "would leave one attempt per group and no retries to count.",
+                new ReportModel.Table(
+                        List.of("Outcome", "Case, configuration and version", "Share"), rows),
+                List.of(new ReportModel.Series("Retry outcomes", points)));
+    }
+
     // =====================================================================
     // The queries — execution_fact and nothing else
     // =====================================================================
+
+    /**
+     * The <strong>narrowed</strong> row set as a CTE, named {@code selected} — every execution the
+     * selection covers, with no policy applied.
+     *
+     * <p>Split out of {@link #resolvedCte} in R7, and the split is load-bearing rather than tidy.
+     * Three sections read this and three read the resolved set, and which one a section reads decides
+     * whether it can answer its question at all: an inconsistency, a first attempt and a retry are all
+     * properties of the executions the policy <em>discards</em>. A caller reaching for
+     * {@code resolvedCte} where it wanted this one gets a section that is empty under the default
+     * policy and looks like a project with nothing to report.
+     *
+     * <p>{@code case_version_id}, {@code automation_status} and {@code source} are projected for
+     * R7's three sections. They cost nothing to carry: the policy window in {@link #resolvedCte}
+     * passes {@code s.*} through, so the resolved set gains them too.
+     */
+    private String selectedCte(AggregateSelection selection) {
+        return """
+                WITH selected AS (
+                    SELECT f.execution_id, f.case_id, f.case_version_id, f.configuration_id,
+                           f.status_kind, f.counts_as_pass, f.executed_at, f.suite_path,
+                           f.feature_ids, f.automation_status, f.source
+                      FROM execution_fact f
+                     WHERE f.project_id = :projectId
+                """ + selection.where() + "\n)";
+    }
 
     /**
      * The resolved row set as a CTE, named {@code r}, ready to be aggregated by any statement.
@@ -311,13 +567,7 @@ class AggregateExecutionReport implements ReportComputation {
      * header for the clause-by-clause mapping onto {@code PlanStatisticsService.resolve}.
      */
     private String resolvedCte(AggregateSelection selection) {
-        String selected = """
-                WITH selected AS (
-                    SELECT f.execution_id, f.case_id, f.configuration_id, f.status_kind,
-                           f.counts_as_pass, f.executed_at, f.suite_path, f.feature_ids
-                      FROM execution_fact f
-                     WHERE f.project_id = :projectId
-                """ + selection.where() + "\n)";
+        String selected = selectedCte(selection);
 
         if (selection.policy() == AggregationPolicy.ALL) {
             // No window at all. ALL is "every execution counted separately", so collapsing and then
@@ -526,6 +776,120 @@ class AggregateExecutionReport implements ReportComputation {
         return List.copyOf(groups);
     }
 
+    /**
+     * Cases with at least one pass and at least one {@code FAILED}, over the <em>un-collapsed</em>
+     * rows — {@link #inconsistencySection} is the argument for every clause here.
+     *
+     * <p>Two aggregates over the same {@code selected} set, joined: one per case (the printed
+     * numbers) and one per <em>cell</em> — (case, configuration, case version) — whose only purpose is
+     * {@code bool_or}, the answer to "is any single cell internally inconsistent". The per-cell pass
+     * uses the same two predicates as the per-case one, so a cell cannot be judged by a rule the row
+     * above it was not.
+     */
+    private List<InconsistentCase> inconsistentCases(UUID projectId, AggregateSelection selection) {
+        Query query = entities.createNativeQuery(selectedCte(selection) + """
+                , cells AS (
+                    SELECT s.case_id, s.configuration_id, s.case_version_id,
+                           count(*) FILTER (WHERE s.counts_as_pass)         AS passed,
+                           count(*) FILTER (WHERE s.status_kind = 'FAILED') AS failed
+                      FROM selected s
+                     GROUP BY s.case_id, s.configuration_id, s.case_version_id
+                )
+                , per_case AS (
+                    SELECT s.case_id,
+                           count(*)                                        AS executions,
+                           count(*) FILTER (WHERE s.counts_as_pass)         AS passed,
+                           count(*) FILTER (WHERE s.status_kind = 'FAILED') AS failed,
+                           count(DISTINCT s.configuration_id)              AS configurations,
+                           count(DISTINCT s.case_version_id)               AS versions
+                      FROM selected s
+                     GROUP BY s.case_id
+                )
+                SELECT p.case_id, p.executions, p.passed, p.failed, p.configurations, p.versions,
+                       bool_or(c.passed > 0 AND c.failed > 0) AS within_one_cell
+                  FROM per_case p
+                  JOIN cells c ON c.case_id = p.case_id
+                 WHERE p.passed > 0 AND p.failed > 0
+                 GROUP BY p.case_id, p.executions, p.passed, p.failed, p.configurations, p.versions
+                 ORDER BY within_one_cell DESC, p.failed DESC, p.executions DESC, p.case_id
+                """)
+                .setParameter("projectId", projectId);
+        selection.bind(query);
+
+        List<InconsistentCase> cases = new ArrayList<>();
+        for (Object result : query.getResultList()) {
+            Object[] row = (Object[]) result;
+            cases.add(new InconsistentCase(
+                    UUID.fromString(row[0].toString()),
+                    number(row[1]),
+                    number(row[2]),
+                    number(row[3]),
+                    number(row[4]),
+                    number(row[5]),
+                    Boolean.TRUE.equals(row[6])));
+        }
+        return List.copyOf(cases);
+    }
+
+    /** The cross-tab of {@link #automationSection}. Alphabetical, for the reason stated there. */
+    private List<SplitRow> automationSplit(UUID projectId, AggregateSelection selection) {
+        Query query = entities.createNativeQuery(resolvedCte(selection) + """
+                SELECT r.automation_status, r.source,
+                       count(*)                                 AS executions,
+                       count(*) FILTER (WHERE r.counts_as_pass) AS passed
+                  FROM resolved r
+                 GROUP BY r.automation_status, r.source
+                 ORDER BY r.automation_status, r.source
+                """)
+                .setParameter("projectId", projectId);
+        selection.bind(query);
+
+        List<SplitRow> split = new ArrayList<>();
+        for (Object result : query.getResultList()) {
+            Object[] row = (Object[]) result;
+            split.add(new SplitRow(
+                    row[0] == null ? "" : row[0].toString(),
+                    row[1] == null ? "" : row[1].toString(),
+                    number(row[2]),
+                    number(row[3])));
+        }
+        return List.copyOf(split);
+    }
+
+    /**
+     * Three counts over the attempt-ordered rows — {@link #retrySection} is the argument.
+     *
+     * <p>{@code row_number() = 1} is the first attempt <em>within a cell</em>; the outer aggregate
+     * reduces each cell to two booleans and the three {@code FILTER}s over them are disjoint and
+     * exhaustive, which is why the section can print shares of a total it did not have to be told.
+     */
+    private RetryOutcomes retryOutcomes(UUID projectId, AggregateSelection selection) {
+        Query query = entities.createNativeQuery(selectedCte(selection) + """
+                , attempts AS (
+                    SELECT s.case_id, s.configuration_id, s.case_version_id, s.counts_as_pass,
+                           row_number() OVER (
+                               PARTITION BY s.case_id, s.configuration_id, s.case_version_id
+                               ORDER BY s.executed_at ASC NULLS LAST, s.execution_id ASC) AS attempt
+                      FROM selected s
+                )
+                , groups AS (
+                    SELECT bool_or(a.counts_as_pass AND a.attempt = 1) AS first_passed,
+                           bool_or(a.counts_as_pass)                   AS ever_passed
+                      FROM attempts a
+                     GROUP BY a.case_id, a.configuration_id, a.case_version_id
+                )
+                SELECT count(*) FILTER (WHERE g.first_passed)                       AS first_attempt,
+                       count(*) FILTER (WHERE NOT g.first_passed AND g.ever_passed) AS after_retry,
+                       count(*) FILTER (WHERE NOT g.ever_passed)                    AS never_passed
+                  FROM groups g
+                """)
+                .setParameter("projectId", projectId);
+        selection.bind(query);
+
+        Object[] row = (Object[]) query.getSingleResult();
+        return new RetryOutcomes(number(row[0]), number(row[1]), number(row[2]));
+    }
+
     private List<GroupRow> toGroups(Query query) {
         List<GroupRow> groups = new ArrayList<>();
         for (Object result : query.getResultList()) {
@@ -568,4 +932,58 @@ class AggregateExecutionReport implements ReportComputation {
     private record StatusRow(String kind, long executions, long cases) {}
 
     private record GroupRow(String label, long executions, long failed) {}
+
+    /**
+     * One row of the inconsistency callout.
+     *
+     * @param withinOneCell whether some single (configuration, version) holds both the pass and the
+     *     failure — §6p's <em>"the only scoping under which flakiness means anything"</em>
+     */
+    private record InconsistentCase(
+            UUID caseId,
+            long executions,
+            long passed,
+            long failed,
+            long configurations,
+            long versions,
+            boolean withinOneCell) {
+
+        /**
+         * What the last column prints, and it is a classification rather than a count.
+         *
+         * <p>Instability wins where it is present: a case that alternates inside one cell
+         * <em>and</em> also differs across configurations is a flaky test first, because that is the
+         * finding that changes what somebody does next. Where it is absent, the axes that actually
+         * vary are named — and at least one of them must, since a case with a single cell can only
+         * disagree inside it.
+         */
+        String disagreement() {
+            if (withinOneCell) {
+                return WITHIN_ONE_CONFIGURATION_AND_VERSION;
+            }
+            if (configurations > 1 && versions > 1) {
+                return "Across configurations and versions";
+            }
+            return configurations > 1 ? "Across configurations" : "Across versions";
+        }
+    }
+
+    /** One row of the manual/automated cross-tab: the case's status, the result's provenance. */
+    private record SplitRow(String automationStatus, String source, long executions, long passed) {}
+
+    /** The three disjoint, exhaustive outcomes of {@link #retrySection}, in reading order. */
+    private record RetryOutcomes(long firstAttempt, long afterRetry, long neverPassed) {
+
+        long total() {
+            return firstAttempt + afterRetry + neverPassed;
+        }
+
+        Map<String, Long> byLabel() {
+            Map<String, Long> outcomes = new LinkedHashMap<>();
+            outcomes.put("Passed on the first attempt", firstAttempt);
+            outcomes.put("Passed only after a retry", afterRetry);
+            outcomes.put("Never passed", neverPassed);
+            return outcomes;
+        }
+    }
 }

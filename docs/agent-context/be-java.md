@@ -2,11 +2,14 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-06 (**R6 phases 2–4, §111** — the aggregate report's contract, form and
-selection tests; R6 phase 1 and §108 before it)
-**Baseline commit:** `8a095cd` (R6 phase 3) **+ the doc commit this line ships in** (its own SHA
+**Last verified:** 2026-08-06 (**R7, §112** — the aggregate report's three variability sections, the
+`selectedCte` split and `ExecutionSource.caseLabels`; R6 phases 1–4 / §111 and §108 before it)
+**Baseline commit:** `d6044d8` (R6 phase 4) **+ the R7 commit this line ships in** (its own SHA
 cannot be written into itself; per `CLAUDE.md`, trust the body over the header and re-grep what a
 later commit could have moved).
+**§112 (R7) touched three files** — `AggregateExecutionReport`, `ExecutionSource`,
+`AggregateVariabilityTest` — plus contract prose. **No migration, no entity, no endpoint, no key, no
+frontend code**; `V35` still head, `V36` still free, policy count still 61.
 **§101's backend half is phases 1, 2 and 4** — `V34` + `V35`, both rollup writers, and the read
 switch. Phase 3 is contract-only and phase 5 is the client. The seam list's first entry records it.
 **§99's backend half is phase 2 alone** — two request fields, one union query, and no migration;
@@ -86,6 +89,36 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   no context, needs no database, strips comments first (the mail block legitimately quotes
   `${SMTP_HOST:-}` when explaining compose), and its negative case has been run. **Add config
   invariants there, not to a reading.** `#confirmed`
+
+- **R7 (§112) — WHICH CTE A SECTION READS IS THE WHOLE SLICE, AND `selectedCte` IS THE NEW SEAM.**
+  `AggregateExecutionReport` grew three sections — *Inconsistent results*, *Manual and automated*,
+  *First attempt and retries* — and `resolvedCte` was split so **`selectedCte`** (narrowed, **no
+  policy applied**) is a named method. Three sections read each. **No migration, no key, no contract
+  change beyond prose** (`gen:api` moved 19 lines of JSDoc and no type); `AggregateVariabilityTest`,
+  prefix **`c3`**, slug `avr-`, 15 tests.
+  - **A SECTION READING `resolvedCte` HERE IS PERMANENTLY EMPTY AND LOOKS FINE.** Under `LATEST`
+    (the default) each case is one row: it cannot disagree with itself, its first attempt is its
+    last, and its retries are already discarded. **The policy exists to hide exactly what these
+    sections are about.** Grep for `selectedCte` before adding a fourth section and decide
+    deliberately; the wrong choice is one word and silently ships a reassuring sentence.
+  - **The inconsistency predicate is `passed > 0 AND failed > 0`, NOT the plan's
+    `count(DISTINCT counts_as_pass) > 1`** — a recorded departure. The plan's shape lists a
+    pass-then-BLOCKED case as flaky (§105's rule, one report over).
+  - **A cell is (case, configuration, case version)** — §6p: alternation across configuration or
+    version *"is just change, and reporting it as flake is a false signal"*. Used twice: the
+    callout's `bool_or` per cell (the *Disagreement* column) and the retry section's partition. The
+    retry counts therefore **do not sum to the distinct-case count**, which the column heading says.
+  - **The split is a CROSS-TAB of two columns that both look like the answer** —
+    `automation_status` is the **case's** (frozen, §86), `source` is the **result's**. Rows are
+    **alphabetical**, because `AutomationStatus` (`repository`) and `RunSource` (`execution`) are
+    both unimportable here; `statuses`' declaration-order rule is unavailable and alphabetical is
+    what its argument actually needs.
+  - **`ExecutionSource.caseLabels(projectId, ids)` closes the gap `RunSummaryReport`'s header has
+    named since §87** (*"the per-case list waits for the slice that decides where case labels come
+    from"*). In the seam beside `findRun`, same argument; **no `deleted_at` predicate**, bounded by
+    `project_id` (the fourth file to layer that over RLS — and **untested here**, R7-6), and
+    `execution_fact` deliberately grows **no `case_key` column**: both labels are mutable, and an
+    append-only log would print names that no longer exist.
 
 - **R6's AGGREGATE REPORT SHIPS THE AGGREGATION POLICY A SECOND TIME, IN SQL (phase 1).**
   `reporting.AggregateExecutionReport` (`type()` = `aggregate_execution`) + `AggregateSelection` +

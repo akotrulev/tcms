@@ -309,6 +309,37 @@ in a helper text, not a behaviour this suite can observe; browser row `M6-25` is
 
 ---
 
+## 17. R7's three variability sections — six mutations, none run
+
+R7 adds three sections that read the **un-collapsed** row set (`selectedCte`) where the rest of the
+report reads the policy-resolved one. `AggregateVariabilityTest` (15 tests, prefix `c3`) is written
+around that, and two of its tests are the ones worth breaking.
+
+**What the RED run already established, and what it did not.** Twelve of the fifteen tests failed
+before the sections existed, so their positive assertions are known non-vacuous. **Three passed on
+the RED run** — `blockedThenPassedIsNotListed`, `agreementIsNotListedInEitherDirection`,
+`theCaseIsNamedByItsKey` — because all three assert an **absence**, and an absent section satisfies
+them. They currently carry **no evidence at all**, and R7-2 and R7-3 below are the only way to give
+them any. That is the reason they are named individually rather than left inside a count.
+
+| # | Mutation | Expected |
+|---|---|---|
+| R7-1 | `inconsistencySection`/`retrySection` call `resolvedCte` instead of `selectedCte` | **THE row.** Under the default `LATEST` each case is one row, so the callout empties and *"passed only after a retry"* goes to zero — a report claiming a project with no instability and no retries. Should redden `theCalloutSurvivesTheDefaultPolicy` and `theRetryOutcomesIgnoreThePolicy`. If it reddens only the `ALL` comparisons, the tests are asserting agreement between two wrong answers. |
+| R7-2 | `WHERE p.passed > 0 AND p.failed > 0` → the slice plan's own shape, `count(DISTINCT counts_as_pass) > 1` | The blocked-then-passed case is listed as an inconsistency. Should redden `blockedThenPassedIsNotListed`, which **passed on the RED run** and is therefore unproven. §105's rule, one report over. |
+| R7-3 | `bool_or(c.passed > 0 AND c.failed > 0)` → `true` | Every listed case reads *Within one configuration and version*, so a configuration-dependent failure is reported as a flaky test. Should redden `theRowSaysWhereTheDisagreementIs`. Then the inverse — `→ false` — which should redden it the other way and turn every genuine flake into "across configurations". |
+| R7-4 | `retryOutcomes`' `ORDER BY s.executed_at ASC NULLS LAST` → `DESC` (the **last** attempt read as the first) | Expected **RED** on the three outcome counts — but note R6-2's lesson: a fixture of mirrored pairs is symmetric under exactly this mutation. Here `BLOCKED_THEN_PASSED` and `ALWAYS_FAILING` break the mirror. If it comes back GREEN, the fixture is the defect, not the code. |
+| R7-5 | `attempts`' partition drops `configuration_id`, then (separately) `case_version_id` | Two runs. Each should move `CONFIG_SPLIT` / `VERSION_SPLIT` out of two groups into one, so the totals fall from 8 and *"passed only after a retry"* rises — a cross-configuration difference reported as a retry, which is §6p's false-flake signal in the third section. |
+| R7-6 | `caseLabels`' `AND c.project_id = :projectId` dropped | A sibling project's case title on this project's report. **Expected to redden nothing** — no test in this class seeds a second project, and RLS scopes to the company, not the project. Recorded as a **gap**: it is `CatalogueFacts`/`PlanFacts`' stated reason for existing, arriving in a fourth file, and the row that would close it is a two-project fixture. |
+
+**Also not covered, and named**: nothing asserts the three sections against a *second* implementation
+the way `AggregateExecutionCrossCheckTest` does for the policy — there is no second implementation to
+check against, because no screen in the product computes an inconsistency callout. The retry
+arithmetic is therefore asserted against literals, which §46 warns about; what makes it defensible
+here is that the three outcomes are disjoint and exhaustive, so the fixture's 3 + 2 + 3 = 8 is
+checkable by hand against a fixture whose every execution is listed in one place.
+
+---
+
 ## 14. §106's board drag — one frontend row, and the backend rows it does NOT owe
 
 §106 replaced the board's native HTML5 drag with `@dnd-kit` and made the move optimistic. **No

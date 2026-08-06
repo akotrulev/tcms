@@ -8300,6 +8300,25 @@ export interface operations {
                      *       no recorded result is not in it at all** — a star schema holds facts, not
                      *       scope, so there is no "not run" here the way a plan page has one.
                      *
+                     *       Since R7 it carries three further sections, and **all three deliberately
+                     *       ignore the `policy` parameter** — they are about the executions a policy
+                     *       collapses, so applying one would leave them empty under the default:
+                     *
+                     *       - **Inconsistent results** — cases with at least one pass *and* at least
+                     *         one failure in the selection, each row saying whether the disagreement is
+                     *         inside one configuration and version (instability) or across one of those
+                     *         axes (a difference, not a flake). A case that was blocked and later passed
+                     *         is **not** listed: nothing failed.
+                     *       - **Manual and automated** — a cross-tab of the case's `automationStatus`
+                     *         as it stood when the result was recorded against the run's `source`, not
+                     *         one column relabelled. The two disagree in both directions, and such a row
+                     *         is a signal about the repository rather than a kind of testing.
+                     *       - **First attempt and retries** — passed first time / passed only after a
+                     *         retry / never passed, counted per (case, configuration, case version),
+                     *         which is the only unit under which a retry means anything. One case can
+                     *         appear in several groups, so these do **not** sum to the distinct-case
+                     *         count in the headline.
+                     *
                      *     **Required unless `definitionId` is sent** — which `required` cannot express
                      *     here without splitting the body into a `oneOf` whose two arms differ by one
                      *     optional field. Sending neither is a field error on `type`.

@@ -2,7 +2,10 @@ package com.tcms.reporting;
 
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
@@ -344,6 +347,70 @@ class ExecutionSource {
 
     /** What a report may say about a run without leaving the fact log for anything else. */
     record RunHeader(String key, String name) {}
+
+    /**
+     * Display keys and titles for the cases a report is about to name — <strong>the slice
+     * {@link RunSummaryReport}'s header said it was waiting for.</strong>
+     *
+     * <p>That header states the problem exactly: <em>"a list of forty UUIDs is not the section §6e
+     * describes, so this report groups failures by suite, which the fact log can name, and the
+     * per-case list waits for the slice that decides where case labels come from."</em> R7's
+     * inconsistency callout <em>is</em> per case — §6e's <em>"cases that both passed and failed
+     * within the selection"</em> cannot be grouped into anything else — so the decision could not be
+     * deferred again, and this is it: <strong>here, in the seam, exactly where {@link #findRun} is
+     * and for the same stated reason.</strong>
+     *
+     * <p>A star schema duplicates the dimensions it aggregates <em>by</em>, not the labels of the
+     * rows it aggregates, so {@code execution_fact} carries {@code case_id} and nothing else about
+     * the case. Adding {@code case_key} to it was the alternative and is worse in two ways: a key is
+     * mutable (§6t reallocates one on a clone) and a title is edited constantly, so freezing either
+     * into an append-only log means old rows print names that no longer exist, and the log grows a
+     * column no aggregate ever groups by.
+     *
+     * <p><strong>No {@code deleted_at} predicate</strong>, which is {@link #findRun}'s call rather
+     * than a second opinion: deleting a case does not un-run it, its results are already in the fact
+     * log, and a report that named the case yesterday and prints a bare UUID today would make a
+     * signed-off release document unreproducible — §6e's determinism bullet, by name.
+     *
+     * @param projectId bounds the lookup, so a case in a sibling project of the same company cannot
+     *     put its title on this project's report. RLS scopes to the company and no further, and this
+     *     module has no {@code project_id}-aware repository to borrow the predicate from.
+     * @param caseIds the ids to label; an empty collection is not queried at all
+     * @return labels by id, missing entries for any id that no longer resolves — the caller prints
+     *     the id rather than dropping the row, for {@link AggregateExecutionReport}'s stated reason
+     */
+    Map<UUID, CaseLabel> caseLabels(UUID projectId, Collection<UUID> caseIds) {
+        if (caseIds.isEmpty()) {
+            return Map.of();
+        }
+        List<?> rows = entities.createNativeQuery("""
+                SELECT c.id, c.key, c.title
+                  FROM test_case c
+                 WHERE c.project_id = :projectId
+                   AND c.id IN (:caseIds)
+                """)
+                .setParameter("projectId", projectId)
+                .setParameter("caseIds", caseIds)
+                .getResultList();
+
+        Map<UUID, CaseLabel> labels = new LinkedHashMap<>();
+        for (Object result : rows) {
+            Object[] row = (Object[]) result;
+            labels.put(
+                    UUID.fromString(row[0].toString()),
+                    new CaseLabel((String) row[1], (String) row[2]));
+        }
+        return Map.copyOf(labels);
+    }
+
+    /** What a report may say about a case. Its display key (§6t) and its current title. */
+    record CaseLabel(String key, String title) {
+
+        /** {@code TC-14 — Checkout with an expired card}. One cell of one table. */
+        String display() {
+            return key + " — " + title;
+        }
+    }
 
     int recomputeFailingRepeatedly(int window, Instant now) {
         return entities.createNativeQuery("""
