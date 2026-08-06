@@ -19,8 +19,13 @@ import java.util.UUID;
  *                       reuses {@code VersionMarker}: a marker is a marker, and a second record with
  *                       the same four components is how one of them acquires a field the other does
  *                       not serialize.
+ * @param computedAt     when the {@code suite_run_summary} rollup behind these entries was last
+ *                       written, or <strong>null when the answer was computed live</strong> (§101).
+ *                       Null is a positive statement — <em>current as of this request</em> — and not
+ *                       a missing value, which is why the contract marks it required.
  */
-public record SuiteHistoryView(List<EntryView> entries, List<MarkerView> versionMarkers) {
+public record SuiteHistoryView(
+        List<EntryView> entries, List<MarkerView> versionMarkers, Instant computedAt) {
 
     /**
      * One run's pass over this suite.

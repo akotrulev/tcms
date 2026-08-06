@@ -246,6 +246,11 @@ export const planStatistics: PlanStatistics = {
   coveragePercent: 97.4,
   latestExecutionAt: '2026-07-30T02:41:00Z',
   stale: false,
+  // The other staleness, and null is the honest value here for the same reason the suite history
+  // handler's is: the mock computes from fixtures per request, so the figures ARE current and
+  // there is no rollup timestamp to report (§101). Mock mode therefore always renders the "live"
+  // branch, and the rollup branch is live-mode-only — recorded on the browser queue as such.
+  computedAt: null,
   byConfiguration: [
     { configuration: 'Chrome / Windows', counts: { passed: 148, failed: 6, blocked: 2, skipped: 0, notRun: 0, total: 156 } },
     { configuration: 'Safari / macOS', counts: { passed: 96, failed: 14, blocked: 3, skipped: 0, notRun: 5, total: 118 } },

@@ -230,6 +230,11 @@ export const suiteHandlers = [
     return HttpResponse.json({
       entries: reporting.suiteHistoryEntries,
       versionMarkers: reporting.suiteVersionMarkers,
+      // Null, and that is the honest value rather than a placeholder: the mock computes from
+      // fixtures on every request, so there is no rollup behind it and "current as of now" is
+      // exactly what null means (§101). It also means mock mode structurally cannot show the
+      // freshness line, which is why this slice's browser rows are live-only.
+      computedAt: null,
     });
   }),
 ];

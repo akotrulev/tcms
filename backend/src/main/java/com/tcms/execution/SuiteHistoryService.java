@@ -104,7 +104,11 @@ public class SuiteHistoryService {
         List<CaseFacts.VersionMark> marks = cases.suiteVersionMarkers(suiteId);
         List<UUID> caseIds = cases.caseIdsInSuite(projectId, suiteId);
 
-        return new SuiteHistoryView(entries(projectId, caseIds, marks), markers(companyId, marks));
+        // computedAt is null while this class still computes live. Phase 4 gives it the rollup's
+        // own updated_at; shipping the field truthful before it is interesting is what lets the
+        // client be built against the shape rather than against a plan to add it.
+        return new SuiteHistoryView(
+                entries(projectId, caseIds, marks), markers(companyId, marks), null);
     }
 
     // --------------------------------------------------------------- entries ---

@@ -23,6 +23,14 @@ import java.util.UUID;
  *                        showing 94% from three weeks ago, presented as current, is the most
  *                        dangerous screen in the product — so the age is on the response rather than
  *                        left to a client to work out from {@link #latestExecutionAt}.
+ * @param computedAt      the <em>other</em> staleness, and the two must not be conflated (§101).
+ *                        {@link #stale} is about the <strong>executions</strong>; this is about the
+ *                        <strong>arithmetic</strong> — when the {@code plan_snapshot} rollup behind
+ *                        these figures was written, or <strong>null when they were computed
+ *                        live</strong>. A plan executed an hour ago and rolled up ten minutes ago is
+ *                        fresh by one measure and ten minutes behind by the other. Null is always
+ *                        the answer for {@code WORST}, {@code BEST} and {@code ALL}, which a
+ *                        latest-result-per-case rollup structurally cannot serve.
  * @param bySuite         every suite holding an in-scope case, including suites where nothing has
  *                        been executed — those are the rows a release meeting is looking for, and a
  *                        breakdown built from the executions alone would omit exactly them.
@@ -42,6 +50,7 @@ public record PlanStatisticsView(
         double coveragePercent,
         Instant latestExecutionAt,
         boolean stale,
+        Instant computedAt,
         List<ConfigurationCountsView> byConfiguration,
         List<SuiteCountsView> bySuite,
         List<TestExecutionSummaryView> blockers,

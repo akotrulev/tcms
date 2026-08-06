@@ -185,6 +185,9 @@ public class PlanStatisticsService {
                 coveragePercent,
                 latestExecutionAt(rows),
                 isStale(rows),
+                // Null while this class still computes live — the truthful value, and phase 4
+                // replaces it for the two policies a latest-per-case rollup can serve.
+                null,
                 byConfiguration(plan.getProjectId(), scope, rows, policy, statusesById),
                 bySuite(scope, contributions, touched),
                 blockers(companyId, rows, contributions, statusesById),

@@ -6647,6 +6647,18 @@ export interface components {
         SuiteHistoryResponse: {
             entries: components["schemas"]["SuiteRunSummary"][];
             versionMarkers: components["schemas"]["VersionMarker"][];
+            /**
+             * Format: date-time
+             * @description When the pre-aggregated `suite_run_summary` rollup these figures come from was last
+             *     written (§6p, §101). **Null means the answer was computed live**, from the executions
+             *     themselves, and is therefore current as of this request — a positive statement, not a
+             *     missing value. A suite whose runs are all newer than the last rollup tick answers null.
+             *
+             *     Required rather than optional precisely because the two readings must be
+             *     distinguishable: an absent field would be indistinguishable from a live answer by a
+             *     client that has not been updated, which is the wrong direction to fail in.
+             */
+            computedAt: string | null;
         };
         SuiteRunSummary: {
             /** Format: uuid */
@@ -6760,14 +6772,40 @@ export interface components {
             /** Format: date-time */
             latestExecutionAt?: string | null;
             /**
-             * @description **Nothing has been executed against this plan in 14 days** — not a freshness
-             *     warning about the figures themselves, which are computed per request. Plan §6p:
-             *     "a plan page showing 94% from three weeks ago, presented as current, is the most
-             *     dangerous screen in the product". False for a plan with no results at all, which
-             *     is un-started rather than stale, and the `counts.total == counts.notRun` branch
-             *     already says so in plainer words.
+             * @description **Nothing has been executed against this plan in 14 days.** Plan §6p: "a plan page
+             *     showing 94% from three weeks ago, presented as current, is the most dangerous screen
+             *     in the product". False for a plan with no results at all, which is un-started rather
+             *     than stale, and the `counts.total == counts.notRun` branch already says so in
+             *     plainer words.
+             *
+             *     ~~Not a freshness warning about the figures themselves, which are computed per
+             *     request.~~ → **superseded 2026-08-06 (§101)**: the figures are no longer always
+             *     computed per request, so the clause that distinguished the two is now `computedAt`
+             *     rather than that sentence. The distinction it drew still holds and is now the reason
+             *     there are two fields — `stale` is about the **executions**, `computedAt` is about the
+             *     **arithmetic**. A plan executed an hour ago and rolled up ten minutes ago is fresh by
+             *     one measure and ten minutes behind by the other, and a client that renders them as one
+             *     signal has reintroduced the ambiguity §6p wrote the sentence to remove.
              */
             stale: boolean;
+            /**
+             * Format: date-time
+             * @description When the pre-aggregated `plan_snapshot` rollup these figures come from was last
+             *     written (§6p, §101). **Null means the answer was computed live** and is current as of
+             *     this request — a positive statement, not a missing value.
+             *
+             *     Live is the answer for the `WORST`, `BEST` and `ALL` aggregation policies, which a
+             *     latest-result-per-case rollup **structurally cannot serve**: each needs every
+             *     execution, and this table keeps one row per case per configuration. `LATEST` and
+             *     `LATEST_PER_CONFIG` are served from the rollup. It is also the answer for a plan whose
+             *     rollup has not been written yet, which is every plan for up to one scheduler tick
+             *     after its first result.
+             *
+             *     That the same screen answers from two sources depending on a dropdown is exactly why
+             *     this field is required and not inferred: two staleness behaviours with no way to tell
+             *     them apart is §65's two-contradictory-percentages defect with the contradiction hidden.
+             */
+            computedAt: string | null;
             byConfiguration: {
                 configuration: string;
                 counts: components["schemas"]["ResultCounts"];
