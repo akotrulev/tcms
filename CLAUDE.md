@@ -343,7 +343,15 @@ A second stack for a concurrent browser pass is `cp .env.lane-b.example .env.lan
 - **A schema-wide or catalogue-wide invariant needs a computed check, not a careful reading.**
   Reading V1 top to bottom missed five join tables without `company_id`; scripting the comparison
   found them. Same family: derive "holds every permission" from the catalogue rather than storing a
-  `'*'` sentinel.
+  `'*'` sentinel. **And §108, the most expensive instance**: `${TCMS_JWT_SECRET:?…}` in
+  `application.yml` looked like a hard requirement, was read by Spring as a *default*, and signed
+  production's sessions with a string from this repo for a year — past a correct comment, a real
+  `@Size(min = 32)`, and 1000+ green tests. Every one of those checks a *resolved value*; the
+  defect was in the *text*. `ConfigConventionTest` is the check that reads the text.
+- **`${VAR:?msg}` and `${VAR:-x}` mean nothing to Spring.** They are shell/Compose forms. This repo
+  writes both, four directories apart: correct in `compose*.yaml`, silently a default in
+  `application*.yml`, where Spring splits on the first `:` and takes the rest verbatim. **A required
+  Spring property is `${VAR}` with no colon** — an unresolvable placeholder throws at bind time.
 - **Build the fault switch before the feature it proves.** A resilience behaviour you cannot trigger
   is one you have not tested.
 - **Measure bundle changes before believing them.** Splitting DataGrid into its own chunk looked

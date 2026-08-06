@@ -2,7 +2,7 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-06 (§101 phases 1–4 — the M2 rollups)
+**Last verified:** 2026-08-06 (§108 — the JWT signing key defect; §101 phases 1–4 before it)
 **Baseline commit:** `7f43c28` (§101 phase 5) **+ the doc commit this line ships in** (its own SHA
 cannot be written into itself; per `CLAUDE.md`, trust the body over the header and re-grep what a
 later commit could have moved).
@@ -64,6 +64,27 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   `<X>Controller` / `<X>Service` / `<X>Repository` inside each.
 
 ## Seams to reuse
+
+- **`${VAR:?msg}` IN SPRING CONFIG IS A DEFAULT, NOT A REQUIREMENT — §108, and it cost the
+  production signing key.** This repo writes both Compose files and Spring config. In
+  `compose*.yaml` the form means *"fail if unset"* and is used correctly on eight variables. In
+  `application*.yml` **Spring has no such form**: it splits on the first `:` and takes the rest as
+  the default value, so `${TCMS_JWT_SECRET:?a JWT signing secret of at least 32 characters is
+  required}` silently resolved to the literal 59-character message — long enough to satisfy
+  `@NotBlank @Size(min = 32)` on `JwtProperties` — and the deployed instance signed every session
+  token with a string committed to this repository.
+
+  **For a required property write `${VAR}` with no colon.** An unresolvable placeholder throws at
+  bind time and the context does not start.
+
+  Two things generalise beyond the one line. **`@DynamicPropertySource` hides shipped config**:
+  `IntegrationTestBase` sets `tcms.auth.jwt.secret` directly, which replaces the placeholder, so
+  1000+ green tests said nothing about the expression that actually ships — anything asserting a
+  *resolved value* cannot see a defect in the *text*. And `ConfigConventionTest`
+  (`src/test/java/com/tcms/config/`) is the answer: it parses `application*.yml` as source, boots
+  no context, needs no database, strips comments first (the mail block legitimately quotes
+  `${SMTP_HOST:-}` when explaining compose), and its negative case has been run. **Add config
+  invariants there, not to a reading.** `#confirmed`
 
 - **THE M2 ROLLUPS HAVE WRITERS SINCE §101, AND THE TWO ARE NOT THE SAME SHAPE.**
   `reporting.RollupRefreshService` (a sibling of `ExecutionFactRefreshService`, driven by the same
