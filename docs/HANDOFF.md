@@ -1,7 +1,7 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-06 · **Branch:** `master` · **Latest slice:** [§112 — the inconsistency
-callout](handoff/112-the-inconsistency-callout.md)
+**Date:** 2026-08-06 · **Branch:** `master` · **Latest slice:** [§113 — the deploy learns a second
+target](handoff/113-the-deploy-learns-a-second-target.md)
 
 This file is an **index**. Every section is its own file under [`docs/handoff/`](handoff/), numbered
 by its § number, and the slice log below is where the narrative lives — one row per slice, each row
@@ -31,6 +31,12 @@ divergence, is the last reporting slice in the plan.** The organization-model re
 §59, so `-Werror` and the Modulith wiring are checked and nothing else is. `./gradlew build` on your
 own machine is the only thing that runs the integration suite. See §58 for what a macOS-only gate
 structurally cannot observe.
+
+> **A nightly Linux lane is written but NOT LIVE (§113).** `.github/workflows/tests.yml` runs the
+> full `./gradlew build` on `[self-hosted, tcms-lab]` — the homelab box — which is a *differently
+> shaped* gate, not just a free one. **It is inert until that runner is registered**
+> (`deploy/shanks/install-runner.sh`), so the paragraph above still holds in full. Do not read the
+> file's existence as coverage.
 
 **Schema.** Flyway head is **`V35__rollup_freshness_columns.sql`**; **`V36` is the next free
 number**. 61 tables under `FORCE ROW LEVEL SECURITY`. Flyway owns all DDL
@@ -242,3 +248,4 @@ Open actions above. The gap is deliberate; do not renumber around it.
 | [§109](handoff/109-the-browser-queue-gets-a-lane-to-run-in.md) | The browser queue gets a lane to run in — the 260 mock rows re-derived against a fixture charter the pass authors through the product, and three rows found already wrong **(361 of 362 ids preserved; executable, not executed)** |
 | [§111](handoff/111-the-aggregate-execution-report.md) | The aggregate execution report — M2.5's R6: the first report spanning more than one run, the policy implemented a **second** time in SQL and legal only because a cross-check asserts the two against each other **(nine mutations run; 5 browser rows queued — built and unverified)** |
 | [§112](handoff/112-the-inconsistency-callout.md) | The inconsistency callout, the split that is two columns, and the retries the default policy erases — M2.5's R7: three sections that must read the **un-collapsed** rows, because a policy exists to hide exactly what they are about, and one written over `resolvedCte` is empty in every project for ever **(built and unverified — 4 browser, 6 mutation rows)** |
+| [§113](handoff/113-the-deploy-learns-a-second-target.md) | The deploy learns a second target — a `lab` job that runs **on** the homelab box via a self-hosted runner (no SSH key, no stored secret), the nightly Linux gate `ci.yml` gave up, and the `target` default that had to stay `production` or every existing release command would have silently shipped elsewhere **(built and unverified — nothing has run on shanks)** |

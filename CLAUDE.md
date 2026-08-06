@@ -98,9 +98,14 @@ npm run gen:api      # regenerate src/api/schema.d.ts after ANY openapi.yaml cha
 
 > **CI runs no backend tests** (changed 2026-08-02, for push-feedback speed: ~327s → ~60s).
 > `.github/workflows/ci.yml` runs `./gradlew build -x test`, so `-Werror` and the Modulith wiring
-> are still checked and nothing else is. There is no nightly lane either. **`./gradlew build` on
-> your own machine is the only thing that runs the 1000+ integration tests** — run it before you
-> push, because nothing downstream will.
+> are still checked and nothing else is. ~~There is no nightly lane either.~~ → **one is written
+> as of 2026-08-06 and is not yet live**: `.github/workflows/tests.yml` runs the full
+> `./gradlew build` nightly on `[self-hosted, tcms-lab]` — the homelab box `shanks`, which is a
+> *Linux* observer and therefore a differently-shaped gate, not merely a free one. **It is inert
+> until that runner is registered** (`deploy/shanks/install-runner.sh`), so until then the
+> sentence below still holds in full. **`./gradlew build` on your own machine is the only thing
+> that runs the 1000+ integration tests** — run it before you push, because nothing downstream
+> will.
 >
 > Know what your machine cannot see. On 2026-08-01 master was red for seven consecutive CI runs on
 > a defect that **cannot fail on macOS**: the app returns an in-memory `Instant` (nanoseconds) where
