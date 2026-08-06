@@ -1,7 +1,7 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-06 · **Branch:** `master` · **Latest slice:** [§113 — the deploy learns a second
-target](handoff/113-the-deploy-learns-a-second-target.md)
+**Date:** 2026-08-06 · **Branch:** `master` · **Latest slice:** [§114 — version
+divergence](handoff/114-version-divergence.md)
 
 This file is an **index**. Every section is its own file under [`docs/handoff/`](handoff/), numbered
 by its § number, and the slice log below is where the narrative lives — one row per slice, each row
@@ -13,16 +13,18 @@ commit).
 
 ## Current state
 
-**Milestones.** M0, M0.5 and M1 are complete. M2 is complete through the rollups (§101). M2.5's
-reporting lane is complete through **R7, the inconsistency callout** (§112) — **R8, version
-divergence, is the last reporting slice in the plan.** The organization-model restatement (§97, §98,
-§99) is complete with nothing outstanding.
+**Milestones.** M0, M0.5 and M1 are complete. M2 is complete through the rollups (§101). **M2.5's
+reporting lane is COMPLETE** — R8, version divergence (§114), was the last slice in the plan, and
+R1–R8 plus F1–F2 have all shipped. What that plan deliberately does not cover is listed in its §8 and
+is unchanged. The organization-model restatement (§97, §98, §99) is complete with nothing
+outstanding. **The next slice is re-derived from the code, not from this plan's tail** (§28, §29,
+§46).
 
-**Gates, as of §112** — both run locally, and only locally:
+**Gates, as of §114** — both run locally, and only locally:
 
 | Gate | State |
 |---|---|
-| `cd backend && ./gradlew build` | **BUILD SUCCESSFUL — 1839 tests across 374 result classes, 0 failures, 0 skipped** |
+| `cd backend && ./gradlew build` | **BUILD SUCCESSFUL — 1852 tests across 377 result classes, 0 failures, 0 skipped** |
 | `cd frontend && npm run build` | clean |
 | `npm run lint` | 0 warnings |
 | `npm run test:run` | **958/958 across 70 files** |
@@ -249,3 +251,4 @@ Open actions above. The gap is deliberate; do not renumber around it.
 | [§111](handoff/111-the-aggregate-execution-report.md) | The aggregate execution report — M2.5's R6: the first report spanning more than one run, the policy implemented a **second** time in SQL and legal only because a cross-check asserts the two against each other **(nine mutations run; 5 browser rows queued — built and unverified)** |
 | [§112](handoff/112-the-inconsistency-callout.md) | The inconsistency callout, the split that is two columns, and the retries the default policy erases — M2.5's R7: three sections that must read the **un-collapsed** rows, because a policy exists to hide exactly what they are about, and one written over `resolvedCte` is empty in every project for ever **(built and unverified — 4 browser, 6 mutation rows)** |
 | [§113](handoff/113-the-deploy-learns-a-second-target.md) | The deploy learns a second target — a `lab` job that runs **on** the homelab box via a self-hosted runner (no SSH key, no stored secret), the nightly Linux gate `ci.yml` gave up, and the `target` default that had to stay `production` or every existing release command would have silently shipped elsewhere **(built and unverified — nothing has run on shanks)** |
+| [§114](handoff/114-version-divergence.md) | Version divergence — M2.5's R8 and the last reporting slice: the section reads the un-collapsed rows for R7's reason, is **wider** than the callout because §6e's harm is the blending and not the disagreement, and each row says whether that version reached the totals as a **computed** column rather than a sentence keyed on the policy's name **(built and unverified — 4 browser, 7 mutation rows, and NO RED run)** |

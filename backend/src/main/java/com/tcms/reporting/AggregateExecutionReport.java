@@ -7,11 +7,14 @@ import com.tcms.project.StatusKind;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -167,19 +170,28 @@ class AggregateExecutionReport implements ReportComputation {
 
         Totals totals = totals(projectId, selection);
         List<StatusRow> statuses = statuses(projectId, selection);
+        // Computed once and read twice — the section prints it and the metadata flags it, and two
+        // queries for one number is how a headline and its own section come to disagree.
+        List<VersionRow> divergence = versionDivergence(projectId, selection);
 
         List<ReportModel.Section> sections = new ArrayList<>();
         sections.add(resultsSection(selection, totals, statuses));
         // Second, immediately under the headline, because §6e calls it "the single most valuable
         // section" and because a reader who stops after the totals is the reader it is written for.
         sections.add(inconsistencySection(projectId, selection, totals));
+        // Third, against the section it qualifies: the callout's "Across versions" rows are a
+        // subset of these, and a reader who has just been told a case disagrees across versions is
+        // the one who needs to know which versions, and which of them the totals used.
+        sections.add(divergenceSection(totals, divergence));
         sections.add(suiteSection(projectId, selection));
         sections.add(featureSection(projectId, selection));
         sections.add(automationSection(projectId, selection, totals));
         sections.add(retrySection(projectId, selection, totals));
 
         return new ReportModel(
-                "Aggregate execution report", metadata(projectId, selection, totals), sections);
+                "Aggregate execution report",
+                metadata(projectId, selection, totals, divergence),
+                sections);
     }
 
     // =====================================================================
@@ -187,7 +199,8 @@ class AggregateExecutionReport implements ReportComputation {
     // =====================================================================
 
     private List<ReportModel.Entry> metadata(
-            UUID projectId, AggregateSelection selection, Totals totals) {
+            UUID projectId, AggregateSelection selection, Totals totals,
+            List<VersionRow> divergence) {
 
         List<ReportModel.Entry> metadata = new ArrayList<>();
         metadata.add(new ReportModel.Entry("Project", projectLabel(projectId)));
@@ -199,6 +212,12 @@ class AggregateExecutionReport implements ReportComputation {
         metadata.add(new ReportModel.Entry(
                 "Pass rate (of contributing executions)",
                 share(totals.passed(), totals.executions())));
+        // R8's flag, and it is printed even when it is zero. §6e asks the report to *flag*
+        // divergence, and a line that appears only when there is something to say is one a reader
+        // cannot tell from a build that does not compute it — the same argument that keeps every
+        // status row in the breakdown. Two reports from one project also have to line up.
+        metadata.add(new ReportModel.Entry(
+                "Cases executed at more than one version", count(divergentCases(divergence))));
         return List.copyOf(metadata);
     }
 
@@ -405,6 +424,125 @@ class AggregateExecutionReport implements ReportComputation {
     }
 
     /**
+     * <strong>Version divergence</strong> — R8, and the last section §6e's aggregate report was
+     * waiting for: <em>"otherwise you are averaging results for two different tests presented as
+     * one."</em>
+     *
+     * <p>{@code execution_fact.case_version_id} is what makes it answerable at all, and it was
+     * specified for exactly this — {@code V1}'s comment on {@code test_execution.case_version_id}
+     * calls it <strong>THE PIN</strong>: <em>"every result knows exactly which version of the case
+     * it executed — without this, editing a case silently rewrites history in every past run
+     * report."</em> Two other shipped surfaces already carry the rule in prose (the case timeline's
+     * contract text: <em>"blending results across versions reports a pass rate for a test whose text
+     * changed"</em>), so a report that blended silently would contradict them both.
+     *
+     * <h2>It reads the un-collapsed rows, for {@link #inconsistencySection}'s reason exactly</h2>
+     *
+     * <p>{@link #selectedCte} again, and the trap is the same one R7 turned on: under {@code LATEST}
+     * — the default — each case is one resolved row, one row pins one version, and a divergence
+     * section computed over the resolved set reports <strong>zero divergence in every project, for
+     * ever</strong>. The policy is what makes the divergence invisible; it is not what removes it.
+     *
+     * <h2>Divergence is wider than the callout's "Across versions" row, and deliberately</h2>
+     *
+     * <p>{@link #inconsistencySection} lists a case only when it both passed <em>and</em> failed, so
+     * its <em>Across versions</em> rows are a strict subset of these. A case that failed at v1 and
+     * failed at v2 disagrees with nothing and is still two tests averaged as one — §6e's harm is in
+     * the <em>blending</em>, not in the disagreement. So the predicate here is
+     * {@code count(DISTINCT case_version_id) > 1} and nothing about outcomes.
+     *
+     * <h2>The last column is computed, not asserted, and it is what the section is for</h2>
+     *
+     * <p>What divergence <em>costs</em> is a property of the policy, not of the selection, and it
+     * differs in kind rather than in degree:
+     *
+     * <ul>
+     *   <li>Under {@code ALL} every version's results reach the totals, so the headline pass rate is
+     *       §6e's sentence literally — one number over two different tests.
+     *   <li>Under {@code LATEST} one version survives per case, so the totals do not blend and the
+     *       older version's results are in <strong>no</strong> total in this report. That is not
+     *       harmless, it is a different fact, and a section that said "blended" would be lying.
+     *   <li>Under {@code WORST} / {@code BEST} the surviving row is chosen by severity <em>across</em>
+     *       versions, so a failure recorded against text that has since been rewritten can outrank a
+     *       pass against the current text.
+     *   <li>Under {@code LATEST_PER_CONFIG} both happen at once: one version per configuration, and
+     *       two configurations that pinned different versions blend after all.
+     * </ul>
+     *
+     * <p>Rather than branch on the policy and print a sentence about it, each row says whether it
+     * reached the totals — an {@code EXISTS} against the resolved set — and the narrative's closing
+     * sentence is chosen by whether any case has <em>more than one</em> counted version, which is
+     * the fact "the totals blend versions" actually consists of. A prose claim keyed on the policy
+     * name would be a second implementation of the policy, in English, in the one place a reader has
+     * no way to check it.
+     */
+    private ReportModel.Section divergenceSection(Totals totals, List<VersionRow> divergence) {
+        if (divergence.isEmpty()) {
+            return ReportModel.Section.text("Version divergence", totals.executions() == 0
+                    ? "No results contribute to this selection."
+                    // A positive statement for inconsistencySection's reason: this section saying
+                    // nothing is a finding, and must not read as the section having failed.
+                    : "Every case in this selection was executed at one version of its own text, so "
+                            + "no figure in this report averages results for two different tests.");
+        }
+
+        List<List<String>> rows = new ArrayList<>();
+        for (VersionRow row : divergence) {
+            rows.add(List.of(
+                    row.caseLabel(),
+                    row.versionLabel(),
+                    count(row.executions()),
+                    count(row.passed()),
+                    count(row.failed()),
+                    row.counted() ? "Counted" : "Not counted"));
+        }
+
+        return ReportModel.Section.of(
+                "Version divergence",
+                "Cases the selection executed at more than one version of their own text. Results "
+                        + "recorded against two versions are results for two different tests, so a "
+                        + "single figure over both describes neither. Like the inconsistency "
+                        + "callout, this reads every contributing execution and ignores the "
+                        + "aggregation policy, which is what makes divergence invisible rather than "
+                        + "what removes it. A case is listed whether or not its versions disagree — "
+                        + "two failures at two versions are still two tests. "
+                        + (blendsVersions(divergence)
+                                ? "Under this policy more than one version of the same case reaches "
+                                        + "the totals above, so those totals average results across "
+                                        + "versions."
+                                : "Under this policy one version of each case reaches the totals "
+                                        + "above and the rest do not, so the totals average nothing "
+                                        + "— but the results marked Not counted are in no figure in "
+                                        + "this report except this table."),
+                new ReportModel.Table(
+                        List.of("Case", "Version", "Executions", "Passed", "Failed",
+                                "Counted in the totals"),
+                        rows));
+    }
+
+    /** How many distinct cases the divergence rows describe — the metadata flag's number. */
+    private static long divergentCases(List<VersionRow> divergence) {
+        return divergence.stream().map(VersionRow::caseId).distinct().count();
+    }
+
+    /**
+     * Whether the resolved totals actually span more than one version of some case.
+     *
+     * <p>Not "is the policy ALL": {@code LATEST_PER_CONFIG} blends whenever two configurations
+     * pinned different versions and does not otherwise, and {@code ALL} blends nothing when the
+     * divergent rows fall outside the selection's own narrowing. The question is about the rows.
+     */
+    private static boolean blendsVersions(List<VersionRow> divergence) {
+        Map<UUID, Long> counted = new LinkedHashMap<>();
+        for (VersionRow row : divergence) {
+            if (row.counted()) {
+                counted.merge(row.caseId(), 1L, Long::sum);
+            }
+        }
+        return counted.values().stream().anyMatch(versions -> versions > 1);
+    }
+
+    /**
      * <strong>The manual and automated split</strong> — §6e's <em>"manual vs automated split"</em>,
      * and it is a cross-tab because the fact log holds <em>two</em> columns that both read like the
      * answer and mean different things.
@@ -539,15 +677,21 @@ class AggregateExecutionReport implements ReportComputation {
      * selection covers, with no policy applied.
      *
      * <p>Split out of {@link #resolvedCte} in R7, and the split is load-bearing rather than tidy.
-     * Three sections read this and three read the resolved set, and which one a section reads decides
-     * whether it can answer its question at all: an inconsistency, a first attempt and a retry are all
-     * properties of the executions the policy <em>discards</em>. A caller reaching for
-     * {@code resolvedCte} where it wanted this one gets a section that is empty under the default
-     * policy and looks like a project with nothing to report.
+     * Which of the two a section reads decides whether it can answer its question at all: an
+     * inconsistency, a first attempt, a retry and a version divergence are all properties of the
+     * executions the policy <em>discards</em>. A caller reaching for {@code resolvedCte} where it
+     * wanted this one gets a section that is empty under the default policy and looks like a project
+     * with nothing to report.
+     *
+     * <p>Three sections read this one — the inconsistency callout, the version divergence and the
+     * retries — while the totals, the status breakdown, the two failure groupings and the automation
+     * split read the resolved set. R8's {@link #versionDivergence} is the one query that reads
+     * <em>both</em>, on purpose: what diverged comes from here, and whether the totals used it comes
+     * from there.
      *
      * <p>{@code case_version_id}, {@code automation_status} and {@code source} are projected for
-     * R7's three sections. They cost nothing to carry: the policy window in {@link #resolvedCte}
-     * passes {@code s.*} through, so the resolved set gains them too.
+     * R7's three sections and R8's fourth. They cost nothing to carry: the policy window in
+     * {@link #resolvedCte} passes {@code s.*} through, so the resolved set gains them too.
      */
     private String selectedCte(AggregateSelection selection) {
         return """
@@ -831,6 +975,99 @@ class AggregateExecutionReport implements ReportComputation {
         return List.copyOf(cases);
     }
 
+    /**
+     * One row per (case, version) for every case the selection ran at more than one version, over
+     * the <em>un-collapsed</em> rows — {@link #divergenceSection} is the argument for every clause.
+     *
+     * <p>{@code diverged} is the {@code HAVING} that decides who is listed and says nothing about
+     * outcomes; {@code per_version} is what is printed; and the {@code EXISTS} against
+     * {@code resolved} is the only place in this class where the two CTEs meet. That meeting is the
+     * point: it answers "did this version reach the totals" from the resolved set itself rather than
+     * from a rule about the policy written twice.
+     *
+     * <p>Labels are resolved in Java through {@link ExecutionSource} — {@link #featureGroups}' rule,
+     * and the ordering therefore has to be Java's too, since {@code version_no} does not exist in
+     * this query. Cases with the most versions first, then the most failures, because this table is
+     * read to decide what to look at; versions ascending inside a case, because that is the order
+     * they were written in and a divergence is read as a sequence.
+     */
+    private List<VersionRow> versionDivergence(UUID projectId, AggregateSelection selection) {
+        Query query = entities.createNativeQuery(resolvedCte(selection) + """
+                , diverged AS (
+                    SELECT s.case_id
+                      FROM selected s
+                     GROUP BY s.case_id
+                    HAVING count(DISTINCT s.case_version_id) > 1
+                )
+                , per_version AS (
+                    SELECT s.case_id, s.case_version_id,
+                           count(*)                                         AS executions,
+                           count(*) FILTER (WHERE s.counts_as_pass)         AS passed,
+                           count(*) FILTER (WHERE s.status_kind = 'FAILED') AS failed
+                      FROM selected s
+                      JOIN diverged d ON d.case_id = s.case_id
+                     GROUP BY s.case_id, s.case_version_id
+                )
+                SELECT v.case_id, v.case_version_id, v.executions, v.passed, v.failed,
+                       EXISTS (SELECT 1 FROM resolved r
+                                WHERE r.case_id = v.case_id
+                                  AND r.case_version_id = v.case_version_id) AS counted
+                  FROM per_version v
+                """)
+                .setParameter("projectId", projectId);
+        selection.bind(query);
+
+        List<Object[]> raw = new ArrayList<>();
+        Set<UUID> caseIds = new LinkedHashSet<>();
+        Set<UUID> versionIds = new LinkedHashSet<>();
+        for (Object result : query.getResultList()) {
+            Object[] row = (Object[]) result;
+            raw.add(row);
+            caseIds.add(UUID.fromString(row[0].toString()));
+            versionIds.add(UUID.fromString(row[1].toString()));
+        }
+        if (raw.isEmpty()) {
+            return List.of();
+        }
+
+        Map<UUID, ExecutionSource.CaseLabel> labels = source.caseLabels(projectId, caseIds);
+        Map<UUID, Integer> numbers = source.caseVersionNumbers(projectId, versionIds);
+
+        List<VersionRow> rows = new ArrayList<>();
+        Map<UUID, Long> versionsPerCase = new LinkedHashMap<>();
+        Map<UUID, Long> failuresPerCase = new LinkedHashMap<>();
+        for (Object[] row : raw) {
+            UUID caseId = UUID.fromString(row[0].toString());
+            UUID versionId = UUID.fromString(row[1].toString());
+            ExecutionSource.CaseLabel label = labels.get(caseId);
+            rows.add(new VersionRow(
+                    caseId,
+                    // A case that no longer resolves prints its id rather than vanishing —
+                    // inconsistencySection's rule, and dropping the row would take the finding.
+                    label == null ? caseId.toString() : label.display(),
+                    versionId,
+                    numbers.get(versionId),
+                    number(row[2]),
+                    number(row[3]),
+                    number(row[4]),
+                    Boolean.TRUE.equals(row[5])));
+            versionsPerCase.merge(caseId, 1L, Long::sum);
+            failuresPerCase.merge(caseId, number(row[4]), Long::sum);
+        }
+
+        rows.sort(Comparator
+                .comparingLong((VersionRow row) -> -versionsPerCase.get(row.caseId()))
+                .thenComparingLong(row -> -failuresPerCase.get(row.caseId()))
+                .thenComparing(VersionRow::caseLabel)
+                // Total, and never consulted for two rows of one case — the id is what the label
+                // was derived from, so this is the tiebreak that cannot itself tie.
+                .thenComparing(row -> row.caseId().toString())
+                // An unresolvable version sorts last: it is the absence of a number, not v0.
+                .thenComparingInt(row -> row.versionNo() == null ? Integer.MAX_VALUE : row.versionNo())
+                .thenComparing(row -> row.versionId().toString()));
+        return List.copyOf(rows);
+    }
+
     /** The cross-tab of {@link #automationSection}. Alphabetical, for the reason stated there. */
     private List<SplitRow> automationSplit(UUID projectId, AggregateSelection selection) {
         Query query = entities.createNativeQuery(resolvedCte(selection) + """
@@ -965,6 +1202,30 @@ class AggregateExecutionReport implements ReportComputation {
                 return "Across configurations and versions";
             }
             return configurations > 1 ? "Across configurations" : "Across versions";
+        }
+    }
+
+    /**
+     * One row of the version-divergence table — one case, at one of the versions it ran at.
+     *
+     * @param versionNo null when the version no longer resolves; the id is printed instead, for
+     *     {@code caseLabel}'s reason one column over
+     * @param counted whether this version reached the report's totals under the policy in force —
+     *     computed from the resolved set, never inferred from the policy's name
+     */
+    private record VersionRow(
+            UUID caseId,
+            String caseLabel,
+            UUID versionId,
+            Integer versionNo,
+            long executions,
+            long passed,
+            long failed,
+            boolean counted) {
+
+        /** {@code v2}. The number a person is shown on the case's own history screen (§35). */
+        String versionLabel() {
+            return versionNo == null ? versionId.toString() : "v" + versionNo;
         }
     }
 

@@ -19,9 +19,9 @@ import org.springframework.stereotype.Component;
  * <p>ArchUnit permits a cross-module dependency only toward {@code tenancy}, {@code identity} and
  * {@code project} (plan §3), and this module declares {@code tenancy} alone. The projection below
  * nonetheless names {@code test_execution} and {@code test_run} ({@code execution}),
- * {@code test_case} and {@code suite} ({@code repository}), {@code case_status} and
- * {@code case_classification} ({@code project} / {@code repository}) — six tables across three
- * modules. Concentrating every one of them in a single file is what makes the coupling reviewable,
+ * {@code test_case}, {@code test_case_version} and {@code suite} ({@code repository}),
+ * {@code case_status} and {@code case_classification} ({@code project} / {@code repository}) —
+ * seven tables across three modules. Concentrating every one of them in a single file is what makes the coupling reviewable,
  * and what makes it one file to rewrite on the day these facts arrive as events instead.
  *
  * <h2>Native SQL, and why there is no entity for {@code execution_fact} either</h2>
@@ -410,6 +410,58 @@ class ExecutionSource {
         String display() {
             return key + " — " + title;
         }
+    }
+
+    /**
+     * Version <em>numbers</em> for the case versions a report is about to distinguish between —
+     * R8's half of {@link #caseLabels}, and the third method to sit here for the same stated reason.
+     *
+     * <p>{@code execution_fact.case_version_id} is <strong>the pin</strong> — {@code V1}'s own comment
+     * on {@code test_execution.case_version_id} says so in those words: <em>"every result knows
+     * exactly which version of the case it executed — without this, editing a case silently rewrites
+     * history in every past run report"</em>. It is a UUID, and a UUID is unusable as the thing a
+     * divergence section is <em>about</em>: <em>"executed at 6f2c… and at a1b9…"</em> tells a reader
+     * that two versions exist and nothing whatever about which came first, which is the only fact
+     * that makes the divergence readable. {@code version_no} is the number the product already shows
+     * a person on the case's own history screen (§35), so this is the label they can act on.
+     *
+     * <p>{@code execution_fact} grows no {@code case_version_no} column, for
+     * {@link #caseLabels}' first reason and one stronger: unlike a key or a title, the number is
+     * <strong>immutable</strong> and could therefore be frozen honestly — but a star schema
+     * duplicates the dimensions it aggregates <em>by</em>, and nothing groups by version number.
+     * The id is the dimension; the number is a label on it.
+     *
+     * <p><strong>No {@code deleted_at} predicate</strong> and <strong>bounded by {@code project_id}</strong>
+     * — {@link #findRun}'s and {@link #caseLabels}' calls rather than second opinions, and the join
+     * to {@code test_case} is the only route to a project bound, since {@code test_case_version}
+     * carries {@code company_id} and no {@code project_id}. RLS scopes to the company and no
+     * further.
+     *
+     * @param versionIds the ids to number; an empty collection is not queried at all
+     * @return numbers by id, missing entries for any id that no longer resolves — the caller prints
+     *     the id rather than dropping the row, for {@link AggregateExecutionReport}'s stated reason
+     */
+    Map<UUID, Integer> caseVersionNumbers(UUID projectId, Collection<UUID> versionIds) {
+        if (versionIds.isEmpty()) {
+            return Map.of();
+        }
+        List<?> rows = entities.createNativeQuery("""
+                SELECT v.id, v.version_no
+                  FROM test_case_version v
+                  JOIN test_case c ON c.id = v.case_id
+                 WHERE c.project_id = :projectId
+                   AND v.id IN (:versionIds)
+                """)
+                .setParameter("projectId", projectId)
+                .setParameter("versionIds", versionIds)
+                .getResultList();
+
+        Map<UUID, Integer> numbers = new LinkedHashMap<>();
+        for (Object result : rows) {
+            Object[] row = (Object[]) result;
+            numbers.put(UUID.fromString(row[0].toString()), ((Number) row[1]).intValue());
+        }
+        return Map.copyOf(numbers);
     }
 
     int recomputeFailingRepeatedly(int window, Instant now) {

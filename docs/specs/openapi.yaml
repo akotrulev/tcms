@@ -3046,7 +3046,7 @@ paths:
                       no recorded result is not in it at all** — a star schema holds facts, not
                       scope, so there is no "not run" here the way a plan page has one.
 
-                      Since R7 it carries three further sections, and **all three deliberately
+                      Since R7 it carries four further sections, and **all four deliberately
                       ignore the `policy` parameter** — they are about the executions a policy
                       collapses, so applying one would leave them empty under the default:
 
@@ -3055,6 +3055,19 @@ paths:
                         inside one configuration and version (instability) or across one of those
                         axes (a difference, not a flake). A case that was blocked and later passed
                         is **not** listed: nothing failed.
+                      - **Version divergence** (R8) — cases the selection executed at more than
+                        one version of their own text, one row per case and version, because
+                        results recorded against two versions are results for two different tests
+                        and one figure over both describes neither. **Wider than the callout's
+                        *Across versions* rows**, which are a strict subset: a case that failed at
+                        both versions disagrees with nothing and is still two tests. Each row also
+                        says whether that version's results reached the report's totals, which is
+                        the only part of the section the policy moves — under `ALL` every version
+                        is counted and the totals genuinely average across versions, while under
+                        `LATEST` one version is counted per case and the rest appear in no total
+                        in the report. The header block carries the count as
+                        `Cases executed at more than one version`, printed **even when it is
+                        zero** so that two reports from one project line up.
                       - **Manual and automated** — a cross-tab of the case's `automationStatus`
                         as it stood when the result was recorded against the run's `source`, not
                         one column relabelled. The two disagree in both directions, and such a row

@@ -2,14 +2,15 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-06 (**R7, §112** — the aggregate report's three variability sections, the
-`selectedCte` split and `ExecutionSource.caseLabels`; R6 phases 1–4 / §111 and §108 before it)
-**Baseline commit:** `d6044d8` (R6 phase 4) **+ the R7 commit this line ships in** (its own SHA
-cannot be written into itself; per `CLAUDE.md`, trust the body over the header and re-grep what a
-later commit could have moved).
-**§112 (R7) touched three files** — `AggregateExecutionReport`, `ExecutionSource`,
-`AggregateVariabilityTest` — plus contract prose. **No migration, no entity, no endpoint, no key, no
-frontend code**; `V35` still head, `V36` still free, policy count still 61.
+**Last verified:** 2026-08-06 (**R8, §114** — version divergence, which completes M2.5's reporting
+plan; R7/§112, R6 phases 1–4 / §111 and §108 before it)
+**Baseline commit:** `c1bc739` (§113, the deploy's second target — **a concurrent strand's commit**,
+not this lane's) **+ the R8 commit this line ships in** (its own SHA cannot be written into itself;
+per `CLAUDE.md`, trust the body over the header and re-grep what a later commit could have moved).
+**§114 (R8) touched three files** — `AggregateExecutionReport`, `ExecutionSource`,
+`AggregateVersionDivergenceTest` — plus contract prose. **§112 (R7) touched the same three** (with
+`AggregateVariabilityTest`). Neither carried a migration, an entity, an endpoint, a key or any
+frontend code; `V35` still head, `V36` still free, policy count still 61.
 **§101's backend half is phases 1, 2 and 4** — `V34` + `V35`, both rollup writers, and the read
 switch. Phase 3 is contract-only and phase 5 is the client. The seam list's first entry records it.
 **§99's backend half is phase 2 alone** — two request fields, one union query, and no migration;
@@ -89,6 +90,31 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   no context, needs no database, strips comments first (the mail block legitimately quotes
   `${SMTP_HOST:-}` when explaining compose), and its negative case has been run. **Add config
   invariants there, not to a reading.** `#confirmed`
+
+- **R8 (§114) — VERSION DIVERGENCE, AND M2.5's REPORTING PLAN IS NOW COMPLETE (R1–R8, F1–F2).**
+  A sixth section on `AggregateExecutionReport`, over `selectedCte` for R7's reason exactly. **No
+  migration, no key, contract change is prose** (`gen:api` moved 14 lines of JSDoc, no type);
+  `AggregateVersionDivergenceTest`, prefix **`c4`**, slug `avd-`, 13 tests.
+  - **THE PREDICATE IS `count(DISTINCT case_version_id) > 1` AND SAYS NOTHING ABOUT OUTCOMES**, so
+    this section is strictly **wider** than R7's *Across versions* rows. A case that failed at v1 and
+    again at v2 disagrees with nothing and is still two tests averaged as one — §6e's harm is the
+    blending, not the disagreement.
+  - **WHAT DIVERGENCE COSTS IS A PROPERTY OF THE POLICY, AND IT IS COMPUTED, NEVER ASSERTED.** Four
+    different consequences (`ALL` blends · `LATEST` discards · `WORST`/`BEST` can keep a failure
+    against rewritten text · `LATEST_PER_CONFIG` does both), so each row carries a `Counted in the
+    totals` column — an `EXISTS` against `resolved` — and the narrative's closing sentence follows
+    **`blendsVersions(rows)`, never `policy == ALL`**. A sentence keyed on the policy's name is a
+    second implementation of the policy in English, where no reader can check it.
+  - `versionDivergence` is **the one query in the class reading BOTH CTEs**: what diverged from
+    `selected`, what the totals did with it from `resolved`.
+  - **`ExecutionSource.caseVersionNumbers(projectId, versionIds)`** — the seam's third method,
+    taking its table count to **seven**. `execution_fact` grows **no `case_version_no` column**:
+    R7's mutability argument does not apply (the number is immutable), it is refused because a star
+    schema duplicates the dimensions it aggregates *by* and nothing groups by version number.
+  - **THIS SLICE HAS NO RED RUN** — tests written after the implementation, all 13 green first time.
+    The substitute is structural (`theFixtureHolds` proves the resolved set is one row per case), and
+    **R8-1 in the mutation queue is the only route to a measurement**. Seven mutation rows, four
+    browser rows (`M6-30`…`M6-33`), none run.
 
 - **R7 (§112) — WHICH CTE A SECTION READS IS THE WHOLE SLICE, AND `selectedCte` IS THE NEW SEAM.**
   `AggregateExecutionReport` grew three sections — *Inconsistent results*, *Manual and automated*,
@@ -1279,6 +1305,21 @@ exist**, and the slice plan's decision E declines to create it for two storage p
 
 ## Session log
 
+- 2026-08-06 · EXTEND · **Version divergence** (§114, **R8** — the last slice in M2.5's reporting
+  plan). A sixth section on `AggregateExecutionReport` over `selectedCte`, one row per (case,
+  version) for cases the selection ran at more than one version, plus a header flag printed even at
+  zero. New: `ExecutionSource.caseVersionNumbers` (the seam's third method, seventh table),
+  `AggregateVersionDivergenceTest` (13 tests, prefix `c4`). **No migration, no key, no entity, no
+  frontend code**; contract change is prose. Gate: **1852 across 377 classes, 0 failures, 0 skipped**
+  (1839/374 → 1852/377); frontend 958/958, run *after* the backend rather than beside it.
+  **The finding is that what divergence costs is a property of the policy and differs in kind across
+  the five**, so the row carries a computed `Counted in the totals` column and the narrative follows
+  `blendsVersions(rows)` rather than the policy's name — prose keyed on a policy is a second
+  implementation of it in a place no reader can check. **The slice has NO RED run** (tests written
+  after the code, all green first time); recorded in §114 §5 and in mutation row R8-1, which is the
+  only route to a measurement. 7 mutation + 4 browser rows queued, none run.
+  Landed alongside a **concurrent strand's §113** (the deploy's second target), which is why this
+  slice is §114: the number was taken between writing the section file and indexing it.
 - 2026-08-05 · EXTEND · **Conditions get a writer** (§95 phase 1) — `POST` + `PUT
   /projects/{projectId}/conditions`, both on `library:manage`, the `PUT` with `If-Match` and a 409.
   New: `ConditionEdit`, `ConditionWriteRequest`, `ConditionUsage`, `ConditionWriteEndpointTest`

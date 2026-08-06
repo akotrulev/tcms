@@ -340,6 +340,39 @@ checkable by hand against a fixture whose every execution is listed in one place
 
 ---
 
+## 18. R8's version divergence — seven mutations, none run, and **no RED run to lean on**
+
+R8 adds a sixth section reading the same un-collapsed row set R7 introduced, plus the one query in
+the class that reads **both** CTEs: what diverged comes from `selected`, whether the totals used it
+comes from `resolved`. `AggregateVersionDivergenceTest` (13 tests, prefix `c4`) is written around it.
+
+**Stated rather than smoothed over: this slice had no RED run.** The tests were written after the
+implementation, so unlike R7 — where twelve of fifteen failed before the sections existed — nothing
+here has been observed failing. What stands in for it is **structural and not evidence**:
+`theFixtureHolds` asserts five executions under `LATEST` over five cases, so the resolved set holds
+exactly one row per case, so `count(DISTINCT case_version_id) > 1` over it is unsatisfiable and the
+section would be empty. That argument is sound and it is still an argument. **R8-1 is the only thing
+that can turn it into a measurement**, and it therefore carries more weight here than R7-1 did.
+
+| # | Mutation | Expected |
+|---|---|---|
+| R8-1 | `versionDivergence`'s `diverged` and `per_version` read `FROM resolved` instead of `FROM selected` | **THE row, and the one this section stands or falls on.** Under the default `LATEST` every case is one row at one version, so the section empties, the header flag goes to 0 and the report claims a project that has never edited a test between runs. Should redden `theSectionSurvivesTheDefaultPolicy`, `divergenceIsWiderThanTheInconsistencyCallout`, `theMostDividedCaseIsFirst`, `theMetadataFlagsTheCount` and every test in `Counted`. If it reddens **only** the cross-policy equalities, the tests are asserting agreement between two wrong answers. |
+| R8-2 | `HAVING count(DISTINCT s.case_version_id) > 1` → the callout's predicate (`passed > 0 AND failed > 0`) | `STILL_FAILING` — failed at both versions — drops out, and the section becomes a duplicate of the inconsistency callout's *Across versions* rows. Should redden `divergenceIsWiderThanTheInconsistencyCallout`. §6e's harm is the **blending**, not the disagreement. |
+| R8-3 | The `EXISTS` against `resolved` drops its `r.case_version_id = v.case_version_id` term, matching on the case alone | Every listed version reads **Counted** under every policy, and the narrative then claims the totals average across versions when under `LATEST` they average nothing. Should redden `theDefaultPolicyCountsOneVersionPerCase`, `worstCanCountTheOlderVersion` and half of `latestPerConfigBlendsAcrossConfigurations`. |
+| R8-4 | `blendsVersions(...)` → `selection.policy() == AggregationPolicy.ALL` — the shortcut the method's javadoc exists to refuse | Expected to redden **exactly one assertion**: `latestPerConfigBlendsAcrossConfigurations`'s narrative check, where two configurations pinned different versions and the totals blend under a policy that is not `ALL`. A narrow blast radius is the *correct* outcome here. **If it reddens nothing at all, the fixture's second configuration is not doing its job** and the finding is in `PER_CONFIG`, not in the code. |
+| R8-5 | The Java comparator: drop the `-versionsPerCase` term; then, separately, the `versionNo` term | Two runs. The first should move `THREE_VERSIONS` out of the first three rows (`theMostDividedCaseIsFirst`); the second should let a case's versions come back in id order rather than v1, v2, v3 — **and may come back GREEN by luck**, since `gen_random_uuid()` orders arbitrarily. A green here is not a passing mutation, it is an unrepeatable test, and the repair is a deterministic version id in the fixture. |
+| R8-6 | `metadata` emits the divergence entry only when the count is non-zero | Should redden the second assertion of `theMetadataFlagsTheCount`. Recorded as its own row because "print it even when it is zero" is exactly the kind of line a later tidy removes as dead, and the failure mode — a report where the flag's absence and the flag's zero look identical — is this repository's most repeated shape. |
+| R8-7 | `caseVersionNumbers`' `AND c.project_id = :projectId` dropped | A sibling project's version number on this project's report. **Expected to redden nothing** — R7-6 one method over, for the same reason: the class seeds one project and RLS scopes to the company, not the project. Recorded as a **gap**, and it is now the *fifth* file layering this predicate with nothing checking any of them. The row that closes both is a two-project fixture, and it should be written once for the seam rather than twice for its methods. |
+
+**Also not covered, and named.** There is no second implementation of version divergence anywhere in
+the product, so nothing plays `AggregateExecutionCrossCheckTest`'s role here — the counts are
+asserted against literals, which §46 warns about. What makes it defensible is that the fixture's
+eleven executions are each listed in one place in the class header and the nine printed rows are
+countable by hand. What is **not** covered by anything is the interaction of divergence with the
+`suitePaths` and `featureIds` facets: every test in this class narrows by policy or by date only.
+
+---
+
 ## 14. §106's board drag — one frontend row, and the backend rows it does NOT owe
 
 §106 replaced the board's native HTML5 drag with `@dnd-kit` and made the move optimistic. **No
