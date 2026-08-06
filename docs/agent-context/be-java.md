@@ -2,7 +2,7 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-06 (§108 — the JWT signing key defect; §101 phases 1–4 before it)
+**Last verified:** 2026-08-06 (**R6 phase 1** — the aggregate execution report; §108 before it)
 **Baseline commit:** `7f43c28` (§101 phase 5) **+ the doc commit this line ships in** (its own SHA
 cannot be written into itself; per `CLAUDE.md`, trust the body over the header and re-grep what a
 later commit could have moved).
@@ -85,6 +85,38 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   no context, needs no database, strips comments first (the mail block legitimately quotes
   `${SMTP_HOST:-}` when explaining compose), and its negative case has been run. **Add config
   invariants there, not to a reading.** `#confirmed`
+
+- **R6's AGGREGATE REPORT SHIPS THE AGGREGATION POLICY A SECOND TIME, IN SQL (phase 1).**
+  `reporting.AggregateExecutionReport` (`type()` = `aggregate_execution`) + `AggregateSelection` +
+  a duplicated `reporting.AggregationPolicy`. **No migration — `V35` still head, `V36` still free**;
+  policy count **61**; no contract change in phase 1; no new key. It became requestable **by
+  existing**: `ReportComputations` is a registry over every `ReportComputation` bean, so nothing in
+  the controller, the validation or a list was edited — which is what R3 built that seam for.
+  - **The enum is duplicated and the ALGORITHM is not** (slice-plan decision D). ERD §0.2 forbids
+    importing `execution`'s, and decision E declines a `shared` module for one enum. The policy is
+    resolved in **one window function over `execution_fact`**; `PlanStatisticsService.resolve` stays
+    the only Java copy. The `ORDER BY` is written to line up with `resolve`'s comparator clause by
+    clause and the class header carries the mapping table — **check it whenever either side moves.**
+  - **`AggregateExecutionCrossCheckTest` is what makes the duplication legal**, asserting the two
+    against **each other** over five policies. **Prefix `c1`, slug `aer-`.**
+  - **A MUTANT FOUND THE FIXTURE VACUOUS AND THE REPAIR IS LOAD-BEARING.** Inverting `LATEST` to
+    ASC — each case resolved to its *oldest* result — passed the whole class, because the fixture's
+    two multi-result cases were exact mirrors (fail→pass, pass→fail) and reversing time swapped
+    *which* case passed without moving a single total. `UNBLOCKED` (blocked→passed) is the row that
+    breaks the symmetry. **Do not trim it.**
+  - **THREE ASYMMETRIES WITH `PlanStatisticsService`, ALL DELIBERATE.** (1) the fact log has no
+    *unrecorded* rows and `resolve` does, so the two agree on **recorded** results only; (2) `notRun`
+    is scope-minus-touched and a star schema has no scope, so this report's denominator is
+    *contributing executions*, named in the label and the narrative; (3) **`UUID` orders differently
+    in Java (signed halves) and Postgres (unsigned bytes)**, so the `execution_id` tiebreak can pick
+    different rows — reachable as a *count* only under `LATEST`/`LATEST_PER_CONFIG` with tied
+    timestamps and differing statuses. Fixture timestamps are distinct for exactly that reason.
+  - **`LEFT JOIN LATERAL unnest(...)` with an explicit empty-array arm** for failures-by-feature: a
+    plain `unnest` drops the unclassified row and the section then reads as a project that
+    classified everything — §96's `JOIN suite` defect in a second shape. Labels come from
+    `ClassificationValueRepository` (`project` is an allowed dependency), **not** a SQL join, so
+    `execution_fact` stays the only table the class names; `findAllById` on purpose, because a
+    retired feature still named last quarter's failures.
 
 - **THE M2 ROLLUPS HAVE WRITERS SINCE §101, AND THE TWO ARE NOT THE SAME SHAPE.**
   `reporting.RollupRefreshService` (a sibling of `ExecutionFactRefreshService`, driven by the same
@@ -1245,6 +1277,17 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   flight; both wrote `backend/build/` and the `Could not write XML test results` failures read as
   test failures. CLAUDE.md's one-build-one-daemon rule, hit directly.
   **Zero mutations run inline; 4 backend rows queued — built and unverified.**
+- 2026-08-06 · EXTEND · The aggregate execution report (**R6 phase 1**) — the first report spanning
+  more than one run, and the slice that spends decision D. New: `AggregateExecutionReport`,
+  `AggregateSelection`, a duplicated `reporting.AggregationPolicy`; `ReportParameters` gains
+  `idList` / `textList` / `optionalInstant`. **No migration (`V36` still free), no contract change,
+  no key, policy count 61.** The report is registered by *existing* — `ReportComputations` is a
+  registry, so no list was edited. `AggregateExecutionCrossCheckTest` (prefix `c1`) is the oracle;
+  **two mutants were run and the second proved the fixture vacuous**, which is why `UNBLOCKED`
+  exists. **§19's prefix collision, sixth instance**: `6a` is `CaseListEndpointTest`'s and the full
+  suite went red in 64 tests of an unrelated class before the move to `c1`. Gate: **1806 across 363
+  classes, 0 failures, 0 skipped** (1795 → 1806). **Still owed by R6: the contract's `parameters`
+  schema for this type**, and R7/R8 remain unstarted.
 - 2026-08-04 · EXTEND · The HTML renderer and the report header (§88) — **R4**, three phases, three
   commits, backend 1615 → **1628** (320 classes), frontend 705/705. New: `ReportHeader`,
   `ReportDocument`, `ReportHeaders`, `HtmlReportRenderer`; `ReportRenderer.render` takes a document;
