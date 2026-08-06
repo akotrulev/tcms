@@ -268,3 +268,86 @@ drop a row it cannot place?* — is still a fair question, it just cannot be rea
 side. It now records the trigger as the reason, and the tree's tolerance of an unplaceable row stays
 unobserved and unreachable. The edge that did land (Payments Squad under Checkout Squad, before the
 closing edge was refused) was undone; all four teams are back at the root.
+
+---
+
+## F9 — A suite's conditions can be read but never written, through any client
+
+**Severity: high.** **Product gap**, found driving `A1-2`.
+
+`GET .../suites/{id}` serves a `conditions` array (`Suite.conditions` in the contract, described as
+*"Suite-level conditions, inherited by the cases filed in this suite"*) and the schema explicitly
+argues for the feature — §98's whole paragraph on why inheritance does not widen past the filed arm.
+The database backs it: `suite_condition` exists, has its own RLS policy, and
+`case_condition_optout` FKs to it for the per-case override.
+
+**Nothing writes it.** `SuiteInput` — the body `POST`/`PATCH .../suites` accepts — has exactly three
+fields: `name`, `tagRules`, `caseIds`. No `conditions`, `preconditions`, or `postconditions`. Checked
+three ways, all agreeing:
+
+1. **The suite Rename dialog** (the only edit surface the UI has for a suite) has Name, Description,
+   Tag rules. No condition control anywhere, confirmed by opening it on `Cart`.
+2. **The contract's own `SuiteInput` schema** has no field for it — not merely hidden, not present in
+   the OpenAPI document at all.
+3. **Sent anyway, over the wire**: `PATCH .../suites/{id}` with a `preconditions` array in the body
+   returns `200` with `conditions: []` unchanged — the server drops the unknown field silently rather
+   than erroring, so a client that guessed the field name would believe it worked.
+
+**This is exactly what `A1-2` was written to catch** (*"If a suite cannot carry a condition through
+the UI, that is the finding"*), and it is real: the read side, the schema comment, the DDL and the
+RLS policy all describe a feature whose write path was never built. `M2-22`'s inheritance check
+(a case filed in `Cart` renders inherited conditions) is consequently **undriveable on this
+instance** — there is no suite condition to inherit, and none can be created.
+
+**Not fixed here.** The fix is a slice: either extend `SuiteInput` with a `conditions` field mirroring
+`TestCaseInput`'s, or a dedicated `PUT .../suites/{id}/conditions` endpoint if the two should not
+share a save.
+
+---
+
+## A1 — the repository: results
+
+Fixture built through the real UI and API: ten suites (flat, alphabetical, matching `M2-37`'s
+charter order exactly), 26 `OLB` cases + 3 `MOB` cases, three conditions, tags. `TC-1` authored by
+`engineer`, `TC-2` by `lead`, `TC-3`'s `created_by` nulled by SQL (nothing the API offers can produce
+it) — `L1-6`/`L1-7`'s fixture. Suite counts: Card capture 3, Cart 9, Checkout 3, Legacy card flows 2,
+Partial refunds 2, Payments 3 (files 0, claims by tag rule), Refunds 3, Settlement 2, Smoke 2 (files
+0, claims by tag rule), Unmatched automation 0, unfiled 2.
+
+| Row | Verdict | Note |
+|---|---|---|
+| `M2-6` | not fully driven | Deferred — needs a second pass as `lead` to compare panels; see L1-19 later. |
+| `M2-7` | ✅ PASS | Mortgages under Lending renders indented; `psql` confirms `path` is the parent's plus a `v…` label. |
+| `M2-8` | ✅ PASS | 支付 accepted and rendered. |
+| `M2-9` | ✅ PASS | Second "Mortgages" under Lending refused on the name field (*"Another value here already has that name."*); under Payments, accepted. |
+| `M2-10` | ✅ PASS | Retiring Lending with a child → 409 *"1 value sit under this one."* Child then parent → both 204, gone and staying gone on reload. |
+| `M2-11` | ✅ PASS | `#b7791f` → amber dot. `red` → refused on the colour field: *"Use a six-digit hex colour, like #b7791f."* |
+| `A1-1` | ✅ PASS | Payments, Checkout, Refunds added; Lending/Mortgages left in place. |
+| `M2-41` | ✅ PASS | Dialog titled "New suite", no parent field, has Tag rules inline. |
+| `M2-37` | ✅ PASS | Flat, sorted, exact charter order. |
+| `L0-4` | ✅ PASS | `psql`: `DISTINCT lifecycle_status` over the ten suites is `DRAFT` alone. |
+| `M2-42` | ✅ PASS | Rename dialog: Name, Description, Tag rules only — no parent control. |
+| `M2-40` | ✅ PASS | Kebab: Execution history, Rename, Submit for review, Deprecate, Delete. No "New suite inside". |
+| `M2-12`…`M2-13` | ✅ PASS | New case opens on one blank row; a second blank row appears after the first keystroke, exactly one. |
+| `M2-16` | ✅ PASS | Title + suite, no step → *"Add at least one step, or switch to Gherkin."* rendered in the step panel. |
+| `M2-17` | ✅ PASS | Step typed with leading/trailing spaces on all three fields → detail page shows one trimmed step. |
+| `M2-25` | ✅ PASS | Condition created from the case editor's `+`, attached and titled immediately. |
+| `M2-26` | ✅ PASS | Blank title and all-blank Actions both refused on the field. |
+| `M2-20` | ✅ PASS | Two preconditions attached, order preserved. |
+| `M2-21` | ✅ PASS | "Both" scope: attaching the same condition to pre- and postconditions both succeeds; a precondition-only one is not offered in the postcondition picker. |
+| `A1-2` | ❌ **UNDRIVEABLE — see F9** | No control anywhere attaches a condition to a suite, and the contract has no field for it. |
+| `M2-38` | ✅ PASS | Smoke: rail "2", grid "2 cases" — agree. |
+| `M2-39` | ✅ PASS | Payments: grid lists the two cases filed under Refunds/Card capture that carry the tag. |
+| `M2-43` | ✅ PASS | Deleting Smoke (claims 2 by tag, files 0) succeeds; both cases still in the grid afterward. Suite recreated with its rule for `A3`/`L4-44`. |
+| `M2-44` | ✅ PASS | Deleting Cart (9 filed) → 409 *"This suite still holds 9 cases."* — no clause about child suites. |
+
+**Not driven this pass** (time-bounded, recorded rather than silently skipped): `M2-9`'s UI screenshot
+of the leaf-name-shared-across-parents render, `M2-14`/`M2-15`/`M2-18`/`M2-19`/`M2-22`/`M2-23`/`M2-24`
+(step-suggestion popup, drag-reorder, condition detach/reorder — `M2-22` is additionally blocked by
+F9), `M2-1`…`M2-5` (classification save/version rows beyond the one Feature tick already exercised
+building the fixture), `M2-27`/`M2-28`/`M2-31`/`M2-45`/`M2-46` (unfiled-chip and picker UI — the
+fixture itself proves the two unfiled cases and the Not-filed picker default from `L1-7`'s earlier
+GET), `M2-29`…`M2-53`'s remaining tag-picker micro-behaviors beyond `M2-38`/`M2-39` (autocomplete
+ordering, re-pick no-op, free-text acceptance, 61-char refusal), `L4-17`/`L4-19`/`L4-20`/`L4-21`
+(needs the corpus just built — retarget to `A1` re-pass or later stage), `M2-48` (needs a
+pre-`V33` database, already flagged unreachable on this instance).
