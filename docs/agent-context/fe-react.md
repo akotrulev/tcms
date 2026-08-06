@@ -2,8 +2,8 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-06 (§103 — the references show the cases they catch)
-**Baseline commit:** `4ee9150` (§102) **+ the doc commit this line ships in** (its own SHA
+**Last verified:** 2026-08-06 (§104 — two links per execution row)
+**Baseline commit:** `87a8b01` (§103) **+ the doc commit this line ships in** (its own SHA
 cannot be written into itself; trust the body over the header and re-grep what a later commit
 could have moved).
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
@@ -35,7 +35,7 @@ could have moved).
 - **`npm run build` is THE gate** (`tsc -b` + vite build). **Do not trust `tsc --noEmit`** — it has
   reported 0 errors while the build failed with nine (working agreement). `#confirmed`
 - `npm run lint` — oxlint, must stay at **0 warnings**; it prints nothing when clean.
-- `npm run test:run` — Vitest + RTL. **936/936** across 68 files at §103 (the §102 line said **925/67** and the measured baseline was **928/67** — this figure is carried forward by hand and has drifted at least twice; read it off a run before trusting it). Earlier: 913/65 at §99 phase 3, 909 at §98, 895/64 at §97 phase 5, 849/60 at §100. **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
+- `npm run test:run` — Vitest + RTL. **941/941** across 69 files at §104 (936/68 at §103) (the §102 line said **925/67** and the measured baseline was **928/67** — this figure is carried forward by hand and has drifted at least twice; read it off a run before trusting it). Earlier: 913/65 at §99 phase 3, 909 at §98, 895/64 at §97 phase 5, 849/60 at §100. **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
 - `npm run gen:api` — regenerate `src/api/schema.d.ts` after **any** `openapi.yaml` change. Runs
   through `npx` on purpose (the scaffold pins TS 6, the tool peer-requires 5.x); do not "fix" it.
 - **Live mode:** `VITE_API_MODE=live` in `.env.local` proxies `/api` to `localhost:8080`.
@@ -68,6 +68,35 @@ directly above the switcher) and the wordmark links there too.
 
 ## Seams to reuse
 
+- **AN EXECUTION ROW IS TWO LINKS TO TWO PLACES, AND `ExecutionRowLinks.tsx` DECIDES BOTH (§104).**
+  `CaseKeyLink` (key → `/cases/{caseId}`) and `ExecuteCaseLink` (title → the execution, carrying
+  `?mode=`), composed by **both** grids over executions: `ExecutionGrid` (Grid mode) and
+  `RunDetailPage`. Testids `<Row>.CaseLink` and `<Row>.Link` onto each grid's static row locator.
+  **The two grids had OPPOSITE answers and only one was right.** `RunDetailPage` sent the key to the
+  case and the title to the execution; `ExecutionGrid` sent the key to the *execution* and left the
+  title inert — so **Grid mode could not reach a test case at all**. No crash, no type error, no
+  lint warning: `ui-rules` §8's renderer divergence, each half locally defensible.
+  **Deliberately NOT one shared cell.** The two grids give this different room — run detail packs
+  both links into one Case cell beside the `v{caseVersionNo}` chip, Grid mode gives the key its own
+  narrow column so keys align for scanning. Sharing the *cell* would have made layout the shared
+  thing and left the destinations decided twice, which is the part that was wrong.
+  **TWO LINKS IN ONE ROW MEANS TWO ACCESSIBLE NAMES.** The key's is *"Open test case TC-41"*, set as
+  an explicit `aria-label` **and** as the `Tooltip` title — **the same string in both**, because
+  MUI's `Tooltip` sets its own `aria-label` from `title` when the child has none, so writing them
+  separately leaves two sentences free to drift with one of them never read aloud. The title's name
+  is its visible text **plus** the destination (WCAG 2.5.3: the visible label is contained in the
+  accessible name, so voice control still works on the words on screen). **The title's tooltip stays
+  the untruncated title** — that cell ellipsises, so its tooltip is a *truncation* affordance and not
+  a destination one; one tooltip answering two questions answers the more useful one worse.
+  **`caseId` was already on `TestExecutionSummary`** (required since M1, stamped by the mock), so
+  there was no contract change and nothing faked client-side — check the schema before assuming a row
+  needs widening.
+  **`ExecutionQueue` is left alone on purpose**: Split's rail row is *one* link with the key and
+  title inside it, and splitting it would nest a link in a link. The case is reachable there through
+  `Execution.CaseLink` in the execution screen's header.
+  **The test asserts over BOTH grids, never the module alone** — a unit test on `ExecutionRowLinks`
+  would have been green throughout the state §100 shipped, because the defect was one caller not
+  using the rule. `#confirmed`
 - **A PLAN GROUP'S REFERENCES NOW LIST THE CASES THEY CATCH, AND THE SERVER DOES EVERY RESOLUTION
   (§103).** `useReferencedCases` (`api/queries/cases.ts`, **the first `useQueries` in this codebase**)
   + `resolveReferences` (`lib/planScope.ts`) + `features/plans/ResolvedScope.tsx`, mounted per
@@ -803,6 +832,15 @@ directly above the switcher) and the wordmark links there too.
 
 ## Session log
 
+- 2026-08-06 · EXTEND · **Two links per execution row** (§104) — the key opens the test case (with
+  the tooltip that says so), the title opens the verdict screen. New `features/runs/ExecutionRowLinks.tsx`
+  + `ExecutionRowLinks.test.tsx` (5, over **both** grids); `ExecutionGrid` and `RunDetailPage` both
+  compose it. **No contract change, no `gen:api`, no mock change, no backend file touched** —
+  `TestExecutionSummary.caseId` has been required since M1. The finding was that the ask's "columns"
+  already existed and the **destinations were the defect**: the two grids had the pair the opposite
+  way round, leaving Grid mode with no route to a test case at all. **941/941 across 69 files, lint 0,
+  build clean. Zero browser rows run; 7 M4 rows queued (M4-41…M4-47)**, of which the keyboard and
+  screen-reader rows carry the risk — the accessible names are the half no gate here can see.
 - 2026-08-06 · EXTEND · **The references show their cases** (§103) — a read-only, live-resolved case
   list under each plan group's chips. New `lib/planScope.ts` (`resolveReferences`) + its 5 tests,
   new `useReferencedCases` (**the first `useQueries` in this codebase**), new

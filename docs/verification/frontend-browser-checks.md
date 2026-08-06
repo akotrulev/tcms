@@ -291,6 +291,13 @@ M2-33's suite rules, so a reload between the lanes costs both rows.*
 | M4-38 | With case gating on, scope a run by a **tag** that catches draft cases | 409, the same refusal as M4-23. §82's bypass with a new spelling: the gate binds on the resolved union. | §99-9 |
 | M4-39 | Live only — a project with **more than 200 cases**: open the Cases picker | The catalogue is the first page, so a case past it cannot be picked. Named as a known limit (`PlanCasesTab`'s, same cause); the row exists so the absence is not read as a bug. | §99-10 |
 | M4-40 | Mock only — scope a run by a tag carried by a **DEPRECATED** case | The mock's `resolveArms` **excludes DEPRECATED and the server does not**, so the two disagree by one row here. A pre-existing divergence §99 inherited by reusing the shared resolver; confirm which is right before changing either. | §99-11 |
+| M4-41 | Open an execution, switch to **Grid**, click a row's **key** (`TC-…`) | The **test case** opens (`/cases/{caseId}`), not the execution. Before §104 the key went to the execution and the title was inert, so Grid mode could not reach a test case at all — and the two uuids on that row are the same shape, so a swap is a 404 nothing but a browser can see. | §104-1 |
+| M4-42 | Back to Grid, hover the key | Tooltip *"Open test case TC-41"*. The affordance of a bare monospace key is not obvious; the tooltip is the sighted half of the accessible name. | §104-2 |
+| M4-43 | Grid mode, click a row's **title** | That row's **execution** opens, on the pass/fail screen, and the address bar still carries **`?mode=grid`** — so Back returns to Grid rather than to Split. | §104-3 |
+| M4-44 | Grid mode, key-only: Tab through one row | Two links before the verdict buttons, both reachable, focus ring visible on each. A title cell that ellipsises must not swallow the focus outline. | §104-4 |
+| M4-45 | Grid mode with VoiceOver (or the accessibility inspector), read the row's links | Two **different** names: *"Open test case TC-41"* and *"<title> — record a result for TC-41 in this run"*. Two links to two places announced identically is the failure this pair exists to avoid, and it is invisible on screen. | §104-5 |
+| M4-46 | Run detail (`/runs/{id}`), click the key, then the title | Unchanged from before §104 — key → case, title → execution, **no `?mode=`** (this grid is not a mode of the execution screen). The row proves the shared module did not move the grid that was already right. | §104-6 |
+| M4-47 | Run detail, a case whose title is longer than the cell | Still ellipsised with the **full title** on hover. The tooltip there is a truncation affordance, not a destination one — the destination moved to the accessible name so the two do not compete. | §104-7 |
 
 ---
 

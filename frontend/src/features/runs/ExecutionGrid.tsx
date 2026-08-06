@@ -1,16 +1,15 @@
 import { Box, Stack, Table, TableBody, TableCell, TableHead, TableRow, Tooltip, Typography } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Link as RouterLink } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import { executionQueryOptions, useSubmitResult } from '../../api/queries';
 import type { CaseStatus, TestExecution, TestExecutionSummary } from '../../api/types';
-import { Identifier } from '../../components/Identifier';
 import { PermissionGate } from '../../components/PermissionGate';
 import { ScrollX } from '../../components/ScrollX';
 import { StatusChip } from '../../components/StatusChip';
 import { describeError } from '../../lib/describeError';
 import { statusLabels } from '../../lib/labels';
+import { CaseKeyLink, ExecuteCaseLink } from './ExecutionRowLinks';
 import { orderedQueue } from './queueOrder';
 
 /**
@@ -46,6 +45,11 @@ import { orderedQueue } from './queueOrder';
  * the read in rule 3 supplies the existing comment back. `stepResults` is omitted, which the
  * endpoint reads as "leave them alone", so a case marked here keeps whatever step detail somebody
  * recorded in Focus mode.
+ *
+ * **5. The key and the title go to different places, and neither decision is made here.**
+ * `ExecutionRowLinks` owns both, shared with `RunDetailPage` — which had the pair the right way
+ * round while this screen had the key pointing at the execution and the title inert, so Grid mode
+ * could not reach a test case at all. See that file for the accessible-name rule the pair carries.
  */
 
 const RowTestId = 'Execution.Grid.Row';
@@ -182,19 +186,19 @@ function GridRow({
       sx={{ bgcolor: current ? 'action.selected' : 'transparent' }}
     >
       <TableCell>
-        <RouterLink
-          to={`/projects/${projectId}/runs/${runId}/executions/${execution.id}${linkSuffix}`}
-          data-testid={`${RowTestId}.Link`}
-        >
-          <Identifier>{execution.caseKey}</Identifier>
-        </RouterLink>
+        {/* The key goes to the CASE and the title to the EXECUTION — both decided in
+            `ExecutionRowLinks`, which is also why Grid mode can reach a test case at all now. */}
+        <CaseKeyLink execution={execution} projectId={projectId} testId={RowTestId} />
       </TableCell>
       <TableCell>
-        <Tooltip title={execution.caseTitle} enterDelay={600}>
-          <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 480 }}>
-            {execution.caseTitle}
-          </Box>
-        </Tooltip>
+        <ExecuteCaseLink
+          execution={execution}
+          projectId={projectId}
+          runId={runId}
+          linkSuffix={linkSuffix}
+          maxWidth={480}
+          testId={RowTestId}
+        />
         {error && (
           <Typography
             variant="caption"

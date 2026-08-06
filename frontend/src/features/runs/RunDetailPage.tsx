@@ -25,6 +25,10 @@ import { describeError } from '../../lib/describeError';
 import { compareCaseKeys, formatCount, formatDateTime, formatDuration } from '../../lib/format';
 import { isRunClosed, runStatusColors, runStatusLabels, statusLabels } from '../../lib/labels';
 import { ScrollX } from '../../components/ScrollX';
+import { CaseKeyLink, ExecuteCaseLink } from './ExecutionRowLinks';
+
+/** The row's static locator — never interpolated with an execution id (`test-ids` rule 6). */
+const RowTestId = 'RunDetail.Executions.Row';
 
 /**
  * A run's execution list — the tester's work queue.
@@ -331,26 +335,26 @@ function RunBody({ data, projectId, runId }: { data: TestRunDetail; projectId: s
               </TableHead>
               <TableBody>
                 {sorted.map((execution) => (
-                  <TableRow key={execution.id} data-testid="RunDetail.Executions.Row" hover>
+                  <TableRow key={execution.id} data-testid={RowTestId} hover>
                     <TableCell>
                       <Stack direction="row" sx={{ alignItems: 'center', gap: 1, minWidth: 0 }}>
-                        <RouterLink
-                          to={`/projects/${projectId}/cases/${execution.caseId}`}
-                          data-testid="RunDetail.Executions.Row.CaseLink"
-                        >
-                          <Identifier>{execution.caseKey}</Identifier>
-                        </RouterLink>
-                        {/* The row→detail affordance: opens this execution, not the case. */}
-                        <Tooltip title={execution.caseTitle}>
-                          <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            <RouterLink
-                              to={`/projects/${projectId}/runs/${runId}/executions/${execution.id}`}
-                              data-testid="RunDetail.Executions.Row.Link"
-                            >
-                              {execution.caseTitle}
-                            </RouterLink>
-                          </Box>
-                        </Tooltip>
+                        {/*
+                          Both links come from `ExecutionRowLinks`, shared with Grid mode on the
+                          execution screen — the key opens the case, the title opens this
+                          execution. This screen had that pair right and Grid mode had it
+                          backwards; one module now decides it for both.
+                        */}
+                        <CaseKeyLink
+                          execution={execution}
+                          projectId={projectId}
+                          testId={RowTestId}
+                        />
+                        <ExecuteCaseLink
+                          execution={execution}
+                          projectId={projectId}
+                          runId={runId}
+                          testId={RowTestId}
+                        />
                         {/*
                           The pinned case version. This is what makes past results honest: the
                           case may have been edited five times since, and this row still says
@@ -365,9 +369,9 @@ function RunBody({ data, projectId, runId }: { data: TestRunDetail; projectId: s
                     </TableCell>
                     <TableCell>
                       {execution.status?.kind ? (
-                        <StatusChip kind={execution.status.kind} testId="RunDetail.Executions.Row.Status" />
+                        <StatusChip kind={execution.status.kind} testId={`${RowTestId}.Status`} />
                       ) : (
-                        <Typography variant="caption" sx={{ color: 'text.secondary' }} data-testid="RunDetail.Executions.Row.Status">
+                        <Typography variant="caption" sx={{ color: 'text.secondary' }} data-testid={`${RowTestId}.Status`}>
                           {statusLabels.UNTESTED}
                         </Typography>
                       )}
@@ -385,7 +389,7 @@ function RunBody({ data, projectId, runId }: { data: TestRunDetail; projectId: s
                               target="_blank"
                               rel="noopener"
                               sx={{ fontSize: '0.75rem' }}
-                              data-testid="RunDetail.Executions.Row.DefectLink"
+                              data-testid={`${RowTestId}.DefectLink`}
                             >
                               <Identifier>{defect.externalKey}</Identifier>
                               <Box component="span" aria-hidden="true" sx={{ ml: 0.5, color: 'text.secondary' }}>
