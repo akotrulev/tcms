@@ -63,9 +63,13 @@ import org.springframework.transaction.annotation.Transactional;
  * is applied here are decisions rather than mechanics:
  *
  * <p><strong>It binds on the RESOLVED set, not on {@code caseIds}.</strong> A run names its cases
- * one of two ways and the plan's scope is the one that gets forgotten: gating only the explicit list
- * would leave "create the run from the plan instead" as a bypass that costs no permission and leaves
- * no trace, on the very path a release run is most likely to take.
+ * four ways since §99 — three explicit arms and the plan's scope — and every one of them but the
+ * first is a way to reach cases without listing them: gating only the explicit list would leave
+ * "create the run from the plan instead", "from the suite instead", "by tag instead" as bypasses
+ * that cost no permission and leave no trace, on the very path a release run is most likely to
+ * take. Because the gate reads {@code edit.caseIds()} — the union, after resolution — a new arm is
+ * covered by construction rather than by remembering, which is the property that made §99's arms
+ * cheap to add and is worth not losing.
  *
  * <p><strong>The whole run is refused, never trimmed.</strong> Dropping the unapproved cases and
  * materialising the rest is the shape {@code CaseBulkService} uses for a filtered selection and it
@@ -228,16 +232,24 @@ public class RunCreateService {
 
         List<UUID> requestedCases = PlanEdit.distinct(request.caseIds());
         Set<UUID> liveCases = cases.liveCaseIds(project.getId(), requestedCases);
+        List<UUID> requestedSuites = PlanEdit.distinct(request.suiteIds());
+        Set<UUID> liveSuites = cases.liveSuiteIds(project.getId(), requestedSuites);
+        List<String> requestedTags = RunEdit.tagsOf(request);
 
         // Explicit selection wins over the plan's scope, and they are never unioned — RunEdit's
         // header carries the argument. Resolved before validation because "would this run have
         // anything in it" is one of the things being validated.
+        //
+        // The three arms are handed over RAW rather than narrowed to the live ones first: the query
+        // itself is bounded by `c.project_id = :projectId AND c.deleted_at IS NULL` and by the same
+        // predicate on the suite, so a deleted or foreign id contributes nothing there. Filtering
+        // here as well would put the bound in two places, and the one that drifts is whichever the
+        // next arm forgets. Liveness is still checked — as a field error, in RunEdit, which is a
+        // different question: what would be materialised versus what the caller believes exists.
         List<UUID> resolved;
-        if (!requestedCases.isEmpty()) {
-            // Narrowed to the live ones so the emptiness check below asks about what would actually
-            // be materialised. An id that is not live is separately a field error, so this cannot
-            // quietly shorten a run that is otherwise accepted.
-            resolved = requestedCases.stream().filter(liveCases::contains).toList();
+        if (!requestedCases.isEmpty() || !requestedSuites.isEmpty() || !requestedTags.isEmpty()) {
+            resolved = cases.caseIdsInRunScope(
+                    project.getId(), requestedCases, requestedSuites, requestedTags);
         } else if (planExists) {
             resolved = cases.caseIdsInPlanScope(project.getId(), request.planId());
         } else {
@@ -253,7 +265,8 @@ public class RunCreateService {
                 && people.isActiveMember(companyId, request.assigneeId());
 
         RunEdit.Outcome validated = RunEdit.validateCreate(
-                request, planExists, liveCases, resolved, assigneeExists, pins.keySet());
+                request, planExists, liveCases, liveSuites, resolved, assigneeExists,
+                pins.keySet());
         if (validated instanceof RunEdit.Outcome.Invalid invalid) {
             return new Outcome.Invalid(invalid.errors());
         }

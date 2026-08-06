@@ -75,6 +75,10 @@ import org.springframework.stereotype.Component;
  *       here. It returns the offending cases' <em>keys</em> rather than a count or a boolean,
  *       because the refusal has to name them: "three of these are not approved" sends somebody to
  *       compare two lists of two hundred by eye.</li>
+ *   <li><strong>Which cases a run's three-armed scope covers</strong> — {@link #caseIdsInRunScope}
+ *       (§99). Cases named directly, cases belonging to a named suite, and cases carrying a named
+ *       tag, unioned. Every one of the three is a {@code repository} fact, which is why the whole
+ *       resolution is one query here rather than three lookups the service unions in Java.</li>
  * </ol>
  *
  * <p>Items 5–6 are new in M2 slice 2, 7–8 in M1 slice 15 and 9–10 in M1 slice 16, and they are
@@ -365,6 +369,89 @@ class CaseFacts {
                 .map(row -> (UUID) ((Object[]) row)[0])
                 .toList();
         return rows;
+    }
+
+    /**
+     * <strong>The live cases a run's three-armed scope covers</strong> — §99, and the second
+     * resolution in this file that answers <em>which cases</em> for a scope somebody wrote.
+     *
+     * <h2>One query, not three lookups unioned in Java</h2>
+     *
+     * <p>All three arms are {@code repository} facts, so a service-side union would need the ids of
+     * each arm crossing the seam separately — three round trips, three chances for one of them to
+     * apply {@code deleted_at} and the others not, and a set whose order is whatever the last
+     * concatenation produced. Here the arms are three {@code OR}s over one {@code test_case} scan,
+     * so <em>live in this project</em> is written once and the order is the project's.
+     *
+     * <h2>The suite arm is membership and never {@code suite_id}</h2>
+     *
+     * <p>{@link #memberOf} — filed, added individually, or matched by the suite's own tag rules.
+     * The tempting spelling is {@code c.suite_id IN (:suiteIds)}, and against a suite defined by a
+     * tag rule it resolves to <strong>nothing</strong>: a run of zero cases, created successfully,
+     * which every count on renders as finished. That is §98's finding — the count and the grid
+     * answering different questions — arriving at the one screen where the wrong answer is not a
+     * number but an empty checklist.
+     *
+     * <h2>Empty arms are omitted from the SQL rather than passed as empty lists</h2>
+     *
+     * <p>{@code IN ()} is a syntax error and Hibernate will not bind an empty collection, so each
+     * arm is appended only when it has members and the caller gets an empty list when none do. The
+     * ordinary create names one arm; the two it did not name must cost nothing and must not be
+     * spelled as {@code IN (NULL)}, which is never true and would read as an arm that matched.
+     *
+     * <p>Ordered by {@code key_seq} for {@link #caseIdsInPlanScope}'s reason, and here it is also
+     * what makes the three arms produce <em>one</em> checklist: a union whose order depended on
+     * which arm found a case first would put the same run's rows in a different order every time
+     * the scope was written differently.
+     */
+    List<UUID> caseIdsInRunScope(
+            UUID projectId, Collection<UUID> caseIds, Collection<UUID> suiteIds,
+            Collection<String> tags) {
+
+        List<String> arms = new ArrayList<>(3);
+        if (!caseIds.isEmpty()) {
+            arms.add("c.id IN (:caseIds)");
+        }
+        if (!suiteIds.isEmpty()) {
+            arms.add("""
+                    EXISTS (SELECT 1 FROM suite s
+                             WHERE s.id IN (:suiteIds)
+                               AND s.project_id = c.project_id
+                               AND s.deleted_at IS NULL
+                               AND %s)
+                    """.formatted(memberOf("s").strip()));
+        }
+        if (!tags.isEmpty()) {
+            arms.add("EXISTS (SELECT 1 FROM case_tag rt "
+                    + "WHERE rt.case_id = c.id AND rt.tag IN (:tags))");
+        }
+        if (arms.isEmpty()) {
+            return List.of();
+        }
+
+        var query = entities.createNativeQuery("""
+                SELECT DISTINCT c.id, c.key_seq
+                FROM test_case c
+                WHERE c.project_id = :projectId
+                  AND c.deleted_at IS NULL
+                  AND (%s)
+                ORDER BY c.key_seq
+                """.formatted(String.join(" OR ", arms)))
+                .setParameter("projectId", projectId);
+
+        if (!caseIds.isEmpty()) {
+            query.setParameter("caseIds", caseIds);
+        }
+        if (!suiteIds.isEmpty()) {
+            query.setParameter("suiteIds", suiteIds);
+        }
+        if (!tags.isEmpty()) {
+            query.setParameter("tags", tags);
+        }
+
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = query.getResultList();
+        return rows.stream().map(row -> (UUID) row[0]).toList();
     }
 
     /**

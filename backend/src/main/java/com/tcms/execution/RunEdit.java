@@ -17,19 +17,38 @@ import java.util.UUID;
  * <h2>Where the cases come from, in order</h2>
  *
  * <ol>
- *   <li><strong>{@code caseIds}, when the body carries them.</strong> An explicit selection wins,
- *       and it is how an ad-hoc run of three cases is created — the SPA's "run selected cases"
- *       affordance. Every id must be a live case in this project.</li>
+ *   <li><strong>The three explicit arms, when the body carries any of them</strong> —
+ *       {@code caseIds}, {@code suiteIds} and {@code tags}, <strong>unioned</strong> and deduped by
+ *       {@link CaseFacts#caseIdsInRunScope} (§99). An explicit selection wins, and it is how an
+ *       ad-hoc run is created: three named cases, a whole suite, or everything tagged
+ *       {@code smoke}.</li>
  *   <li><strong>Otherwise the plan's scope, expanded.</strong> The same expansion the plan's own
  *       {@code caseCount} displays ({@link CaseFacts#caseIdsInPlanScope}), so a run created from a
  *       plan has the length the previous screen said it would.</li>
  * </ol>
  *
- * <p>Not the union of the two. A body carrying both a plan and a case list means "this run is
+ * <p>Not the union of the two. A body carrying both a plan and any explicit arm means "this run is
  * against that plan, and here is the subset we are doing this pass" — which is a real thing to want
  * during a stabilisation — and unioning them would silently add back the cases somebody explicitly
  * narrowed away. The run still records its {@code planId}, so the narrowing is visible as a run
  * shorter than its plan rather than as a lost association.
+ *
+ * <p><strong>The three arms union with each other and substitute for the plan, which is one rule
+ * and not two.</strong> The arms are how the caller says what this run covers; the plan is a
+ * default for when they did not say. §99 widened the first half from one arm to three and left the
+ * second alone deliberately: the alternative — "cases replace the plan, but suites and tags add to
+ * it" — is a rule nobody could predict from the request.
+ *
+ * <h2>The three arms are validated differently, and each difference is a decision</h2>
+ *
+ * <p>A {@code caseId} or a {@code suiteId} naming nothing live in this project is a
+ * <strong>field error</strong>: an id is a reference to something the caller has already seen, so
+ * one that resolves to nothing means the two of you disagree about what exists. A <strong>tag</strong>
+ * that matches nothing is <strong>accepted</strong>, for {@code SuiteEdit}'s reason — there is no
+ * vocabulary to check it against, and refusing a run because one of its three tags is currently
+ * unused would be a validator inventing a workflow order. What catches the typo is the emptiness
+ * check below, which is the honest place for it: the request is refused when it would produce
+ * nothing, not when one arm of it happens to be quiet.
  *
  * <h2>A run with nothing to execute is refused</h2>
  *
@@ -53,6 +72,19 @@ record RunEdit(
 
     /** {@code release_version} and {@code build_number} are both short identifiers, not prose. */
     static final int MAX_RELEASE = 100;
+
+    /**
+     * The longest tag a run's scope may name, and it <strong>must stay {@code SuiteEdit.MAX_TAG}'s
+     * number</strong>: a scope entry longer than a tag can be is one that can never match anything.
+     *
+     * <p>Spelled again rather than imported, for {@code RunCreateService.APPROVE_CASE}'s reason —
+     * the constant lives in {@code repository} and this module may not depend on it (plan §3). The
+     * duplication is real and the alternative is a port whose only job is to hand back a number.
+     * What holds them together is {@code CaseEdit}'s own cap, which both are copies of: a tag
+     * longer than that cannot be stored, so a rule or a scope entry above it is unmatchable by
+     * construction rather than by agreement.
+     */
+    static final int MAX_TAG = 60;
 
     /**
      * The most executions one create will materialise.
@@ -84,6 +116,10 @@ record RunEdit(
      *                       distinction is the one §6t refuses to publish, and the field error is
      *                       the same sentence either way.
      * @param liveCaseIds    of the requested {@code caseIds}, those naming a live case here
+     * @param liveSuiteIds   of the requested {@code suiteIds}, those naming a live suite here.
+     *                       Checked for the same reason and by the same predicate — an id from a
+     *                       <em>sibling project in this company</em> passes the foreign key, the
+     *                       company column and RLS, so this is the only thing that refuses it.
      * @param resolvedCases  the case set this run would cover, already resolved in the order it will
      *                       be materialised
      * @param assigneeExists whether {@code assigneeId} names a member of this company
@@ -93,6 +129,7 @@ record RunEdit(
             RunWriteRequest request,
             boolean planExists,
             Set<UUID> liveCaseIds,
+            Set<UUID> liveSuiteIds,
             List<UUID> resolvedCases,
             boolean assigneeExists,
             Set<UUID> pinnableCases) {
@@ -135,26 +172,53 @@ record RunEdit(
             }
         }
 
+        List<UUID> requestedSuites = PlanEdit.distinct(request.suiteIds());
+        for (UUID suiteId : requestedSuites) {
+            if (!liveSuiteIds.contains(suiteId)) {
+                PlanEdit.error(errors, "suiteIds",
+                        "One of the selected suites is not in this project any more.");
+                break;
+            }
+        }
+
+        List<String> requestedTags = tagsOf(request);
+        for (String tag : requestedTags) {
+            if (tag.length() > MAX_TAG) {
+                PlanEdit.error(errors, "tags", "Keep each tag under " + MAX_TAG + " characters.");
+                break;
+            }
+        }
+
+        List<String> scopeFields = scopeFields(request);
+
         if (resolvedCases.isEmpty()) {
-            // On planId when the scope came from a plan, on caseIds otherwise — the field the caller
-            // can actually change. A message on the wrong field is one the form has nowhere to put.
-            String field = request.planId() != null && requestedCases.isEmpty()
-                    ? "planId" : "caseIds";
-            PlanEdit.error(errors, field,
-                    "This run would have nothing to execute. Choose cases, or a plan whose scope "
-                            + "still has some.");
+            // On every arm the caller actually used — the fields they can act on. A message on the
+            // wrong field is one the form has nowhere to put, and with three arms "the wrong field"
+            // stops being a guess between two: a run scoped only by a mistyped tag, answered on
+            // caseIds, sends somebody to a control they never touched. When more than one arm was
+            // used the message goes on all of them, because at least one has to change and nothing
+            // here can know which.
+            for (String field : scopeFields) {
+                PlanEdit.error(errors, field,
+                        "This run would have nothing to execute. Choose cases, suites or tags that "
+                                + "match something, or a plan whose scope still has some.");
+            }
         } else if (resolvedCases.size() > MAX_EXECUTIONS) {
-            PlanEdit.error(errors, "caseIds",
-                    "A run covers at most " + MAX_EXECUTIONS + " cases. Split it, or narrow the "
-                            + "plan's scope.");
+            for (String field : scopeFields) {
+                PlanEdit.error(errors, field,
+                        "A run covers at most " + MAX_EXECUTIONS + " cases. Split it, or narrow "
+                                + "the scope.");
+            }
         } else if (!pinnableCases.containsAll(resolvedCases)) {
             // Refused rather than silently shortened: an execution must name the version it ran, so
             // a case with no version row cannot be in this run at all — and a checklist quietly
             // missing cases is one nobody can tell from a checklist that is complete. Unreachable
             // for any case authored since case-create wrote v1 with the case (§29).
-            PlanEdit.error(errors, "caseIds",
-                    "Some of these cases have no saved version yet, so a run cannot record which "
-                            + "version it tested. Open and save them first.");
+            for (String field : scopeFields) {
+                PlanEdit.error(errors, field,
+                        "Some of these cases have no saved version yet, so a run cannot record "
+                                + "which version it tested. Open and save them first.");
+            }
         }
 
         return errors.isEmpty()
@@ -162,5 +226,55 @@ record RunEdit(
                         name, request.planId(), releaseVersion, buildNumber, request.assigneeId(),
                         resolvedCases))
                 : new Outcome.Invalid(errors);
+    }
+
+    /**
+     * The request's tags: trimmed, blanks dropped, duplicates collapsed, order kept —
+     * {@code SuiteEdit#normalizeTagRules}' rules, minus its null-means-leave-alone distinction,
+     * which a create has no use for.
+     *
+     * <p>Static and shared with {@link RunCreateService} on purpose: the service resolves the scope
+     * <em>before</em> this class validates it, so the tags that are checked and the tags that are
+     * queried must come from one function. Trimming in one place and not the other is how a scope
+     * containing {@code " smoke"} resolves to nothing and is reported as a tag matching nothing.
+     */
+    static List<String> tagsOf(RunWriteRequest request) {
+        if (request.tags() == null) {
+            return List.of();
+        }
+        List<String> distinct = new java.util.ArrayList<>();
+        Set<String> seen = new java.util.HashSet<>();
+        for (String raw : request.tags()) {
+            String tag = PlanEdit.trimToNull(raw);
+            if (tag != null && seen.add(tag)) {
+                distinct.add(tag);
+            }
+        }
+        return List.copyOf(distinct);
+    }
+
+    /**
+     * The fields a scope-level refusal belongs on: every explicit arm the caller used, or
+     * {@code planId} when they named only a plan.
+     *
+     * <p>{@code caseIds} is the fallback when the body named no scope at all, which is what the
+     * form with no controls filled in sends — the same field the message landed on before there
+     * were three arms.
+     */
+    private static List<String> scopeFields(RunWriteRequest request) {
+        List<String> fields = new java.util.ArrayList<>(3);
+        if (!PlanEdit.distinct(request.caseIds()).isEmpty()) {
+            fields.add("caseIds");
+        }
+        if (!PlanEdit.distinct(request.suiteIds()).isEmpty()) {
+            fields.add("suiteIds");
+        }
+        if (!tagsOf(request).isEmpty()) {
+            fields.add("tags");
+        }
+        if (fields.isEmpty()) {
+            fields.add(request.planId() != null ? "planId" : "caseIds");
+        }
+        return fields;
     }
 }

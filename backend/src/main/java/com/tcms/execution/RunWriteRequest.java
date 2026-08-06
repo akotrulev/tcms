@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * {@code TestRunInput} on the wire — the contract's eight properties and no more.
+ * {@code TestRunInput} on the wire — the contract's ten properties and no more.
  *
  * <p>{@code status}, {@code source}, {@code startedAt} and the key are all absent for the reasons
  * {@link TestRun#create} gives: they are the server's to decide, and a field the client can set is a
@@ -12,6 +12,12 @@ import java.util.UUID;
  * on the contract; they arrive with CI ingestion in M3, and accepting them here would be a field
  * read and dropped.
  *
+ * @param suiteIds             §99's second scope arm. Whole suites, resolved through their
+ *                             membership rather than through {@code test_case.suite_id} — see
+ *                             {@link CaseFacts#caseIdsInRunScope}.
+ * @param tags                 §99's third. Every live case carrying <em>any</em> of them, which is
+ *                             the opposite of {@code GET /cases?tag=} and deliberately so: this is
+ *                             a collection being assembled, that is a list being narrowed.
  * @param overrideApprovalGate §6g's <em>"documented lead override for the 2am release"</em> (§82),
  *                             and the one property here that is not a property of the run — it is a
  *                             statement about <em>this request</em>, which is why nothing on
@@ -37,6 +43,8 @@ public record RunWriteRequest(
         String releaseVersion,
         String buildNumber,
         List<UUID> caseIds,
+        List<UUID> suiteIds,
+        List<String> tags,
         UUID assigneeId,
         Boolean overrideApprovalGate) {
 }

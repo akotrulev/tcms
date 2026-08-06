@@ -426,6 +426,203 @@ class RunCreateEndpointTest extends IntegrationTestBase {
     }
 
     // =====================================================================
+    // §99 — the scope's three arms
+    // =====================================================================
+
+    /**
+     * §99. A run is scoped by cases, suites and tags, unioned — and every test here is written
+     * against a fixture where the three arms answer <strong>different</strong> sets, because in one
+     * where they agree an implementation that reads only the first arm passes all of them.
+     *
+     * <p>The load-bearing fixture fact is that <strong>PAYMENTS files nothing</strong>: it claims
+     * {@code caseA} through a tag rule (§98's seeding, and §96's model). So the tempting suite arm —
+     * {@code c.suite_id IN (:suiteIds)} — resolves it to the empty set, and a run scoped on it would
+     * be refused as empty or, worse, created empty. {@link #paymentsFilesNothing()} asserts that
+     * property directly rather than leaving it as a comment somebody later "tidies".
+     */
+    @Nested
+    @DisplayName("Scope — cases, suites and tags, unioned and resolved once")
+    class Scope {
+
+        @Test
+        @DisplayName("the fixture's non-vacuity: PAYMENTS claims a case it does not file")
+        void paymentsFilesNothing() throws Exception {
+            assertThat(filedIn(PAYMENTS))
+                    .as("if anything were filed here, every assertion below would also pass "
+                            + "against a suite arm that only read test_case.suite_id")
+                    .isEmpty();
+            assertThat(filedIn(REFUNDS)).containsExactly(caseA);
+        }
+
+        @Test
+        @DisplayName("a suite arm resolves MEMBERSHIP — the tag-claimed case, not the filed column")
+        void aSuiteArmResolvesMembership() throws Exception {
+            UUID runId = UUID.fromString(body(post(LEAD, ACME, ACME_BANKING,
+                    onScope("Payments pass", List.of(), List.of(PAYMENTS), List.of()), null))
+                    .get("id").asText());
+
+            assertThat(caseIdsOf(runId)).containsExactly(caseA);
+        }
+
+        @Test
+        @DisplayName("a tag arm resolves the cases carrying it")
+        void aTagArmResolves() throws Exception {
+            UUID runId = UUID.fromString(body(post(LEAD, ACME, ACME_BANKING,
+                    onScope("Everything tagged refunds", List.of(), List.of(), List.of("refunds")),
+                    null)).get("id").asText());
+
+            assertThat(caseIdsOf(runId)).containsExactly(caseA);
+        }
+
+        @Test
+        @DisplayName("the three arms UNION, and a case reached twice is materialised once")
+        void theArmsUnionAndDedupe() throws Exception {
+            // caseA arrives through the tag AND through the named id; caseB only through SPARE. A
+            // second execution for caseA would give the tester the same case twice on one checklist
+            // and a denominator one larger than the set they chose.
+            UUID runId = UUID.fromString(body(post(LEAD, ACME, ACME_BANKING,
+                    onScope("Everything", List.of(caseA), List.of(SPARE), List.of("refunds")),
+                    null)).get("id").asText());
+
+            assertThat(caseIdsOf(runId)).containsExactlyInAnyOrder(caseA, caseB);
+            assertThat(executionCount(ACME)).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("an arm SUBSTITUTES for the plan's scope and is not unioned with it")
+        void theArmsReplaceThePlansScope() throws Exception {
+            // The plan expands to caseA + caseB. Scoping on the tag narrows the pass to caseA — and
+            // unioning would silently hand back the case somebody just narrowed away, which is
+            // `anExplicitSelectionNarrows` one arm over.
+            Map<String, Object> payload = fromPlan("Narrowed to the tagged ones");
+            payload.put("tags", List.of("refunds"));
+
+            UUID runId = UUID.fromString(
+                    body(post(LEAD, ACME, ACME_BANKING, payload, null)).get("id").asText());
+
+            assertThat(caseIdsOf(runId)).containsExactly(caseA);
+            assertThat(planIdOf(runId))
+                    .as("the association is kept, so this reads as a short run and not a lost plan")
+                    .isEqualTo(plan);
+        }
+
+        @Test
+        @DisplayName("resolved ONCE: a case tagged after the run does not join it")
+        void theScopeIsResolvedAtCreation() throws Exception {
+            UUID runId = UUID.fromString(body(post(LEAD, ACME, ACME_BANKING,
+                    onScope("Tagged now", List.of(), List.of(), List.of("refunds")), null))
+                    .get("id").asText());
+
+            tagCase(caseB, "refunds");
+
+            assertThat(caseIdsOf(runId))
+                    .as("a run's executions are written at create; a plan's scope is references "
+                            + "re-resolved on every read, and this is where the two differ")
+                    .containsExactly(caseA);
+        }
+
+        @Test
+        @DisplayName("an unknown tag beside a matching one is accepted, not a field error")
+        void anUnknownTagIsNotAnError() throws Exception {
+            MvcResult created = post(LEAD, ACME, ACME_BANKING,
+                    onScope("Refunds and whatever", List.of(), List.of(),
+                            List.of("refunds", "never-used-by-anybody")), null);
+
+            assertThat(created.getResponse().getStatus())
+                    .as("there is no tag vocabulary to check against, and a run is not wrong "
+                            + "because one of its three tags is currently unused")
+                    .isEqualTo(201);
+            assertThat(caseIdsOf(UUID.fromString(body(created).get("id").asText())))
+                    .containsExactly(caseA);
+        }
+
+        @Test
+        @DisplayName("a tag matching NOTHING, alone, is refused on tags — the field they typed in")
+        void aTagMatchingNothingIsRefusedOnItsOwnField() throws Exception {
+            MvcResult refused = post(LEAD, ACME, ACME_BANKING,
+                    onScope("Typo", List.of(), List.of(), List.of("refnuds")), null);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(refused))
+                    .as("answering on caseIds would send somebody to a control they never touched")
+                    .containsKey("tags")
+                    .doesNotContainKey("caseIds");
+            assertThat(runCount(ACME)).isZero();
+        }
+
+        @Test
+        @DisplayName("two empty arms are both named — nothing here can know which one to change")
+        void everyArmTheCallerUsedCarriesTheRefusal() throws Exception {
+            softDeleteCase(ACME, caseB);
+
+            MvcResult refused = post(LEAD, ACME, ACME_BANKING,
+                    onScope("Nothing left", List.of(), List.of(SPARE), List.of("refnuds")), null);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(refused)).containsKeys("suiteIds", "tags");
+        }
+
+        @Test
+        @DisplayName("a deleted case is not reached by a tag it still carries")
+        void aDeletedCaseIsNotReachedByItsTag() throws Exception {
+            softDeleteCase(ACME, caseA);
+
+            MvcResult refused = post(LEAD, ACME, ACME_BANKING,
+                    onScope("Gone", List.of(), List.of(), List.of("refunds")), null);
+
+            assertThat(refused.getResponse().getStatus())
+                    .as("case_tag rows outlive a soft delete, so deleted_at has to be in the "
+                            + "union query and not only in the arms it was written for")
+                    .isEqualTo(400);
+        }
+
+        @Test
+        @DisplayName("a suite from a SIBLING project is a 400 on suiteIds, not a silent empty run")
+        void aSiblingProjectsSuiteIsRefused() throws Exception {
+            // LEAD holds both projects, so no access check refuses this and RLS does not either.
+            MvcResult refused = post(LEAD, ACME, ACME_BANKING,
+                    onScope("Wrong suite", List.of(), List.of(MOBILE_SUITE), List.of()), null);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(refused)).containsKey("suiteIds");
+            assertThat(runCount(ACME)).isZero();
+        }
+
+        @Test
+        @DisplayName("a suite id naming nothing is a 400 on suiteIds")
+        void anAbsentSuiteIsRefused() throws Exception {
+            MvcResult refused = post(LEAD, ACME, ACME_BANKING,
+                    onScope("Ghost", List.of(), List.of(ABSENT), List.of()), null);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(refused)).containsKey("suiteIds");
+        }
+
+        @Test
+        @DisplayName("a tag longer than a tag can be is a 400 — it could never match anything")
+        void anOverLongTagIsRefused() throws Exception {
+            MvcResult refused = post(LEAD, ACME, ACME_BANKING,
+                    onScope("Too long", List.of(), List.of(),
+                            List.of("t".repeat(RunEdit.MAX_TAG + 1))), null);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(refused)).containsKey("tags");
+        }
+
+        @Test
+        @DisplayName("tags are trimmed, so a pasted \" refunds \" still matches")
+        void tagsAreTrimmed() throws Exception {
+            MvcResult created = post(LEAD, ACME, ACME_BANKING,
+                    onScope("Pasted", List.of(), List.of(), List.of("  refunds  ")), null);
+
+            assertThat(created.getResponse().getStatus())
+                    .as("the tags that are validated and the tags that are queried come from one "
+                            + "function; trimming in only one place resolves this to nothing")
+                    .isEqualTo(201);
+        }
+    }
+
+    // =====================================================================
     // The run's own columns
     // =====================================================================
 
@@ -788,6 +985,30 @@ class RunCreateEndpointTest extends IntegrationTestBase {
         }
 
         /**
+         * §99's arms arrive at §82's bypass through two new doors. A gate bound to {@code caseIds}
+         * would leave "run everything tagged smoke instead" and "run the suite instead" as ways to
+         * launder unapproved cases into a release run — costing no permission and leaving no trace,
+         * exactly as naming the plan would.
+         *
+         * <p>Both arms in one test on purpose: they are the same defect, and the reason they cannot
+         * fail separately is that the gate reads the <em>resolved</em> set. That is the property
+         * being pinned, so a run that split them would suggest each arm has its own gate.
+         */
+        @Test
+        @DisplayName("and a run scoped by a TAG or a SUITE is gated too — §99's arms are not doors")
+        void theNewScopeArmsAreGatedAsWell() throws Exception {
+            gating(ACME_BANKING, true);
+
+            assertThat(post(ENGINEER, ACME, ACME_BANKING,
+                    onScope("By tag", List.of(), List.of(), List.of("refunds")), null)
+                    .getResponse().getStatus()).isEqualTo(409);
+            assertThat(post(ENGINEER, ACME, ACME_BANKING,
+                    onScope("By suite", List.of(), List.of(PAYMENTS), List.of()), null)
+                    .getResponse().getStatus()).isEqualTo(409);
+            assertThat(runCount(ACME)).isZero();
+        }
+
+        /**
          * The whole run, never a trimmed one — this class's own header argues it for a different
          * cause: a checklist quietly shorter than the one that was asked for is indistinguishable
          * from a run whose scope was smaller, and reports a pass rate over a denominator nobody
@@ -934,10 +1155,36 @@ class RunCreateEndpointTest extends IntegrationTestBase {
     }
 
     private Map<String, Object> onCases(String name, List<UUID> caseIds) {
+        return onScope(name, caseIds, List.of(), List.of());
+    }
+
+    /** §99's three arms, with no plan — the ad-hoc run. */
+    private Map<String, Object> onScope(
+            String name, List<UUID> caseIds, List<UUID> suiteIds, List<String> tags) {
+
         Map<String, Object> payload = fromPlan(name);
         payload.put("planId", null);
         payload.put("caseIds", caseIds.stream().map(UUID::toString).toList());
+        payload.put("suiteIds", suiteIds.stream().map(UUID::toString).toList());
+        payload.put("tags", tags);
         return payload;
+    }
+
+    /** The cases FILED in one suite — {@code Scope}'s non-vacuity check, and nothing else. */
+    private List<UUID> filedIn(UUID suiteId) throws SQLException {
+        List<UUID> ids = new ArrayList<>();
+        try (Connection connection = appConnection(ACME);
+             var statement = connection.prepareStatement(
+                     "SELECT id FROM test_case "
+                             + "WHERE suite_id = CAST(? AS uuid) AND deleted_at IS NULL")) {
+            statement.setString(1, suiteId.toString());
+            try (ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) {
+                    ids.add(UUID.fromString(rows.getString(1)));
+                }
+            }
+        }
+        return ids;
     }
 
     private MvcResult post(
