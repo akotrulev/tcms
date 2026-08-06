@@ -81,6 +81,67 @@ public interface TestExecutionRepository extends JpaRepository<TestExecution, UU
     List<Object[]> findForPlan(@Param("projectId") UUID projectId, @Param("planId") UUID planId);
 
     /**
+     * The plan's execution rows that carry <strong>no result</strong> — the checklist §42 writes at
+     * run creation, one empty row per case in scope.
+     *
+     * <h2>Why this exists separately since §101</h2>
+     *
+     * <p>{@code plan_snapshot} is fed by a statement that joins {@code case_status} inner, so it
+     * holds recorded results only. That is the right grain — it is the "current verdict" table — and
+     * it means the rollup path has to get the unrecorded half from somewhere.
+     *
+     * <p><strong>The split is between what grows and what does not.</strong> The recorded half grows
+     * without limit: every execution of every case across every run, for as long as the plan is
+     * used, which is the scan §6p wrote the rollup to remove. This half is bounded by (cases in
+     * scope × configurations) and does not grow with time, so it stays live at no meaningful cost.
+     *
+     * <p>Dropping it instead would be wrong in exactly one place, and quietly:
+     * {@code PlanStatisticsService.byConfiguration} lists only configurations with at least one
+     * execution, so a configuration whose run has been opened and not yet recorded would
+     * <strong>vanish from the matrix</strong> — §6p's Chrome-versus-Safari failure, from a third
+     * direction.
+     *
+     * <p>Returns {@code [executionId, caseId, runId, runKey, configurationId, runStartedAt]} rather
+     * than the entity: nothing about an unrecorded row needs loading as an object, and the columns
+     * are exactly the ones {@code Row} carries. Deleted runs are excluded, matching
+     * {@link #findForPlan} — a withdrawn run's checklist is not outstanding work.
+     */
+    @Query("SELECT e.id, e.caseId, r.id, r.key, r.configurationId, r.startedAt "
+            + "FROM TestExecution e JOIN TestRun r ON r.id = e.runId "
+            + "WHERE e.projectId = :projectId AND r.planId = :planId AND r.deletedAt IS NULL "
+            + "AND e.statusId IS NULL")
+    List<Object[]> findUnrecordedForPlan(
+            @Param("projectId") UUID projectId, @Param("planId") UUID planId);
+
+    /**
+     * The distinct cases with a <strong>recorded</strong> result in this plan's runs.
+     *
+     * <h2>This exists because the rollup path was wrong without it, and wrong in the worst way</h2>
+     *
+     * <p>{@code PlanStatisticsService} picks its source from the aggregation policy. That alone is
+     * not enough: a policy the rollup <em>can</em> serve is not the same claim as a rollup that
+     * <em>has</em> been written. A plan whose first results landed since the last scheduler tick —
+     * or any plan at all on a deployment where the job has never run — has an empty
+     * {@code plan_snapshot}, and reading it would report <strong>every case as not-run</strong>.
+     *
+     * <p>That is not staleness, which this design accepts and declares through {@code computedAt}.
+     * It is a plan that has been executed reporting that nothing has been executed, and it renders
+     * as an un-started plan rather than as an error — the shape this repository has paid for in §47,
+     * §53, §72 and §81. {@code RollupAgreementTest} caught it, which is the whole reason that class
+     * was written before the implementation.
+     *
+     * <p>Ids only, and one row per case rather than per execution: this is a coverage check, not a
+     * second source of results. Deleted runs are excluded, matching {@link #findForPlan} and the
+     * rollup's own refresh — otherwise a withdrawn run's cases would make the snapshot look
+     * incomplete for ever and the plan page would silently never use the rollup again.
+     */
+    @Query("SELECT DISTINCT e.caseId FROM TestExecution e JOIN TestRun r ON r.id = e.runId "
+            + "WHERE e.projectId = :projectId AND r.planId = :planId AND r.deletedAt IS NULL "
+            + "AND e.statusId IS NOT NULL")
+    List<UUID> recordedCaseIdsForPlan(
+            @Param("projectId") UUID projectId, @Param("planId") UUID planId);
+
+    /**
      * Every execution of one case, across every run, as {@code [execution, run]}.
      *
      * <p><strong>Deleted runs are INCLUDED here, and that is the difference from

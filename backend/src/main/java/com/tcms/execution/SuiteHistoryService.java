@@ -30,16 +30,32 @@ import org.springframework.transaction.annotation.Transactional;
  * are returned alongside — the page draws the boundary between them and refuses to compare across
  * it silently.
  *
- * <h2>Computed on read, and §6p specifies otherwise</h2>
+ * <h2>~~Computed on read, and §6p specifies otherwise~~ → served from the rollup since §101</h2>
  *
- * <p>§6p serves this from {@code suite_run_summary}, a read model keyed
+ * <p>~~§6p serves this from {@code suite_run_summary}, a read model keyed
  * {@code (run, suite, configuration)} and updated as results land. That table exists in {@code V1}
  * and has no writer, because the {@code reporting} module does not exist. So this recomputes from
  * {@code test_execution} per request — the same deliberate deviation {@link PlanStatisticsService}
  * and {@link CaseHistoryService} each record, with the same benefit (a figure recomputed per request
- * cannot be stale against a result recorded a second ago) and the same cost. The cost is bounded
- * here by grouping in the database rather than in Java: see
- * {@link TestExecutionRepository#tallyForCases}.
+ * cannot be stale against a result recorded a second ago) and the same cost.~~
+ *
+ * <p><strong>Superseded 2026-08-06.</strong> {@code suite_run_summary} has a writer
+ * ({@code reporting.RollupRefreshService}) and this class reads it through {@link RollupFacts}. The
+ * old reasoning is kept rather than deleted because it was right, and because <em>its</em> benefit
+ * is what this slice gave up: a figure recomputed per request cannot be stale, and these figures now
+ * can be, by up to one scheduler tick. That cost is not hidden — it is on the wire, as
+ * {@code computedAt}.
+ *
+ * <p><strong>Rollup ∪ tail, and the tail is not an optimisation.</strong> A run recorded ninety
+ * seconds ago has no summary row, and serving the rollup alone would drop that run from the history
+ * <em>entirely</em> — an absence rather than a stale number, which the live path never produced and
+ * which the person who has just finished a run is the first to meet. See
+ * {@link RollupFacts#runsWithoutSummary}.
+ *
+ * <p>What did <em>not</em> move: the version marks and the {@code versionAt} walk read
+ * {@code suite_version}, which no rollup holds, and the run's own key, name, release and
+ * soft-delete flag are read from {@code test_run} exactly as before. The rollup replaces the
+ * <em>tally</em> and nothing else.
  *
  * <h2>What this page cannot yet show, stated rather than faked</h2>
  *
@@ -60,6 +76,7 @@ public class SuiteHistoryService {
     private final ResultStatuses statuses;
     private final ExecutionPeople people;
     private final CaseFacts cases;
+    private final RollupFacts rollups;
 
     public SuiteHistoryService(
             ProjectService projects,
@@ -68,7 +85,8 @@ public class SuiteHistoryService {
             ConfigurationRepository configurations,
             ResultStatuses statuses,
             ExecutionPeople people,
-            CaseFacts cases) {
+            CaseFacts cases,
+            RollupFacts rollups) {
 
         this.projects = projects;
         this.executions = executions;
@@ -77,6 +95,7 @@ public class SuiteHistoryService {
         this.statuses = statuses;
         this.people = people;
         this.cases = cases;
+        this.rollups = rollups;
     }
 
     /**
@@ -104,16 +123,37 @@ public class SuiteHistoryService {
         List<CaseFacts.VersionMark> marks = cases.suiteVersionMarkers(suiteId);
         List<UUID> caseIds = cases.caseIdsInSuite(projectId, suiteId);
 
-        // computedAt is null while this class still computes live. Phase 4 gives it the rollup's
-        // own updated_at; shipping the field truthful before it is interesting is what lets the
-        // client be built against the shape rather than against a plan to add it.
+        List<RollupFacts.SuiteRunRow> summaries = rollups.suiteRunSummaries(suiteId);
+
         return new SuiteHistoryView(
-                entries(projectId, caseIds, marks), markers(companyId, marks), null);
+                entries(projectId, suiteId, caseIds, marks, summaries),
+                markers(companyId, marks),
+                computedAt(summaries));
+    }
+
+    /**
+     * The age of the <strong>stalest</strong> figure on the page, or null when every row was
+     * computed live.
+     *
+     * <p><em>Minimum</em> and not maximum, which is the whole decision. This page mixes rolled-up
+     * rows with a live tail, so the newest {@code updated_at} would be a claim that is true of one
+     * row and false of the others — and it is false in the reassuring direction, which is the one
+     * that matters. The oldest is the only instant of which "nothing here is older than this" holds
+     * for the whole response, and that is what a freshness line is asked to mean.
+     */
+    private static Instant computedAt(List<RollupFacts.SuiteRunRow> summaries) {
+        Instant oldest = null;
+        for (RollupFacts.SuiteRunRow summary : summaries) {
+            if (oldest == null || summary.updatedAt().isBefore(oldest)) {
+                oldest = summary.updatedAt();
+            }
+        }
+        return oldest;
     }
 
     // --------------------------------------------------------------- entries ---
 
-    /** A run's tallies, accumulated as the (run × status) rows arrive. */
+    /** A run's tallies, accumulated as the (run × status) rows arrive, or read whole from a rollup. */
     private static final class Tally {
         private long passed;
         private long failed;
@@ -121,6 +161,29 @@ public class SuiteHistoryService {
         private long skipped;
         private long notRun;
         private Instant lastExecutedAt;
+        /**
+         * The suite version the rollup <strong>froze</strong> at the run, or null for a tail row
+         * that has to derive it from the marks.
+         *
+         * <p>Preferring the frozen value is not interchangeable with recomputing it. {@code versionAt}
+         * walks the marks and would agree today, because marks do not move — but a version row
+         * written by a backfill or an import carries whatever {@code created_at} it was given, and
+         * on that day the recomputed answer changes for every past run at once while the frozen one
+         * does not. §6p open question #32 is about exactly that direction.
+         */
+        private Integer frozenVersionNo;
+
+        static Tally of(RollupFacts.SuiteRunRow summary) {
+            Tally tally = new Tally();
+            tally.passed = summary.passed();
+            tally.failed = summary.failed();
+            tally.blocked = summary.blocked();
+            tally.skipped = summary.skipped();
+            tally.notRun = summary.notRun();
+            tally.lastExecutedAt = summary.lastExecutedAt();
+            tally.frozenVersionNo = summary.suiteVersionNo();
+            return tally;
+        }
 
         void add(StatusKind kind, long count, Instant executedAt) {
             switch (kind) {
@@ -143,26 +206,45 @@ public class SuiteHistoryService {
     }
 
     private List<EntryView> entries(
-            UUID projectId, List<UUID> caseIds, List<CaseFacts.VersionMark> marks) {
+            UUID projectId,
+            UUID suiteId,
+            List<UUID> caseIds,
+            List<CaseFacts.VersionMark> marks,
+            List<RollupFacts.SuiteRunRow> summaries) {
 
         if (caseIds.isEmpty()) {
             // An empty IN list is a SQL syntax error, and an empty folder is ordinary.
             return List.of();
         }
 
-        Map<UUID, CaseStatusView> statusesById = statuses.byId(projectId);
-
         // Insertion-ordered so the assembly below is deterministic; the final order is set at the
         // end, by time, which is the only order this page's rows mean anything in.
         Map<UUID, Tally> byRun = new LinkedHashMap<>();
-        for (Object[] row : executions.tallyForCases(projectId, caseIds)) {
-            UUID runId = (UUID) row[0];
-            UUID statusId = (UUID) row[1];
-            byRun.computeIfAbsent(runId, id -> new Tally())
-                    .add(
-                            ResultStatuses.countable(statusId == null ? null : statusesById.get(statusId)),
-                            ((Number) row[2]).longValue(),
-                            (Instant) row[3]);
+
+        for (RollupFacts.SuiteRunRow summary : summaries) {
+            byRun.put(summary.runId(), Tally.of(summary));
+        }
+
+        // The tail: runs the rollup has not reached. Tallied live, from the same grouped query this
+        // class used for everything before §101 — bounded to the runs with no summary row, which is
+        // what has happened since the last tick rather than the project's whole history.
+        List<UUID> tail = rollups.runsWithoutSummary(caseIds, suiteId);
+        if (!tail.isEmpty()) {
+            Map<UUID, CaseStatusView> statusesById = statuses.byId(projectId);
+            Set<UUID> tailRuns = Set.copyOf(tail);
+            for (Object[] row : executions.tallyForCases(projectId, caseIds)) {
+                UUID runId = (UUID) row[0];
+                if (!tailRuns.contains(runId)) {
+                    continue;
+                }
+                UUID statusId = (UUID) row[1];
+                byRun.computeIfAbsent(runId, id -> new Tally())
+                        .add(
+                                ResultStatuses.countable(
+                                        statusId == null ? null : statusesById.get(statusId)),
+                                ((Number) row[2]).longValue(),
+                                (Instant) row[3]);
+            }
         }
 
         if (byRun.isEmpty()) {
@@ -187,7 +269,11 @@ public class SuiteHistoryService {
                     run.getId(),
                     run.getKey(),
                     run.getName(),
-                    versionAt(marks, executedAt),
+                    // The rollup's frozen number when there is one; the marks otherwise. See
+                    // Tally#frozenVersionNo for why the two are not interchangeable.
+                    tally.frozenVersionNo != null
+                            ? tally.frozenVersionNo
+                            : versionAt(marks, executedAt),
                     // The configuration's own name, falling back to its id rather than to a blank:
                     // the contract marks it required, and a vocabulary row deleted under a finished
                     // run should leave a row a reader can still match against something.

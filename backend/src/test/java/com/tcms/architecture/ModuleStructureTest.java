@@ -87,7 +87,16 @@ class ModuleStructureTest {
                         records as having requested it — and the reason the narrow declaration was \
                         right in the meantime is the rule this list runs on: a declaration is a \
                         fact about code that exists, never a forecast of what the module will want, \
-                        because a forecast cannot fail the build when it stops being true.""")
+                        because a forecast cannot fail the build when it stops being true. \
+                        §101 adds the first module with TWO seams: `execution.RollupFacts` names \
+                        `reporting`'s three read models beside `execution.CaseFacts` naming \
+                        `repository`'s tables. The rule was never "one seam per module" but one \
+                        seam per FOREIGN module, and splitting them keeps each file's header an \
+                        argument about one boundary. It is also the first edge that runs both ways \
+                        at the table level — `reporting` builds those three tables from \
+                        `execution`'s — and in neither direction at the Java level, which is the \
+                        only level this test can see; `RollupAgreementTest` is what holds the two \
+                        sides to each other instead.""")
                 .containsExactly(
                         "auth", "documentation", "execution", "identity", "project", "provisioning",
                         "reporting", "repository", "tenancy", "work");

@@ -36,6 +36,26 @@
  * reviewable — and what makes it a single file to rewrite on the day these facts arrive as events
  * instead.
  *
+ * <h2>There are TWO seams since §101, one per foreign module</h2>
+ *
+ * <p>{@link com.tcms.execution.RollupFacts} is the second, and it names {@code reporting}'s three
+ * read models — {@code execution_fact}, {@code suite_run_summary}, {@code plan_snapshot} — so the
+ * suite-history and plan-statistics screens can read pre-aggregated counts instead of scanning every
+ * execution per request.
+ *
+ * <p>Two classes rather than one, which departs from {@code work.BoardFacts}' precedent of a single
+ * seam naming two foreign modules, and it is deliberate: {@code CaseFacts} is nine hundred lines
+ * whose header is an argument about the <em>repository</em> boundary specifically. Adding a rollup
+ * reader would put two unrelated boundaries in one file with nothing distinguishing them, and the
+ * next person would have to read both arguments to change either. The rule that matters is
+ * unchanged and is per-module: <strong>one seam per foreign module, and nothing else in this package
+ * may name that module's tables.</strong>
+ *
+ * <p>The {@code reporting} edge runs both ways at the table level — that module builds those three
+ * tables by reading this one's — and in neither direction at the Java level, which is the level
+ * ArchUnit and Modulith check. {@code RollupAgreementTest} is what holds the two sides to each
+ * other, since no compiler does.
+ *
  * <h2>The pin is read through the snapshot, and that is the design rather than a shortcut</h2>
  *
  * <p>{@link com.tcms.execution.CaseFacts} does not read the live case. It reads

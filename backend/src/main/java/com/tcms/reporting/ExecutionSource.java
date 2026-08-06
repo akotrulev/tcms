@@ -443,14 +443,14 @@ class ExecutionSource {
                 INSERT INTO suite_run_summary (
                         company_id, run_id, suite_id, configuration_id, suite_version_no,
                         passed, failed, blocked, skipped, not_run, total,
-                        membership_snapshot, updated_at)
+                        membership_snapshot, last_executed_at, updated_at)
                 SELECT m.company_id, m.run_id, m.suite_id, m.configuration_id,
                        COALESCE((SELECT max(v.version_no) FROM suite_version v
                                   WHERE v.suite_id = m.suite_id
                                     AND m.last_executed_at IS NOT NULL
                                     AND v.created_at <= m.last_executed_at), 1),
                        m.passed, m.failed, m.blocked, m.skipped, m.not_run, m.total,
-                       m.case_ids, now()
+                       m.case_ids, m.last_executed_at, now()
                   FROM (
                         SELECT e.company_id,
                                e.run_id,
@@ -515,9 +515,14 @@ class ExecutionSource {
                 UPDATE suite_run_summary srs
                    SET passed = t.passed, failed = t.failed, blocked = t.blocked,
                        skipped = t.skipped, not_run = t.not_run, total = t.total,
+                       -- Moves with the counts and is NOT frozen with the membership: it describes
+                       -- the results, not the composition. An amended verdict changes when the
+                       -- run's last result landed, and the page sorts by that.
+                       last_executed_at = t.last_executed_at,
                        updated_at = now()
                   FROM (
                         SELECT s.run_id, s.suite_id, s.configuration_id,
+                               max(e.executed_at)                          AS last_executed_at,
                                count(*) FILTER (WHERE st.kind = 'PASSED')  AS passed,
                                count(*) FILTER (WHERE st.kind = 'FAILED')  AS failed,
                                count(*) FILTER (WHERE st.kind = 'BLOCKED') AS blocked,
@@ -537,10 +542,12 @@ class ExecutionSource {
                  WHERE srs.run_id = t.run_id
                    AND srs.suite_id = t.suite_id
                    AND srs.configuration_id = t.configuration_id
-                   AND (srs.passed, srs.failed, srs.blocked, srs.skipped, srs.not_run, srs.total)
+                   AND (srs.passed, srs.failed, srs.blocked, srs.skipped, srs.not_run, srs.total,
+                        srs.last_executed_at)
                        IS DISTINCT FROM
                        (CAST(t.passed AS int), CAST(t.failed AS int), CAST(t.blocked AS int),
-                        CAST(t.skipped AS int), CAST(t.not_run AS int), CAST(t.total AS int))
+                        CAST(t.skipped AS int), CAST(t.not_run AS int), CAST(t.total AS int),
+                        t.last_executed_at)
                 """)
                 .executeUpdate();
     }
@@ -603,10 +610,10 @@ class ExecutionSource {
         return entities.createNativeQuery("""
                 INSERT INTO plan_snapshot (
                         company_id, plan_id, case_id, configuration_id, execution_id,
-                        status_kind, counts_as_pass, executed_at, release_version)
+                        status_kind, counts_as_pass, executed_at, release_version, updated_at)
                 SELECT DISTINCT ON (i.plan_id, e.case_id, r.configuration_id)
                        e.company_id, i.plan_id, e.case_id, r.configuration_id, e.id,
-                       st.kind, st.counts_as_pass, e.executed_at, e.release_version
+                       st.kind, st.counts_as_pass, e.executed_at, e.release_version, now()
                   FROM plan_scope_item i
                   JOIN test_plan p ON p.id = i.plan_id
                   LEFT JOIN suite s ON s.id = i.suite_id
@@ -638,7 +645,18 @@ class ExecutionSource {
                        status_kind     = EXCLUDED.status_kind,
                        counts_as_pass  = EXCLUDED.counts_as_pass,
                        executed_at     = EXCLUDED.executed_at,
-                       release_version = EXCLUDED.release_version
+                       release_version = EXCLUDED.release_version,
+                       updated_at      = now()
+                 -- Only when something actually moved, for correctSuiteRunCounts' reason: this
+                 -- column is served as `computedAt`, and a tick that rewrote every row would make
+                 -- the freshness field always say "just now", which is a freshness field that says
+                 -- nothing on the screen §6p calls the most dangerous in the product.
+                 WHERE (plan_snapshot.execution_id, plan_snapshot.status_kind,
+                        plan_snapshot.counts_as_pass, plan_snapshot.executed_at,
+                        plan_snapshot.release_version)
+                       IS DISTINCT FROM
+                       (EXCLUDED.execution_id, EXCLUDED.status_kind, EXCLUDED.counts_as_pass,
+                        EXCLUDED.executed_at, EXCLUDED.release_version)
                 """)
                 .executeUpdate();
     }

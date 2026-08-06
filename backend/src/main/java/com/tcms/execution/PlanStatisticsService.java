@@ -109,6 +109,7 @@ public class PlanStatisticsService {
     private final ResultStatuses statuses;
     private final ExecutionViews views;
     private final CaseFacts cases;
+    private final RollupFacts rollups;
     private final PlanCriteria criteria;
     private final Clock clock;
 
@@ -120,6 +121,7 @@ public class PlanStatisticsService {
             ResultStatuses statuses,
             ExecutionViews views,
             CaseFacts cases,
+            RollupFacts rollups,
             PlanCriteria criteria,
             Clock clock) {
 
@@ -130,6 +132,7 @@ public class PlanStatisticsService {
         this.statuses = statuses;
         this.views = views;
         this.cases = cases;
+        this.rollups = rollups;
         this.criteria = criteria;
         this.clock = clock;
     }
@@ -162,13 +165,26 @@ public class PlanStatisticsService {
         }
 
         Map<UUID, CaseStatusView> statusesById = statuses.byId(plan.getProjectId());
-        List<Row> rows = rowsInScope(plan, inScope);
+
+        // Where the numbers come from, and it is not the same answer for all five policies —
+        // see servedFromRollup. Everything below this line is identical either way, which is the
+        // property that keeps one implementation of the arithmetic rather than two.
+        List<RollupFacts.PlanSnapshotRow> snapshot = servedFromRollup(policy)
+                ? rollups.planSnapshot(plan.getId())
+                : List.of();
+        boolean fromRollup = !snapshot.isEmpty() && snapshotIsComplete(plan, inScope, snapshot);
+        if (!fromRollup) {
+            snapshot = List.of();
+        }
+        List<Row> rows = fromRollup
+                ? rollupRows(plan, inScope, snapshot, statusesById)
+                : rowsInScope(plan, inScope, statusesById);
 
         // Resolved once and reused by every breakdown below. A per-panel resolution would let the
         // headline and the by-suite table disagree about the same case under the same policy, which
         // is the class of defect §6p exists to remove.
         List<Contribution> contributions = resolve(rows, policy, statusesById);
-        Set<UUID> covered = coveredCases(rows, statusesById);
+        Set<UUID> covered = coveredCases(rows);
         Set<UUID> touched = touchedCases(rows);
 
         ResultCountsView counts = tally(contributions, scope.size() - touched.size());
@@ -185,44 +201,176 @@ public class PlanStatisticsService {
                 coveragePercent,
                 latestExecutionAt(rows),
                 isStale(rows),
-                // Null while this class still computes live — the truthful value, and phase 4
-                // replaces it for the two policies a latest-per-case rollup can serve.
-                null,
+                computedAt(snapshot),
                 byConfiguration(plan.getProjectId(), scope, rows, policy, statusesById),
                 bySuite(scope, contributions, touched),
-                blockers(companyId, rows, contributions, statusesById),
+                blockers(companyId, contributions, statusesById),
                 notRun(scope, covered),
                 criteria.evaluate(
                         criteria.parse(plan.getExitCriteria()), actuals(counts, coveragePercent)),
-                trend(rows, statusesById));
+                fromRollup ? rollupTrend(plan.getId()) : trend(rows));
+    }
+
+    /**
+     * Whether {@code plan_snapshot} can answer this policy at all.
+     *
+     * <p><strong>Two of the five, and it is a property of the table rather than a shortfall to work
+     * around.</strong> The rollup holds the latest result per case per configuration, so
+     * {@link AggregationPolicy#LATEST_PER_CONFIG} is literally its grain and
+     * {@link AggregationPolicy#LATEST} is one further collapse of it — the row with the greatest
+     * {@code executed_at} among a case's configuration rows, which {@link #resolve} already computes
+     * and which is unchanged by having pre-collapsed the input (latest-per-case over
+     * latest-per-case-per-config <em>is</em> latest-per-case, and both keep the larger execution id
+     * on a tie).
+     *
+     * <p>{@link AggregationPolicy#WORST}, {@link AggregationPolicy#BEST} and
+     * {@link AggregationPolicy#ALL} each need <em>every</em> execution: the worst result a case ever
+     * had is not derivable from its most recent one. They keep the live path, and the response says
+     * so through a null {@code computedAt} rather than leaving a reader to discover that the same
+     * screen has two staleness behaviours depending on a dropdown.
+     */
+    private static boolean servedFromRollup(AggregationPolicy policy) {
+        return policy == AggregationPolicy.LATEST || policy == AggregationPolicy.LATEST_PER_CONFIG;
+    }
+
+    /**
+     * Whether the rollup has actually been written for every case this plan has a result for.
+     *
+     * <h2>The policy check alone was a defect, and {@code RollupAgreementTest} caught it</h2>
+     *
+     * <p>"This policy <em>can</em> be served from the rollup" is not the same claim as "the rollup
+     * <em>has</em> been written". A plan whose first results landed since the last scheduler tick —
+     * or any plan at all on a deployment where the job has never run — has an empty
+     * {@code plan_snapshot}, and reading it reports <strong>every case as not-run</strong>.
+     *
+     * <p>That is not the staleness this design accepts and declares through {@code computedAt}. It
+     * is a plan that has been executed reporting that nothing has been executed, rendering exactly
+     * like an un-started plan — the failure shape §47, §53, §72 and §81 each paid for, arriving
+     * through a cache that is merely cold.
+     *
+     * <p><strong>Falling back is the safe direction and the fallback is not a degradation.</strong>
+     * The live path is the specification (this class's header) and is what shipped for the whole of
+     * M2; the rollup is an optimisation over it. So a plan the rollup cannot fully answer is served
+     * exactly as it was before §101, with {@code computedAt} null — which is true, and is the
+     * client's signal that these numbers are current rather than pre-aggregated.
+     *
+     * <p><strong>Completeness, not freshness.</strong> A snapshot holding a verdict the tester has
+     * since amended is <em>stale</em>, and staleness is reported rather than avoided — chasing it
+     * here would mean re-reading every execution, which is the scan the rollup exists to remove. A
+     * snapshot missing a case entirely is a different thing, and it is the one that produces a wrong
+     * number rather than an old one.
+     */
+    private boolean snapshotIsComplete(
+            TestPlan plan, Set<UUID> inScope, List<RollupFacts.PlanSnapshotRow> snapshot) {
+
+        Set<UUID> snapshotted = new HashSet<>();
+        for (RollupFacts.PlanSnapshotRow row : snapshot) {
+            snapshotted.add(row.caseId());
+        }
+
+        for (UUID caseId : executions.recordedCaseIdsForPlan(plan.getProjectId(), plan.getId())) {
+            // Out-of-scope cases are absent from the snapshot by design — the refresh's own scope
+            // predicate drops them — so counting them here would make the snapshot permanently
+            // "incomplete" for any plan somebody has ever narrowed, and the rollup would silently
+            // never be used again. That failure is invisible: the page stays correct and slow.
+            if (inScope.contains(caseId) && !snapshotted.contains(caseId)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * The age of the <strong>stalest</strong> figure on the page, or null when it was computed live.
+     *
+     * <p><em>Minimum</em> and not maximum, for {@code SuiteHistoryService}'s reason: the response
+     * mixes rolled-up rows with a live unrecorded tail, so the newest {@code updated_at} would be a
+     * claim true of one row and false of the others — false in the reassuring direction, which is the
+     * one that matters on the screen §6p calls the most dangerous in the product. The oldest is the
+     * only instant for which "nothing here is older than this" holds of the whole response.
+     *
+     * <p>Null for an empty snapshot as well as for the live policies, and both are the same
+     * statement: no figure here came from a rollup, so nothing here is behind.
+     */
+    private static Instant computedAt(List<RollupFacts.PlanSnapshotRow> snapshot) {
+        Instant oldest = null;
+        for (RollupFacts.PlanSnapshotRow row : snapshot) {
+            if (oldest == null || row.updatedAt().isBefore(oldest)) {
+                oldest = row.updatedAt();
+            }
+        }
+        return oldest;
+    }
+
+    /**
+     * The trend line from {@code execution_fact}, aggregated in the database.
+     *
+     * <p>A second implementation of {@link #trend}, and it is forced rather than chosen:
+     * {@code plan_snapshot} keeps one row per case and a trend is one point per <em>run</em>, so the
+     * rollup path has nothing to compute it from. Computing it live beside a rolled-up headline
+     * would keep the scan the rollup exists to remove <em>and</em> put the sparkline on a different
+     * clock from the number beside it.
+     *
+     * <p>Held to the other implementation by {@code RollupAgreementTest} rather than by this
+     * comment — the same device {@code SuiteScopeAgreementTest} uses for the membership union, for
+     * the same reason: a duplicated computation the module boundary makes unavoidable is kept honest
+     * by a test or not at all.
+     */
+    private List<TrendPointView> rollupTrend(UUID planId) {
+        List<TrendPointView> points = new ArrayList<>();
+        for (RollupFacts.PlanTrendRow row : rollups.planTrend(planId)) {
+            if (row.executed() == 0) {
+                continue;
+            }
+            points.add(new TrendPointView(
+                    row.runKey(),
+                    row.executedAt(),
+                    Math.round(row.passed() * 1000.0 / row.executed()) / 10.0));
+        }
+        points.sort(Comparator.comparing(
+                TrendPointView::executedAt, Comparator.nullsLast(Comparator.naturalOrder())));
+        return List.copyOf(points);
     }
 
     // ------------------------------------------------------------------ rows ---
 
     /**
-     * One execution joined to the run that holds it.
+     * One execution's contribution to this plan, joined to the run that holds it.
      *
+     * <p><strong>Flattened out of {@link TestExecution} in §101</strong>, and that is what lets the
+     * same arithmetic run over two sources. It used to wrap the entity and read {@code getStatusId},
+     * {@code getCaseId} and {@code getExecutedAt} off it — which binds every computation below to a
+     * row having been loaded as an object. {@code plan_snapshot} stores the resolved
+     * {@link StatusKind} rather than a status id, so an entity-shaped row simply cannot be built
+     * from it, and flattening is what stops there being two implementations of the five policies.
+     *
+     * @param kind       resolved <em>at construction</em>, by whichever source built the row: the
+     *                   live path through {@link ResultStatuses#countable} against the project's own
+     *                   statuses, the rollup path from the {@code status_kind} the refresh already
+     *                   resolved. Both end at the same enum, which is the whole point of {@code V1}
+     *                   storing a kind beside a project-configurable status.
      * @param executedAt taken from the execution rather than the run: a run started on Monday can
      *                   hold a result recorded on Thursday, and the trend line plots when the work
      *                   happened.
+     * @param runId      null on a rollup row — {@code plan_snapshot} is keyed by case, not by run,
+     *                   and nothing that reads a rollup row asks which run it came from. The trend,
+     *                   which is the only per-run computation here, comes from
+     *                   {@link RollupFacts#planTrend} on that path.
      */
     private record Row(
-            TestExecution execution,
+            UUID executionId,
+            UUID caseId,
+            StatusKind kind,
+            Instant executedAt,
             UUID runId,
             String runKey,
             UUID configurationId,
             Instant runStartedAt) {
-
-        Instant executedAt() {
-            return execution.getExecutedAt();
-        }
-
-        UUID caseId() {
-            return execution.getCaseId();
-        }
     }
 
-    private List<Row> rowsInScope(TestPlan plan, Set<UUID> inScope) {
+    private List<Row> rowsInScope(
+            TestPlan plan, Set<UUID> inScope, Map<UUID, CaseStatusView> statusesById) {
+
         List<Row> rows = new ArrayList<>();
         for (Object[] row : executions.findForPlan(plan.getProjectId(), plan.getId())) {
             TestExecution execution = (TestExecution) row[0];
@@ -231,13 +379,86 @@ public class PlanStatisticsService {
             // a case the plan no longer covers.
             if (inScope.contains(execution.getCaseId())) {
                 rows.add(new Row(
-                        execution,
+                        execution.getId(),
+                        execution.getCaseId(),
+                        kindOf(execution.getStatusId(), statusesById),
+                        execution.getExecutedAt(),
                         (UUID) row[1],
                         (String) row[2],
                         (UUID) row[3],
                         (Instant) row[4]));
             }
         }
+        return rows;
+    }
+
+    /**
+     * The same rows, assembled from {@code plan_snapshot} plus the run checklist.
+     *
+     * <h2>Two sources, and the split is between what grows and what does not</h2>
+     *
+     * <p>{@code plan_snapshot} holds only <strong>recorded</strong> results — its refresh joins
+     * {@code case_status} inner — and that is the half whose size grows without limit: every
+     * execution of every case across every run of the plan, for as long as the plan is used. It is
+     * the half §6p wrote the rollup for.
+     *
+     * <p>The <strong>unrecorded</strong> half is the checklist §42 writes at run creation, one empty
+     * execution per case in scope. It is bounded by (cases in scope × configurations) and does not
+     * grow with time, so it stays live — and it has to be here rather than dropped, for one reason
+     * that is easy to miss and easy to ship: {@link #byConfiguration} lists <em>only configurations
+     * with at least one execution</em>, so a configuration whose run has been opened and not yet
+     * recorded would <strong>disappear from the matrix</strong> if this method returned recorded
+     * rows alone. That is §6p's Chrome-versus-Safari failure arrived at from the third direction,
+     * after the two the panel's own header already records.
+     *
+     * <p>Everything else survives the omission by arithmetic rather than by luck, and it is worth
+     * writing down because it looks like luck: an unrecorded row contributes {@code UNTESTED}, which
+     * {@link #tally} counts in {@code notRun}; without the row the case contributes nothing, is not
+     * in {@code touched}, and is phantomed into {@code notRun} by the same method. One each way.
+     */
+    private List<Row> rollupRows(
+            TestPlan plan,
+            Set<UUID> inScope,
+            List<RollupFacts.PlanSnapshotRow> snapshot,
+            Map<UUID, CaseStatusView> statusesById) {
+
+        List<Row> rows = new ArrayList<>(snapshot.size());
+
+        for (RollupFacts.PlanSnapshotRow row : snapshot) {
+            // The scope filter is applied by the rollup's own delete pass, and again here. Not
+            // redundant: the prune runs on the scheduler's clock, so between a case leaving the
+            // scope and the next tick the table still holds its row — and this screen must not
+            // report a case the plan no longer covers even for fifteen minutes.
+            if (!inScope.contains(row.caseId())) {
+                continue;
+            }
+            rows.add(new Row(
+                    row.executionId(),
+                    row.caseId(),
+                    StatusKind.valueOf(row.statusKind()),
+                    row.executedAt(),
+                    null,
+                    null,
+                    row.configurationId(),
+                    null));
+        }
+
+        for (Object[] row : executions.findUnrecordedForPlan(plan.getProjectId(), plan.getId())) {
+            UUID caseId = (UUID) row[1];
+            if (!inScope.contains(caseId)) {
+                continue;
+            }
+            rows.add(new Row(
+                    (UUID) row[0],
+                    caseId,
+                    kindOf(null, statusesById),
+                    null,
+                    (UUID) row[2],
+                    (String) row[3],
+                    (UUID) row[4],
+                    (Instant) row[5]));
+        }
+
         return rows;
     }
 
@@ -265,7 +486,7 @@ public class PlanStatisticsService {
             List<Row> rows, AggregationPolicy policy, Map<UUID, CaseStatusView> statusesById) {
 
         if (policy == AggregationPolicy.ALL) {
-            return rows.stream().map(row -> contribution(row, statusesById)).toList();
+            return rows.stream().map(PlanStatisticsService::contribution).toList();
         }
 
         Comparator<Row> preference = switch (policy) {
@@ -281,10 +502,10 @@ public class PlanStatisticsService {
             // un-started work is already reported — by `coverage` and by `notRun` — and reporting
             // it a second time by hiding a case's actual worst result is how "worst" stops meaning
             // what its label says.
-            case WORST -> verdictsFirst(statusesById).thenComparingInt(
-                    row -> -WORST_FIRST.indexOf(kindOf(row, statusesById)));
-            case BEST -> verdictsFirst(statusesById).thenComparingInt(
-                    row -> WORST_FIRST.indexOf(kindOf(row, statusesById)));
+            case WORST -> verdictsFirst().thenComparingInt(
+                    row -> -WORST_FIRST.indexOf(row.kind()));
+            case BEST -> verdictsFirst().thenComparingInt(
+                    row -> WORST_FIRST.indexOf(row.kind()));
             case ALL -> throw new IllegalStateException("handled above");
         };
 
@@ -294,7 +515,7 @@ public class PlanStatisticsService {
         // return first, so the SAME request could answer a different configuration in
         // `byConfiguration` between two calls. Execution id is arbitrary but stable, which is the
         // whole requirement.
-        Comparator<Row> keeps = preference.thenComparing(row -> row.execution().getId());
+        Comparator<Row> keeps = preference.thenComparing(Row::executionId);
 
         Map<Object, Row> winners = new LinkedHashMap<>();
         for (Row row : rows) {
@@ -304,20 +525,17 @@ public class PlanStatisticsService {
             winners.merge(key, row, (held, candidate) ->
                     keeps.compare(candidate, held) > 0 ? candidate : held);
         }
-        return winners.values().stream().map(row -> contribution(row, statusesById)).toList();
+        return winners.values().stream().map(PlanStatisticsService::contribution).toList();
     }
 
     /** Rows carrying a verdict sort above rows that do not. See the two call sites for why. */
-    private static Comparator<Row> verdictsFirst(Map<UUID, CaseStatusView> statusesById) {
-        return Comparator.comparing(row -> isVerdict(kindOf(row, statusesById)));
+    private static Comparator<Row> verdictsFirst() {
+        return Comparator.comparing(row -> isVerdict(row.kind()));
     }
 
-    private Contribution contribution(Row row, Map<UUID, CaseStatusView> statusesById) {
+    private static Contribution contribution(Row row) {
         return new Contribution(
-                row.caseId(),
-                row.configurationId(),
-                kindOf(row, statusesById),
-                row.execution().getId());
+                row.caseId(), row.configurationId(), row.kind(), row.executionId());
     }
 
     /**
@@ -327,8 +545,7 @@ public class PlanStatisticsService {
      * who renamed "Blocked" to "Environment down" or added a second passing status must not fall out
      * of the counts.
      */
-    private static StatusKind kindOf(Row row, Map<UUID, CaseStatusView> statusesById) {
-        UUID statusId = row.execution().getStatusId();
+    private static StatusKind kindOf(UUID statusId, Map<UUID, CaseStatusView> statusesById) {
         return ResultStatuses.countable(statusId == null ? null : statusesById.get(statusId));
     }
 
@@ -348,10 +565,10 @@ public class PlanStatisticsService {
      * — and coverage is the figure §6p puts beside the pass rate precisely so that the pass rate
      * cannot be read alone.
      */
-    private static Set<UUID> coveredCases(List<Row> rows, Map<UUID, CaseStatusView> statusesById) {
+    private static Set<UUID> coveredCases(List<Row> rows) {
         Set<UUID> covered = new HashSet<>();
         for (Row row : rows) {
-            if (isVerdict(kindOf(row, statusesById))) {
+            if (isVerdict(row.kind())) {
                 covered.add(row.caseId());
             }
         }
@@ -546,7 +763,6 @@ public class PlanStatisticsService {
      */
     private List<TestExecutionSummaryView> blockers(
             UUID companyId,
-            List<Row> rows,
             List<Contribution> contributions,
             Map<UUID, CaseStatusView> statusesById) {
 
@@ -561,10 +777,16 @@ public class PlanStatisticsService {
             return List.of();
         }
 
-        List<TestExecution> failing = rows.stream()
-                .map(Row::execution)
-                .filter(execution -> blocking.contains(execution.getId()))
-                .toList();
+        // Loaded by id rather than filtered out of the rows in hand, which is what §101 changed and
+        // why: a rollup row is not an entity — plan_snapshot stores an execution's ID and its
+        // resolved verdict, not the row — so the live path's "filter the objects we already have"
+        // has nothing to filter on the other path. One bounded query over the failed and blocked
+        // ids serves both, and having one is what stops the two paths from rendering this list
+        // differently.
+        List<TestExecution> failing = new ArrayList<>();
+        for (TestExecution execution : executions.findAllById(blocking)) {
+            failing.add(execution);
+        }
         return views.render(companyId, failing, statusesById);
     }
 
@@ -606,8 +828,7 @@ public class PlanStatisticsService {
      * <p>Ignores the aggregation policy, and must: the policy resolves a case's several results
      * across runs into one, which is the opposite of what a per-run series is.
      */
-    private static List<TrendPointView> trend(
-            List<Row> rows, Map<UUID, CaseStatusView> statusesById) {
+    private static List<TrendPointView> trend(List<Row> rows) {
 
         record Accumulator(long passed, long executed, Instant at) {
         }
@@ -615,7 +836,7 @@ public class PlanStatisticsService {
         Map<UUID, Accumulator> byRun = new HashMap<>();
         Map<UUID, String> keys = new HashMap<>();
         for (Row row : rows) {
-            StatusKind kind = kindOf(row, statusesById);
+            StatusKind kind = row.kind();
             if (!isVerdict(kind)) {
                 continue;
             }

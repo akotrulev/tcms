@@ -60,8 +60,13 @@
  *
  * <h2>What is deliberately not here yet</h2>
  *
- * <p>{@code suite_run_summary} and {@code plan_snapshot} are {@code V1} tables with no code.
- * {@code report_definition} has an entity and no writer — saved definitions are R5, so every job in
+ * <p>~~{@code suite_run_summary} and {@code plan_snapshot} are {@code V1} tables with no code.~~
+ * <strong>→ superseded 2026-08-06 (§101):</strong> both have writers now
+ * ({@link com.tcms.reporting.RollupRefreshService}), and {@code execution} reads them back through
+ * its own {@code RollupFacts} seam. They are the last two tables this section named. Note the
+ * asymmetry recorded there, because they look like siblings and are not: the suite rollup is
+ * <em>history</em> and freezes its membership, the plan snapshot is <em>current state</em> and needs
+ * a delete pass. {@code report_definition} has an entity and no writer — saved definitions are R5, so every job in
  * R3 is ad-hoc and {@code definition_id} is null on every row this module writes. §6e's catalogue
  * names ten reports and {@link com.tcms.reporting.RunSummaryReport} is the first;
  * {@code docs/plans/2026-08-04-m2.5-reporting-slice-plan.md} decomposes the rest into R4–R8, of
@@ -69,7 +74,22 @@
  *
  * <p><strong>Naming trap, live.</strong> {@code com.tcms.execution.PlanSnapshot} is §74's
  * plan-version value object and has nothing whatever to do with the {@code plan_snapshot} table in
- * this section. A writer for that table must not be called {@code PlanSnapshot}.
+ * this section. A writer for that table must not be called {@code PlanSnapshot} — §101's is
+ * {@link com.tcms.reporting.RollupRefreshService}, and the trap was live when it was written.
+ *
+ * <h2>The tables this module writes are read back by {@code execution}, and that is not a cycle</h2>
+ *
+ * <p>Since §101 the direction runs both ways at the <em>table</em> level: this module builds
+ * {@code execution_fact}, {@code suite_run_summary} and {@code plan_snapshot} by reading
+ * {@code execution}'s tables through {@link com.tcms.reporting.ExecutionSource}, and
+ * {@code execution.RollupFacts} then reads those three back. At the Java level there is no
+ * dependency in either direction — no import, no bean, no call — which is the level ArchUnit and
+ * Spring Modulith check and the only level at which a compile can break.
+ *
+ * <p>The alternative was moving the suite-history and plan-statistics endpoints into this module,
+ * which would have made a screen's module depend on which storage strategy it happened to use.
+ * <strong>The cost is that nothing checks the two sides still agree about a column</strong>, and it
+ * is closed by {@code RollupAgreementTest} rather than by this paragraph.
  */
 @org.springframework.modulith.ApplicationModule(allowedDependencies = {"tenancy", "project", "identity"})
 package com.tcms.reporting;
