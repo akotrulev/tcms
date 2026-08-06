@@ -1,1111 +1,670 @@
 # Deferred browser checks — the queue
 
-**Policy set 2026-08-02 (§65).** Driving each slice in a real browser through the Chrome plugin is
-slow — a live pass is many minutes of clicking per slice, and it was being paid *during* feature
-work. It is now **deferred and batched**: a slice records what must be driven and what must be
-observed, and this file is executed as one session later.
+**Policy §65 (2026-08-02).** A live browser pass is deferred and batched: a slice records what must
+be driven, and this file is executed later as one session. Nothing here is optional — each row is a
+defect nobody has looked for yet, and **a slice in an unrun lane is *built and unverified***.
 
-**This reverses a standing rule, and the reversal is the risk.** `CLAUDE.md` says *"the gates prove
-it compiles, not that it works"*, and the handoff's evidence is overwhelming: the live pass has
-found a defect no gate could see in **most** slices since §42 — §62's unselectable APPROVED option,
-§57's permanent loading skeleton, §53's card with no reason on it, §52's clipped tables, §64's
-contradictory error messages. Deferring does not make those defects less likely; it makes them
-**arrive later and in a batch**, which is the trade being accepted deliberately to ship the
-remaining functionality first while requirements are still moving.
+**Rewritten 2026-08-05 into lanes.** It was one block per slice (~30 blocks, 128 numbered rows) with
+the same permission, resilience and responsive checks restated in each. It is now **two passes of
+ordered lanes**. Rows keep a `src` column so existing references (`§80 row 14`, `§100 row 112`) still
+resolve; the per-slice originals are in git history at `4b582ec`.
 
-**So the entries below are not optional and they are not a wishlist.** Each one is a defect that has
-not yet been looked for. Until this file is run, a slice listed here is *built and unverified*, and
-should be described that way rather than as done.
+| Pass | Lanes | Shape |
+|---|---|---|
+| **The mock pass** | `M1 → M7` | One `npm run dev`, one persona, no sign-ins, no backend. |
+| **The live pass** | `L0 → L4` | One provisioned company, five personas, two scheduler waits. |
 
-## How to run this file
+**Each pass is a single agent working its lanes in order, start to finish.** They are not a menu and
+they do not interleave: within a pass the lanes share one accumulating state, later lanes read what
+earlier ones wrote, and both passes end with a lane that would poison everything after it (`M7` arms
+the fault switches; `L4` finishes writing the company). Each pass opens with its own **run-order
+table** naming what every stage needs and what it leaves behind — read that before the first row.
 
-Per `CLAUDE.md`, live mode is the one that counts — mock mode agrees with itself (§64, §54, §52 each
-found a defect that existed only because the mock and the SPA shared one wrong assumption).
+The two passes are independent of each other and can be done on different days, in either order.
+**Neither may be split across agents**, and neither may run concurrently with the other in the same
+tree: `docs/plans/2026-07-31-parallel-execution-rework.md` §0 is what that costs here.
+
+## Setup
 
 ```bash
-docker compose up --build          # REBUILD — §63's trap: a running image predates the change,
-                                   # so a stale container answers with the old rules
-cd frontend && npm run dev         # with VITE_API_MODE=live in .env.local
-                                   # then: rm -rf node_modules/.vite after changing .env.local
+docker compose up --build          # REBUILD — a running image predates the change (§63)
+cd frontend && npm run dev         # mock lanes: default. live lanes: VITE_API_MODE=live in
+                                   # .env.local, then rm -rf node_modules/.vite
 ```
 
-Then per row: drive the flow, check the observation, and check `window.__tcmsErrors` is empty at the
-end of each. **Record what was found in the slice's handoff section**, not here — this file is the
-queue, not the findings.
+Live mode is the one that counts — mock mode agrees with itself, and §52/§54/§64 each found a defect
+that existed only because the mock and the SPA shared one wrong assumption. Where a lane is marked
+**mock**, mock is sufficient *for those rows*; where a row is live-only it says so.
 
-> **⚠ The same rule binds the sibling queue, restated 2026-08-02: NOTHING is run inline** — not a
-> browser pass, and not a mutation check either, however cheap the individual one looks. See
-> `backend-mutation-checks.md`'s header for the correction and why §72–§76's partial runs were a
-> drift rather than the policy.
+Per row: drive it, check the observation, and check `window.__tcmsErrors` is empty at the end of each
+lane. **Findings go in the slice's handoff section, not here** — this is the queue.
+
+**Personas.** Mock mode signs in as one persona holding every key, so every tier distinction is
+structurally invisible there and lives in `L1`. Live mode needs five: Viewer · Test Engineer ·
+Test Lead · Company Admin · a `report:view`-without-`report:export` grant (no built-in role has that
+shape — §87 created it for the suite).
 
 ---
 
-## §65 — permission qualifiers on the wire
+# The mock pass — M1 → M7, one agent, one sitting, in this order
 
-**What shipped unverified:** `/me/permissions` now carries a qualifier per held key, and
-`ArtifactDialogs` uses it to disable the PROJECT-scope choice for a caller whose `artifact:edit` is
-`PLAN_SCOPE`.
+**One `npm run dev`, one persona, no sign-ins.** The mock holds every key, so nothing here switches
+account — which is why the whole pass is one continuous session and why every tier distinction lives
+in L1 instead. Run the seven lanes back-to-back in the order below.
 
-| # | Drive | Must observe |
+**The mock store resets on reload — this is the sequencing hazard of the whole pass.**
+`src/mocks/db.ts` is a cloned fixture store in module state, so a browser reload returns it to
+baseline and takes every write in this lane with it. Two consequences, and neither is optional:
+
+- **Prefer in-app navigation to a browser reload.** Where a row says *"save and reload"* and expects
+  the write to survive, it means navigate away and back. A row that genuinely needs a browser reload
+  to prove something (M1-16's collapsed rail, M6-15's lost cards) says so, and those two are
+  deliberately about state that *should* be lost or *should* outlive the store.
+- **Order within a lane matters more than it looks.** A row that reads a write made three rows
+  earlier is only meaningful if nothing reloaded in between. Work down each lane as written.
+
+### Run order
+
+| Stage | Lane | Before you start | What it leaves behind |
+|---|---|---|---|
+| 1 | **M1** | A fresh `npm run dev`. | Almost nothing — it is mostly navigation, so it is the cheapest lane to redo after an accidental reload. |
+| 2 | **M2** | Baseline fixtures. M2-1…M2-11 build the Feature tree the later classification rows read. | Cases, tags, suite rules and vocabulary values that M3's plan counts depend on. |
+| 3 | **M3** | M2-29/M2-33 done: **M3-5 reads the `smoke` tag M2 wrote**, and M3-6's section arithmetic only holds once the suite rules exist. | Plans moved down the ladder, a plan document, drafts in the tab spine. |
+| 4 | **M4** | M3's plans. M4-23…M4-29 need a plan whose cases are drafts, which M2 left. | A completed run, a reopened run, attached evidence, two gates switched on. |
+| 5 | **M5** | **M5-1 first, always** — §77 changed the default to "review nowhere", so nothing else in the lane exists until it runs. M4-28 switched the opt-ins off; M5-1 switches plans back on. | An open review, a verdict trail, comments, reviewer requests, board cards. |
+| 6 | **M6** | Nothing from earlier lanes — the console rows stand alone. **Its last two rows edit source** (M6-13's `GenerateReportDialog`, M6-20's `mockModel`), which restarts HMR and resets the store, so they are last in the lane on purpose. **Undo both edits before Stage 7.** | Report jobs, saved definitions, and two source files you must have reverted. |
+| 7 | **M7** | Everything else finished. **This lane arms `tcmsFaults`, which poisons every request until it is disarmed** — running it earlier makes every later row's failure ambiguous. | Faults. Call `tcmsFaults.off()` after each row and reload at the end. |
+
+**Fault switches live in module state**, so a reload clears them — arm the fault *after* the page has
+loaded when the row is about testing a failed refetch. Caught client errors are readable at
+`window.__tcmsErrors`, and M7-8 checks it is empty at the end of the pass.
+
+**If a row cannot be driven** — a control is missing, a fixture is not what the row assumes — record
+it against that row and carry on down the lane. Unlike the live pass, restarting is cheap here: a
+reload and a re-walk of the lane costs minutes, so a lane whose state got confused is worth redoing
+rather than reasoning around.
+
+---
+
+# M1 — the frame: rails, boards, and the way back (mock)
+
+Three boards share one component and one card shape; the rail is on every screen and now has two
+widths. Most of the repaired defects were "the route's project and the card's project happened to be
+the same value", which is invisible from a single project.
+
+| # | Drive | Expect | src |
+|---|---|---|---|
+| M1-1 | Look at the rail before touching anything | **My work**, then **All projects**, then the **Project** switcher, with a divider above the switcher. A personal board listed inside the project frame says switching projects changes it. | §83-1, §91-35 |
+| M1-2 | Click **My work**, then switch projects | The board **does not change**; the tab title stays "My work". | §83-2 |
+| M1-3 | Read My Work's cards | Cards from **both OLB and MOB**, each stamped with its own project key. One project means the aggregate quietly became one project's board — and every unit test still passes. | §83-3 |
+| M1-4 | Click the key on a **MOB** card, then on an OLB review card (case, then plan) | A MOB URL that resolves — **check the address bar**. Case → case detail with the review panel; plan → plan detail. `linkFor` took the board's project before §83 and has needed repair in three slices. | §83-4,5, §85-6 |
+| M1-5 | Drag a **task** card on My Work, then open that project's board **and** a team board | The card is in the new column on **all three**. The move invalidates the shared `work-items` root; a per-board key leaves two screens showing a card in the column it just left, and neither looks wrong alone. | §83-6, §85-7 |
+| M1-6 | Drag a **derived** card (execution or review) on any of the three boards | Refused in place, sentence naming what to update — *"TC-20 mirrors a review, so it can't be moved to Done."* Identical on all three: one component. Moving must not perform the approval. | §83-7, §85-8, §81-4 |
+| M1-7 | On My Work and on a team board, look for the **Everyone / Assigned to me** chips and **New task** | **Neither is present.** The chips are a deliberate 400 ("Choose a board"); the button needs a project these screens do not have. Render-then-reject. | §83-8, §85-9 |
+| M1-8 | URL → `/projects/<nonexistent-uuid>/board` | An error state, **not another project's board**. The mock used to fall back to the first project, so a stale bookmark rendered OLB's cards under a foreign id. Only reachable by typing a URL. | §83-13 |
+| M1-9 | Sign in, go straight to `/my-work` before visiting any project | It renders. Must not depend on `useProjects` — a member with no grants has this board and nothing else. | §83-14 |
+| M1-10 | Teams & roles → any team row | A **Board** link on every row, **not greyed** even when Edit/Members/Delete beside it are. It is the one affordance there with no permission behind it. | §85-1 |
+| M1-11 | Board on *Payments Squad*, then on *Checkout Squad* | `/teams/<uuid>/board`, title "Payments Squad — board". Cards from **more than one person** and from **both projects**. Checkout Squad shows a **different set** — Priya's OLB task, not the signed-in user's. Two teams showing one board passes every test written from one team. | §85-3,4,5 |
+| M1-12 | URL → `/teams/<not-a-team>/board`, then press **Back to teams** | **"No such team"** with a working *Back to teams* → `/admin/teams`. Not an empty board, not "Not found — Not Found": the server's 404 is empty-bodied so the sentence is the client's. | §85-10,11 |
+| M1-13 | Create a team with no members, open its board | The **empty state**, visibly different from M1-12's error. The two answers this screen exists to keep apart. | §85-12 |
+| M1-14 | Two or three screens deep, click **All projects**, then the **TCMS** wordmark | Both land on the picker. `All projects` is marked current **there and on no other screen**. | §91-34 |
+| M1-15 | Collapse the rail; hover each icon, then tab through with the keyboard | 64px, content reflows. Tooltips carry the label **on keyboard focus, not only hover**. Group dividers stand in for the headings. The active item keeps its indicator bar. | §91-36 |
+| M1-16 | Collapsed: click the project-key button; reload; expand and reload | The menu lists every project, current one selected, navigation works. **The collapsed state survives both reloads**, and the rail does **not** render expanded for a frame first (read in initial state, not an effect). | §91-37 |
+| M1-17 | Collapsed, walk case list · case detail · plan statistics · board · docs · reports | Nothing reflows badly; no screen assumed a 232px rail. The DataGrid pages are where a width change shows. | §91-38 |
+| M1-18 | Keyboard: tab from the top; then narrow below `md` and open the hamburger | Skip link → **My work** first → switcher. Active state marked by bar and weight, not colour alone. The drawer holds the same items in the same order and closes on tap; a row in one and not the other means the drawer took a different path. Team-board columns stack at `xs`. | §83-15,16, §85-18,19 |
+
+---
+
+# M2 — the repository: cases, steps, conditions, tags, suites (mock)
+
+| # | Drive | Expect | src |
+|---|---|---|---|
+| M2-1 | Open a case editor → Classification panel | **Four** controls — Test Type, Test Level, Feature, Execution Phase — with current values selected. Empty vocabulary reads *"Nothing to choose from yet"*, not a spinner. | §68-1,10 |
+| M2-2 | Change Test Type, save; then save again untouched | One new version, then **no new version**. Reorder-churn is the risk: the ids go over the wire as an array. | §68-2,3 |
+| M2-3 | Set Test Type to **None**, save | Detail shows none; `psql` shows the `case_classification` row **gone**. | §68-4 |
+| M2-4 | Tick a **parent** Feature, save; tick a child too; untick one | Parent accepted (two milestones of comments claimed it could not be); both stored and both named on the grid; unticking takes only that one. | §68-5,6,7 |
+| M2-5 | Create a new case with a Test Type and two Features | Both land; the v1 snapshot carries them. Network: `classificationValueIds` present on **every** save, including empty. | §68-11,13 |
+| M2-6 | Vocabulary editor (`/settings/classification`) as the mock persona | Four panels with a scope chip (*This project* / *Company-wide*). Feature: **Add value** and every rename/retire enabled. Test Type: **Add value disabled with a tooltip** — not hidden (§31). That contrast is the screen. | §69-1,2,3 |
+| M2-7 | Add root "Lending", then "Mortgages" under it via the row's **+** | Renders indented. `psql`: the child's `path` is the parent's plus a `v…` label **not derived from the name**. | §69-4,5 |
+| M2-8 | Add a Feature named **支付** | Accepted and rendered. A name-derived path fails this insert outright. | §69-6 |
+| M2-9 | Add a second "Mortgages" under Lending; then under a different parent | Refused **on the name field** (*"Another value here already has that name"*), then accepted — two leaves under different parents may share a name. | §69-7,8 |
+| M2-10 | Retire a parent that has children; then the children, then it | **409**, dialog **stays open**, *"2 values sit under this one"* — not a toast over a closed dialog. Then 204 each. Reload: gone and staying gone. | §69-10,11,12 |
+| M2-11 | Add a value with `#b7791f`, then one with `red` | Colour dot; then refused on the **colour** field. | §69-17 |
+| M2-12 | Open a case for editing, then **New test case** | Both end in a **blank row**; the new case opens on exactly one. **No "Add step" button** anywhere. Before this slice a new case opened on zero rows. | §94-51 |
+| M2-13 | Type one word in the last row's Action, keep typing, then type in the new last row. Repeat with a **paste** | A blank row appears after the **first keystroke** and **exactly one** — not one per character, and not one per paste. The caret **stays put**: a jump means `shouldFocus` is back. | §94-52 |
+| M2-14 | Type a fragment of an existing step (mock: "Refund") | A suggestion popup with action, a **"n cases"** count, and data → expected beneath. It fires **after you stop typing** — watch the network panel: one request per word, not per letter. | §94-53 |
+| M2-15 | Pick a suggestion with data+expected; then one with **neither** into a row where you had typed data; then edit the action | First fills all three. Second **clears** the data rather than leaving it attached to a step it was never written for. Editing changes nothing else and no "Shared" chip appears — a pick is a copy. | §94-54 |
+| M2-16 | New case: title and suite only, no step, press **Create case** | Refused with **"Add at least one step" rendered in the step panel**. Two things at once: the permanent blank row no longer satisfies the rule, and the message is *visible* — it rendered nothing before, so the button simply did not respond. | §94-55 |
+| M2-17 | One step with leading/trailing spaces in all three fields, trailing row blank, save and reopen. Then type into the trailing row and clear it back to spaces, save | One trimmed step, no empty numbered step — check the **detail** page too. Whitespace is not a step: `"  "` is accepted by the API and renders for ever as an empty line. | §94-56,57 |
+| M2-18 | Remove the trailing blank row with its bin button | A blank row is still there. With no Add button, removing the last row is otherwise a dead end. | §94-58 |
+| M2-19 | Drag a step two places down; drop one **outside** the list; drop one back where it started; then keyboard (Tab to handle, Space, arrows, Space) | Moves and **renumbers**, text stays with its row. The two null drops leave the form **un-dirty** — on an edit form Save stays disabled ("Nothing has changed yet"); a `move(i,i)` would offer a new version of an unchanged case. ▲▼ still work. | §94-60 |
+| M2-20 | Attach two preconditions, save, reopen | Both, **in attachment order** — position is content. | §95-62 |
+| M2-21 | Attach one, reopen the picker; then attach one condition as **both** pre- and postcondition | The attached one is **not offered**. Both lists accept the same condition and both survive a reopen — "reset the payment data" is the canonical case. | §95-63,64 |
+| M2-22 | A case whose **folder** carries conditions: open the editor, save untouched, reopen | Inherited rows render **named with their folder**, with no remove/reorder/drag, and are **still inherited** afterwards. **The slice's most dangerous defect**: an editor that seeded them into the form attaches the folder's conditions to every case anybody edits, permanently and invisibly. | §95-65 |
+| M2-23 | Detach the **last** condition and save | Gone after reload. Absent ≠ empty: a client omitting the empty list reports success and changes nothing. | §95-66 |
+| M2-24 | Reorder conditions with ▲▼, then drag, then keyboard | All three paths produce the same saved order. | §95-67 |
+| M2-25 | Create a condition from the **+** beside the picker | Created, **attached to the list it was created from**, title rendered immediately — not "Unknown condition". Library lists are cached per search term. | §95-70 |
+| M2-26 | Save a condition with a blank title, then an all-blank body | Both refused on the field. An empty condition is a picker row that attaches nothing and cannot be told from one that failed to load. | §95-71 |
+| M2-27 | Save a case and leave the Suite select on **Not filed**; find it in the grid | Saves, Suite column reads **Not filed** (muted italics), and it is **in the unfiltered grid**. `suite_id IN (…)` is never true of NULL, so a grid without an explicit arm drops every unfiled case with no error and a total that still counts it. | §96-74 |
+| M2-28 | Click the **Not filed** chip; then apply a suite filter and look at it again | Only unfiled cases, `unfiled=true` in a shareable URL, cleared by **Clear filters**. With a suite filter it is **disabled with the reason on hover** — not hidden, not enabled-but-inert. | §96-75,76 |
+| M2-29 | Tag a case `smoke` and `regression`, save, reopen; type `smoke` again | Both survive; **no second chip** — a tag list is a set. | §96-77 |
+| M2-30 | Filter bar: add tag `smoke`, then `regression` | Each Enter adds a removable chip and **narrows** — AND, not OR, deliberately the opposite of a suite's tag rules. Deleting widens back. | §96-78 |
+| M2-31 | Editor on a filed case → suite **Not filed** → save, reload | Unfiled, and the detail breadcrumb reads **Not filed** linking to the grid's unfiled filter — not `?suiteId=null`, which renders every case. | §96-80 |
+| M2-32 | Type a 61-character tag, save | Refused on the tags field, **never truncated** — a shortened tag stops matching the suite rule it was written for, with no symptom. | §96-81 |
+| M2-33 | Create a suite with tag rule `smoke`; open it in the grid | It reports cases carrying `smoke` **wherever they are filed** — members are a query, not a filing decision. Only observable on the fixture's `Smoke` suite (TS-10). | §96-82 |
+| M2-34 | Rename that suite without touching the rules, reopen; then remove the last rule and save | Rules survive the rename; removal drops the count. The form always sends `tagRules` seeded from the suite: omitting it could never clear a rule, sending `[]` by default would empty the suite on every rename. | §96-83,84 |
+| M2-35 | Type a tag rule and watch the field | The chip **appears on Enter**. This phase's own defect: replacing MUI's `slotProps` to add a testid drops the adornment the chips live in, so every rule was held, sent and invisible — both gates green. | §96-85 |
+| M2-36 | Hover a suite's case count; then add a tag to a case that suite claims and reload the tree | The tooltip says the count includes cases filed here, added here, **or carrying its tags — and that a case can belong to several folders, so counts do not sum to the project total.** The count then goes up **with no write to the suite**. | §96-86,87 |
+
+---
+
+# M3 — plans: the ladder, the editor, the document, the seven tabs (mock)
+
+*Stage 3 of the mock pass. **M3-5 reads the `smoke` tag M2-29 wrote** and M3-6's arithmetic needs
+M2-33's suite rules, so a reload between the lanes costs both rows.*
+
+| # | Drive | Expect | src |
+|---|---|---|---|
+| M3-1 | Open a plan as a Test Lead and read the header | **Three states only.** Draft → *Submit for review*. In review → *Approve plan* + *Return to draft*. Approved → *Return to draft*. **No Start, Close or Reopen anywhere.** | §97p3a-92 |
+| M3-2 | ~~On an approved plan press **Edit**~~ → **obsoleted by §97 phase 5**: there is no Edit button. Open an approved plan's **Plan** tab instead | The fields are editable and there is no "Reopen the plan…" tooltip anywhere. There is no closed plan; the plan is editable. | §97p3a-93, §97p5-129 |
+| M3-3 | Project settings → *Approval required before work starts* | **One** switch (cases). The plan switch is **gone, not disabled**. Toggling it leaves every other setting alone. | §97p3a-95 |
+| M3-4 | Plan list ordering | Drafts, then in-review, then approved. A list that reshuffles between loads is what this ordering prevents. | §97p3a-96 |
+| M3-5 | Plan list: note **TP-1**'s count, tag a case `smoke` in another tab, reload | The count **goes up with nothing written to the plan** — a section is a live selector (D7′), and the case side is the only place to see it. Until §97p3b the mock stored `caseCount` at save time. | §97p2-90, §97p3b-99 |
+| M3-6 | TP-1: compare the total against its sections | The total is the **deduped union** of every arm; the sections' counts **exceed** it, because a case reached two ways is one case. A total equal to the sum is the mock resolving each arm separately. | §97p2-89, §97p3b-100 |
+| M3-7 | Edit a plan's **name only**, save, check the version; then move a case into a section and save | Unchanged, then moved. Prose and name are content; the version pins what will be run. Two saves, because each passes the other's check. | §97p2-91, §74-6 |
+| M3-8 | **Plan** tab → add exit criteria *pass_rate ≥ 95*; then add *open_critical = 0* | The first two get verdicts; `open_critical` renders **not evaluated** — no tick, no cross. Null means not evaluated, not unmet: the product has no issue tracker, and a red cross would tell a release meeting a gate had failed. | §74-2 |
+| M3-9 | **Plan** tab → set a threshold, clear the number box entirely, save | The row is **dropped, not sent as `0`**. A `pass_rate >= 0` gate is met by every release and reads exactly like one somebody meant. | §74-3 |
+| M3-10 | On a plan with folders in scope, change **only** the name on the Plan tab and save | `plan_scope_item` unchanged, `caseCount` the same, and the `PATCH` carries **neither `suiteIds` nor `caseIds`**. ~~Scope checkboxes were pre-ticked on open~~ → the picker left with the dialog in §97 phase 5 and the Test cases tab's editor is phase 6, so **a plan's suite scope has no on-screen editor in between** — a deliberate window, not a regression. An editor that sent `[]` for what it did not render would empty the plan silently, which is what this row still guards. | §74-4, §97p5-130 |
+| M3-11 | Open a plan in two browser tabs, save in the second, then save the first | **409 "Someone else saved first"** in the page's own save report with *"Reload the plan…"* — the draft is compared against the seed, never the live query, so the stale `lockVersion` is the one that travels. `lock_version` had no `@Version` before §74, so it was `0` for ever and this could not fire. | §74-7 |
+| M3-12 | **Plan** tab → open the metric dropdown | **Five options with readable labels** ("Pass rate (%)", "Open critical defects"), not raw enum spellings. | §74-11 |
+| M3-13 | Reopen a closed plan (where the ladder still allows it) | Chip back to **Active**, `closed_at` null, audit action `plan.reopened` — not a second `plan.started`. | §73-3 |
+| M3-14 | Draft plan (`TP-4`) → Delete → confirm | 204, leaves the list, the following read is a **404 page** not an empty panel. | §73-6 |
+| M3-15 | A plan with runs (`TP-1`) → Delete → confirm; then open the run list | Dialog **stays open**: *"3 test runs have been executed against this plan… Close the plan instead."* Not a corner toast — nothing on that screen predicted the refusal. Each run still shows its `TP-n` chip and the link still opens the plan. | §73-7,8 |
+| M3-16 | Open a plan → **Business requirements** (mock: any plan but TP-1) | `?tab=requirements` in the URL; the empty state reads *"No page is linked to this plan"* and carries a **page picker**, *Link this page* and *Open documentation* — no Start-the-document button, the template `POST` is retired. ~~A plan cannot be given a document at all in between~~ → **closed by §97 phase 5**, which is this row's picker. Not a "Something didn't load" toast — the 404-to-null in `usePlanDocument` is all that stands between the first state and an error. | §93-45, §97p2-88, §97p4-128, §97p5-131 |
+| M3-17 | ~~On TP-1's document, edit a heading in place~~ → **obsoleted by §97 phase 5, which made the tab read-only.** Press **Open in documentation**, edit the heading there, come back | The tab shows the edited text and holds **no input of any kind**; `/docs` shows the same page in the tree. One page, one writer, two routes. | §93-47, §97p5-132 |
+| M3-18 | ~~Type a title, pick a suite, **Add case**~~ → **deleted in §97 phase 5** with `useCreateDraftCase`: the bar required a suite (D2 says none) and created the case before Save (§5 says nothing is created until Save). The idempotency question it existed for moves to the **Test cases tab's per-row keys** (phase 6), and has no row until that tab can be driven | — | §93-48 |
+| M3-19 | On a linked page's bullet, click a case chip | It **navigates** to the case and there is no × on it: unlinking a case from a block is the documentation editor's affordance now, on the screen that owns the page. Two destructive-looking controls on one read-only tab is what phase 5 removed. | §93-49, §97p5-133 |
+| M3-20 | ~~Rename the **Test cases** heading, then add a case~~ → **obsoleted by §97 phase 5**: nothing matches a heading by text any more (D1's failure mode removed by removing the mechanism), so there is no stranded control to look for. | — | §93-50 |
+| M3-21 | Open a plan | **Seven tabs** — Progress · Plan · Business requirements · Test artefacts · Scope · Out of scope · Test cases — with Progress still the default: every existing link to this route means the numbers. | §97p4-114 |
+| M3-22 | URL → `?tab=nonsense` | Falls back to Progress. An unrecognised id reaching the body renders **nothing at all** — a blank page from a query string. | §97p4-115 |
+| M3-23 | Open **Scope**, type a sentence, click **Progress**, then go back to Scope | The banner reads *"Unsaved changes in Scope"* **while Progress is on screen**, numbers underneath; the sentence is still in the box on return. §93's unmounting decision reversed: the tab is gone, the draft is not. | §97p4-116,117 |
+| M3-24 | With the banner up, navigate away or reload | The unsaved-work prompt fires — `useUnsavedWork` covers the deploy-skew reload and the mid-session 401. | §97p4-118 |
+| M3-25 | Press **Discard** | Back to what the server served, banner gone. **Not "empty"** — discarding to blank loses the work the control protects. | §97p4-119 |
+| M3-26 | Edit Scope **and** Out of scope, read the banner | It names **both**, in tab order. One label for two edits makes the second invisible. | §97p4-120 |
+| M3-27 | Press **Save**, watch the network panel | **One `PATCH`** carrying `scopeText`/`outOfScopeText` and **no `suiteIds`, `caseIds`, `sections`**. The server reads an empty list as *clear it*, so a full-draft payload empties the plan's scope on a prose edit — and succeeds either way. | §97p4-121 |
+| M3-28 | After the save | Banner gone (reseeded from the response), green *Plan saved*. A banner surviving its own successful save is one nobody trusts. | §97p4-122 |
+| M3-29 | `tcmsFaults.status(503, 30)`, edit Scope, Save | *"The plan was not saved"* **with the typed text still in the box and the banner still up.** | §97p4-123 |
+| M3-30 | **Test artefacts** on a plan whose project has artifacts | The plan's register with project rows marked *from project* — the same `ArtifactTable` as `/artifacts`, so a broken inheritance marker breaks in one place. | §97p4-126 |
+| M3-31 | **Test cases** on a plan with sections | Each section shows **what defines it** beside its count ("2 suites · 3 cases added directly · tags smoke"), and the header total carries the do-not-sum tooltip. | §97p4-127 |
+| M3-32 | **Plan** tab: change the name, then switch to **Scope** and back | The banner reads *"Unsaved changes in Plan"*, and the typed name survives the round trip — the Plan tab is in the draft like the prose tabs, not a form of its own. | §97p5-134 |
+| M3-33 | **Plan** tab: clear the name entirely | **Save is disabled with the reason on it** and the banner says which tab is stopping it. Typing a name re-enables it. A blank name is the one refusal the client is certain about; everything else is the server's. | §97p5-135 |
+| M3-34 | **Plan** tab: type three spaces as the name | Still refused. §94's trim defect — whitespace is not a name, and the server would otherwise answer 400 for something the client could see. | §97p5-136 |
+| M3-35 | Save a plan whose exit criteria name a metric the server rejects (edit the payload in devtools, or use an old client) | The refusal renders **in the criteria panel it is about**, not as a corner toast and not swallowed. `exitCriteria` has no text field to land on, and a refusal the user cannot see is the failure the whole error path exists to prevent. | §97p5-137 |
+| M3-36 | **Business requirements** → pick a page that is already another plan's document | It is **offered and disabled**, with the reason in the row. Hidden, it reads as deleted and the reader goes hunting in the tree. | §97p5-138 |
+| M3-37 | Link a page, then press **Unlink (keeps the page)**; then open `/docs` | The tab returns to the picker and **the page is still in the tree with its blocks and history**. The label is the check: delete is one screen away and does something else. | §97p5-139 |
+| M3-38 | **Test artefacts** → **Register**, with the plan pre-selected | The scope is `PLAN` and the plan is *this* one, the kind offers only `DOC_PAGE_REF` and `EXTERNAL_URL` (no upload control — the storage port does not exist), and the registered row appears in the tab **without the plan's Save banner ever appearing**: the register writes itself. | §97p5-140 |
+| M3-39 | As a Test Engineer (`artifact:edit` = `PLAN_SCOPE`), open the same dialog from this tab | Register is **enabled** and the scope selector is pinned to `PLAN` — this tab can only ever register at plan scope, which is the one scope every holder of the key has. Live-only: mock mode grants everything. | §97p5-141 |
+| M3-40 | As a reader with `project:read` only, open every tab | Progress renders its numbers; the Plan tab's fields render **filled in and editable-looking with Save disabled and a reason**, never blank; Business requirements renders the page with Unlink disabled. A reader who came for the report must never be met by nothing. | §97p5-142 |
+| M3-41 | **Test cases** tab: type a title in the blank row | The next blank row appears **while you are still typing**, and the caret does not move. Then check the network panel: **no `POST`** — §93's bar created the case on the click, and the model changed to make that wrong. | §97p6-143 |
+| M3-42 | Reload the plan without touching anything | **No unsaved-changes banner**, and navigating away does not prompt. The trailing blank row is permanent, so anything counting rows would flag every plan page in the product from the moment it rendered (§94's refine defect). | §97p6-144 |
+| M3-43 | Add a section, type one title under it and one under *Not in a section*, Save; then check the payload and the case list | **Two `POST /cases` and one `PATCH`**, in that order. The `PATCH` carries the new ids in the group each was authored under — the sectioned one under `sections[].caseIds`, the other under the top-level `caseIds`. Both cases are in the repository **filed in no suite** (D2). | §97p6-145 |
+| M3-44 | Add a suite, a tag and an existing case to one section, Save, reload | Three chips, and the `PATCH` sent `suiteIds`/`tags`/`caseIds` — **references, never the cases they resolve to.** | §97p6-146 |
+| M3-45 | With a section referencing a suite, add a case to that suite in another tab and reload the plan | The section's count **goes up with nothing written to the plan**. This is the live-selector claim (D7′) seen from the plan's own screen; M3-5 is the same fact from the case side. | §97p6-147 |
+| M3-46 | Note a section's count, then type anything on the tab | The counts **disappear** and an info alert says they are recomputed on save. A number that stays put beside a draft that has moved is wrong in the direction of the work just done. | §97p6-148 |
+| M3-47 | Rename a section that has an **unsaved** case row under it, then Save | The row moves with the heading and its case lands **in that section**, not in *Not in a section*. `NewCaseRow.section` is the section's name, so the migration is the whole of what stops a case from silently leaving the group the author put it in. | §97p6-149 |
+| M3-48 | Delete a section holding a suite and a tag → **Keep them in the plan**; then repeat with **Remove them from the plan** | First: the references appear under *Not in a section* and the plan's total is unchanged. Second: they are gone and the total drops. Two answers, both defensible, which is why the dialog asks. | §97p6-150 |
+| M3-49 | Add a second section with the name of an existing one | **Save is disabled** and the banner says two sections share a name. Sections have no ids — the server keys them by name — so two of one name come back as one section holding the union of both. | §97p6-151 |
+| M3-50 | Reorder two sections with ▲▼, Save, reload | The order persists. `position` is sent as the array order, and the end buttons are disabled rather than being no-ops nobody can see. | §97p6-152 |
+| M3-51 | As a Test Engineer **without `case:create`** (live only), open the tab | The new-case rows are **disabled with the reason**; the suite, tag and existing-case pickers still work and Save is enabled. §31 disables the section, not the Save. | §97p6-153 |
+
+---
+
+# M4 — execution: runs, results, evidence, and the approval gates (mock)
+
+| # | Drive | Expect | src |
+|---|---|---|---|
+| M4-1 | A run with no results → **Complete run** | **Disabled**, tooltip *"Nothing has been recorded in this run yet. Abort it instead."* Abort beside it is enabled. | §72-4 |
+| M4-2 | Record one result, **Complete run** | 200, chip → Completed, and the Complete/Abort pair is **replaced by Reopen**, not joined by it. | §72-5 |
+| M4-3 | On the completed run, open an execution | Four verdict buttons **disabled**, *"This run has ended, so its results can no longer change."* Attach and every Remove disabled with the same reason — **and the attachments still listed and still opening**. | §72-6 |
+| M4-4 | **Reopen run** → record a result | Chip back to In progress, `completed_at` null, `started_at` **unchanged**, the result saves. | §72-8 |
+| M4-5 | Abort a run that was never started, then Reopen it | Back to **"Not started"**, not In progress — the client asked for `IN_PROGRESS` and the server normalized. `started_at` still null. | §72-9 |
+| M4-6 | Complete a run, then Abort from a stale tab | 409 *"Reopen it before recording a different outcome."* | §72-11 |
+| M4-7 | Open a failed execution, **Attach** a PNG; then click the filename | 201 with a **rendered thumbnail** (not a broken image), correct size and your name. The filename opens the image **inline** from `/evidence/{id}/content` — live-only for the inline half; the mock serves a `blob:` URI. | §67-1,2 |
+| M4-8 | Delete the row **you** attached | Enabled; removing takes the row away. | §67-3 |
+| M4-9 | Attach a file **over 10 MB** | Refused **client-side**, sentence naming the limit, before any upload. | §67-8 |
+| M4-10 | Record a result on a step, then attach with that step selected | The file lands **on that step**; the execution-level list stays empty. | §67-10 |
+| M4-11 | Network tab on the attach | `multipart/form-data` **with a boundary**, no hand-set `Content-Type`. A lost boundary is a 400 that looks correct in devtools. | §67-11 |
+| M4-12 | Attach the **same file twice in a row** | The second works — the input is cleared on change so re-picking an identical file re-fires. The first thing anyone tries after a failed upload. | §67-13 |
+| M4-13 | Open an execution | Three-segment mode switch top right; **Split** default, queue rail beside the detail reading *Case N of 42*. | §100-103 ✅ |
+| M4-14 | Mark steps 1–3 Passed, step 4 Failed, leave step 5 unmarked | *Failed* gains a heavier border and a **suggested** label, caption *"A step failed…"*, **every other verdict still enabled**. Fires on a half-marked checklist — failure outranks completeness. | §100-104 ✅ |
+| M4-15 | Look at a step's verdict keys | **P F B S**, fixed 30×24 squares. `statusLabels[kind].slice(0,4)` rendered "Bloc" four times per row. | §100-105 ✅ |
+| M4-16 | **Grid** mode: mark an untested row Failed | The row's chip becomes Failed **and the page header's chip changes with it** — the write landed in the query key the detail screen reads, not a second copy. | §100-106 ✅ |
+| M4-17 | Press **B** on a Grid row, tick a precondition, record it, then open that execution in **Focus** → Notes | A dialog (never a one-click write) listing **that case's own preconditions**; the reason prefills *"Blocked — these preconditions did not hold: …"*; the comment is **there** in Focus. `PATCH` sets `comment` to whatever it is sent and an omitted comment **clears** it. | §100-107,108,109 ✅ |
+| M4-18 | URL → `?mode=kanban` | Falls back to Split. An unrecognised value renders neither rail nor detail. | §100-110 ✅ |
+| M4-19 | Open one execution in two tabs, record in the first, mark the same row in Grid in the second | *"Someone else recorded a result first"* **in place, on that row** — not a corner toast. Bulk marking is where overwriting a second tester is easiest. | §100-113 |
+| M4-20 | Settings → Review: toggle **Only approved test cases can go into a run**, Save, reload | Still on. The **whole-body save** is the risk: this form `PUT`s all eight settings and the server reads an absent boolean as `false`. | §82-1 |
+| M4-21 | With gating on, change **only** the peer-review number and Save, reload | Both gating switches **still on**. The silent-discard defect in the form it would take: an admin editing an unrelated field quietly reopens the gate, and nothing says so. | §82-2 |
+| M4-22 | Turn a gate on, then both off | The amber warning appears while either is on and disappears when both are off — §6g requires the choice to be explicit and this is where "explicit" lives. | §82-3 |
+| M4-23 | With cases gating on, start a run from a plan whose cases are drafts | **409 in the dialog's banner**, naming the count and the first few keys — not a toast, not a silent no-op. Read the sentence as somebody who did not configure this: does it say what to do next? | §82-4 |
+| M4-24 | Same, as a caller **holding `case:approve`**; then edit the run name and press it | **Create it anyway** under the refusal, enabled — §6g's documented override, and why a 409 here is not a dead end. The retry re-reads the form, so the run gets the **edited** name; a replay would create a run the user is not looking at. | §82-5,7 |
+| M4-25 | With plan gating on, press **Start** on a draft plan; then press **Submit for review** and let it be refused | 409 beside the buttons with **Start it anyway** — sentence naming review as the way forward. On the submit refusal, **no override button**: the gate can only refuse a start. | §82-8,9 |
+| M4-26 | Approve a plan properly, then Start it; then create a run with **no** unapproved cases | Starts normally, no refusal, no override. Created normally with **no mention of the gate anywhere** — a gate that announces itself when satisfied is the noise that gets it switched off. | §82-10,15 |
+| M4-27 | Start a plan, Close it, **Reopen** it with plan gating **on** | **It reopens.** The row the slice turns on: a target-keyed reading makes every closed plan permanently un-reopenable, showing a Reopen button that 409s for ever about approving a plan that cannot be approved. | §82-11 |
+| M4-28 | Switch **all three review opt-ins off**, leave a gate on, repeat M4-23 and M4-25 | The gates **still fire** and no review panel renders. Gating reads the status ladder; review's opt-in suppresses the apparatus. A build where they are coupled looks identical until this row. | §82-12 |
+| M4-29 | Gate on for project A, repeat M4-23 in project B | B unaffected. The read is `useProjectSettings(projectId)`; a cache keyed too broadly leaks A's policy into B. | §82-13 |
+
+---
+
+# M5 — the review apparatus: settings, panel, comments, requests, inbox (mock)
+
+*Stage 5 of the mock pass.* **Run M5-1 first.** §77 changed the default to "review nowhere", so
+nothing else in this lane exists until review is switched on — and M4-28 has just switched all three
+opt-ins off, so this is not a no-op even if an earlier row turned one on. (`L0-7` is the only chance
+to see the off state on a real box.)
+
+| # | Drive | Expect | src |
+|---|---|---|---|
+| M5-1 | Project → **Review** in the rail. Turn on **Test plans only**, Save | 200, "Last changed … by you". A **plan** now has the panel; a **case** still has nothing. The opt-in is per artifact type — this is the row proving the map is not read as any-of. | §77-2 |
+| M5-2 | Set **Peer reviews required** to `21`, then `-1` | Red with *"Between 0 and 20."* **before any request**, Save disabled. `V23`'s CHECK is the backstop behind both. | §77-5 |
+| M5-3 | Raise the minimum from 1 to 5 **while a review is open**, then approve it; then submit a new plan | The open one **still approves** (the count is pinned at submission, so goalposts do not move under reviewers already asked); the new one needs 5. | §77-10 |
+| M5-4 | With **Keep the approval** (RETAIN): approve a plan, rename it. Then switch to **Return it to draft** (RE_REVIEW) and repeat | RETAIN: status stays **Approved** with §76's staleness warning if the edit wrote a version. RE_REVIEW: status becomes **Draft**, and the warning Alert on the settings screen must have been visible before saving. | §77-11,12 |
+| M5-5 | Turn review **off** for plans while a plan sits In review | The panel disappears; the status chip **still reads In review**; `psql` shows the `review` row **still `IN_REVIEW`**. Switching the policy off does not withdraw submissions on anyone's behalf. | §77-14 |
+| M5-6 | Turn review off entirely, then move a case Draft → In review → Approved from the bulk dialog | Every move **succeeds**. The ladder is not the apparatus — the alternative reading silently removes approval from every existing project on upgrade day. | §77-15 |
+| M5-7 | Change one switch, press **Discard changes**; then change one, navigate away and back | Back to the server's values, Save re-disabled; the draft is gone on return. Nothing here is autosaved. | §77-17 |
+| M5-8 | Submit a plan for review, open the panel | Chip **In review**, "Submitted by *you*", version pinned (`v1`), empty trail, and **no Approve button on the panel**. `psql`: one `review` row, `subject_version_no` = the plan's `current_version_no`. | §76-2 |
+| M5-9 | Type a comment, press **Looks good**; then **Request changes** with a different comment | 201, trail gains *Looks good · your name*, the comment renders under it, **the box clears**, plan **still In review** — a peer verdict moves nothing. Then **both rows are there, oldest first**: participations are append-only, and a panel that replaced the first would hide somebody changing their mind. | §76-3,4 |
+| M5-10 | As a lead, approve the plan from its own screen, re-read the panel | State **Approved**, "Signed off by *you*" with a timestamp, an `APPROVAL / Approved` row ending the trail, and **the verdict form gone** — not merely disabled. | §76-6 |
+| M5-11 | With a review open, edit the artifact so it writes a version, re-read the panel | *"…has changed since it was submitted — the review covers v2, and you are looking at v3."* The version on the record must **not** move. | §76-9 |
+| M5-12 | Withdraw and re-submit the same artifact twice | Newest review on top, an **"Earlier reviews"** list beneath, each with its own state and version. `psql`: exactly one row `state = 'IN_REVIEW'` per subject. | §76-10 |
+| M5-13 | Have the review approved in another tab, then press **Looks good** in the stale one | **409 in place, inside the panel** — *"This review has already ended. Submit the plan for review again to reopen it."* Not a toast; the trail refreshes rather than the page. | §76-11 |
+| M5-14 | Bulk-submit ~20 cases from the case list, open two | **Each has its own open review**, pinned to that case's own version. The bulk path is the common case and the one place a per-row write could silently do nothing. | §76-13 |
+| M5-15 | Open the demo project's plan in review → **Comments** | Two threads: one with a reply **indented** beneath it, one greyed reading **"Resolved by …"** with **Re-open**. The reply has **no Reply button** — threads are one level deep and the server refuses a reply to a reply. | §79-1 |
+| M5-16 | Write a comment, press Comment; then **Reply** on that thread | Appears at the bottom attributed to you, box cleared, `parent_id` NULL. The reply lands **under** the root and the reply form closes; `parent_id` = the root's id. | §79-3,4 |
+| M5-17 | **Resolve** a thread, then **Re-open**, then Resolve twice in a row (or from a second tab) | Greys out reading "Resolved by *you*" with `resolved_at` **and** `resolved_by` set; Re-open clears **both together**; the second Resolve leaves timestamp and resolver **unchanged**. The unconditional write shipped in the first draft and hands the record to whoever clicked last. | §79-5,6,7 |
+| M5-18 | Approve or reject the plan, re-open it | The conversation is **still readable** and there is **no comment box, no Reply, no Resolve**. A closed review takes no writes; the affordance's only outcome would be a 409. | §79-8 |
+| M5-19 | A review with **no** comments, open then closed | Open: *"No comments yet."* with the box. **Closed: the whole section is absent**, not an empty heading. | §79-9 |
+| M5-20 | Paste 5001 characters; then clear the box | Refused **in place beside the box** (*"Keep the comment under 5000 characters."*); the button disables on empty rather than letting the server refuse a blank. | §79-10 |
+| M5-21 | A comment containing a blank line and a list | The paragraph break survives (`pre-wrap`). What a reviewer typed is part of what they said. | §79-11 |
+| M5-22 | The same plan → **Asked to review**, above the trail | Three chips — a person, a **group** icon on "QA Chapter", and a third person appearing in **no** verdict row. The trail below still lists only the one who spoke. **Compare the two lists deliberately**: a name asked and not in the trail is the row a lead opens this panel to find, and if the lists have been merged the slice's premise is gone. | §80-1,2 |
+| M5-23 | Open the picker | Project members and teams (suffixed "(team)"). **The submitter is absent**, and so is anybody already asked — the first is a server field error, the second a write that does nothing. | §80-5 |
+| M5-24 | Pick a person → **Ask**; then a team → **Ask** | A chip and a cleared select; `review_assignment` with `assignee_user_id` set, `assignee_team_id` NULL, `assigned_by` you. The team chip carries the **group** icon and the team's name, **no member names** — expanding would freeze membership as it was at page load. | §80-6,7 |
+| M5-25 | Press a chip's **✕**; then ask the same person twice (second tab) | Gone immediately, no confirmation, and the row is **deleted not tombstoned** — an assignment is a worklist entry. The duplicate ask changes no count and the original **"asked by"** survives; re-stamping is §79's resolution defect recurring. | §80-8,9 |
+| M5-26 | Approve or reject, then re-open | Chips **still readable**, **no picker and no ✕**. | §80-10 |
+| M5-27 | A plan in review nobody was asked about, open then closed | *"Nobody has been asked yet. Anyone with review rights can still give a verdict."* — and on a **closed** review with no requests the section is **absent**. | §80-11 |
+| M5-28 | The demo project's **Board** | Two **Review** cards in **To do** — `TP-5` and `TC-20` — marked `linked`, reading *"Review requested by …"*. **Not** in In-review: To do is where work nobody has started belongs. The old generator drew a card per `IN_REVIEW` case, in the In-review column, assigned to the case's **owner** — a reviewer inbox shown to the person under review. If any row reads like that, it is the regression. | §81-1 |
+| M5-29 | Click the key on `TP-5`, then on `TC-20` | Plan detail with the review panel, then case detail with its panel. One card shape, three subject types, three destinations. Before §81 every card routed to the case list, so a plan review searched the cases for `TP-5` and rendered "no cases match". | §81-2,3 |
+| M5-30 | Switch the board to **Assigned to me** | The review cards stay. This is the inbox as people will use it. | §81-5 |
+
+---
+
+# M6 — reports: three console slices and two screens (mock)
+
+*Stage 6 of the mock pass. Independent of every earlier lane — but **M6-13 and M6-20 edit source**,
+which restarts HMR and resets the store, so they are last here on purpose and **both edits must be
+reverted** before M7.*
+
+Rows M6-1…M6-8 have no UI and are driven from the console on any signed-in page; `P` is a project id
+from the URL, and the auth header is
+`{'Content-Type':'application/json', Authorization:'Bearer '+JSON.parse(localStorage.getItem('tcms.session')).token}`.
+
+| # | Drive | Expect | src |
+|---|---|---|---|
+| M6-1 | `POST /api/v1/projects/${P}/reports/generate` with `{type:'run_summary', format:'MD'}` | **202** with **all seven** contract fields: `jobId` (**not `id`**), `type`, `status: 'PENDING'`, `format`, `downloadUrl: null`, `modelUrl: null`, `error: null`. **No `requestedAt`.** `Location` → `…/reports/jobs/{jobId}`. The handler answered `{id, status:'QUEUED', …}` until §87 — `QUEUED` was never one of `ReportJob.status`'s four values. | §87-1 |
+| M6-2 | Poll `…/reports/jobs/{jobId}` **three times** | `PENDING` → `RUNNING` → `COMPLETED`, one state per poll. The intermediate states are the point: a mock that completes on the first poll leaves the two states a client spends its loading life in unreachable in dev. | §87-2 |
+| M6-3 | On the COMPLETED job follow `downloadUrl` and `modelUrl` | Both resolve — Markdown and JSON. A null `modelUrl` is a screen that cannot be built without a second computation. | §87-3 |
+| M6-4 | Ask for `format:'PDF'`, `'DOCX'`, `type:'quarterly_vanity_metrics'` | **400 each**, error under `format`/`format`/`type`, read from the mock's own `TYPES`/`FORMATS` registries. The same request must not be a 400 here and a 202 live. | §87-4 |
+| M6-5 | Generate `format: 'HTML'`, poll to COMPLETED, open `downloadUrl` in a tab | **202** (a 400 before R4 — the registries moved with the server's) and a page that renders as a **document**: `<title>`, `<h1>`, no broken frame. A fragment would make the download look like it worked while producing something no browser opens. | §88-9 |
+| M6-6 | On the same job, `await (await fetch(modelUrl)).json()` | `{ header, report }` — **both keys**. `header`: `reportType`, `description`, `company`, `projectScope`, `scopeNote`, `generatedBy`, `generatedAt`, `selection[]`. `report`: `title`, `metadata`, `sections`. A bare `{title, sections}` is the shape F2 would be built against and the server does not serve it. | §88-10 |
+| M6-7 | `POST /reports` (save a definition), `GET /reports`, then `POST /generate` with **only** `{definitionId, format:'MD'}` | 201 with `owner` filled; the list contains it; the generate is **202 with `type: 'run_summary'` without the request naming a type** — the whole of "one click". Poll to COMPLETED and download: the report must be **of the saved run**. | §92-40 |
+| M6-8 | Re-generate with `{definitionId, format:'MD', parameters:{note:'this run'}}`, then read the model header. Then `DELETE` the definition and re-poll the first job; then generate from the deleted id | Selection lists **both** `runId` (definition) and `note` (request) — only `note` means the shallow merge became a replacement, which renders a perfect report over the wrong scope. The delete is 204, the definition leaves the list, and **the earlier report still downloads** (V28: deleting a saved report does not delete its history). Generating from the deleted id is a **400 with a field error on `definitionId`** — not 404, not 500. | §92-41,42 |
+| M6-9 | Open a project → **Reports** in the rail | Header, **Generate**, and a "Saved reports" panel showing the **empty state** — not a spinner, not a table with no rows. The rail item is under **Execution**, `aria-current`, and present for **every** persona: it is ungated on purpose. | §89-14 |
+| M6-10 | **Generate** → run `TR-1`, format HTML, submit. Watch the card | A card appears **immediately** reading `Queued` (the 202's body is seeded into the cache, so no skeleton), then `Building`, then `Ready`, ~2s apart. **This proves the poller runs at all** — a card jumping straight to Ready means the seeding or the interval is wrong. | §89-15 |
+| M6-11 | On the Ready card click **Download HTML**, with the Network tab open | A file saves as `run_summary-{artifactId}.html`; opening it gives a whole document whose `<h1>` names **`TR-1`** — the run actually chosen, i.e. the mock read the stored `parameters`. The request carries an **`Authorization: Bearer …` header**, which is the whole reason it is a button and not a link (see L2-12). | §89-16,17 |
+| M6-12 | Generate a second report while the first is `Building` | **Two cards**, newest first, each advancing on its own. The query key carries the job id; a key naming only the project makes the second answer overwrite the first's `downloadUrl`. | §89-18 |
+| M6-13 | Force a failure: temporarily make `GenerateReportDialog` send `parameters: {}` | The card reaches **`Failed`**, red, carrying the worker's sentence, with **no download button and no spinner** — distinguishable at a glance from a Ready report that contains nothing. §89 added this path to the mock; `FAILED` was unreachable without a backend before. | §89-19 |
+| M6-14 | Choose format **PDF** and submit | **400 under the Format field** — *"PDF rendering is not installed on this server. It can produce: MD, HTML."* — not in the top banner. PDF is offered on purpose: the enum is the contract's, not this deployment's. | §89-20 |
+| M6-15 | Reload the page while a card is showing | The cards are **gone**, and that is the design: nothing lists jobs, so the screen shows what this tab asked for. Confirm the running card said so before the reload. **If this reads as broken, record it as the argument for R5 — do not patch it client-side.** | §89-21 |
+| M6-16 | On a Ready card click **View report**, then **Download HTML**, and open the file beside the tab | Provenance block, section and table on both. **Compare line by line** — company, project scope, the scope sentence, who generated it, when, `Selection — runId`, then the numbers. Any difference is the drift decision F exists to prevent, and no gate can see it: the two renderers share a model and nothing checks they render it the same. | §90-26 |
+| M6-17 | Read the report view's section body | Bars **proportional to the largest value in the series** with the number printed beside each, and cells reading exactly as the file's — `50.0%`, not `50%`, not `0.5`. The number is not decoration: it is what survives a reader who cannot judge length against a scale they cannot see. | §90-27, §88-12 |
+| M6-18 | Copy the report view's URL, reload, then open it in a **new tab** | Renders both times — the durable handle the reports screen does not have. The breadcrumb reads *Project → Reports → the report's title*, and **Reports** links back to a screen with no cards, which is the honest state. | §90-28 |
+| M6-19 | Open a report view URL for a job **still building** | *"Building — this page updates itself when the report is ready"* with a spinner — **not** a skeleton and not an error — then it **becomes the report with no reload**. Network tab: no artifact request until it completes. | §90-29 |
+| M6-20 | Break the stored model: make `mockModel` return `{ report: { title: 'Half a model' } }` | A **failed region with a retry** saying the stored model is not in a shape this version can display — not an empty report, not a blank panel. This is the only rendering separating "the report contains nothing" from "this client cannot read the report"; a cast instead of a parse makes them one screen. **Undo the edit.** | §90-30 |
+
+---
+
+# M7 — resilience and responsive, swept once (mock)
+
+*Stage 7, the last, and it is last because it arms `tcmsFaults` — every request is poisoned until the
+switch is off, so a failure in an earlier lane run after this one would be unattributable. Disarm
+between rows with `tcmsFaults.off()`.*
+
+Every slice queued its own copy of these. They are one lane: the fault switches behave the same
+everywhere, and what differs is which screen is worst to lose.
+
+| # | Drive | Expect | src |
+|---|---|---|---|
+| M7-1 | `tcmsFaults.hang()`, reload **My Work**, a **team board**, and a **plan** | Loading state, then **failure on the timeout budget** — never an endless spinner. The page chrome stays on screen throughout: the header is not inside the region. | §83-9, §85-13 |
+| M7-2 | `tcmsFaults.status(503, 30)`, reload, then `tcmsFaults.off()` and press **Try again**, on each of the three | Retry offered and working. On the team board it must **not** read "No such team" — a 503 wearing the 404's sentence sends the reader after a team that is still there. | §83-10, §85-14 |
+| M7-3 | Load each screen, then `tcmsFaults.status(500)` and let it refetch | The board **keeps its cards, marked stale** rather than blanking. On My Work a blanked refetch reads as "your queue is clear", which is the worst possible wrong answer on that page. | §83-11, §85-15 |
+| M7-4 | `tcmsFaults.expire()`, reload My Work and a team board | The session recovers **in place**. These are bookmarks opened cold in the morning, which is exactly when a token has expired. | §83-12, §85-16 |
+| M7-5 | `tcmsFaults.only('/teams')` + `tcmsFaults.status(500)`, open a team board | The **board still renders** under the fallback title "Team board". The name is chrome from a second read; gating on it blanks a board that loaded fine. | §85-17 |
+| M7-6 | `tcmsFaults.only('/conditions')` + `tcmsFaults.status(503, 30)`, open a case editor | The conditions panel shows its own warning and **the rest of the case still saves**. A failed library read must not take the editor down with it. | §95-73 |
+| M7-7 | At **390 px**: the review panel with a two-line comment and a replied thread; the reviewer chips; the settings screen; the board with two review cards; the suite rail with ~10 folders at three depths, one badged | Nothing scrolls the page sideways. The version history is not pushed off screen; comments wrap and the reply's indent does not force horizontal scroll; chips wrap and the picker/Ask stack; the three switches, number field and mode select stack with the RE_REVIEW warning wrapping and Save/Discard reachable; cards wrap with the `linked` chip not pushing the title into overflow; the folder **name** ellipsizes rather than the badge wrapping (which is why drafts are unbadged at all). | §76-12, §79-12, §80-12, §77-16, §81-11, §75-11 |
+| M7-8 | Console across the whole sweep | 0 client errors; `window.__tcmsErrors` empty. | §69-18 |
+
+---
+
+# The live pass — L0 → L4, one agent, one sitting, in this order
+
+**The five L lanes are a single run, not five errands.** They share one deployment, one database and
+one accumulating state, and three of them depend on what an earlier one leaves behind. Run them
+back-to-back in the order below; do not interleave them with the mock lanes, and do not split them
+across agents — a second agent in this tree is the incident `CLAUDE.md` records, and here it would
+also mean two people writing the same company's fixtures.
+
+**Two things must be started early and left to cook**, or the pass stalls twice for a quarter of an
+hour each:
+
+| Start it at | What | Why |
 |---|---|---|
-| 1 | Sign in as a **Test Engineer**, open a project's artifact register, click New | The **"Belongs to" PROJECT option is disabled** with a reason naming the restriction — not enabled-then-refused, which is what §61 shipped |
-| 2 | Same caller, choose PLAN scope, fill the form, submit | **201**, the row appears in the plan's register |
-| 3 | Sign in as a **Test Lead**, same dialog | PROJECT scope is **enabled and selectable**, and submitting lands a project-scope row. Without this, #1 passes equally well against a dialog that is broken for everyone |
-| 4 | Sign in as a **Viewer**, same register | The New button itself is **disabled** (they hold no `artifact:edit` at all) — the qualifier path must not have replaced the plain permission gate |
-| 5 | Network tab on any of the above | `GET /me/permissions` returns `permissions: [{key, qualifier}, …]`, **sorted by key**, with no entry whose qualifier is `NONE` |
-| 6 | Any authenticated screen — the case grid, the board, the dashboard | **No regression from the response shape change.** Every `useCan` consumer reads the new shape; a missed one fails *open* (`useCan` falls open on error), so it shows as a control that is enabled when it should not be, not as an error |
+| Stage 2, immediately after the fixtures | **L4-23's seed** — one case, three `Failed` results across three runs | The health scheduler is `PT3M` then `PT15M`. Seed it now and the tick has happened by Stage 6; seed it when you reach L4 and you wait. |
+| Stage 2, same moment | **One report generate** as a Test Lead (L4-30) | The report worker is on the same clock. The card must sit at Queued/Building for *minutes* — that is the row — so start the clock and read the card later. |
 
-**Highest-risk row is #6.** The wire shape changed under eleven gated affordances at once, and the
-fall-open policy means a consumer left on the old shape looks **normal** rather than broken.
+### Run order
 
-**Also still owed from §61, found and not fixed:** the artifact register's plan filter is `useState`
-rather than the URL, so a plan's register **cannot be linked to** while every other filtered screen
-can. Not a §65 regression — an older gap that this queue is now the place to track.
+| Stage | Lane | Before you start | What it leaves behind |
+|---|---|---|---|
+| 1 | **L0** | A **freshly provisioned company**, migrated, nothing written. Review **off** (the default) — L0-7 is the only chance to see it. | Nothing. It is read-only, and it is the only lane that is. |
+| 2 | **Prologue** (below) | L0 finished and screenshotted. | Every fixture the rest of the pass needs, plus the two clocks running. |
+| 3 | **L1** | The prologue's author split, the second account, and review switched **on** for plans. | Cases deleted (L1-6), evidence deleted (L1-8), a suite approved (L1-9), a plan moved down the ladder. |
+| 4 | **L2** | L1's personas still to hand — L2 reuses four of the five, and its rows are the server half of controls L1 just saw disabled. | Refused writes only. Nothing lands. |
+| 5 | **L3** | L1 and L2 done: L3-1, L3-2, L3-5 and L3-11 read rows *those lanes wrote*. | Nothing new; it is a `psql` read of what stages 3–4 produced. |
+| 6 | **L4** | Both clocks from stage 2 elapsed. Teams still absent (L4-1 creates the first). | The company is now fully written and cannot serve L0 again. |
 
----
+**Sign-in schedule.** Signing in is the expensive part, so the pass is ordered to do it five times
+rather than twenty. L1 is already grouped by persona; L2, L3 and L4 name theirs per row. Where a
+stage-4 or stage-6 row wants a persona you are not currently holding, batch it with the others that
+want the same one rather than switching per row.
 
-## §66 — the `OWN` qualifier reaches the row
+**If a stage cannot be completed** — a persona cannot be provisioned, a clock did not fire, an
+endpoint 500s — finish every other row in that lane, record what was skipped and why in the slice's
+handoff section, and carry on to the next stage. Do not restart the pass; L0 cannot be re-run and a
+restart costs the whole company.
 
-**What shipped unverified:** `TestCaseSummary.createdBy` is on the wire, and the case detail's
-Delete button is gated on it — a Test Engineer sees Delete enabled on cases they wrote and disabled,
-with the reason on it, on everyone else's.
+# L0 — the fresh instance (live, once, before anything else)
 
-**Fixture needed:** at least two live cases in one project with **different** `created_by` values,
-one of them the signed-in Test Engineer, plus one row with `created_by IS NULL`. The seeded data has
-no such split, so set it directly:
+Eight facts that are true of every real installation today and false for ever after the first write.
+Screenshot as you go; none of these can be reproduced. **Read-only: write nothing in this lane**, not
+even to check something — the prologue is where writing starts.
 
-```sql
--- as tcms_owner, with app.current_company set
-UPDATE test_case SET created_by = '<engineer-uuid>' WHERE key = 'TC-1';
-UPDATE test_case SET created_by = '<lead-uuid>'     WHERE key = 'TC-2';
-UPDATE test_case SET created_by = NULL              WHERE key = 'TC-3';
-```
-
-| # | Drive | Must observe |
-|---|---|---|
-| 1 | Sign in as a **Test Engineer**, open TC-1 (theirs) | Delete is **enabled**, and deleting it works — 204, the case leaves the list |
-| 2 | Same caller, open TC-2 (the lead's) | Delete is **disabled**, and hovering it shows *"You can only delete test cases you created."* — not "you don't have permission", which is false for this caller |
-| 3 | Same caller, open TC-3 (`created_by IS NULL`) | Delete is **disabled**. This is the arm most likely to be wrong and it is invisible in the seeded data — an installation's oldest cases all look like this |
-| 4 | Sign in as a **Test Lead**, open TC-2 and TC-3 | Delete is **enabled on both**. Without this, #2 and #3 pass equally well against a page that disables Delete for everybody, which would lock out every lead in the product |
-| 5 | Sign in as a **Viewer**, open any case | Delete is disabled with the *ordinary* sentence (*"You don't have permission to delete test cases in this project."*) — the authorship path must not have replaced the plain permission gate |
-| 6 | As the Test Engineer, **create** a case, then open it | Delete is **enabled** — `created_by` is set to the creator on the server, so a case you just wrote is always one you can remove |
-| 7 | The case list and the case detail, network tab | `createdBy` is present on every row, `null` where the column is, and **is not the same person as `owner`** on the rows seeded above. If the two always agree, the fixture did not take and rows #1–#4 prove nothing |
-| 8 | `psql` after #1 | `SELECT deleted_at FROM test_case WHERE key='TC-1'` is set — the delete is soft, as `CaseDeleteDialog`'s copy claims |
-
-**Highest-risk rows are #3 and #4.** #3 because the null-author arm exists only in code and in one
-unit test, and the rows it governs are the ones no fixture happens to contain. #4 because every
-"disabled" observation above is also what a *broken-for-everyone* gate produces — and `useCan` is
-fail-closed while pending, which is exactly how this slice's own component test passed against a
-page with the wiring deleted.
+| # | Drive | Expect | src |
+|---|---|---|---|
+| L0-1 | Company Admin → Teams & roles | "Team structure" **empty**, no-records copy. `team` has never had a writer. | §71-1 |
+| L0-2 | Any run list, then open a run | Every run **"Not started"**, `started_at` null. The chip is coloured, not the grey fall-through — `NOT_STARTED` was missing from the colour map and `PLANNED` (not a run status) was in it. | §72-1,2 |
+| L0-3 | Plan list | Every plan **"Draft"** in the draft colour. The old map was `Record<string,string>` missing `IN_REVIEW` and `APPROVED`. | §73-1 |
+| L0-4 | Any project's suite rail | **Every folder unbadged.** `psql`: `SELECT DISTINCT lifecycle_status FROM suite` returns one row, `DRAFT`. | §75-1 |
+| L0-5 | Any plan's exit-criteria panel | **Empty.** `psql`: `entry_criteria`/`exit_criteria` are NULL on every row — never written by anything, while the mock has carried hand-written criteria since Phase 1. Mock mode has been showing a feature the product did not have. | §74-1 |
+| L0-6 | A case or plan already **In review** | The review panel reads **"Not in review"**. `psql`: `SELECT count(*) FROM review` is 0. The record starts now; this is not a defect. | §76-1 |
+| L0-7 | Any case, suite and plan | **No Review panel anywhere** — not an empty panel, not a placeholder. `psql`: one `project_settings` row per project, all three `review_enabled_*` false. | §77-1 |
+| L0-8 | A project dashboard within 3 min of a fresh deploy | "Needs attention" reads **"not computed yet"**, not "nothing needs attention". `healthComputedAt` is the only thing separating them, and §86 shrank the window to the first three minutes. | §86-5 |
 
 ---
 
-## §67 — evidence attach and delete
+### Stage 2 — the prologue: the fixtures, once, after L0 and before L1
 
-**What shipped unverified:** the execution screen can attach a screenshot or log to a result, render
-it inline, download it, and remove it — with the delete gated on `evidence:delete`'s `OWN`
-qualifier. `evidence` and `attachment`, both in `V1` since the beginning, have their first writer.
-
-**Fixture needed.** Mock mode already seeds three evidence rows on every FAILED execution — one
-authored by the caller, one by a colleague, one with `created_by IS NULL` — so **mock mode needs no
-setup**. Live mode does, because nothing the API offers can produce the unauthored row:
-
-```sql
--- as tcms_owner, with app.current_company set
-UPDATE evidence SET created_by = NULL WHERE id = '<the third row on the failed execution>';
-```
-
-| # | Drive | Must observe |
-|---|---|---|
-| 1 | As a **Test Engineer**, open a failed execution, Attach a PNG | 201, the row appears with a **rendered thumbnail** (not a broken image), the correct size and your name |
-| 2 | Click the filename | The image opens **inline** in a new tab — served from `/evidence/{id}/content`, not downloaded as a file |
-| 3 | Same caller, the row **they** attached | Delete is **enabled**, and removing it takes the row away |
-| 4 | Same caller, the **colleague's** row | Delete is **disabled**, tooltip reads *"You can only remove evidence you attached."* — not "you don't have permission", which is false for this caller |
-| 5 | Same caller, the **null-author** row | Delete is **disabled**. The arm exists only in code and one unit test, and governs the oldest rows in a real installation |
-| 6 | Sign in as a **Test Lead**, same three rows | Delete is **enabled on all three**. Without this, #4 and #5 pass equally well against a panel broken for everybody |
-| 7 | Sign in as a **Viewer** | All three rows are **visible**; Attach and every Delete are disabled with the ordinary sentence. Disable-don't-hide (§31) — evidence is part of the record of what happened |
-| 8 | Attach a file **over 10 MB** | Refused **client-side** with a sentence naming the limit, before any upload happens |
-| 9 | Live mode only: temporarily set `max-file-size: 1MB`, attach a 2 MB file | **413** with readable copy (*"Evidence files are limited to…"*), never a bare 500. The container refuses this before the handler runs, so it exercises a completely different path from #8 |
-| 10 | Record a result on a step, then attach with that step selected | The file appears **on that step** and the execution-level list stays empty |
-| 11 | Network tab, on the attach | Request is `multipart/form-data` with a **boundary**; no hand-set `Content-Type`. A lost boundary is a 400 that looks correct in devtools |
-| 12 | `psql` after #3 | The `evidence` **and** `attachment` rows are gone, and the file is gone from `TCMS_EVIDENCE_ROOT`. A hard delete, not a soft one — this is the one thing a customer may need removed for privacy |
-| 13 | Attach the **same file twice in a row** | The second attach works. The file input is cleared on change precisely so re-picking an identical file re-fires — the first thing anyone tries after a failed upload |
-
-**Highest-risk rows are #5, #6 and #12.** #5 and #6 for §66's reason: every "disabled" observation is
-also what a broken-for-everyone gate produces, and `useCan` is fail-closed while pending. #12
-because the delete crosses out of Postgres into a directory, and a failure between the two leaves a
-row whose blob is gone (or worse in the other order) — the one place in the product where a partial
-write is not rolled back by anything.
-
-**Mock-vs-live divergence, stated up front:** in mock mode `url` is a `blob:`/`data:` URI, because
-there is no server to serve `/content`. Rows #2 and #11 are therefore **live-mode only** — mock mode
-cannot show them and will look fine either way.
-
----
-
-## §68 — the classification picker
-
-**Setup (live mode).** The seeded Feature tree is **empty** — `tcms_seed_project_defaults` creates
-the dimension and no values — so rows 5–9 need a tree first:
+**Nothing above this line has written anything. Everything below it does.**
 
 ```sql
 -- as tcms_owner, with app.current_company set to the company under test
+
+-- L1-6/L1-7: the author split. The seeded data has none.
+UPDATE test_case SET created_by = '<engineer-uuid>' WHERE key = 'TC-1';
+UPDATE test_case SET created_by = '<lead-uuid>'     WHERE key = 'TC-2';
+UPDATE test_case SET created_by = NULL              WHERE key = 'TC-3';
+
+-- L1-8: the unauthored evidence row. Nothing the API offers can produce it.
+UPDATE evidence SET created_by = NULL WHERE id = '<third row on the failed execution>';
+
+-- L3-3: a classification value that is assigned and THEN retired. Neither the API
+-- nor the UI can produce this state, which is why it is the arm most likely to be wrong.
+--   1. assign 'Cheques' to a case through the editor first, then:
+UPDATE classification_value SET deleted_at = now() WHERE name = 'Cheques';
+
+-- L3-4 / M2-7 need a Feature tree; tcms_seed_project_defaults creates the dimension and no values.
 INSERT INTO classification_value (id, company_id, dimension_id, parent_id, path, name, position)
 SELECT gen_random_uuid(), :company, d.id, NULL, 'payments'::ltree, 'Payments', 0
   FROM classification_dimension d
  WHERE d.project_id = :project AND d.key = 'feature';
--- then a child of it, and a THIRD value which is then retired:
-UPDATE classification_value SET deleted_at = now() WHERE name = 'Cheques';
 ```
 
-| # | Drive | Must observe |
-|---|---|---|
-| 1 | Open any case in the editor | The Classification panel shows **four** controls — Test Type, Test Level, Feature, Execution Phase — with the case's current values already selected |
-| 2 | Change Test Type, save | Toast, and the case detail shows the **new** Test Type. The version list gains **one** entry |
-| 3 | Save again without touching anything | **No new version.** Reorder-churn is the specific risk: the ids go over the wire as an array |
-| 4 | Set Test Type to **None**, save | The detail shows no Test Type, and `psql` shows the `case_classification` row **gone** |
-| 5 | Tick a **parent** Feature (Payments), save | Accepted. Two milestones of editor comments claimed a parent could not be assigned |
-| 6 | Tick a **child** as well, save | Both are stored; `features` on the grid shows both names |
-| 7 | Untick one, save | Only that one goes; the other survives |
-| 8 | On a case carrying the **retired** value (assign it *before* retiring), open the editor and save any other change | The retired value has **no checkbox** — and `psql` shows its `case_classification` row **still there** afterwards |
-| 9 | Reload that case's editor and save again | Still there. The bound is not a one-shot |
-| 10 | A project whose Feature dimension has **no values** | Reads *"Nothing to choose from yet — this vocabulary is empty"*, not an empty box or a spinner |
-| 11 | Create a **new** case with a Test Type and two Features | Both land on the created case; its v1 snapshot carries them |
-| 12 | Sign in as a **Viewer**, open a case | The editor is unreachable as before — this is only to confirm nothing about the panel bypasses the existing gate |
-| 13 | Network tab on any save | `classificationValueIds` is present on **every** save, including when empty |
+Then, through the UI:
 
-**Highest-risk rows are #8, #9 and #3.**
-
-#8/#9 are the slice's central decision and the only failure that is **silent**: if the bound is
-wrong, the save succeeds, the response looks correct, and a classification is gone with nothing on
-any screen having mentioned it. Neither the API nor the UI can produce the state they test — a
-retired value must be assigned before it is retired — so this is the arm most likely to be wrong,
-for §67's null-author reason.
-
-#3 because the reorder property is invisible: a spurious version looks exactly like a real one, and
-the version list only becomes obviously useless after it has accumulated a few dozen.
-
-**Mock-vs-live divergence, stated up front:** the mock has **no retired values** — its `dimensions`
-fixture is all live — so **rows 8, 9 and 10 are live-mode only** and mock mode will look correct
-either way. Mock mode also has one project's vocabulary, so the sibling-project refusal has no mock
-equivalent at all; it is covered by the backend suite and by row 5's live analogue only if a second
-project's Feature value id is pasted into the request by hand.
+1. **A second account** in the same company, granted on the project — L1-17, L4-2, L4-9…L4-16 and
+   L4-35 all need two people, and there is no way to fake one.
+2. **A third grant**: `report:view` **without** `report:export`. No built-in role has that shape;
+   §87 created it for the suite, and L1-20, L2-11 and L4-35 all read it.
+3. **Review on for plans** (`/projects/:id/settings/review`) — L1-4, L1-13, L2-7 and every L4 review
+   row presuppose it, and nothing in the review apparatus exists until it is switched on.
+4. **Start the two clocks** from the table above.
 
 ---
 
-## §69 — the classification vocabulary editor
+# L1 — the permission matrix (live, five personas, one sitting)
 
-**Route:** `/projects/:projectId/settings/classification`, reached from **Classification** in the
-nav rail's Project group.
+*Stage 3 of the live pass. Needs the prologue's fixtures. Leaves deleted cases and evidence, an
+approved suite and a moved plan, which L3 then reads.*
 
-**Personas needed: two, and the whole point of the screen is the difference between them.** A Test
-Lead (holds `project:settings` on the project, not `company:vocabulary`) and a Company Admin (holds
-both). In mock mode the seeded persona is the first, so the Test Lead column is drivable without
-touching a fixture and the Company Admin column is **live-mode only**.
+**Mock mode signs in as one persona holding every key**, so every row here is structurally
+unobservable there. Walk the app once per persona rather than once per slice. The standing rule is
+§31 **disable, don't hide**, and the standing trap is that a control disabled *for everybody* passes
+every "is it disabled?" row — so each block ends with the tier above it confirming the control is
+live.
 
-| # | Do | Expect |
-|---|---|---|
-| 1 | Open the page as the **Test Lead** | Four panels — Feature, Test Type, Test Level, Execution Phase — each with a scope chip reading *This project* or *Company-wide* |
-| 2 | Look at the Feature panel | **Add value** enabled; every row's rename and retire enabled |
-| 3 | Look at the Test Type panel | **Add value disabled, with a tooltip explaining why.** Not hidden, not missing — §31. This is the headline and the one thing no gate can see |
-| 4 | Add a root Feature "Lending" | Appears in the panel; the case editor's Feature picker offers it on the next open |
-| 5 | Add "Mortgages" under it via the row's **+** | Renders indented under Lending. `psql`: its `path` is the parent's path plus a `v…` label, and the label is **not** derived from the name |
-| 6 | Add a Feature named **支付** (or any name with no ASCII letters) | Accepted, and the row reads 支付. A name-derived path fails this insert outright |
-| 7 | Add a second "Mortgages" under Lending | Refused with *"Another value here already has that name"* **on the name field**, not a toast |
-| 8 | Add "Mortgages" under a **different** parent | Accepted — two leaves under different parents may share a name (§68) |
-| 9 | Rename "Lending" to "Lending & Cards" | Saved. `psql`: `path` is **byte-identical** to before. This is the payoff of the id-derived label and it is invisible in the UI |
-| 10 | Retire "Lending & Cards" while Mortgages is under it | **409**, dialog stays open, reads *"2 values sit under this one"* (or 1) — not a toast over a closed dialog |
-| 11 | Retire the children, then the parent | 204 each; the rows leave the panel |
-| 12 | Reload | The retired values are gone and stay gone; the renamed one keeps its new name |
-| 13 | Open a case classified with a value you just retired | The value is **not** in the picker, and the case's stored classification is **still there** in `psql` — §68's bound, from the retiring end |
-| 14 | Sign in as the **Company Admin** (live only) | Every panel's controls are enabled, including Test Type's |
-| 15 | Add a Test Type value as the admin, then check a **second project** in the same company | The new value is offered there too — that is what "company-wide" means, and it is the reason the permission is separate |
-| 16 | As the Test Lead again, POST to `/classification/values` by hand with the **sibling project's** Feature dimension id | **404**, not 403 — the caller must not learn which permission would have applied |
-| 17 | A colour: add a value with `#b7791f`, then one with `red` | The first shows a colour dot; the second is refused on the **colour** field |
-| 18 | Console throughout | 0 client errors |
+### Viewer
 
-**Highest-risk rows are #3, #9 and #13.**
+| # | Drive | Expect | src |
+|---|---|---|---|
+| L1-1 | Artifact register; any case; evidence on a failed execution | **New** disabled (no `artifact:edit`); Delete disabled with the *ordinary* sentence (*"You don't have permission to delete test cases in this project."*) — the authorship path must not have replaced the plain gate; all three evidence rows **visible** with Attach and every Delete disabled. Evidence is part of the record of what happened. | §65-4, §66-5, §67-7 |
+| L1-2 | A plan; the classification settings screen; Teams & roles | Edit **disabled**; the settings page **renders with every control disabled and the current values visible** rather than 403ing or hiding the rail item — a Viewer must be able to find out why no artifact shows a review panel; the **Review** rail item is present for the same reason. | §74-10, §77-3,4 |
+| L1-3 | A plan's Scope tab: type into the box; then the Progress tab | Save **disabled with the reason**, never hidden. The box still accepts typing — the accepted cost of one draft above seven tabs; the refusal is on the write. On Progress the numbers render in full with **no disabled editor anywhere near them** — the row that catches a form spine that swallowed the read-only screen. | §97p4-124,125 |
+| L1-4 | A case/plan with an open review (holds `case:comment`, not `*:review`) | Comment box and **Reply enabled**; **Resolve**, both verdict buttons, the **Ask** button and the picker **disabled**, chips carrying **no ✕**; the whole trail readable. One comment key for all three artifact types, and the reviewing tier above it. | §79-2, §80-3 |
 
-#3 because a page that asked `project:settings` for every dimension renders *identically* for a
-Company Admin, passes every Feature assertion, and hands a Test Lead a button the server answers
-403 to. The component test pins it, and the component test mocks both permission endpoints — the
-live pass is what proves the real `/me/permissions` answers the company question at all on this
-screen, which no other screen asks except the project picker.
+### Test Engineer
 
-#9 because nothing in the UI shows a path. If a rename rewrote it, the only symptom would appear
-later, in §6q's descendant matching, which is not built yet — so the check has to be made in `psql`
-now or not at all.
+| # | Drive | Expect | src |
+|---|---|---|---|
+| L1-5 | Artifact register → New | The **PROJECT** "Belongs to" option **disabled with a reason naming the restriction** — not enabled-then-refused, which is what §61 shipped. Choosing PLAN scope and submitting is a **201** landing in the plan's register. | §65-1,2 |
+| L1-6 | Cases with three different authors (fixture below) | TC-1 (theirs): Delete **enabled**, and deleting works — 204. TC-2 (the lead's): **disabled**, *"You can only delete test cases you created."* TC-3 (`created_by IS NULL`): **disabled** — the arm that exists only in code and governs an installation's oldest cases. Then **create** a case and open it: Delete **enabled**. | §66-1,2,3,6 |
+| L1-7 | Case list and detail, network tab | `createdBy` on every row, `null` where the column is, and **not the same person as `owner`** on the seeded rows. If they always agree the fixture did not take and L1-6 proves nothing. | §66-7 |
+| L1-8 | Evidence on a failed execution | Their own row: Delete **enabled**. The colleague's: **disabled**, *"You can only remove evidence you attached."* The null-author row: **disabled**. | §67-4,5,6 |
+| L1-9 | A run; an approved suite's kebab; a draft suite's kebab | Complete and Abort **disabled with a tooltip** while recording a result still works. On the approved folder **"Return to draft" and "Deprecate…" greyed** with "Execution history" live beside them — before §75 the same caller could take that approval back through the bulk case dialog with nothing on screen saying otherwise. On a draft folder **"Submit for review" is live** and "Deprecate…" is greyed. | §72-3, §75-3,5 |
+| L1-10 | Case list: select one `DRAFT` and one `APPROVED` case → bulk **Set status → Draft** | The draft **changed**, the approved one **skipped** with *"Only a test lead can change a case that is already approved."*, and `changed + unchanged + skipped == total`. Before §75 both moved. | §75-4 |
+| L1-11 | A plan in review, then an **approved** plan (holds `plan:edit`, not `plan:approve`) | In review: **Approve disabled**, "Return to draft" **enabled**. Approved: the same "Return to draft" button now **disabled**. The same control, the same target, gated by where the plan is. | §73-4, §97p3a-94 |
+| L1-12 | An approved plan under **RE_REVIEW**: edit it | **The edit succeeds and the plan drops to Draft.** This looks wrong and is the design (`EditAfterApproval.RE_REVIEW`) — charging the approve key makes an approved plan uneditable by the people expected to edit it. | §77-13 |
+| L1-13 | A plan in review: the reviewer picker (holds `plan:review`, not `plan:approve`) | Picker and **Ask enabled**. The gate decision made visible: the request must not be confined to the people whose sign-off it prepares. | §80-4 |
+| L1-14 | A run's Grid mode (holds `result:submit`, not `result:amend`) | A row that already has a result: four keys **disabled with the amend tooltip**; an untested row's are live. The permission is **per row**, because half a run may be recorded and half not. | §100-112 |
+| L1-15 | Start a run from a plan of draft cases with cases gating on (no `case:approve`) | **Create it anyway** is **present and disabled** with the gate's why-tooltip. Hidden instead of disabled is the defect: the person who has to go and ask would not know the way out exists. | §82-6 |
+| L1-16 | Teams & roles (no `company:teams`) | The three admin buttons disabled with a reason, **Board live**. A Board button written as a fourth child of that gate looks identical until this sign-in. | §85-2 |
 
-#13 because it is the same silent-loss shape §68's queue names, approached from the other side: the
-retire is what *creates* the state whose reconcile bound §68 built.
+### Test Lead / Company Admin — the control-is-live half
 
-**Mock-vs-live divergence, stated up front.** Mock mode has one project and one persona, so rows
-14, 15 and 16 have no mock equivalent. Row 5's `psql` half and row 9's are live-only by nature. The
-mock does enforce every field rule, the 409 and both gates, so rows 1–4, 6–8, 10–12 and 17 are
-drivable against `npm run dev` with no backend.
+| # | Drive | Expect | src |
+|---|---|---|---|
+| L1-17 | As **Test Lead**, repeat L1-5, L1-6, L1-8 | PROJECT scope **enabled and selectable**, submitting lands a project-scope row; Delete **enabled on TC-2 and TC-3**; Delete **enabled on all three** evidence rows. Without these, every "disabled" row above passes equally well against a page broken for everyone — and `useCan` is **fail-closed while pending**, which is exactly how §66's own component test passed against a page with the wiring deleted. | §65-3, §66-4, §67-6 |
+| L1-18 | As **Test Lead**, a suite kebab: approve a folder, then reopen it; then deprecate one and reopen it | After approval **"Submit for review" is not offered at all** — the moves swap rather than accumulate, and offering it would be a control the server 409s. After deprecation **"Restore to draft" is the only move**, with a muted rather than coloured badge. | §75-6,7 |
+| L1-19 | As **Company Admin**, the classification settings screen; add a Test Type value; check a **second project** | Every panel's controls enabled, **including Test Type's**. The new value is offered in the sibling project too — that is what "company-wide" means and why the permission is separate. A page asking `project:settings` for every dimension renders *identically* for this persona and hands a Test Lead a button the server 403s. | §69-14,15, §77-3 |
+| L1-20 | As the `report:view`-without-`report:export` persona: the Reports screen; then a Ready card's Download; then a completed job's **report view URL**; then save/list/delete a definition and try to generate from it | **Generate disabled with a why-tooltip**, rail item still there, polls and definition reads working. Download → **403 handed back beside the button in the card**, not a corner toast, card and status still on screen (the route's 403 is empty-bodied, so this also confirms `describeError` produces a sentence from the status alone). The report view → job renders, report **refused with the worded 403** *"You can watch this report being made, but not open it"* — **this is a finding, not the expected product behaviour**: §6e's split is "may read on screen, may not carry off", and today the screen costs the export key because the model is served through the download route. The three definition operations **succeed** and the generate is **403**: saving a selection is not exporting a report. | §89-24,25, §90-31, §92-44 |
+
+**Fixtures for this lane are the prologue's**, run at stage 2 — the author split (L1-6/L1-7), the
+unauthored evidence row (L1-8), the second account (L1-17), the `report:view`-only grant (L1-20) and
+review switched on for plans (L1-4, L1-13). If any of them is missing, go back and run the prologue
+rather than improvising one here: L1-7 exists precisely to catch a fixture that did not take.
 
 ---
 
-## §70 — the verb the contract checks could not see
+# L2 — the server's refusals (live, curl / devtools)
 
-**Nothing to drive, and the row exists to say so rather than to leave the slice absent.**
+*Stage 4 of the live pass. Reuses L1's personas — keep them to hand rather than re-provisioning.
+Lands nothing: every row is a refused write.*
 
-§70 changed `src/api/contractIntrospection.ts`, `contractOperations.test.ts` and
-`apiResponseTypes.test.ts` and nothing else. The first is imported **only by the two test files**
-(`grep -rln contractIntrospection src/` returns exactly those two), so it is not in any bundle: the
-`npm run build` output is byte-for-byte the app §69 shipped. There is no screen, no request and no
-rendered string that differs, so any browser row here would be a check of §69's screens wearing
-§70's number.
+The disabled control is a courtesy; these rows are the rule. Several are unreachable from any UI.
 
-**What stands in for it** is the pair of mutations, and because this slice *is* a check they were
-run inline rather than queued — see §70's table: the unmapped client spelling reddens exactly 8, and
-an unreadable verb reddens exactly 2 (one guard per file).
-
-**The one thing a later reader might want to re-derive** — cheaper as a command than as a browser
-pass, and it is the whole slice in one line:
-
-```bash
-cd frontend && grep -rn "api\.delete" src/     # must return NOTHING — the client's verb is `del`
-npx vitest run src/api/contractOperations.test.ts src/api/apiResponseTypes.test.ts
-                                               # must report 8 DELETE call sites and 1 upload among them
-```
+| # | Drive | Expect | src |
+|---|---|---|---|
+| L2-1 | `GET /me/permissions` on any authenticated screen; then walk the case grid, the board, the dashboard | `permissions: [{key, qualifier}, …]`, **sorted by key**, no entry whose qualifier is `NONE`. **No regression across the eleven gated affordances** — the wire shape changed under all of them at once and `useCan` falls **open** on error, so a consumer left on the old shape looks *normal*, not broken. The highest-risk row in the §65 block. | §65-5,6 |
+| L2-2 | As a Test Lead, `POST /classification/values` with the **sibling project's** dimension id | **404, not 403** — the caller must not learn which permission would have applied. | §69-16 |
+| L2-3 | Write to a **completed** run (devtools, or a tab opened before the close) | **409** *"This run has ended…"* — not 403, not 500. | §72-7 |
+| L2-4 | `PUT …/status` with `IN_REVIEW` on an **APPROVED** suite | **409** *"Only a draft suite can be submitted for review. Return this suite to draft first."* — and the same sentence, prefixed with the folder's name, in the rail's own alert if reached through the UI. | §75-8 |
+| L2-5 | **Close** a draft plan (no such control exists) | **409** *"Only a plan that is being executed can be closed…"*. The absence of the button is the point; the server refusing anyway proves it is not a UI convention. | §73-5 |
+| L2-6 | Force a save on a **closed** plan | **409** *"This plan is closed… Reopen the plan to change them."* | §74-9 |
+| L2-7 | With peer minimum 1 and *the submitter cannot approve* **on**: submit a plan yourself and approve it | **409 in place** — *"You submitted this plan for review, and this project asks somebody else to approve it."* Plan stays In review. **Not a 403**: the permission is held and the policy is what refuses. | §77-6 |
+| L2-8 | Attach a file with `max-file-size: 1MB` temporarily set, 2 MB file | **413** with readable copy (*"Evidence files are limited to…"*), never a bare 500. The container refuses before the handler runs, so this is a completely different path from the client-side M4-9. | §67-9 |
+| L2-9 | `GET /api/v1/work-items` with **no parameters** | **400, "Choose a board"**, naming both requests that do work. The SPA never sends it; this confirms the refusal its shape is built around exists. | §83-19 |
+| L2-10 | `GET …/work-items?teamId=<uuid>&mine=true`; then `?teamId=<team in another company>`; then `?teamId=<valid>&projectId=<valid>` | **400 "Choose one board"** (unobservable in the body for a caller on the team, so the status is the only evidence). **404 with an empty body, identical to an unknown UUID** — any difference makes the operation a company-wide team-existence oracle (§6t). **200** with the team's work inside that project: legal, no screen sends it, and the mock answers it — this row stops the mock's answer being the only definition. | §85-23,24,25 |
+| L2-11 | As the `report:view`-only persona: `POST …/reports/generate`, then poll an existing job, then follow a completed job's `downloadUrl` | **403 with a problem body**; poll **200**; download **403 with an empty body** — deliberately bodiless because the response is typed to a binary resource. Confirm the last does not render as a corrupted download. | §87-6,7 |
+| L2-12 | As a Test Lead, paste a completed job's `downloadUrl` into the **address bar**, then download the same report **through the screen's button** | Address bar **401**; button gives the file. The session is a bearer token in a header and `SecurityConfiguration` is `STATELESS` with no cookie, so **no `<a href>` into `/api/v1` can ever authenticate**. This supersedes §87's row 8, which assumed a navigation would authenticate. | §89-22 |
+| L2-13 | As a Test Lead, follow `downloadUrl` from the app | The file **downloads** — `Content-Disposition: attachment`, named `run_summary-{artifactId}.md`. Evidence is served `inline` (a screenshot belongs beside the step it failed on); a report is a file somebody keeps. | §87-8 |
 
 ---
 
-## §71 — the org chart becomes editable
+# L3 — the invariants only `psql` can see (live)
 
-**The live-mode-only rows come first, because this slice's whole point is a live-mode gap.** Mock
-mode has shown three teams since Phase 1 and live mode has shown **none, ever** — `team` had no
-writer, so `GET /teams` answered `[]` on every real instance. So the rows that matter most are the
-ones mock mode structurally cannot show, and rows 1–3 must be driven with `VITE_API_MODE=live`
-against a provisioned company or they prove nothing.
+*Stage 5 of the live pass. Reads what stages 3–4 wrote — L3-1, L3-2, L3-5 and L3-11 have nothing to
+look at if L1 and L2 have not run. No browser needed except where a row says to drive something.*
 
-**The mock persona cannot drive the happy path at all.** `companyScopePermissions` is
-`['company:read']`, so every org-chart control renders *disabled with its reason* in mock mode —
-which is row 4, and is worth driving as-is. To reach rows 5–11 in mock mode, add `'company:teams'`
-to that array in `src/mocks/fixtures/core.ts` (the file says so at the point of the decision).
+Every row here looks identical on screen whether it holds or not. That is why they are written down.
 
-| # | Flow | What must be true | Mode |
+| # | Drive | Expect | src |
 |---|---|---|---|
-| 1 | Sign in as a Company Admin on a **freshly provisioned** company → Teams & roles | "Team structure" is **empty**, with the no-records copy. This is the state every real company has always been in. | **live only** |
-| 2 | New team → "Platform" → Create | The team appears in the tree. Then `psql`: `SELECT id, name, parent_team_id FROM team` shows **exactly one row**, `company_id` the caller's. | **live only** |
-| 3 | Grant a role → subject **Platform (team)** → Test Engineer on a project → then Members → tick a colleague | The colleague's own session (second browser / private window) now lists that project on `/projects`, **without signing out and in**. Then untick → the project disappears from their rail on the next navigation. **This is the slice**: the team-grant path has existed since M0 and could never be exercised, because no team could be created for a grant to name. | **live only** |
-| 4 | Sign in as the mock persona (or any caller without `company:teams`) → Teams & roles | "New team" and all three row actions are **disabled with a tooltip giving the reason** — not hidden, not absent (§31). "Invite a person" beside them stays **enabled**, which is what shows the two permissions are asked apart. | mock + live |
-| 5 | New team → leave the name blank → Create | Field error on the name input, dialog stays open. | mock + live |
-| 6 | Create "QA", then create "qa" | Refused with a field error naming **the stored spelling** — `already has a team called "QA"`. The case-folding is the point; an exact-match check accepts this. | mock + live |
-| 7 | Create A, create B under A, then Edit A → "Sits under" | B is **not offered** in the select. Then edit A and pick a legal parent → saves. | mock + live |
-| 8 | Edit a nested team → "Sits under" → "No parent — a top-level team" → Save | The team moves to the root of the tree. **The PUT-not-PATCH decision is this row**: under PATCH this operation is unreachable. | mock + live |
-| 9 | Grant a role to a team, then Delete that team | **409**, and the dialog lists *"1 role grant is made through this team…"*. Cancel, and the grant is still in the Role assignments table. | mock + live |
-| 10 | Delete a team that has children | 409 naming the child count. Delete the child first, then the parent → 204 and both are gone from the tree. | mock + live |
-| 11 | Members dialog on a team that holds a grant | The **warning banner** names the projects and says anyone added gets them immediately. Tick a person → the row's checkbox stays ticked after the dialog is closed and reopened (the list refetches from the mutation's invalidation, not from a snapshot). | mock + live |
-| 12 | Members dialog → tick "Leads" for somebody **not** in the team | The Leads checkbox is **disabled** with a tooltip until they are a member. Ticking "In team" enables it. | mock + live |
-| 13 | Members dialog → tick a person, close, reopen, untick them | 204 both times; no duplicate row, and `psql` shows `team_membership` gained one row and lost it. | **live only** |
-
-**The two rows no browser can produce, recorded so nobody goes looking for them:**
-
-- **An orphaned team** (`parent_team_id` naming a team that is not in the list) and **a cycle**.
-  The API refuses both, twice over, so they can only be made in `psql` — and the tree now surfaces
-  them at the root rather than dropping them, which is `TeamsPage.test.tsx`'s job instead. It
-  matters because the tree is the **only** place a team can be edited or deleted, so a row it drops
-  is a row nobody can fix. Driving it needs
-  `UPDATE team SET parent_team_id = gen_random_uuid() WHERE name = 'Platform';` and is worth doing
-  once on the box if the §71 live pass happens at all.
-- **A sibling company's account offered as a team member.** The picker only lists this company's
-  people, so the refusal it exists for is unreachable from the UI. That one is asserted at the
-  server (`TeamEndpointTest`, "a SIBLING COMPANY'S user is refused — 404, and no row is written").
+| L3-1 | Delete a case you authored (L1-6) | `SELECT deleted_at FROM test_case WHERE key='TC-1'` is **set** — the delete is soft, as `CaseDeleteDialog`'s copy claims. | §66-8 |
+| L3-2 | Delete evidence you attached | The `evidence` **and** `attachment` rows are gone **and the file is gone from `TCMS_EVIDENCE_ROOT`** — a hard delete. The one place a partial write is rolled back by nothing: a failure between the two leaves a row whose blob is gone, or worse in the other order. | §67-12 |
+| L3-3 | Assign a classification value, **then retire it**, then open the editor and save any other change; reload and save again | The retired value has **no checkbox** and its `case_classification` row is **still there** afterwards — both times. **The only silent failure in §68**: if the bound is wrong the save succeeds, the response looks correct, and a classification is gone with nothing having mentioned it. Neither the API nor the UI can produce this state, which is why it is the arm most likely to be wrong. | §68-8,9, §69-13 |
+| L3-4 | Rename a classification value | `path` is **byte-identical**. Nothing in the UI shows a path; if a rename rewrote it the only symptom appears later in §6q's descendant matching, which is not built — so it is checked here or not at all. | §69-9 |
+| L3-5 | Complete a run, then Complete it again | 200, `completed_at` **unchanged**, **one** `run.closed` audit row. | §72-10 |
+| L3-6 | Plan: Submit → Approve → Start → Close | `status` moves, `closed_at` set **only** on the close, `updated_by` is the actor, and `audit_event` holds **four** rows — `plan.submitted`, `plan.approved`, `plan.started`, `plan.closed` — each with `from` and `to`. | §73-2 |
+| L3-7 | Edit a plan's **scope** (tick a folder), then edit **only** its name | Scope: `test_plan_version` gains a row whose `snapshot` names both suites, `current_version_no` = 2. Name: **no new version row**, `current_version_no` unchanged. A plan version is its scope (§6j); a name is content — and an implementation that bumps on every save looks identical on screen. | §74-5,6 |
+| L3-8 | Press a suite move twice quickly (Approve → Approve); then check `suite_version` | Second is **200 with no second audit row**: exactly one `suite.approved`, `updated_at` unchanged. And **no new `suite_version` row**, `current_version_no` unchanged — a suite version is its composition, and approving does not change what is in the folder. | §75-9,10 |
+| L3-9 | Retag a case (add a tag, save), open its version timeline | **No new version.** Tags are kept off `CaseEdit` and out of the content hash — a version whose diff says nothing about the test having changed is the empty-diff noise §6j added the hash to keep out. | §96-79 |
+| L3-10 | Under RE_REVIEW, edit an approved plan | An audit row `plan.re_review_required` naming you, `from APPROVED to DRAFT`. | §77-12 |
+| L3-11 | Create a run with the gate **overridden**, then one with the gate off | `approvalGateOverridden` on the first row and **absent** on the second. **No audit screen exists** (`audit:view` has no consumer), so this is a read against `audit_event.changes`. | §82-14 |
+| L3-12 | Members dialog: tick a person, close, reopen, untick | 204 both times, no duplicate row: `team_membership` gained one row and lost it. | §71-13 |
+| L3-13 | Deprecate a folder that holds cases, open the case list scoped to it | The cases are **still there and still editable**. Deprecating is a label on the folder, not a soft delete of its contents — nothing in this slice cascades. | §75-12 |
 
 ---
 
-## §72 — the run lifecycle: starting, ending, reopening, and the freeze
+# L4 — what only a real instance produces (live)
 
-**Built and NOT browser-verified.** The seventh slice in the deferred queue.
+*Stage 6, the last. Both stage-2 clocks must have elapsed — L4-23…L4-29 read a scheduler tick and
+L4-30 reads a report worker tick, and neither can be hurried from the app. Teams must still be
+absent: L4-1 creates the first one this company has ever had.*
 
-**The live-only rows come first, and for a sharper reason than §71's.** `test_run.status` had no
-writer at all, so on every real instance **every run has always been `NOT_STARTED`** with a null
-`started_at` — the state mock mode almost never shows, because its fixtures ship runs that are
-already `IN_PROGRESS`. Row 1 is therefore about a state live mode has *only* ever been in and mock
-mode has *never* been in, which is the exact inverse of §71's asymmetry and just as invisible.
+### Teams (the whole screen was unreachable before §71)
 
-**The mock persona can drive most of this.** `run:close` is in the mock's granted set, so rows 4–11
-work in mock mode as written; row 3 needs a caller *without* it, which the frontend test covers and
-a browser pass can reach by removing `'run:close'` from `src/mocks/fixtures/core.ts`.
-
-| # | Flow | What must be true | Mode |
+| # | Drive | Expect | src |
 |---|---|---|---|
-| 1 | Live: create a run → open it | Header chip reads **"Not started"** and the summary "Not started yet". Then record one result → the chip becomes **"In progress"** *without a reload of the run list*, and `psql` shows `status='IN_PROGRESS'` with `started_at` **equal to that execution's `executed_at`**. **This is the slice** — before it, that chip never changed for the life of the run. | **live only** |
-| 2 | Live: the run list after row 1 | The row's status chip is coloured, not the grey fall-through. `NOT_STARTED` was **missing from the colour map** and `PLANNED` — not a run status — was in it, so every real run rendered grey. | **live only** |
-| 3 | Sign in as a caller without `run:close` (a Test Engineer) → open a run | Complete and Abort are **disabled with a tooltip**, and recording a result on the same screen still works. Not hidden (§31). | mock + live |
-| 4 | Open a run with no results → Complete run | The button is **disabled**, tooltip: *"Nothing has been recorded in this run yet. Abort it instead."* Abort beside it is enabled. | mock + live |
-| 5 | Record one result, then Complete run | 200; chip → "Completed"; the Complete/Abort pair is **replaced by Reopen**, not joined by it. | mock + live |
-| 6 | On the completed run, open an execution | The four verdict buttons are **disabled**, and the panel shows *"This run has ended, so its results can no longer change."* The Attach button and every Remove are disabled with the same reason; **the attachments themselves are still listed and still open**. | mock + live |
-| 7 | Live: try the write anyway (devtools, or a second tab opened before the close) | **409** with *"This run has ended…"* — not 403, not 500. The point is that the freeze is the server's, and the disabled controls are a courtesy. | **live only** |
-| 8 | Reopen run → record a result | The chip returns to "In progress", `completed_at` is **null** again in `psql`, `started_at` is **unchanged**, and the result saves. | mock + live |
-| 9 | Abort a run that was never started, then Reopen it | It returns to **"Not started"**, not "In progress" — the client asked for `IN_PROGRESS` and the server normalized. `started_at` still null. | mock + live |
-| 10 | Complete a run, then Complete it again | 200, no error, and `psql` shows `completed_at` **unchanged** and **one** `run.closed` audit row. | **live only** (the audit half) |
-| 11 | Complete a run, then try Abort via a stale tab | 409 *"Reopen it before recording a different outcome."* | mock + live |
+| L4-1 | New team → "Platform" → Create | Appears in the tree; `SELECT id, name, parent_team_id FROM team` shows **exactly one row**, `company_id` the caller's. | §71-2 |
+| L4-2 | Grant a role → subject **Platform (team)** → Test Engineer on a project → Members → tick a colleague | The colleague's own session (second window) lists that project on `/projects` **without signing out and in**; unticking removes it from their rail on the next navigation. **This is §71**: the team-grant path has existed since M0 and could never be exercised, because no team could be created for a grant to name. | §71-3 |
+| L4-3 | Blank name → Create; then create "QA" and then "qa"; then A, B-under-A, and edit A's "Sits under" | Field error, dialog open. Second refused naming **the stored spelling** (`already has a team called "QA"`) — case-folding is the point and an exact-match check accepts it. B is **not offered** as A's parent; a legal parent saves. | §71-5,6,7 |
+| L4-4 | Edit a nested team → "Sits under" → "No parent" → Save | It moves to the root. **The PUT-not-PATCH decision is this row**: under PATCH the operation is unreachable. | §71-8 |
+| L4-5 | Delete a team that holds a grant; then one with children | **409** listing *"1 role grant is made through this team…"* — cancel and the grant is still in the Role assignments table. Then 409 naming the child count; delete the child first, then the parent → 204. | §71-9,10 |
+| L4-6 | Members dialog on a team that holds a grant | The **warning banner** names the projects and says anyone added gets them immediately. Ticking a person survives close-and-reopen (the list refetches from the mutation's invalidation, not a snapshot). Ticking "Leads" for a non-member is **disabled with a tooltip** until "In team" is ticked. | §71-11,12 |
+| L4-7 | `UPDATE team SET parent_team_id = gen_random_uuid() WHERE name = 'Platform';` — and a cycle | Both surface **at the root** rather than being dropped. The tree is the **only** place a team can be edited or deleted, so a row it drops is a row nobody can fix. The API refuses both twice over, so `psql` is the only way in. | §71 note |
+| L4-8 | Delete a team that has an outstanding review request | The chip is gone on the next load and **the person asked individually is untouched**. The decision §71's 409 is deliberately *not* extended to — what cascades is a request, not authority — and the DDL is the only thing enforcing it. | §80-13 |
 
-**The row no browser can produce:** two testers recording the last result and closing the run in the
-same instant. There is no `If-Match` on the status endpoint by design (the target state is absolute),
-so the race resolves to "the close wins and the result 409s" or the reverse, and both are correct.
-Recorded so nobody reads its absence as an oversight.
+### Reviews across two accounts
+
+| # | Drive | Expect | src |
+|---|---|---|---|
+| L4-9 | Submit as A, **send it back as B**; then submit as A and **withdraw as A** | **"Sent back"** with a trail row `APPROVAL / Sent back` naming **B**; then **"Withdrawn"** with **no verdict row added**. The same ladder edge, and they must read differently — this is the pair `V22` added a state for. | §76-7,8 |
+| L4-10 | Comment as one account, resolve as another | The thread names **two different people** — author on the remark, resolver on the resolution line. The pair is why `V24` added the actor column. | §79-13 |
+| L4-11 | Peer minimum 1: have B say **Looks good**, then approve as A. Then repeat with B saying Looks good → **Request changes** → approve | First succeeds. Second **refused** — *"…needs 1 peer review … and has 0."* The latest verdict is what counts and the trail shows both. **The single most valuable row here**: the cheap implementation passes the first perfectly and fails only this. | §77-7,8 |
+| L4-12 | Author rule **off**: press Looks good as the submitter, then approve | Still refused on the peer minimum — *"has 0"*. The submitter's own LGTM is not a second opinion, and the two settings are independent. | §77-9 |
+| L4-13 | Ask a **colleague** to review, sign in as them, open the board | A Review card for that artifact on **their** board naming the lead as the asker. **The row §81 exists for**; §80's row 14 recorded its absence. | §81-6 |
+| L4-14 | Ask a **team**, sign in as any member; then **add somebody to that team** and reload their board | A card each for every member, none of them named on an assignment row; the new member's card is waiting. Expansion happens on the **read** — write-time expansion would have frozen the list at the moment somebody clicked. | §81-7 |
+| L4-15 | As the person asked, leave a verdict (LGTM **or** Request changes), reload the board | **The card is gone** — on "changes requested" too, deliberately: they have done what was asked and the ball is with the author. A card that stays until they approve reads as work the reviewer still owes. | §81-8 |
+| L4-16 | Approve or reject the artifact, reload every asked person's board; then soft-delete a case with an open review somebody was asked for | All cards gone though the `review_assignment` rows are untouched — the board reads `review.state`, and unassigning is the only thing that deletes a request. The deleted case's card disappears; nothing in the schema removes the review, because the subject triple has no FK. | §81-9,10 |
+
+### Content, corpus and health
+
+| # | Drive | Expect | src |
+|---|---|---|---|
+| L4-17 | On a real project, type a step fragment used by several cases; then soft-delete a case using the top suggestion and repeat; then repeat on a **second project** | Counts are **distinct cases** (a case repeating a step twice adds one). The deleted case's usage **drops out**. The second project offers **its own** steps and none of the first's. All three are unobservable in mock: the fixtures give every structured case the same four steps and `DELETE` removes the row. | §94-59 |
+| L4-18 | Drag a step in a case that has evidence or results against it | Steps reorder and the **evidence stays with its step**, not the position (`step_result` FKs to `test_step.id`). If this were ever false it would be found by a tester reading someone else's evidence under the wrong step. | §94-61 |
+| L4-19 | Edit a condition attached to several cases: read the impact line, confirm, open a **different** case that attaches it | The line gives **two separate figures** — cases attaching directly, suites attaching — never one blended number. The other case shows the **new** text: the attachment is a reference and the edit propagates with no prompt. | §95-68 |
+| L4-20 | With the condition edit dialog open, have somebody else change that condition, then save | **409 in the dialog** saying to reload and reapply — not a toast, not a silent overwrite. `condition.lock_version` was mapped for the first time in §95 **with** `@Version`; §74 found three entities where the plain-column spelling makes the precondition unable to fail. | §95-69 |
+| L4-21 | Case editor as a user **without `library:manage`** | Attach, detach and reorder still work (attaching is a case edit); **create and edit refused**, legibly rather than as a bare 403. | §95-72 |
+| L4-22 | Re-run `provision-company` against an existing company, open a project's status vocabulary; then record a **WIP** result and open the plan's Progress tab | A seventh status **WIP** — blue, not final, not counting as a pass. Existing projects do **not** get it from the migration (M9's decision), so this is the check that the documented top-up path works. A WIP result counts as **not run**, not as a verdict, and coverage does not move. | §97p3a-97,98 |
+| L4-23 | One case, **three `Failed`** results across three runs (the unique constraint forces one run each). Wait for the tick (`PT3M` then `PT15M`), open the dashboard | **"Failing repeatedly"** tile, count **1**, severity WARNING (amber not red). Before §86 it could only ever read 0. | §86-1 |
+| L4-24 | Same case, record a fourth result **`Passed`**, wait, reload | The tile drops to **0** and the chip disappears. **The self-healing property §6o rests on** — "no 'mark as not-stale' button exists to lie with" is only true if the computation takes it back. A latching signal is indistinguishable on screen from a correct one. | §86-2 |
+| L4-25 | Three **`Blocked`** results on a different case, wait, reload | **Not listed.** The predicate is `status_kind = 'FAILED'`, not "did not pass" — a blocked case is an environment problem, and flagging it sends the reader to fix the wrong thing. | §86-3 |
+| L4-26 | With L4-23's case flagged, open the board | A **`CASE_MAINTENANCE`** card naming the signal, in the right column, whose `linkFor` **resolves**. Structurally empty since §53: two of nine signals had a writer and the card was built around neither. | §86-4 |
+| L4-27 | Soft-delete a flagged case, wait a tick, reload | Tile count drops, case gone — **and the fact log keeps the deleted case's results**. Two opposite calls in one slice, and the screen is where their consistency is legible: no orphan chip, no report row lost. | §86-7 |
+| L4-28 | Two companies, both with a failing-repeatedly case; sign in as a member of one | Only that company's case is counted. The projection carries **no company predicate** — `FORCE ROW LEVEL SECURITY` is the entire mechanism on both the `SELECT` and the `INSERT`. | §86-6 |
+| L4-29 | A project of a few hundred cases: dashboard response time before and after a tick populates `failing_repeatedly` | No visible regression. **`V1` ships four partial indexes on `case_health` and none on `failing_repeatedly`**, so this tile is the first that has to scan. Found while reading the DDL and deliberately not fixed — if this shows a real cost, the index belongs in R3's `V27`. | §86-8 |
+
+### Reports, documents and the deployed build
+
+| # | Drive | Expect | src |
+|---|---|---|---|
+| L4-30 | As a Test Lead, generate a report and poll | **202**, then a job reaching `COMPLETED` **without polling advancing it** — the real worker is `PT15M` after a `PT3M` delay, so this waits for a tick or follows a restart. The mock's poll-driven clock must not be what a client depends on. The card sits at Queued/Building for **minutes**, and the copy has to hold up over that duration — a client that only ever saw the mock has copy written for a two-second wait. | §87-5, §89-23 |
+| L4-31 | Generate `format: 'HTML'` for a real run and open `downloadUrl` | The provenance block at the top: company, project scope, the §390 scope sentence, who generated it, when, `Selection — runId`. Then **turn the network off and reload the saved file** — identical. "A self-contained file that needs a CDN to draw its diagrams is not self-contained"; the unit test asserts the absence of URLs, only a browser proves it *looks* like a report without them. | §88-11 |
+| L4-32 | Same document: read the bar chart, then **Print preview** | Bars in CSS with the number beside each, and **no table row split across a page boundary** (`break-inside: avoid`). This page is what the PDF slice hands to a headless browser, so print is the deliverable's dry run — and the number beside the bar is what survives a mail client that strips the stylesheet. | §88-12 |
+| L4-33 | Name a project (or run) `<img src=x onerror=alert(1)>`, generate HTML, open the file | The text appears **as text** — no alert, no broken layout. Every value in a report is user-controlled; the escaping is asserted by a counted unit test and this is the only place it meets a real parser. | §88-13 |
+| L4-34 | As a Test Lead, open a real report's **on-screen view**; then print it and narrow to phone width | Header carries the **real** company, `KEY — Name` project scope, the scope sentence, the signed-in display name and a **UTC-labelled** timestamp (the mock's are literals) — compare `Generated at` against the run's own timestamps for a sensible timezone. Tables scroll **inside their own container** (`ScrollX`) rather than the page, and the print view is legible. | §90-32,33 |
+| L4-35 | Two people on one project each save a report definition, then each list; then B `DELETE`s A's id | **Each sees only their own**, and the delete is **404** with the row surviving. Structurally unobservable in mock, which signs in as one persona — "mine" and "the project's" are the same set there, and dropping the owner filter passes every mock check. | §92-43 |
+| L4-36 | A member with **no project grants at all**: My Work, then any team board, then the rail | **`200 []`** rendered as the empty state on both — never a 404, never an error. The personal board names no project, so nothing can fail to resolve; this is the first screen a new member sees and it must read as an empty queue, not a broken product. The rail shows **My work** and **All projects** with an **empty** switcher (a folder icon, not a key, when collapsed), and the picker says "You don't have access to any project yet". | §83-18, §85-21, §91-39 |
+| L4-37 | A user with grants on **two** projects: My Work; then user A and user B (granted on one of the two) opening **the same team board** | A sees cards from both. **B sees strictly fewer cards** — the ones from the project they hold no grant on are absent, with no error. §84's headline decision, and unreachable in mock: the fixture has no project the caller is barred from. | §83-17, §85-20 |
+| L4-38 | A member **not on the team** opens its board | It renders. Membership is not a requirement (§6k) — a team board a lead's manager cannot open is a board for nobody. | §85-22 |
+| L4-39 | Footer: `npm run dev`; then `VITE_APP_VERSION=9.9.9 npm run build && npm run preview`; then after a real `gh workflow run deploy.yml -f version=<v>`, hard-reload the deployed site; then deploy a second version | **`TCMS dev`** (a plausible number here means a hardcoded literal is back — the exact defect this replaced), then **`TCMS 9.9.9`** proving the `define` reaches the emitted bundle, then **`TCMS <v>`** matching the dispatched input and the GHCR tag, then a **changing** number. One correct reading is consistent with a literal that happens to match; two are not. The `web` job greps `dist/assets/` for the dispatched version, so the automated half is covered — the deployed reads are the part a human must see. | footer 1–4 |
 
 ---
 
-## §73 — the plan lifecycle: the ladder, and the delete that refuses
-
-**Built and NOT browser-verified.** The eighth slice in the deferred queue.
-
-**The live-only rows come first, for §72's reason and one more.** `test_plan.status` had no writer,
-so on every real instance **every plan has always been `DRAFT`** — and the mock's fixtures carried
-only `ACTIVE` and `CLOSED` plans, so *the state a fresh install produces was the one state mock mode
-never rendered*. §72 wrote that lesson about runs; here it was already true of plans, three files
-away. This slice adds `TP-4` (DRAFT, no runs) and `TP-5` (IN_REVIEW) to the fixtures, so rows 3–8
-work in mock mode as written.
-
-**The mock persona holds `plan:edit`, `plan:approve` and `plan:delete`**, so row 4 needs a caller
-without one of them: remove `'plan:approve'` from `src/mocks/fixtures/core.ts`.
-
-| # | Flow | What must be true | Mode |
-|---|---|---|---|
-| 1 | Live: create a plan → open it from the list | The list chip reads **"Draft"** in the draft colour, not a grey unlabelled fall-through. The old map was `Record<string, string>`, carried an `ARCHIVED` that is not a plan status, and was **missing `IN_REVIEW` and `APPROVED`** — the two states this slice makes reachable. | **live only** |
-| 2 | Live: Submit for review → Approve → Start plan → Close plan | The header chip follows each step. `psql`: `status` moves, `closed_at` is set **only** on the close, `updated_by` is the actor, and `audit_event` holds **four** rows — `plan.submitted`, `plan.approved`, `plan.started`, `plan.closed` — each with `from` and `to`. | **live only** |
-| 3 | Reopen the closed plan | The chip returns to **"Active"**, `closed_at` is **null** again, and the audit action is `plan.reopened`, not a second `plan.started`. | mock + live |
-| 4 | Sign in as a caller with `plan:edit` but not `plan:approve` (Test Engineer) → open a plan in review | **Approve plan is disabled**; "Return to draft" beside it is **enabled**. Then open an *approved* plan: the same "Return to draft" button is now **disabled**. **The same control, the same target, gated differently by where the plan is** — the slice's central rule, seen from the UI. | mock + live |
-| 5 | On a draft plan, press **Close plan** — there is no such control, so use devtools/curl | **409** *"Only a plan that is being executed can be closed. Start the plan, or delete it if it was never used."* The absence of the button is the point; the server refusing anyway is the proof it is not a UI convention. | **live only** |
-| 6 | Draft plan (`TP-4`) → Delete → confirm | 204, the plan leaves the list, and the following read is a 404 page rather than an empty panel. | mock + live |
-| 7 | A plan with runs (`TP-1`) → Delete → confirm | The dialog **stays open** and shows *"3 test runs have been executed against this plan… Close the plan instead."* Not a corner toast, and not a closed dialog: nothing on that screen could have predicted this refusal, so it is the only place the sentence can land. | mock + live |
-| 8 | After row 7, open the run list | Each run still shows its `TP-n` chip and the link still opens the plan. This is what the refusal protects — and it is why the check is *"the runs are still whole"*, not *"the delete failed"*. | mock + live |
-| 9 | Live: a plan with exit criteria written by hand into `exit_criteria`, then the plan **list** | The "Exit criteria" column counts only criteria whose `met` is **false**. The list never evaluates anything, so every criterion arrives with `met: null` — the old `!c.met` counted all of them as unmet and would have read "3 unmet" for a plan whose gates were green. Invisible until the column has a writer, which is the next slice. | **live only** |
-
-**The row no browser can produce:** a lead approving while another lead returns the plan to draft in
-the same instant. There is no `If-Match` on this endpoint by design (the target state is absolute),
-so the race resolves to whichever lands second, and both orders are legal moves. Recorded so its
-absence does not read as an oversight.
-
----
-
-## §74 — the plan editor: the criteria that had no writer, and the scope that could not round-trip
-
-**Built and NOT browser-verified.** The ninth slice in the deferred queue.
-
-**Row 1 is live-only and it is the row that matters**, for a reason this queue has now recorded
-three slices running: `entry_criteria` and `exit_criteria` have **never been written by anything**,
-so on every real instance both are `NULL` and the plan page's exit-criteria panel — built in §46,
-with `PlanCriteria.evaluate` behind it — has rendered an empty list for its entire life. The mock's
-fixtures, by contrast, have carried hand-written criteria on `TP-1` since Phase 1. **Mock mode has
-been showing a feature the product did not have.** That is §52's "mock agrees with itself" from the
-opposite direction, and it is why the panel has to be seen against a real row before this is called
-done.
-
-**§73 row 9 becomes runnable here** — it needed a plan with real exit criteria and there was no way
-to make one without psql. Run the two together.
-
-| # | Flow | What must be true | Mode |
-|---|---|---|---|
-| 1 | Live: open a plan → **Edit** → add exit criteria *pass_rate ≥ 95* and *coverage ≥ 100* → Save → look at the statistics page | The exit-criteria panel **renders two gates with verdicts**, evaluated against the plan's real numbers — a green tick and a red cross, not two "not evaluated" dashes. `psql`: `exit_criteria` is a JSONB array, and it was `NULL` before the save. **This is the first time this panel has ever had anything to show on a real instance.** | **live only** |
-| 2 | Same plan → Edit → add *open_critical = 0* → Save | That gate renders as **not evaluated** — no tick, no cross — while the two above keep their verdicts. Null means *not evaluated*, which is not *unmet*: the product has no issue tracker, and a red cross here would tell a release meeting a gate had been checked and failed. | mock + live |
-| 3 | Edit → set a threshold, clear the number box entirely, Save | The row is **dropped**, not sent as `0`. A `pass_rate >= 0` gate is met by every release that ever runs and reads on screen exactly like one somebody meant. | mock + live |
-| 4 | Edit a plan that has folders in scope → **do not touch the scope** → change only the name → Save | The scope checkboxes are **pre-ticked on open** (the field the detail endpoint did not serve before this slice), and after the save `psql` shows `plan_scope_item` **unchanged** and `caseCount` the same. The failure this catches is silent: an editor that sent `[]` for what it did not render would empty the plan. | mock + live |
-| 5 | Edit → tick a second folder → Save → reopen the editor | The new folder is ticked, `caseCount` has grown by that folder's subtree, and **`test_plan_version` has a second row** whose `snapshot` names both suites. `psql`: `current_version_no` is 2. | **live only** |
-| 6 | Edit → change **only** the name → Save → `psql` | **No new `test_plan_version` row** and `current_version_no` unchanged. A plan version is its *scope* (§6j); a name is content. This is the assertion an implementation that bumps on every save fails, and the screen looks identical either way. | **live only** |
-| 7 | Open a plan, and in a second tab edit and save it. Return to the first tab and save. | **409 "Someone else saved first"** in the dialog's own alert, with *"Reload the plan…"*. Before this slice `lock_version` had no `@Version`, so it was `0` for ever and this check could not fire — **the whole point of the row is that it now can**. | mock + live |
-| 8 | Close a plan (Start → Close), then look at the header | **Edit is disabled**, with the title *"Reopen the plan to edit its scope and criteria."* Then Reopen → Edit is enabled again. | mock + live |
-| 9 | On the closed plan from row 8, force the save through devtools/curl | **409** *"This plan is closed… Reopen the plan to change them."* The disabled button is a courtesy; the server refusing is the rule. | **live only** |
-| 10 | Sign in as a caller **without** `plan:edit` (Viewer) → open a plan | **Edit is disabled**, and a `plan:approve`-less Test Engineer still sees it **enabled** — the two keys gate different controls on the same header. | mock + live |
-| 11 | Edit → open the metric dropdown | **Five options with readable labels** ("Pass rate (%)", "Open critical defects"), not raw enum spellings. The closed vocabulary is the reason a typo cannot become a gate that is silently never evaluated. | mock + live |
-
-**The row no browser can produce:** two editors saving in the same instant *after both passing the
-`If-Match` check*. That is the true race `@Version` catches at flush, mapped to the same 409 by
-`PlanController#onWriteRace`, and it needs two interleaved transactions — which this suite has no
-mechanism for either, so the handler is reachable in principle and unverified in practice. Recorded
-so its absence does not read as an oversight.
-
----
-
-## §75 — the suite lifecycle: the status nothing ever wrote, and the rescind on cases
-
-**Built and NOT browser-verified.** The tenth slice in the deferred queue.
-
-**The live-only rows lead, and it is §72's inversion exactly.** On every real instance every suite
-is `DRAFT` and has been for the product's whole life, because `Suite.create` was the only writer
-`lifecycle_status` ever had. The mock's fixtures, meanwhile, have carried `APPROVED` and `IN_REVIEW`
-folders since Phase 1 — so **mock mode has been showing a signed-off suite tree the product could
-not produce**, and mock mode will look unchanged by this slice while live mode changes completely.
-
-Rows 3 and 4 are the ones that matter most: they are the client half of the defect this slice
-found, and both would have looked correct before it.
-
-| # | Flow | What must be true | Mode |
-|---|---|---|---|
-| 1 | Live: sign in as a lead, open a project's case list, and read the suite rail | **Every folder is unbadged**, because every folder is a draft — the state this slice's first save changes. `psql`: `SELECT DISTINCT lifecycle_status FROM suite` returns one row, `DRAFT`. Take the screenshot before doing anything else; it cannot be reproduced afterwards. | **live only** |
-| 2 | Kebab on a draft folder → **Submit for review** → **Approve** | The badge appears and then changes ("IN REVIEW" → "APPROVED"), the tree does not reshuffle, and `psql` shows two `audit_event` rows — `suite.submitted` then `suite.approved` — each carrying `from` and `to`. | mock + live |
-| 3 | Sign in as a **Test Engineer**, open the kebab on the folder approved in row 2 | **"Return to draft" and "Deprecate…" are greyed**, and "Execution history" is live beside them. This is the client half of the slice's defect: before §75 the same caller could take that approval back through the bulk case dialog, and nothing on screen said otherwise. | mock + live |
-| 4 | Same caller: case list → select two cases, one `DRAFT` and one `APPROVED` → bulk **Set status → Draft** → commit | The draft is reported **changed** and the approved one **skipped**, with *"Only a test lead can change a case that is already approved."* — and `changed + unchanged + skipped == total`. Before §75 both moved. | mock + live |
-| 5 | As a Test Engineer, kebab on a **draft** folder | **"Submit for review" is live** and "Deprecate…" is greyed. §6g: submitting needs only edit rights; retiring is the soft form of a delete. | mock + live |
-| 6 | As a lead: approve a folder, then open its kebab | **"Submit for review" is not offered at all** — the moves swap rather than accumulate. Offering it would be a control the server answers 409 to. | mock + live |
-| 7 | As a lead: deprecate a folder, then open its kebab | **"Restore to draft" is the only move**, and the badge is muted rather than coloured. A retired folder cannot go straight back to approved. | mock + live |
-| 8 | Force the refused move through devtools/curl: `PUT …/status` with `IN_REVIEW` on an APPROVED suite | **409**, *"Only a draft suite can be submitted for review. Return this suite to draft first."* — and the same sentence must appear in the rail's own alert, prefixed with the folder's name, if it is reached through the UI at all. | **live only** |
-| 9 | Press the same move twice quickly (Approve → Approve) | The second is a **200 with no second audit row**. `psql`: exactly one `suite.approved` row, and `updated_at` unchanged by the second press. | **live only** |
-| 10 | Approve a folder, then `psql` `suite_version` | **No new row and `current_version_no` unchanged.** A suite version is its composition; approving does not change what is in the folder. The screen looks identical either way, which is why this row is here. | **live only** |
-| 11 | Rail with ~10 folders at three depths, one badged | The badge does **not** crowd the name out — the name still ellipsizes rather than the count or badge wrapping — at the narrowest rail width and at 390 px. This is the reason drafts are unbadged at all. | mock + live |
-| 12 | Deprecate a folder that holds cases, then open the case list scoped to it | The cases are **still there and still editable**. Deprecating a folder is a label on the folder, not a soft delete of its contents — nothing in this slice cascades. | mock + live |
-
-**The row no browser can produce:** two leads moving one suite in the same instant. There is no
-`If-Match` on this endpoint by design (the target is absolute), so the race resolves to whichever
-lands second and both orders are legal moves. Recorded so its absence does not read as an oversight.
-
----
-
-## §76 — the review record: the panel that shows a sign-off and cannot grant one
-
-**Built and NOT browser-verified.** The eleventh slice in the deferred queue.
-
-**Mock and live disagree by construction here, and both disagreements are deliberate.** The mock's
-fixtures carry an open review on `TP-5` and a *rejected* one on `TC-8` — so mock mode can show the
-panel's three shapes without driving a flow — while on a real instance **no artifact has a review
-row at all** until somebody submits one after this deploy, including the artifacts that are already
-`IN_REVIEW`. Row 1 is that state, and it cannot be reproduced once row 2 has run.
-
-| # | Flow | What must be true | Mode |
-|---|---|---|---|
-| 1 | Live: open a case or plan that is already **In review**, before submitting anything new | The panel reads **"Not in review"** while the artifact's own status chip says In review, and the empty-state body explains that submitting is part of the status. This is not a defect: the record starts now. `psql`: `SELECT count(*) FROM review` is 0. | **live only** |
-| 2 | Submit a plan for review (plan screen → Submit for review), then open the panel | State chip **In review**, "Submitted by *you*", the version pinned (`v1` on a fresh plan), an empty trail, and **no Approve button anywhere on the panel**. `psql`: one `review` row, `state = 'IN_REVIEW'`, `subject_version_no` equal to the plan's `current_version_no`. | mock + live |
-| 3 | As a **Test Engineer** on the same open review: type a comment, press **Looks good** | 201, the trail gains one row reading *Looks good · your name*, the comment renders under it, **the box clears**, and the plan is **still In review** — a peer verdict moves nothing. | mock + live |
-| 4 | Same caller, again: press **Request changes** with a different comment | **Both rows are there, oldest first.** Participations are append-only; a panel that replaced the first row would be hiding the fact somebody changed their mind, which is what the trail is for. | mock + live |
-| 5 | As a **Viewer** (holds `case:comment`, not `case:review`) open a case with an open review | Both buttons **greyed with a tooltip**, the trail fully readable. §31's disable-don't-hide over §6g's three tiers — and the tier boundary is invisible unless it is rendered. | mock + live |
-| 6 | As a lead: approve the plan from its own screen, then re-read the panel | State **Approved**, "Signed off by *you*" with a timestamp, an `APPROVAL / Approved` row at the end of the trail, and **the verdict form is gone** (not merely disabled). | mock + live |
-| 7 | Submit again as person A, then **send it back as person B** (Return to draft) | State reads **Sent back**, and the trail's last row is `APPROVAL / Sent back` naming **B**. | **live only** — needs two accounts |
-| 8 | Submit as person A and **withdraw it as A** (Return to draft) | State reads **Withdrawn** and **no verdict row is added**. Rows 7 and 8 are the same ladder edge and must read differently; this is the pair `V22` added a state for. | **live only** |
-| 9 | With a review open, edit the artifact so it writes a version (a plan's **scope**, a case's content), then re-read the panel | The warning appears: *"…has changed since it was submitted — the review covers v2, and you are looking at v3."* The version on the record must **not** move. | mock + live |
-| 10 | Withdraw and re-submit the same artifact twice | The panel shows the newest review at the top and an **"Earlier reviews"** list beneath it, each with its own state and version. `psql`: exactly one row with `state = 'IN_REVIEW'` for that subject. | mock + live |
-| 11 | Have the review approved in another tab, then press **Looks good** in the stale one | **409 in place, inside the panel** — *"This review has already ended. Submit the plan for review again to reopen it."* — not a toast, and the trail refreshes rather than the page. | mock + live |
-| 12 | The case detail sidebar at 390 px, with a two-line comment in the trail | The panel does not push the version history off screen, the comment wraps rather than overflowing, and the two buttons stay side by side or stack cleanly. | mock + live |
-| 13 | Bulk-submit ~20 cases from the case list, then open two of them | **Each has its own open review**, each pinned to that case's own version. The bulk path is the one §6g calls the common case, and it is the one place a per-row write could silently do nothing. | mock + live |
-
-**The row no browser can produce:** two people submitting the same artifact in the same instant.
-`V22`'s partial unique index is what decides it, and the loser gets a constraint violation rather
-than a second open review — recorded here so its absence does not read as an oversight, and queued
-as a backend check.
-
----
-
-## §77 — per-project review settings: the switch that decides whether §76 exists
-
-**Built and NOT browser-verified.** The twelfth slice in the deferred queue.
-
-**Read row 1 before any other.** This slice changes the *default* from "review everywhere" to
-"review nowhere", so on both mock and live the first observable effect is that **§76's panel
-disappears from every screen** until somebody turns it on. Every row in §76's block above now
-presupposes that the project has review enabled — which is exactly what row 2 here does, and the
-honest way to run the two blocks is §77 row 2 first.
-
-**The mock deliberately disagrees with a fresh install, in one direction only.** `settingsForProject`
-seeds the **demo project** with review on so §76's fixture reviews are reachable, and every other
-project on the defaults. Both are states a real instance produces; a store that did only one of them
-would be §72's finding (fixtures sitting in a state a fresh install cannot produce) or would make the
-panel look unbuilt.
-
-| # | Flow | What must be true | Mode |
-|---|---|---|---|
-| 1 | Live: open any case, suite and plan **before touching the settings screen** | **No Review panel anywhere** — not an empty panel, not a "review is off" placeholder, nothing. §6g's "a project that never turns it on should see no extra UI at all". `psql`: `SELECT * FROM project_settings` has one row per project, all three `review_enabled_*` false. | **live only** — the state disappears once row 2 runs |
-| 2 | Project → **Review** in the nav rail. Turn on Test plans only, Save | 200, "Last changed … by you". Re-open a **plan**: the panel is there. Re-open a **case**: still nothing. The opt-in is per artifact type and this is the row that proves the map is not read as any-of. | mock + live |
-| 3 | As a **Viewer** (no `project:settings`), open the same screen | The page **renders with every control disabled** and the current values visible — §31's disable-don't-hide — rather than 403ing or hiding the rail item. A Viewer must be able to find out why no artifact shows a panel. | mock + live |
-| 4 | As a Viewer, confirm the rail item is present | "Review" appears under Project. Hiding it would leave the reader in row 3's situation with no route to the answer. | mock + live |
-| 5 | Set **Peer reviews required** to `21`, then to `-1` | The field goes red with *"Between 0 and 20."* **before** any request is sent, and Save is disabled. The server refuses the same values on the same field; `V23`'s CHECK is the backstop behind both. | mock + live |
-| 6 | Turn review on for plans, set peer minimum **1**, leave *the person who submits cannot approve* **on**. Submit a plan as yourself and try to approve it | **409 in place** — *"You submitted this plan for review, and this project asks somebody else to approve it."* The plan stays **In review**. Not a 403: the permission is held and the policy is what refuses. | mock + live |
-| 7 | Same plan: have a **second account** press Looks good, then approve as the first | The approval now succeeds. This is the pair row 6 is half of, and it is the only way to see the peer minimum satisfied. | **live only** — needs two accounts |
-| 8 | With the minimum at 1: have person B say **Looks good**, then **Request changes**, then try to approve | **Refused** — *"…needs 1 peer review … and has 0."* The latest verdict is what counts, and the trail shows both rows. The single most valuable row here: the cheap implementation passes row 7 perfectly and fails only this. | **live only** |
-| 9 | Approve your own plan's LGTM: press Looks good as the submitter, then approve, with the author rule **off** | Still refused on the peer minimum — *"has 0"*. The submitter's own LGTM is not a second opinion, and the two settings are independent. | **live only** |
-| 10 | Raise the minimum from 1 to 5 **while a review is open**, then approve that review | It **still approves**. The count is pinned onto the review at submission, so the goalposts do not move under reviewers who were already asked. Then submit a *new* plan and confirm it needs 5. | mock + live |
-| 11 | With **Keep the approval** (RETAIN): approve a plan, then rename it | Status stays **Approved**, and the panel shows §76's staleness warning if the edit wrote a version. This is the behaviour the product has always had; the row exists so the contrast in 12 is readable. | mock + live |
-| 12 | Switch to **Return it to draft** (RE_REVIEW), approve a plan, then rename it | Status becomes **Draft**. The warning Alert on the settings screen must have been visible before saving. `psql`: an audit row with action `plan.re_review_required` naming you, `from APPROVED to DRAFT`. | mock + live |
-| 13 | As a **Test Engineer** (holds `plan:edit`, not `plan:approve`), edit that approved plan under RE_REVIEW | **The edit succeeds and the plan drops to Draft.** This looks wrong and is the design — see `EditAfterApproval.RE_REVIEW`. Charging the approve key would make an approved plan uneditable by the people §6g expects to edit it. The row exists so a future reader meets the decision in the product rather than only in a javadoc. | **live only** |
-| 14 | Turn review **off** for plans while a plan is sitting In review | The panel disappears from that plan, and its status chip **still reads In review**. `psql`: its `review` row is **still `IN_REVIEW`** — switching the policy off does not withdraw submissions on anyone's behalf. | mock + live |
-| 15 | Turn review off entirely, then move a case through Draft → In review → Approved from the bulk dialog | Every move **succeeds**. The ladder is not the apparatus: a project with review off keeps the four statuses it has used since M1. This is the row that would have caught the alternative reading, which would have silently removed approval from every existing project on upgrade day. | mock + live |
-| 16 | The settings screen at 390 px | The three switches, the number field and the mode select stack without overflow; the RE_REVIEW warning wraps; Save and Discard stay reachable without horizontal scroll. | mock + live |
-| 17 | Change one switch, then press **Discard changes** | The form returns to the server's values and Save re-disables. Then change one and navigate away and back: the draft is gone, which is correct — nothing here is autosaved. | mock + live |
-
-**Not reproducible in a browser:** two admins saving the settings form at the same instant.
-`project_settings.lock_version` is maintained (`@Version`) but **nothing sends an `If-Match`**, so
-the second write wins silently. Recorded rather than implied — adding the header is a later slice,
-and the column is annotated now precisely so that slice does not first have to discover it was
-reading `0` for ever (§74's finding).
-
----
-
-## §79 — review comments: the tier that may write and may not resolve
-
-**Run §77 row 2 first** — every row here presupposes a project with review switched on for the
-artifact being opened, and §77's row 1 is the only chance to see the off state.
-
-The mock's fixtures carry **two threads on the demo project's open plan review** — one with a reply,
-one already resolved and naming its resolver — and **none** on the rejected case review. That second
-shape is the one to check against a real box: most reviews on a real instance have no conversation
-at all, and a fixture set where every review has threads is §72's finding waiting to happen.
-
-| # | Flow | What must be true | Mode |
-|---|---|---|---|
-| 1 | Open the demo project's plan in review | Under the verdict trail: a **Comments** section with two threads. The first shows a reply indented beneath it; the second is greyed with **"Resolved by …"** and a **Re-open** button. The reply has **no Reply button of its own** — threads are one level deep and the server refuses a reply to a reply. | mock + live |
-| 2 | As a **Viewer** (`case:comment`, no `plan:review`), open the same plan | The comment box and **Reply** are **enabled**; **Resolve** and both verdict buttons are **disabled**, not hidden (§31). This is the row the whole slice turns on: one comment key for all three artifact types, and the reviewing tier above it. | **live only** — mock mode signs in as one persona holding everything | 
-| 3 | Write a comment and press Comment | It appears at the bottom of the list, attributed to you, with the box cleared. `psql`: one `review_comment` row, `parent_id` NULL, `resolved_at` NULL. | mock + live |
-| 4 | Press **Reply** on that thread, write, press Reply | It lands **under** the root rather than as a new thread, and the reply form closes. `psql`: `parent_id` = the root's id. | mock + live |
-| 5 | Press **Resolve** on a thread as a Test Engineer | It greys out and reads "Resolved by *you*", with the button now **Re-open**. `psql`: `resolved_at` **and** `resolved_by` both set. | mock + live |
-| 6 | Press **Re-open** | Both columns clear together — the row must not keep a `resolved_by` on an open thread. | mock + live |
-| 7 | Press **Resolve** twice in a row (or on an already-resolved thread from a second tab) | The timestamp and the resolver **do not change**. The defect this prevents shipped in the slice's first draft: an unconditional write hands the record to whoever clicked last. | mock + live |
-| 8 | Approve or reject the plan, then re-open it | The conversation is **still readable**, and **no comment box, no Reply, no Resolve**. A closed review takes no writes, and offering the affordance would be an affordance whose only outcome is a 409. | mock + live |
-| 9 | Open a case or plan whose review has **no** comments | The section reads **"No comments yet."** with the box below it while the review is open — and on a **closed** review with no comments the whole section is **absent**, not an empty heading. | mock + live |
-| 10 | Paste 5001 characters and press Comment | Refused with *"Keep the comment under 5000 characters."* in place, beside the box. Then clear it: the button disables on empty rather than letting the server refuse a blank. | mock + live |
-| 11 | Write a comment containing a blank line and a list | The paragraph break survives (`pre-wrap`). What a reviewer typed is part of what they said; collapsing it changes the remark. | mock + live |
-| 12 | The panel at 390 px, on a thread with a reply | The reply's indent does not push the body into horizontal scroll; the two buttons wrap rather than overflow. | mock + live |
-| 13 | Live only: comment as one account, then resolve as another | The thread names **two different people** — the author on the remark, the resolver on the resolution line. The pair is the whole reason `V24` added the actor column. | **live only** — needs two accounts |
-
-**Not exercisable here:** the anchor. §6g wants comments *"anchored to a specific step or field
-where possible"*, and `anchor_type` / `anchor_id` stay NULL on every row — see `ReviewComment`'s
-header for what accepting one would need first (a `PeopleDirectory`-shaped port into `repository`).
-There is nothing to drive, and the row exists so the absence is not mistaken for a defect.
-
----
-
-## §80 — reviewer assignment: asked, and not the same fact as spoke
-
-**Run §77 row 2 first**, for §79's reason: every row here presupposes a project with review switched
-on for the artifact being opened.
-
-The mock's fixtures carry **three requests on the demo project's open plan review** — a person who
-has also given a verdict, a **team** (QA Chapter), and a person who has said nothing — and **none**
-on the rejected case review. The third of those three is the row the whole section exists for, and
-the empty case is §72's rule applied to a fixture: most reviews on a real instance were never
-assigned to anybody, because §6g's peer review is open to the whole tier and a request is a nudge.
-
-| # | Flow | What must be true | Mode |
-|---|---|---|---|
-| 1 | Open the demo project's plan in review | Above the verdict trail: an **Asked to review** section with three chips — a person icon, a **group** icon on "QA Chapter", and a third person who appears in **no** verdict row. The trail below still lists only the one person who spoke. | mock + live |
-| 2 | Compare the two lists deliberately | A name in "Asked to review" and **not** in the trail is a request nobody has answered — the row a lead opens this panel to find. If the two lists have been merged into one, this row is unverifiable and the slice's premise is gone. | mock + live |
-| 3 | As a **Viewer** (`case:comment`, no `plan:review`), open the same plan | The chips are **readable**; the **Ask** button and the picker are **disabled**, not hidden (§31), and the chips carry **no ✕**. Asking is the reviewing tier's act — the bottom tier does not fill other people's queues. | **live only** — mock mode signs in as one persona holding everything |
-| 4 | As a **Test Engineer** (holds `plan:review`, **not** `plan:approve`) | The picker and **Ask** are **enabled**. This is the gate decision made visible: the request must not be confined to the people whose sign-off it exists to prepare. | **live only** — same reason as row 3 |
-| 5 | Open the picker | It lists project members and teams (teams suffixed "(team)"). **The submitter is absent**, and so is anybody already asked. Both absences are deliberate — the first is a server field error, the second a write that does nothing. | mock + live |
-| 6 | Pick a person, press **Ask** | A new chip appears with their name and the select clears. `psql`: one `review_assignment` row, `assignee_user_id` set, `assignee_team_id` NULL, `assigned_by` = you. | mock + live |
-| 7 | Pick a team, press **Ask** | A chip with the **group** icon and the team's name — and **no member names**. §6g says any member may action it; expanding the team would freeze the membership as it was when the page loaded. | mock + live |
-| 8 | Press the ✕ on a chip | It disappears immediately and no confirmation is asked. `psql`: the row is **gone**, not tombstoned — an assignment is a worklist entry, not part of the audit record. | mock + live |
-| 9 | Ask the same person twice (second tab, or re-open the picker after a refetch) | The chip count **does not change** and the original **"asked by"** attribution survives. Re-stamping would hand the request to whoever clicked last — §79's resolution defect in the one place it recurs. | mock + live |
-| 10 | Approve or reject the plan, then re-open it | The chips are **still readable** and there is **no picker and no ✕**. A closed review takes no writes, and both affordances would only ever produce a 409. | mock + live |
-| 11 | Open a plan in review that nobody has been asked to look at | *"Nobody has been asked yet. Anyone with review rights can still give a verdict."* — and on a **closed** review with no requests the whole section is **absent**, not an empty heading (§6g's "no extra UI"). | mock + live |
-| 12 | The panel at 390 px with three chips and the picker | The chips wrap rather than overflow; the select and **Ask** stack rather than pushing the panel into horizontal scroll. | mock + live |
-| 13 | Live only: delete a team that has an outstanding request | The chip is gone on the next load and **the person asked individually is untouched**. This is the decision §71's 409 is deliberately not extended to — what cascades is a request, not authority — and the DDL is the only thing enforcing it. | **live only** — needs the teams screen and a migrated database |
-| 14 | Live only: ask somebody, then sign in as them | ~~Nothing surfaces on their board or anywhere outside this panel. **That is correct today and is the next slice**~~ → **superseded by §81, which built it.** The expectation is now the opposite: a **Review** card appears on that person's board. Run §81's rows instead of this one — a pass here would now mean the inbox is missing. | **live only** — needs two accounts |
-
-**Not exercisable here:** asking a **sibling company's** account or a sibling company's team. Both
-are refused as field errors and neither is reachable from any picker in either mode — the check is
-the backend queue's, and the rows exist there.
-
----
-
-## §81 — the reviewer's inbox: the board is where a request surfaces
-
-**The section §80 ended by naming.** Until this slice a person asked to review found out by opening
-the artifact; now the request is a card on the board, which is §6l's *"Review requested → card for
-each reviewer"* — the third of its five derived-item generators to exist.
-
-**Run §77 row 2 first** (review switched on for the demo project) — no review exists without it, and
-therefore no card. Rows 4 and 5 are live-only for §80's reason: mock mode signs in as one persona,
-so a second person's board cannot be seen there.
-
-The mock's fixtures were rebuilt for this and the previous ones were **wrong in a way nothing could
-see**: the old generator drew a card for every case whose `lifecycleStatus` was `IN_REVIEW`, in the
-`IN_REVIEW` column, assigned to the case's **owner** — a reviewer inbox no server could produce,
-shown to the person whose work is under review. If any row below reads like the old behaviour, that
-is the regression to catch.
-
-| # | Flow | What must be true | Mode |
-|---|---|---|---|
-| 1 | Open the demo project's **Board** as the signed-in user | Two **Review** cards in **To do** — `TP-5` (Payments hardening cycle) and `TC-20` (Cart survives a page reload) — each marked `linked`, each reading *"Review requested by …"*. **Not** in the In-review column: To do is where work nobody has started belongs, and In review is for items *being* reviewed. | mock + live |
-| 2 | Click the key on the `TP-5` card | Lands on the **plan detail**, with §6g's review panel on it. This is the row the slice's link repair exists for — before it, every card routed to the case list, so a plan review searched the cases for `TP-5` and rendered "no cases match". | mock + live |
-| 3 | Click the key on the `TC-20` card | Lands on the **case detail** and its review panel. Together with row 2: one card shape, three subject types, three destinations. | mock + live |
-| 4 | Try to drag a review card, or press any of its move buttons | Refused, and the sentence names **a review** — *"TC-20 mirrors a review, so it can't be moved to Done. Update the review and the card follows."* Every derived card said "an execution or a review" until §81; more importantly, moving it must not perform the approval: §6l's eventual drag-to-Done is a gated act with an `If-Match`, and a drag would be a second door to the sign-off. | mock + live |
-| 5 | Switch the board to **Assigned to me** | The review cards stay (both are addressed to the signed-in user). This is the inbox as people will use it. | mock + live |
-| 6 | Live only: as a lead, ask a **colleague** to review something, then sign in as them and open the board | A Review card for that artifact, on **their** board, naming the lead as the asker. **This is the row the whole slice exists for** — §80's row 14 recorded its absence. | **live only** — needs two accounts |
-| 7 | Live only: ask a **team**, then sign in as any member | A card each, for every member, and none of them was named on an assignment row. Then **add somebody to that team** and reload their board: the card is waiting. Expansion happens on the read, which is why membership can move — the write-time expansion §80 refused would have frozen the list at the moment somebody clicked. | **live only** — needs the teams screen and two accounts |
-| 8 | Live only: as the person asked, leave a verdict (LGTM or Request changes), then reload the board | **The card is gone** — and gone on "changes requested" too, which is deliberate: they have done what was asked and the ball is with the author. A card that stays until they approve reads as work the reviewer still owes. | **live only** — needs the review panel and a board reload |
-| 9 | Live only: approve or reject the artifact, then reload every asked person's board | All of its cards are gone, though the `review_assignment` rows are untouched. The board reads `review.state`; unassigning is the only thing that deletes a request. | **live only** |
-| 10 | Live only: delete (soft) a case that has an open review somebody was asked for | The card disappears. "Go and review this" is not something to say about an artifact that is gone — and nothing in the schema removes the review, because the subject triple has no FK. | **live only** — needs a delete |
-| 11 | The board at 390 px with two review cards | The cards wrap with the others and the `linked` chip does not push the title into overflow. Nothing new is laid out here, which is the point of one card shape. | mock + live |
-
-**Not exercisable in mock mode:** rows 6–10, all for the same two reasons — one persona, and no
-second account to be asked. **Not exercisable anywhere yet:** a review card on a **cross-project**
-personal board, because §6l's "My Work" board does not exist; the board is per project, so the inbox
-is per project too. That bound is stated in the handoff rather than left to be discovered.
-
----
-
-## Release version in the footer (2026-08-03)
-
-The footer used to render the string `0.1.0` as a **literal** in `AppShell.tsx`, so the number on
-screen was not a fact about the running build: it survived every release unchanged. It is now
-`__APP_VERSION__`, a Vite `define` fed from `deploy.yml`'s `version` input.
-
-**This is the one row that cannot be fully checked in mock mode**, and that is inherent rather than
-an oversight: `npm run dev` and a local `npm run build` both leave `VITE_APP_VERSION` unset, so the
-footer correctly reads `dev`. Only a build produced by the workflow carries a release name. The
-`web` job now greps `dist/assets/` for the dispatched version and fails the release if it is
-absent — measured against a real build, the string appears exactly once, in the footer node — so
-the automated half of this is genuinely covered and row 3 is the part a human must see.
-
-| # | Flow | What must be true | Mode |
-|---|---|---|---|
-| 1 | `npm run dev`, scroll to the footer | Reads **`TCMS dev`** — not a version number. A plausible-looking number here means someone has re-introduced a hardcoded literal, which is the exact defect this replaced. | mock |
-| 2 | `VITE_APP_VERSION=9.9.9 npm run build && npm run preview` | Footer reads **`TCMS 9.9.9`**. Proves the `define` reaches the emitted bundle and not just the dev server. | mock |
-| 3 | After a real `gh workflow run deploy.yml -f version=<v>`, hard-reload the deployed site | Footer reads **`TCMS <v>`**, matching the dispatched input and the GHCR image tag. **This is the check the whole change exists for** — the previous release passed every gate and still showed the wrong number. | **live only** — needs a real dispatch |
-| 4 | Deploy a second version, then reload | The number **changes**. One correct reading is consistent with a literal that happens to match; two are not. | **live only** — needs two dispatches |
-
-## §82 — §6g's gating rules: the refusal that has to offer a way out
-
-The sixteenth slice in this queue. §6g calls gating *"powerful and genuinely obstructive"*, which
-makes this the one feature here whose **failure mode is a person who cannot start work and is not
-told what to do about it** — so most of these rows are about the sentence and the affordance beside
-it rather than about whether the rule fires.
-
-**Both switches are off in the mock's fixtures on purpose**, so every row below opens by turning
-one on at `/projects/:projectId/settings/review`. That is also row 1.
-
-| # | Flow | What must be true | Mode |
-|---|---|---|---|
-| 1 | Settings → Review, toggle **Only approved test cases can go into a run**, Save, reload | The switch is still on after the reload. The **whole-body save** is the risk: this form `PUT`s all eight settings and the server reads an absent boolean as `false`, so a field dropped anywhere between the draft, the submit and the mock handler switches the gate off with a success message. A unit test asserts the body; this asserts the round trip. | mock |
-| 2 | With gating on, change **only** the peer-review number and Save, then reload | The two gating switches are **still on**. The silent-discard defect in the form it would actually take — an admin editing an unrelated field quietly reopens the gate. Nothing on screen would say so. | mock |
-| 3 | Turn a gate on and confirm the warning; turn both off | The amber warning appears while either is on and disappears when both are off. §6g requires this to be an explicit choice; the warning is where "explicit" lives. | mock |
-| 4 | With cases gating on, start a run from a plan whose cases are drafts | **409 rendered in the dialog's banner**, naming the count and the first few keys — not a corner toast, and not a silent no-op submit. Read the sentence as somebody who did not configure this: does it say what to do next? | mock |
-| 5 | Same, as a caller **holding `case:approve`** | **Create it anyway** appears under the refusal, enabled. Click it: the run is created, the dialog closes, and the run's checklist is the full one. This is §6g's documented override and the whole reason a 409 here is not a dead end. | mock |
-| 6 | Same, as a caller **without** `case:approve` (a Test Engineer persona) | The button is **present and disabled**, with the gate's why-tooltip on hover (§31). Hidden instead of disabled is the defect: the person who has to go and ask would not know the way out exists. **Mock mode signs in as one persona holding every key**, so this row is **live only**. | **live only** |
-| 7 | Edit the run name *after* the refusal, then click **Create it anyway** | The run is created with the **edited** name. The retry re-reads the form rather than replaying the first attempt's values — a replay would create a run the user is not looking at. | mock |
-| 8 | With plan gating on, open a draft plan and press **Start** | 409 beside the buttons, and **Start it anyway** appears next to it. Check the sentence names review as the way forward. | mock |
-| 9 | Same plan, press **Submit for review** and let it be refused for a ladder reason | **No override button.** The gate can only refuse a start, so an override under a sentence about submitting for review would offer to bypass something that is not blocking. | mock |
-| 10 | Approve a plan properly, then Start it | Starts normally, no refusal, no override affordance. The rule satisfied must look like nothing happened. | mock |
-| 11 | Start a plan, Close it, then **Reopen** it — with plan gating **on** | **It reopens.** This is the row the whole slice turns on: a target-keyed reading of §6g makes every closed plan permanently un-reopenable, and the screen would show a Reopen button that 409s for ever with a message about approving a plan that cannot be approved. | mock |
-| 12 | Switch **all three review opt-ins off** while leaving a gate on, then repeat rows 4 and 8 | The gates **still fire**, and no review panel is rendered anywhere. §82's decision made visible: gating reads the status ladder, review's opt-in suppresses the apparatus. A build where these are coupled looks identical until this row. | mock |
-| 13 | Turn a gate on for project A only, then repeat row 4 in project B | Project B is unaffected. Per-project settings, and the read is `useProjectSettings(projectId)` — a cache keyed too broadly would leak A's policy into B. | mock |
-| 14 | After an override, check the audit trail | `approvalGateOverridden` is on the row — and is **absent** on an ordinary run created with the gate off. **No audit screen exists** (`audit:view` has no consumer), so this is a `psql` read against `audit_event.changes`, not a UI check. | **live only** |
-| 15 | With gating on, create a run through the dialog while the project has **no** unapproved cases | Created normally with no mention of the gate anywhere. A gate that announces itself when it is satisfied is the noise that makes people turn it off. | mock |
-
-## §83 — §6l's cross-project "My Work" board
-
-The seventeenth slice in this queue, and the first screen in the product that is **not** inside the
-project frame. Most of these rows exist because mock mode's fixtures are dense in one project and
-thin in the other: almost every defect this slice repaired is one where the route's project and the
-card's project happened to be the same value, so a row that only looks at OLB proves nothing.
-
-The fixture now seeds **one task in MOB assigned to the signed-in user** for exactly that reason —
-without it, My Work in mock mode is byte-identical to OLB's personal board.
-
-| # | Flow | What must be true | Mode |
-|---|---|---|---|
-| 1 | `npm run dev`, look at the rail before touching anything | **My work** sits **above** the project switcher, with a divider between them. Below it is the frame the switcher sets; a personal board listed inside that frame tells the reader that switching projects changes it, which is the same misstatement the `Teams & roles` grouping made one level further out. | mock |
-| 2 | Click **My work**, then switch projects in the rail's switcher | The board **does not change**, and the browser tab title stays "My work". If the content moves, something is reading a project this screen does not have. | mock |
-| 3 | On My Work, read the cards | Cards from **both OLB and MOB** are present, each stamped with its own project key. One project only means either the fixture lost its MOB task or the aggregate quietly became one project's board — and every unit test would still pass. | mock |
-| 4 | Click the key on a **MOB** card | Lands on a MOB URL that resolves. **This is the row the slice's main repair exists for**: before §83 the link took the board's project, so this card would have gone to `/projects/{OLB}/…` and 404'd. Check the address bar, not just that a page rendered. | mock |
-| 5 | Click the key on an **OLB** review card (a case, then the plan one) | Case → case detail with §6g's panel; plan → plan detail. §81's routing still holds when the project comes from the card rather than from the route. | mock |
-| 6 | Drag a **task** card on My Work to another column, then open that project's own board | The card is in the new column **on both boards**. The move invalidates the shared `work-items` root; keying it to one board leaves the other showing a card in the column it just left, and neither screen would look wrong on its own. | mock |
-| 7 | Drag a **derived** card (an execution or a review) on My Work | Refused in place, with the sentence naming what to update. Identical to the project board — this is one component, and a difference here means a second board has grown. | mock |
-| 8 | Look for an "Everyone" / "Assigned to me" chip pair, and for **New task** | **Neither is present.** The chips would produce a 400 the server sends deliberately ("Choose a board"); the button would need a project this screen does not have. An affordance whose only outcome is an error is `ui-rules` §4's render-then-reject. | mock |
-| 9 | `tcmsFaults.hang()`, then reload `/my-work` | The region shows its loading state and then **fails on the timeout budget** rather than spinning for ever. The header stays on screen throughout — the page's chrome is not inside the region. | mock |
-| 10 | `tcmsFaults.status(503, 30)`, reload, then `tcmsFaults.off()` and press **Try again** | The failed state offers a retry and the retry works. A personal board is the screen somebody has open when the network blips; a dead end here is the one they will report. | mock |
-| 11 | Load My Work, then `tcmsFaults.status(500)` and let it refetch | The board **keeps its cards** and marks them stale rather than blanking. A failed *refetch* that empties this screen reads as "your queue is clear", which is the worst possible wrong answer on this particular page. | mock |
-| 12 | `tcmsFaults.expire()`, then reload My Work | The session recovers **in place** and the board loads. This screen is a bookmark people open cold in the morning, which is exactly when a token has expired. | mock |
-| 13 | Edit the URL to `/projects/<a-uuid-that-does-not-exist>/board` | **A not-found / error state, not another project's board.** The mock used to fall back to the first project for any unknown id, so a stale bookmark rendered OLB's cards under a foreign id and every key linked into a project that does not contain them. No unit test covers this — the handler branch is only reachable by typing a URL. | mock |
-| 14 | Sign in and go straight to `/my-work` **before** visiting any project | The screen renders. It must not depend on `useProjects` having answered or on a project being resolved — a member holding no grants at all has this board and nothing else. | mock |
-| 15 | Keyboard only: Tab from the top of the page | The skip link, then **My work** as the first rail item, then the switcher. Its active state is marked by the indicator bar and weight, not colour alone, when you are on it. | mock |
-| 16 | Narrow the window below `md`, open the hamburger | **My work** is in the drawer, in the same position, and tapping it closes the drawer. The rail and the drawer render the same content — a row that is in one and not the other means the drawer took a different path. | mock |
-| 17 | `VITE_API_MODE=live`, sign in as a user with **grants on two projects**, open My Work | Cards from both. The mock has no per-project grant data (`projectMembers` records the same limit), so the "projects you can **see**" half of the aggregate is only genuinely exercised against a real server. | **live only** |
-| 18 | Live, as a user with **no project grants at all** | **`200 []`** rendered as the empty state — never a 404 and never an error. The personal board names no project, so nothing can fail to resolve; this is the first screen a newly added member sees and it must read as an empty queue rather than as a broken product. | **live only** |
-| 19 | Live, hit `GET /api/v1/work-items` directly with no parameters | **400, "Choose a board"**, with the sentence naming both requests that do work. The SPA never sends it; this row confirms the refusal the SPA's shape is built around actually exists. | **live only** |
-
-## §85 — §6l's team board
-
-The eighteenth slice in this queue, and the **second** screen outside the project frame. Two things
-make these rows different from §83's: the reader is looking at *other people's* work, and the answer
-is bounded by the reader's own grants — so several rows are only meaningful with two different
-sign-ins, and the ones that matter most are **live only**, because mock mode has no project anybody
-is barred from.
-
-The fixture now seeds **one OLB task assigned to Priya Nair** (Checkout Squad, not the signed-in
-user) for the same reason §83 seeded a MOB task: without it, every card in the store belongs to
-Payments Squad and a team board that ignored membership entirely would look right.
-
-| # | Flow | What must be true | Mode |
-|---|---|---|---|
-| 1 | `npm run dev`, open **Teams & roles**, look at any team row | A **Board** link is present on every row, and it is **not greyed out** — even when Edit / Members / Delete beside it are. It is the one affordance there with no permission behind it. | mock |
-| 2 | Sign in as a caller **without** `company:teams` (a Test Engineer), open Teams & roles | Same: the three admin buttons are disabled with a reason, **Board is live**. This is the row the slice's gating decision turns on — a Board button written as a fourth child of that gate looks identical until this sign-in. | **live only** |
-| 3 | Click **Board** on *Payments Squad* | Lands on `/teams/<uuid>/board` — check the address bar. The title reads "Payments Squad — board", the tab title "Board · Payments Squad". | mock |
-| 4 | Read the cards on that board | Cards assigned to **more than one person**, each card naming its assignee, and cards from **both OLB and MOB** each stamped with its own project key. One person or one project means either the fixture regressed or the board quietly became the personal one. | mock |
-| 5 | Go back and click **Board** on *Checkout Squad* | A **different set** — Priya's OLB task is here and the signed-in user's cards are not. Two teams showing the same board is the defect that passes every unit test written from one team. | mock |
-| 6 | Click the key on a card from **MOB** on a team board | Lands on a MOB URL that resolves. `linkFor` has needed repair in two consecutive slices (§81, §83); this is the second cross-project board and therefore the second screen that would expose the same class. Check the address bar, not that a page rendered. | mock |
-| 7 | Drag a **task** card on a team board to another column, then open that project's own board and My Work | The card is in the new column on **all three**. The move invalidates the shared `work-items` root; a third board is exactly the case §83's key comment predicted. | mock |
-| 8 | Drag a **derived** card on a team board | Refused in place with the sentence naming what to update — identical to both other boards. A difference here means a second board has grown. | mock |
-| 9 | Look for filter chips and for **New task** | **Neither is present.** `teamId` + `mine=true` is a 400 the client must not be able to send; a create needs a project this screen does not have. | mock |
-| 10 | Edit the URL to `/teams/<a-uuid-that-is-not-a-team>/board` | **"No such team"** with a *Back to teams* button that works — **not** an empty board, and not "Not found — Not Found". The server's 404 is empty-bodied, so the sentence is the client's; this row is the only place the copy is visible. | mock |
-| 11 | From row 10, press **Back to teams** | Lands on `/admin/teams`. A dead-end error page on a screen reached by a shared link is the failure this button exists for. | mock |
-| 12 | Open a team with **no members** (create one on Teams & roles, then open its board) | The **empty state**, worded as a reachable empty board — not the "No such team" error. The two must be visibly different; they are the two answers this screen exists to keep apart. | mock |
-| 13 | `tcmsFaults.hang()`, then reload a team board | Loading state, then **failure on the timeout budget** rather than an endless spinner. The header stays on screen throughout. | mock |
-| 14 | `tcmsFaults.status(503, 30)`, reload, then `tcmsFaults.off()` and press **Try again** | The failed state offers a retry and the retry works — and it must **not** read "No such team". A 503 wearing the 404's sentence sends the reader looking for a team that is still there. | mock |
-| 15 | Load a team board, then `tcmsFaults.status(500)` and let it refetch | The board **keeps its cards** and marks them stale rather than blanking. | mock |
-| 16 | `tcmsFaults.expire()`, then reload a team board | The session recovers **in place** and the board loads. | mock |
-| 17 | With the org chart failing (`tcmsFaults.only('/teams')` then `tcmsFaults.status(500)`), open a team board | The **board still renders**, under the fallback title "Team board". The name is chrome from a second read; gating the board on it would blank a board that loaded fine. | mock |
-| 18 | Keyboard only: Tab through a team row on Teams & roles | Board is reachable and activates on Enter as a link (not a button-that-navigates), and its focus ring is visible against the row. | mock |
-| 19 | Narrow the window below `md`, open a team board | The columns stack (`xs: 1fr`) and nothing scrolls the page horizontally. The board is the same component, so this is a regression check on the new frame around it. | mock |
-| 20 | **Live**, sign in as **user A** granted on two projects and open a team's board; note the cards. Then sign in as **user B**, granted on only one of them, and open **the same team's board** | **B sees strictly fewer cards** — the ones from the project they hold no grant on are absent, and no error is shown. This is §84's headline decision made visible, and it is *unreachable in mock mode*: the fixture has no project the caller is barred from, so this bound is structural there rather than demonstrated. | **live only** |
-| 21 | **Live**, as a member with **no project grants at all**, open any team's board | **`200 []`** rendered as the empty state — never a 404 and never an error. | **live only** |
-| 22 | **Live**, as a member who is **not on the team**, open its board | It renders. Membership is not a requirement (§6k) — a team board a lead's manager cannot open is a board for nobody. | **live only** |
-| 23 | **Live**, hit `GET /api/v1/work-items?teamId=<uuid>&mine=true` directly | **400, "Choose one board"**. The SPA cannot send it; this row confirms the refusal the SPA's shape is built around actually exists. Note it is *unobservable in the body* for a caller on the team, so the status code is the only evidence. | **live only** |
-| 24 | **Live**, hit `GET /api/v1/work-items?teamId=<a team in another company>` | **404, empty body** — identical to an unknown UUID. If the two differ in any way, the operation is a company-wide team-existence oracle (§6t). | **live only** |
-| 25 | **Live**, hit `GET /api/v1/work-items?teamId=<valid>&projectId=<valid>` | **200**, the team's work inside that one project. Legal (§6l's swimlanes) and no screen sends it yet — the mock answers it, so this row is what stops the mock's answer being the only definition. | **live only** |
-
-**Highest-risk rows are 20 and 5.** Row 20 is the only place the reader-bound is observable at all;
-row 5 is the only place the team-bound is, and both are the kind of defect that looks completely
-correct to whoever wrote it, because their own board is right.
-
----
-
-## §86 — `failing_repeatedly` lights a dashboard tile and a board card
-
-**Live only, all of them, and the reason is structural rather than incidental.** §86 touched no
-frontend file: `HealthSignal.FAILING_REPEATEDLY` has been in the contract since §47, labelled in
-`lib/labels.ts` and rendered by `DashboardPage`'s "Needs attention" panel and the board's
-`CASE_MAINTENANCE` card ever since. What changed is that a server now *asserts* it. **Mock mode
-cannot observe any of this** — `src/mocks/db.ts` invents its own health rows and has never been fed
-by a fact log — so every row below is `live`, and mock mode agreeing is not evidence.
-
-**Getting into the state at all takes a fixture and a wait**, which is what makes these rows worth
-writing down rather than assuming. The scheduler runs at `PT3M` after startup then every `PT15M`; a
-faster loop is `docker compose exec` nothing — there is no CLI verb for it — so either wait for the
-tick or restart the container after seeding.
-
-| # | Drive | Expect | Mode |
-|---|---|---|---|
-| 1 | **Live.** Provision a company, create a project, one case, and record **three** `Failed` results for it across three runs (the unique constraint forces one run each). Wait for the tick. Open `/projects/{id}/dashboard`. | The **"Needs attention"** panel shows a **Failing repeatedly** tile with count **1**, severity WARNING (amber, not red — §47's severity split puts this below "the case is now wrong"). Before this slice the tile could only ever read 0. | **live only** |
-| 2 | **Live.** Same case, now record a **fourth** result: `Passed`. Wait for the next tick. Reload the dashboard. | The tile drops back to **0** and the case's chip disappears. **This is the self-healing property §6o's whole design rests on** — "no 'mark as not-stale' button exists to lie with" is only true if the computation actually takes it back. A signal that latches on is indistinguishable, on screen, from one that is correct. | **live only** |
-| 3 | **Live.** Record **three `Blocked`** results for a *different* case. Wait for the tick. Reload. | That case is **not** listed under Failing repeatedly. The predicate is `status_kind = 'FAILED'`, not "did not pass" — a blocked case is an environment problem, and flagging it here sends the reader to fix the wrong thing. The backend has a test for this; the row exists because the *tile* is where somebody would notice it and misread it. | **live only** |
-| 4 | **Live.** With row 1's case flagged, open `/projects/{id}/board`. | A **`CASE_MAINTENANCE`** card for that case, naming the signal, in the right column. **Structurally empty since §53** — `BoardFacts` has read `case_health` since the board shipped and only two of nine signals had a writer, neither of which the card was built around. This is the first time the card can appear for this signal at all, and its `linkFor` must resolve (§81 and §83 each repaired a link that did not). | **live only** |
-| 5 | **Live.** Before any scheduler tick has run on a fresh company, open the dashboard. | The panel reads **"not computed yet"**, not an empty "nothing needs attention". `healthComputedAt` is what distinguishes them and `CaseHealth`'s header calls the distinction the reason the column is mapped at all. **§86 makes this harder to see, not easier**: reporting's refresh now stamps `computed_at` too, so the window in which it is null is the first three minutes of a deployment. Worth confirming it still exists. | **live only** |
-| 6 | **Live.** Two companies, both with a failing-repeatedly case. Sign in as a member of one. | The dashboard counts **only** that company's case. The projection carries no company predicate — `FORCE ROW LEVEL SECURITY` is the entire mechanism on both the `SELECT` and the `INSERT` — and this is the on-screen half of a property the backend asserts with two companies. | **live only** |
-| 7 | **Live.** Soft-delete a flagged case, wait a tick, reload the dashboard. | The tile count drops and the case is gone. `case_health` rows are derived for live cases only, while the **fact log deliberately keeps the deleted case's results** — the two opposite calls in one slice, and the screen is where their consistency is legible: no orphan chip, and no report row lost. | **live only** |
-| 8 | **Live, and this one is about cost rather than correctness.** With a project of a few hundred cases, watch the dashboard's response time before and after a tick has populated `failing_repeatedly`. | No visible regression. **`V1` ships four partial indexes on `case_health` — `outdated_spec_changed`, `stale_approval`, `never_executed`, `unlinked` — and none on `failing_repeatedly`**, so this signal's tile is the first that has to scan. Found while reading the DDL for this slice and deliberately **not fixed**: adding an index is a migration, and §86 states it has none. If this row shows a real cost, the index belongs in R3's `V27` alongside the job table. | **live only** |
-
----
-
-## §87 — the report pipeline (R3)
-
-**There is no screen yet, and that is what these rows are for.** F1/F2 (the request form and the
-on-screen report view) are later slices; what §87 shipped on the frontend is the corrected mock
-handler for three operations nothing calls. Every row below is therefore driven **from the browser
-console** with `fetch`, not by clicking — which is the honest way to record a check on a handler
-that has no UI, rather than deferring the whole thing until a screen exists and inheriting whatever
-the mock happens to do by then.
-
-**What was wrong until this slice** is the reason the rows exist at all: the handler answered
-`{ id, status: 'QUEUED', format: 'PDF', requestedAt }` — `id` where the contract says `jobId`, a
-`requestedAt` the contract never declared, and `QUEUED`, **never one of the four values
-`ReportJob.status` has had**. §52's "the mock agrees with an idea of the feature", §81's finding one
-slice earlier, and cheap only because it is being corrected before a screen depends on it.
-
-Run these in mock mode (`npm run dev`, default) from the console on any signed-in page. `P` is a
-project id from the URL.
-
-| # | Drive | Expect | Mode |
-|---|---|---|---|
-| 1 | **Mock.** `await (await fetch(`/api/v1/projects/${P}/reports/generate`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({type:'run_summary', format:'MD'})})).json()` | **202**, and a body carrying **all seven** contract-required fields: `jobId` (not `id`), `type`, `status: 'PENDING'`, `format`, `downloadUrl: null`, `modelUrl: null`, `error: null`. No `requestedAt`. A `Location` header pointing at `…/reports/jobs/{jobId}`. | mock |
-| 2 | **Mock.** Poll `…/reports/jobs/{jobId}` **three times** in a row. | `PENDING` → `RUNNING` → `COMPLETED`, one state per poll. **The intermediate states are the point** — a mock that completed on the first poll would leave the two states a real client spends its whole loading life in unreachable in dev, so the polling UI would be developed against a state machine with one state. | mock |
-| 3 | **Mock.** On the `COMPLETED` job, follow `downloadUrl` and `modelUrl`. | Both resolve — Markdown and JSON respectively. `modelUrl` is decision F's other half: the on-screen view (F2) reads the same artifact the export was rendered from, so a null here is a screen that cannot be built without a second computation. | mock |
-| 4 | **Mock.** Ask for `format: 'PDF'`, then for `format: 'DOCX'`, then for `type: 'quarterly_vanity_metrics'`. | **400 each**, with the error under `format`, `format` and `type`. The mock's refusals read its own `TYPES`/`FORMATS` registries rather than literals, mirroring the server — the same request must not be a 400 here and a 202 in live mode. | mock |
-| 5 | **Live.** Same as row 1 against a real backend, signed in as a Test Lead. Then poll. | **202**, then a job that reaches `COMPLETED` **without polling advancing it** — the real worker is on a `PT15M` schedule with a `PT3M` initial delay, so this either waits for a tick or follows a container restart. The difference from row 2 is the check: the mock's poll-driven clock must not be what a client depends on. | **live only** |
-| 6 | **Live.** Sign in as a persona holding `report:view` and **not** `report:export` (needs a grant edit — no built-in role has that shape), and `POST …/reports/generate`. | **403 with a problem body**, and a poll of an existing job **200**. **Unobservable in mock mode**, which signs in as one persona holding every key — the backend asserts this with two custom fixture roles (§87 phase 6) and the browser is where a client would meet it. | **live only** |
-| 7 | **Live.** The same persona follows a completed job's `downloadUrl`. | **403 with an empty body** — deliberately bodiless, unlike the other two refusals, because the response is typed to a binary resource and a JSON problem document under a status the client can already read tells it nothing. Worth seeing in a browser: confirm it does not render as a corrupted download. | **live only** |
-| 8 | **Live.** As a Test Lead, follow `downloadUrl` in the address bar. | The file **downloads** rather than rendering — `Content-Disposition: attachment`, named `run_summary-{artifactId}.md`. Evidence is served `inline` (a screenshot is shown beside the step it failed on); a report is a file somebody keeps. | **live only** |
-
----
-
-## §88 — the report header and the HTML renderer (R4)
-
-Still no screen: F1 and F2 are later slices, so these are console-driven for §87's reason. What R4
-changed on this side is the **shape of the stored model** (`{ header, report }`) and the fact that
-`format: 'HTML'` is now a 202 rather than a 400 — both of which F2 and F1 will be built against, so
-they are worth seeing before the screens exist rather than inherited.
-
-| # | Drive | Expect | Mode |
-|---|---|---|---|
-| 9 | **Mock.** Generate with `format: 'HTML'`, poll to `COMPLETED`, then open `downloadUrl` in a tab. | **202** (not the 400 it was before R4 — the mock's `FORMATS` registry moved with the server's), and a page that renders as a **document**: a `<title>`, an `<h1>`, no broken frame. The mock serves a whole self-contained file rather than a fragment on purpose; a snippet would make the download look like it worked while producing something no browser opens as a report. | mock |
-| 10 | **Mock.** On the same job, `await (await fetch(modelUrl)).json()`. | `{ header, report }` — **both keys**. `header` carries `reportType`, `description`, `company`, `projectScope`, `scopeNote`, `generatedBy`, `generatedAt` and a `selection` array; `report` carries `title`, `metadata`, `sections`. A bare `{ title, sections }` here is the shape F2 would be built against and the server does not serve it — §81's and §87's finding, one slice apart. | mock |
-| 11 | **Live.** As a Test Lead, generate `format: 'HTML'` for a real run, wait for the tick, and open `downloadUrl`. | A rendered report with the **provenance block at the top**: company, project scope, the §390 scope sentence, who generated it, when, and `Selection — runId`. Then **turn the network off and reload the saved file** — it must render identically. That is the check §6e asks for: "a self-contained file that needs a CDN to draw its diagrams is not self-contained", and the unit test asserts the absence of URLs while only a browser proves it *looks* like a report without them. | **live only** |
-| 12 | **Live.** In the same document, read the bar chart, then use the browser's **Print preview**. | Bars drawn in CSS with the number printed beside each one, and a print preview where no table row is split across a page boundary (`break-inside: avoid`). This page is what the PDF slice will hand to a headless browser, so the print view is the deliverable's dry run — and the number beside each bar is what survives a mail client that strips the stylesheet. | **live only** |
-| 13 | **Live.** Name a project (or a run) with `<img src=x onerror=alert(1)>` in it, generate an HTML report, and open the file. | The text appears **as text**, no alert, no broken layout. Every value in a report is user-controlled; the renderer's escaping is asserted by a counted unit test, and this is the one place the claim is checked against a real browser's parser rather than against a string assertion. | **live only** |
-
----
-
-## §89 — the Reports screen (F1)
-
-**The first rows in this file that drive a screen rather than a console.** §87 and §88 queued
-console rows because there was nothing to click; F1 is the click. Row 8's live check is now
-*obsolete as written* and is restated below as row 22 — following `downloadUrl` in the address bar
-sends **no `Authorization` header**, so what it actually proves is a 401, and the screen deliberately
-does not use an anchor for exactly that reason.
-
-The three §65-shaped risks this slice carries are rows 15, 19 and 22. Everything else is ordinary.
-
-| # | Drive | Expect | Mode |
-|---|---|---|---|
-| 14 | **Mock.** Open a project, click **Reports** in the rail. | The screen renders: header, a **Generate** button, and a "Saved reports" panel showing the **empty state**, not a spinner and not a table with no rows. The rail item is under **Execution**, marked active (`aria-current`), and is present for every persona — it is ungated on purpose (§89), so no persona sees the rail item disappear. | mock |
-| 15 | **Mock.** Click **Generate**, choose run `TR-1`, leave the format at HTML, submit. Watch the card. | A card appears **immediately** carrying `Queued` — not a skeleton, because the 202's body is seeded into the cache. Then `Building`, then `Ready`, one state per poll, roughly two seconds apart. **This is the row that proves the poller runs at all**: the three states are why the mock advances one per poll, and a card that jumps straight to Ready means the seeding or the interval is wrong. | mock |
-| 16 | **Mock.** On the `Ready` card, click **Download HTML**. | A file **saves to disk** named `run_summary-{artifactId}.html`. Open it: a whole document with a `<title>` and an `<h1>` naming `TR-1` — the run actually chosen, which is the mock reading the stored `parameters` rather than the job id. | mock |
-| 17 | **Mock.** With devtools' Network tab open, repeat row 16 and inspect the download request. | It carries an **`Authorization: Bearer …` header**. That is the whole reason the button is a button and not a link — see row 22. | mock |
-| 18 | **Mock.** Generate a second report while the first is still `Building`. | **Two cards**, newest first, each advancing on its own. Neither loses its state to the other: the query key carries the job id, and a key naming only the project would make the second answer overwrite the first's `downloadUrl`. | mock |
-| 19 | **Mock.** In the console, `await (await fetch(`/api/v1/projects/${P}/reports/generate`, {method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer x'}, body:JSON.stringify({type:'run_summary', format:'MD', parameters:{}})})).json()` — then paste that `jobId` nowhere; instead generate through the UI in a project **whose runs list is empty in the store**. Simpler path: temporarily edit `parameters` in `GenerateReportDialog` to send `{}`. | The card reaches **`Failed`**, red, carrying the worker's sentence, with **no download button** and **no spinner**. Distinguishable at a glance from a `Ready` report that happens to contain nothing — §85's 404-vs-`200 []` argument, and the defect the M2.5 plan names for this screen. **§89 added this path to the mock for this row**: before it, `FAILED` was unreachable without a backend. | mock |
-| 20 | **Mock.** Choose format **PDF** and submit. | A **400** whose sentence lands **under the Format field** — *"PDF rendering is not installed on this server. It can produce: MD, HTML."* — not in the banner at the top. The picker is where the reader can act on it. PDF is offered on purpose: the enum is the contract's, not this deployment's. | mock |
-| 21 | **Mock.** Reload the page while a card is showing. | The cards are **gone**, and that is the current design, not a bug to file: nothing lists jobs, so the screen can only show what this tab asked for. Confirm the running card said so before the reload. **If this reads as broken to you, that is the argument for R5/a list endpoint** — record it, do not patch it client-side. | mock |
-| 22 | **Live.** Sign in as a Test Lead. Copy a completed job's `downloadUrl` and paste it into the address bar. Then download the same report **through the screen's button**. | The address bar gives **401**; the button gives the file. This supersedes §87's row 8, which assumed a browser navigation would authenticate. The session is a bearer token in a header and `SecurityConfiguration` is `STATELESS` with no cookie, so **no `<a href>` into `/api/v1` can ever authenticate** — the finding that shaped this slice's transport. | **live only** |
-| 23 | **Live.** Same persona, generate a report and wait for the real worker's tick (`PT15M` schedule, `PT3M` initial delay). | The card sits at `Queued`/`Building` for **minutes**, not seconds, and the copy under it holds up over that duration — this is the only place the wait is real. The mock's poll-driven clock is what makes it two seconds; a client that only ever saw the mock would have copy written for a two-second wait. | **live only** |
-| 24 | **Live.** Sign in as a persona holding `report:view` and **not** `report:export` (a grant edit — no built-in role has that shape). | **Generate is disabled with a why-tooltip**, never hidden (§31), and the Reports rail item is **still there**. Poll and definition reads still work, so the screen is fully readable. **Unobservable in mock mode**, which signs in as one persona holding every key. | **live only** |
-| 25 | **Live.** Same persona, click a `Ready` card's Download (reachable only if a job was generated by someone else — or re-grant `report:export`, generate, then remove it). | **403**, handed back **beside the button** in the card rather than as a corner toast, with the card and its status still on screen. The route's 403 is deliberately empty-bodied, so this also confirms `describeError` produces a readable sentence from the status alone. | **live only** |
-
----
-
-## §90 — the on-screen report view (F2)
-
-**Eight rows.** Row 26 is the one that proves the whole slice — the screen and the downloaded file
-must be the *same numbers*, because that is what §6e's one-model architecture claims and no unit
-test can compare an HTML file to a React tree. **Row 31 is the slice's finding** and is live-only:
-the artifact route is gated on `report:export`, so the on-screen view costs the same key as carrying
-the report away, which contradicts the split §6e names and §87 built a custom role to express.
-
-Rows 27 and 30 exist because the two states they drive — a report with nothing in it, and a stored
-model this client cannot read — both render as *something is missing*, and telling them apart at a
-glance is the whole of this screen's error design.
-
-| # | Drive | Expect | Mode |
-|---|---|---|---|
-| 26 | **Mock.** Generate an HTML report, wait for `Ready`, click **View report**. Then click **Download HTML** and open the saved file beside the tab. | The screen shows the provenance block, the section and its table; the file shows the same values. **Compare them line by line** — company, project scope, the scope sentence, who generated it, when, `Selection — runId`, then the section's numbers. Any difference is the drift decision F exists to prevent, and it is invisible to every gate: the two renderers share a model and nothing checks they render it the same. | mock |
-| 27 | **Mock.** On the report view, read the section body. | The bar chart draws bars **proportional to the largest value in the series**, with the number printed beside each one, and the table's cells read exactly as the file's do — `50.0%`, not `50%` and not `0.5`. The number beside the bar is not decoration: it is what survives a reader who cannot judge length against a scale they cannot see. | mock |
-| 28 | **Mock.** Copy the report view's URL, reload the page, then open the URL in a **new tab**. | The report renders **both times**. This is the durable handle the reports screen does not have — row 21 records that the cards are lost on reload, and this URL is what survives it. Confirm the breadcrumb still reads *Project → Reports → the report's title*, and that **Reports** links back to a screen with no cards on it, which is the honest state. | mock |
-| 29 | **Mock.** Open a report view URL for a job **that is still building** (click View the instant the card offers it, or paste the URL while the card reads `Building`). | The page shows *"Building — this page updates itself when the report is ready"* with a spinner, **not** a report skeleton and not an error — and then **turns into the report by itself**, with no reload. The model request must not be made before the job completes: check the Network tab shows no artifact request until then. | mock |
-| 30 | **Mock.** Break the stored model on purpose: in `mocks/handlers/reporting.ts`, make `mockModel` return `{ report: { title: 'Half a model' } }`. Open a report view. | A **failed region with a retry**, whose sentence says the stored model is not in a shape this version can display — **not** an empty report and not a blank panel. This is the one rendering that separates "the report contains nothing" from "this client cannot read the report", and a cast instead of a parse makes them the same screen. Undo the edit afterwards. | mock |
-| 31 | **Live.** Sign in as a persona holding `report:view` and **not** `report:export` (a grant edit — no built-in role has that shape). Open a completed job's report view URL. | The job renders (the poll needs only `report:view`), and the report is **refused with the worded 403**: *"You can watch this report being made, but not open it"*, naming `report:export`. **This is the finding, not the expected product behaviour** — §6e's split is "may read on screen, may not carry off", and today the screen costs the export key because the model is served through the download route. Record what it looks like; the fix is the server's. | **live only** |
-| 32 | **Live.** As a Test Lead, generate a report for a real run and open its view. | The header block carries the **real** company, the `KEY — Name` project scope, the §390 scope sentence, the signed-in person's display name and a **UTC-labelled** timestamp — all of them values only a live deployment can produce (the mock's are literals). Compare the `Generated at` against the run's own timestamps for a timezone that reads sensibly. | **live only** |
-| 33 | **Live.** With the report view open, use the browser's **Print preview**, then narrow the window to a phone width. | The tables scroll **inside their own container** rather than making the page scroll sideways (`ScrollX`), and the print view is legible. This screen is not the PDF deliverable — §88's HTML file is — but it is the one a lead will print from a laptop in a release meeting. | **live only** |
-
----
-
-## §91 — the way back to the picker, and the rail that collapses
-
-**Six rows.** Row 34 is the one the slice exists for and takes four seconds; rows 36–37 are the ones
-worth the time, because they cover the two things a unit test cannot see — what an icon-only rail
-*looks* like when the labels are gone, and whether the collapsed width leaves the content area
-sensible on a real screen rather than in jsdom, which has no layout at all.
-
-Row 38 is the honest one: the rail is the app's most-shared component and it now has two widths, so
-every screen has a second appearance nothing has ever looked at.
-
-| # | Drive | Expect | Mode |
-|---|---|---|---|
-| 34 | **Mock.** Sign in, open a project, navigate two or three screens deep (a case detail). Then click **All projects** in the rail. Then do it again with the **TCMS** wordmark. | Both land on the picker with its cards. Before this slice neither existed and `/` was reachable only by editing the address bar. Confirm **All projects** is marked current there — indicator bar, heavier weight, `aria-current` — and marked on **no other screen**, which is the assertion the unit test pins but cannot show you. | mock |
-| 35 | **Mock.** On the picker, confirm the ordering in the rail's top block. | **My work**, then **All projects**, then the **Project** switcher — the last two adjacent on purpose ("all of them", then "this one"). If the switcher has drifted above them, the rail is telling the reader that switching projects changes what `All projects` shows, which is the §83 misstatement one level out. | mock |
-| 36 | **Mock.** Click the collapse chevron at the bottom of the rail. Then hover each icon in turn, and tab through the whole rail with the keyboard. | The rail narrows to 64px with the content reflowing beside it. Every icon shows a **tooltip on hover with the item's label**, and — the part that matters — the tooltip also appears **on keyboard focus**, not only on hover. The group dividers stand in for the Repository/Execution/Project headings, so four icons do not read as one undifferentiated column. The active item still carries its indicator bar. | mock |
-| 37 | **Mock.** Collapsed, click the project key button where the switcher was. Then reload the page. Then expand again and reload. | The menu lists every project with its key and name, the current one marked selected, and choosing one navigates. **The collapsed state survives the reload both ways** — this is the whole reason it is written to storage, and it is the one behaviour that is invisible in a single session. Confirm the rail does **not** render expanded for a frame and then snap shut (it is read during the initial state, not in an effect). | mock |
-| 38 | **Mock.** Collapsed, walk the app: case list, case detail, plan statistics, board, docs, reports. | **Nothing reflows badly at the wider content area** and no screen assumed a 232px rail. This is the row that justifies the slice's size: the rail is on every screen, so a second width is a second appearance for all of them, and the DataGrid pages are where a width change is most likely to show. | mock |
-| 39 | **Live.** Sign in as a member with **no project grants at all**. | The rail shows **My work** and **All projects** and an **empty** project switcher — not a missing control and not a broken rail. The picker itself says "You don't have access to any project yet". Collapse it: the switcher becomes a folder icon rather than a key, because there is no project to name. **Unobservable in mock mode**, whose fixture user holds everything. | **live only** |
-
----
-
-## §92 — saved report definitions (R5, backend)
-
-**Five rows, and the numbering skips nothing** — §92's rows follow §91's because a concurrent strand
-took that number while this slice was in flight (see `docs/handoff/92-*.md` §0).
-
-**This slice has no screen.** R5 is a server surface and the Reports page still has a definitions
-panel with no Save control, so rows 40–42 are driven from the **browser console** in mock mode and
-rows 43–44 are live. They are queued rather than optional: the mock now stores definitions and the
-next frontend slice will be built against it, which is exactly the arrangement §81 and §87 both
-found wrong after the fact.
-
-| # | Drive | Expect | Mode |
-|---|---|---|---|
-| 40 | **Mock.** From the console on a project's Reports page: `POST`, then `GET`, then `POST /generate` with only the id and a format. <br>`const p = location.pathname.split('/')[2];`<br>`const h = {'Content-Type':'application/json', Authorization:'Bearer '+JSON.parse(localStorage.getItem('tcms.session')).token};`<br>`const d = await (await fetch(`/api/v1/projects/${p}/reports`,{method:'POST',headers:h,body:JSON.stringify({type:'run_summary',name:'Cycle',parameters:{runId:'<a run id>'}})})).json();`<br>`await (await fetch(`/api/v1/projects/${p}/reports`,{headers:h})).json();`<br>`await (await fetch(`/api/v1/projects/${p}/reports/generate`,{method:'POST',headers:h,body:JSON.stringify({definitionId:d.id,format:'MD'})})).json();` | The save answers **201** with `owner` filled; the list answers an array containing it; the generate answers **202** with `type: "run_summary"` — **without the request naming a type**, which is the whole of "one click". Poll the job to `COMPLETED` and download it: the report must be **of the saved run**, which is the evidence the parameters came from the definition and not from an empty object. | mock |
-| 41 | **Mock.** Repeat the generate with `{definitionId: d.id, format:'MD', parameters:{note:'this run'}}`, then read the job's `parameters` via the model artifact's header. | The header's **Selection** block lists **both** `runId` (from the definition) and `note` (from the request). A selection showing only `note` is the shallow merge having become a replacement — the defect that renders a perfect report over the wrong scope, and the reason it is worth seeing on a rendered document rather than in a JSON blob. | mock |
-| 42 | **Mock.** `DELETE /api/v1/projects/{p}/reports/{d.id}`, then re-poll the job from row 40 and follow its `downloadUrl`. | **204**, the definition is gone from the list, and **the report still downloads**. This is V28's behaviour end to end: deleting a saved report must not delete the history of what it produced. Then re-run the generate with the deleted id — a **400 with a field error on `definitionId`**, not a 404 and not a 500. | mock |
-| 43 | **Live.** As two different people on the same project, each save a definition, then each list. | **Each sees only their own.** This is the slice's access rule and it is **structurally unobservable in mock mode**, which signs in as one persona — so "mine" and "the project's" are the same set there and an implementation that dropped the owner filter would pass every mock check. Then have the second person try `DELETE` on the first's id: **404**, and the row survives. | **live only** |
-| 44 | **Live.** As a persona holding `report:view` and **not** `report:export` (a grant edit — no built-in role has that shape, and it is the role §87 created for the suite), save a definition, list it, delete it. Then try to generate from it. | The three definition operations **succeed** and the generate is **403**. That pair is the key decision made visible: saving a selection is not exporting a report, and the persona §6e's split exists for must be able to keep its selection. Note that this is the same persona row 31 records the on-screen-view finding against — the two rows read together are the whole state of that split. | **live only** |
-
-## §93 — the plan document (ui)
-
-**Six rows, and this slice has more riding on them than most**: it has **no automated tests of its
-own**, so these are currently the only thing that would catch it being broken. All mock mode unless
-stated.
-
-| # | Drive | Expect | Mode |
-|---|---|---|---|
-| 45 | Open a plan → **Document** tab. | The tab exists beside **Progress**, `?tab=document` is in the URL, and the empty state reads "This plan has no document yet" with a **Start the document** button — **not** a global "Something didn't load". The 404-to-null in `usePlanDocument` is the only thing standing between the ordinary first state and an error toast. | mock |
-| 46 | Press **Start the document**. | Five headed sections appear in order: Business requirements · Test artefacts (with **Test environments** and **Accounts** beneath it) · Scope · Out of scope · **Test cases**. Bullets under Test cases are **visibly indented at three depths** — that is `level` on a list block, and a flat list means the widening did not reach storage. Every paragraph is a prompt, not content. | mock |
-| 47 | Edit a heading's text, click away, reload. | The change persisted. Then check the documentation space (`/docs`): the same page is in the tree, titled `TP-n — <plan name>`. One page, two routes. | mock |
-| 48 | Type a title, pick a suite, press **Add case**. Then do it **twice more without reloading**. | Three DIFFERENT cases exist in the case list, each `DRAFT`, and three bullets appear under Test cases each carrying a chip with its own `TC-` key. **Three identical chips pointing at one case is the idempotency-key defect** `useCreateDraftCase` exists to avoid, and it is invisible on a single add. | mock |
-| 49 | Click a chip's × , then click the chip body. | The × removes the **link** and leaves the case in the repository (check the case list). The chip body navigates to the case. Two affordances on one control and only one is destructive — if the × deleted the case, that is the row that finds it. | mock |
-| 50 | Rename the **Test cases** heading to something else, then add a case. | The bullet lands at the **end of the document** and an info alert says so. It must not vanish and must not throw. | mock |
-
-## §94 — writing steps (phases 2–3)
-
-**Eleven rows (51–61), none run.** This is the slice that changes how a test case is *written*, so
-it is almost entirely gesture and timing — the two things no gate here can observe. Three of them
-(55, 57, 58) are about a state that only exists because the trailing blank row is now permanent,
-which is the defect class this slice introduced deliberately and paid for in the schema.
-
-**Two are live only, and row 59 is the one that matters most**: the corpus is derived from the
-project's own cases, and mock mode's fixtures give every structured case the *same four steps*, so
-ranking, soft-delete exclusion and project scoping are all unobservable there by construction.
-
-| # | Drive | Expect | Mode |
-|---|---|---|---|
-| 51 | Open a case for editing, then **New test case**. | Both open with the step list ending in a **blank row**, and the new case opens on exactly one. There is **no "Add step" button** anywhere. Before this slice a new case opened on zero step rows. | mock |
-| 52 | In the last row's Action, type one word. Then keep typing. Then type in the new last row. | A blank row appears **after the first keystroke** and **exactly one** — not one per character. The caret **stays where you are typing**: if focus jumps to the new row, `shouldFocus` has come back. Repeat with a **paste** rather than typing: still exactly one new row. | mock |
-| 53 | Type a fragment of a step the project already uses (in mock mode, "Refund"). | A popup lists suggestions, each with the action, a **"n cases"** count, and the test data → expected result beneath. It appears **after you stop typing**, not per keystroke — watch the network panel: one request for the word, not one per letter. | mock |
-| 54 | Pick a suggestion that has test data and an expected result. Then pick one that has **neither** (mock: "Refund it twice") into a row where you had already typed test data. | The first fills **all three** fields. The second **clears** the test data you had typed rather than leaving it attached to a step it was never written for. Then edit the action: nothing else on the screen changes — a pick is a copy, not a link, and no "Shared" chip appears. | mock |
-| 55 | On a **new** case, fill in the title and suite, touch no step, and press **Create case**. | Refused, with **"Add at least one step"** rendered in the step panel. Two things are being checked at once: that the permanently-blank row no longer satisfies the rule, and that the message is **visible** — it was computed and rendered nothing at all before this slice, so the form simply did not respond to the button. | mock |
-| 56 | Write one step with **leading and trailing spaces** in all three fields, leave the trailing row blank, save, and reopen the case. | One step, all three values **trimmed**. No empty numbered step at the end. Then check the case's steps on the **detail** page — an empty step there is what a tester is asked to perform. | mock |
-| 57 | Type into the trailing row, then clear it back to empty (or to spaces), then save. | The row is dropped. **Whitespace is not a step**: a step whose action is `"  "` is accepted by the API, renders forever as an empty line, and cannot be told from a rendering bug. | mock |
-| 58 | Remove the **trailing blank row** with its bin button. | A blank row is still there afterwards. With no Add button, removing the last row would otherwise be a dead end with nothing on screen saying so. | mock |
-| 59 | **Live.** On a project with real content, type a fragment matching a step used by several cases; check the counts. Then soft-delete a case that uses the top suggestion and type the fragment again. Then repeat the fragment on a **second project**. | The counts are **distinct cases**, so a case repeating a step twice adds one and not two. The deleted case's usage **drops out** of the count. The second project offers **its own** steps and none of the first's. All three are structurally unobservable in mock mode — the fixtures give every structured case the same four steps and `DELETE` removes the row entirely. | **live only** |
-| 60 | Grab a step by its handle and drop it two places down. Then drop one **outside** the list, and drop one back **where it started**. Then do the same with the keyboard: tab to a handle, Space, arrows, Space. | The step moves, and the **numbering renumbers** while the text stays with its row. The two null drops change nothing **and leave the form un-dirty** — on an edit form, watch that **Save stays disabled** (it says "Nothing has changed yet"): a `move(i, i)` would offer to write a new version of an unchanged case. The ▲▼ buttons are still there and still work. | mock |
-| 61 | Drag a step in a case that has **evidence or results** against it (an executed case, live). | The steps reorder and the **evidence stays with its step**, not with the position. `step_result` FKs to `test_step.id`, so this is expected — the row exists because if it were ever false, it would be discovered by a tester reading someone else's evidence under the wrong step. | **live only** |
-
-## §95 — conditions get a writer (phases 1–3)
-
-Built and unverified. Rows written per §65; **none of them run.** Rows 68 and 69 are **live-only**
-and they are the ones carrying the slice's real risk — mock mode has one project, so the two
-refusals that matter most (a sibling project's condition, and a suite attachment's true reach) are
-structurally unreachable in it.
-
-| # | Drive | Expect |
-|---|---|---|
-| 62 | Open a case for editing. Attach a precondition from the picker, then attach a second, then save and reopen. | Both are there, **in the order they were attached**. Position is the content — a condition list is a procedure, and the payload's order is the only way an author can express it. |
-| 63 | Attach one condition, then open the picker again. | The one already attached is **not offered**. Attaching the same entry twice in one list is a row with no meaning; the server collapses it silently, and removing it from the picker is the honest version of that. |
-| 64 | Attach the same condition as **both** a pre- and a postcondition. | Accepted, and both survive a save-and-reopen. Setup that is also cleanup ("reset the payment data") is the canonical case, and the two lists are validated independently. |
-| 65 | On a case whose **folder** carries conditions, open the editor. Then save without touching the panel, and reopen. | The inherited rows render, **named with their folder**, with no remove / reorder / drag affordance — and after the save they are **still inherited**, not converted into the case's own. **This is the slice's most dangerous defect**: an own row and an inherited row look almost identical, so an editor that seeded them into the form would attach the folder's conditions directly to every case anybody edits, permanently and invisibly. |
-| 66 | Detach the **last** remaining condition and save. | It is gone after a reload. Absent and empty are different instructions to the server — absent means "leave them alone", so a client that omitted the empty list would report success and change nothing. |
-| 67 | Reorder conditions with the ▲▼ buttons, then with a **drag**, then with the **keyboard** (tab to the handle, Space, arrows, Space). | All three paths reorder and all three produce the same saved order. The ▲▼ path is the screen-reader and touch route and is deliberately kept beside the drag handle (§94's rule). |
-| 68 | **Live.** Edit a condition attached to several cases: read the impact line, confirm, then open a **different** case that attaches it. | The impact line names the condition and gives **two separate figures** — cases attaching it directly, and suites attaching it — and never a single blended number. After the save the other case shows the **new** text: the attachment is a reference and the edit propagates with no prompt. |
-| 69 | **Live.** With the edit dialog open on a condition, have somebody else change that condition, then save. | A **409** in the dialog saying to reload and reapply — not a toast, and not a silent overwrite. `condition.lock_version` was mapped for the first time in §95 *with* `@Version`; §74 found three entities where the plain-column spelling makes the precondition unable to fail, and this is the check that would notice. |
-| 70 | Create a condition from inside the editor (the **+** beside the picker). | It is created, **attached to the list it was created from**, and its title renders immediately — not "Unknown condition". The library lists are cached per search term, so the entry is not resolvable from a query until one refetches; leaving the author to find it in the picker they just left is the workflow defect. |
-| 71 | Try to save a condition with a blank title, then with an all-blank body. | Both refused, with the message on the field. The all-blank body matters more than it looks: an empty condition is a picker row that attaches nothing and cannot be told apart from one that failed to load — and it would appear in every case attaching the entry. |
-| 72 | Open the editor as a user **without `library:manage`**. | Attach, detach and reorder still work — attaching is a case edit, not a library edit — while **create and edit are refused**. Check the refusal is legible rather than a bare 403. *(Live-ish: mock mode holds every key.)* |
-| 73 | Break the condition endpoint (`tcmsFaults.only('/conditions')`, then `tcmsFaults.status(503, 30)`) and open the editor. | The panel shows its own warning and **the rest of the case still saves**. A failed library read must not take the editor down with it — the failure is scoped to the region that depends on it. |
-
-## §96 phase 5 — the case side: tags, and a case filed nowhere
-
-Built and unverified. Rows written per §65; **none of them run.** Row 79 is **live-only** — mock
-mode has one project, so a case moving between projects' vocabularies is unreachable in it.
-
-| # | Drive | Expect |
-|---|---|---|
-| 74 | Create a case and leave the Suite select on **Not filed**. Save, then find it in the grid. | It saves (no "Choose a suite"), the Suite column reads **Not filed** in muted italics, and the case is **in the unfiltered grid** — not hidden. `suite_id IN (…)` is never true of NULL, so a grid without an explicit arm for it drops every unfiled case with no error and a total that still counts it. |
-| 75 | With that case saved, click the **Not filed** chip in the filter bar. | Only unfiled cases. The URL carries `unfiled=true` and is shareable; **Clear filters** removes it. This is the only way to reach a case that appears under no node of the tree. |
-| 76 | Apply a **suite** filter, then look at the **Not filed** chip. | Disabled, with the reason on hover — "a case cannot be both in a folder and in none". Not hidden (§31), and not enabled-but-inert: the server ignores the pair, so an active-looking chip that changed nothing is the worse half of render-then-reject. |
-| 77 | Tag a case `smoke` and `regression` in the editor, save, reopen. | Both chips survive. Typing `smoke` a second time adds **no second chip** — a tag list is a set, and a duplicate is the same request rather than an error about a chip you cannot see twice. |
-| 78 | In the filter bar, add tag `smoke`, then add `regression`. | Each Enter adds a removable chip and narrows further — **AND, not OR**: the second tag must *shorten* the list. Deliberately the opposite of a suite's tag rules, which union. Deleting a chip widens it back. |
-| 79 | **Live.** Retag a case (add a tag, save), then open its version timeline. | **No new version.** A tag is not authored content — the server keeps tags off `CaseEdit` and out of the content hash — so retagging must not write a version whose diff says nothing about the test having changed. A version here is the empty-diff noise §6j added the hash to keep out. |
-| 80 | Open the editor on a case that **is** filed, change the suite to **Not filed**, save, reload. | It is unfiled, and the detail page's breadcrumb reads **Not filed** and links to the grid's unfiled filter — not to `?suiteId=null`, which renders every case in the project and reads as a broken crumb. |
-| 81 | Type a 61-character tag in the editor and save. | Refused with the message on the tags field, never truncated. A silently shortened tag stops matching the suite rule it was written for, and the case leaves that collection with no symptom. |
-
-## §96 phase 6 — the suite side: a folder that claims cases
-
-Built and unverified. Rows written per §65; **none of them run.**
-
-| # | Drive | Expect |
-|---|---|---|
-| 82 | Create a suite with tag rule `smoke`. Then look at its count and open it in the grid. | The folder reports the cases carrying `smoke` **wherever they are filed** — its members are a query, not a filing decision. In mock mode the fixture's `Smoke` suite (TS-10) is the one folder where this is observable at all; every other answers the same number under the old rule and the new one. |
-| 83 | Rename that suite **without touching the rules**, then reopen the dialog. | The rules are still there. The form always sends `tagRules`, seeded from the suite — absent means "leave them alone" to the server, so a form that omitted the field could never clear a rule, and one that sent `[]` by default would empty the suite on every rename. |
-| 84 | Remove the last rule and save. | The rule is gone and the folder's count drops. This is the arm the two failure modes above meet on: it only works if the field is both **seeded** and **always sent**. |
-| 85 | Type a tag rule and watch the field. | The chip **appears as you press Enter**. It is the check that would have caught this phase's own defect — the first draft replaced MUI's `slotProps` to add a testid, which drops the adornment the chips live in, so every rule was held, sent and invisible. Both gates were green. |
-| 86 | Hover a suite's case count in the tree. | The tooltip says the count includes cases filed here, added here, or carrying its tags — **and that a case can belong to several folders, so the counts do not sum to the project total.** Without it a reader who subtracts finds a discrepancy and reports a bug in a correct number. |
-| 87 | Add a tag to a case that a suite claims, then reload the tree. | The folder's count goes up **with no write to the suite**. That is the whole point of the third arm, and the only way to see it is from the other side. |
-
-## §97 phase 2 — the contract: scope prose, sections, tags, and the retired template
-
-Built and unverified. Rows written per §65; **none of them run.** Rows 90–91 are the ones that can
-only be seen from the *other* side of the screen, which is what makes them worth queueing.
-
-| # | Drive | Expect |
-|---|---|---|
-| 88 | Open a plan that has no document (mock: any plan but TP-1) and go to its **Document** tab. | The empty state no longer offers **Start the document** — that endpoint is retired — and says the requirements are a page written in the documentation section, with **Open documentation** as the only affordance. **A known interim state**: the *Link a page* control is phase 5's, so between here and there a plan cannot be given a document at all. Named rather than discovered. |
-| 89 | Open **TP-1** and look at the plan's case count against the sections in its fixture. | The count is the **deduped union of every arm** — the unsectioned suite, the *Create an object* section's two named cases, and the *Navigation* section's suite reference and `smoke` tag. The sections' own counts **exceed** it, because a case reached two ways is one case. A count that equals the sum is the mock resolving each arm separately, which is the number no server will produce. |
-| 90 | With TP-1 open in one tab, tag any case `smoke` in another, then reload the plan. | The plan's count **goes up with nothing written to the plan**. That is D7′ — a section is a live selector — and this is the only way to observe it: from the case side. |
-| 91 | Edit a plan's name only (no scope change) and save; check the version number. | Unchanged. The scope prose and the name are content; the version pins what will be **run**. Then move a case into a section and save: the version **does** move. Two saves, because each passes the other's check. |
-
-## §97 phase 3a — the plan ladder is three states
-
-Deferred per §65. **None of these were run.**
-
-| # | Drive | Expect |
-|---|---|---|
-| 92 | Open a plan on `/projects/:id/plans/:planId` as a Test Lead. | Three states only. A **draft** offers *Submit for review* and nothing else; **in review** offers *Approve plan* and *Return to draft*; **approved** offers *Return to draft*. No *Start plan*, no *Close plan*, no *Reopen plan* anywhere. |
-| 93 | On an approved plan, press **Edit**. | The dialog opens. It used to be disabled on a closed plan with a "Reopen the plan…" tooltip; there is no closed plan and no tooltip. The plan is editable. |
-| 94 | As a Test **Engineer** (holds `plan:edit`, not `plan:approve`), open an approved plan. | *Return to draft* is **disabled with the permission tooltip**, never hidden (§31) — the edge rule, from the only side that still has two answers. |
-| 95 | Open **Project settings → Approval required before work starts**. | **One** switch: *Only approved test cases can go into a run*. The plan switch is gone, not disabled. Saving with the case switch toggled leaves every other setting alone. |
-| 96 | On the plan list, check the order. | Drafts first, then in-review, then approved — the rank changed with the states, and a list that reshuffles between loads is the failure this ordering exists to prevent. |
-| 97 | **Live mode only.** Re-run `provision-company` against an existing company, then open a project's status vocabulary. | A seventh status, **WIP**, blue, not final, not counting as a pass. Existing projects do **not** get it from the migration — that is M9's decision, and this is the check that the documented top-up path actually works. |
-| 98 | **Live mode only.** Record a WIP result on a case in a run, then open the plan's Progress tab. | The case counts as **not run**, not as a verdict, and coverage does not move. Mock mode cannot show this: the mock's fixtures carry no WIP status. |
-
-## §97 phase 3b — the counts stop being stored
-
-Deferred per §65. **None of these were run.** Phase 3b is backend work; the Test cases tab that
-renders sections is phase 6, so there is exactly one thing observable today — and it is a mock
-defect this phase fixed rather than a feature it added.
-
-| # | Drive | Expect |
-|---|---|---|
-| 99 | Open the plan list, note **TP-1**'s case count, then tag any case `smoke` in another tab and reload the list. | The count **goes up**. Until this phase the mock stored `caseCount` on the row at save time, so it answered whatever was true when the plan was last edited — which made phase 2's own row 90 false in mock mode. Both counts are now resolved on the way out (`present`), as the server resolves them on every read. |
-| 100 | Open **TP-1** and compare its total against its two sections, once the Test cases tab exists (phase 6). | Recorded here because the number is already correct in the payload and can be read in the network tab today: *Create an object* holds 2, *Navigation* holds whatever carries `smoke` plus the second suite, and the two **exceed** the plan's deduped total. |
-
-## §100 — the design comp's three proposals
-
-**Ran inline at the user's explicit direction (2026-08-05), overriding §65 for this slice only.**
-Rows 101–110 were driven in Chrome against **mock mode** and their results are recorded below;
-111–113 could not be driven and stay queued. The §65 default is unchanged for the next slice.
-
-**The pass was in mock mode, not live** — which `CLAUDE.md` says is the one that counts, and the
-gap is named rather than glossed: `.env.local` holds `VITE_API_MODE=live` against a backend on
-:8080 that this session had no credentials for, so a second vite was started with
-`VITE_API_MODE=mock` on port 5199. Everything below is therefore evidence about the SPA and the
-mock agreeing, which is exactly the pairing §64, §54 and §52 each found a shared wrong assumption
-in. **Re-run 101–110 in live mode** when credentials are at hand.
-
-| # | Drive | Expect | Result |
-|---|---|---|---|
-| 101 | Open the plan list. | **TP-1** reads *3 not evaluated* against three grey outlined marks — never "3 unmet". The fixtures store `met: false`, so before this slice the chip claimed three failed gates that nothing had computed. | ✅ RUN — reads "3 not evaluated"; TP-2 "1 not evaluated"; TP-3/4/5 "None set". |
-| 102 | Same list in the **light** theme. | The unevaluated mark is legible: `--color-text-muted` at 4px would vanish on a light row, so it carries a 1px border. An invisible mark reads as "this plan has no criteria", which is what the strip exists to deny. | ✅ RUN — three marks clearly readable, verified zoomed. |
-| 103 | Open an execution. | Three-segment mode switch top right; **Split** is the default with the queue rail beside the detail, and the rail says *Case N of 42*. | ✅ RUN. |
-| 104 | Mark steps 1–3 Passed and step 4 Failed, leaving step 5 unmarked. | *Failed* gains a heavier border and a **suggested** label; the caption reads "A step failed…". Every other verdict stays enabled — the suggestion is never a decision. Fires on a **half-marked** checklist, which is the failure rule outranking the completeness rule. | ✅ RUN — all four verdicts remained clickable. |
-| 105 | Look at a step's verdict keys. | **P F B S**, fixed 30×24 squares. Previously `statusLabels[kind].slice(0, 4)` rendered **"Bloc"** four times per row. | ✅ RUN. |
-| 106 | Switch to **Grid** and mark an untested row Failed. | The row's Result chip becomes *Failed*, **and the page header's chip changes with it** — proof the row's write landed in the same query key the detail screen reads, rather than a second copy. | ✅ RUN. |
-| 107 | Press **B** on a row in Grid. | A dialog, never a one-click write. It renders **that case's own preconditions** as a checklist, because Grid has no checklist on screen — the rule that a Blocked result must say which precondition failed, kept in the third mode. | ✅ RUN — both preconditions listed; *Record blocked* disabled until a reason exists. |
-| 108 | Tick a precondition in that dialog. | The reason prefills with *"Blocked — these preconditions did not hold: - …"*. | ✅ RUN. |
-| 109 | Record it, then open that execution in **Focus** and scroll to Notes. | **The comment is there.** `PATCH` sets `comment` to whatever it is sent and an omitted comment CLEARS it, so a Grid mark that skipped the read would have silently emptied the field. | ✅ RUN — reason persisted verbatim; the "already recorded" alert names the result and time. |
-| 110 | Hand-edit the URL to `?mode=kanban`. | Falls back to Split and renders normally. An unrecognised value reaching the layout renders neither rail nor detail — a blank page produced by a query string. | ✅ RUN. |
-| 111 | Narrow the window below the `lg` breakpoint with Split active. | The rail is dropped and the detail takes the width — Split degrades to Focus, not to a squeezed version of itself. **Not driven**: `resize_window` had no effect on the rendered viewport in this environment, so the one responsive claim in the slice is unverified. | ⬜ QUEUED |
-| 112 | In Grid as a Test **Engineer** (holds `result:submit`, not `result:amend`), find a row that already has a result. | Its four keys are **disabled with the amend tooltip**, while an untested row's are live — the permission is per row, because half a run may be recorded and half not. Mock mode holds every key, so this is **live-only**. | ⬜ QUEUED — live only |
-| 113 | Open one execution in two tabs, record a result in the first, then mark the same row in Grid in the second. | The row shows *"Someone else recorded a result first"* **in place, on that row** — not a corner toast. This is the `If-Match` the row reads before it writes; bulk marking is the surface where overwriting a second tester is easiest. | ⬜ QUEUED |
-
-## §97 phase 4 — the plan detail's form spine
-
-Built and unverified. Rows written per §65; **none of them run.** The §100 pass was an exception the
-user directed for that slice only; the default is back.
-
-| # | Drive | Expect | Result |
-|---|---|---|---|
-| 114 | Open a plan. | **Seven tabs** — Progress · Plan · Business requirements · Test artefacts · Scope · Out of scope · Test cases — and Progress is still the default, because every existing link to this route means the numbers. | ⬜ QUEUED |
-| 115 | Hand-edit the URL to `?tab=nonsense`. | Falls back to Progress and renders normally. An unrecognised tab id reaching the body renders **nothing at all** — a blank page produced by a query string, which is §100 browser row 110's defect in its second home. | ⬜ QUEUED |
-| 116 | Open **Scope**, type a sentence, then click **Progress**. | The banner reads *"Unsaved changes in Scope"* **while Progress is on screen**, and the numbers render underneath it. This is the whole of §93's unmounting decision reversed: the tab is gone, the draft is not. | ⬜ QUEUED |
-| 117 | Go back to Scope. | The sentence is still in the box. Under the old screen it would have been discarded the moment the reader glanced at the numbers, with no warning and nothing to undo. | ⬜ QUEUED |
-| 118 | With the banner up, try to navigate away (or reload). | The unsaved-work prompt fires — `useUnsavedWork` is registered on the dirty draft, so the deploy-skew reload and the mid-session 401 both ask instead of destroying it. | ⬜ QUEUED |
-| 119 | Press **Discard**. | The box returns to what the server served and the banner goes. Not "empty" — discarding to blank is the version of this control that loses work it was asked to protect. | ⬜ QUEUED |
-| 120 | Edit Scope **and** Out of scope, then read the banner. | It names **both**, in tab order. One label for two edits is what makes the second one invisible. | ⬜ QUEUED |
-| 121 | Press **Save**, then open the network panel. | **One `PATCH`**, whose body carries `scopeText`/`outOfScopeText` and **no `suiteIds`, `caseIds`, `sections`**. The server reads an empty list as *clear it*, so a full-draft payload would empty the plan's scope on a prose edit — and the request succeeds either way. Covered by a unit test; this row is the live confirmation that the mock and the server agree about it. | ⬜ QUEUED |
-| 122 | After the save. | The banner is gone (reseeded from the response) and a green *Plan saved* alert is on screen. A banner that survives its own successful save is one nobody trusts. | ⬜ QUEUED |
-| 123 | Arm `tcmsFaults.status(503, 30)`, edit Scope, press Save. | *"The plan was not saved"* **with the typed text still in the box and the banner still up**. A failed save that cleared the draft would lose exactly the work it failed to write. | ⬜ QUEUED |
-| 124 | Open a plan as a reader holding `project:read` and **not** `plan:edit`, then open Scope and type. | Save is **disabled with the reason**, never hidden (§31). The box itself still accepts typing, which is the accepted cost of one draft above seven tabs — the refusal is on the write, where the server's is. | ⬜ QUEUED — live only (mock mode holds every key) |
-| 125 | Same reader, Progress tab. | The numbers render in full and **no disabled editor is anywhere near them**. The page is a report first; this is the row that catches a form spine that swallowed the read-only screen. | ⬜ QUEUED — live only |
-| 126 | Open **Test artefacts** on a plan the project has artifacts for. | The plan's register, with the project's rows marked *from project*. Same table as `/artifacts` — extracted to `ArtifactTable` rather than re-rendered, so an inheritance marker that stops working stops working in one place. | ⬜ QUEUED |
-| 127 | Open **Test cases** on a plan with sections. | Each section shows **what defines it** beside its count — "2 suites · 3 cases added directly · tags smoke" — and the header's total carries the tooltip saying the sections do not sum to it (§96's lesson, one slice later). | ⬜ QUEUED |
-| 128 | Open **Business requirements** on a plan with no document. | The empty state, **not** an error toast, and no *Start the document* button — the template `POST` is retired (§97 phase 3c) and the *Link a page* control lands in phase 5. This is the window the plan's trap list names: rows 88 and this one are the same gap seen twice. | ⬜ QUEUED |
+# Not reproducible in a browser — recorded so the absence does not read as an oversight
+
+- **Simultaneous writes with no `If-Match`.** Two testers closing a run as the last result lands; two
+  leads moving one suite; a lead approving while another returns a plan to draft; two admins saving
+  the review settings form. The target state is absolute in each, so both orders are legal — except
+  the settings form, where `project_settings.lock_version` **is** maintained but **nothing sends the
+  header**, so the second write wins silently. Adding it is a later slice; the column is annotated
+  now precisely so that slice does not first have to discover it was reading `0` for ever (§74).
+- **The true optimistic-lock race on a plan**: two editors saving *after both passing* `If-Match`.
+  `@Version` catches it at flush and `PlanController#onWriteRace` maps it to the same 409, so the
+  handler is reachable in principle and unverified in practice.
+- **Two people submitting one artifact for review in the same instant.** `V22`'s partial unique index
+  decides it; the loser gets a constraint violation, not a second open review. Queued as a backend
+  check.
+- **A sibling company's account offered as a team member, or asked to review.** No picker in either
+  mode lists them, so the refusal is unreachable from the UI — asserted at the server
+  (`TeamEndpointTest`: *"a SIBLING COMPANY'S user is refused — 404, and no row is written"*).
+- **Comment anchors.** §6g wants comments anchored to a step or field; `anchor_type`/`anchor_id` are
+  NULL on every row and accepting one needs a `PeopleDirectory`-shaped port into `repository` first.
+- **A cross-project review card on a personal board.** §6l's "My Work" board exists but the *board*
+  is per project, so the reviewer inbox is per project too.
+- **§70 had nothing to drive at all.** It changed `contractIntrospection.ts` and two test files;
+  `grep -rln contractIntrospection src/` returns exactly those two, so it is in no bundle and the
+  build output was byte-for-byte §69's app. What stands in for it is one command:
+  ```bash
+  cd frontend && grep -rn "api\.delete" src/     # must return NOTHING — the client's verb is `del`
+  npx vitest run src/api/contractOperations.test.ts src/api/apiResponseTypes.test.ts
+                                                 # 8 DELETE call sites, 1 upload among them
+  ```
+
+# Still owed, found and not fixed
+
+- **The plan's case chips resolve through the case list's first 200 rows** (§97 phase 6). There is no
+  by-ids read on the contract, so a plan naming an individual case outside that page shows *"a case
+  outside the loaded list"* — removable, but unnamed. Not reproducible without a project of that
+  size; the fix is a server-side read.
+- **Three tag controls still offer an empty option list** — the case editor's, `SuiteDialogs`'
+  `tagRules` and `BulkActionDialog`'s. `GET /projects/{id}/tags` exists since §97 phase 3b and has a
+  consumer since phase 6; wiring the other three is a three-line change §97 deliberately did not make
+  in a slice that does not own those screens.
+
+- **The artifact register's plan filter is `useState`, not the URL**, so a plan's register cannot be
+  linked to while every other filtered screen can. An older gap than §65; tracked here.
+- **§100's rows 101–110 were run in *mock* mode** at the user's explicit direction (2026-08-05,
+  overriding §65 for that slice only) — marked ✅ in M4 and M1. `CLAUDE.md` says live is the one that
+  counts, so **re-run M4-13…M4-18 in live mode** when credentials are at hand.
+- **§100 row 111 could not be driven**: `resize_window` had no effect on the rendered viewport, so
+  the slice's one responsive claim — Split degrading to Focus below `lg`, dropping the rail rather
+  than squeezing it — is unverified. Retry it by resizing the window by hand.

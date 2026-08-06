@@ -1,5 +1,14 @@
 # Remaining-scope assessment — what is left to build
 
+> **→ SUPERSEDED 2026-08-05 by `docs/audits/2026-08-05-remaining-scope-assessment.md` (round 3,
+> baseline `ced197e`, §100).** Kept in full rather than deleted, because two of its findings are only
+> readable against it: its §1.1 check was run as a plain `grep` despite claiming to exclude
+> non-code references, so four tables discussed only in javadoc — including M2's `suite_run_summary`
+> and `plan_snapshot` rollups — counted as live, and **its M2 figure of 90% is overstated for that
+> reason**. Round 3 §1.1 has the corrected check and §1.4 records where its dependency check produced
+> a false positive (MD/HTML export shipped hand-rolled). **Do not quote the numbers below as
+> current.**
+
 **Date:** 2026-08-02 · **Baseline commit:** `98d19aa` (handoff §77, per-project review settings)
 **Round 2.** Round 1 was written the same day against `33e5843` (§62). Its numbers are kept
 struck-through below rather than deleted, so the movement is readable and the reasoning that
