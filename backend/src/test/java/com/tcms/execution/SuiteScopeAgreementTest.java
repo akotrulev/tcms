@@ -46,6 +46,19 @@ import org.springframework.transaction.support.TransactionTemplate;
  * a plan, with two screens each showing a plausible number and neither identifiable as the wrong
  * one.
  *
+ * <h2>There are THREE copies since §101, and this class holds two of them</h2>
+ *
+ * <p>{@code reporting.ExecutionSource} is the third — the {@code suite_run_summary} rollup resolves
+ * the same union to decide which of a run's cases each suite claims. It is forced by the same
+ * boundary and could not be asserted here: {@code ExecutionSource} is package-private in a module
+ * this test package cannot see, and giving it a public resolution method purely so this class could
+ * call it would be production code with no production caller.
+ *
+ * <p>So it is held by {@code SuiteRunSummaryRefreshTest.Agreement} instead, against
+ * {@code SuiteMembership} — the same canonical side this class compares to — and through the
+ * {@code membership_snapshot} column the shipping statement actually writes, rather than through a
+ * method added for the test. Two classes, one canonical union, three copies checked.
+ *
  * <h2>The one place they deliberately DISAGREE, and it is asserted too</h2>
  *
  * <p>{@code caseIdsInSuite} <strong>includes soft-deleted cases</strong> — a suite's history

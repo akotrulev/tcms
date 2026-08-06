@@ -369,4 +369,197 @@ class ExecutionSource {
                 .setParameter("now", now)
                 .executeUpdate();
     }
+
+    // =========================================================================
+    // The M2 rollups (§6p) — §101
+    // =========================================================================
+
+    /**
+     * Insert one {@code suite_run_summary} row per {@code (run, suite, configuration)} the open
+     * company has an execution for, capturing the suite's membership <em>as it stands now</em>.
+     *
+     * <h2>{@code ON CONFLICT DO NOTHING}, and the freeze is structural rather than a set-list</h2>
+     *
+     * <p>An existing row's membership is <strong>never</strong> revisited. Counts are corrected by
+     * {@link #correctSuiteRunCounts()}, which tallies over the snapshot this statement stored, so
+     * the two frozen columns — {@code membership_snapshot} and {@code suite_version_no} — are
+     * unreachable from the correcting statement rather than merely omitted from it.
+     *
+     * <p>That is deliberate, and it is the one place this class departs from
+     * {@link #projectRecordedExecutions()}'s shape. There, fifteen frozen columns are held by an
+     * {@code ON CONFLICT} set-list naming the other seven — correct, and held only by a reviewer
+     * noticing which columns are absent. Here the freeze is a property of the statement's shape.
+     *
+     * <h2>Why membership must freeze at all</h2>
+     *
+     * <p>A run's executions are fixed when the run is created (§42), so <em>which cases ran</em>
+     * cannot move. <strong>Which suites claim those cases moves every time somebody adds a tag.</strong>
+     * A recompute that re-derived membership on every tick would therefore rewrite last March's pass
+     * rate: a case tagged {@code checkout} today would join the March run's Checkout summary, whose
+     * total goes 43 → 44 and whose percentage moves — with both numbers looking equally correct and
+     * nobody able to name when it changed.
+     *
+     * <p>§6p settled this before the table had a writer, as open question <strong>#32</strong>:
+     * as-executed membership is the default, <em>"the run shows the cases the suite held when it
+     * ran; a later suite edit cannot retroactively change a past run's coverage"</em>.
+     * {@code membership_snapshot} is the {@code V1} column that exists to hold it, and this is the
+     * statement that fills it. It is also §86's frozen-dimension argument reaching a second table: a
+     * frozen dimension that should have moved is one statement to change, while a moving dimension
+     * that should have been frozen has already destroyed the history it rewrote.
+     *
+     * <h2>Three arms, and {@code c.suite_id = s.id} is the defect that reads right</h2>
+     *
+     * <p>The fourth copy of {@code execution.CaseFacts#memberOf}'s union, and the module boundary is
+     * what makes it a copy rather than a call (this class's header, ERD §0.2). One column comparison
+     * is what the schema looks like it wants, and against a suite defined by a <strong>tag
+     * rule</strong> — which files nothing — it resolves to the empty set: a summary of
+     * {@code 0 of 0, 100%} over a run that covered forty of that suite's cases. §98 found that
+     * between a count and a grid; §99 found it as an empty checklist; this is the third door onto it.
+     * {@code SuiteScopeAgreementTest} holds this copy to the others.
+     *
+     * <h2>{@code not_run} counts the non-verdicts, and this is where the rollup differs from the fact log</h2>
+     *
+     * <p>{@link #projectRecordedExecutions()} joins {@code case_status} inner, so the fact log
+     * structurally holds only recorded executions and its header states the consequence: coverage
+     * and not-run denominators can never come from that table. This one <em>is</em> a coverage
+     * denominator. §6p: <em>"where a run covers only part of a suite, show the coverage alongside
+     * the percentage, because a 100% pass rate over 3 of 47 cases is otherwise actively
+     * misleading."</em> So the join is a {@code LEFT JOIN} and an execution with no status at all —
+     * the empty row §42 writes per case at run creation — lands in {@code not_run} rather than
+     * vanishing from {@code total}.
+     *
+     * <h2>{@code suite_version_no} is the version in force AT THE RUN</h2>
+     *
+     * <p>Never {@code suite.current_version_no}, which is the version now: today's number beside an
+     * old run puts this year's composition under last year's pass rate, and the column exists
+     * precisely so a reader can tell those apart. Falls back to 1, the column default on every suite
+     * row and the honest answer for suites created before {@code SuiteVersions} existed.
+     *
+     * @return rows inserted. Zero on a steady-state tick is ordinary — every run already has its
+     *     summary — which is why {@link #correctSuiteRunCounts()} reports its own count separately.
+     */
+    int insertNewSuiteRunSummaries() {
+        return entities.createNativeQuery("""
+                INSERT INTO suite_run_summary (
+                        company_id, run_id, suite_id, configuration_id, suite_version_no,
+                        passed, failed, blocked, skipped, not_run, total,
+                        membership_snapshot, updated_at)
+                SELECT m.company_id, m.run_id, m.suite_id, m.configuration_id,
+                       COALESCE((SELECT max(v.version_no) FROM suite_version v
+                                  WHERE v.suite_id = m.suite_id
+                                    AND m.last_executed_at IS NOT NULL
+                                    AND v.created_at <= m.last_executed_at), 1),
+                       m.passed, m.failed, m.blocked, m.skipped, m.not_run, m.total,
+                       m.case_ids, now()
+                  FROM (
+                        SELECT e.company_id,
+                               e.run_id,
+                               s.id AS suite_id,
+                               r.configuration_id,
+                               count(*) FILTER (WHERE st.kind = 'PASSED')  AS passed,
+                               count(*) FILTER (WHERE st.kind = 'FAILED')  AS failed,
+                               count(*) FILTER (WHERE st.kind = 'BLOCKED') AS blocked,
+                               count(*) FILTER (WHERE st.kind = 'SKIPPED') AS skipped,
+                               count(*) FILTER (WHERE st.kind IS NULL
+                                                   OR st.kind IN ('UNTESTED','RETEST','WIP'))
+                                                                           AS not_run,
+                               count(*)                                    AS total,
+                               max(e.executed_at)                          AS last_executed_at,
+                               to_jsonb(array_agg(e.case_id ORDER BY e.case_id)) AS case_ids
+                          FROM test_execution e
+                          JOIN test_run  r ON r.id = e.run_id
+                          JOIN test_case c ON c.id = e.case_id
+                          JOIN suite     s ON s.project_id = e.project_id
+                          LEFT JOIN case_status st ON st.id = e.status_id
+                         WHERE ( c.suite_id = s.id
+                                 OR EXISTS (SELECT 1 FROM suite_case sc
+                                             WHERE sc.suite_id = s.id AND sc.case_id = c.id)
+                                 OR EXISTS (SELECT 1 FROM suite_tag_rule tr
+                                              JOIN case_tag ct ON ct.tag = tr.tag
+                                                              AND ct.case_id = c.id
+                                             WHERE tr.suite_id = s.id) )
+                         GROUP BY e.company_id, e.run_id, s.id, r.configuration_id
+                       ) m
+                    ON CONFLICT (run_id, suite_id, configuration_id) DO NOTHING
+                """)
+                .executeUpdate();
+    }
+
+    /**
+     * Re-tally the counts of {@code suite_run_summary} rows that already exist, over
+     * <strong>the membership each row froze</strong> and never over today's.
+     *
+     * <p>This is the half that follows an amended verdict: a result re-recorded from {@code FAILED}
+     * to {@code PASSED} must move the row, and nothing else may. The join to the row's own
+     * {@code membership_snapshot} is what makes that true by construction — there is no set-list to
+     * get wrong, and a case that joined the suite after the run is not in the snapshot and therefore
+     * cannot be counted.
+     *
+     * <h2>The trailing {@code IS DISTINCT FROM} is not micro-optimisation</h2>
+     *
+     * <p>Without it every tick rewrites every row and bumps {@code updated_at} — which is what the
+     * contract's {@code computedAt} serves to the client (§101 decision D7). A freshness field that
+     * always says "just now" says nothing, and it would say it most loudly on the screen §6p calls
+     * the most dangerous in the product. So a row whose counts have not changed keeps the timestamp
+     * of the tick that last changed them, which is the honest reading of "as of".
+     *
+     * <p>{@code IS DISTINCT FROM} rather than {@code <>} because a row comparison containing a NULL
+     * is NULL rather than true — and every count column is {@code NOT NULL} today, so this is
+     * defence against a column that later is not, in the one direction that fails silently: {@code <>}
+     * evaluating to NULL would skip the update and freeze a count for ever.
+     *
+     * @return rows corrected. Zero on a steady-state tick is the ordinary case.
+     */
+    int correctSuiteRunCounts() {
+        return entities.createNativeQuery("""
+                UPDATE suite_run_summary srs
+                   SET passed = t.passed, failed = t.failed, blocked = t.blocked,
+                       skipped = t.skipped, not_run = t.not_run, total = t.total,
+                       updated_at = now()
+                  FROM (
+                        SELECT s.run_id, s.suite_id, s.configuration_id,
+                               count(*) FILTER (WHERE st.kind = 'PASSED')  AS passed,
+                               count(*) FILTER (WHERE st.kind = 'FAILED')  AS failed,
+                               count(*) FILTER (WHERE st.kind = 'BLOCKED') AS blocked,
+                               count(*) FILTER (WHERE st.kind = 'SKIPPED') AS skipped,
+                               count(*) FILTER (WHERE st.kind IS NULL
+                                                   OR st.kind IN ('UNTESTED','RETEST','WIP'))
+                                                                           AS not_run,
+                               count(*)                                    AS total
+                          FROM suite_run_summary s
+                          JOIN LATERAL jsonb_array_elements_text(s.membership_snapshot) AS mc(id)
+                                    ON true
+                          JOIN test_execution e ON e.run_id = s.run_id
+                                               AND e.case_id = CAST(mc.id AS uuid)
+                          LEFT JOIN case_status st ON st.id = e.status_id
+                         GROUP BY s.run_id, s.suite_id, s.configuration_id
+                       ) t
+                 WHERE srs.run_id = t.run_id
+                   AND srs.suite_id = t.suite_id
+                   AND srs.configuration_id = t.configuration_id
+                   AND (srs.passed, srs.failed, srs.blocked, srs.skipped, srs.not_run, srs.total)
+                       IS DISTINCT FROM
+                       (CAST(t.passed AS int), CAST(t.failed AS int), CAST(t.blocked AS int),
+                        CAST(t.skipped AS int), CAST(t.not_run AS int), CAST(t.total AS int))
+                """)
+                .executeUpdate();
+    }
+
+    /**
+     * Phase 2 fills this — {@code plan_snapshot}'s upsert.
+     *
+     * @return rows inserted or corrected
+     */
+    int refreshPlanSnapshot() {
+        return 0;
+    }
+
+    /**
+     * Phase 2 fills this — {@code plan_snapshot}'s delete pass.
+     *
+     * @return rows deleted
+     */
+    int prunePlanSnapshot() {
+        return 0;
+    }
 }

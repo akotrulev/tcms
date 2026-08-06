@@ -56,6 +56,20 @@ import org.springframework.stereotype.Component;
  * <p>Deliberate, and cheap. Suspension is reversible by policy (suspend-never-delete, §6s), and a
  * company that comes back to reports missing everything recorded before its suspension would be
  * reading numbers nobody can date.
+ *
+ * <h2>Two services, one loop, and the order is the reason (§101)</h2>
+ *
+ * <p>{@link RollupRefreshService} runs in this loop rather than on a scheduler of its own, and it
+ * runs <strong>after</strong> the fact refresh. The plan statistics screen takes its headline from
+ * {@code plan_snapshot} and its trend sparkline from {@code execution_fact}, so the two must move on
+ * one clock: a second scheduler would have been the tidier shape and would have put them on
+ * independent ones, which is precisely the arrangement in which a plan page's headline and its
+ * sparkline disagree by up to fifteen minutes with nothing on screen to say so.
+ *
+ * <p>Each company's rollups commit in their own transaction, separate from that company's fact
+ * refresh, so a rollup failure does not roll back a projection that succeeded — and the
+ * {@code catch} below covers both, because losing the other forty-nine companies because one has a
+ * lock timeout is a much worse outcome than a warning in the log.
  */
 @Component
 @ConditionalOnProperty(prefix = "tcms.reporting", name = "enabled", matchIfMissing = true)
@@ -65,10 +79,15 @@ class ExecutionFactScheduler {
 
     private final CompanyRepository companies;
     private final ExecutionFactRefreshService refresh;
+    private final RollupRefreshService rollups;
 
-    ExecutionFactScheduler(CompanyRepository companies, ExecutionFactRefreshService refresh) {
+    ExecutionFactScheduler(
+            CompanyRepository companies,
+            ExecutionFactRefreshService refresh,
+            RollupRefreshService rollups) {
         this.companies = companies;
         this.refresh = refresh;
+        this.rollups = rollups;
     }
 
     /**
@@ -92,6 +111,10 @@ class ExecutionFactScheduler {
         for (Company company : companies.findAll()) {
             try (var ignored = CompanyContext.open(company.getId())) {
                 refresh.refresh();
+                // After the projection, never before: the plan page's trend reads execution_fact
+                // while its headline reads plan_snapshot, and a stale sparkline renders exactly
+                // like a fresh one.
+                rollups.refresh();
                 done++;
             } catch (RuntimeException failure) {
                 // Named, not swallowed: without the company id this line is unactionable, and
