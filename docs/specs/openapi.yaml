@@ -3032,8 +3032,19 @@ paths:
                     generated from a stale one could not ask for a report that exists.
 
                     A type this server cannot compute is a 400 naming what it can.
-                    **`run_summary` is the only one today** (§87): one run's results, its pass rate
-                    and its outstanding work.
+                    **Two today**, and the refusal is generated from what is registered rather
+                    than from this list, so a deployment is the authority on its own catalogue:
+
+                    - `run_summary` (§87) — one run's results, its pass rate and its outstanding
+                      work. Scoped to a single run, so it can say what was *not* run.
+                    - `aggregate_execution` (R6) — executions **across** a selection of plans,
+                      suites, features, configurations and dates, resolved under a stated
+                      aggregation policy. It is computed from the `execution_fact` log rather
+                      than from live rows, which has two consequences worth knowing before
+                      comparing it with a screen: **a result recorded in the last few minutes may
+                      not be in it yet** (the projection runs every 15 minutes), and **a case with
+                      no recorded result is not in it at all** — a star schema holds facts, not
+                      scope, so there is no "not run" here the way a plan page has one.
 
                     **Required unless `definitionId` is sent** — which `required` cannot express
                     here without splitting the body into a `oneOf` whose two arms differ by one
@@ -3063,6 +3074,38 @@ paths:
 
                     Untyped because each report takes different ones. `run_summary` takes a single
                     required `runId` (uuid).
+
+                    `aggregate_execution` takes a **selection**, every field of it optional — a
+                    request with none is the whole project, which is what "I did not narrow on
+                    anything" means:
+
+                    - `policy` — one of `LATEST` (the default), `LATEST_PER_CONFIG`, `WORST`,
+                      `BEST`, `ALL`; the same five values, with the same meanings, that
+                      `GET /plans/{planId}/statistics` takes. The report prints the policy it
+                      used and prints **both** the execution count and the distinct-case count,
+                      because those two are equal under `LATEST` and differ under the others,
+                      and reporting one of them as "the number" inflates it.
+                    - `planIds`, `configurationIds`, `featureIds` — arrays of uuid.
+                      `featureIds` **unions**: a case classified under Payments *or* Refunds. The
+                      intersection reading would answer nothing for the ordinary two-feature
+                      request, which reads as a quiet project rather than as a misunderstanding.
+                    - `suitePaths` — array of strings, matched **descendant-or-self** against the
+                      suite path each result was recorded under. That path is frozen history: it
+                      is what the tree said when the execution happened, so a report spanning the
+                      §98 flattening matches deep paths for old runs and single labels for new
+                      ones.
+                    - `automationStatuses`, `sources` — arrays of strings, matched exactly.
+                    - `from`, `to` — RFC 3339 instants, **half-open**: `from` inclusive, `to`
+                      exclusive, so asking for August means `to` = `2026-09-01T00:00:00Z` and two
+                      adjacent monthly reports neither double-count nor drop whatever landed on
+                      midnight. `to` before `from` is a field error and is never swapped for you.
+                      A result recorded with **no** timestamp is outside every range — that is
+                      what a date range means, and the alternative puts one execution in two
+                      months.
+
+                    An **empty array is read as absent**, not as "match nothing": the other
+                    reading turns `{"planIds": []}` into a clean, plausible report of nothing
+                    (§99, from the SQL side).
 
                     With `definitionId`, this is the **override** and the saved definition is the
                     base — the stored `parameters` on the job (and therefore the artifact's
