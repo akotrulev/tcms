@@ -68,8 +68,20 @@ const plans = [
   { id: 'plan-2', key: 'TP-2', name: 'Hardening', status: 'ACTIVE' },
 ]
 
-function mockReads(rows: unknown[]) {
+const pages = [
+  {
+    id: 'page-1',
+    key: 'DOC-1',
+    title: 'Payments',
+    slug: 'payments',
+    status: 'PUBLISHED',
+    updatedAt: '2026-08-01T09:00:00Z',
+  },
+]
+
+function mockReads(rows: unknown[], docPages: unknown[] = pages) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
+    if (path.includes('/doc-pages')) return docPages
     if (path.includes('/runs')) return rows
     if (path.includes('/plans')) return plans
     if (path.includes('/me/permissions')) return heldPermissions(['report:export', 'report:view'], {}, PROJECT)
@@ -321,6 +333,104 @@ describe('GenerateReportDialog', () => {
       expect(await screen.findByText(/covers nothing/i)).toBeInTheDocument()
       // Nothing was sent, which is the whole value: the server's own refusal for this arrives as a
       // FAILED job minutes later, on a card the person who typed it has already navigated away from.
+      expect(post).not.toHaveBeenCalled()
+    })
+  })
+
+  /**
+   * §115's third report, and the two things about it a gate cannot see.
+   *
+   * The first is the request body, for the same reason `runId` has a test: `docPageId` lives inside
+   * `parameters`, and sent at the top level it is dropped silently and the job FAILS minutes later
+   * saying the report needs a page.
+   *
+   * The second is the one this slice would most plausibly have shipped broken. R6 spelled the run
+   * gate `!isAggregate`, which was the same statement as "needs a run" while there were two types
+   * and stops being one at three: `coverage_matrix` is not the aggregate, so it would have inherited
+   * the run gate and been **unreachable in every project with documentation and no runs**. That is
+   * the defect R6 itself fixed, arriving a second time through the shape of the fix.
+   */
+  describe('the coverage matrix (§115)', () => {
+    it('sends docPageId inside parameters, and nothing else', async () => {
+      mockReads(runs)
+      const post = vi.spyOn(api, 'post').mockResolvedValue(queued('coverage_matrix'))
+
+      render(
+        <TestProviders client={createTestQueryClient()}>
+          <GenerateReportDialog projectId={PROJECT} open onClose={() => {}} onQueued={() => {}} />
+        </TestProviders>,
+      )
+
+      await screen.findByTestId('Reports.Generate.Type')
+      await chooseType('coverage_matrix')
+      await userEvent.click(screen.getByRole('combobox', { name: /document/i }))
+      await userEvent.click(await screen.findByTestId('Reports.Generate.Document.DOC-1'))
+      await userEvent.click(screen.getByTestId('Reports.Generate.Submit'))
+
+      await waitFor(() => expect(post).toHaveBeenCalled())
+      const [, body] = post.mock.calls[0] as [string, Record<string, unknown>]
+      // Exact: a `runId` or a `policy` riding along would be printed in the artifact's selection
+      // block as a filter the reader believes narrowed the numbers.
+      expect(body).toEqual({
+        type: 'coverage_matrix',
+        format: 'HTML',
+        parameters: { docPageId: 'page-1' },
+      })
+    })
+
+    it('can be asked for in a project with no runs at all', async () => {
+      // THE regression test for the negated gate. With `!isAggregate` this button is disabled and
+      // the run picker is rendered, so both assertions redden — which is what makes them worth
+      // more than the passing version of themselves.
+      mockReads([])
+
+      render(
+        <TestProviders client={createTestQueryClient()}>
+          <GenerateReportDialog projectId={PROJECT} open onClose={() => {}} onQueued={() => {}} />
+        </TestProviders>,
+      )
+
+      await screen.findByTestId('Reports.Generate.Type')
+      await chooseType('coverage_matrix')
+
+      expect(screen.getByTestId('Reports.Generate.Submit')).toBeEnabled()
+      expect(screen.queryByTestId('Reports.Generate.NoRuns')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('Reports.Generate.Run')).not.toBeInTheDocument()
+    })
+
+    it('cannot be asked for in a project with no documentation, and says why', async () => {
+      // The mirror of the run summary's gate, and a real one rather than symmetry: this report's
+      // whole spine is a document, so a project with no pages has nothing to report on.
+      mockReads(runs, [])
+
+      render(
+        <TestProviders client={createTestQueryClient()}>
+          <GenerateReportDialog projectId={PROJECT} open onClose={() => {}} onQueued={() => {}} />
+        </TestProviders>,
+      )
+
+      await screen.findByTestId('Reports.Generate.Type')
+      await chooseType('coverage_matrix')
+
+      expect(await screen.findByTestId('Reports.Generate.NoDocuments')).toBeInTheDocument()
+      expect(screen.getByTestId('Reports.Generate.Submit')).toBeDisabled()
+    })
+
+    it('requires the document, because the server would only refuse it in the worker', async () => {
+      mockReads(runs)
+      const post = vi.spyOn(api, 'post')
+
+      render(
+        <TestProviders client={createTestQueryClient()}>
+          <GenerateReportDialog projectId={PROJECT} open onClose={() => {}} onQueued={() => {}} />
+        </TestProviders>,
+      )
+
+      await screen.findByTestId('Reports.Generate.Type')
+      await chooseType('coverage_matrix')
+      await userEvent.click(screen.getByTestId('Reports.Generate.Submit'))
+
+      expect(await screen.findByText(/choose the document/i)).toBeInTheDocument()
       expect(post).not.toHaveBeenCalled()
     })
   })

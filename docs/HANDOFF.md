@@ -1,7 +1,7 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-06 · **Branch:** `master` · **Latest slice:** [§114 — version
-divergence](handoff/114-version-divergence.md)
+**Date:** 2026-08-07 · **Branch:** `master` · **Latest slice:** [§115 — the coverage
+matrix](handoff/115-the-coverage-matrix.md)
 
 This file is an **index**. Every section is its own file under [`docs/handoff/`](handoff/), numbered
 by its § number, and the slice log below is where the narrative lives — one row per slice, each row
@@ -15,19 +15,23 @@ commit).
 
 **Milestones.** M0, M0.5 and M1 are complete. M2 is complete through the rollups (§101). **M2.5's
 reporting lane is COMPLETE** — R8, version divergence (§114), was the last slice in the plan, and
-R1–R8 plus F1–F2 have all shipped. What that plan deliberately does not cover is listed in its §8 and
-is unchanged. The organization-model restatement (§97, §98, §99) is complete with nothing
+R1–R8 plus F1–F2 have all shipped. What that plan deliberately does not cover is listed in its §8,
+and **§115 took one item off that list**: the coverage matrix, which was blocked only on `doc_link`
+having a writer — a blocker §93 had already removed. The rest of §8 stands, and every remaining entry
+is blocked on infrastructure or on a deferred decision rather than on a writer (PDF and Mermaid's
+SVG pre-render both need a headless renderer; evidence-bundle export needs the `shared` module;
+scheduled reports need a notification channel). The organization-model restatement (§97, §98, §99) is complete with nothing
 outstanding. **The next slice is re-derived from the code, not from this plan's tail** (§28, §29,
 §46).
 
-**Gates, as of §114** — both run locally, and only locally:
+**Gates, as of §115** — both run locally, and only locally:
 
 | Gate | State |
 |---|---|
-| `cd backend && ./gradlew build` | **BUILD SUCCESSFUL — 1852 tests across 377 result classes, 0 failures, 0 skipped** |
+| `cd backend && ./gradlew build` | **BUILD SUCCESSFUL — 1870 tests across 383 result classes, 0 failures, 0 skipped** |
 | `cd frontend && npm run build` | clean |
 | `npm run lint` | 0 warnings |
-| `npm run test:run` | **958/958 across 70 files** |
+| `npm run test:run` | **962/962 across 70 files** |
 
 **CI runs no backend tests** — `.github/workflows/ci.yml` has run `./gradlew build -x test` since
 §59, so `-Werror` and the Modulith wiring are checked and nothing else is. `./gradlew build` on your
@@ -252,3 +256,4 @@ Open actions above. The gap is deliberate; do not renumber around it.
 | [§112](handoff/112-the-inconsistency-callout.md) | The inconsistency callout, the split that is two columns, and the retries the default policy erases — M2.5's R7: three sections that must read the **un-collapsed** rows, because a policy exists to hide exactly what they are about, and one written over `resolvedCte` is empty in every project for ever **(built and unverified — 4 browser, 6 mutation rows)** |
 | [§113](handoff/113-the-deploy-learns-a-second-target.md) | The deploy learns a second target — a `lab` job that runs **on** the homelab box via a self-hosted runner (no SSH key, no stored secret), the nightly Linux gate `ci.yml` gave up, and the `target` default that had to stay `production` or every existing release command would have silently shipped elsewhere **(built and unverified — nothing has run on shanks)** |
 | [§114](handoff/114-version-divergence.md) | Version divergence — M2.5's R8 and the last reporting slice: the section reads the un-collapsed rows for R7's reason, is **wider** than the callout because §6e's harm is the blending and not the disagreement, and each row says whether that version reached the totals as a **computed** column rather than a sentence keyed on the policy's name **(built and unverified — 4 browser, 7 mutation rows, and NO RED run)** |
+| [§115](handoff/115-the-coverage-matrix.md) | The coverage matrix — §6e's *requirement → cases → last result* with a **document as its spine**, unblocked by a writer §93 shipped two slices earlier and nobody noticed; a second foreign-module seam, a statement definition that refuses to call a specification's prose an untested requirement, and a frontend gate that stopped being a negation before a third report type made the negation wrong **(built and unverified — 7 browser, 9 mutation rows, five of the nine RUN and stated as a deviation)** |

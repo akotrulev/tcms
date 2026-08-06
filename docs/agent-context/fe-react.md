@@ -2,10 +2,14 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-06 (§107 — the mock layer is deleted; the deploy stops eating evidence)
-**Baseline commit:** `3f2dab3` (§106) **+ the doc commit this line ships in** (its own SHA
+**Last verified:** 2026-08-07 (§115 — the coverage matrix's frontend arm; §107 — the mock layer is
+deleted — before it)
+**Baseline commit:** `0a16c67` **+ the §115 commit this line ships in** (its own SHA
 cannot be written into itself; trust the body over the header and re-grep what a later commit
 could have moved).
+**§115 touched two frontend files** — `features/reports/GenerateReportDialog.{tsx,test.tsx}` — plus
+a regenerated `api/schema.d.ts` (prose only, **no type moved**). Test count is now **962 across 70
+files**.
 
 > **§107 invalidated a lot of this file at once.** `src/mocks/` is gone — every "the mock does X"
 > statement in the slice entries below is now history rather than current state, and is left in
@@ -81,6 +85,26 @@ directly above the switcher) and the wordmark links there too.
 > slice's shape. `docs/handoff/00-plugin-skills-are-mandatory.md` step 0 now states the protocol.
 
 ## Seams to reuse
+
+- **A PER-TYPE GATE MUST KEY ON WHAT THE TYPE NEEDS, NEVER ON WHAT IT IS NOT (§115).**
+  `GenerateReportDialog` offers three report types since §115 (`run_summary` ·
+  `aggregate_execution` · `coverage_matrix`), and the run-emptiness gate was spelled
+  **`!isAggregate`** by R6. With two types that was the same statement as *"this type needs a run"*;
+  **at three it is not**, and `coverage_matrix` would have inherited the run gate and been
+  **unreachable in exactly the projects with documentation and no runs** — §66's shape, and the very
+  defect R6 wrote that line to fix, arriving again through the shape of the fix. It is `needsRun`
+  and `isCoverage` now, so a fourth type **opts in**. Grep for `needsRun` before adding one.
+  - Each type's parameter form lives beside its entry in `TYPES`, because **nothing in the contract
+    describes a report's parameters machine-readably** — there is nothing to generate a form from,
+    which is why the file says so rather than leaving it to be rediscovered.
+  - The wire strings are named **once each** at the top (`RUN_SUMMARY`/`AGGREGATE`/`COVERAGE`);
+    §115 added the third without hunting hard-coded literals, which is what R6 created them for.
+  - The document picker is **flat**, though `DocPageSummary` carries `parentId`: the report's spine
+    is **one page and never its subtree**, so a nested picker would suggest a choice the request
+    cannot express.
+  - **`docPageId` goes inside `parameters`**, like `runId`. At the top level it is dropped silently
+    and the job FAILS minutes later on a card that looks exactly like a correct one — the reason
+    both have an exact-body test.
 
 - **THE BOARD IS DRAGGED WITH `@dnd-kit`, AND THE WRITE IS OPTIMISTIC (§106).**
   `features/board/{cardMove,boardKeyboard}.ts` + `BoardPage.tsx`'s `BoardColumn`/`WorkCard`, over

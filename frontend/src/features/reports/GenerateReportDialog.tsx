@@ -15,12 +15,19 @@ import { useEffect } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { ApiError } from '../../api/client';
-import { useClassification, useGenerateReport, usePlans, useRuns } from '../../api/queries';
+import {
+  useClassification,
+  useDocPages,
+  useGenerateReport,
+  usePlans,
+  useRuns,
+} from '../../api/queries';
 import type { AggregationPolicy, ReportFormat, ReportJob } from '../../api/types';
 import { describeError } from '../../lib/describeError';
 import {
   aggregationHelp,
   aggregationLabels,
+  docPageStatusLabel,
   reportFormatHints,
   reportFormatLabels,
   runStatusLabels,
@@ -36,9 +43,9 @@ import {
  * **The report type is an open string in the contract** because §6e names ten and a deployment
  * grows them slice by slice; a client generated from a stale enum could not ask for a report that
  * exists. What this dialog offers is therefore a list of the ones it can *build a parameter form
- * for* — ~~one, today~~ **two since R6** — and not a claim about what the server can compute. A
- * server that has more is not misrepresented: it is simply not asked, and the list and its
- * parameter forms move together, which is the only way they can stay consistent.
+ * for* — ~~one, today~~ ~~**two since R6**~~ **three since §115** — and not a claim about what the
+ * server can compute. A server that has more is not misrepresented: it is simply not asked, and the
+ * list and its parameter forms move together, which is the only way they can stay consistent.
  *
  * ## What a second report changed, and why it is more than a menu entry
  *
@@ -50,6 +57,19 @@ import {
  * type that has no use for one. The natural implementation — leaving the gate where it was — is a
  * dialog whose second report is unreachable in exactly the projects that have not started running
  * things yet, which is §66's shape and the one this file's own tests had to be written to catch.
+ *
+ * ## And what a THIRD one changed, which is that the gate stopped being a negation
+ *
+ * R6 spelled the run gate `!isAggregate`, and with two types that was the same statement as "this
+ * type needs a run". With three it is not: `coverage_matrix` is not the aggregate, so it would have
+ * inherited the run gate and been **unreachable in exactly the projects that have documentation and
+ * no runs** — the same defect R6 fixed, arriving again through the shape of the fix rather than
+ * through the code. The gates now key on what a type *needs* (`needsRun`, `isCoverage`), so a
+ * fourth report opts in rather than being enrolled by not being the others.
+ *
+ * `coverage_matrix` brings the second emptiness gate, and it is a real one rather than symmetry: a
+ * coverage matrix's whole spine is a document, so a project with no pages has nothing to report on,
+ * exactly as a project with no runs has nothing for a run summary.
  *
  * ## Why the aggregate form validates what the server would also refuse
  *
@@ -94,14 +114,15 @@ import {
  */
 
 /**
- * The two wire strings, named once each.
+ * The three wire strings, named once each.
  *
  * They are the server's durable identifiers (a saved definition stores this text), so they are
  * spelled here and nowhere else — the hard-coded `'run_summary'` in four places is what this file's
- * own note said R6 would otherwise have to go and find.
+ * own note said R6 would otherwise have to go and find, and §115 added the third without having to.
  */
 const RUN_SUMMARY = 'run_summary';
 const AGGREGATE = 'aggregate_execution';
+const COVERAGE = 'coverage_matrix';
 
 /**
  * Ordered as the plan page orders them, not as the contract declares them — the two screens that
@@ -118,6 +139,7 @@ const ReportSchema = z
   .object({
     type: z.string().min(1),
     runId: z.string(),
+    docPageId: z.string(),
     format: z.enum(['MD', 'HTML', 'PDF']),
     policy: z.enum(POLICIES),
     planIds: z.array(z.string()),
@@ -132,6 +154,15 @@ const ReportSchema = z
         code: 'custom',
         path: ['runId'],
         message: 'Choose the run this report covers.',
+      });
+    }
+    // Same shape as the run, and for the same reason: `docPageId` is checked in the WORKER, so
+    // omitting it here buys a job that spins and then fails for a field this form could require.
+    if (values.type === COVERAGE && values.docPageId === '') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['docPageId'],
+        message: 'Choose the document this report covers.',
       });
     }
     // ISO dates compare correctly as strings, so this needs no Date. The server refuses the same
@@ -166,6 +197,11 @@ const TYPES = [
     label: 'Aggregate execution report',
     hint: 'Many runs at once, narrowed by plan, feature and date, under one aggregation policy.',
   },
+  {
+    value: COVERAGE,
+    label: 'Coverage matrix',
+    hint: 'A document, its statements, and the cases that verify them — with each case’s latest result.',
+  },
 ] as const;
 
 /** Ordered by what people ask for, not by the contract's declaration order. */
@@ -180,7 +216,7 @@ type FormField = keyof ReportFormInput;
  * they compose the `parameters` object, which the server names as one field — so their sentences
  * belong in the banner, where `applyServerError` already puts anything it does not recognise.
  */
-const FIELDS: readonly FormField[] = ['type', 'runId', 'format'];
+const FIELDS: readonly FormField[] = ['type', 'runId', 'docPageId', 'format'];
 
 /**
  * `yyyy-mm-dd` from a date input to the instant the contract wants.
@@ -266,6 +302,7 @@ export function GenerateReportDialog({
 }) {
   const generate = useGenerateReport(projectId);
   const runs = useRuns(projectId);
+  const pages = useDocPages(projectId);
   const plans = usePlans(projectId);
   const dimensions = useClassification(projectId);
   const {
@@ -281,6 +318,7 @@ export function GenerateReportDialog({
     defaultValues: {
       type: TYPES[0].value,
       runId: '',
+      docPageId: '',
       format: 'HTML',
       policy: 'LATEST',
       planIds: [],
@@ -299,6 +337,16 @@ export function GenerateReportDialog({
   const type = watch('type');
   const policy = watch('policy');
   const isAggregate = type === AGGREGATE;
+  const isCoverage = type === COVERAGE;
+  /**
+   * The run picker's type, named rather than derived as "not the other two".
+   *
+   * With two types a negation was the same statement; with three it stops being one, and the
+   * fourth report would silently inherit the run gate by being neither of the types that opt out.
+   * This file's own header records that shape as §66's, which is why the gates below key on what a
+   * type NEEDS rather than on what it is not.
+   */
+  const needsRun = type === RUN_SUMMARY;
 
   const submit = handleSubmit(async (values) => {
     try {
@@ -312,7 +360,11 @@ export function GenerateReportDialog({
         // the union of both forms: a `runId` riding along on an aggregate request would be
         // printed as part of a selection that ignored it.
         parameters:
-          values.type === AGGREGATE ? aggregateParameters(values) : { runId: values.runId },
+          values.type === AGGREGATE
+            ? aggregateParameters(values)
+            : values.type === COVERAGE
+              ? { docPageId: values.docPageId }
+              : { runId: values.runId },
       });
       onQueued(job);
       onClose();
@@ -322,6 +374,14 @@ export function GenerateReportDialog({
   });
 
   const available = runs.data ?? [];
+  /**
+   * Every page in the project's documentation, flat.
+   *
+   * The list is a tree on the wire (`parentId`), and it is offered flat on purpose: the report's
+   * spine is ONE page and never its subtree, so a nested picker would suggest a choice — "this
+   * branch" — that the request cannot express and the server would not honour.
+   */
+  const documents = pages.data ?? [];
   /**
    * The project's own Feature tree, by its contract key.
    *
@@ -349,7 +409,7 @@ export function GenerateReportDialog({
               Scoped to that type since R6: the aggregate report needs no run, and a project with
               none is exactly where somebody would be reaching for it first.
             */}
-            {!isAggregate && runs.isSuccess && available.length === 0 && (
+            {needsRun && runs.isSuccess && available.length === 0 && (
               <Alert severity="info" data-testid={`${TestId}.NoRuns`}>
                 This project has no test runs yet. A run summary reports on one run, so there is
                 nothing to report on until a run has been started.
@@ -378,7 +438,13 @@ export function GenerateReportDialog({
                 </MenuItem>
               ))}
             </TextField>
-            {!isAggregate && (
+            {isCoverage && pages.isSuccess && documents.length === 0 && (
+              <Alert severity="info" data-testid={`${TestId}.NoDocuments`}>
+                This project has no documentation pages yet. A coverage matrix reports on the
+                statements a document makes, so there is nothing to report on until one is written.
+              </Alert>
+            )}
+            {needsRun && (
               <TextField
                 label="Run"
                 required
@@ -400,6 +466,43 @@ export function GenerateReportDialog({
                       </Typography>
                       <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                         {runStatusLabels[run.status]}
+                      </Typography>
+                    </Stack>
+                  </MenuItem>
+                ))}
+              </TextField>
+            )}
+            {isCoverage && (
+              <TextField
+                label="Document"
+                required
+                select
+                defaultValue=""
+                error={!!errors.docPageId}
+                helperText={
+                  errors.docPageId?.message ??
+                  'The page whose structure the report follows. Its statements are the rows.'
+                }
+                slotProps={{ htmlInput: { 'data-testid': `${TestId}.Document` } }}
+                {...register('docPageId')}
+              >
+                {documents.map((page) => (
+                  <MenuItem
+                    key={page.id}
+                    value={page.id}
+                    data-testid={`${TestId}.Document.${page.key}`}
+                  >
+                    <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1 }}>
+                      <Typography variant="body2">
+                        {page.key} · {page.title}
+                      </Typography>
+                      {/*
+                        The status, because a coverage report over a DRAFT specification is a
+                        different claim from one over a PUBLISHED one — the report prints it in its
+                        own metadata, and the picker says it before the choice rather than after.
+                      */}
+                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                        {docPageStatusLabel[page.status]}
                       </Typography>
                     </Stack>
                   </MenuItem>
@@ -579,7 +682,11 @@ export function GenerateReportDialog({
             // test for it had to be written to fail without: a project with no runs may still ask
             // for an aggregate report, whose honest answer is a report saying nothing has been
             // recorded yet.
-            disabled={generate.isPending || (!isAggregate && available.length === 0)}
+            disabled={
+              generate.isPending ||
+              (needsRun && available.length === 0) ||
+              (isCoverage && documents.length === 0)
+            }
             data-testid={`${TestId}.Submit`}
           >
             {generate.isPending ? 'Requesting…' : 'Generate'}

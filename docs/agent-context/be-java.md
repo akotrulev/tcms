@@ -2,11 +2,20 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-06 (**R8, §114** — version divergence, which completes M2.5's reporting
-plan; R7/§112, R6 phases 1–4 / §111 and §108 before it)
-**Baseline commit:** `c1bc739` (§113, the deploy's second target — **a concurrent strand's commit**,
-not this lane's) **+ the R8 commit this line ships in** (its own SHA cannot be written into itself;
+**Last verified:** 2026-08-07 (**§115** — the coverage matrix, the first slice past M2.5's reporting
+plan; R8/§114, R7/§112, R6 phases 1–4 / §111 and §108 before it)
+**Baseline commit:** `0a16c67` (the `provision-host` strand — **a concurrent strand's commit**, not
+this lane's) **+ the §115 commit this line ships in** (its own SHA cannot be written into itself;
 per `CLAUDE.md`, trust the body over the header and re-grep what a later commit could have moved).
+**§115 added two files and one test class** — `DocumentationSource`, `CoverageMatrixReport`,
+`CoverageMatrixReportTest` — plus contract prose and one frontend arm. No migration, no entity, no
+endpoint, no key; `V35` still head, `V36` still free, policy count still 61.
+**⚠ THIS HEADER WAS WRONG IN TWO PLACES AT §115 AND BOTH WERE STALE IN THE SAME DIRECTION** — §95's
+"still owed (phases 2–4)" entry below is **closed**: `CaseUpdateRequest` no longer 400s on
+`preconditions`/`postconditions`, and the frontend **does** have call sites for the condition GET,
+POST and PUT (`api/queries/library.ts`). The body claimed work that was already done, which is the
+failure mode opposite to the one the trust-the-body rule guards against. Re-grep before believing a
+"still owed".
 **§114 (R8) touched three files** — `AggregateExecutionReport`, `ExecutionSource`,
 `AggregateVersionDivergenceTest` — plus contract prose. **§112 (R7) touched the same three** (with
 `AggregateVariabilityTest`). Neither carried a migration, an entity, an endpoint, a key or any
@@ -90,6 +99,50 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   no context, needs no database, strips comments first (the mail block legitimately quotes
   `${SMTP_HOST:-}` when explaining compose), and its negative case has been run. **Add config
   invariants there, not to a reading.** `#confirmed`
+
+- **§115 — THE COVERAGE MATRIX, AND `reporting`'s SECOND FOREIGN-MODULE SEAM.**
+  `CoverageMatrixReport` (`type()` = `coverage_matrix`) + **`DocumentationSource`** (`doc_page` ·
+  `doc_block` · `doc_link`). **No migration, no table, no column, no key**; contract change is prose
+  (`gen:api` moved JSDoc, no type). `CoverageMatrixReportTest`, prefix **`c5`**, slug `cvm-`, 18
+  tests. Requestable **by existing** — `ReportComputations` is a bean registry, so no controller,
+  validation or list was edited.
+  - **THE BLOCKER WAS GONE AND NOBODY HAD NOTICED.** M2.5's plan §8 lists the coverage matrix and
+    doc-structured reports as blocked on *"`doc_link` having a writer, which it does not"*. §93's
+    `BlockLinkService` is that writer, and `DocBlockView`'s header already carried the supersession.
+    **Re-read a plan's own "not covered" list against the code before treating it as current.**
+  - **ONE SEAM PER FOREIGN MODULE, NOT ONE PER MODULE.** `ExecutionSource` already names seven
+    tables across three modules; a fourth module's three would make the file whose purpose is to keep
+    the coupling reviewable unreviewable. **Case labels stayed on `ExecutionSource`** (`test_case` is
+    `repository`'s and R7 already serves them) — a second copy would be one table read two ways in
+    one module.
+  - **THE PROJECT BOUND IS `findPage`'s ALONE.** `doc_block` and `doc_link` have no `project_id`, so
+    the page is the only route to one. The other two methods take the id `findPage` returned and are
+    package-private for that reason: **called with a page id from anywhere else they read a sibling
+    project's document.** This is the **sixth** file layering a project predicate over RLS with
+    **nothing checking any of them** (`PlanFacts`, `CatalogueFacts`, `ExecutionSource`×3). CM-6 is
+    the third slice to record it as a gap; the fix is **one two-project fixture written once for the
+    seam**, not a row per method.
+  - **A STATEMENT IS A `list` BLOCK OR ANY BLOCK ALREADY CARRYING A `VERIFIES` LINK — never every
+    block.** §93 made `level` a third arm on `list` so an outline is linkable per bullet, so the
+    bullets are what a document intends to be verifiable. Every-block is `DocBlockView`'s
+    zeroed-marker objection in an auditor's document: it marks a specification's prose as untested
+    requirements. Consequence: **a page of prose reports 0 statements and an em-dash coverage**, not
+    `0.0%`.
+  - **`VERIFIES` ONLY.** `REFERENCES` is *"context, not coverage"* and `DERIVED_FROM` claims no
+    proof; counting either is the exact false claim `LinkRelationship`'s header exists to prevent,
+    and it is **one word** in the predicate. Also `source_type = 'TEST_CASE'`: the CHECK permits
+    `SUITE`, which is a claim about a collection.
+  - **THE LADDER IS PESSIMISTIC AND ITS TWO ABSENCES ARE DIFFERENT PROBLEMS.** Not covered →
+    **Failing** (any linked case whose latest result is not a pass) → Not run → Verified. Failing
+    outranks verified per §46; *nobody tested this* and *this fails* have different owners.
+  - **THE POLICY IS FIXED TO `LATEST` AND SAID SO IN THE METADATA** (decision D). A coverage matrix
+    asks *"is this verified now"*, which has one answer; `WORST` would print a failure fixed three
+    weeks ago against a requirement. The `ORDER BY` is `resolvedCte`'s `LATEST` arm clause for clause
+    (`NULLS LAST`, `execution_id` tiebreak) — **check both when either moves.**
+  - **FIVE MUTATIONS WERE RUN — a stated §65 deviation, because the class went 18/18 GREEN FIRST
+    TIME**, which is §114's own weakness. Each reddened the test written for it, three of them
+    *alone*. `openDefects` (M4) and the doc **subtree** are named as not built. `DocBlockView.coverage`
+    is **still absent and its reason has not moved.**
 
 - **R8 (§114) — VERSION DIVERGENCE, AND M2.5's REPORTING PLAN IS NOW COMPLETE (R1–R8, F1–F2).**
   A sixth section on `AggregateExecutionReport`, over `selectedCte` for R7's reason exactly. **No

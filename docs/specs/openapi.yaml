@@ -3032,7 +3032,7 @@ paths:
                     generated from a stale one could not ask for a report that exists.
 
                     A type this server cannot compute is a 400 naming what it can.
-                    **Two today**, and the refusal is generated from what is registered rather
+                    **Three today**, and the refusal is generated from what is registered rather
                     than from this list, so a deployment is the authority on its own catalogue:
 
                     - `run_summary` (§87) — one run's results, its pass rate and its outstanding
@@ -3078,6 +3078,35 @@ paths:
                         appear in several groups, so these do **not** sum to the distinct-case
                         count in the headline.
 
+                    - `coverage_matrix` (§115) — §6e's *requirement → cases → last result*, with a
+                      **documentation page as its spine**: the document's own headings in order,
+                      and under each the statements it makes with the cases that claim to verify
+                      them and those cases' latest results. Two things about it are decisions
+                      rather than details, and both change what the numbers mean:
+
+                      - **A statement is a list item, or any block somebody has already linked.**
+                        Not every block. A specification's prose is context, and marking each
+                        paragraph of it "Not covered" would put a specific, alarming and usually
+                        false claim on every page of the document — which is the same reason
+                        `DocBlock.coverage` is absent rather than zeroed. So a page of prose alone
+                        reports **no statements**, which is not the same as 0% coverage.
+                      - **Only a `VERIFIES` link is coverage.** A `REFERENCES` or `DERIVED_FROM`
+                        link is a relationship somebody deliberately chose *not* to state as
+                        proof, and counting it would be exactly the false claim the relationship
+                        field exists to prevent. A block whose only links are those reads as
+                        **Not covered**.
+
+                      A statement's own state is the pessimistic roll-up of its cases — one case
+                      last failing makes the statement **Failing** however many others pass — and
+                      **Not run** (covered, nothing executed) is kept distinct from **Not
+                      covered** (nothing linked), because they are different problems with
+                      different owners. Results are resolved **LATEST** and the policy is not a
+                      parameter: this report asks whether a statement is verified *now*, and there
+                      is one answer to that. `openDefects` from §6e's catalogue line is **not**
+                      built — there is no defect anywhere in the product until M4 — and is named
+                      as absent rather than rendered as an empty column, which would read as "no
+                      defects are open".
+
                     **Required unless `definitionId` is sent** — which `required` cannot express
                     here without splitting the body into a `oneOf` whose two arms differ by one
                     optional field. Sending neither is a field error on `type`.
@@ -3105,7 +3134,11 @@ paths:
                     trusts" (§6e).
 
                     Untyped because each report takes different ones. `run_summary` takes a single
-                    required `runId` (uuid).
+                    required `runId` (uuid), and `coverage_matrix` a single required `docPageId`
+                    (uuid) — the page whose structure becomes the report's spine. It is **one
+                    page and not its subtree**: a page's descendants are a different document in
+                    every space this product seeds, and a scope that silently swept in three
+                    sibling specifications would be wrong in the direction nobody checks.
 
                     `aggregate_execution` takes a **selection**, every field of it optional — a
                     request with none is the whole project, which is what "I did not narrow on
