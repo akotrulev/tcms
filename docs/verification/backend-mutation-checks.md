@@ -248,14 +248,14 @@ backend file was touched and no contract moved**, so the Java suite owes nothing
 explicitly, because a slice that writes to `PATCH /work-items/{id}` and adds no rows to this file
 otherwise reads as a slice that forgot.
 
-What it *did* expose is on the mock side, and it is the row worth keeping:
+What it *did* expose was on the mock side:
 
 | # | Mutation | What must redden |
 |---|---|---|
-| 14a | *(frontend)* `mocks/handlers/workItems.ts` — delete the `allowedTransitions` 409 §106 added | Nothing in the Vitest suite, **and that is the finding**. No component test drives the mock handlers; the check is browser row **M1-29**. The handler answered `200` to an illegal transition from Phase 1 to §106 because the only mover was a button the board had already disabled — a mock leniency that becomes a certified bug the moment a drag can reach it |
+| ~~14a~~ | ~~*(frontend)* `mocks/handlers/workItems.ts` — delete the `allowedTransitions` 409 §106 added~~ | **VOID since §107 — the file is deleted.** The row said no component test drove the mock handlers, which was the finding; §107 removed the handlers entirely, so there is nothing left to mutate. **What it was really asking has not gone away and is now 14b's alone**: the board relies client-side on a rule only the server enforces. Browser row `M1-29` moved to the `L2` refusals lane for the same reason (§109) |
 | 14b | *(backend, unrun)* `WorkItemService`'s move — accept a status outside `allowedTransitions` | Whichever `WorkItemEndpointTest` case pins the 409 the contract declares. **Not verified to exist.** If nothing reddens, the server's half of the rule this slice now relies on client-side is unasserted, and that is a test to write rather than a mutation that failed |
 
-**Neither was run**, per §65.
+**Neither was run**, per §65 — and 14a can no longer be, which leaves 14b carrying the whole rule.
 
 ---
 

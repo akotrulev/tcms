@@ -340,6 +340,12 @@ A second stack for a concurrent browser pass is `cp .env.lane-b.example .env.lan
   §72–§76 each ran a handful inline and recorded them as `✅ RUN` in the queue, which made the
   exception look like the rule; it was not. Write the row, run nothing. **A slice in an unrun queue is *built and
   unverified*, and must be described that way rather than as done.**
+  **The browser queue is ONE LIVE PASS of thirteen ordered lanes since §109** — there is no mock lane
+  and no mode to choose. A new row goes in the lane whose *state* it needs, names the fixture the
+  pass's own charter authors, and **keeps a stable id**: ids are quoted from handoff sections, so
+  they are never renumbered. A row that needs data no lane creates must say what is missing and what
+  the options are, because "not driven, and here is why" is a legitimate outcome and a silent skip is
+  not.
 - **A schema-wide or catalogue-wide invariant needs a computed check, not a careful reading.**
   Reading V1 top to bottom missed five join tables without `company_id`; scripting the comparison
   found them. Same family: derive "holds every permission" from the catalogue rather than storing a
