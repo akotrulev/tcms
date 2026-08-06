@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '../../api/client'
@@ -24,6 +24,23 @@ import { GenerateReportDialog } from './GenerateReportDialog'
  *   4. **PDF is offered at all.** Asserted directly, because "don't render an action the backend
  *      rejects" is the rule a later reader would apply to remove it, and the reason not to is the
  *      contract's own (`ReportFormat`'s comment). A test is where that decision survives.
+ *
+ * R6 adds four more, and three of them are about the *second* report being reachable and honest:
+ *
+ *   5. **A project with no runs may still ask for the aggregate report**, asserted as
+ *      `toBeEnabled()`. The inverted assertion is the finding: `toBeDisabled()` passes against the
+ *      dialog as it stood before R6, so the test that "covers" this behaviour is green while the
+ *      report is unreachable in precisely the projects that have not run anything yet (§66, §99).
+ *   6. **The date range is converted, not passed through.** The form's `to` is inclusive and the
+ *      API's is exclusive, so the assertion is on the *instant* — 31 August typed, 1 September
+ *      sent. Getting this wrong drops the last day of every range and produces a smaller number
+ *      that looks entirely reasonable.
+ *   7. **Untouched facets are absent from `parameters`**, not present and empty. The server reads
+ *      an empty array as absent either way, so this is not about the numbers: `parameters` is
+ *      frozen onto the artifact and printed as the report's selection block, where `"planIds": []`
+ *      tells the reader a filter was applied that was not.
+ *   8. **A backwards range is refused here**, because the server refuses it in the worker — the
+ *      dialog is closed by then and the answer is a FAILED job card.
  */
 
 const PROJECT = '11111111-1111-1111-1111-111111111111'
@@ -46,12 +63,35 @@ const runs = [
   },
 ]
 
+const plans = [
+  { id: 'plan-1', key: 'TP-1', name: 'Release 4.3.0', status: 'ACTIVE' },
+  { id: 'plan-2', key: 'TP-2', name: 'Hardening', status: 'ACTIVE' },
+]
+
 function mockReads(rows: unknown[]) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.includes('/runs')) return rows
+    if (path.includes('/plans')) return plans
     if (path.includes('/me/permissions')) return heldPermissions(['report:export', 'report:view'], {}, PROJECT)
     return []
   }) as unknown as typeof api.get)
+}
+
+async function chooseType(type: string) {
+  await userEvent.click(screen.getByRole('combobox', { name: /report/i }))
+  await userEvent.click(await screen.findByTestId(`Reports.Generate.Type.${type}`))
+}
+
+function queued(type: string) {
+  return {
+    jobId: 'job-1',
+    type,
+    status: 'PENDING',
+    format: 'HTML',
+    downloadUrl: null,
+    modelUrl: null,
+    error: null,
+  } as never
 }
 
 /**
@@ -168,5 +208,120 @@ describe('GenerateReportDialog', () => {
     // And NOT in the root banner — that is the branch a naive "show the detail" would take, and it
     // reads as a broken server rather than as a choice the picker can change.
     expect(screen.queryByTestId('Reports.Generate.Error')).not.toBeInTheDocument()
+  })
+
+  describe('the aggregate execution report (R6)', () => {
+    it('can be asked for in a project with no runs at all', async () => {
+      mockReads([])
+
+      render(
+        <TestProviders client={createTestQueryClient()}>
+          <GenerateReportDialog projectId={PROJECT} open onClose={() => {}} onQueued={() => {}} />
+        </TestProviders>,
+      )
+
+      await screen.findByTestId('Reports.Generate.Type')
+      await chooseType('aggregate_execution')
+
+      // `toBeEnabled`, and that direction is the point: the pre-R6 dialog disabled Generate for
+      // any project with no runs, so an assertion that the button is DISABLED passes against a
+      // dialog where this report cannot be requested at all.
+      expect(screen.getByTestId('Reports.Generate.Submit')).toBeEnabled()
+      // And the run summary's explanation must not be standing over a form that needs no run.
+      expect(screen.queryByTestId('Reports.Generate.NoRuns')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('Reports.Generate.Run')).not.toBeInTheDocument()
+    })
+
+    it('sends only what was narrowed on, with the policy always stated', async () => {
+      mockReads(runs)
+      const post = vi.spyOn(api, 'post').mockResolvedValue(queued('aggregate_execution'))
+
+      render(
+        <TestProviders client={createTestQueryClient()}>
+          <GenerateReportDialog projectId={PROJECT} open onClose={() => {}} onQueued={() => {}} />
+        </TestProviders>,
+      )
+
+      await screen.findByTestId('Reports.Generate.Type')
+      await chooseType('aggregate_execution')
+      await userEvent.click(screen.getByTestId('Reports.Generate.Submit'))
+
+      await waitFor(() => expect(post).toHaveBeenCalled())
+      const [, body] = post.mock.calls[0] as [string, Record<string, unknown>]
+      // Exact, so an empty `planIds`/`featureIds` or a `runId` riding along would redden this.
+      // `policy` is present at its default on purpose — it is the one parameter whose absence
+      // changes what the numbers mean rather than which rows produced them.
+      expect(body).toEqual({
+        type: 'aggregate_execution',
+        format: 'HTML',
+        parameters: { policy: 'LATEST' },
+      })
+    })
+
+    it('sends the day AFTER the last day, because the wire range is half-open', async () => {
+      mockReads(runs)
+      const post = vi.spyOn(api, 'post').mockResolvedValue(queued('aggregate_execution'))
+
+      render(
+        <TestProviders client={createTestQueryClient()}>
+          <GenerateReportDialog projectId={PROJECT} open onClose={() => {}} onQueued={() => {}} />
+        </TestProviders>,
+      )
+
+      await screen.findByTestId('Reports.Generate.Type')
+      await chooseType('aggregate_execution')
+
+      await userEvent.click(screen.getByRole('combobox', { name: /aggregation policy/i }))
+      await userEvent.click(await screen.findByTestId('Reports.Generate.Policy.WORST'))
+      // `fireEvent` rather than `type` for the two date inputs: jsdom's date input takes a whole
+      // value and not keystrokes, and react-hook-form registers the same `onChange` either way.
+      fireEvent.change(screen.getByTestId('Reports.Generate.From'), {
+        target: { value: '2026-08-01' },
+      })
+      fireEvent.change(screen.getByTestId('Reports.Generate.To'), {
+        target: { value: '2026-08-31' },
+      })
+      await userEvent.click(screen.getByTestId('Reports.Generate.Submit'))
+
+      await waitFor(() => expect(post).toHaveBeenCalled())
+      const [, body] = post.mock.calls[0] as [string, Record<string, unknown>]
+      expect(body).toEqual({
+        type: 'aggregate_execution',
+        format: 'HTML',
+        parameters: {
+          policy: 'WORST',
+          from: '2026-08-01T00:00:00Z',
+          // Not 2026-08-31. The API's `to` is exclusive, so sending the typed date verbatim would
+          // silently drop the 31st from every August report.
+          to: '2026-09-01T00:00:00Z',
+        },
+      })
+    })
+
+    it('refuses a backwards range here, because the server refuses it in the worker', async () => {
+      mockReads(runs)
+      const post = vi.spyOn(api, 'post')
+
+      render(
+        <TestProviders client={createTestQueryClient()}>
+          <GenerateReportDialog projectId={PROJECT} open onClose={() => {}} onQueued={() => {}} />
+        </TestProviders>,
+      )
+
+      await screen.findByTestId('Reports.Generate.Type')
+      await chooseType('aggregate_execution')
+      fireEvent.change(screen.getByTestId('Reports.Generate.From'), {
+        target: { value: '2026-08-31' },
+      })
+      fireEvent.change(screen.getByTestId('Reports.Generate.To'), {
+        target: { value: '2026-08-01' },
+      })
+      await userEvent.click(screen.getByTestId('Reports.Generate.Submit'))
+
+      expect(await screen.findByText(/covers nothing/i)).toBeInTheDocument()
+      // Nothing was sent, which is the whole value: the server's own refusal for this arrives as a
+      // FAILED job minutes later, on a card the person who typed it has already navigated away from.
+      expect(post).not.toHaveBeenCalled()
+    })
   })
 })

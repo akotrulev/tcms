@@ -53,8 +53,16 @@ record AggregateSelection(
     /**
      * Reads the selection off the job's {@code parameters}.
      *
-     * @throws IllegalArgumentException for an unrecognised policy or a malformed facet. Every one of
-     *     these is a 400 at request time rather than a job that goes {@code FAILED} an hour later.
+     * @throws IllegalArgumentException for an unrecognised policy or a malformed facet.
+     *     <p><strong>These surface as a {@code FAILED} job carrying the sentence, not as a 400</strong>
+     *     — corrected in R6 phase 3, where the first draft of this line claimed the opposite.
+     *     {@link ReportJobService} validates the type, the format and the JSON <em>parse</em> at
+     *     request time and deliberately leaves each report's own parameters to the worker, because
+     *     the alternative is a second copy of every report's rules on the request path (§58's E1).
+     *     That is a defensible trade and it has a cost this class cannot pay off on its own: the
+     *     refusal arrives after the dialog has closed. Which is why {@code GenerateReportDialog}
+     *     makes the two reachable mistakes unexpressible — the policy is a picker, and the date
+     *     order is checked before the request — rather than relying on these sentences being read.
      */
     static AggregateSelection parse(ReportParameters parameters) {
         String requested = parameters.optionalText("policy").orElse(null);

@@ -276,6 +276,26 @@ R6-9 (a selection test that is not the cross-check), or say why not.
 
 ---
 
+## 16. R6 phase 3's dialog — four frontend mutations, **all four run**
+
+Phase 3 put the aggregate report behind a form. Its four new tests **all passed on the first run**,
+which this file treats as a question rather than as a result (§89's poll test passed first time in a
+form that could not fail). So each was mutated once, in `GenerateReportDialog.tsx`, and reverted.
+
+| # | Mutation | Result |
+|---|---|---|
+| R6-10 | `disabled={… || (!isAggregate && available.length === 0)}` → back to `available.length === 0` (the pre-R6 gate) | ✅ **RED** — *"can be asked for in a project with no runs at all"*. The row is worth keeping precisely because the assertion is `toBeEnabled()`: written the natural way round it is green against the dialog this mutation restores. |
+| R6-11 | `parameters.to = dayAfter(...)` → `startOfDay(...)` (the typed date sent verbatim) | ✅ **RED** — *"sends the day AFTER the last day"*. Un-mutated this is invisible: the report renders, the header prints the range the caller typed, and the last day of every range is missing. |
+| R6-12 | `if (planIds.length > 0)` dropped, so an empty array is always sent | ✅ **RED** — *"sends only what was narrowed on"*, because the body assertion is `toEqual` and not `toMatchObject`. The defect is not arithmetic — the server reads `[]` as absent — it is a **selection block on the artifact claiming a filter that was not applied**. |
+| R6-13 | the `to < from` clause in `superRefine` → `false` | ✅ **RED** — *"refuses a backwards range here"*. |
+
+**What is NOT covered, stated rather than implied**: nothing asserts that the *policy* the form
+sends is the one the server resolves under — that is the cross-check test's job on the other side of
+the wire, and no frontend test can see it. And the Features control's union semantics are a sentence
+in a helper text, not a behaviour this suite can observe; browser row `M6-25` is where it is checked.
+
+---
+
 ## 14. §106's board drag — one frontend row, and the backend rows it does NOT owe
 
 §106 replaced the board's native HTML5 drag with `@dnd-kit` and made the move optimistic. **No

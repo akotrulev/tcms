@@ -12,13 +12,19 @@ import {
 } from '@mui/material';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { ApiError } from '../../api/client';
-import { useGenerateReport, useRuns } from '../../api/queries';
-import type { ReportFormat, ReportJob } from '../../api/types';
+import { useClassification, useGenerateReport, usePlans, useRuns } from '../../api/queries';
+import type { AggregationPolicy, ReportFormat, ReportJob } from '../../api/types';
 import { describeError } from '../../lib/describeError';
-import { reportFormatHints, reportFormatLabels, runStatusLabels } from '../../lib/labels';
+import {
+  aggregationHelp,
+  aggregationLabels,
+  reportFormatHints,
+  reportFormatLabels,
+  runStatusLabels,
+} from '../../lib/labels';
 
 /**
  * Asking for a report (§6e, the request half of §87's pipeline).
@@ -30,9 +36,41 @@ import { reportFormatHints, reportFormatLabels, runStatusLabels } from '../../li
  * **The report type is an open string in the contract** because §6e names ten and a deployment
  * grows them slice by slice; a client generated from a stale enum could not ask for a report that
  * exists. What this dialog offers is therefore a list of the ones it can *build a parameter form
- * for* — one, today — and not a claim about what the server can compute. A server that has more is
- * not misrepresented: it is simply not asked, and the day a second report lands, this list and its
- * parameter form move together, which is the only way they can stay consistent.
+ * for* — ~~one, today~~ **two since R6** — and not a claim about what the server can compute. A
+ * server that has more is not misrepresented: it is simply not asked, and the list and its
+ * parameter forms move together, which is the only way they can stay consistent.
+ *
+ * ## What a second report changed, and why it is more than a menu entry
+ *
+ * Every gate in this dialog used to be able to assume the run picker. A project with no runs
+ * disabled **Generate** outright, which is right for `run_summary` — one run is its whole scope —
+ * and wrong for `aggregate_execution`, whose selection is optional in every field and whose honest
+ * answer for an empty project is a report that says so. So the emptiness alert and the disabled
+ * submit are now scoped to the type that needs a run, and the run picker is not rendered for the
+ * type that has no use for one. The natural implementation — leaving the gate where it was — is a
+ * dialog whose second report is unreachable in exactly the projects that have not started running
+ * things yet, which is §66's shape and the one this file's own tests had to be written to catch.
+ *
+ * ## Why the aggregate form validates what the server would also refuse
+ *
+ * Normally a client that re-checks a server rule is building the copy that drifts. This form
+ * checks two things anyway, because of *when* the server's refusal arrives: a report's own
+ * parameters are validated inside the **worker** (`ReportJobService`'s own note — the alternative
+ * is a second copy of each report's rules on the request path), so a bad policy or a backwards
+ * date range is not a 400 on this form, it is a job that goes `FAILED` after the dialog has
+ * closed. So the policy is a **picker** — the value cannot be wrong because it cannot be typed —
+ * and the date order is checked here, since the one refusal a person is most likely to earn is
+ * worth more as a message beside the field than as a dead job card.
+ *
+ * ## The three facets this form deliberately cannot express
+ *
+ * The contract's selection also takes `configurationIds`, `suitePaths` and `automationStatuses` /
+ * `sources`. None is offered, and the reasons differ: **there is no configurations endpoint in
+ * this client at all**; **`suitePaths` are `ltree` paths that the API stopped exposing when suites
+ * flattened (§98)**, so a picker here would have to guess at the server's own path spelling; and
+ * the last two are cheap but would go on a form that is already the longest in the product. A
+ * caller who needs them can send them — the API takes them — and the day a screen needs them,
+ * they land beside these. Named as not built rather than left to be discovered as missing.
  *
  * **The format is a closed enum and is offered in full**, including the one that is refused on
  * every deployment today. That looks like `ui-rules`' render-then-reject and is the contract's
@@ -50,15 +88,62 @@ import { reportFormatHints, reportFormatLabels, runStatusLabels } from '../../li
  * `run_summary` takes a required `runId`, checked **inside the worker** — a bad one is a FAILED
  * job carrying a sentence, not a 400. So a dialog that let it be omitted would produce a job that
  * spins and then fails, for a field the form could have required. A generic parameter form for
- * whatever a future report declares is not built, and is named as not built: nothing in the
- * contract describes a report's parameters, so there is nothing to generate one from.
+ * whatever a future report declares is still not built, and is still named as not built: nothing
+ * in the contract describes a report's parameters in a machine-readable way, so there is nothing
+ * to generate one from — which is why each type's form is written here, beside its entry.
  */
 
-const ReportSchema = z.object({
-  type: z.string().min(1),
-  runId: z.string().min(1, 'Choose the run this report covers.'),
-  format: z.enum(['MD', 'HTML', 'PDF']),
-});
+/**
+ * The two wire strings, named once each.
+ *
+ * They are the server's durable identifiers (a saved definition stores this text), so they are
+ * spelled here and nowhere else — the hard-coded `'run_summary'` in four places is what this file's
+ * own note said R6 would otherwise have to go and find.
+ */
+const RUN_SUMMARY = 'run_summary';
+const AGGREGATE = 'aggregate_execution';
+
+/**
+ * Ordered as the plan page orders them, not as the contract declares them — the two screens that
+ * offer a policy must offer it in the same order or the same click means two things.
+ *
+ * `satisfies` against the generated union, so a policy added to the contract is a **compile error
+ * here** rather than a report this form cannot ask for. That is the same argument `lib/labels.ts`
+ * makes for every enum map in the product.
+ */
+const POLICIES = ['LATEST', 'LATEST_PER_CONFIG', 'WORST', 'BEST', 'ALL'] as const satisfies
+  readonly AggregationPolicy[];
+
+const ReportSchema = z
+  .object({
+    type: z.string().min(1),
+    runId: z.string(),
+    format: z.enum(['MD', 'HTML', 'PDF']),
+    policy: z.enum(POLICIES),
+    planIds: z.array(z.string()),
+    featureIds: z.array(z.string()),
+    // `yyyy-mm-dd` as typed, or empty. Converted to instants at submit — see `aggregateParameters`.
+    from: z.string(),
+    to: z.string(),
+  })
+  .superRefine((values, ctx) => {
+    if (values.type === RUN_SUMMARY && values.runId === '') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['runId'],
+        message: 'Choose the run this report covers.',
+      });
+    }
+    // ISO dates compare correctly as strings, so this needs no Date. The server refuses the same
+    // thing — and refuses it in the worker, minutes later, on a job nobody is watching any more.
+    if (values.type === AGGREGATE && values.from !== '' && values.to !== '' && values.to < values.from) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['to'],
+        message: 'The last day is before the first, so the range covers nothing.',
+      });
+    }
+  });
 
 type ReportFormInput = z.infer<typeof ReportSchema>;
 
@@ -72,9 +157,14 @@ const TestId = 'Reports.Generate';
  */
 const TYPES = [
   {
-    value: 'run_summary',
+    value: RUN_SUMMARY,
     label: 'Run summary',
     hint: 'One run: status breakdown, progress per tester, and results by suite.',
+  },
+  {
+    value: AGGREGATE,
+    label: 'Aggregate execution report',
+    hint: 'Many runs at once, narrowed by plan, feature and date, under one aggregation policy.',
   },
 ] as const;
 
@@ -83,7 +173,53 @@ const FORMATS: readonly ReportFormat[] = ['HTML', 'MD', 'PDF'];
 
 type FormField = keyof ReportFormInput;
 
+/**
+ * The fields the **server** may name in a 400.
+ *
+ * Still three. The aggregate report's controls are not on this list and must not be added to it:
+ * they compose the `parameters` object, which the server names as one field — so their sentences
+ * belong in the banner, where `applyServerError` already puts anything it does not recognise.
+ */
 const FIELDS: readonly FormField[] = ['type', 'runId', 'format'];
+
+/**
+ * `yyyy-mm-dd` from a date input to the instant the contract wants.
+ *
+ * **The range on the wire is half-open and the one on this form is not**, which is the whole
+ * reason this function exists. A person picking 1–31 August means the whole of the 31st; the API's
+ * `to` is exclusive, so it is sent the **next** midnight. Sending the typed date verbatim silently
+ * drops the last day of every range — a smaller number that looks entirely reasonable, on a report
+ * whose readers are comparing months.
+ */
+function startOfDay(date: string): string {
+  return `${date}T00:00:00Z`;
+}
+
+function dayAfter(date: string): string {
+  const next = new Date(`${date}T00:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  return `${next.toISOString().slice(0, 10)}T00:00:00Z`;
+}
+
+/**
+ * The selection, with **only what the caller narrowed on** in it.
+ *
+ * An empty array would be read by the server as absent anyway, so this is not about the numbers:
+ * `parameters` is frozen onto the artifact and printed as the report's selection block (§88), and
+ * a `"planIds": []` in there is a line telling the reader a filter was applied that was not.
+ *
+ * `policy` is always sent, even at its default. It is the one parameter whose omission changes what
+ * the numbers *mean* rather than which rows they came from — "94% pass" under `WORST` and under
+ * `BEST` are different claims — so the request states it and the header prints it.
+ */
+function aggregateParameters(values: ReportFormInput): Record<string, unknown> {
+  const parameters: Record<string, unknown> = { policy: values.policy };
+  if (values.planIds.length > 0) parameters.planIds = values.planIds;
+  if (values.featureIds.length > 0) parameters.featureIds = values.featureIds;
+  if (values.from !== '') parameters.from = startOfDay(values.from);
+  if (values.to !== '') parameters.to = dayAfter(values.to);
+  return parameters;
+}
 
 /**
  * Server field errors onto the fields that carry them.
@@ -130,7 +266,10 @@ export function GenerateReportDialog({
 }) {
   const generate = useGenerateReport(projectId);
   const runs = useRuns(projectId);
+  const plans = usePlans(projectId);
+  const dimensions = useClassification(projectId);
   const {
+    control,
     register,
     handleSubmit,
     setError,
@@ -139,7 +278,16 @@ export function GenerateReportDialog({
     formState: { errors },
   } = useForm<ReportFormInput>({
     resolver: zodResolver(ReportSchema),
-    defaultValues: { type: TYPES[0].value, runId: '', format: 'HTML' },
+    defaultValues: {
+      type: TYPES[0].value,
+      runId: '',
+      format: 'HTML',
+      policy: 'LATEST',
+      planIds: [],
+      featureIds: [],
+      from: '',
+      to: '',
+    },
     mode: 'onBlur',
   });
 
@@ -148,6 +296,9 @@ export function GenerateReportDialog({
   }, [open, setFocus]);
 
   const format = watch('format');
+  const type = watch('type');
+  const policy = watch('policy');
+  const isAggregate = type === AGGREGATE;
 
   const submit = handleSubmit(async (values) => {
     try {
@@ -157,8 +308,11 @@ export function GenerateReportDialog({
         // Frozen onto the artifact verbatim (`V1`: "a report you cannot reproduce is a report
         // nobody trusts"), so only what the report actually takes is sent — an extra key here
         // would be printed in the header's selection block as a filter the reader believes
-        // narrowed the numbers.
-        parameters: { runId: values.runId },
+        // narrowed the numbers. Which is also why this switches on the type rather than sending
+        // the union of both forms: a `runId` riding along on an aggregate request would be
+        // printed as part of a selection that ignored it.
+        parameters:
+          values.type === AGGREGATE ? aggregateParameters(values) : { runId: values.runId },
       });
       onQueued(job);
       onClose();
@@ -168,6 +322,15 @@ export function GenerateReportDialog({
   });
 
   const available = runs.data ?? [];
+  /**
+   * The project's own Feature tree, by its contract key.
+   *
+   * `execution_fact.feature_ids` holds classification values of this dimension and no other, so
+   * offering the company's Test Type or Test Level here would be a picker whose every choice
+   * matches nothing. Absent while the read is in flight, and absent for a project whose vocabulary
+   * has no features — the control says so instead of rendering an empty menu.
+   */
+  const features = (dimensions.data ?? []).find((dimension) => dimension.key === 'feature');
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" data-testid={TestId}>
@@ -181,10 +344,12 @@ export function GenerateReportDialog({
               </Alert>
             )}
             {/*
-              A run is this report's whole scope, so a project with none cannot produce one — said
-              before the click rather than after it, as the run dialog says it about plans.
+              A run is the RUN SUMMARY's whole scope, so a project with none cannot produce one —
+              said before the click rather than after it, as the run dialog says it about plans.
+              Scoped to that type since R6: the aggregate report needs no run, and a project with
+              none is exactly where somebody would be reaching for it first.
             */}
-            {runs.isSuccess && available.length === 0 && (
+            {!isAggregate && runs.isSuccess && available.length === 0 && (
               <Alert severity="info" data-testid={`${TestId}.NoRuns`}>
                 This project has no test runs yet. A run summary reports on one run, so there is
                 nothing to report on until a run has been started.
@@ -196,42 +361,193 @@ export function GenerateReportDialog({
               select
               defaultValue={TYPES[0].value}
               error={!!errors.type}
-              helperText={errors.type?.message ?? TYPES[0].hint}
+              helperText={
+                errors.type?.message ??
+                (TYPES.find((entry) => entry.value === type) ?? TYPES[0]).hint
+              }
               slotProps={{ htmlInput: { 'data-testid': `${TestId}.Type` } }}
               {...register('type')}
             >
-              {TYPES.map((type) => (
-                <MenuItem key={type.value} value={type.value} data-testid={`${TestId}.Type.${type.value}`}>
-                  {type.label}
+              {TYPES.map((entry) => (
+                <MenuItem
+                  key={entry.value}
+                  value={entry.value}
+                  data-testid={`${TestId}.Type.${entry.value}`}
+                >
+                  {entry.label}
                 </MenuItem>
               ))}
             </TextField>
-            <TextField
-              label="Run"
-              required
-              select
-              defaultValue=""
-              error={!!errors.runId}
-              helperText={
-                errors.runId?.message ??
-                'Which run the numbers come from. Frozen onto the report so it can be reproduced.'
-              }
-              slotProps={{ htmlInput: { 'data-testid': `${TestId}.Run` } }}
-              {...register('runId')}
-            >
-              {available.map((run) => (
-                <MenuItem key={run.id} value={run.id} data-testid={`${TestId}.Run.${run.key}`}>
-                  <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1 }}>
-                    <Typography variant="body2">
-                      {run.key} · {run.name}
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                      {runStatusLabels[run.status]}
-                    </Typography>
-                  </Stack>
-                </MenuItem>
-              ))}
-            </TextField>
+            {!isAggregate && (
+              <TextField
+                label="Run"
+                required
+                select
+                defaultValue=""
+                error={!!errors.runId}
+                helperText={
+                  errors.runId?.message ??
+                  'Which run the numbers come from. Frozen onto the report so it can be reproduced.'
+                }
+                slotProps={{ htmlInput: { 'data-testid': `${TestId}.Run` } }}
+                {...register('runId')}
+              >
+                {available.map((run) => (
+                  <MenuItem key={run.id} value={run.id} data-testid={`${TestId}.Run.${run.key}`}>
+                    <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1 }}>
+                      <Typography variant="body2">
+                        {run.key} · {run.name}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                        {runStatusLabels[run.status]}
+                      </Typography>
+                    </Stack>
+                  </MenuItem>
+                ))}
+              </TextField>
+            )}
+            {isAggregate && (
+              <>
+                {/*
+                  The policy is a picker and never a free field, and it is REQUIRED with a default
+                  rather than optional: this report spans many runs, so a case with four results
+                  has to be resolved to one somehow, and the arithmetic that does it is the
+                  difference between two teams reading "94% pass" and meaning different things
+                  (plan §3, detail 9). The help text under it is the same sentence the plan page
+                  shows for the same value — one map, two screens.
+                */}
+                <TextField
+                  label="Aggregation policy"
+                  required
+                  select
+                  defaultValue="LATEST"
+                  error={!!errors.policy}
+                  helperText={errors.policy?.message ?? aggregationHelp[policy]}
+                  slotProps={{ htmlInput: { 'data-testid': `${TestId}.Policy` } }}
+                  {...register('policy')}
+                >
+                  {POLICIES.map((value) => (
+                    <MenuItem
+                      key={value}
+                      value={value}
+                      data-testid={`${TestId}.Policy.${value}`}
+                    >
+                      {aggregationLabels[value]}
+                    </MenuItem>
+                  ))}
+                </TextField>
+                <Controller
+                  control={control}
+                  name="planIds"
+                  render={({ field }) => (
+                    <TextField
+                      label="Plans"
+                      select
+                      /*
+                        The testid is on the ROOT and not on the input: a `multiple` select writes
+                        through a hidden input MUI owns, and MUI's own props type refuses a
+                        `data-*` on the display element. Tests reach the control by its role and
+                        label, which is what a person does too.
+                      */
+                      data-testid={`${TestId}.Plans`}
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      inputRef={field.ref}
+                      helperText="Every plan when none is chosen. Results recorded outside any plan are excluded once one is."
+                      slotProps={{
+                        select: {
+                          multiple: true,
+                          renderValue: (selected) =>
+                            `${(selected as string[]).length} selected`,
+                        },
+                      }}
+                    >
+                      {(plans.data ?? []).map((plan) => (
+                        <MenuItem
+                          key={plan.id}
+                          value={plan.id}
+                          data-testid={`${TestId}.Plans.${plan.key}`}
+                        >
+                          {plan.key} · {plan.name}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  )}
+                />
+                <Controller
+                  control={control}
+                  name="featureIds"
+                  render={({ field }) => (
+                    <TextField
+                      label="Features"
+                      select
+                      data-testid={`${TestId}.Features`}
+                      disabled={!features || features.values.length === 0}
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      inputRef={field.ref}
+                      // Union, not intersection — the contract's reading, said here because the
+                      // opposite one is what a person assumes when they tick two boxes.
+                      helperText={
+                        features && features.values.length > 0
+                          ? 'Cases classified under any of these. Every feature when none is chosen.'
+                          : 'This project has no features in its vocabulary yet.'
+                      }
+                      slotProps={{
+                        select: {
+                          multiple: true,
+                          renderValue: (selected) =>
+                            `${(selected as string[]).length} selected`,
+                        },
+                      }}
+                    >
+                      {(features?.values ?? []).map((value) => (
+                        <MenuItem
+                          key={value.id}
+                          value={value.id}
+                          data-testid={`${TestId}.Features.${value.id}`}
+                        >
+                          {/* The path, so two features of the same name under different parents
+                              are distinguishable — the picker is a filter and picking the wrong
+                              one produces a plausible report of the wrong thing. */}
+                          {value.path.split('.').join(' / ')}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  )}
+                />
+                <Stack direction="row" sx={{ gap: 2 }}>
+                  <TextField
+                    label="From"
+                    type="date"
+                    fullWidth
+                    error={!!errors.from}
+                    helperText={errors.from?.message ?? 'Inclusive. The beginning when empty.'}
+                    slotProps={{
+                      inputLabel: { shrink: true },
+                      htmlInput: { 'data-testid': `${TestId}.From` },
+                    }}
+                    {...register('from')}
+                  />
+                  <TextField
+                    label="To"
+                    type="date"
+                    fullWidth
+                    error={!!errors.to}
+                    // "Inclusive" is a claim this form has to make good on: the API's `to` is
+                    // exclusive, so `dayAfter` is what keeps the last day in the report.
+                    helperText={errors.to?.message ?? 'Inclusive — the whole of that day. Now when empty.'}
+                    slotProps={{
+                      inputLabel: { shrink: true },
+                      htmlInput: { 'data-testid': `${TestId}.To` },
+                    }}
+                    {...register('to')}
+                  />
+                </Stack>
+              </>
+            )}
             <TextField
               label="Format"
               required
@@ -259,7 +575,11 @@ export function GenerateReportDialog({
           <Button
             type="submit"
             variant="contained"
-            disabled={generate.isPending || available.length === 0}
+            // `!isAggregate &&` is the whole of R6's frontend gate change, and it is the line the
+            // test for it had to be written to fail without: a project with no runs may still ask
+            // for an aggregate report, whose honest answer is a report saying nothing has been
+            // recorded yet.
+            disabled={generate.isPending || (!isAggregate && available.length === 0)}
             data-testid={`${TestId}.Submit`}
           >
             {generate.isPending ? 'Requesting…' : 'Generate'}
