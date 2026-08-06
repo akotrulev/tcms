@@ -1,10 +1,9 @@
 /**
- * Thin fetch wrapper. All requests go to /api/v1 — served in development either by MSW
- * (`VITE_API_MODE=mock`, the default; see src/mocks/) or by the real Spring Boot API through
- * the Vite dev proxy (`VITE_API_MODE=live`). Same origin either way, so nothing here changes
- * between the two.
+ * Thin fetch wrapper. All requests go to /api/v1 — the real Spring Boot API, reached in
+ * development through the Vite dev proxy and in production from the same origin that served the
+ * SPA. Same origin either way, so nothing here changes between the two.
  *
- * Two things here are load-bearing rather than boilerplate:
+ * Three things here are load-bearing rather than boilerplate:
  *
  *   1. Every call carries a **timeout budget**. A request nothing aborts hangs until the
  *      browser's own ~300s limit, which renders as a region spinning forever — a state no
@@ -12,8 +11,13 @@
  *   2. `TimeoutError` and `AbortError` are kept apart. A timeout is a failure to surface;
  *      an abort (unmount, navigation, a superseded query) is **not a failure at all** and
  *      must never be rendered or notified.
+ *   3. A **dev-only fault seam** sits in front of `fetch` (`maybeFault`). None of the resilience
+ *      behaviour above can be triggered by using the app normally, so it is driven from the
+ *      console instead — see `lib/devFaults.ts`. Every `import.meta.env.DEV` guarding it is a
+ *      literal, so the whole seam is statically eliminated from a production build.
  */
 
+import { maybeFault } from '../lib/devFaults';
 import { safeStorage } from '../lib/safeStorage';
 
 const BASE = '/api/v1';
@@ -166,23 +170,32 @@ interface RequestOptions {
 async function request<T>(path: string, init: RequestInit = {}, options: RequestOptions = {}): Promise<T> {
   const timeoutMs = options.timeoutMs ?? TIMEOUTS.interactive;
 
+  const signal = budget(timeoutMs, options.signal);
+
   let res: Response;
   try {
-    res = await fetch(`${BASE}${path}`, {
-      ...init,
-      signal: budget(timeoutMs, options.signal),
-      headers: {
-        // A FormData body must NOT carry a hand-set Content-Type. The browser generates
-        // `multipart/form-data; boundary=…`, and the boundary is the only thing that tells the
-        // server where one part ends — set the header here and it is lost, after which the server
-        // cannot parse a single part and answers 400 for a request that looks correct in devtools.
-        ...(init.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
-        ...authHeader(),
-        ...(options.idempotencyKey ? { 'Idempotency-Key': options.idempotencyKey } : {}),
-        ...options.headers,
-        ...init.headers,
-      },
-    });
+    // The dev fault seam. `import.meta.env.DEV` is a literal so Rollup drops the branch — and
+    // `lib/devFaults` with it — from a production build; see that module's header.
+    const faulted = import.meta.env.DEV ? maybeFault(path, signal) : null;
+    res = await (
+      faulted ??
+      fetch(`${BASE}${path}`, {
+        ...init,
+        signal,
+        headers: {
+          // A FormData body must NOT carry a hand-set Content-Type. The browser generates
+          // `multipart/form-data; boundary=…`, and the boundary is the only thing that tells the
+          // server where one part ends — set the header here and it is lost, after which the
+          // server cannot parse a single part and answers 400 for a request that looks correct
+          // in devtools.
+          ...(init.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+          ...authHeader(),
+          ...(options.idempotencyKey ? { 'Idempotency-Key': options.idempotencyKey } : {}),
+          ...options.headers,
+          ...init.headers,
+        },
+      })
+    );
   } catch (error) {
     // AbortSignal.timeout() rejects with a TimeoutError DOMException; a caller-driven
     // cancellation is an AbortError. Only the first is a failure worth surfacing.
@@ -350,9 +363,13 @@ async function artifactResponse(
   }
 
   const timeoutMs = options.timeoutMs ?? TIMEOUTS.long;
+  const signal = budget(timeoutMs, options.signal);
   let res: Response;
   try {
-    res = await fetch(url, { signal: budget(timeoutMs, options.signal), headers: authHeader() });
+    // Faulted too, so `tcmsFaults` covers downloads exactly as the MSW wildcard did — the
+    // artifact routes are where a 60s budget and a mid-download 401 are hardest to reach by hand.
+    const faulted = import.meta.env.DEV ? maybeFault(url, signal) : null;
+    res = await (faulted ?? fetch(url, { signal, headers: authHeader() }));
   } catch (error) {
     if (error instanceof DOMException && error.name === 'TimeoutError') throw new TimeoutError(timeoutMs);
     throw error;

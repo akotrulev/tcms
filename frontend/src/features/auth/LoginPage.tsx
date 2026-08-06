@@ -4,7 +4,6 @@ import { useForm } from 'react-hook-form';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { ApiError } from '../../api/client';
-import { IS_MOCK_API } from '../../app/apiMode';
 import { Identifier } from '../../components/Identifier';
 import { useAuth } from '../../auth/useAuth';
 import { offerToSaveCredentials } from '../../lib/credentials';
@@ -66,12 +65,11 @@ export function LoginPage() {
     resolver: zodResolver(LoginSchema),
     defaultValues: {
       /*
-        A seeded address is a convenience of the mock API, where any password of 4+ characters
-        signs you in as that user. Against the real backend it is worse than nothing: it
-        prefills an account that does not exist on the instance. The invitee's own address wins
-        over both.
+        Blank unless the invitee just accepted, and never a seeded address. This used to prefill
+        a fixture account under the mock API; against the real backend that is worse than
+        nothing, because it prefills an account that does not exist on the instance.
       */
-      email: acceptedEmail ?? (IS_MOCK_API ? 'ana.petrova@example.com' : ''),
+      email: acceptedEmail ?? '',
       password: '',
       rememberMe: true,
     },

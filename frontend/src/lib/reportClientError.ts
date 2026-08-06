@@ -6,9 +6,10 @@
  * boundaries, the global `error`/`unhandledrejection` listeners, React's own recoverable-error
  * hook — reports here, so there is one place to point at a real collector later.
  *
- * There is no backend yet (see `src/mocks/`), so the transport is deliberately a stub with
- * the shape already correct: a rate-limited POST to a collector endpoint. When the Spring
- * Boot service lands, only `send()` changes — no call site does.
+ * **The transport is still a stub**, deliberately, with the shape already correct: a rate-limited
+ * POST to a collector endpoint. This was written when there was no backend at all; there is one
+ * now, but it exposes no client-fault collector route, so the stub stands until `openapi.yaml`
+ * grows one. When it does, only `send()` changes — no call site does.
  */
 
 import { ApiError, TimeoutError, isAbort } from '../api/client';

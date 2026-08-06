@@ -139,8 +139,9 @@ export function useReportJob(projectId: string, jobId: string): UseQueryResult<R
  * `report:view` alone can watch a job succeed and then be refused the report it is watching. The
  * fix belongs to the server — either the model artifact is served under `report:view`, or the
  * on-screen view gets a route of its own — and this client cannot paper over it, so
- * `ReportViewPage` renders that 403 as the sentence it is. Recorded in the handoff; unobservable
- * in mock mode, which signs in holding every key.
+ * `ReportViewPage` renders that 403 as the sentence it is. Recorded in the handoff — and now
+ * **reachable**: it used to be unobservable because mock mode signed in holding every key, and
+ * with the mock gone a persona holding `report:view` alone will actually hit it.
  *
  * `staleTime: Infinity` because the artifact is **immutable**: a completed job's bytes never
  * change, so a refetch can only re-download a file this client already parsed. `enabled` on the

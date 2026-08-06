@@ -93,10 +93,10 @@ export const workItemStatusLabels = {
 /**
  * The board's columns, left to right — §6l's order.
  *
- * Here rather than in `BoardPage`, because it is not only the board that needs it: the mock's
- * `POST /work-items` computes `allowedTransitions` from the same set, and a hand-written array
- * there is exactly what keeps mock mode one column behind the server. Order is a display
- * decision and this is the display layer.
+ * Here rather than in `BoardPage`: order is a display decision and this is the display layer, and
+ * more than one screen needs it. (It was also what the mock's `POST /work-items` computed
+ * `allowedTransitions` from, back when a hand-written array there could leave mock mode a column
+ * behind the server — that reason retired with the mock; the one above did not.)
  *
  * **Derived from the label map, which is the part that makes it exhaustive.** That map is
  * `satisfies Record<WorkItemStatus, string>`, so a status added to the contract is a compile error
