@@ -1,6 +1,50 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-06 (latest section: **§98, suites become flat** — M2 of the organization-model
+**Date:** 2026-08-06 (latest section: **§99, a run is scoped by suites, cases and tags** — M3 of the
+organization-model restatement and the slice that **completes it**, **three phases, three commits**.
+**No migration (`V33` still head, `V34` still free), no table, no column, no key, no route**, policy
+count unchanged at **61**: the whole slice is two fields on `TestRunInput` and one query behind them,
+unioned, deduped and resolved **once** at create. **THE FINDING IS THE SUITE ARM THAT READS RIGHT
+AND RESOLVES TO NOTHING.** `c.suite_id IN (:suiteIds)` is one column comparison, is what the schema
+looks like it wants, and against a suite defined by a **tag rule** — which files nothing — returns
+the empty set: a run of zero cases, rendering as **0 of 0, 100%, complete**. §98's finding one screen
+over, where the wrong answer is not a number but an empty checklist. The arm is `CaseFacts#memberOf`,
+filed ∪ added ∪ tag-matched, the same predicate the plan's scope goes through — and the fixture's
+**non-vacuity is asserted first and by its own test** (`paymentsFilesNothing`: PAYMENTS claims a case
+it does not file), because without it every row below is equally true of the defective arm.
+**ONE QUERY, NOT THREE LOOKUPS UNIONED IN JAVA**: three `OR`s over one `test_case` scan, so *live in
+this project* is written once and the order is `key_seq` — and each arm is appended to the SQL only
+when it has members, since `IN ()` is a syntax error and the shape that survives compilation,
+`IN (NULL)`, is never true and reads as an arm that matched. **§82's GATE NEEDED NO EDIT AND THAT IS
+THE PROPERTY WORTH KEEPING**: it binds on the resolved union, so both new arms are covered by
+construction rather than by remembering — recorded as a property and not as coverage, because a
+structurally-covered gate has no mutation that proves it. **The arms SUBSTITUTE for the plan's scope
+and never add to it** (`RunEdit`'s existing rule widened from one arm to three), and this is where
+"scope" stops meaning one thing: a run resolves **once** because its executions are written now,
+where a plan's scope is references re-resolved on every read. **Three arms, three validations**: an
+unknown case or suite **id** is a field error (a reference to something the caller has already seen),
+an unknown **tag** is accepted (`SuiteEdit`'s reason — no vocabulary to check against), and what
+catches the typo is the emptiness check. **The refusal now lands on EVERY arm the caller used** —
+with three arms "the wrong field" stops being a guess between two, and a run scoped only by a
+mistyped tag answered on `caseIds` sends somebody to a control they never touched. **`tags` unions
+where `?tag=` intersects and both are right.** Frontend: the dialog's own header decision is
+**overturned and struck through**, the plan becomes one of four ways to scope a run, and **THE
+ASSERTION THAT HAD TO BE INVERTED IS THE FRONTEND'S FINDING** — `toBeDisabled()` on a plan-less
+project passes against a dialog that never grew the arms, so it would have stayed green while the
+feature was unreachable in exactly the project that needs it first (§66 from the other side). **The
+hand-written `TestRunInput` failed exactly as its own comment predicted**: two properties added to
+the spec, the generated type grew them, the copy did not — now `S['TestRunInput']` with **one
+documented narrowing**, since `openapi-typescript` renders a `default:`-carrying property as
+required, which is true of a response and false of a request body. **Found and not fixed**: the
+mock's shared `resolveArms` excludes `DEPRECATED` and the server does not — a pre-existing
+divergence inherited by reusing the resolver, queued rather than changed in a slice that does not own
+the plan's scope. Gates: backend **BUILD SUCCESSFUL — 1761 across 348 classes, 0 failures, 0
+skipped** (1746 → 1761), all 14 new tests passing first run; frontend **913/913 across 65 files**
+(909 → 913), lint 0, entry bundle unchanged. **One test failed first run and it was the assertion,
+not the code.** **Zero verification run**: 11 browser rows (M4-30…M4-40) and 7 mutation rows queued,
+two recording checks weaker than they look. **Built and unverified.** **The organization-model
+restatement is COMPLETE** — §97, §98, §99, nothing outstanding in that plan.
+Before that: **§98, suites become flat** — M2 of the organization-model
 restatement, **two phases, two commits**, and the slice that finishes what §96 started: a suite
 stops being a folder in a tree and is only ever a **named collection**. **`V33__flatten_suites.sql`**
 drops `suite.parent_id`, `suite.path` and `suite_path_idx`; `V34` next free; policy count unchanged
@@ -1582,4 +1626,5 @@ See [`docs/plans/2026-07-31-parallel-execution-rework.md`](plans/2026-07-31-para
 | [§96](handoff/96-tags-become-real.md) | Tags become real, and a suite resolves from them — the nullable key that drops rows in four places, the union written twice on purpose, and the tag that must not write a version **(built and unverified — 14 browser rows, 20 mutation rows, none run; one names a test not yet written, two record checks weaker than they look)** |
 | [§97](handoff/97-the-plan-detail-rework.md) | The test plan detail becomes one form — the tabs that cannot be headings, the sections that resolve on every read, and the rename that would have moved a case out of its own section **(built and unverified — 32 browser rows written or restated across the M3 lane, plus 3a/3b's mutation rows, none run)** |
 | [§98](handoff/98-suites-become-flat.md) | Suites become flat — the count and the grid that have answered different questions since §96, the frozen path that outlived the column it copied, and the agreement test the plan expected to retire **(built and unverified — 12 browser rows, 6 mutation rows plus a `V33` row on the Hetzner list, none run)** |
+| [§99](handoff/99-a-run-is-scoped-by-suites-cases-and-tags.md) | A run is scoped by suites, cases and tags — the suite arm that reads right and resolves to nothing, the gate that needed no edit, and the hand-written type that failed exactly as its own comment predicted **(built and unverified — 11 browser rows, 7 mutation rows, none run; two record checks weaker than they look)** |
 | [§100](handoff/100-the-design-comp-lands.md) | The design comp lands — the contract that declared a shape nobody served, the mock that evaluated gates the server never evaluates, and the bulk surface that re-asks every per-row rule **(browser pass RUN inline by direction — mock mode only; 3 rows still queued, one of them live-only)** |

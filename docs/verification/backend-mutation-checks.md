@@ -190,6 +190,29 @@ tolerates neither a missing one nor an extra one — but Testcontainers migrates
 a `DROP COLUMN` that failed against a real database with data would go unobserved. Same shape as
 `V32`'s backfill row below, and it belongs to the Hetzner list.
 
+## 12. §99's run scope — seven mutations, none run
+
+The slice adds two arms to one query and changes no gate, so nearly all of its risk is in the query
+itself and in what the *validator* stops refusing. **None was run**, per §65.
+
+| # | Mutation | What must redden |
+|---|---|---|
+| 12a | `CaseFacts.caseIdsInRunScope` — replace the suite arm with `c.suite_id IN (:suiteIds)` | **The slice's own defect, armed.** `RunCreateEndpointTest.Scope.aSuiteArmResolvesMembership` must fail, because PAYMENTS claims `caseA` by tag and files nothing. `paymentsFilesNothing` is the guard on that property; if 12a goes green, run *that* test first — a fixture where the two readings agree makes every row below vacuous |
+| 12b | Same method — drop `AND c.deleted_at IS NULL` | `aDeletedCaseIsNotReachedByItsTag`. `case_tag` rows outlive a soft delete, so this is the one arm where the omission is reachable through data rather than through a missing join |
+| 12c | Same method — drop `AND s.project_id = c.project_id` from the suite arm | Suspected **weak**: `aSiblingProjectsSuiteIsRefused` is refused by `RunEdit`'s `liveSuiteIds` check one step earlier, so the query's own bound may never be reached. If nothing reddens, the second gate is untested and the honest repair is a test that bypasses the validator, not a claim of coverage |
+| 12d | `RunCreateService` — pass only `requestedCases` to the resolution, dropping the other two arms | `theArmsUnionAndDedupe` and both single-arm tests. Expected to redden broadly; recorded because a narrow red would mean the arms are covered by one test each and not by the union |
+| 12e | `RunEdit.validateCreate` — remove the `liveSuiteIds` loop | `aSiblingProjectsSuiteIsRefused` **and** `anAbsentSuiteIsRefused`. Both, or the check is only pinned in the direction that also fails at the query |
+| 12f | `RunEdit.scopeFields` — return `List.of("caseIds")` unconditionally | `aTagMatchingNothingIsRefusedOnItsOwnField` (its `doesNotContainKey` half) and `everyArmTheCallerUsedCarriesTheRefusal`. The mutation is what the code did before §99, so a green run means the new rule is described and not asserted |
+| 12g | `RunEdit.tagsOf` — drop the trim | `tagsAreTrimmed`. The test exists because the tags that are *validated* and the tags that are *queried* come from this one function, and trimming in only one of two places is the drift it prevents |
+
+**Two things the suite structurally cannot observe here.** The gate over the new arms
+(`theNewScopeArmsAreGatedAsWell`) can only fail if the gate stops reading the resolved set — there
+is no mutation that covers "somebody adds a fourth arm and forgets", because the coverage is
+structural. And the union's **ordering** by `key_seq` is asserted nowhere: `caseIdsOf` reads
+`test_execution` with no `ORDER BY`, so a resolution that returned its arms concatenated would pass
+every row above. Recorded rather than papered over — the display order is the view's, so the cost is
+insertion order only.
+
 ---
 
 # CLOSED — no longer owed

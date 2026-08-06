@@ -264,6 +264,17 @@ M2-33's suite rules, so a reload between the lanes costs both rows.*
 | M4-27 | Start a plan, Close it, **Reopen** it with plan gating **on** | **It reopens.** The row the slice turns on: a target-keyed reading makes every closed plan permanently un-reopenable, showing a Reopen button that 409s for ever about approving a plan that cannot be approved. | §82-11 |
 | M4-28 | Switch **all three review opt-ins off**, leave a gate on, repeat M4-23 and M4-25 | The gates **still fire** and no review panel renders. Gating reads the status ladder; review's opt-in suppresses the apparatus. A build where they are coupled looks identical until this row. | §82-12 |
 | M4-29 | Gate on for project A, repeat M4-23 in project B | B unaffected. The read is `useProjectSettings(projectId)`; a cache keyed too broadly leaks A's policy into B. | §82-13 |
+| M4-30 | New run → open the **Plan** select | A **"No plan — scope it below"** row above the plans, not a blank first option. A run against no plan is supported since §99, and a blank row reads as a field somebody forgot. | §99-1 |
+| M4-31 | New run in a project with **no plans at all** | The info alert says *"choose the suites, tags or cases this run covers instead"* and **Start run is enabled**. Before §99 it was disabled — the row exists because `toBeDisabled()` goes on passing against a client that never grew the arms. | §99-2 |
+| M4-32 | Name it, choose **Suites → Payments** only, Start | 201, and the checklist is the suite's **whole membership** — including cases filed elsewhere that its tag rules claim. A suite defined only by a tag rule must not produce an empty run. | §99-3 |
+| M4-33 | Choose **Tags → smoke** only | The option list is the project's own tags **with a case count beside each**, and the run's length matches the count. Free text still accepted for a tag nobody has used. | §99-4 |
+| M4-34 | Choose a plan, then add a tag | The plan select's helper text **changes** to *"Its scope is not used — the choices below are"*, and the created run is the tag's cases with `planKey` still shown on the run. The substitution rule is invisible in a form where four controls look equally live. | §99-5 |
+| M4-35 | Choose a suite **and** a tag that overlap | One row per case on the checklist, no duplicates, and the total is the union rather than the sum. | §99-6 |
+| M4-36 | Type a tag nobody uses, alone, and Start | 400 landing **on the Tags control**, not in the banner and not on Cases: *"This run would have nothing to execute…"*. Then add a suite that also matches nothing → the message appears on **both** controls. | §99-7 |
+| M4-37 | Press Start with the name filled and nothing else chosen | Refused **client-side** under the Cases control — no request goes out. | §99-8 |
+| M4-38 | With case gating on, scope a run by a **tag** that catches draft cases | 409, the same refusal as M4-23. §82's bypass with a new spelling: the gate binds on the resolved union. | §99-9 |
+| M4-39 | Live only — a project with **more than 200 cases**: open the Cases picker | The catalogue is the first page, so a case past it cannot be picked. Named as a known limit (`PlanCasesTab`'s, same cause); the row exists so the absence is not read as a bug. | §99-10 |
+| M4-40 | Mock only — scope a run by a tag carried by a **DEPRECATED** case | The mock's `resolveArms` **excludes DEPRECATED and the server does not**, so the two disagree by one row here. A pre-existing divergence §99 inherited by reusing the shared resolver; confirm which is right before changing either. | §99-11 |
 
 ---
 

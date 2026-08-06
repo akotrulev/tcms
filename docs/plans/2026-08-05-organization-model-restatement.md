@@ -236,6 +236,17 @@ flat-suite product will "fix" it.
 
 ## §99 — a run is scoped by suites, cases and tags
 
+> **SHIPPED 2026-08-06** — three phases, three commits (`d9b25c6`, `9f4ef89`, `38df750`), no
+> migration. See `docs/handoff/99-a-run-is-scoped-by-suites-cases-and-tags.md`. **With it this plan
+> is complete**: §97, §98 and §99 have all landed.
+>
+> **Two corrections to the sketch below, both worth reading before trusting a phase table again.**
+> The four phases became **three** — the frontend and its mock are one commit, because the mock is
+> what the dialog's tests run against and a commit that changed one without the other could not pass
+> its own gate. And the sketch's silence about the suite arm is where the slice's finding lived:
+> "resolved through `SuiteMembership`" is one line here and is the whole difficulty, because the
+> spelling that reads right (`c.suite_id IN (…)`) resolves a tag-defined suite to nothing.
+
 ### The change
 
 ```

@@ -2,11 +2,13 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-06 (§98 phase 2 — suites become flat)
-**Baseline commit:** `f904e9d` (§98 phase 1) **+ the doc commit this line ships in** (its own SHA
+**Last verified:** 2026-08-06 (§99 phase 2 — a run is scoped by suites, cases and tags)
+**Baseline commit:** `38df750` (§99 phase 3) **+ the doc commit this line ships in** (its own SHA
 cannot be written into itself; per `CLAUDE.md`, trust the body over the header and re-grep what a
 later commit could have moved).
-**§98 phase 2 is the backend half of the flattening** — `V33`, the entity, the two services, the
+**§99's backend half is phase 2 alone** — two request fields, one union query, and no migration;
+the seam list's first entry records it. §98's note is kept below because its shape recurs.
+**§98 phase 2 was the backend half of the flattening** — `V33`, the entity, the two services, the
 membership seams and a 35-file test-fixture sweep. §97's own note is kept below because its shape
 recurs.
 **§97 phases 4, 5 and 6 touched NO backend file** — they are the frontend's form spine, its tabs and
@@ -61,6 +63,24 @@ exist**, and the slice plan's decision E declines to create it for two storage p
 
 ## Seams to reuse
 
+- **A RUN'S SCOPE IS THREE ARMS SINCE §99 — `caseIds` ∪ `suiteIds` ∪ `tags`, RESOLVED ONCE.**
+  `CaseFacts.caseIdsInRunScope(projectId, caseIds, suiteIds, tags)` is the whole resolution: one
+  query, three `OR`s over one `test_case` scan, ordered by `key_seq`, **each arm appended to the SQL
+  only when non-empty** (`IN ()` is a syntax error; `IN (NULL)` compiles and is never true). No
+  migration — `V33` is still the head, `V34` still free, policy count still 61.
+  **THE SUITE ARM IS `memberOf` AND NEVER `c.suite_id IN (…)`** — a suite defined by a tag rule files
+  nothing, so the column reading resolves it to the empty set and produces a run of zero cases that
+  renders as 0 of 0, 100%, complete. Same class as §98's grid-vs-count defect, one screen over.
+  **§82's approval gate needed no edit**: it binds on `edit.caseIds()`, the resolved union, so a new
+  arm is gated by construction. Keep it that way — the moment anything gates a *request field*
+  instead, every arm needs its own remembering.
+  **The arms SUBSTITUTE for the plan's scope, never union with it** (`RunEdit`'s rule since M2).
+  A run resolves **once**, at create; a plan's scope is references re-resolved on every read — the
+  two are described in the same words and are not the same thing.
+  **Unknown case/suite id = field error; unknown TAG = accepted** (no vocabulary to check against —
+  `SuiteEdit`'s rule). The emptiness check is what catches a typo, and its message lands on **every
+  arm the caller used**, `caseIds` only as the fallback for a body naming no scope at all.
+  `RunEdit.MAX_TAG` is a third copy of `CaseEdit`'s cap, spelled out for `APPROVE_CASE`'s reason.
 - **A SUITE IS FLAT SINCE §98 — `parent_id`, `path` and `suite_path_idx` ARE GONE (`V33`, the head;
   `V34` next free; policy count still 61).** A suite is a named collection, not a folder: no
   `Suite.getParentId()`/`getPath()`, no `parentId` on `SuiteView`/`SuiteWriteRequest`,

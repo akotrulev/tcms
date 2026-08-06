@@ -2,8 +2,8 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-06 (§98 phase 1)
-**Baseline commit:** `8e71010` (§97 phase 7) **+ the doc commit this line ships in** (its own SHA
+**Last verified:** 2026-08-06 (§99 phase 3 — the run dialog offers all three scope arms)
+**Baseline commit:** `38df750` (§99 phase 3) **+ the doc commit this line ships in** (its own SHA
 cannot be written into itself; trust the body over the header and re-grep what a later commit
 could have moved).
 **Fingerprint files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`,
@@ -35,7 +35,7 @@ could have moved).
 - **`npm run build` is THE gate** (`tsc -b` + vite build). **Do not trust `tsc --noEmit`** — it has
   reported 0 errors while the build failed with nine (working agreement). `#confirmed`
 - `npm run lint` — oxlint, must stay at **0 warnings**; it prints nothing when clean.
-- `npm run test:run` — Vitest + RTL. **915/915** across 65 files at §97 phase 6 (895/64 at phase 5, 849/60 at §100). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
+- `npm run test:run` — Vitest + RTL. **913/913** across 65 files at §99 phase 3 (909 at §98, 895/64 at §97 phase 5, 849/60 at §100). **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
 - `npm run gen:api` — regenerate `src/api/schema.d.ts` after **any** `openapi.yaml` change. Runs
   through `npx` on purpose (the scaffold pins TS 6, the tool peer-requires 5.x); do not "fix" it.
 - **Live mode:** `VITE_API_MODE=live` in `.env.local` proxies `/api` to `localhost:8080`.
@@ -400,6 +400,26 @@ directly above the switcher) and the wordmark links there too.
   screen with no test file at all**) asserts the body as an **exact object**, because
   `toMatchObject` passes with a field silently dropped. The mock's `saveProjectSettings` takes the
   whole value, which is how `npm run build` caught the handler forgetting both. `#confirmed`
+- **THE RUN DIALOG SCOPES BY PLAN *OR* SUITES/TAGS/CASES SINCE §99, AND THE PLAN IS OPTIONAL.**
+  `RunCreateDialog` has four scope controls; the three arms are sent as-is and **resolved by the
+  server**, which is the whole point — a dialog that resolved locally would pin a checklist
+  assembled at a different instant from the executions. The arms **substitute** for the plan's
+  scope, so the plan select's helper text changes once any arm is filled (`watch`ed, not computed at
+  submit). **No total is computed across the arms** — they overlap, and a client-side sum is wrong
+  in the direction that makes a run look longer than it is.
+  **`Runs.Create.Submit` is NO LONGER disabled in a plan-less project**, and the old
+  `toBeDisabled()` assertion is why the row is here: it passes against a dialog that never grew the
+  arms, so it would have stayed green while the feature was unreachable in exactly the project that
+  needs it first. The live assertion is `toBeEnabled()`.
+  **`caseIds`, `suiteIds` and `tags` now have controls**, so their field errors land **on** them and
+  no longer in the banner — only `configurationId` and `assigneeId` are still strays.
+  **`TestRunInput` is `S['TestRunInput']` since §99**, with one documented narrowing:
+  `openapi-typescript` renders a `default:`-carrying property as **required**, which is true of a
+  response and false of a request body, so `overrideApprovalGate` is made optional again in
+  `api/queries/runs.ts`. Expect the same correction on any future defaulted request field.
+  The mock resolves through **`runScopeCaseIds` = `resolveArms`**, the plan's own union — and that
+  function **excludes `DEPRECATED` while the server does not**, a pre-existing divergence queued as
+  browser row M4-40 rather than fixed.
 - **A gating refusal is a 409 that must OFFER THE WAY OUT (§82).** `RunCreateDialog` and
   `PlanStatisticsPage` each render the server's sentence in place and put §6g's lead override beside
   it — `ui-rules`: an error naming an action the UI does not offer is a design bug. **Offered only
