@@ -61,6 +61,14 @@ export type TestCaseSummary = S['TestCaseSummary'];
  * shape directly.
  */
 export type CaseFlake = S['CaseFlake'];
+/**
+ * A case's buffered autosave draft (§128).
+ *
+ * `content` is a `TestCaseInput` that has been through **no validation at all** — that is what a
+ * keystroke buffer means — so it may carry a blank title or a step referencing a retired shared
+ * step. Restoring it into the form is safe; the refusal, if there is one, comes on Save.
+ */
+export type CaseDraft = S['CaseDraft'];
 export type TestStep = S['TestStep'];
 export type Condition = S['Condition'];
 export type CaseConditionRef = S['CaseConditionRef'];

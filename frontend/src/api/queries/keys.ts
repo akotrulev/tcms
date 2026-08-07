@@ -30,6 +30,16 @@ export const keys = {
   caseHistory: (p: string, id: string, scope: string) =>
     ['projects', p, 'cases', id, 'history', scope] as const,
   /**
+   * The case's buffered autosave draft (§128).
+   *
+   * Under `keys.case`'s prefix like the two above, which is what a reader would expect — and it
+   * carries one consequence worth naming, because it is load-bearing rather than incidental:
+   * `useUpdateCase` invalidates `['projects', p, 'cases']`, so a successful save invalidates this
+   * key too. That is exactly right, since the save clears the buffer server-side, and the refetch
+   * is what turns the editor's "restore unsaved changes" offer off without anybody wiring it up.
+   */
+  caseDraft: (p: string, id: string) => ['projects', p, 'cases', id, 'draft'] as const,
+  /**
    * The project's tags **in use** (§97 phase 3b's endpoint, first consumer in phase 6).
    *
    * No `q` in the key, unlike the searches around it: this list is derived from `case_tag` and is a

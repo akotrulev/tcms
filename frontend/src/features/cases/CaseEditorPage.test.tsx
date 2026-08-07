@@ -625,3 +625,202 @@ describe('CaseEditorPage — conditions', () => {
     expect(await screen.findByText('Seed a captured payment')).toBeVisible()
   })
 })
+
+/**
+ * The autosave buffer's screen half (§128).
+ *
+ * The editor is rendered in **edit** mode here, unlike everything above it, because the buffer's
+ * primary key is a foreign key to `test_case` — a case being created has nothing to key a draft on,
+ * so the New Case form has no autosave at all and that is asserted rather than assumed.
+ *
+ * What these cover that no gate can:
+ *
+ *   1. **The offer names who typed it.** There is ONE buffer per case, so the draft may be a
+ *      colleague's, and restoring it silently publishes their half-finished sentence under your
+ *      name.
+ *   2. **A stale draft says so and is still offered.** Advisory, never enforcing.
+ *   3. **Restore replaces the whole form**, not the fields the draft happens to carry — a hybrid of
+ *      draft and saved case is neither, and the author cannot tell it from either.
+ *   4. **Discard removes the row**, so the same rejected draft is not re-offered on the next mount.
+ */
+describe('the draft buffer', () => {
+  const EXISTING_CASE = 'c-42'
+
+  const savedCase = {
+    id: EXISTING_CASE,
+    key: 'TC-42',
+    title: 'The saved title',
+    suiteId: 'suite-1',
+    objective: 'What the server has stored',
+    description: null,
+    expectedOutcome: null,
+    priority: 'MEDIUM',
+    severity: 'MEDIUM',
+    automationStatus: 'MANUAL',
+    automationKey: null,
+    notAutomatableReason: null,
+    estimatedDurationSec: null,
+    stepFormat: 'STRUCTURED',
+    gherkinSource: null,
+    steps: [{ id: 's1', keyword: null, action: 'A saved step', testData: null, expectedResult: null }],
+    classificationValueIds: [],
+    preconditions: [],
+    postconditions: [],
+    tags: [],
+    lockVersion: 3,
+    currentVersionNo: 2,
+    lifecycleStatus: 'DRAFT',
+  } as unknown as TestCase
+
+  /** A buffered draft, as `GET …/draft` serves it. */
+  function draft(overrides: Record<string, unknown> = {}) {
+    return {
+      lockVersion: 3,
+      stale: false,
+      updatedAt: new Date(Date.now() - 60_000).toISOString(),
+      updatedBy: { id: 'u9', displayName: 'E. Engineer', email: 'eng@acme.test', avatarUrl: null },
+      content: {
+        title: 'The unsaved title',
+        suiteId: 'suite-1',
+        objective: 'What the author was still writing',
+        steps: [{ id: null, action: 'A drafted step', testData: null, expectedResult: null }],
+        stepFormat: 'STRUCTURED',
+        priority: 'MEDIUM',
+        automationStatus: 'MANUAL',
+        classificationValueIds: [],
+        preconditions: [],
+        postconditions: [],
+        tags: [],
+      },
+      ...overrides,
+    }
+  }
+
+  /** `mockReads`, plus the case and its draft. `null` for the draft is the 204 — no unsaved work. */
+  function mockEditReads(theDraft: unknown) {
+    vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
+      if (path.startsWith('/me/permissions')) return heldPermissions(['case:edit'], {}, PROJECT)
+      if (path.includes('/draft')) return theDraft
+      if (path.includes('/step-suggestions')) return corpus
+      if (path.includes('/conditions')) return library
+      if (path.includes('/suites')) return suites
+      if (path.includes('/classification')) return []
+      if (path.includes('/tags')) return projectTags
+      if (path.includes(`/cases/${EXISTING_CASE}`)) return savedCase
+      return []
+    }) as never)
+  }
+
+  function renderEditMode() {
+    return render(
+      <TestProviders
+        client={createTestQueryClient()}
+        route={`/projects/${PROJECT}/cases/${EXISTING_CASE}/edit`}
+      >
+        <SessionRecoveryContext.Provider value={sessionRecovery}>
+          <SnackbarProvider>
+            <Routes>
+              <Route
+                path="/projects/:projectId/cases/:caseId/edit"
+                element={<CaseEditorPage mode="edit" />}
+              />
+            </Routes>
+          </SnackbarProvider>
+        </SessionRecoveryContext.Provider>
+      </TestProviders>,
+    )
+  }
+
+  it('offers the buffered draft and NAMES WHO TYPED IT', async () => {
+    // The 1:1 primary key's cost, on screen. There is one buffer per case, so the draft on offer
+    // may be a colleague's — restoring it without saying so publishes their half-finished sentence
+    // under your name, with nothing in the audit trail showing it had ever been theirs.
+    mockEditReads(draft())
+    renderEditMode()
+
+    const prompt = await screen.findByTestId('CaseEditor.DraftPrompt')
+    expect(prompt).toHaveTextContent('E. Engineer')
+    expect(prompt).toHaveTextContent(/without saving/i)
+  })
+
+  it('warns when the draft is stale, and still offers it', async () => {
+    // Advisory, never enforcing: the words are the author's, and dropping them would be the
+    // product deciding that somebody else's edit invalidates your sentence.
+    mockEditReads(draft({ stale: true }))
+    renderEditMode()
+
+    const prompt = await screen.findByTestId('CaseEditor.DraftPrompt')
+    expect(prompt).toHaveTextContent(/saved by someone else/i)
+    expect(within(prompt).getByTestId('CaseEditor.DraftRestore')).toBeEnabled()
+  })
+
+  it('shows no prompt when there is no buffered draft', async () => {
+    // The ordinary state of almost every case. A 204 is `null` here, and it must read as loaded —
+    // not as a failure, and not as a decision the author has to make.
+    mockEditReads(null)
+    renderEditMode()
+
+    expect(await screen.findByTestId('CaseEditor.Field.Title')).toHaveValue('The saved title')
+    expect(screen.queryByTestId('CaseEditor.DraftPrompt')).not.toBeInTheDocument()
+  })
+
+  it('restoring replaces the form with the draft', async () => {
+    const user = userEvent.setup()
+    mockEditReads(draft())
+    renderEditMode()
+
+    await user.click(await screen.findByTestId('CaseEditor.DraftRestore'))
+
+    expect(screen.getByTestId('CaseEditor.Field.Title')).toHaveValue('The unsaved title')
+    // The WHOLE form, not the fields the draft happened to carry: a hybrid of draft and saved case
+    // is neither, and the author cannot tell it apart from either.
+    expect(screen.getByTestId('CaseEditor.Field.Objective')).toHaveValue(
+      'What the author was still writing',
+    )
+    expect(actionFields()[0]).toHaveValue('A drafted step')
+    // The offer is answered, so it goes.
+    expect(screen.queryByTestId('CaseEditor.DraftPrompt')).not.toBeInTheDocument()
+  })
+
+  it('restoring leaves the form dirty, so Save stays available', async () => {
+    // `reset` clears the dirty flag by default, which would disable Save on the restored content
+    // and switch the autosave off — on the one screen where both must be running.
+    const user = userEvent.setup()
+    mockEditReads(draft())
+    renderEditMode()
+
+    await user.click(await screen.findByTestId('CaseEditor.DraftRestore'))
+
+    await waitFor(() => expect(screen.getByTestId('CaseEditor.Submit')).toBeEnabled())
+  })
+
+  it('discarding deletes the row, so the same draft is not re-offered', async () => {
+    // Keeping it would re-offer a draft the author has already refused — and the autosave is about
+    // to overwrite it anyway, so leaving it would be a promise to keep something we are replacing.
+    const user = userEvent.setup()
+    mockEditReads(draft())
+    const del = vi.spyOn(api, 'del').mockResolvedValue(undefined as never)
+    renderEditMode()
+
+    await user.click(await screen.findByTestId('CaseEditor.DraftDiscard'))
+
+    expect(del).toHaveBeenCalledWith(
+      expect.stringContaining(`/cases/${EXISTING_CASE}/draft`),
+    )
+    expect(screen.queryByTestId('CaseEditor.DraftPrompt')).not.toBeInTheDocument()
+    // The saved case is still what the form holds — discarding a draft is not discarding the case.
+    expect(screen.getByTestId('CaseEditor.Field.Title')).toHaveValue('The saved title')
+  })
+
+  it('the CREATE form asks for no draft at all', async () => {
+    // Stated rather than left to be discovered: the buffer's key is a foreign key to `test_case`,
+    // so there is nothing to key a draft on until the case exists. The New Case form is exactly as
+    // lossy as it was before this slice.
+    mockReads()
+    renderEditor()
+
+    await screen.findByTestId('CaseEditor.Field.Title')
+    const paths = vi.mocked(api.get).mock.calls.map(([path]) => path)
+    expect(paths.some((path) => String(path).includes('/draft'))).toBe(false)
+  })
+})

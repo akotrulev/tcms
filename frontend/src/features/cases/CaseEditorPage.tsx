@@ -18,6 +18,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import {
   Alert,
+  AlertTitle,
   Autocomplete,
   Box,
   Button,
@@ -43,17 +44,21 @@ import { useUnsavedWork } from '../../auth/useSessionRecovery';
 import { Controller, useFieldArray, useForm, type Control } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
-import { CaseSchema, isBlankStep, liveSteps, type CaseInput } from './caseSchema';
+import { CaseSchema, fromCasePayload, isBlankStep, toCasePayload, type CaseInput } from './caseSchema';
 import { ClassificationPicker } from './ClassificationPicker';
 import { ConditionEditDialog } from './ConditionEditDialog';
 import { ConditionsPanel } from './ConditionsPanel';
 import { SharedStepPicker } from './SharedStepPicker';
 import { resolveStepMove } from './stepReorder';
+import { useCaseAutosave } from './useCaseAutosave';
 import {
   useCase,
+  useCaseDraft,
   useClassification,
   useCreateCase,
+  useDiscardCaseDraft,
   useProjectTags,
+  useSaveCaseDraft,
   useStepSuggestions,
   useSuites,
   useUpdateCase,
@@ -62,6 +67,7 @@ import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
+import { formatAge, formatTimeOfDay } from '../../lib/format';
 import { automationLabels, priorityLabels, stepFormatLabels } from '../../lib/labels';
 import { selectTestId } from '../../lib/muiTestIds';
 import type { CaseConditionRef, Condition, StepSuggestion, TestCase } from '../../api/types';
@@ -379,6 +385,7 @@ function CaseEditorForm({
     register,
     handleSubmit,
     getValues,
+    reset,
     watch,
     setValue,
     setError,
@@ -498,75 +505,95 @@ function CaseEditorForm({
   const stepFormat = watch('stepFormat');
   const automationStatus = watch('automationStatus');
 
+  /*
+    ============================ The autosave buffer (§128) ============================
+
+    `test_case_draft` is a real table with a real writer now, so the editor stops being a screen
+    that loses everything when a tab closes. Edit mode only: the buffer's primary key is a foreign
+    key to `test_case`, so a case being created has nothing to key a draft on — the New Case form
+    is exactly as lossy as it was before, which is stated rather than left to be discovered.
+  */
+  const draftQuery = useCaseDraft(projectId, mode === 'edit' ? existing?.id : undefined);
+  const saveDraft = useSaveCaseDraft(projectId, existing?.id ?? '');
+  const discardDraft = useDiscardCaseDraft(projectId, existing?.id ?? '');
+
+  /*
+    Whether the restore offer has been answered. `false` until the author accepts or dismisses it —
+    and it also becomes true on its own the moment the query resolves to no draft, which is the
+    ordinary case and must not require a decision nobody was asked for.
+
+    THIS GATES THE AUTOSAVE, and `useCaseAutosave`'s header spells out the five-step sequence that
+    happens without it: the first keystroke overwrites the very draft the editor is about to offer,
+    so the user is shown a restore prompt for work that no longer exists, and accepting it hands
+    back what they had already saved. Nothing errors. Nothing is logged.
+  */
+  const [restoreDecided, setRestoreDecided] = useState(false);
+  const offeredDraft = draftQuery.data ?? null;
+  const promptOpen = !restoreDecided && offeredDraft !== null;
+  const draftSettled = draftQuery.isSuccess || draftQuery.isError;
+
+  /*
+    A failed draft read resolves the gate too, and that is a deliberate call rather than an
+    oversight. The alternative is an editor whose autosave never starts because one GET failed —
+    silently, since there is nothing on screen that could say so — which trades a small risk of
+    overwriting a draft we could not read for a certainty of buffering nothing at all for the rest
+    of the session. The status line below still reports what the buffer is doing.
+  */
+  const autosaveEnabled =
+    mode === 'edit' &&
+    !!existing &&
+    draftSettled &&
+    !promptOpen &&
+    isDirty &&
+    !isSubmitting;
+
+  const values = watch();
+  const autosave = useCaseAutosave({
+    enabled: autosaveEnabled,
+    // The SAME mapping the submit uses — see `toCasePayload`. A second copy here is how a field
+    // wired into Save and forgotten in the buffer comes back empty from a restore.
+    payload: toCasePayload(values),
+    save: (content) =>
+      saveDraft.mutateAsync({ lockVersion: existing?.lockVersion ?? 0, content }),
+  });
+
+  /**
+   * Puts the buffered draft back into the form.
+   *
+   * `reset` rather than field-by-field `setValue`, because the draft is the whole form: setting
+   * the fields it carries would leave the fields it does not at whatever the saved case said,
+   * producing a hybrid that is neither the draft nor the case and that the author cannot tell
+   * apart from either.
+   *
+   * `keepDefaultValues`, and it is NOT `keepDirty` — which was the first draft of this line and is
+   * the wrong option in a way that reads as right. `keepDirty` preserves the dirty *flag* as it
+   * currently stands, and at this moment it stands at **false**: the offer is answered on mount,
+   * before the author has typed anything. So the restored draft would land in a form the editor
+   * considers pristine — Save disabled with "Nothing has changed yet" on a form full of unsaved
+   * work, and the autosave gated off with it.
+   *
+   * `keepDefaultValues` keeps the *saved case* as the baseline and re-evaluates dirtiness against
+   * it, which is the question actually being asked: the restored draft differs from what the server
+   * has stored, so it is dirty, and it stops being dirty if the author edits it back.
+   */
+  const restoreDraft = () => {
+    if (offeredDraft) reset(fromCasePayload(offeredDraft.content), { keepDefaultValues: true });
+    setRestoreDecided(true);
+  };
+
+  const dismissDraft = () => {
+    // Discards the row as well as the offer. Keeping it would re-offer the same draft on the next
+    // mount, after the author has already said no — and the autosave is about to overwrite it
+    // anyway, so leaving it would be a promise to keep something we are about to replace.
+    discardDraft.mutate();
+    setRestoreDecided(true);
+  };
+
   const onSubmit = handleSubmit(async (data) => {
-    /*
-      Trim first, then drop the rows that are empty once trimmed.
-
-      Both halves matter and the order is the point. Trimming alone would send a step whose action
-      is `"  "` — the trailing blank row after somebody tabbed through it, or a row typed into and
-      cleared — as a real step: the API accepts it, it renders as an empty numbered line forever,
-      and a run asks a tester to perform it. Dropping alone would keep the leading and trailing
-      spaces of every step somebody pasted in, which is what makes two identical steps two entries
-      in the corpus this slice added.
-
-      `liveSteps` is `caseSchema`'s, not a second implementation here: the validator's "at least
-      one step" and this filter have to be the same question, or the form validates a list the
-      submit then empties.
-    */
-    const steps = liveSteps(
-      data.steps.map((step) => ({
-        ...step,
-        action: step.action.trim(),
-        testData: (step.testData ?? '').trim(),
-        expectedResult: (step.expectedResult ?? '').trim(),
-      })),
-    );
-
-    // Only the chosen format's content is sent. Posting both would leave the other one
-    // stale in the record, and the next reader can't tell which is authoritative.
-    const payload: Record<string, unknown> = {
-      title: data.title.trim(),
-      // null, not '', for an unfiled case: the field is a uuid on the contract and '' is a 400.
-      suiteId: data.suiteId || null,
-      objective: data.objective || null,
-      description: data.description || null,
-      expectedOutcome: data.expectedOutcome || null,
-      priority: data.priority,
-      severity: data.priority,
-      automationStatus: data.automationStatus,
-      automationKey: data.automationStatus === 'AUTOMATED' ? data.automationKey || null : null,
-      notAutomatableReason:
-        data.automationStatus === 'NOT_AUTOMATABLE' ? data.notAutomatableReason || null : null,
-      estimatedDurationSec: data.estimatedDurationSec ? Number(data.estimatedDurationSec) : null,
-      stepFormat: data.stepFormat,
-      gherkinSource: data.stepFormat === 'GHERKIN' ? data.gherkinSource : null,
-      steps:
-        data.stepFormat === 'STRUCTURED'
-          ? steps.map((step) => ({
-              id: step.id ?? null,
-              keyword: null,
-              action: step.action,
-              testData: step.testData || null,
-              expectedResult: step.expectedResult || null,
-              sharedStepId: step.sharedStepId ?? null,
-            }))
-          : [],
-      // Always sent, including as `[]`. Omitting it when empty would mean "leave it alone" to the
-      // server, so clearing a case's classification would silently do nothing — the one place
-      // where sending the field's natural empty value and omitting the field are different
-      // instructions, which is why this is not `|| undefined` like the nullable scalars above.
-      classificationValueIds: data.classificationValueIds,
-      // Always sent, including as `[]`, for the reason above — the server reads absent as "leave
-      // them alone", so removing a case's last tag would silently do nothing. Trimmed and
-      // de-duplicated here as well as in the control, because the control is not the only way a
-      // value can get into the form (a draft restored from state, a future paste handler).
-      tags: [...new Set(data.tags.map((tag) => tag.trim()).filter((tag) => tag !== ''))],
-      // Always sent, including as `[]`, for the reason above — the server reads absent as "leave
-      // them alone", so detaching the last condition would silently do nothing.
-      preconditions: data.preconditionIds.map((conditionId) => ({ conditionId })),
-      postconditions: data.postconditionIds.map((conditionId) => ({ conditionId })),
-      changeComment: data.changeComment || null,
-    };
+    // `toCasePayload` is caseSchema's, shared with the autosave below. Two hand-written copies of
+    // this mapping is how a field wired into Save and forgotten in the buffer restores as empty —
+    // see the function's header.
+    const payload = toCasePayload(data);
 
     try {
       if (mode === 'edit' && existing) {
@@ -660,6 +687,90 @@ function CaseEditorForm({
           </>
         }
       />
+
+      {/*
+        The restore offer (§128). Rendered as a banner above the form rather than as a modal,
+        deliberately: a modal on mount would block the author from reading the case underneath, and
+        the decision it asks for is one that only makes sense next to what is currently on screen —
+        "restore this instead of that".
+
+        `severity="info"`, not `warning`: nothing is wrong. There is unsaved work, which is good
+        news, and a warning icon on a screen about somebody's own writing reads as a problem with
+        it.
+      */}
+      {promptOpen && offeredDraft && (
+        <Alert
+          severity="info"
+          sx={{ mb: 2 }}
+          data-testid={`${TestIdPrefix}.DraftPrompt`}
+          action={
+            <Stack direction="row" sx={{ gap: 1 }}>
+              <Button size="small" onClick={dismissDraft} data-testid={`${TestIdPrefix}.DraftDiscard`}>
+                Discard
+              </Button>
+              <Button
+                size="small"
+                variant="contained"
+                onClick={restoreDraft}
+                data-testid={`${TestIdPrefix}.DraftRestore`}
+              >
+                Restore
+              </Button>
+            </Stack>
+          }
+        >
+          <AlertTitle>Unsaved changes from {formatAge(offeredDraft.updatedAt)}</AlertTitle>
+          {/*
+            WHO typed it, and this is not decoration. There is ONE buffer per case, so the draft on
+            offer may be a colleague's — restoring it silently would publish their half-finished
+            sentence under your name, with nothing in the audit trail showing it had ever been
+            theirs. `updatedBy` is on the wire for exactly this sentence.
+          */}
+          {offeredDraft.updatedBy
+            ? `${offeredDraft.updatedBy.displayName} left work on this case without saving it.`
+            : 'Somebody left work on this case without saving it.'}
+          {offeredDraft.stale && (
+            <>
+              {' '}
+              <strong>
+                The case has been saved by someone else since this draft was written, so restoring
+                it will discard their change.
+              </strong>
+            </>
+          )}
+        </Alert>
+      )}
+
+      {/*
+        What the buffer is doing, and the ONLY place a failed autosave is reported.
+
+        The mutation is `meta.handled` so nothing else announces it: a toast fired by a timer,
+        mid-sentence, once per interval, about something the author did not ask for and cannot act
+        on, is worse than the silence it replaces. `role="status"` and `aria-live="polite"` so a
+        screen reader is told when the work became safe without being interrupted while typing.
+      */}
+      <Box
+        role="status"
+        aria-live="polite"
+        sx={{ mb: 2, minHeight: 20 }}
+        data-testid={`${TestIdPrefix}.DraftStatus`}
+      >
+        {autosave.status === 'failed' ? (
+          <Typography variant="caption" color="error">
+            Could not save a backup of your changes. Your work is still here — use Save changes to
+            keep it.
+          </Typography>
+        ) : autosave.status === 'saving' ? (
+          <Typography variant="caption" color="text.secondary">
+            Saving a backup…
+          </Typography>
+        ) : autosave.status === 'saved' ? (
+          <Typography variant="caption" color="text.secondary">
+            Backup saved {formatTimeOfDay(autosave.savedAt)}. This is not the case itself — use Save
+            changes to publish your edit.
+          </Typography>
+        ) : null}
+      </Box>
 
       {errors.root && (
         <Alert severity="error" role="alert" sx={{ mb: 2 }} data-testid={`${TestIdPrefix}.Error`}>

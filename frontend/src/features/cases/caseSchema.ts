@@ -211,3 +211,180 @@ export const CaseSchema = z
   });
 
 export type CaseInput = z.infer<typeof CaseSchema>;
+
+/**
+ * The form's values as the API's `TestCaseInput` — **the one mapping**, and it has two consumers
+ * that must not disagree.
+ *
+ * The editor's Save built this inline for as long as Save was the only thing that sent it. §128's
+ * autosave is the second, and a second hand-written copy is the defect that shape produces: a field
+ * wired into the save and forgotten in the buffer restores as empty, so the author's recovered
+ * draft is missing exactly the thing they were typing — with nothing failing at either end, because
+ * both requests are individually valid. `documentation`'s `BlockContent.of` is the same rule one
+ * module over, arrived at the same way.
+ *
+ * **It normalizes but does not validate**, which is what lets autosave use it: trimming and
+ * dropping blank steps are shape decisions, while "a title is required" is `CaseSchema`'s and is
+ * asked only on Save. A buffered draft is half-written by definition.
+ *
+ * Every collection is sent **including when empty**, because the server reads an absent field as
+ * "leave it alone": omitting `tags` when the author has just removed the last one would silently do
+ * nothing. That asymmetry is on the contract and is the reason these are not `|| undefined`.
+ */
+export function toCasePayload(data: CaseInput): Record<string, unknown> {
+  /*
+    Trim first, then drop the rows that are empty once trimmed — and the order is the point.
+    Trimming alone sends a step whose action is `"  "` as a real step: the API accepts it, it
+    renders as an empty numbered line for ever, and a run asks a tester to perform it. Dropping
+    alone keeps the leading and trailing spaces of every pasted step, which is what makes two
+    identical steps two entries in the suggestion corpus.
+  */
+  const steps = liveSteps(
+    data.steps.map((step) => ({
+      ...step,
+      action: step.action.trim(),
+      testData: (step.testData ?? '').trim(),
+      expectedResult: (step.expectedResult ?? '').trim(),
+    })),
+  );
+
+  return {
+    title: data.title.trim(),
+    // null, not '', for an unfiled case: the field is a uuid on the contract and '' is a 400.
+    suiteId: data.suiteId || null,
+    objective: data.objective || null,
+    description: data.description || null,
+    expectedOutcome: data.expectedOutcome || null,
+    priority: data.priority,
+    severity: data.priority,
+    automationStatus: data.automationStatus,
+    // Only the chosen branch's content is sent. Posting both would leave the other one stale in
+    // the record, and the next reader cannot tell which is authoritative.
+    automationKey: data.automationStatus === 'AUTOMATED' ? data.automationKey || null : null,
+    notAutomatableReason:
+      data.automationStatus === 'NOT_AUTOMATABLE' ? data.notAutomatableReason || null : null,
+    estimatedDurationSec: data.estimatedDurationSec ? Number(data.estimatedDurationSec) : null,
+    stepFormat: data.stepFormat,
+    gherkinSource: data.stepFormat === 'GHERKIN' ? data.gherkinSource : null,
+    steps:
+      data.stepFormat === 'STRUCTURED'
+        ? steps.map((step) => ({
+            id: step.id ?? null,
+            keyword: null,
+            action: step.action,
+            testData: step.testData || null,
+            expectedResult: step.expectedResult || null,
+            sharedStepId: step.sharedStepId ?? null,
+          }))
+        : [],
+    classificationValueIds: data.classificationValueIds,
+    // De-duplicated here as well as in the control, because the control is not the only way a value
+    // reaches the form — a restored draft is now one of them.
+    tags: [...new Set(data.tags.map((tag) => tag.trim()).filter((tag) => tag !== ''))],
+    preconditions: data.preconditionIds.map((conditionId) => ({ conditionId })),
+    postconditions: data.postconditionIds.map((conditionId) => ({ conditionId })),
+    changeComment: data.changeComment || null,
+  };
+}
+
+/** The blank trailing step row the editor always keeps at the end of the list (§94). */
+const BLANK_ROW = { id: null, keyword: null, action: '', testData: '', expectedResult: '', sharedStepId: null };
+
+const str = (value: unknown): string => (typeof value === 'string' ? value : '');
+const nullableStr = (value: unknown): string | null => (typeof value === 'string' ? value : null);
+const strArray = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+
+/** `[{ conditionId }]` on the wire back to the ids the form binds — see `preconditionIds`. */
+const conditionIds = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value
+        .map((ref) =>
+          ref && typeof ref === 'object' ? (ref as { conditionId?: unknown }).conditionId : null,
+        )
+        .filter((id): id is string => typeof id === 'string')
+    : [];
+
+/**
+ * A buffered draft's `content` back into the form's own shape — **the inverse of
+ * {@link toCasePayload}**, and the thing a restored draft goes through.
+ *
+ * ## Why an inverse exists at all
+ *
+ * The form's shape and the API's are genuinely different, and each difference has a reason
+ * recorded on `CaseSchema`: an unfiled case is `''` in the form and `null` on the wire (MUI's
+ * `Select` warns on `null`), a duration is the string the number input produces, and conditions are
+ * ids in the form against `[{conditionId}]` on the contract. The buffer stores the **API** shape —
+ * which is what makes it exactly what `PATCH` takes, and therefore what makes "restore" mean "put
+ * this back in the form and press Save".
+ *
+ * ## It decodes DEFENSIVELY, and that is the whole point
+ *
+ * The buffer is unvalidated by design, and it may also have been written by an older build of this
+ * app. So every field is read with a fallback and nothing here can throw: a draft that has lost a
+ * field restores without it, rather than taking the editor down with a `TypeError` on the one
+ * screen whose job is not losing the user's work. **A wrong-typed field reads as absent** — the
+ * honest outcome, since the alternative is putting `[object Object]` in a title.
+ *
+ * ## The round trip is lossy in exactly one direction, deliberately
+ *
+ * `toCasePayload` drops blank step rows and this re-adds one, because the editor's list always ends
+ * in a blank row — that is how a step is added since §94. So `from(to(x))` is `x` with its trailing
+ * blank restored, which is the same normalization opening an existing case performs.
+ */
+export function fromCasePayload(content: unknown): CaseInput {
+  const raw = (content && typeof content === 'object' ? content : {}) as Record<string, unknown>;
+
+  const priority = str(raw.priority);
+  const automationStatus = str(raw.automationStatus);
+  const stepFormat = str(raw.stepFormat);
+  const duration = raw.estimatedDurationSec;
+
+  const steps = (Array.isArray(raw.steps) ? raw.steps : [])
+    .filter((step): step is Record<string, unknown> => !!step && typeof step === 'object')
+    .map((step) => ({
+      id: typeof step.id === 'string' ? step.id : null,
+      keyword: nullableStr(step.keyword),
+      action: str(step.action),
+      testData: str(step.testData),
+      expectedResult: str(step.expectedResult),
+      sharedStepId: typeof step.sharedStepId === 'string' ? step.sharedStepId : null,
+    }));
+
+  return {
+    title: str(raw.title),
+    // '' is UNFILED, not missing — the inverse of the submit's `data.suiteId || null`.
+    suiteId: typeof raw.suiteId === 'string' ? raw.suiteId : '',
+    objective: nullableStr(raw.objective),
+    description: nullableStr(raw.description),
+    expectedOutcome: nullableStr(raw.expectedOutcome),
+    // An unrecognised enum value falls back to the form's own default rather than being bound and
+    // rendering a `Select` with no matching option — which is a control that looks empty and
+    // silently submits whatever was there.
+    priority: (['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const).includes(
+      priority as 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW',
+    )
+      ? (priority as CaseInput['priority'])
+      : 'MEDIUM',
+    automationStatus: (['MANUAL', 'TO_BE_AUTOMATED', 'AUTOMATED', 'NOT_AUTOMATABLE'] as const).includes(
+      automationStatus as CaseInput['automationStatus'],
+    )
+      ? (automationStatus as CaseInput['automationStatus'])
+      : 'MANUAL',
+    automationKey: nullableStr(raw.automationKey),
+    notAutomatableReason: nullableStr(raw.notAutomatableReason),
+    // A number on the wire, the string the input produces in the form.
+    estimatedDurationSec:
+      typeof duration === 'number' && Number.isFinite(duration) ? String(duration) : null,
+    stepFormat: stepFormat === 'GHERKIN' ? 'GHERKIN' : 'STRUCTURED',
+    gherkinSource: nullableStr(raw.gherkinSource),
+    // The trailing blank row — see the header. Without it a restored draft has no way to add a
+    // step, because the blank last row IS the add control.
+    steps: [...steps, { ...BLANK_ROW }],
+    classificationValueIds: strArray(raw.classificationValueIds),
+    preconditionIds: conditionIds(raw.preconditions),
+    postconditionIds: conditionIds(raw.postconditions),
+    tags: strArray(raw.tags),
+    changeComment: nullableStr(raw.changeComment),
+  };
+}

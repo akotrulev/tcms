@@ -14,6 +14,7 @@ import type {
   Attachment,
   BulkOperation,
   BulkResult,
+  CaseDraft,
   CaseFilters,
   CaseFlake,
   CaseHistorySummary,
@@ -535,6 +536,91 @@ export function useDeleteCaseFile(projectId: string, caseId: string) {
     meta: { handled: true },
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: keys.case(projectId, caseId) });
+    },
+  });
+}
+
+/**
+ * The case's buffered autosave draft, or `null` when there is none (§128).
+ *
+ * ## `null` is a value here, and it must not be `undefined`
+ *
+ * The endpoint answers **204** for a readable case with nothing buffered — which is the state of
+ * almost every case almost all of the time, not an edge — and `api.get` maps a 204 to `undefined`.
+ * TanStack Query treats an `undefined` return as a programming error and throws
+ * *"Query data cannot be undefined"*, so the ordinary answer would surface as a failed query and
+ * the editor would render an error where the truth is "you have no unsaved work". Normalising to
+ * `null` at the boundary is what keeps "no draft" a **loaded** state.
+ *
+ * ## No `staleTime`, and no refetch on focus either
+ *
+ * Read **once per editor mount** and then owned by the mutations below. It is deliberately not
+ * kept live: the only writer of this row while the editor is open is the editor itself, and a
+ * refetch landing mid-typing would offer to restore the draft the user is currently writing.
+ * `refetchOnWindowFocus` is off here for that reason and only that reason — the standing rule that
+ * a returning tab must not show yesterday's data is about *server-owned* data, and this row's
+ * current value is on screen in the form.
+ */
+export function useCaseDraft(
+  projectId: string,
+  caseId: string | undefined,
+): UseQueryResult<CaseDraft | null> {
+  return useQuery({
+    queryKey: keys.caseDraft(projectId, caseId ?? ''),
+    queryFn: ({ signal }) =>
+      api
+        .get<CaseDraft | undefined>(`${base(projectId)}/cases/${caseId}/draft`, { signal })
+        .then((draft) => draft ?? null),
+    enabled: !!caseId,
+    refetchOnWindowFocus: false,
+    staleTime: Infinity,
+  });
+}
+
+/**
+ * Buffers the editor's current state — the autosave.
+ *
+ * ## `meta.handled`, and this one is the strongest case for it in the module
+ *
+ * Every other `handled` mutation here renders its own failure somewhere. This one renders it in a
+ * status line and **nowhere else**, because the caller is a timer rather than a person: a global
+ * toast for a failed autosave would appear unbidden, mid-sentence, once per interval, about
+ * something the user did not ask for and cannot act on. The honest surface is the editor saying it
+ * has not been able to buffer — which is what `CaseEditorPage` renders — and the work itself is
+ * still safe in the form.
+ *
+ * ## The cache is written from the response, not invalidated
+ *
+ * An invalidation would refetch the row this call just wrote, on every keystroke interval, to learn
+ * what it already knows. Worse, the refetch could land after a later autosave and put an older
+ * `updatedAt` on screen. The response is the row.
+ */
+export function useSaveCaseDraft(projectId: string, caseId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { lockVersion: number; content: Record<string, unknown> }) =>
+      api.put<CaseDraft>(`${base(projectId)}/cases/${caseId}/draft`, input),
+    meta: { handled: true },
+    onSuccess: (draft) => {
+      client.setQueryData(keys.caseDraft(projectId, caseId), draft);
+    },
+  });
+}
+
+/**
+ * Throws the buffered draft away.
+ *
+ * The cache entry is set to `null` rather than invalidated: the endpoint answers 204 and there is
+ * nothing to refetch, and a refetch would spend a round trip to be told the same thing. `null` is
+ * the loaded "no draft" state — see {@link useCaseDraft} for why it is not `undefined`.
+ */
+export function useDiscardCaseDraft(projectId: string, caseId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.del<void>(`${base(projectId)}/cases/${caseId}/draft`),
+    meta: { handled: true },
+    onSuccess: () => {
+      client.setQueryData(keys.caseDraft(projectId, caseId), null);
     },
   });
 }
