@@ -92,6 +92,17 @@ public class CaseHealth {
     private boolean orphaned;
 
     /**
+     * {@code case_health.undeclared_automation} — {@code V37}, the mirror of
+     * {@link #staleAutomation} (plan §6c).
+     *
+     * <p>Both are derived from one fact on opposite sides of one cutoff, so a case can never raise
+     * both. That is a property of the computation and not of the schema, which is why
+     * {@code ExecutionFacts} writes them in a single statement rather than two.
+     */
+    @Column(name = "undeclared_automation", nullable = false)
+    private boolean undeclaredAutomation;
+
+    /**
      * {@code case_health.incomplete} — mapped so {@code ddl-auto: validate} has the whole row in
      * view, and deliberately absent from {@link HealthSignal}: the contract's enum has no such
      * member, and inventing one would put a value on the wire the SPA cannot label.
@@ -140,6 +151,7 @@ public class CaseHealth {
                 case UNLINKED -> unlinked;
                 case FAILING_REPEATEDLY -> failingRepeatedly;
                 case ORPHANED -> orphaned;
+                case UNDECLARED_AUTOMATION -> undeclaredAutomation;
             };
             if (set) {
                 raised.add(signal);

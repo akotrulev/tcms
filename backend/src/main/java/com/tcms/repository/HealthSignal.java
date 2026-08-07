@@ -24,17 +24,28 @@ package com.tcms.repository;
  * {@code case_health} is a read model in the §3-lesson-4 sense, fed by events from
  * {@code execution} and {@code documentation}.
  *
- * <p><strong>Nothing populates it yet</strong>, because neither module exists. So every case
- * currently reports {@code []} and every facet count is zero — the honest answer ("no signal has
- * been computed"), not a placeholder. It starts working when the computation lands, with no change
- * here.
+ * <p>~~<strong>Nothing populates it yet</strong>, because neither module exists.~~ →
+ * <strong>superseded, and the prediction held: each computation landed with no change here except
+ * its own constant.</strong> {@code NEVER_EXECUTED} and {@code LONG_UNEXECUTED} got a writer in §53
+ * ({@code ExecutionFacts}), {@code FAILING_REPEATEDLY} in {@code reporting.ExecutionSource}, and
+ * {@code STALE_AUTOMATION} + {@code UNDECLARED_AUTOMATION} in M3 slice 5 — <strong>five of the ten
+ * are real</strong>. The other five still report an honest zero, which is what the paragraph below
+ * about severity and the one in {@code CaseHealth} about column ownership both depend on.
  *
  * <h2>{@code incomplete} is on the table and not in this enum</h2>
  *
- * <p>{@code case_health.incomplete} exists in the schema with no counterpart in the contract's
- * enum. Left out rather than added: putting it on the wire would invent a member the SPA has no
- * label for (in {@code lib/labels.ts} a new member is a compile error until it is labelled), and
- * adding it to {@code openapi.yaml} is a contract change with no consumer on the other side.
+ * <p>{@code case_health.incomplete} exists in the schema with no constant here. Left out rather
+ * than added: no computation asserts it, and a member whose column no writer fills is a facet that
+ * always tallies zero.
+ *
+ * <p><strong>The contract went the other way and this header did not notice.</strong>
+ * {@code openapi.yaml}'s {@code HealthSignal} <em>does</em> list {@code INCOMPLETE}, and
+ * {@code lib/labels.ts} labels it — so the original reasoning here ("putting it on the wire would
+ * invent a member the SPA has no label for") describes a state that has not been true for some
+ * time. The two enums are therefore <strong>not</strong> the same set: the wire is a superset by
+ * one member this server can never send. Left as it is rather than tidied in either direction,
+ * because both tidyings are worse — deleting it from the contract breaks a label the SPA has, and
+ * adding it here invents the writerless facet above.
  *
  * <h2>Severity and label are here for the same reason the attribute is</h2>
  *
@@ -63,7 +74,26 @@ public enum HealthSignal {
     LONG_UNEXECUTED("longUnexecuted", Severity.WARNING, "Not run in 90 days"),
     UNLINKED("unlinked", Severity.INFO, "Unlinked"),
     FAILING_REPEATEDLY("failingRepeatedly", Severity.WARNING, "Failing repeatedly"),
-    ORPHANED("orphaned", Severity.INFO, "Orphaned");
+    ORPHANED("orphaned", Severity.INFO, "Orphaned"),
+
+    /**
+     * §6c's second drift direction, added in {@code V37} — CI is posting results for a case whose
+     * {@code automationStatus} says no automation exists.
+     *
+     * <p><strong>Appended last, and that is the only safe place to add one.</strong>
+     * {@code CaseSearch.tallyHealth} selects one aggregate per constant and reads the results back
+     * <em>by position</em>; inserting this beside {@link #STALE_AUTOMATION}, where it belongs
+     * thematically, would silently shift every facet count after it onto the wrong tile.
+     *
+     * <p><strong>WARNING rather than ERROR, unlike its mirror, and the asymmetry is the point.</strong>
+     * {@code STALE_AUTOMATION} means a result the team believes it is getting is not arriving — a
+     * red test can be invisible for as long as it lasts. This one means results are arriving that no
+     * coverage number counts: the automation-coverage percentage is understated, which is wrong in
+     * the direction that costs nobody a missed defect. Both need fixing; only one of them can be
+     * hiding a failure.
+     */
+    UNDECLARED_AUTOMATION(
+            "undeclaredAutomation", Severity.WARNING, "Automated, but not marked so");
 
     /**
      * {@code DashboardTile.severity} in {@code openapi.yaml}. Ordered worst first, which is the

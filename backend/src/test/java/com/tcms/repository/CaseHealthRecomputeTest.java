@@ -23,7 +23,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
- * The {@code case_health} recompute — the first writer this read model has ever had.
+ * The {@code case_health} recompute — the first writer this read model has ever had, and since M3
+ * slice 5 the writer of <strong>four</strong> signals rather than two: §6c's automation-drift pair
+ * joined the execution pair once §117 made {@code test_run.source = 'INGESTED'} a thing that
+ * exists.
  *
  * <h2>What this class is really guarding</h2>
  *
@@ -43,8 +46,14 @@ import org.springframework.beans.factory.annotation.Autowired;
  *   <li><strong>The wrong execution winning.</strong> A case executed 200 days ago and again last
  *       week is not stale. Taking any row rather than the newest inverts the answer for exactly the
  *       cases that are being actively maintained.</li>
- *   <li><strong>The job asserting signals it did not compute.</strong> Seven of the nine signals
- *       have no writer. An {@code ON CONFLICT} that set every column would make this job the author
+ *   <li><strong>A result counted as evidence about the wrong thing.</strong> The drift pair's
+ *       predicate is the newest <em>ingested</em> result, and the statement directly above it in
+ *       {@code ExecutionFacts} reads the newest result of any kind. A case CI abandoned but a
+ *       person still runs by hand satisfies one and not the other, and copying the neighbouring
+ *       lateral — the likeliest edit anybody makes here — reports it as healthy.</li>
+ *   <li><strong>The job asserting signals it did not compute.</strong> Five of the ten signals
+ *       have no writer, and one more ({@code failing_repeatedly}) has a writer in another module
+ *       writing the same rows on its own schedule. An {@code ON CONFLICT} that set every column would make this job the author
  *       of claims it has no evidence for, and would blank a future approval computation's work on
  *       every tick. The columns are owned individually even though the row is shared.</li>
  *   <li><strong>Writing across companies.</strong> The statement carries no company predicate — it
@@ -93,6 +102,14 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
      * refused it, which is the schema being right about the domain.
      */
     private static final UUID ACME_OLD_RUN = UUID.fromString("ce003000-0000-4000-8000-000000000002");
+    /**
+     * A run CI posted — {@code source = 'INGESTED'}, which is the whole predicate of the automation
+     * drift pair. §117 pinned that column to <em>the door the request came through</em>, so this is
+     * what {@code IngestionService} writes and what nothing else does.
+     */
+    private static final UUID ACME_CI_RUN = UUID.fromString("ce003000-0000-4000-8000-000000000003");
+    /** The same, long ago. Separate because {@code uq_execution_run_case} allows a case one row per run. */
+    private static final UUID ACME_OLD_CI_RUN = UUID.fromString("ce003000-0000-4000-8000-000000000004");
 
     /** No execution row at all. */
     private static final UUID NEVER = UUID.fromString("ce004000-0000-4000-8000-000000000001");
@@ -109,8 +126,44 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
     /** Umbra's only case. Never executed, and must stay invisible to Acme's recompute. */
     private static final UUID FOREIGN = UUID.fromString("ce004000-0000-4000-8000-000000000007");
 
+    // ---- the automation-drift pair (M3 slice 5, plan §6c) ----------------------------------
+    //
+    // Every one of these is AUTOMATED-or-not crossed with an ingested result inside-or-outside the
+    // window, and each is exercised ALONE — §117's ladder rule. A fixture where one case satisfies
+    // two rungs passes against an implementation that only computes one of them.
+
+    /** AUTOMATED, CI last reported outside the window. The signal's whole point. */
+    private static final UUID CI_STOPPED = UUID.fromString("ce004000-0000-4000-8000-000000000008");
+    /** AUTOMATED, CI reported inside the window. Clean. */
+    private static final UUID CI_REPORTING = UUID.fromString("ce004000-0000-4000-8000-000000000009");
     /**
-     * Comfortably either side of the 90-day default rather than exactly on it.
+     * AUTOMATED, CI silent for 120 days, but a person ran it by hand 10 days ago.
+     *
+     * <p>The case that separates the two statements in {@code ExecutionFacts}. It is <em>not</em>
+     * long-unexecuted (its newest recorded result is recent) and it <em>is</em> stale automation
+     * (its newest INGESTED result is not) — so an implementation reading "the last result" for both
+     * signals gets exactly one of the two answers wrong, whichever it picks.
+     */
+    private static final UUID CI_STOPPED_RUN_BY_HAND =
+            UUID.fromString("ce004000-0000-4000-8000-00000000000a");
+    /** AUTOMATED, CI has NEVER reported. D3's hole, asserted rather than left to be discovered. */
+    private static final UUID CI_NEVER_REPORTED =
+            UUID.fromString("ce004000-0000-4000-8000-00000000000b");
+    /** MANUAL, taking CI results right now. §6c's second direction, as §6c words it. */
+    private static final UUID UNDECLARED = UUID.fromString("ce004000-0000-4000-8000-00000000000c");
+    /** MANUAL, took CI results 120 days ago and none since. Expired, by the same cutoff. */
+    private static final UUID UNDECLARED_LAPSED =
+            UUID.fromString("ce004000-0000-4000-8000-00000000000d");
+    /** NOT_AUTOMATABLE, taking CI results. The state §6c did not name and the coverage denominator does. */
+    private static final UUID UNDECLARED_IMPOSSIBLE =
+            UUID.fromString("ce004000-0000-4000-8000-00000000000e");
+
+    /**
+     * Comfortably either side of the 90-day default rather than exactly on it — <strong>and either
+     * side of the 14-day stale-automation default too</strong>, which is what lets one pair of
+     * offsets drive both jobs. 10 days is inside both windows and 120 is outside both; nothing here
+     * lands between 14 and 90, because a fixture that did would make one signal's answer depend on
+     * the other's threshold.
      *
      * <p>The boundary itself is deliberately not asserted against a live {@link java.time.Clock}: a
      * test that inserts a result at exactly {@code now - 90d} and asserts a strict {@code <} is a
@@ -154,15 +207,31 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             // whole class pass for the wrong reason while looking like it discriminates.
             seedProjectDefaults(acme, ACME, ACME_PROJECT);
             suite(acme, ACME_SUITE, ACME, ACME_PROJECT, "Root");
-            testCase(acme, NEVER, ACME, ACME_PROJECT, ACME_SUITE, "TC-1", 1, false);
-            testCase(acme, PLANNED, ACME, ACME_PROJECT, ACME_SUITE, "TC-2", 2, false);
-            testCase(acme, RECENT, ACME, ACME_PROJECT, ACME_SUITE, "TC-3", 3, false);
-            testCase(acme, ANCIENT, ACME, ACME_PROJECT, ACME_SUITE, "TC-4", 4, false);
-            testCase(acme, REVISITED, ACME, ACME_PROJECT, ACME_SUITE, "TC-5", 5, false);
-            testCase(acme, REMOVED, ACME, ACME_PROJECT, ACME_SUITE, "TC-6", 6, true);
+            testCase(acme, NEVER, ACME, ACME_PROJECT, ACME_SUITE, "TC-1", 1, false, "MANUAL");
+            testCase(acme, PLANNED, ACME, ACME_PROJECT, ACME_SUITE, "TC-2", 2, false, "MANUAL");
+            testCase(acme, RECENT, ACME, ACME_PROJECT, ACME_SUITE, "TC-3", 3, false, "MANUAL");
+            testCase(acme, ANCIENT, ACME, ACME_PROJECT, ACME_SUITE, "TC-4", 4, false, "MANUAL");
+            testCase(acme, REVISITED, ACME, ACME_PROJECT, ACME_SUITE, "TC-5", 5, false, "MANUAL");
+            testCase(acme, REMOVED, ACME, ACME_PROJECT, ACME_SUITE, "TC-6", 6, true, "MANUAL");
 
-            run(acme, ACME_RUN, ACME, ACME_PROJECT, "TR-1", 1);
-            run(acme, ACME_OLD_RUN, ACME, ACME_PROJECT, "TR-2", 2);
+            testCase(acme, CI_STOPPED, ACME, ACME_PROJECT, ACME_SUITE, "TC-7", 7, false,
+                    "AUTOMATED");
+            testCase(acme, CI_REPORTING, ACME, ACME_PROJECT, ACME_SUITE, "TC-8", 8, false,
+                    "AUTOMATED");
+            testCase(acme, CI_STOPPED_RUN_BY_HAND, ACME, ACME_PROJECT, ACME_SUITE, "TC-9", 9, false,
+                    "AUTOMATED");
+            testCase(acme, CI_NEVER_REPORTED, ACME, ACME_PROJECT, ACME_SUITE, "TC-10", 10, false,
+                    "AUTOMATED");
+            testCase(acme, UNDECLARED, ACME, ACME_PROJECT, ACME_SUITE, "TC-11", 11, false, "MANUAL");
+            testCase(acme, UNDECLARED_LAPSED, ACME, ACME_PROJECT, ACME_SUITE, "TC-12", 12, false,
+                    "MANUAL");
+            testCase(acme, UNDECLARED_IMPOSSIBLE, ACME, ACME_PROJECT, ACME_SUITE, "TC-13", 13, false,
+                    "NOT_AUTOMATABLE");
+
+            run(acme, ACME_RUN, ACME, ACME_PROJECT, "TR-1", 1, "MANUAL");
+            run(acme, ACME_OLD_RUN, ACME, ACME_PROJECT, "TR-2", 2, "MANUAL");
+            run(acme, ACME_CI_RUN, ACME, ACME_PROJECT, "TR-3", 3, "INGESTED");
+            run(acme, ACME_OLD_CI_RUN, ACME, ACME_PROJECT, "TR-4", 4, "INGESTED");
 
             // The discrimination that matters most: a row, no result.
             execution(acme, ACME, ACME_PROJECT, ACME_RUN, PLANNED, null);
@@ -172,19 +241,36 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             // row wins" both produce the stale answer that theNewestResultWins() rejects.
             execution(acme, ACME, ACME_PROJECT, ACME_RUN, REVISITED, now.minus(WELL_INSIDE));
             execution(acme, ACME, ACME_PROJECT, ACME_OLD_RUN, REVISITED, now.minus(WELL_OUTSIDE));
+
+            // ---- the drift pair --------------------------------------------------------------
+            execution(acme, ACME, ACME_PROJECT, ACME_OLD_CI_RUN, CI_STOPPED, now.minus(WELL_OUTSIDE));
+            execution(acme, ACME, ACME_PROJECT, ACME_CI_RUN, CI_REPORTING, now.minus(WELL_INSIDE));
+            // Old from CI, recent by hand. The MANUAL row is the one that must NOT count.
+            execution(acme, ACME, ACME_PROJECT, ACME_OLD_CI_RUN, CI_STOPPED_RUN_BY_HAND,
+                    now.minus(WELL_OUTSIDE));
+            execution(acme, ACME, ACME_PROJECT, ACME_RUN, CI_STOPPED_RUN_BY_HAND,
+                    now.minus(WELL_INSIDE));
+            // Declared AUTOMATED, and CI has never once posted for it.
+            execution(acme, ACME, ACME_PROJECT, ACME_OLD_RUN, CI_NEVER_REPORTED,
+                    now.minus(WELL_OUTSIDE));
+            execution(acme, ACME, ACME_PROJECT, ACME_CI_RUN, UNDECLARED, now.minus(WELL_INSIDE));
+            execution(acme, ACME, ACME_PROJECT, ACME_OLD_CI_RUN, UNDECLARED_LAPSED,
+                    now.minus(WELL_OUTSIDE));
+            execution(acme, ACME, ACME_PROJECT, ACME_CI_RUN, UNDECLARED_IMPOSSIBLE,
+                    now.minus(WELL_INSIDE));
         }
 
         try (Connection umbra = appConnection(UMBRA)) {
             seedProjectDefaults(umbra, UMBRA, UMBRA_PROJECT);
             suite(umbra, UMBRA_SUITE, UMBRA, UMBRA_PROJECT, "Root");
-            testCase(umbra, FOREIGN, UMBRA, UMBRA_PROJECT, UMBRA_SUITE, "TC-1", 1, false);
+            testCase(umbra, FOREIGN, UMBRA, UMBRA_PROJECT, UMBRA_SUITE, "TC-1", 1, false, "MANUAL");
         }
     }
 
     // =====================================================================
 
     @Nested
-    @DisplayName("The two signals this job owns")
+    @DisplayName("The two execution signals this job owns")
     class Signals {
 
         @Test
@@ -242,6 +328,110 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
                     .as("a deleted case is absent from every dashboard count; a health row for it "
                             + "would be a signal with nothing to navigate to")
                     .isFalse();
+        }
+    }
+
+    @Nested
+    @DisplayName("Automation drift — §6c, both directions")
+    class AutomationDrift {
+
+        @Test
+        @DisplayName("AUTOMATED, and CI stopped reporting, is STALE_AUTOMATION")
+        void ciStopped() {
+            recomputeFor(ACME);
+            // Also long-unexecuted: nothing has run it at all in 120 days. Both are true and both
+            // are this job's, so the assertion names both rather than filtering to the one under
+            // test — a containsExactly that quietly ignored a sibling signal would pass against an
+            // implementation that raised it wrongly.
+            assertThat(signalsOf(CI_STOPPED))
+                    .containsExactlyInAnyOrder("stale_automation", "long_unexecuted");
+        }
+
+        @Test
+        @DisplayName("AUTOMATED, and CI reported inside the window, raises nothing")
+        void ciReporting() {
+            recomputeFor(ACME);
+            assertThat(signalsOf(CI_REPORTING)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a MANUAL re-run does not clear stale automation")
+        void aPersonRunningItByHandProvesNothingAboutTheAutomation() {
+            // THE test of this pair. The case was run 10 days ago, so it is not long-unexecuted;
+            // CI has not posted for 120, so its automation IS stale. An implementation that read
+            // "the newest result" for both signals — which is the shape of the statement directly
+            // above it in ExecutionFacts, and therefore the one somebody will copy — reports this
+            // case as healthy, and the automation nobody is watching stays unwatched.
+            recomputeFor(ACME);
+            assertThat(signalsOf(CI_STOPPED_RUN_BY_HAND))
+                    .as("the predicate is the newest INGESTED result, not the newest result")
+                    .containsExactly("stale_automation");
+        }
+
+        @Test
+        @DisplayName("AUTOMATED with no ingested result EVER is not stale")
+        void automationThatNeverStartedHasNotStopped() {
+            // D3, and it is a deliberate hole rather than an oversight. §6c makes automationKey
+            // optional precisely so a case can be marked AUTOMATED before its automation exists;
+            // without this clause an ERROR-severity signal fires on every case in the project the
+            // day somebody starts declaring intent, loudest on the teams doing the work.
+            recomputeFor(ACME);
+            assertThat(signalsOf(CI_NEVER_REPORTED))
+                    .as("'stopped reporting' presupposes started; no results at all is "
+                            + "NEVER_EXECUTED's question, and only manual ones is nobody's yet")
+                    .containsExactly("long_unexecuted");
+        }
+
+        @Test
+        @DisplayName("a MANUAL case taking CI results is UNDECLARED_AUTOMATION")
+        void undeclaredAutomation() {
+            recomputeFor(ACME);
+            assertThat(signalsOf(UNDECLARED)).containsExactly("undeclared_automation");
+        }
+
+        @Test
+        @DisplayName("NOT_AUTOMATABLE taking CI results is undeclared too, though §6c says MANUAL")
+        void undeclaredIsWiderThanManual() {
+            // The widening, tested alone because it is the arm a literal reading of §6c drops. It
+            // is also the loudest: automation coverage is denominated AUTOMATED / (total −
+            // NOT_AUTOMATABLE), so this case is subtracted from the denominator of the very number
+            // the signal family exists to keep honest.
+            recomputeFor(ACME);
+            assertThat(signalsOf(UNDECLARED_IMPOSSIBLE)).containsExactly("undeclared_automation");
+        }
+
+        @Test
+        @DisplayName("undeclared automation expires on the same cutoff staleness uses")
+        void undeclaredLapses() {
+            // D5. Unbounded, this signal could never go false: a case automated, discovered, and
+            // then legitimately returned to manual when the automation was deleted would stay
+            // flagged for ever with nothing anybody could do — HealthSignal's "no button for
+            // lying" rule arriving from the other side, as a claim with no route back.
+            recomputeFor(ACME);
+            assertThat(signalsOf(UNDECLARED_LAPSED))
+                    .as("CI last posted 120 days ago; whatever was automating this has stopped too")
+                    .containsExactly("long_unexecuted");
+        }
+
+        @Test
+        @DisplayName("no case can raise both halves of the pair")
+        void theTwoAreMutuallyExclusive() {
+            // A property of the statement rather than of the schema — one fact, two sides of one
+            // cutoff — so it is worth asserting over the whole fixture rather than per case. Two
+            // thresholds, or an automation_status predicate dropped from either arm, and a case
+            // reads as both "the automation stopped" and "the automation is undeclared".
+            recomputeFor(ACME);
+
+            for (UUID caseId : List.of(NEVER, PLANNED, RECENT, ANCIENT, REVISITED, CI_STOPPED,
+                    CI_REPORTING, CI_STOPPED_RUN_BY_HAND, CI_NEVER_REPORTED, UNDECLARED,
+                    UNDECLARED_LAPSED, UNDECLARED_IMPOSSIBLE)) {
+                List<String> raised = signalsOf(caseId);
+                assertThat(raised.contains("stale_automation")
+                                && raised.contains("undeclared_automation"))
+                        .as("case %s raised both halves of a pair that reads one fact on two sides "
+                                + "of one cutoff: %s", caseId, raised)
+                        .isFalse();
+            }
         }
     }
 
@@ -343,7 +533,7 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
         UUID companyId = caseId.equals(FOREIGN) ? UMBRA : ACME;
         List<String> columns = List.of("outdated_spec_changed", "stale_approval", "condition_drift",
                 "stale_automation", "never_executed", "long_unexecuted", "unlinked",
-                "failing_repeatedly", "orphaned");
+                "failing_repeatedly", "orphaned", "undeclared_automation");
         try (Connection connection = appConnection(companyId);
                 PreparedStatement statement = connection.prepareStatement(
                         "SELECT " + String.join(", ", columns)
@@ -463,15 +653,25 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
         }
     }
 
+    /**
+     * One case.
+     *
+     * @param automationStatus what the case <em>claims</em> about its automation — the left-hand
+     *                         side of both drift signals. {@code NOT_AUTOMATABLE} carries a reason
+     *                         because {@code V1}'s {@code CHECK} requires one, which is the schema
+     *                         being right about the domain: "we will never automate this" is a
+     *                         statement somebody has to justify.
+     */
     private void testCase(Connection connection, UUID id, UUID companyId, UUID projectId,
-            UUID suiteId, String key, long keySeq, boolean deleted) throws SQLException {
+            UUID suiteId, String key, long keySeq, boolean deleted, String automationStatus)
+            throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
                 INSERT INTO test_case
                     (id, company_id, project_id, suite_id, key, key_seq, title, step_format,
-                     priority, lifecycle_status, automation_status, created_at, updated_at,
-                     deleted_at)
+                     priority, lifecycle_status, automation_status, not_automatable_reason,
+                     created_at, updated_at, deleted_at)
                 VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?,
-                        ?, 'STRUCTURED', 'MEDIUM', 'DRAFT', 'MANUAL', now(), now(),
+                        ?, 'STRUCTURED', 'MEDIUM', 'DRAFT', ?, ?, now(), now(),
                         CAST(? AS timestamptz))
                 ON CONFLICT (id) DO NOTHING
                 """)) {
@@ -482,7 +682,10 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             statement.setString(5, key);
             statement.setLong(6, keySeq);
             statement.setString(7, "Case " + key);
-            statement.setString(8, deleted ? "2026-01-01T00:00:00Z" : null);
+            statement.setString(8, automationStatus);
+            statement.setString(9,
+                    "NOT_AUTOMATABLE".equals(automationStatus) ? "Requires visual judgement" : null);
+            statement.setString(10, deleted ? "2026-01-01T00:00:00Z" : null);
             statement.executeUpdate();
         }
         try (PreparedStatement statement = connection.prepareStatement("""
@@ -499,14 +702,22 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
         }
     }
 
+    /**
+     * One run.
+     *
+     * @param source {@code 'MANUAL'} or {@code 'INGESTED'} — the right-hand side of both drift
+     *               signals, and §117's rule: this is the <em>door the request came through</em>,
+     *               so a fixture cannot express "a token posted this through {@code POST /runs}" as
+     *               {@code INGESTED}, because the product cannot either.
+     */
     private void run(Connection connection, UUID id, UUID companyId, UUID projectId, String key,
-            long keySeq) throws SQLException {
+            long keySeq, String source) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
                 INSERT INTO test_run
                     (id, company_id, project_id, key, key_seq, name, status, source,
                      configuration_id, created_at, updated_at)
                 VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?,
-                        'Recompute fixture run', 'IN_PROGRESS', 'MANUAL',
+                        'Recompute fixture run', 'IN_PROGRESS', ?,
                         (SELECT c.id FROM configuration c
                           WHERE c.project_id = CAST(? AS uuid) LIMIT 1),
                         now(), now())
@@ -517,7 +728,8 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             statement.setString(3, projectId.toString());
             statement.setString(4, key);
             statement.setLong(5, keySeq);
-            statement.setString(6, projectId.toString());
+            statement.setString(6, source);
+            statement.setString(7, projectId.toString());
             statement.executeUpdate();
         }
     }

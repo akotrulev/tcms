@@ -157,6 +157,17 @@ tcms:
     # than a decision that it never should. See CaseHealthProperties.
     long-unexecuted: ${TCMS_LONG_UNEXECUTED:P90D}
 
+    # How long CI may go without posting a result for a case marked AUTOMATED before
+    # STALE_AUTOMATION is raised — and, on the other side of the SAME cutoff, how recent
+    # an ingested result must be for UNDECLARED_AUTOMATION to fire on a case that does
+    # not claim automation (§6c, both directions).
+    #
+    # 14 days, which open question #30 resolved on 2026-08-02 rather than this line
+    # choosing it. One duration for both signals on purpose: they read one fact — the
+    # newest ingested result — on opposite sides of one cutoff, so two thresholds would
+    # let the pair overlap or leave a gap. See CaseHealthProperties.
+    stale-automation: ${TCMS_STALE_AUTOMATION:P14D}
+
   reporting:
     # How many of a case's most recent recorded results must ALL be failures before
     # FAILING_REPEATEDLY is raised. §6o words the signal as "failed the last N executions"

@@ -28,6 +28,18 @@ import org.springframework.validation.annotation.Validated;
  *                       <strong>Deliberately a {@link Duration} rather than an int of days</strong>:
  *                       a bare number invites the reader to guess the unit, and the one test that
  *                       pins the boundary has to state a unit anyway.
+ * @param staleAutomation how long CI may go without posting a result for a case before
+ *                       {@link HealthSignal#STALE_AUTOMATION} is raised — and, on the other side of
+ *                       the same cutoff, how recent an ingested result must be for
+ *                       {@link HealthSignal#UNDECLARED_AUTOMATION} to fire on a case that does not
+ *                       claim automation. <strong>Open question #30 resolved this to 14 days</strong>
+ *                       (2026-08-02), instance-wide, so there is no number being chosen here.
+ *                       <p><strong>One duration for both signals is deliberate.</strong> They read
+ *                       one fact — the newest ingested result — on opposite sides of one cutoff, so
+ *                       a second threshold would let the pair overlap (a case raising both) or leave
+ *                       a gap (a case raising neither while its automation is plainly drifting).
+ *                       Open question #34 made the same choice for the stale-plan threshold and said
+ *                       why: <em>one figure to remember rather than two that drift</em>.
  * @param enabled        whether {@link CaseHealthScheduler} is registered at all.
  *                       <p><strong>Its real job is the test suite, and the reason is worth stating
  *                       because the failure would have been blamed on something else.</strong> The
@@ -45,7 +57,8 @@ import org.springframework.validation.annotation.Validated;
  */
 @ConfigurationProperties(prefix = "tcms.case-health")
 @Validated
-public record CaseHealthProperties(@NotNull Duration longUnexecuted, boolean enabled) {
+public record CaseHealthProperties(
+        @NotNull Duration longUnexecuted, @NotNull Duration staleAutomation, boolean enabled) {
 
     /**
      * Compact constructor, because {@code @Positive} cannot express this.
@@ -64,6 +77,16 @@ public record CaseHealthProperties(@NotNull Duration longUnexecuted, boolean ena
             throw new IllegalArgumentException(
                     "tcms.case-health.long-unexecuted must be a positive duration, was "
                             + longUnexecuted);
+        }
+        // The same check, and it fails in a more confusing direction than its neighbour: a
+        // non-positive window puts the cutoff at now or later, so EVERY case with any ingested
+        // result becomes STALE_AUTOMATION and every case without one becomes clean — the pair
+        // inverts rather than merely over-firing, and the dashboard reads as a project whose
+        // automation all died at once while the unautomated cases look healthy.
+        if (staleAutomation != null && (staleAutomation.isZero() || staleAutomation.isNegative())) {
+            throw new IllegalArgumentException(
+                    "tcms.case-health.stale-automation must be a positive duration, was "
+                            + staleAutomation);
         }
     }
 }

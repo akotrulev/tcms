@@ -17,14 +17,25 @@ import org.springframework.stereotype.Component;
  * {@code test_execution} would end that property, and it would end it for the most tempting reason
  * there is — that the new query is short.
  *
- * <p>One fact lives on the other side of this seam:
+ * <p>Two facts live on the other side of this seam, and <strong>neither is ever needed as a
+ * value</strong> — both are folded directly into the statement that consumes them, because moving a
+ * row per case through the application to decide a boolean is the shape that turns a read-model
+ * refresh into an N-query job:
  *
  * <ol>
- *   <li><strong>When each case was last actually executed</strong> — folded directly into
- *       {@link #recomputeExecutionSignals}, because the answer is never needed as a value. Its only
- *       consumer writes {@code case_health}, and moving a row per case through the application to
- *       decide two booleans is the shape that turns a read model refresh into an N-query job.</li>
+ *   <li><strong>When each case was last actually executed</strong> — {@link
+ *       #recomputeExecutionSignals}.</li>
+ *   <li><strong>When CI last posted a result for each case</strong> — {@link
+ *       #recomputeAutomationDrift}. The same {@code test_execution} rows, narrowed to those whose
+ *       run came through the ingestion door.</li>
  * </ol>
+ *
+ * <p>Two statements rather than one, though they scan the same table for the same cases. They are
+ * separable because they own <strong>disjoint columns</strong> (see either method's {@code ON
+ * CONFLICT} note), and separate because merging them would put four booleans behind one lateral and
+ * make the cheap half — which needs no {@code test_run} join at all — pay for the expensive one on
+ * every tick. The cost of the split is one extra scan per company per tick against a bounded set of
+ * live cases; the sizing assumption this is measured against is plan §8 #5, under 10k cases.
  *
  * <h2>Native SQL, and why there is no entity for {@code test_execution} here</h2>
  *
@@ -126,6 +137,118 @@ class ExecutionFacts {
                    SET never_executed  = EXCLUDED.never_executed,
                        long_unexecuted = EXCLUDED.long_unexecuted,
                        computed_at     = EXCLUDED.computed_at
+                """)
+                .setParameter("cutoff", cutoff)
+                .setParameter("now", now)
+                .executeUpdate();
+    }
+
+    /**
+     * Re-derive {@link HealthSignal#STALE_AUTOMATION} and {@link HealthSignal#UNDECLARED_AUTOMATION}
+     * for every live case in the currently-open company, in one statement (plan §6c).
+     *
+     * <h2>These are one fact read on two sides of one cutoff</h2>
+     *
+     * <p>The fact is {@code max(executed_at)} over this case's <em>recorded, ingested</em>
+     * executions. Above the cutoff and the case does not claim automation, the automation is
+     * undeclared; below it and the case does claim automation, the automation has stopped
+     * reporting. <strong>A case can therefore never raise both</strong>, and that is a property of
+     * this statement rather than of the schema — which is exactly why the two are written here
+     * together instead of by two jobs that would have to agree.
+     *
+     * <h2>Ingested means the run's {@code source}, which is the door and not the caller</h2>
+     *
+     * <p>§117 pinned {@code TestRun.create}'s {@code source} to <em>the door the request came
+     * through, never the caller's role</em>: an Automation Service token opening a run through
+     * {@code POST /runs} writes {@code MANUAL}, and only {@code IngestionService} writes
+     * {@code INGESTED}. That is the definition this signal wants — drift is about whether the CI
+     * pipeline is posting reports, not about whether a machine was involved somewhere — and the
+     * alternative spelling ("the executor was a token") would be a second implementation of a
+     * question {@code test_run.source} already answers, differing for the person who kicks the
+     * pipeline off by hand.
+     *
+     * <p>Until §117 nothing wrote {@code INGESTED} at all, which is why this column waited from
+     * {@code V1} to M3 for a writer: the predicate would have selected the empty set in every
+     * deployment and reported a confident zero.
+     *
+     * <h2>Staleness requires a PREVIOUS ingested result, and that is not an optimisation</h2>
+     *
+     * <p>{@code last_ci.at IS NOT NULL} is load-bearing. "Stopped reporting" presupposes started,
+     * and §6c makes {@code automationKey} optional precisely so <em>"a case can be marked
+     * {@code AUTOMATED} before the key is known"</em>. Without the clause, an ERROR-severity signal
+     * fires on every case in a project the day somebody begins declaring automation intent — before
+     * anything is wrong, and loudest on the teams doing the work. A case with no results at all is
+     * already {@code NEVER_EXECUTED}; a case marked {@code AUTOMATED} whose automation has
+     * <em>never</em> reported is a hole this pair leaves open on purpose, because closing it needs a
+     * date-automation-was-expected that no write path fills.
+     *
+     * <p><strong>Mutation testing found that clause is load-bearing twice over.</strong> Deleting it
+     * outright does not produce a wrong answer — it produces a <em>crash</em>: with no ingested
+     * result, {@code last_ci.at < :cutoff} is NULL, and NULL into a {@code NOT NULL} boolean column
+     * aborts the whole recompute. Every test in the class went red, which is the safe direction and
+     * says nothing about the semantics. The mutation that <em>does</em> measure them is the naive
+     * reading of §6c — {@code (last_ci.at IS NULL OR last_ci.at < :cutoff)}, "no ingested result in
+     * N days" taken literally — and that one reddens exactly one test,
+     * {@code automationThatNeverStartedHasNotStopped}. Anybody re-measuring this should mutate to
+     * the competing implementation rather than to nothing.
+     *
+     * <h2>The mirror is {@code <> 'AUTOMATED'} and not {@code = 'MANUAL'}</h2>
+     *
+     * <p>§6c words it as {@code MANUAL}. Two of the other three states are louder:
+     * {@code TO_BE_AUTOMATED} means the automation backlog is counting work already done, and
+     * {@code NOT_AUTOMATABLE} means a case declared impossible to automate is being automated —
+     * which moves the <em>denominator</em> of §6c's own coverage formula,
+     * {@code AUTOMATED / (total − NOT_AUTOMATABLE)}.
+     *
+     * <h2>No {@code deleted_at} predicate on the run, for agreement rather than for correctness</h2>
+     *
+     * <p>A deleted run's results still count as evidence CI reported. That is arguable; what is not
+     * arguable is that the two statements in this file must mean the same thing by "a result", and
+     * {@link #recomputeExecutionSignals} has counted every recorded execution since §53. Two
+     * neighbouring statements disagreeing would surface as a case that is simultaneously
+     * {@code NEVER_EXECUTED} and {@code STALE_AUTOMATION} — which reads as a bug in whichever the
+     * reader trusts less. If it changes, it changes for both.
+     *
+     * <h2>{@code ON CONFLICT} names three columns, and there are now three writers of this row</h2>
+     *
+     * <p>{@code stale_automation}, {@code undeclared_automation}, {@code computed_at} — the rule
+     * {@link #recomputeExecutionSignals} states (the row is shared, the columns are not), and this
+     * is the first slice in which it holds in both directions: {@code reporting.ExecutionSource}
+     * writes {@code failing_repeatedly} into the same rows on its own schedule, so a statement here
+     * that set every column would blank a sibling's live work rather than a hypothetical future
+     * one's.
+     *
+     * @param cutoff the boundary. Newest ingested result older than this ⇒ stale; newer ⇒ the case
+     *               had better claim automation. Passed in for the same reason its sibling's is: the
+     *               caller owns the clock.
+     * @param now    stamped into {@code computed_at}.
+     * @return how many cases were re-derived.
+     */
+    int recomputeAutomationDrift(Instant cutoff, Instant now) {
+        return entities.createNativeQuery("""
+                INSERT INTO case_health (
+                        case_id, company_id, project_id,
+                        stale_automation, undeclared_automation, computed_at)
+                SELECT c.id, c.company_id, c.project_id,
+                       c.automation_status =  'AUTOMATED'
+                           AND last_ci.at IS NOT NULL AND last_ci.at <  :cutoff,
+                       c.automation_status <> 'AUTOMATED'
+                           AND last_ci.at IS NOT NULL AND last_ci.at >= :cutoff,
+                       :now
+                  FROM test_case c
+                  LEFT JOIN LATERAL (
+                           SELECT max(e.executed_at) AS at
+                             FROM test_execution e
+                             JOIN test_run r ON r.id = e.run_id
+                            WHERE e.case_id = c.id
+                              AND e.status_id IS NOT NULL
+                              AND r.source = 'INGESTED'
+                       ) last_ci ON true
+                 WHERE c.deleted_at IS NULL
+                    ON CONFLICT (case_id) DO UPDATE
+                   SET stale_automation      = EXCLUDED.stale_automation,
+                       undeclared_automation = EXCLUDED.undeclared_automation,
+                       computed_at           = EXCLUDED.computed_at
                 """)
                 .setParameter("cutoff", cutoff)
                 .setParameter("now", now)

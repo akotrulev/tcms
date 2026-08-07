@@ -9,7 +9,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Re-derives the two execution-driven health signals for the company currently in context.
+ * Re-derives the execution-driven health signals for the company currently in context — two since
+ * §53, and <strong>four since M3 slice 5</strong>, which added §6c's automation-drift pair now that
+ * ingestion exists to make "no ingested result in N days" mean something.
  *
  * <h2>Why this exists at all, and what it stops the dashboard from claiming</h2>
  *
@@ -19,10 +21,14 @@ import org.springframework.transaction.annotation.Transactional;
  * attention" is a page telling the reader everything is fine, and it is not, because nobody has
  * looked. {@code healthComputedAt} exists solely so the SPA can render "not computed yet" instead.
  *
- * <p>This is the first thing that makes that timestamp non-null. Two of the nine signals become
+ * <p>This is the first thing that makes that timestamp non-null. ~~Two of the nine signals become
  * real; the other seven keep their honest zero, because approvals, documentation links and
- * ingestion still have no writer of their own (see {@code ExecutionFacts}' note on why this job
- * must not touch their columns).
+ * ingestion still have no writer of their own~~ → <strong>four of the ten, and ingestion is no
+ * longer on the list</strong>: §117 gave {@code test_run.source = 'INGESTED'} a writer, which is the
+ * whole predicate {@code STALE_AUTOMATION} was blocked on. Approvals, documentation links and the
+ * owner check keep their honest zero (see {@code ExecutionFacts}' note on why this job must not
+ * touch their columns), as does {@code FAILING_REPEATEDLY}, which is a sibling job's and not
+ * absent.
  *
  * <h2>Why a scheduled recompute and not an event handler</h2>
  *
@@ -78,7 +84,12 @@ public class CaseHealthRecomputeService {
         Instant cutoff = now.minus(thresholds.longUnexecuted());
 
         int cases = executionFacts.recomputeExecutionSignals(cutoff, now);
-        log.debug("Recomputed execution health signals for {} cases", cases);
+        // Both statements in one transaction, and therefore under one GUC and one company. Split
+        // across two, a company whose second transaction failed would be left with half a tick's
+        // signals stamped with this tick's computed_at — a row claiming to have been derived just
+        // now, half of which was not.
+        executionFacts.recomputeAutomationDrift(now.minus(thresholds.staleAutomation()), now);
+        log.debug("Recomputed execution and automation-drift health signals for {} cases", cases);
         return cases;
     }
 }
