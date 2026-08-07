@@ -107,6 +107,39 @@ for exactly the queries that use it.
 | 3 | `ARTIFACT` — `ArtifactKind.FILE` becomes registrable | `./gradlew build` |
 | 4 | The three frontend surfaces | `npm run build` + `lint` + `test:run` |
 
+### What phase 3 turned out to be, against what this document assumed
+
+**The endpoint shape above is wrong for `ARTIFACT`, and the schema said so all along.** The section
+"a family per owner" projected the `CASE`/`DOC_PAGE` shape onto all three — *"the same three shapes
+under `/doc-pages/{pageId}` and `/artifacts/{artifactId}`"* — which would have given an artifact a
+**list** of attachments. It does not have one. `V1` declares `artifact.attachment_id`, a single
+nullable foreign key, sitting in a row of four payload columns: `attachment_id` for `FILE`,
+`doc_page_id` for `DOC_PAGE_REF`, `external_url` for `EXTERNAL_URL`, `report_artifact_id` for
+`GENERATED_REPORT`. **Four kinds, four payloads.** A case or a page *has* files; a `FILE` artifact
+*is* one, and §6n replaces it by superseding rather than by attaching a second.
+
+So phase 3 is not a third copy of the attachment family:
+
+- **The bytes travel with the registration** — `POST /projects/{projectId}/artifacts/files`, one
+  multipart request, `ArtifactFileInput` beside the file. There is no attach-afterwards, because a
+  `FILE` row with no file is a register entry claiming a document it cannot produce.
+- **No `PUT`, no detach, no re-upload.** `attachment_id` is `updatable = false`.
+- **The download hangs off the artifact's id**, not the attachment's, and is served
+  `Content-Disposition: attachment` — the only attachment response in the product that is not
+  `inline`, because a register lists held documents by name rather than illustrating prose.
+- **`artifact.attachment_id` and `attachment.owner_type = 'ARTIFACT'` are both written and are not
+  rivals.** `owner_id`/`owner_type` are `NOT NULL`, so there is no unowned blob; the FK is the
+  kind's payload. The reader who assumes the schema declared one relationship twice will otherwise
+  delete the wrong half.
+
+Two smaller corrections to this document's own text. `Artifact`'s javadoc listed `attachment_id`
+among four *deliberately unmapped* columns on the rule "do not map a field this slice cannot set" —
+the rule stands and its condition expired here, the **fifth** time a blocker note in this repo has
+outlived its blocker. And `Artifact.register` now takes the artifact's id as a parameter: the two
+rows reference each other, so one id must exist before either object does, and the alternative
+(setting the column on the transient instance) is a trap — the same call on a *managed* instance
+compiles, runs and persists nothing, giving a `FILE` artifact with no file and no error.
+
 Phase 1 carries the shared half deliberately: a phase that shipped `storage`'s new vocabulary with
 no consumer would be the writerless seam §121 phase 3 deleted and §125 warned about again.
 

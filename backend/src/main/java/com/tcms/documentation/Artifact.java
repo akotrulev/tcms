@@ -31,13 +31,30 @@ import org.hibernate.annotations.Filter;
  * refuses it explicitly rather than letting the database answer with a 500. The claim survived
  * because it described the schema from memory and no check read the schema.
  *
- * <p><strong>Four columns of {@code V1}'s table are deliberately unmapped:</strong>
+ * <p>~~<strong>Four columns of {@code V1}'s table are deliberately unmapped:</strong>
  * {@code attachment_id}, {@code report_artifact_id} and the two halves of the tags/version story
- * plan §6n describes. {@code ddl-auto: validate} checks that every mapped field has a column, never
- * the reverse, so an unmapped nullable column is inert. Mapping a field this slice cannot set would
- * put an always-null accessor on the wire's other side and invite a caller to believe it means
- * something — the call {@code TestCaseDetailView} made for {@code relatedDocuments} and §57 made for
- * {@code coverage}: absent rather than zeroed.
+ * plan §6n describes.~~ <strong>→ three, since §126 phase 3 gave {@link ArtifactKind#FILE} a
+ * writer.</strong> The rule stands and the reason expired for one column: mapping a field
+ * <em>this slice cannot set</em> would put an always-null accessor on the wire's other side and
+ * invite a caller to believe it means something — the call {@code TestCaseDetailView} made for
+ * {@code relatedDocuments} and §57 made for {@code coverage}: absent rather than zeroed. This slice
+ * can set {@code attachment_id}, so the condition the exclusion was written under no longer holds.
+ * That is the fifth time in this project a "blocked" note has outlived its blocker, and the note
+ * itself is what made it cheap to notice. {@code ddl-auto: validate} checks that every mapped field
+ * has a column and never the reverse, so the remaining three stay inert.
+ *
+ * <h2>{@code attachment_id} and {@code attachment.owner_type = 'ARTIFACT'} are not rivals</h2>
+ *
+ * <p>Both are written for a {@code FILE}, and a reader meeting the two for the first time will
+ * assume the schema declared the same relationship twice and picked wrong. It did not.
+ * {@code attachment.owner_id}/{@code owner_type} are {@code NOT NULL}: there is no such thing as an
+ * unowned blob, so the bytes behind an artifact <em>must</em> name it as their owner. This column is
+ * the other direction and it carries different information — it is the {@code FILE} kind's
+ * <strong>payload</strong>, the exact sibling of {@link #docPageId} for {@code DOC_PAGE_REF} and
+ * {@link #externalUrl} for {@code EXTERNAL_URL}. Four kinds, four payload columns, and this one is
+ * single-valued where the owner side is not: a case or a page has a <em>list</em> of files, while a
+ * {@code FILE} artifact <em>is</em> one file. Plan §6n replaces it by superseding, never by
+ * attaching a second.
  */
 @Entity
 @Table(name = "artifact")
@@ -114,6 +131,24 @@ public class Artifact {
     private String externalUrl;
 
     /**
+     * Set for {@link ArtifactKind#FILE} — the {@code attachment} row holding this artifact's bytes.
+     *
+     * <p>{@code updatable = false}, like its two sibling payload columns, and that is the
+     * one-file-per-artifact rule expressed where it cannot be worked around. Replacing the document
+     * is superseding it (plan §6n), which produces a second artifact naming the first; an update
+     * here would swap the bytes under a row whose {@code created_at}, author and audit trail all go
+     * on describing the file that was replaced.
+     *
+     * <p>A raw {@code UUID} rather than a {@code @ManyToOne Attachment}, for {@link #planId}'s
+     * reason pointed at a different module: {@code storage} owns that entity, and while
+     * {@code documentation} may import it (it is a foundation module since §125), an association
+     * would make every register read fetch a join it does not want — the list renders a filename and
+     * a size for one row in ten. The batch read is {@code ArtifactFiles}.
+     */
+    @Column(name = "attachment_id", updatable = false)
+    private UUID attachmentId;
+
+    /**
      * Sign-off records: a correction supersedes, never edits (plan §6n, and {@code V1}'s own column
      * comment). Nothing sets it true yet — no act in this slice creates a sign-off — but the reads
      * and the future edit path both have to honour it, so it is mapped rather than ignored.
@@ -152,8 +187,18 @@ public class Artifact {
      * <p>Validation lives in {@link ArtifactWriteService} and not here. This constructor is reached
      * only after the scope/kind cross-field rules have been decided, because those rules need to
      * answer with a <em>field name</em> in a 400 and an entity cannot produce one.
+     *
+     * <p><strong>The id is a parameter and was generated here until §126 phase 3</strong>, because a
+     * {@code FILE}'s two rows reference each other: the {@code attachment} names this artifact as its
+     * owner ({@code owner_id} is {@code NOT NULL}) and this row names that attachment
+     * ({@link #attachmentId}), so one of the two ids has to exist before either object does. The
+     * alternative — construct the artifact, then set the column on the transient instance — works
+     * and is a trap: {@code updatable = false} means the same call on a <em>managed</em> instance
+     * compiles, runs, and persists nothing, which is a {@code FILE} artifact with no file and no
+     * error. A parameter cannot be forgotten in the second position.
      */
     static Artifact register(
+            UUID id,
             UUID projectId,
             ArtifactScope scope,
             UUID planId,
@@ -163,11 +208,12 @@ public class Artifact {
             String description,
             UUID docPageId,
             String externalUrl,
+            UUID attachmentId,
             UUID authorId,
             Instant now) {
 
         Artifact artifact = new Artifact();
-        artifact.id = UUID.randomUUID();
+        artifact.id = id;
         artifact.companyId = CompanyContext.require();
         artifact.projectId = projectId;
         artifact.scope = scope;
@@ -178,6 +224,7 @@ public class Artifact {
         artifact.description = description;
         artifact.docPageId = docPageId;
         artifact.externalUrl = externalUrl;
+        artifact.attachmentId = attachmentId;
         // Never from the input — plan §6g. A create that could choose its own status is an author
         // approving their own sign-off, which is the one thing the register exists to make auditable.
         artifact.status = ArtifactStatus.ACTIVE;
@@ -235,6 +282,11 @@ public class Artifact {
 
     public String getExternalUrl() {
         return externalUrl;
+    }
+
+    /** The blob row behind a {@link ArtifactKind#FILE}, and {@code null} for every other kind. */
+    public UUID getAttachmentId() {
+        return attachmentId;
     }
 
     public boolean isWriteOnce() {

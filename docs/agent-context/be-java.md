@@ -2,19 +2,74 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-07 (**§126 phase 2** — attachment owners, `DOC_PAGE`; **§126 phase 1**
-before it — the `CASE` owner; **§125** before that —
+**Last verified:** 2026-08-07 (**§126 phase 3** — attachment owners, `ARTIFACT`; **§126 phase 2**
+before it — the `DOC_PAGE` owner; **§126 phase 1** — the `CASE` owner; **§125** before that —
 the `storage` module extraction; **§124** — the `BEST` removal and the two unwired permission keys;
 §122's grant-instance-admin, §121's four phases, §120's automation drift, §119's ingestion history,
 §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `18399b0` (§126 phase 1) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `f541f84` (§126 phase 2) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
 **SCHEMA HEAD IS `V39__attachment_owner_types.sql`; `V40` is next free.** It adds no table, so the
-policy count is unchanged at **62**. Test count **2072 across 439 result classes** (phase 1's
-baseline was 2050/434).
+policy count is unchanged at **62**. **Phase 3 carried no migration either** — `attachment_id` has
+been a column since `V1`; what changed is that it is now *mapped*. Test count **2088 across 445
+result classes** (phase 2's baseline was 2072/439 — this phase added 16 tests).
 
 ---
+
+## §126 phase 3 — `ArtifactKind.FILE` IS REGISTRABLE, AND AN ARTIFACT IS NOT A LIST
+
+**`attachment.owner_type = 'ARTIFACT'` has a writer, and it is the last of the five surviving owner
+types to get one.** `V1`'s polymorphic table is now fully claimed.
+
+- **AN ARTIFACT DOES NOT HAVE ATTACHMENTS — IT *IS* ONE.** Read this before assuming the
+  `CASE`/`DOC_PAGE` shape carries over; the slice plan assumed it and was wrong. `V1`'s
+  `artifact.attachment_id` is a **single nullable FK** and sits among four payload columns, one per
+  kind: `attachment_id` (`FILE`) · `doc_page_id` (`DOC_PAGE_REF`) · `external_url`
+  (`EXTERNAL_URL`) · `report_artifact_id` (`GENERATED_REPORT`). So there is **no attachment family
+  under `/artifacts/{id}`**, no list, no attach-afterwards and no detach.
+- **`artifact.attachment_id` and `attachment.owner_type='ARTIFACT'` are BOTH written and are not
+  rivals.** `owner_id`/`owner_type` are `NOT NULL` (no blob is unowned); the FK is the kind's
+  payload. A reader who assumes the schema declared one relationship twice will delete the wrong
+  half.
+- **`POST /projects/{projectId}/artifacts/files`** — multipart, `artifact` (JSON, `ArtifactFileInput`)
+  + `file`. **A separate path, not a media type on `POST /artifacts`**: sharing the path means
+  narrowing that operation to `consumes: application/json`, which turns every client posting a
+  reference with no `Content-Type` into a 415. Own controller (`ArtifactFileController`) for the
+  `MaxUploadSizeExceededException` scoping reason — **fourth instance** of that argument.
+- **`ArtifactFileInput` has NO `kind`, `url` or `docPageId`.** `FILE` by construction, so a
+  contradictory request is unconstructable from the generated types — `ArtifactInput.kind`'s
+  narrowing argument taken one step further. `asRegistration()` widens it so **both create paths
+  share one `validate`**; the only difference is a `hasUpload` boolean.
+- **THE GATE IS `artifact:edit`, SCOPE-QUALIFIED — the same `writeGrantedByRowScope` the reference
+  create uses, at a SECOND call site.** A plain `writeGranted` here compiles and passes everything
+  but `Gates.anEngineerCannotUploadAtProjectScope` (mutation `FA-1`). Delete is
+  `artifact:delete` (§124's key) and now guards the last copy of a file. Download costs nothing
+  beyond the register read — no `attachment:read` was invented.
+- **`Artifact.register` takes the id as a PARAMETER now.** The two rows reference each other, so one
+  id must exist before either object does. The alternative — setting the column on the transient
+  instance — is a trap: the same call on a *managed* instance compiles, runs and persists nothing
+  (`updatable = false`), giving a `FILE` artifact with no file and no error.
+- **Write order: attachment row → artifact row → bytes. Delete order: artifact row → attachment row
+  → bytes.** The first two are the FK's direction (checked at statement time, so the other order is
+  a 500 on every upload); the bytes are last in both for §67's non-rollback reason.
+- **`ArtifactFiles`** is the assembly seam — `forArtifacts(rows)` batched for the register
+  (**plural**, opposite call from `PageAttachments`, because a register renders dozens of rows at
+  once) and `forArtifact(one)` for the download. It keys on the **artifact's own `attachment_id`**,
+  not the owner side, so a second owner row could never be picked at random.
+- **`ArtifactView.url` now carries a THIRD meaning** — the external link for `EXTERNAL_URL` and the
+  **download path** for `FILE`, `null` for the other two. Server-built, so the SPA never composes
+  the route. `filename`/`sizeBytes` were on the wire with no writer since the register shipped, so
+  neither side changed shape.
+- **The download is `Content-Disposition: attachment`, not `inline` — the only one in the product.**
+  A page's image renders beside its paragraphs; an artifact is a held document reached from a list
+  that names it.
+- `Artifact`'s "four deliberately unmapped columns" is **three** now. The rule ("do not map a field
+  this slice cannot set") stands; its condition expired — **fifth** blocker note to outlive its
+  blocker.
+- Fixture prefix **`4f`** (`ArtifactFileEndpointTest`, 16). **NO RED RUN** — stated because it is
+  unusual, and the likely reason is that the two-rows-referencing-each-other problem was solved at
+  design time rather than at compile time.
 
 ## §126 phase 2 — `documentation` DECLARES `storage`, AND THE WIRE SCHEMA IS NO LONGER CASE-SHAPED
 

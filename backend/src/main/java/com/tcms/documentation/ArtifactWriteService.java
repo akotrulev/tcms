@@ -1,8 +1,14 @@
 package com.tcms.documentation;
 
 import com.tcms.project.GateResult;
+import com.tcms.project.Project;
 import com.tcms.project.ProjectService;
 import com.tcms.project.RowScopeGate;
+import com.tcms.storage.Attachment;
+import com.tcms.storage.AttachmentOwner;
+import com.tcms.storage.AttachmentRepository;
+import com.tcms.storage.AttachmentStore;
+import com.tcms.storage.BlobUpload;
 import com.tcms.tenancy.AuditEvent;
 import com.tcms.tenancy.AuditEventRepository;
 import com.tcms.tenancy.CompanyContext;
@@ -65,6 +71,8 @@ public class ArtifactWriteService {
     private final DocPageRepository pages;
     private final PlanFacts plans;
     private final ArtifactPeople people;
+    private final AttachmentRepository attachments;
+    private final AttachmentStore store;
     private final AuditEventRepository auditEvents;
     private final Clock clock;
 
@@ -74,6 +82,8 @@ public class ArtifactWriteService {
             DocPageRepository pages,
             PlanFacts plans,
             ArtifactPeople people,
+            AttachmentRepository attachments,
+            AttachmentStore store,
             AuditEventRepository auditEvents,
             Clock clock) {
 
@@ -82,6 +92,8 @@ public class ArtifactWriteService {
         this.pages = pages;
         this.plans = plans;
         this.people = people;
+        this.attachments = attachments;
+        this.store = store;
         this.auditEvents = auditEvents;
         this.clock = clock;
     }
@@ -154,7 +166,7 @@ public class ArtifactWriteService {
     public Outcome create(UUID userId, UUID projectId, ArtifactInput input) {
         return gated(projects.writeGrantedByRowScope(userId, projectId, PERMISSION,
                 (project, rowScope) -> {
-                    Map<String, List<String>> errors = validate(project.getId(), input);
+                    Map<String, List<String>> errors = validate(project.getId(), input, false);
                     if (!errors.isEmpty()) {
                         return new Outcome.Invalid(errors);
                     }
@@ -166,6 +178,7 @@ public class ArtifactWriteService {
 
                     Instant now = clock.instant();
                     Artifact artifact = artifacts.save(Artifact.register(
+                            UUID.randomUUID(),
                             project.getId(),
                             input.scope(),
                             input.scope() == ArtifactScope.PLAN ? input.planId() : null,
@@ -175,6 +188,7 @@ public class ArtifactWriteService {
                             trimmedOrNull(input.description()),
                             input.kind() == ArtifactKind.DOC_PAGE_REF ? input.docPageId() : null,
                             input.kind() == ArtifactKind.EXTERNAL_URL ? input.url().trim() : null,
+                            null,
                             userId,
                             now));
 
@@ -184,8 +198,117 @@ public class ArtifactWriteService {
                             people.resolve(CompanyContext.require(), List.of(userId));
                     // `inherited` is false: a row just created at either scope is this register's
                     // own. It only becomes inherited when read from inside a plan.
-                    return new Outcome.Created(ArtifactView.of(artifact, false, authors));
+                    return new Outcome.Created(
+                            ArtifactView.of(project.getId(), artifact, null, false, authors));
                 }));
+    }
+
+    /**
+     * Registers an uploaded file — <strong>{@code ArtifactKind.FILE}'s first writer, and the last of
+     * {@code attachment.owner_type}'s five surviving values to get one.</strong>
+     *
+     * <p>{@code V1} declared {@code artifact.attachment_id} and {@code owner_type = 'ARTIFACT'} at
+     * the beginning and {@link ArtifactKind#FILE} said "not registrable yet" in three places, on a
+     * blocker — open question #28, the storage port — that §67 resolved and §125 finished. The
+     * fifth time in this project a "blocked" note has outlived its blocker.
+     *
+     * <h2>The file arrives WITH the registration, and cannot arrive after it</h2>
+     *
+     * <p>There is no "create the artifact, then attach the bytes". A {@code FILE} row with no file
+     * is a register entry that says a document is held and cannot produce it — the register's whole
+     * claim, false, in the one module where §6n makes the audit trail the point. Making the two acts
+     * one request is what removes that state entirely, rather than making it a window somebody has
+     * to remember to close.
+     *
+     * <p>It is also why there is <strong>no re-upload and no detach</strong>. Replacing the document
+     * is superseding it (plan §6n), which produces a second artifact naming the first, and the
+     * column is {@code updatable = false} so the shortcut does not exist to be taken. An artifact
+     * that swapped its bytes would keep the author, the timestamp and the audit trail of the file it
+     * replaced.
+     *
+     * <h2>The gate is the reference create's, unchanged</h2>
+     *
+     * <p>{@code artifact:edit}, scope-qualified through {@link ProjectService#writeGrantedByRowScope}
+     * — a Test Engineer may upload a cycle's sign-off and may not upload the project's test strategy,
+     * for the same reason they may not <em>link</em> one: a project-scope artifact is inherited
+     * read-only by every plan. Nothing about the payload being bytes changes who may write it, and
+     * inventing a stricter key for uploads would be a rule the roles spec does not have.
+     *
+     * <h2>Rows first, bytes second</h2>
+     *
+     * <p>{@code EvidenceService}'s ordering for the third owner in this slice, with one wrinkle the
+     * other two do not have: <strong>the attachment row is written before the artifact row</strong>,
+     * because {@code artifact.attachment_id} is a foreign key and Postgres checks it at statement
+     * time. The bytes go last regardless, so the failure mode stays a row whose blob is missing —
+     * findable by joining — rather than a blob no row names.
+     */
+    @Transactional
+    public Outcome createFile(
+            UUID userId, UUID projectId, ArtifactFileInput fileInput, BlobUpload upload) {
+
+        ArtifactInput input = fileInput.asRegistration();
+        return gated(projects.writeGrantedByRowScope(userId, projectId, PERMISSION,
+                (project, rowScope) -> {
+                    Map<String, List<String>> errors = validate(project.getId(), input, true);
+                    if (!errors.isEmpty()) {
+                        return new Outcome.Invalid(errors);
+                    }
+                    if (!rowScope.mayActOn(input.scope() == ArtifactScope.PLAN)) {
+                        return new Outcome.ForbiddenAtScope();
+                    }
+                    if (upload.sizeBytes() <= 0) {
+                        // The controller already refuses an empty part; this is the same refusal one
+                        // layer down, where a future caller that is not that controller would write
+                        // a zero-byte blob and a register row promising a document.
+                        return new Outcome.Invalid(
+                                Map.of("file", List.of("Choose a file to register.")));
+                    }
+                    return writeFile(userId, project, input, upload);
+                }));
+    }
+
+    /** The two rows and the bytes, in the only order the foreign key and the filesystem allow. */
+    private Outcome writeFile(
+            UUID userId, Project project, ArtifactInput input, BlobUpload upload) {
+
+        UUID companyId = CompanyContext.require();
+        Instant now = clock.instant();
+
+        // The artifact's id, before either row exists — the cycle Artifact.register's header
+        // describes. The blob's owner is the artifact, so the key is keyed on the artifact too, and
+        // BlobUpload.key stays the one place a storage key is built.
+        UUID artifactId = UUID.randomUUID();
+        String key = BlobUpload.key(companyId, artifactId);
+
+        Attachment file =
+                Attachment.forArtifact(companyId, artifactId, key, upload, userId, now);
+        // FIRST, and flushed: artifact.attachment_id references it, and Postgres checks a foreign
+        // key at statement time rather than at commit.
+        attachments.saveAndFlush(file);
+
+        Artifact artifact = artifacts.save(Artifact.register(
+                artifactId,
+                project.getId(),
+                input.scope(),
+                input.scope() == ArtifactScope.PLAN ? input.planId() : null,
+                ArtifactKind.FILE,
+                input.category().trim(),
+                input.title().trim(),
+                trimmedOrNull(input.description()),
+                null,
+                null,
+                file.getId(),
+                userId,
+                now));
+
+        audit(project.getId(), userId, artifact, now);
+
+        // LAST — the half that does not roll back goes after the half that does.
+        store.put(key, upload.bytes());
+
+        Map<UUID, UserRefView> authors = people.resolve(companyId, List.of(userId));
+        return new Outcome.Created(
+                ArtifactView.of(project.getId(), artifact, file, false, authors));
     }
 
     /**
@@ -247,8 +370,45 @@ public class ArtifactWriteService {
             // both, so the trail can never record a removal that did not happen.
             auditRemoval(project.getId(), userId, artifact, now);
             artifacts.delete(artifact);
+            removeFile(artifact);
             return new Outcome.Deleted();
         }));
+    }
+
+    /**
+     * The bytes behind a deleted {@code FILE}, and the row that described them.
+     *
+     * <p><strong>This is what §124 meant by "a {@code FILE} artifact is the first kind whose
+     * deletion also destroys bytes", and it is the reason {@code artifact:delete} is a separate key
+     * rather than {@code artifact:edit}'s destructive half.</strong> Unregistering a link removes a
+     * pointer to a document that goes on existing somewhere else; unregistering an upload is the
+     * last copy leaving the disk. Both are refused for a write-once sign-off, which is the guard
+     * that now protects something irreplaceable rather than merely something recorded.
+     *
+     * <p>Ordering, and it is the mirror of the write: the artifact row goes first (its foreign key
+     * points at the attachment, so the other order is a constraint violation), then the attachment
+     * row, then the bytes. A crash anywhere leaves at worst an unreferenced blob an operator can
+     * sweep — never a register row whose download 404s, and never a blob no row names.
+     *
+     * <p>A no-op for the three reference kinds, keyed on {@code attachment_id} rather than on
+     * {@code kind}: a row either has bytes or does not, and consulting the enum would leave a blob
+     * behind the day the two disagreed.
+     */
+    private void removeFile(Artifact artifact) {
+        if (artifact.getAttachmentId() == null) {
+            return;
+        }
+        Optional<Attachment> file = attachments.findOwnedById(
+                AttachmentOwner.ARTIFACT, artifact.getId(), artifact.getAttachmentId());
+        if (file.isEmpty()) {
+            // Already gone, which the product cannot produce today. Deleting nothing is the right
+            // answer; throwing would refuse the removal of the register row over a blob that is
+            // already in the state the caller asked for.
+            return;
+        }
+        attachments.delete(file.get());
+        attachments.flush();
+        store.delete(file.get().getStorageKey());
     }
 
     /**
@@ -256,8 +416,15 @@ public class ArtifactWriteService {
      *
      * <p>All of them at once rather than the first: a form that surfaces one error per round trip
      * makes the user discover their payload by bisection.
+     *
+     * @param hasUpload whether bytes arrived with the request. The <em>only</em> thing that differs
+     *                  between the two create paths, and it is a parameter rather than two
+     *                  validators so that title, category, description and both scope rules cannot
+     *                  drift apart — a second copy of them is a second answer to what a valid
+     *                  registration is, and only one of the two would be the one a reviewer reads
      */
-    private Map<String, List<String>> validate(UUID projectId, ArtifactInput input) {
+    private Map<String, List<String>> validate(
+            UUID projectId, ArtifactInput input, boolean hasUpload) {
         Map<String, List<String>> errors = new LinkedHashMap<>();
 
         if (input.scope() == null) {
@@ -284,7 +451,7 @@ public class ArtifactWriteService {
         }
 
         validateScope(projectId, input, errors);
-        validateKind(projectId, input, errors);
+        validateKind(projectId, input, hasUpload, errors);
         return errors;
     }
 
@@ -315,7 +482,8 @@ public class ArtifactWriteService {
 
     /** Each reference kind needs its own target, and neither may carry the other's. */
     private void validateKind(
-            UUID projectId, ArtifactInput input, Map<String, List<String>> errors) {
+            UUID projectId, ArtifactInput input, boolean hasUpload,
+            Map<String, List<String>> errors) {
 
         switch (input.kind()) {
             case DOC_PAGE_REF -> {
@@ -344,11 +512,26 @@ public class ArtifactWriteService {
                             List.of("An external link points at a URL, not a page."));
                 }
             }
-            // Declared on the response because the register must render a row of any kind; refused
-            // here because this endpoint cannot honour them. See ArtifactKind.
-            case FILE -> errors.put("kind", List.of(
-                    "Uploading a file is not available yet — register the document as a link or a "
-                            + "documentation page."));
+            // A FILE with bytes beside it is registrable; a FILE without them is a register row
+            // promising a document it does not hold. So the refusal is about the ENDPOINT, not
+            // about the kind, and it names the way forward — the caller holds the same permission
+            // for the other path, so the advice is true by construction rather than hopeful, which
+            // is §124's ordering rule (advice that is confidently wrong is worse than a refusal).
+            case FILE -> {
+                if (!hasUpload) {
+                    errors.put("kind", List.of(
+                            "A file is registered by uploading it — send it to "
+                                    + "POST /projects/{projectId}/artifacts/files instead."));
+                }
+                if (input.docPageId() != null) {
+                    errors.put("docPageId", List.of("An uploaded file is not a page reference."));
+                }
+                if (input.url() != null) {
+                    // Not ignored, for validateScope's reason: a client sending a URL believes the
+                    // artifact points at it, and storing bytes instead is a silent disagreement.
+                    errors.put("url", List.of("An uploaded file points at its own bytes."));
+                }
+            }
             case GENERATED_REPORT -> errors.put("kind", List.of(
                     "Pinning a generated report is not available yet."));
             case null -> {

@@ -3179,10 +3179,13 @@ paths:
         scope.
 
         `FILE` and `GENERATED_REPORT` are declared on `Artifact` because the register renders them,
-        and are deliberately **not** accepted here. An upload needs the storage port (open question
-        #28: a filesystem adapter, so the bytes proxy through the API and a request-size limit has
-        to exist first), and a pinned report needs the `reporting` module, which does not exist. A
-        `kind` this endpoint cannot honour is a `400` rather than a silently different artifact.
+        and are deliberately **not** accepted here. ~~An upload needs the storage port (open
+        question #28…)~~ → **superseded: `FILE` is registrable since 2026-08-07, at
+        `POST /projects/{projectId}/artifacts/files`**, because the bytes have to travel with the
+        registration — a `FILE` row created here and filled in later is a register entry claiming a
+        document it cannot produce. Sending `kind: FILE` to *this* operation is a `400` naming that
+        endpoint, and the advice is safe to give because the caller holds the same permission for
+        it. A pinned report still needs a writer: nothing in `reporting` produces one.
 
         Steering people toward references is the design, not a limitation of this slice — plan §6n
         calls the register's failure mode "a graveyard of outdated copies", and a strategy document
@@ -3206,6 +3209,120 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /projects/{projectId}/artifacts/files:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+    post:
+      tags: [artifacts]
+      operationId: registerArtifactFile
+      summary: Register an uploaded file as an artifact
+      description: |
+        Decision round 3's #49 — `ArtifactKind.FILE` and `attachment.owner_type = 'ARTIFACT'`, both
+        declared by `V1` and writerless for the life of the product. The blocker was the storage
+        port (open question #28), resolved in §67 and finished in §125; the "not registrable yet"
+        note outlived it by two milestones.
+
+        **The file arrives with the registration and cannot arrive after it.** There is no
+        "create the artifact, then attach the bytes" — a `FILE` row with no file is a register
+        entry that says a document is held and cannot produce it, which is the register's whole
+        claim, false, in the module where plan §6n makes the audit trail the point. One request
+        removes that state rather than making it a window somebody has to close.
+
+        **There is no re-upload and no detach, and no `PUT` here.** Replacing the document is
+        *superseding* it (plan §6n) — a second artifact naming the first — so the bytes are fixed
+        at registration. An artifact that swapped its bytes would keep the author, the timestamp
+        and the audit trail of the file it replaced.
+
+        **Requires `artifact:edit`, scope-qualified exactly as the reference create is.** A Test
+        Engineer may upload a cycle's sign-off and may not upload the project's test strategy, for
+        the same reason they may not *link* one: a project-scope artifact is inherited read-only by
+        every plan. A `PROJECT` scope from that caller is a `403` with `errors.scope`; the same
+        caller with `PLAN` gets a `201`. No stricter key was invented for uploads — the roles spec
+        has no such rule, and one seeded to nobody is a `403` no administrator can grant their way
+        out of.
+
+        **A separate path rather than a multipart variant of `POST /artifacts`.** Adding a second
+        media type to that operation means narrowing it to `application/json`, which turns every
+        client posting a reference without a `Content-Type` into a `415` — a behaviour change on an
+        endpoint this has no business touching.
+
+        **The upload proxies through the API**, so the instance's
+        `spring.servlet.multipart.max-file-size` is a real limit and a file over it is a `413`,
+        refused before the handler runs.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [artifact, file]
+              properties:
+                artifact: { $ref: '#/components/schemas/ArtifactFileInput' }
+                file:
+                  type: string
+                  format: binary
+                  description: |
+                    The bytes. Filename and content type travel in the part's own headers, and the
+                    filename is stored in a column — it never becomes part of a storage key, which
+                    is built from server-generated UUIDs.
+      responses:
+        '201':
+          description: Registered
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Artifact' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413':
+          description: |
+            The file is larger than this instance's upload limit. Refused by the servlet container
+            before the handler runs, so there is no field to hang a message on.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /projects/{projectId}/artifacts/{artifactId}/content:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - name: artifactId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [artifacts]
+      operationId: downloadArtifactFile
+      summary: A file artifact's bytes
+      description: |
+        What `Artifact.url` points at when `kind` is `FILE`.
+
+        **No permission beyond the register's read gate.** Anyone who may see that the document is
+        registered may open it, and the catalogue has no `attachment:read` — inventing one would be
+        a permission no role is granted, which is a `403` nobody can fix.
+
+        Addressed by the **artifact's** id, not the attachment's: the attachment is an
+        implementation of the artifact rather than a thing the register has a route to, and a URL
+        naming it would put a second identifier on screen for one document.
+
+        Served as `attachment` with the uploaded filename — **the one attachment response in the
+        product that is not `inline`**. A page's image and a case's screenshot render beside the
+        text they illustrate; an artifact is a held document reached from a list that names it, and
+        what somebody clicking it wants is the file.
+
+        One `404` for four things (§6t): an unreachable project, an artifact of another project, an
+        artifact that is a link rather than an upload, and a row whose blob is missing — the orphan
+        the write ordering deliberately produces rather than the reverse. An empty `200` would hand
+        the browser a corrupt file.
+      responses:
+        '200':
+          description: The bytes
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 
   /projects/{projectId}/artifacts/{artifactId}:
@@ -3234,6 +3351,13 @@ paths:
 
         There is no `deleted_at` on `artifact`, unlike cases, suites and runs. That is the schema's
         own answer and it is honoured here: **the row is gone**, not hidden.
+
+        **For a `FILE`, the bytes go with it** — the attachment row and the blob, in that order,
+        after the artifact row. This is the first kind whose unregistration destroys something
+        rather than removing a pointer to a document that goes on existing elsewhere, and it is why
+        `artifact:delete` being a separate key from `artifact:edit` matters more than it did when
+        the key was wired: the two `409`s below now protect the last copy of a file, not only a
+        record of one.
 
         Two refusals, both `409`, and both about the record rather than about the caller:
 
@@ -7875,7 +7999,21 @@ components:
         inherited:
           type: boolean
           description: Project-scope artifact shown read-only inside a plan (plan §6n).
-        url: { type: string, nullable: true }
+        url:
+          type: string
+          nullable: true
+          description: |
+            **Where this artifact points, whatever its kind.** The external link for
+            `EXTERNAL_URL`, and — since the `FILE` kind got a writer — the download path for
+            `FILE`. `null` for `DOC_PAGE_REF` (reached by `docPageId`) and `GENERATED_REPORT`.
+
+            The server builds it rather than the client composing
+            `/projects/{projectId}/artifacts/{artifactId}/content`: a composed path is a second
+            place the route is spelled, and a route change then breaks the download with a `404`
+            that reads as a missing file.
+
+            **Read `kind` before following it.** One of these two values leaves the product for
+            somebody else's site and the other does not, and nothing about the string says which.
         docPageId:
           type: string
           format: uuid
@@ -7886,10 +8024,56 @@ components:
             Without it the kind plan §6n steers people toward is the one kind the reader cannot
             open — a row that says "Documentation page" and goes nowhere, while an `EXTERNAL_URL`
             beside it is clickable. That asymmetry would push people back to pasting links.
-        filename: { type: string, nullable: true }
-        sizeBytes: { type: integer, nullable: true }
+        filename:
+          type: string
+          nullable: true
+          description: |
+            The uploaded name, for `FILE` and `null` for every other kind. It was declared here
+            with no writer behind it for three slices — the register renders a name and a size
+            column for uploads — so nothing on either side changed shape when
+            `POST /projects/{projectId}/artifacts/files` arrived.
+        sizeBytes:
+          type: integer
+          format: int64
+          nullable: true
+          description: The stored size in bytes, for `FILE` and `null` otherwise.
         updatedBy: { $ref: '#/components/schemas/UserRef' }
         updatedAt: { type: string, format: date-time }
+
+    ArtifactFileInput:
+      type: object
+      required: [scope, category, title]
+      description: |
+        The register fields beside an uploaded file — the `artifact` part of
+        `POST /projects/{projectId}/artifacts/files`.
+
+        **It carries no `kind`, no `url` and no `docPageId`**, and each omission removes a request
+        that could otherwise be sent and would have to be refused. The kind is `FILE` by
+        construction: there is no field to disagree with the endpoint the payload was sent to. That
+        is `ArtifactInput.kind`'s own narrowing argument taken one step further — a client
+        generating types from this contract cannot express the contradiction at all.
+
+        Everything the two inputs share is validated by one server-side path, so a rule about
+        titles or scopes cannot come out differently depending on which endpoint you reached it
+        through.
+      properties:
+        scope:
+          type: string
+          enum: [PROJECT, PLAN]
+          description: |
+            As `ArtifactInput.scope`, including the qualifier: a Test Engineer may upload a cycle's
+            sign-off (`PLAN`) and may not upload the project's test strategy (`PROJECT`). Bytes
+            change nothing about who may write a row.
+        planId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Required when `scope` is `PLAN`, and rejected otherwise.
+        category:
+          type: string
+          maxLength: 60
+        title: { type: string, maxLength: 200 }
+        description: { type: string, maxLength: 2000, nullable: true }
 
     ArtifactInput:
       type: object

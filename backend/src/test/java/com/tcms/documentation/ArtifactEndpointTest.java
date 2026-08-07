@@ -510,15 +510,24 @@ class ArtifactEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("a FILE is refused with a sentence naming what to do instead")
-        void uploadsAreNotRegistrableYet() throws Exception {
+        @DisplayName("a FILE is refused HERE and the message names the upload endpoint")
+        void uploadsGoToTheFileEndpoint() throws Exception {
             MvcResult result = create(LEAD, ACME_BANKING, """
                     {"scope":"PROJECT","category":"TestData","kind":"FILE","title":"Seed data"}""");
 
-            // Accepting it would create a row the register renders with no way to reach the bytes.
-            // The storage port is open question #28 and is not built.
+            // ~~"the storage port is open question #28 and is not built"~~ → it is, and a FILE is
+            // registrable since §126 phase 3 — at POST /artifacts/files, because the bytes have to
+            // travel WITH the registration. Accepting it here would create the exact row that
+            // endpoint's whole shape exists to make unreachable: a register entry saying a document
+            // is held, with no way to reach it.
             assertThat(result.getResponse().getStatus()).isEqualTo(400);
             assertThat(errorFields(result)).containsExactly("kind");
+
+            // The advice, asserted. §124's ordering rule: advice that is confidently wrong is worse
+            // than a flat refusal, and this one is safe to give because the caller holds the same
+            // permission for the endpoint it names.
+            assertThat(result.getResponse().getContentAsString())
+                    .contains("/artifacts/files");
         }
 
         @Test
