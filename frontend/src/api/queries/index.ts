@@ -63,6 +63,7 @@ export {
   useCreatePlanCase,
   useProjectTags,
   useDeleteCase,
+  useQuarantineCase,
   useReferencedCases,
   useUpdateCase,
   type BulkInput,

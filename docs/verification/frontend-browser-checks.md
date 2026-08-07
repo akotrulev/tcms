@@ -356,6 +356,29 @@ had. `TC-3`'s `created_by = NULL` still needs SQL; nothing the API offers can pr
 | M2-36 | Hover a suite's case count; then add `smoke` to another case and reload the tree | The tooltip says the count includes cases filed here, added here, **or carrying its tags — and that a case can belong to several suites, so counts do not sum to the project total.** The count then goes up **with no write to the suite**. | §96-86,87 |
 | M2-30 | Filter bar: add tag `smoke`, then `regression` | Each Enter adds a removable chip and **narrows** — AND, not OR, deliberately the opposite of a suite's tag rules. Deleting widens back. | §96-78 |
 
+### The flake panel and the quarantine action — §6l on the case page (§121 phase 4)
+
+*The screen `M1-29`…`M1-34` had to author their fixture around, because until this phase nothing in
+the product could quarantine a test. **These rows replace that console snippet with the product**,
+and `M1-34`'s release should be driven from here rather than from `fetch` once this lane has run.*
+
+*Fixture: the charter's case list has no flake rows at all on a fresh instance — the recompute is a
+scheduled job and `A1` runs before anything has been ingested. **`M2-54` is therefore the only row
+in this block that a fresh lane can drive**, and it is the most important one. The rest need
+`ExecutionSource.recomputeFlakeScores` to have run over ingested results, which the `L4` lane
+creates; drive `M2-55`…`M2-58` **after** `L4`, and say so if the lane is run in isolation.*
+
+| # | Drive | Expect | src |
+|---|---|---|---|
+| M2-54 | Open any case detail on a fresh instance and read the **Reliability** panel | *"Not assessed yet."* plus the sentence about what flakiness is measured from — and **no percentage, no "0%", no em dash, and no "Computed now" line**. This is the never-scored state, which is neither of the other two. A panel showing `0%` here says a test nobody has run is evidently stable. | §121-20 |
+| M2-55 | Find a case with **fewer than the evidence floor** of repeat runs and read the panel | *"Not enough evidence to score"* **with its counts** — "3 results, 2 repeat runs under identical conditions — too few to score." **THE ROW THIS PHASE EXISTS FOR:** this and `M2-56` must not read alike. One says nobody can tell, the other says we looked hard and it is fine, and `score ?? 0` renders them identically while type-checking. | §121-21 |
+| M2-56 | Find a case scored **0** and put it beside `M2-55` on two tabs | A **Stable** chip and `0.0%`, with "0 switches between pass and fail across N repeat runs". Different words, different shape, obviously a measurement rather than the absence of one. **Check the chip is not green** — this measures reliability, not outcome, and a green badge on a test that fails every time reads as a pass. | §121-22 |
+| M2-57 | Read the evidence sentence on a scored case and check its **denominator** against the case's execution history | It says *"across N repeat runs"* and **not** *"across N results"*. §121's own finding: a case with six results in six cells has six executions and **zero** transitions, and a sentence quoting the result count invites the reader to treat a score computed from nothing as a measurement over six. | §121-23 |
+| M2-58 | As a **Viewer** (no `case:edit`), open a case detail | The **Quarantine test** button is present and **disabled**, with the reason on hover — never absent (§31). Then as **Automation Service** if a session can be had: also refused. **The gate is the slice** — a panel gated on `result:submit` looks identical on every other row here. | §121-24 |
+| M2-59 | Press **Quarantine test**, confirm with the reason box **empty** | Refused **without a request leaving the browser** (watch the network tab) and the field says why. Then type a reason and confirm: the dialog closes, and the panel behind it shows the Quarantined banner **with the reason and your own name** — not an id, and not a blank line. | §121-25 |
+| M2-60 | With that case quarantined, open the project **Board**, then come back and press **Return to the gate** | The card is there (`M1-29`'s card, created by the product this time); after the release the panel's banner is gone, the button reads *Quarantine test* again, and **the board card is gone on the next visit without a manual reload** — the write invalidates every board key, which is a different screen with a different key and the one thing a `setQueryData` on the case alone would miss. | §121-26 |
+| M2-61 | Quarantine a case, then read the reason **character by character**, commas included | Verbatim. Same reason `M1-30` exists one lane over, on the surface that *authors* the sentence rather than the one that renders it: if either end ever splits it, the two rows fail together and the pair says which. | §121-27 |
+
 ### Filing, and the cases filed nowhere
 
 | # | Drive | Expect | src |
@@ -1243,15 +1266,21 @@ screen**. Nothing in `src/` calls the endpoint, so there is no flow a browser co
 `curl` would not drive better.
 
 This is §116's and §117's shape exactly: both were backend-only and both recorded "no browser rows,
-and the screen that will carry them is the next slice." Here that is **phase 4**, which is not
-built. Its rows will name:
+and the screen that will carry them is the next slice." Here that was **phase 4** — ~~which is not
+built~~ → **shipped 2026-08-07, and its eight rows are `M2-54`…`M2-61` in the `A1` repository lane**,
+where the case detail already lives. They name:
 
 - The flake panel on the case page, and the one thing it must not do — render a **null**
   `flakeScore` as `0`. The two mean opposite things (*not enough evidence* against *evidently
   stable*), the API ships `executions` and `transitions` precisely so the panel can say which, and
-  a component that formats `score ?? 0` passes every type check.
+  a component that formats `score ?? 0` passes every type check. **There turned out to be a third
+  state above both** — `flake === null`, no row at all — so `M2-54`…`M2-56` are three rows and not
+  two.
 - The quarantine action, its required reason, and the **release path clearing the reason on screen**
   rather than only in the row.
+- **`M2-54` is the only one a fresh lane can drive**, because a flake row needs the recompute to
+  have run over ingested results. The rest are marked to run after `L4`. A row that cannot be driven
+  yet is recorded with its reason, which is this queue's own rule.
 - ~~The board's quarantined-flaky card (**phase 3**, also not built)~~ → **phase 3 shipped, and its
   six rows are `M1-29`…`M1-34` in the A5 board lane**, where the state they need already lives. They
   author their own fixture from the console, because there is still no screen that quarantines —

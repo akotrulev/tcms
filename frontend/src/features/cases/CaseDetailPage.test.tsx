@@ -77,6 +77,10 @@ function caseBody(createdBy: string | null): TestCase {
     postconditions: [],
     currentVersionNo: 1,
     lockVersion: 1,
+    // The never-scored state, which is what most cases are: no `case_flake` row at all. Required by
+    // the contract, so leaving it off is a build error rather than a panel that silently renders
+    // its "not assessed" branch for the wrong reason — §65's cast class, caught by `required`.
+    flake: null,
   } as TestCase
 }
 

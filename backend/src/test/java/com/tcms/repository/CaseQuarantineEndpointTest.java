@@ -242,7 +242,13 @@ class CaseQuarantineEndpointTest extends IntegrationTestBase {
             assertThat(body.get("quarantined").asBoolean()).isTrue();
             assertThat(body.get("quarantineReason").asText())
                     .isEqualTo("Flaky on the payment gateway stub");
-            assertThat(body.get("quarantinedBy").asText()).isEqualTo(LEAD.toString());
+            // A UserRef, not the bare id this shipped as in phase 1 — see CaseFlakeView. The
+            // display name is the half that matters: the panel names who took the test out of the
+            // gate, and an id there is a sentence nobody can act on.
+            assertThat(body.get("quarantinedBy").get("id").asText()).isEqualTo(LEAD.toString());
+            assertThat(body.get("quarantinedBy").get("displayName").asText())
+                    .as("resolved inside the service's transaction — an unset company names nobody")
+                    .isNotBlank();
             assertThat(body.get("quarantinedAt").isNull())
                     .as("the database refuses a quarantine without a moment")
                     .isFalse();

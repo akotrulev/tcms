@@ -199,14 +199,84 @@ wrong project, with the wrong owner. **The only test that went red was §84's te
 has nothing to do with either row — sixth instance of the family §19 opened, and the durable half is
 that a collision does not fail where you added it.
 
+## Phase 4 — the screen, and the read path that did not exist
+
+**`CaseFlake` had no `GET`.** It was served only as the `PUT` response, so the panel this phase is
+about had nothing to render on load — the endpoint could *set* a state the product could not *show*.
+Three phases shipped without anyone noticing, because a write path's response looks like a read.
+
+The read is `TestCase.flake`, nullable, decided rather than assumed: `healthSignals` and `lastResult`
+are already derived data riding on the case, and the alternative — a second `GET .../flake` — buys an
+independent cache key and pays a round trip on every case page plus a decided answer for "no row
+yet", which is either a 404 the panel must not render as an error or a synthesized row that would
+have to lie about `computedAt`. It is **detail-only**, never the summary: `classificationValueIds`'
+rule one field over, and `theListIsNotWidened` is the test that makes widening it a decision.
+
+**There are THREE ways to have no number and they are three different claims.** This is the whole
+phase:
+
+| Wire | Means | Renders |
+|---|---|---|
+| `flake === null` | no row — the recompute has never reached this case | *Not assessed yet* |
+| `flakeScore === null` | a row, below the evidence floor | *Not enough evidence — 3 results, 2 repeat runs* |
+| `flakeScore === 0` | measured over 38 transitions, never alternated | **Stable**, `0.0%` |
+
+The middle and the last are **opposite** and `score ?? 0` collapses them while type-checking on both
+sides of the wire. The queue had recorded that pair since phase 1; the *third* state only appeared
+once something had to render a case with no row at all, which is most cases. `lib/flake.ts` holds
+the verdict as a discriminated union so the branch that gets it wrong is reachable from a unit test
+with no DOM, and `FQ-21` is the mutation that collapses it at the seam furthest from the screen.
+
+**`quarantinedBy` was the only bare-uuid actor field on the API**, against ~25 that are `UserRef` —
+and `CaseFlakeView`'s own javadoc asserted it followed the convention it broke ("resolved to a name
+by the caller like every other actor field on this API"). §100's rule, third sighting: *a comment
+stating a fact about another file is not a check.* It matters at one screen and only one: the panel
+names who took the test out of the gate, and an id there makes the record present and unreviewable.
+The resolution happens **inside the service's transaction** — `CaseOwners` reads `app_user` through
+the tenancy filter, so a controller resolving it after the transaction closed would fail *closed*
+and answer null on every successful quarantine, with nothing failing (`FQ-23`).
+
+**Two consumerless seams from phase 1 got their consumer, and one of them was the second.**
+`CaseFlakeRepository.findForCases` had no caller at all — the same shape as the `findQuarantined`
+phase 3 deleted, in the same file, missed because phase 3 was looking for the one whose javadoc named
+a caller. `CaseRenderer.flakesFor` is now it, batched because `CaseBulkService` renders up to 500
+cases and this is the third lookup in that class that would otherwise be N+1.
+
+**THE RED RUN WAS `Map.of().get(null)`, and it is §38's trap arriving through a comment.**
+`flakesFor` short-circuited to `Map.of()` when no row in the batch named a decider, then looked up on
+a **nullable** column. `Map.of()` throws NPE on `get(null)` by contract — which `CaseOwners` carries
+a comment about, and which this code copied the *words* of and not the behaviour. Every case detail
+500'd whenever the batch held no quarantined case: **the common path**. The batch that did hold one
+worked perfectly, so it reads as correct. Five tests went red and **three of them were `Conditions`,
+`Automation` and `Steps`** — nothing to do with flake. Second consecutive phase of this slice whose
+first red run failed somewhere else, and the first red run overall was a fixture again (`FQ-26`: no
+`ON CONFLICT` on a `@BeforeEach` insert, 44 of 63 red, which is the count the standing trap says to
+read as harness-before-assertion).
+
+**The dialog closes on success, deliberately unlike §118's.** Nothing here is unrecoverable and the
+opposite direction of the same dialog reverses it; §118's token dialog stays open because it shows a
+secret nothing can produce again, and that was never a rule for every dialog. **The reason is
+refused client-side before the request** — the server's check is the one that binds and exists
+anyway, but the answer is certain and a round trip to be told so is a worse version of the message.
+**Releasing sends no `reason` key at all** rather than an empty one: a field the contract documents
+as ignored is one a request should carry no opinion in.
+
+**The pluralizer produced "4 switches" only after its own test caught "4 switchs"** — every noun in
+the file was regular except the one carrying the headline number.
+
+**One shared-layer change nobody asked for:** `['work-items']` was a module-private const in
+`workItems.ts`, and quarantining moves a card on a board the case screen knows nothing about. Rather
+than write the literal twice it moved to `keys.workItemRoot`, which is what that module's own three
+comments argue for.
+
 ## Gates
 
 | Gate | State |
 |---|---|
-| `cd backend && ./gradlew build` | **BUILD SUCCESSFUL — 2008 tests across 425 result classes, 0 failures** (phase 3; phase 2's was 2003/424, §120's baseline 1963/410) |
+| `cd backend && ./gradlew build` | **BUILD SUCCESSFUL — 2014 tests across 426 result classes, 0 failures** (phase 4; phase 3's was 2008/425, phase 2's 2003/424, §120's baseline 1963/410) |
 | `cd frontend && npm run build` | clean |
 | `npm run lint` | 0 warnings |
-| `npm run test:run` | 1021/1021 across 77 files (measured — unchanged by phase 3, which added no component) |
+| `npm run test:run` | **1045/1045 across 79 files** (measured). **The recorded 1021 baseline was wrong again** — 22 tests were added and the total moved by 24, so the real figure before this phase was 1023. **Fifth drift of this number**; read it off a run. |
 
 Schema head is **`V38__case_flake.sql`**; **`V39` is the next free number**. Policy count goes
 **61 → 62** — a new company-owned table, unlike `V37`, which added a column to an already-policed
@@ -230,22 +300,24 @@ own fixture from the console**, because there is still no screen that quarantine
 The phase-4 rows the queue already records still stand, including the one thing the flake panel must
 not do: render a null score as `0`, which passes every type check.
 
-## What is NOT done — this slice is THREE QUARTERS SHIPPED
+## What is NOT done — ~~this slice is THREE QUARTERS SHIPPED~~ → ALL FOUR PHASES ARE SHIPPED
 
 - ~~**Phase 3 — the board's fourth generator.**~~ → **shipped, above.** `BoardFacts` implements four
   of §6l's five and the quarantined-flaky card source is real. It needed **no migration**
   (`work_item.kind` has no `CHECK` and derived cards are not rows) and **one additive contract
   change** — a seventh `kind`.
-- **Phase 4 — the frontend.** No SPA consumer for `PUT …/quarantine` or for `CaseFlake`. The
-  contract and `schema.d.ts` carry both. **The board now renders a quarantine it cannot create**,
-  which is §117's position with one screen's worth of it closed: the card is visible, and the only
-  way to raise or clear one is the console snippet in the browser queue.
+- ~~**Phase 4 — the frontend.** No SPA consumer for `PUT …/quarantine` or for `CaseFlake`.~~ →
+  **shipped, above.** `FlakePanel` on the case detail, `QuarantineDialog` behind `case:edit`, and
+  the read path the contract did not have. **The board no longer renders a quarantine the product
+  cannot create.** The contract change is one field on `TestCase` plus one actor field corrected
+  from a uuid to a `UserRef`; no migration.
+
+**Built and unverified**, like everything since §65: 8 browser rows (`M2-54`…`M2-61`), 6 mutation
+rows (`FQ-21`…`FQ-26`, two of them findings already fixed), none of the mutations run.
 
 ## What is next
 
-- **Phase 4** — above. The endpoint without a screen is §117's position exactly, and §118 is what it
-  looked like to close.
-- **`lastUsedAt` needs a writer** (§118), still — named for the fourth slice running now. §28's rule
+- **`lastUsedAt` needs a writer** (§118), still — named for the fifth slice running now. §28's rule
   says that is a reason to check whether it is blocked rather than to repeat it: it is not.
 - **Async ingestion** — `PENDING`/`PROCESSING`/`FAILED` and `raw_storage_key`, which §117 left
   writerless on purpose. Note it re-opens §117's idempotency-key decision, so it is a design slice

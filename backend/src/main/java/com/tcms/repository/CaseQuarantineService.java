@@ -82,6 +82,7 @@ public class CaseQuarantineService {
     private final TestCaseRepository cases;
     private final CaseFlakeRepository flakes;
     private final AuditEventRepository auditEvents;
+    private final CaseOwners people;
     private final Clock clock;
 
     CaseQuarantineService(
@@ -89,12 +90,27 @@ public class CaseQuarantineService {
             TestCaseRepository cases,
             CaseFlakeRepository flakes,
             AuditEventRepository auditEvents,
+            CaseOwners people,
             Clock clock) {
         this.projects = projects;
         this.cases = cases;
         this.flakes = flakes;
         this.auditEvents = auditEvents;
+        this.people = people;
         this.clock = clock;
+    }
+
+    /**
+     * Renders the row, naming the decider.
+     *
+     * <p>One lookup and only when the row names somebody — a release clears the column, so the
+     * common path resolves nothing.
+     */
+    private CaseFlakeView render(UUID companyId, CaseFlake flake) {
+        UUID decider = flake.getQuarantinedBy();
+        return CaseFlakeView.of(
+                flake,
+                decider == null ? null : people.resolve(companyId, List.of(decider)).get(decider));
     }
 
     public sealed interface Outcome {
@@ -111,8 +127,16 @@ public class CaseQuarantineService {
         record Invalid(String field, String message) implements Outcome {
         }
 
-        /** Recorded. The row as it now stands. */
-        record Done(CaseFlake flake) implements Outcome {
+        /**
+         * Recorded. The row as it now stands, <strong>already rendered</strong>.
+         *
+         * <p>A view rather than the entity, so the decider is resolved to a name inside this
+         * service's transaction. {@link CaseOwners} reads {@code app_user} through the tenancy
+         * filter, and a controller resolving it after the transaction closed would run with no
+         * {@code app.current_company} and name nobody — fail-closed, so the field would simply be
+         * null on every successful quarantine and nothing would fail.
+         */
+        record Done(CaseFlakeView flake) implements Outcome {
         }
     }
 
@@ -153,17 +177,18 @@ public class CaseQuarantineService {
         TestCase testCase = found.get();
 
         Instant now = clock.instant();
+        UUID companyId = CompanyContext.require();
         Optional<CaseFlake> existing = flakes.findScopedById(caseId);
         if (existing.isEmpty() && !quarantined) {
             // Releasing a case that was never quarantined. The requested state is the state it is
             // in, so this succeeds rather than 404s — and it does NOT create a row, because a row
             // whose every column is a default is a claim the recompute has not made yet.
-            return new Outcome.Done(CaseFlake.unscored(
-                    caseId, CompanyContext.require(), project.getId(), now));
+            return new Outcome.Done(render(
+                    companyId, CaseFlake.unscored(caseId, companyId, project.getId(), now)));
         }
 
         CaseFlake flake = existing.orElseGet(() -> flakes.save(CaseFlake.unscored(
-                caseId, CompanyContext.require(), project.getId(), now)));
+                caseId, companyId, project.getId(), now)));
 
         if (quarantined) {
             flake.quarantine(trimmed, userId, now);
@@ -193,6 +218,6 @@ public class CaseQuarantineService {
                         : "{\"key\":" + AuditEvent.jsonString(testCase.getKey()) + "}",
                 now));
 
-        return new Outcome.Done(flake);
+        return new Outcome.Done(render(companyId, flake));
     }
 }

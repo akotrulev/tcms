@@ -27,6 +27,7 @@ import { PermissionGate } from '../../components/PermissionGate';
 import { CaseDeleteDialog } from './CaseDeleteDialog';
 import { ReviewPanel } from '../review/ReviewPanel';
 import { CaseVersionPanel } from './CaseVersionPanel';
+import { FlakePanel } from './FlakePanel';
 import { AutomationLabel, HealthChip, LifecycleChip, PriorityLabel, StatusChip } from '../../components/StatusChip';
 import { formatAge, formatDateTime, formatSeconds } from '../../lib/format';
 import { stepFormatLabels } from '../../lib/labels';
@@ -313,6 +314,15 @@ export function CaseDetailPage() {
                       />
                     </Stack>
                   </Panel>
+
+                  {/*
+                    Directly under Automation, because that is what it is about: a flake score is
+                    computed from repeat runs under identical conditions, which in practice means
+                    CI. Above the review panel for the reason that one gives about its own place —
+                    this is a panel a reader acts on, and a quarantined test is a standing decision
+                    somebody has to either justify or undo.
+                  */}
+                  <FlakePanel projectId={projectId} testCase={data} />
 
                   {/*
                     Above the version history and below the metadata, because it is the panel a

@@ -21,9 +21,14 @@ import java.util.UUID;
  * @param flakeScore alternations ÷ transitions in {@code [0,1]}, or <strong>null when there is not
  *        enough evidence</strong> — never zero as a stand-in. The two mean opposite things: zero is
  *        <em>evidently stable</em> and null is <em>we cannot say</em>.
- * @param quarantinedBy the user id, resolved to a name by the caller like every other actor field
- *        on this API. Null exactly when {@link #quarantined} is false — the database refuses any
- *        other combination.
+ * @param quarantinedBy <strong>who decided</strong>, resolved here rather than handed out as an id.
+ *        This shipped as a bare {@code UUID} in phase 1 under a javadoc claiming it was "resolved to
+ *        a name by the caller like every other actor field on this API" — it was the <em>only</em>
+ *        actor field on this API that was not a {@code UserRef}, against roughly twenty-five that
+ *        are, so the comment asserted the convention it broke. §100's rule: a comment stating a fact
+ *        about another file is not a check. Null exactly when {@link #quarantined} is false — the
+ *        database refuses any other combination — and also null when the id resolves to no account,
+ *        which {@link CaseOwners} treats as unattributed rather than inventing a name.
  * @param computedAt when the derived half was last recomputed. On the wire for
  *        {@code DashboardView.healthComputedAt}'s reason: it is the only thing that tells "this test
  *        is not flaky" from "nobody has looked at this test yet", and those render identically
@@ -40,10 +45,16 @@ public record CaseFlakeView(
         Instant computedAt,
         boolean quarantined,
         Instant quarantinedAt,
-        UUID quarantinedBy,
+        UserRefView quarantinedBy,
         String quarantineReason) {
 
-    static CaseFlakeView of(CaseFlake flake) {
+    /**
+     * @param decider the resolved {@link CaseFlake#getQuarantinedBy()}, or null when the row names
+     *                nobody or names an id that resolves to no account. Passed in rather than looked
+     *                up here for {@link CaseOwners}' reason: a page of cases resolves its people once,
+     *                and a view that resolved its own would be one query per row.
+     */
+    static CaseFlakeView of(CaseFlake flake, UserRefView decider) {
         return new CaseFlakeView(
                 flake.getCaseId(),
                 flake.getExecutions(),
@@ -55,7 +66,7 @@ public record CaseFlakeView(
                 flake.getComputedAt(),
                 flake.isQuarantined(),
                 flake.getQuarantinedAt(),
-                flake.getQuarantinedBy(),
+                decider,
                 flake.getQuarantineReason());
     }
 }

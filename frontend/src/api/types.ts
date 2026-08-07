@@ -55,6 +55,12 @@ export type CaseStatus = S['CaseStatus'];
 export type Suite = S['Suite'];
 export type TestCase = S['TestCase'];
 export type TestCaseSummary = S['TestCaseSummary'];
+/**
+ * A case's flake evidence and quarantine decision (§121). `TestCase['flake']` is this **or null**,
+ * and the null is a third state — see `lib/flake.ts`, which is the only thing that should read the
+ * shape directly.
+ */
+export type CaseFlake = S['CaseFlake'];
 export type TestStep = S['TestStep'];
 export type Condition = S['Condition'];
 export type CaseConditionRef = S['CaseConditionRef'];

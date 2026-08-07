@@ -136,6 +136,15 @@ export const keys = {
   apiTokens: ['api-tokens'] as const,
   workItems: (p: string, mine: boolean) => ['work-items', p, mine] as const,
   /**
+   * The prefix every board shares — invalidate this and all three refresh.
+   *
+   * Named here rather than spelled `['work-items']` at each call site, which is what the three
+   * entries below argue for and what `workItems.ts` had privately. §121 phase 4 gave it a second
+   * module's worth of callers: quarantining a case changes a card on a board the case screen does
+   * not know about, so the literal was about to exist twice.
+   */
+  workItemRoot: ['work-items'] as const,
+  /**
    * §6l's cross-project personal board (§83) — **under the same `work-items` root as the project
    * board, and that is the point.**
    *

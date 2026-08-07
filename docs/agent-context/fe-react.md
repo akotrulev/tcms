@@ -2,15 +2,47 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-07 (§121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the ingestion history and the binder;
+**Last verified:** 2026-08-07 (§121 phase 4 — the flake panel and the quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the ingestion history and the binder;
 §118 — the token screen; §115 — the coverage matrix's frontend arm; §107 — the mock layer is deleted
 — before them)
-**Baseline commit:** `4542959` (lab deploy) (trust the body over the header and re-grep what a
-later commit could have moved).
-**§121 (M3 slice 6, phases 1–2) touched ONE frontend file — a regenerated `api/schema.d.ts`.**
-The contract gained `PUT /projects/{projectId}/cases/{caseId}/quarantine` plus two schemas,
-`CaseQuarantineInput` and `CaseFlake`. **There is NO consumer in `src/` — phase 4 is not built**, so
-both types are generated and unreferenced. Test count is unchanged at **1021 across 77 files**.
+**Baseline commit:** `bbe7ec9` (ci: stop the backend job claiming to run Testcontainers) (trust the
+body over the header and re-grep what a later commit could have moved).
+
+**§121 PHASE 4 ADDED FOUR FILES** — `lib/flake.ts` + `lib/flake.test.ts`,
+`features/cases/{FlakePanel,QuarantineDialog}.tsx` + `FlakePanel.test.tsx` — and touched
+`api/{types.ts,schema.d.ts,queries/{cases,keys,index,workItems}.ts}` plus
+`features/cases/CaseDetailPage.{tsx,test.tsx}`.
+**Test count is 1045 across 79 files** — measured. **The 1021 in the previous header was wrong**:
+22 tests were added and the total moved 24, so the real baseline was 1023. **Fifth drift of this
+figure — read it off a run.**
+
+> **⚠ THREE STATES HAVE NO FLAKE NUMBER AND THEY ARE THREE DIFFERENT CLAIMS. `lib/flake.ts` is the
+> only thing that should read `CaseFlake` directly.** `flake === null` is *no row — nobody has
+> looked*; `flakeScore === null` is *a row, not enough evidence to say*; `flakeScore === 0` is
+> *measured 38 times, evidently stable*. The middle and the last are **opposite** and `score ?? 0`
+> collapses them while type-checking. `describeFlake` returns a discriminated union so the wrong
+> branch is reachable from a unit test with no DOM. **`formatRatio` is deliberately not used for the
+> null branch** — it answers an em dash, which is the unexplained blank the module exists to avoid.
+> The band chip is **not green for `STABLE`**: this measures reliability, not outcome, and a test
+> that fails every single time would wear it.
+> **`TestCase.flake` IS THE READ PATH AND IT IS DETAIL-ONLY.** There is no `GET .../flake` — the
+> contract served `CaseFlake` only as the `PUT` response for three phases, so the panel had nothing
+> to render on load. `classificationValueIds`' rule decided where it went; `theListIsNotWidened`
+> (backend) is what makes putting it on the grid a decision.
+> **`quarantinedBy` IS A `UserRef` SINCE THIS PHASE** — it was the only bare-uuid actor field on the
+> API against ~25 that are not. It can still be null when the id resolves to no account, and the
+> panel says "somebody no longer in this company" rather than dropping the line (which would lose
+> the date too).
+> **THE GATE IS `case:edit` AND THAT IS THE SLICE**, not `result:submit`: Automation Service does not
+> hold it, so a leaked CI token can post results and cannot quarantine the tests those results fail.
+> A panel gated on `result:submit` passes every other test in `FlakePanel.test.tsx`.
+> **THE DIALOG CLOSES ON SUCCESS, deliberately unlike §118's reveal** — nothing here is
+> unrecoverable and the opposite direction reverses it. Do not generalise §118's stay-open rule.
+> `quarantining` is a **prop decided by the caller**, never derived inside the dialog: a toggle
+> computed from a possibly-stale row is how a quarantine releases itself.
+> **`keys.workItemRoot` REPLACED `workItems.ts`'s PRIVATE `WORK_ITEM_ROOT`** — quarantining moves a
+> card on a board the case screen knows nothing about, so the `['work-items']` literal was about to
+> exist in two modules. `#confirmed`
 
 **§121 PHASE 3 ADDED A SEVENTH `WorkItem['kind']` — `QUARANTINE` — AND THREE `Record<Union, …>`
 MAPS ARE WHAT MADE IT SAFE.** `BoardPage.kindLabels`, `cardMove.derivedNouns`, and the contract's

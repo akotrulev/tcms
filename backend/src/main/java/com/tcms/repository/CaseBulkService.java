@@ -627,7 +627,9 @@ public class CaseBulkService {
                 row,
                 edit,
                 decision,
-                renderer.render(row, context.liveSuites(), context.vocabularies(), companyId),
+                renderer.render(
+                        row, context.liveSuites(), context.vocabularies(), companyId,
+                        context.flakes()),
                 userId,
                 now);
     }
@@ -704,7 +706,15 @@ public class CaseBulkService {
              * may proceed, and empty entirely for any command that is not a move into
              * {@code APPROVED}. See {@code ReviewService#refusesEach}.
              */
-            Map<UUID, String> reviewRefusals) {
+            Map<UUID, String> reviewRefusals,
+            /**
+             * The batch's flake rows, resolved once — see {@link CaseRenderer#flakesFor}.
+             *
+             * <p>Here rather than looked up in {@link #writeVersion} because that method runs once
+             * per case: resolving there would be 500 queries to render a field no bulk action
+             * changes. Empty for a command that writes no version, since nothing would read it.
+             */
+            Map<UUID, CaseFlakeView> flakes) {
 
         List<CaseCondition> conditionsOf(UUID caseId) {
             return conditions.getOrDefault(caseId, List.of());
@@ -870,6 +880,11 @@ public class CaseBulkService {
                 byCase,
                 classificationsByCase,
                 Map.copyOf(priorEdits),
-                reviewRefusals);
+                reviewRefusals,
+                // Only for the authored commands — they are the ones that write a version snapshot,
+                // and the snapshot is the only thing in this class that renders a case.
+                authored && !found.isEmpty()
+                        ? renderer.flakesFor(CompanyContext.require(), found)
+                        : Map.of());
     }
 }

@@ -6201,6 +6201,7 @@ export interface components {
             updatedAt: string;
         };
         TestCase: components["schemas"]["TestCaseSummary"] & {
+            flake: components["schemas"]["CaseFlake"] | null;
             /**
              * @description Every classification value this case carries, as ids — the same assignments
              *     `testType`, `testLevel` and `features` render by name.
@@ -6723,11 +6724,10 @@ export interface components {
             /** Format: date-time */
             quarantinedAt?: string | null;
             /**
-             * Format: uuid
-             * @description Null exactly when `quarantined` is false — the database refuses any other
-             *     combination.
+             * @description Who decided. Null exactly when `quarantined` is false — the database refuses any
+             *     other combination.
              */
-            quarantinedBy?: string | null;
+            quarantinedBy?: components["schemas"]["UserRef"] | null;
             quarantineReason?: string | null;
         };
         EntityVersion: {

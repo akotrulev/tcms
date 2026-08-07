@@ -14,6 +14,7 @@ import type {
   BulkOperation,
   BulkResult,
   CaseFilters,
+  CaseFlake,
   CaseHistorySummary,
   EntityVersion,
   ExecutionHistoryEntry,
@@ -293,6 +294,54 @@ export function useDeleteCase(projectId: string) {
       // because `keys.project` is a PREFIX of every key above it: without it this one call would
       // invalidate the case list, the tree and the case that was just removed from the cache.
       void client.invalidateQueries({ queryKey: keys.project(projectId), exact: true });
+    },
+  });
+}
+
+/**
+ * Quarantines a flaky test, or puts it back into the gate (§121).
+ *
+ * ## `PUT` with an absolute state, and the hook keeps it that way
+ *
+ * The endpoint takes the state to move to rather than a verb, so a client sending the same request
+ * twice is never told 404 or 409 about a state it already asked for. This hook therefore takes
+ * `quarantined` explicitly and **never derives it by negating what it read** — a toggle computed
+ * from a stale cache is precisely how "the quarantine turned itself off" happens, and the two call
+ * sites are two separate confirmed actions rather than one switch.
+ *
+ * ## Not optimistic, deliberately unlike `useMoveWorkItem`
+ *
+ * §106's board write is optimistic because a *drag* that springs back reads as the drop having
+ * missed. This is a dialog with a confirm button, where 300ms of latency reads as the button
+ * working — and the response carries three fields the client cannot compute (`quarantinedAt`, the
+ * resolved `quarantinedBy`, and the derived counts, which is why the endpoint answers 200 with the
+ * row rather than 204). Predicting them would mean inventing a decision-maker and a timestamp on
+ * screen and then replacing them a moment later.
+ *
+ * The case's own cache entry is written from the response, so the panel re-renders from the server's
+ * account of the decision rather than from the client's.
+ */
+export function useQuarantineCase(projectId: string, caseId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ quarantined, reason }: { quarantined: boolean; reason?: string }) =>
+      api.put<CaseFlake>(`${base(projectId)}/cases/${caseId}/quarantine`, { quarantined, reason }),
+    // The dialog lands the 400 on its own reason field — the server raises a missing reason as a
+    // field error precisely so a form can, and a global toast would show it at the corner while the
+    // dialog sat there looking like it had not been submitted.
+    meta: { handled: true },
+    onSuccess: (flake) => {
+      // Patched into the case rather than invalidated, so the panel does not blank while a refetch
+      // of the whole case runs. `flake` is the ONLY field this write can change: rewriting the
+      // cached case wholesale from a response that describes one row is how a screen loses the
+      // edits another tab made — the `EXCLUDED.*` mistake one table over, in a cache.
+      client.setQueryData<TestCase>(keys.case(projectId, caseId), (previous) =>
+        previous ? { ...previous, flake } : previous,
+      );
+      // The board's quarantine card (§121 phase 3) is derived from this row, and it is on a
+      // different screen with a different key — without this a release leaves the card standing
+      // until something else happens to invalidate the board.
+      void client.invalidateQueries({ queryKey: keys.workItemRoot });
     },
   });
 }

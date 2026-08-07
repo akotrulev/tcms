@@ -2,14 +2,50 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-07 (**§121 phase 3** — the board's fourth derived-item generator; §122's
-grant-instance-admin, §121's phases 1–2, §120's automation drift, §119's ingestion history,
-§117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `4542959` (lab deploy) (per `CLAUDE.md`, trust the body over the header and
-re-grep what a later commit could have moved).
+**Last verified:** 2026-08-07 (**§121 phase 4** — the flake read path; §121 phase 3 — the board's
+fourth derived-item generator; §122's grant-instance-admin, §121's phases 1–2, §120's automation
+drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
+**Baseline commit:** `bbe7ec9` (ci: stop the backend job claiming to run Testcontainers) (per
+`CLAUDE.md`, trust the body over the header and re-grep what a later commit could have moved).
 
-**§121 PHASE 3 CARRIED NO MIGRATION** — schema head is still `V38`, `V39` next free, policy count
-62. One additive contract change (a seventh `WorkItem.kind`).
+**§121 PHASE 4 CARRIED NO MIGRATION EITHER** — schema head is still `V38`, `V39` next free, policy
+count 62. Test count **2014 across 426 result classes** (phase 3's was 2008/425).
+
+**Contract changes §121 phase 4 made — both on shapes, neither a new operation:**
+- **`TestCase.flake`** (nullable, required) — **`CaseFlake` had NO READ PATH.** It was served only
+  as `PUT …/quarantine`'s response for three phases, so the SPA could set a state it could not
+  show. A write path's response looks like a read, which is why nobody noticed.
+- **`CaseFlake.quarantinedBy` is a `UserRef`, was a bare `UUID`** — the **only** actor field on this
+  API that was one, against ~25 that are not, and `CaseFlakeView`'s own javadoc asserted it followed
+  the convention it broke. §100's rule again: *a comment stating a fact about another file is not a
+  check.*
+
+**New seams §121 phase 4 created — `repository`:**
+- **`CaseRenderer.flakesFor(companyId, rows)`** — two queries for any batch size, and the **first
+  caller `CaseFlakeRepository.findForCases` has ever had.** That method was written in phase 1 with
+  no consumer at all: the *second* consumerless seam in that file, missed by phase 3 because phase 3
+  was hunting the one whose javadoc named a caller. `CaseBulkService` renders up to 500 cases, so
+  the batched form is what keeps the third lookup in that class from being N+1; the batch's map is
+  threaded through `Context.flakes()` and populated only for `authored` commands.
+- **`CaseRenderer.render(…, Map<UUID, CaseFlakeView>)`** is the new low-level overload; the 4-arg
+  form resolves its own batch of one.
+- **`CaseQuarantineService.Outcome.Done` now carries a `CaseFlakeView`, not the entity.** The decider
+  is resolved **inside the service's transaction** — `CaseOwners` reads `app_user` through the
+  tenancy filter, so resolving in the controller would fail *closed* and answer null on every
+  successful quarantine, with nothing failing anywhere.
+- `TestCaseDetailView` gained `flake`. **It therefore lands in the version snapshot**
+  (`CaseVersions` serializes this whole view) — accepted, not unnoticed: `healthSignals` is derived
+  and has been in that snapshot since M1, and the content **hash is over `CaseEdit`**, so a nightly
+  recompute still cannot make a no-op save write a version. Making the snapshot authored-only is a
+  separate slice; doing it here would break the response-is-the-snapshot invariant `CaseRenderer`
+  exists to hold.
+
+> **⚠ `Map.of().get(null)` THROWS NPE BY CONTRACT, AND THIS IS THE SECOND TIME IT HAS BITTEN (§38).**
+> `flakesFor` short-circuited to `Map.of()` when no row in a batch named a decider, then looked up
+> on a **nullable** column — so **every case detail 500'd whenever no case in the batch was
+> quarantined**, which is the common path, while the batch that *did* contain one worked perfectly.
+> `CaseOwners` carries a comment about exactly this and the new code copied its words, not its
+> behaviour. Use `new HashMap<>()` on **both** arms whenever the lookup key can be null.
 
 **New seams §121 phase 3 created — `work`:**
 - `work.BoardFacts.quarantinedCases(projectIds)` — the **fourth** generator's fact, native SQL over

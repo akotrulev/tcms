@@ -2,8 +2,13 @@ package com.tcms.repository;
 
 import com.tcms.project.ClassificationDimensionView;
 import com.tcms.project.ProjectConfigurationService;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
 
 /**
@@ -33,6 +38,8 @@ class CaseRenderer {
     private final CaseClassifications classifications;
     private final CaseAutomationTagRepository automationTags;
     private final TestStepRepository stepRows;
+    private final CaseFlakeRepository flakes;
+    private final CaseOwners people;
 
     CaseRenderer(
             ProjectConfigurationService configuration,
@@ -40,7 +47,9 @@ class CaseRenderer {
             CaseConditions conditions,
             CaseClassifications classifications,
             CaseAutomationTagRepository automationTags,
-            TestStepRepository stepRows) {
+            TestStepRepository stepRows,
+            CaseFlakeRepository flakes,
+            CaseOwners people) {
 
         this.configuration = configuration;
         this.summaries = summaries;
@@ -48,6 +57,8 @@ class CaseRenderer {
         this.classifications = classifications;
         this.automationTags = automationTags;
         this.stepRows = stepRows;
+        this.flakes = flakes;
+        this.people = people;
     }
 
     /**
@@ -77,6 +88,66 @@ class CaseRenderer {
             List<ClassificationDimensionView> vocabularies,
             UUID companyId) {
 
+        return render(row, liveSuites, vocabularies, companyId, flakesFor(companyId, List.of(row)));
+    }
+
+    /**
+     * Resolves the flake half for a whole batch of cases — <strong>two queries for any number of
+     * rows, never two per row.</strong>
+     *
+     * <p>{@link CaseBulkService} renders up to 500 cases in one operation, and this is the third
+     * lookup in this class that would otherwise be N+1 (the class header's two-step form exists for
+     * the first two). {@link CaseFlakeRepository#findForCases} was written in §121 phase 1 with
+     * <strong>no caller at all</strong> — the same consumerless shape as the {@code findQuarantined}
+     * phase 3 deleted, and this is the consumer it was actually waiting for.
+     *
+     * <p>The second query names the deciders, and it runs <strong>only when some row in the batch is
+     * quarantined</strong>: the id set is empty on the overwhelmingly common path, and
+     * {@link CaseOwners#resolve} over an empty collection is not worth a round trip.
+     */
+    Map<UUID, CaseFlakeView> flakesFor(UUID companyId, List<TestCase> rows) {
+        List<CaseFlake> found = flakes.findForCases(rows.stream().map(TestCase::getId).toList());
+        if (found.isEmpty()) {
+            return Map.of();
+        }
+
+        Set<UUID> deciders = found.stream()
+                .map(CaseFlake::getQuarantinedBy)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        // A HashMap on BOTH arms, never Map.of() on the empty one — §38's trap, and it bites here
+        // rather than in CaseOwners because the lookup below is keyed on a NULLABLE column.
+        // Map.of().get(null) throws NPE by contract, so the short-circuit made every unquarantined
+        // case a 500 in exactly the batches where nobody was quarantined: the common one. The batch
+        // containing one quarantined case worked, which is why this reads as fine.
+        Map<UUID, UserRefView> named = deciders.isEmpty()
+                ? new HashMap<>()
+                : people.resolve(companyId, deciders);
+
+        // A HashMap, never Map.of() / toMap() — CaseOwners' own note applies verbatim: an immutable
+        // map throws on get(null) by contract, so behaviour on an unresolvable decider would depend
+        // on whether the batch happened to contain a resolvable one.
+        Map<UUID, CaseFlakeView> byCase = new HashMap<>();
+        for (CaseFlake flake : found) {
+            byCase.put(flake.getCaseId(), CaseFlakeView.of(flake, named.get(flake.getQuarantinedBy())));
+        }
+        return byCase;
+    }
+
+    /**
+     * The same render with the batch's flake rows already resolved — see {@link #flakesFor}.
+     *
+     * @param flakeViews keyed by case id; a case absent from the map has no {@code case_flake} row
+     *                   and renders a null {@code flake}, which is the "never scored" state and not
+     *                   the "scored, no evidence" one
+     */
+    TestCaseDetailView render(
+            TestCase row,
+            List<Suite> liveSuites,
+            List<ClassificationDimensionView> vocabularies,
+            UUID companyId,
+            Map<UUID, CaseFlakeView> flakeViews) {
+
         TestCaseSummaryView summary =
                 summaries.render(companyId, List.of(row), liveSuites, vocabularies).getFirst();
 
@@ -95,7 +166,8 @@ class CaseRenderer {
                         .sorted()
                         .toList(),
                 stepRows.findForCase(row.getId()).stream().map(TestStepView::of).toList(),
-                conditions.forCase(row, liveSuites));
+                conditions.forCase(row, liveSuites),
+                flakeViews.get(row.getId()));
     }
 
     /** The project's classification dimensions, or none when the caller cannot read them. */

@@ -109,9 +109,9 @@ export function useMoveWorkItem() {
     onMutate: async ({ id, status }) => {
       // Cancel first, or a read already in flight resolves *after* this write and puts the card
       // back — an optimistic update overwritten by a response that predates it.
-      await client.cancelQueries({ queryKey: WORK_ITEM_ROOT });
+      await client.cancelQueries({ queryKey: keys.workItemRoot });
 
-      const snapshot = client.getQueriesData<WorkItem[]>({ queryKey: WORK_ITEM_ROOT });
+      const snapshot = client.getQueriesData<WorkItem[]>({ queryKey: keys.workItemRoot });
       for (const [key, board] of snapshot) {
         if (!board) continue;
         client.setQueryData<WorkItem[]>(
@@ -140,12 +140,11 @@ export function useMoveWorkItem() {
     // On both paths: success re-reads the server's own answer (a move can change `overdue`,
     // `allowedTransitions` and, on a derived card, nothing at all), and a failure re-reads because
     // the rolled-back cache is now a guess about a server that just refused something.
-    onSettled: () => client.invalidateQueries({ queryKey: WORK_ITEM_ROOT }),
+    onSettled: () => client.invalidateQueries({ queryKey: keys.workItemRoot }),
   });
 }
 
 /** Every board's key starts here — see `keys.myWork` on why the two share a root. */
-const WORK_ITEM_ROOT = ['work-items'] as const;
 
 /**
  * Creates a task.
@@ -176,6 +175,6 @@ export function useCreateWorkItem(projectId: string) {
     // could not have compiled against a real payload.
     mutationFn: (input: Omit<WorkItemInput, 'projectId'>) =>
       api.post<WorkItem>('/work-items', { ...input, projectId }, { idempotencyKey: intentKey.current }),
-    onSuccess: () => client.invalidateQueries({ queryKey: WORK_ITEM_ROOT }),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.workItemRoot }),
   });
 }

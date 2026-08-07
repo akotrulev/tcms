@@ -189,6 +189,7 @@ class CaseDetailEndpointTest extends IntegrationTestBase {
         seedVocabularies();
         seedTrees();
         seedCases();
+        seedFlake();
         seedLibrary();
         seedAttachments();
         seedStepsTagsAndClassification();
@@ -868,6 +869,110 @@ class CaseDetailEndpointTest extends IntegrationTestBase {
         }
     }
 
+    // =====================================================================
+    // The flake half
+    // =====================================================================
+
+    @Nested
+    @DisplayName("The flake half — three ways to have no number, and they are not the same")
+    class Flake {
+
+        @Test
+        @DisplayName("a case the recompute never reached serves flake: null, and the KEY is present")
+        void noRowIsAnExplicitNull() throws Exception {
+            JsonNode body = detailAs(LEAD, ACME, ACME_BANKING, caseId("bare"));
+
+            assertThat(body.has("flake"))
+                    .as("`flake` is required by openapi.yaml — an absent key reads as a field the "
+                            + "server forgot, which is TestCaseSummary.suiteId's rule one field over")
+                    .isTrue();
+            assertThat(body.get("flake").isNull()).isTrue();
+        }
+
+        @Test
+        @DisplayName("a scored row carries the counts, the score and the cells")
+        void aScoredRowIsServed() throws Exception {
+            JsonNode flake = detailAs(LEAD, ACME, ACME_BANKING, caseId("full")).get("flake");
+
+            assertThat(flake.get("caseId").asText()).isEqualTo(caseId("full").toString());
+            assertThat(flake.get("executions").asInt()).isEqualTo(12);
+            assertThat(flake.get("transitions").asInt()).isEqualTo(9);
+            assertThat(flake.get("alternations").asInt()).isEqualTo(4);
+            assertThat(flake.get("cells").asInt()).isEqualTo(2);
+            assertThat(flake.get("flakeScore").asDouble()).isEqualTo(0.4444);
+            assertThat(flake.get("computedAt").isNull())
+                    .as("what tells 'not flaky' from 'nobody has looked at it'")
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("NULL SCORE IS NOT ZERO — the counts ship so the panel can say which")
+        void theNullScoreIsNotAZero() throws Exception {
+            // The one assertion this whole field exists for. `flakeScore: null` (a row below the
+            // evidence floor) and `flakeScore: 0` (a test measured 38 times and evidently stable)
+            // are opposite claims, and `score ?? 0` type-checks in every language on both sides.
+            JsonNode unscored = detailAs(LEAD, ACME, ACME_BANKING, caseId("gherkin")).get("flake");
+            JsonNode stable = detailAs(LEAD, ACME, ACME_BANKING, caseId("bystander")).get("flake");
+
+            assertThat(unscored.isNull())
+                    .as("a row EXISTS — this is not the never-scored state")
+                    .isFalse();
+            assertThat(unscored.get("flakeScore").isNull()).isTrue();
+            assertThat(unscored.get("executions").asInt())
+                    .as("the counts are what let a client render 'not enough to score' rather "
+                            + "than an unexplained blank")
+                    .isEqualTo(3);
+            assertThat(unscored.get("transitions").asInt()).isEqualTo(2);
+
+            assertThat(stable.get("flakeScore").isNull()).isFalse();
+            assertThat(stable.get("flakeScore").asDouble()).isZero();
+            assertThat(stable.get("transitions").asInt()).isEqualTo(38);
+        }
+
+        @Test
+        @DisplayName("the decider is a UserRef and is named through THIS company's membership")
+        void theDeciderIsNamed() throws Exception {
+            // A bare uuid until this slice, and the only actor field on the API that was one. The
+            // panel's sentence is "quarantined by <somebody>", so an id makes the record present
+            // and unreviewable — see CaseFlakeView.
+            JsonNode by = detailAs(LEAD, ACME, ACME_BANKING, caseId("full"))
+                    .get("flake").get("quarantinedBy");
+
+            assertThat(by.get("id").asText()).isEqualTo(LEAD.toString());
+            assertThat(by.get("displayName").asText())
+                    .as("plan §6u — the membership label, not the account's canonical name")
+                    .isEqualTo("L. Lead of Acme");
+        }
+
+        @Test
+        @DisplayName("a released row names nobody and keeps no reason")
+        void releasedRowsCarryNoDecision() throws Exception {
+            JsonNode flake = detailAs(LEAD, ACME, ACME_BANKING, caseId("bystander")).get("flake");
+
+            assertThat(flake.get("quarantined").asBoolean()).isFalse();
+            assertThat(flake.get("quarantinedBy").isNull()).isTrue();
+            assertThat(flake.get("quarantinedAt").isNull()).isTrue();
+            assertThat(flake.get("quarantineReason").isNull()).isTrue();
+        }
+
+        @Test
+        @DisplayName("the GRID does not carry it — detail only, deliberately")
+        void theListIsNotWidened() throws Exception {
+            // `classificationValueIds`' rule one field over: a per-row join on the hottest read in
+            // the product, for a column no grid draws. If a flake column is ever wanted on the
+            // list, that is a decision and this test is where it gets made.
+            String body = mvc.perform(MockMvcRequestBuilders
+                            .get("/api/v1/projects/" + ACME_BANKING + "/cases")
+                            .header("Authorization", "Bearer " + tokenFor(LEAD, ACME))
+                            .accept(MediaType.APPLICATION_JSON))
+                    .andReturn().getResponse().getContentAsString();
+
+            JsonNode rows = json.readTree(body).get("items");
+            assertThat(rows).isNotEmpty();
+            assertThat(rows).allSatisfy(row -> assertThat(row.has("flake")).isFalse());
+        }
+    }
+
     private static UUID assignmentId(String marker) {
         return UUID.nameUUIDFromBytes(("case-detail:" + marker).getBytes());
     }
@@ -878,6 +983,62 @@ class CaseDetailEndpointTest extends IntegrationTestBase {
 
     private static UUID stepId(String marker) {
         return UUID.nameUUIDFromBytes(("case-detail-step:" + marker).getBytes());
+    }
+
+    /**
+     * Three cases with a {@code case_flake} row and one deliberately without.
+     *
+     * <p>The four states this fixture holds apart are the whole point of the field, and three of
+     * them render as "no number" if anything collapses them: <strong>no row</strong> (nobody has
+     * looked at this test), <strong>a row with a null score</strong> (looked at, not enough evidence
+     * to say), <strong>a score of zero</strong> (looked at, evidently stable), and a real score.
+     */
+    private void seedFlake() throws SQLException {
+        try (Connection connection = appConnection(ACME)) {
+            // Scored AND quarantined — the only row here that names a decider.
+            flake(connection, caseId("full"), ACME_BANKING, 12, 9, 4, "0.4444", true, LEAD,
+                    "Flaky on the payment gateway stub");
+
+            // Below the evidence floor: a row exists, the recompute ran, and the score is NULL
+            // because two transitions cannot tell a flaky test from an unlucky one. The counts are
+            // what let a panel say so instead of rendering a blank.
+            flake(connection, caseId("gherkin"), ACME_BANKING, 3, 2, 1, null, false, null, null);
+
+            // Evidently stable — the opposite claim from the row above, and the one a `score ?? 0`
+            // would make them both.
+            flake(connection, caseId("bystander"), ACME_BANKING, 40, 38, 0, "0.0000", false, null,
+                    null);
+
+            // caseId("bare") deliberately gets NO ROW.
+        }
+    }
+
+    private void flake(Connection connection, UUID caseId, UUID projectId, int executions,
+            int transitions, int alternations, String score, boolean quarantined, UUID decider,
+            String reason) throws SQLException {
+
+        try (var statement = connection.prepareStatement("""
+                INSERT INTO case_flake (case_id, company_id, project_id, executions, transitions,
+                                        alternations, cells, flake_score, computed_at,
+                                        quarantined, quarantined_at, quarantined_by,
+                                        quarantine_reason)
+                VALUES (?::uuid, ?::uuid, ?::uuid, ?, ?, ?, 2, ?::numeric, now(),
+                        ?, CASE WHEN ? THEN now() END, ?::uuid, ?)
+                ON CONFLICT (case_id) DO NOTHING
+                """)) {
+            statement.setString(1, caseId.toString());
+            statement.setString(2, ACME.toString());
+            statement.setString(3, projectId.toString());
+            statement.setInt(4, executions);
+            statement.setInt(5, transitions);
+            statement.setInt(6, alternations);
+            statement.setString(7, score);
+            statement.setBoolean(8, quarantined);
+            statement.setBoolean(9, quarantined);
+            statement.setString(10, decider == null ? null : decider.toString());
+            statement.setString(11, reason);
+            statement.executeUpdate();
+        }
     }
 
     private static UUID attachmentId(String marker) {

@@ -51,6 +51,27 @@ import java.util.UUID;
  * @param lockVersion on the wire because the SPA sends it back on a PATCH, so a concurrent edit is
  *              a 409 rather than a silent overwrite (plan §6j). The one internal that earns its
  *              place in a response.
+ * @param flake the case's flake evidence and quarantine decision, or <strong>null when no
+ *              {@code case_flake} row exists at all</strong> — the recompute has never reached this
+ *              case. That is a third state and the SPA renders all three differently: no row is
+ *              "nobody has looked at this test", a row with a null {@code flakeScore} is "not enough
+ *              evidence to say", and a score of zero is "evidently stable". Two of those three are
+ *              easy to collapse and mean opposite things.
+ *
+ *              <p>Detail only, never {@link TestCaseSummaryView}: the grid draws what a case
+ *              <em>is</em>, and this is read while deciding what to do about one case. A per-row
+ *              join on the list endpoint would buy a column nobody asked for.
+ *
+ *              <p><strong>It lands in the version snapshot, and that is accepted rather than
+ *              unnoticed.</strong> {@link CaseVersions} serializes this whole view as the authored
+ *              version's body, so a v7 row records the flake measurement as it stood the moment
+ *              somebody saved. {@code healthSignals} above is derived and has been in that snapshot
+ *              since M1, so this follows an established line rather than crossing a new one — and
+ *              critically the content HASH is computed over {@link CaseEdit}, not over this view, so
+ *              a nightly recompute still cannot cause a save that changed nothing to write a
+ *              version. Making the snapshot authored-only is a real cleanup and it is a separate
+ *              slice; doing it here would mean the response and the snapshot stop being one render,
+ *              which is the invariant {@link CaseRenderer} exists to hold.
  */
 public record TestCaseDetailView(
         UUID id,
@@ -103,7 +124,8 @@ public record TestCaseDetailView(
         List<CaseConditionRefView> preconditions,
         List<CaseConditionRefView> postconditions,
         int currentVersionNo,
-        long lockVersion) {
+        long lockVersion,
+        CaseFlakeView flake) {
 
     static TestCaseDetailView of(
             TestCase row,
@@ -111,7 +133,8 @@ public record TestCaseDetailView(
             List<String> automationTags,
             List<UUID> classificationValueIds,
             List<TestStepView> steps,
-            CaseConditions.Resolved conditions) {
+            CaseConditions.Resolved conditions,
+            CaseFlakeView flake) {
 
         return new TestCaseDetailView(
                 summary.id(),
@@ -146,6 +169,7 @@ public record TestCaseDetailView(
                 conditions.preconditions(),
                 conditions.postconditions(),
                 row.getCurrentVersionNo(),
-                row.getLockVersion());
+                row.getLockVersion(),
+                flake);
     }
 }

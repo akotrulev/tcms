@@ -5296,7 +5296,21 @@ components:
             - currentVersionNo
             - lockVersion
             - classificationValueIds
+            - flake
           properties:
+            flake:
+              # The detail carries it and the summary does not, for `classificationValueIds`'
+              # reason one field down: the grid draws a case's *state*, and flake evidence is
+              # read while deciding what to do about one case. A per-row join on the hottest
+              # list read in the product would buy a column nobody asked for.
+              #
+              # Nullable, and the null is load-bearing: it means NO `case_flake` ROW EXISTS —
+              # the recompute has never reached this case. That is a third state, distinct from
+              # both `flakeScore: null` (a row exists, below the evidence floor, "not enough
+              # evidence to say") and `flakeScore: 0` ("evidently stable"). Rendering any two of
+              # the three alike is the defect this field ships counts to prevent.
+              allOf: [{ $ref: '#/components/schemas/CaseFlake' }]
+              nullable: true
             classificationValueIds:
               type: array
               items: { type: string, format: uuid }
@@ -5921,12 +5935,20 @@ components:
           format: date-time
           nullable: true
         quarantinedBy:
-          type: string
-          format: uuid
+          # A `UserRef`, not the bare uuid this field shipped as in §121 phase 1 — it was the
+          # ONLY actor field on this API that was one, against ~25 that are not, and
+          # `CaseFlakeView`'s own javadoc asserted it followed the convention it broke
+          # ("resolved to a name by the caller like every other actor field on this API").
+          # A comment claiming a fact about another file is not a check (§100).
+          #
+          # It matters at exactly one screen: the flake panel names who took the test out of the
+          # gate, and a bare id leaves it rendering a uuid or silently dropping the decider — the
+          # half of the record that makes a quarantine reviewable rather than just present.
+          allOf: [{ $ref: '#/components/schemas/UserRef' }]
           nullable: true
           description: |
-            Null exactly when `quarantined` is false — the database refuses any other
-            combination.
+            Who decided. Null exactly when `quarantined` is false — the database refuses any
+            other combination.
         quarantineReason:
           type: string
           nullable: true

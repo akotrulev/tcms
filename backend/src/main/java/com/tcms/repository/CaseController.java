@@ -405,8 +405,10 @@ public class CaseController {
             case CaseQuarantineService.Outcome.Invalid invalid ->
                     ResponseEntity.badRequest().body(ApiProblem.validation(
                             Map.of(invalid.field(), List.of(invalid.message()))));
-            case CaseQuarantineService.Outcome.Done done ->
-                    ResponseEntity.ok(CaseFlakeView.of(done.flake()));
+            // Already a rendered view, decider and all — the service resolves the name inside its
+            // own transaction, because CaseOwners reads app_user through the tenancy filter and a
+            // resolution done out here would run with no company set and name nobody.
+            case CaseQuarantineService.Outcome.Done done -> ResponseEntity.ok(done.flake());
         };
     }
 
