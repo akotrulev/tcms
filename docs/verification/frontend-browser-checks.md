@@ -1435,3 +1435,51 @@ new file has to be authored for this slice.
 - **No row asserts a seventh block type renders as prose.** The renderer's `default` arm exists for
   a server a version ahead of the bundle, and no deployment can produce one — a unit test drives it
   instead, which is the only observer that can.
+
+---
+
+## §128 — the case editor's autosave buffer (M3 #57, decision round 3 step 8)
+
+Added 2026-08-08. `test_case_draft` got its first writer and the case editor got autosave, a restore
+offer, and a discard. **9 rows, none driven.**
+
+> **`M2-67` is the row that cannot be reached by any gate, and it is not close.** Every automated
+> assertion here is about one browser: the *point* of a draft buffer is that the work survives
+> something the suite cannot do — closing the tab. A test that never closes a tab proves the request
+> was made, not that the work came back.
+>
+> **`M2-71` is second, and it is the one this slice is honest about being uncomfortable.** There is
+> **one buffer per case**, so two people editing the same case share it. Driving it needs two
+> accounts and two browsers, and what it demonstrates is a *designed* consequence rather than a
+> defect: the second person's draft replaces the first's, and the offer names whose it is. If it
+> reads as wrong when actually driven, that is a finding about the schema's 1:1 key and belongs in
+> a decision, not a patch.
+
+### A1 — losing the tab, and getting the work back
+
+| Row | Drive | Expect |
+|---|---|---|
+| `M2-67` | Open `TC-1` → **Edit**. Change the title to `Checkout — reworked` and add a step. Wait ~3 seconds for the status line to read **"Backup saved …"**. Then **close the tab outright** — no Save, no Cancel. Reopen `TC-1` → **Edit** | A banner above the form: **"Unsaved changes from a minute ago"**, naming *you*, with **Restore** and **Discard**. Press **Restore**: the title and the step come back exactly as typed. **This is the whole slice.** Before it, closing the tab lost the work with no trace. |
+| `M2-68` | Same, but press **Discard** instead | The banner goes, the form still shows **the saved case** — discarding a draft is not discarding the case. Reload the editor: **no banner**, because the row was deleted rather than merely dismissed. A banner returning here would be the product re-offering something you refused. |
+| `M2-69` | Open `TC-2` → **Edit** and change nothing at all. Wait 5 seconds | **No status line, and no request.** The autosave is gated on the form being dirty, so merely opening a case must not buffer it — otherwise every case in the project acquires a phantom "unsaved changes" offer that is just a copy of itself. Confirm in the network panel: no `PUT …/draft`. |
+| `M2-70` | Open `TC-1` → **Edit**, type continuously in the Description for ~10 seconds without pausing, then stop | **One** `PUT …/draft` about two seconds after you stop — not one per keystroke and not one per field blur. The status line goes **"Saving a backup…"** then **"Backup saved HH:MM"**. The debounce is on the *content*, so tabbing between fields without changing anything sends nothing either. |
+| `M2-71` | **Two accounts, two browsers.** As the Test Engineer, open `TC-3` → **Edit**, type, wait for the backup. As the Test Lead in the other browser, open `TC-3` → **Edit** | The lead is offered a banner naming **the engineer**: *"E. Engineer left work on this case without saving it."* Not "you". There is one buffer per case, and this sentence is the only thing standing between the lead and publishing a colleague's half-finished text under their own name. |
+| `M2-72` | Continuing `M2-71`: as the **lead**, press **Save changes** on `TC-3` (with or without restoring). Then as the **engineer**, reload the editor | The engineer's banner is **gone** — the lead's save cleared the shared buffer. This is a designed consequence of the 1:1 key, recorded here so that driving it is a decision point rather than a surprise. The engineer's own unsaved work in *their* open form is untouched; it is the *buffer* that went. |
+| `M2-73` | Open `TC-4` → **Edit**, type, wait for the backup. In another tab, have someone else (or yourself as another account) **save** `TC-4`. Back in the first tab, reload the editor | The banner carries the extra sentence in bold: **"The case has been saved by someone else since this draft was written, so restoring it will discard their change."** The draft is **still offered in full** — advisory, never enforcing. This is the check `If-Match` structurally cannot make: the editor's own precondition comes from the fresh read and is correct. |
+| `M2-74` | Restore a draft (`M2-67`), then press **Save changes** immediately without touching anything | The save succeeds and lands on the case detail. Reopen the editor: **no banner**. The server clears the buffer on every successful save, so a restored-and-saved draft must not be re-offered — being offered here would read as "your save did not land", about a save that did. Also confirm **Save changes is enabled** the moment the restore lands, rather than reading *"Nothing has changed yet"*. |
+| `M2-75` | Open the **New case** form (`/cases/new`) and type | **No status line and no `…/draft` request of any kind.** Stated rather than left to be discovered: the buffer's primary key is a foreign key to `test_case`, so a case being created has nothing to key a draft on and the New Case form is exactly as lossy as it was before this slice. |
+
+### F — what only a fault shows
+
+| Row | Drive | Expect |
+|---|---|---|
+| `F-12` | In the editor with unsaved changes, run `tcmsFaults.only('/draft')` then `tcmsFaults.status(503, 30)`, and type | The status line reads **"Could not save a backup of your changes. Your work is still here — use Save changes to keep it."** and **no toast appears** — the caller is a timer, so a corner notification firing mid-sentence once per interval, about something you did not ask for and cannot act on, is worse than the silence it replaces. `tcmsFaults.off()`, type again: the backup succeeds on the **next change** without a reload. |
+
+**Not driven, and stated rather than left to look like oversights:**
+
+- **No row drives a draft larger than 256 KB.** The ceiling is a field error the server raises, and
+  authoring a quarter of a megabyte of case by hand is not a browser pass — `CaseDraftEndpointTest`
+  owns it.
+- **No row drives the buffer surviving a browser *crash* rather than a deliberate close.** They are
+  the same code path from the server's side; the difference is only whether an unload handler runs,
+  and this design deliberately has none.

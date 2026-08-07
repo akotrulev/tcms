@@ -939,3 +939,40 @@ in `DocPageEndpointTest` (`TableBlocks`, `ImageBlocks` — 13 tests), `DocPageAt
 `content ->> 'text'` reads as a tidy-up and would make every table's cells silently unfindable.
 `jsonb_to_tsvector(…, '["string"]')` walks the whole document, which is why the cells became
 searchable with no migration. `SearchVectorTest.tableCellsAreSearchable` is the guard.
+
+---
+
+## §128 — the case draft buffer (M3 #57, decision round 3 step 8)
+
+Added 2026-08-08. `test_case_draft` got its first writer since `V1`, three endpoints, and a clear on
+every successful save. Assertions live in `CaseDraftEndpointTest` (26 tests across four nested
+classes). **No migration** — every column has been there since M0.
+
+> **NONE RUN**, per §65. **`CD-1` is the row worth running first and it is not close.** It is the
+> only mutation here whose failure is invisible to every *other* test in the class: writing and
+> reading a draft works perfectly with the clear deleted, and what breaks is the next mount.
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| CD-1 | `CaseUpdateService.apply` drops the `drafts.deleteForCase(...)` call | **The mutation of this slice.** V1's own comment has promised this since M0 and nothing enforced it. The editor's next mount offers to restore content the user already saved — "your save did not land", about a save that did. Should redden `Promotion.savingTheCaseClearsTheBuffer` **and nothing else**, which is the point: every other test in the class passes. | ⬜ NOT RUN |
+| CD-2 | The `deleteForCase` call is moved to the **top** of `apply`, before validation | The clear that destroys the work it was protecting: a save refused for a blank title also throws away the buffered draft the author was about to lose. Should redden `Promotion.aFailedSaveKeepsTheDraft` while `savingTheCaseClearsTheBuffer` stays green — the pair is why the placement is asserted separately. | ⬜ NOT RUN |
+| CD-3 | `CaseDraftService.findOne` uses `readVisible` / `project:read` instead of `writeGranted` / `case:edit` | The gate most likely to be "simplified", on the argument that a draft discloses nothing the case does not. It discloses somebody's unfinished sentence, shown nowhere else in the product, to the one role invited to read coverage rather than watch it being written. Should redden `Gates.aViewerCannotReadTheDraftEither` and leave `theViewerReachesTheCase` green. | ⬜ NOT RUN |
+| CD-4 | `save`/`discard` swap `writeGranted` for `readVisible` | A Viewer can overwrite and destroy other people's unsaved work. Should redden `Gates.aViewerCannotBuffer` and `aViewerCannotDiscard` — and note both assert the row's *state* as well as the status, so a 403 that wrote anyway is caught too. | ⬜ NOT RUN |
+| CD-5 | `buffer` drops the `cases.findLiveInProject` check and trusts the project gate alone | `/projects/{granted}/cases/{ungranted}` buffers against a case the caller was never given, and the `GET` then reads it back. Should redden `Gates.theSecondPathSegmentIsGatedToo`. | ⬜ NOT RUN |
+| CD-6 | The `lockVersion == null` check is replaced with a default of `0` | The field exists precisely because guessing it wrong loses a committed edit: a draft that claims version 0 is stale against every case, or — worse, if the default were the case's current version — is silently *never* stale. Should redden `Writing.theLockVersionIsRequired`. | ⬜ NOT RUN |
+| CD-7 | The `lockVersion` check is moved **below** the `findLiveInProject` lookup | A malformed body answers 404, sending the caller to check a case id that is fine. Should redden `Writing.theBodyIsCheckedBeforeThe404` only — the 400 itself still happens for a reachable case, which is why the ordering has its own test. | ⬜ NOT RUN |
+| CD-8 | `render` computes `stale` as `false` unconditionally | The restore-over-a-colleague's-edit path goes unreported, and it is the one the existing `If-Match` machinery **structurally cannot catch** — the client's precondition comes from a fresh read and is correct. Should redden `Staleness.aDraftWrittenAgainstAnOlderVersionSaysSo` and leave `aCurrentDraftIsNotStale` green. | ⬜ NOT RUN |
+| CD-9 | `render` makes a stale draft return empty `content` instead of the buffered text | The refusal dressed as safety: the product deciding somebody else's edit invalidates your sentence. Should redden the second assertion of `aDraftWrittenAgainstAnOlderVersionSaysSo`, which exists separately from the `stale` flag for exactly this. | ⬜ NOT RUN |
+| CD-10 | `read` returns `Outcome.NotFound` instead of `Outcome.Empty` when no draft exists | Collapses the 204 into the 404 and tells an editor their case is gone every time they open one they had not left work in — which is almost every case, almost always. Should redden `Reading.noDraftIsA204AndNotA404` and leave `theCaseGateStillAnswers404` green; the pair is the whole distinction. | ⬜ NOT RUN |
+| CD-11 | `discard` answers `NotFound` when `deleteForCase` returns 0 | A second click, a retry after a timeout, and a concurrent save that already cleared the row all become errors. Should redden `Promotion.discardingNothingIsNotA404` on its **second** call — the first still finds a row, which is why the test discards twice. | ⬜ NOT RUN |
+| CD-12 | `buffer` validates the content through `CaseEdit.validate` before storing | The tempting "surely we should check it" change, and it breaks the one thing a keystroke buffer may never do: autosave starts failing while somebody is mid-sentence, so the buffer protects nothing during exactly the interval it exists for. Should redden `Writing.aHalfWrittenDraftIsBuffered`. | ⬜ NOT RUN |
+| CD-13 | `MAX_CONTENT_BYTES` is measured in `String.length()` rather than UTF-8 bytes | A different ceiling per language — a case written in Cyrillic or Japanese gets up to four times the storage of one written in English, on a column that stores bytes. Should redden nothing in the current suite, which is the finding: the assertion uses ASCII. **Recorded as a known gap rather than a mutation with an expected red.** | ⬜ NOT RUN |
+| CD-14 | `TestCaseDraft.overwrite` merges the incoming content instead of replacing it | A merge has to decide what an absent field means, and `CaseUpdateRequest`'s header records that absent and null are the same Java value here — so clearing a field would never survive an autosave. Should redden `Writing.theBufferIsReplacedWholesale`. | ⬜ NOT RUN |
+| CD-15 | `TestCaseDraft` is given a `@Version` column and optimistic locking | An autosave that answers 409 is one the user cannot resolve — they never asked for it and there is no dialog. Would not redden anything in this suite, because reaching it needs two interleaved transactions. **Recorded as a decision to defend, not a mutation with an expected red** — the same honesty `CaseUpdateService` applies to its own second concurrency check. | ⬜ NOT RUN |
+| CD-16 | `TestCaseDraftRepository` loses its `@Transactional` (or gains `readOnly = true`) | The first is the repository rule this project has a build-failing test for; the second is subtler — Hibernate skips the flush, so the write silently does nothing while every assertion about the *read* still passes. `RepositoryTransactionTest` catches the first from the live context. Should redden most of `Writing` for the second. | ⬜ NOT RUN |
+
+**Not a mutation, recorded as an observation:** `findScopedById` is a `@Query` and deliberately not
+`findById`. A primary-key lookup resolves through the persistence context and Hibernate filters do
+not apply to that path — RLS would still cover it, and using one layer where both are available is
+how a layered defence quietly becomes a single point. Nothing in the suite can see the difference,
+which is exactly why it is written down.

@@ -2,18 +2,53 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-07 (**§127 phase 1** — the table and image block payloads; **§126
-phases 1–4** before it — attachment owners; **§125** — the `storage` module extraction; **§124** —
-the `BEST` removal and the two unwired permission keys; §122's grant-instance-admin, §121's four
-phases, §120's automation drift, §119's ingestion history, §117's CI ingestion, §116's API tokens
-before it)
-**Baseline commit:** `a6d40a0` (§126 phase 4) (per `CLAUDE.md`, trust the body over the header and
+**Last verified:** 2026-08-08 (**§128** — the case draft buffer; **§127 phase 1** — the table and
+image block payloads; **§126 phases 1–4** — attachment owners; **§125** — the `storage` module
+extraction; **§124** — the `BEST` removal and the two unwired permission keys; §122's
+grant-instance-admin, §121's four phases, §120's automation drift, §119's ingestion history, §117's
+CI ingestion, §116's API tokens before it)
+**Baseline commit:** `99c0dea` (§128 phase 2) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
 **SCHEMA HEAD IS STILL `V39__attachment_owner_types.sql`; `V40` is next free.** The policy count is
-unchanged at **62**, and **§127 phase 1 carried no migration either** — `doc_block.content` is JSONB
-and the two new fields are a record's components, nothing more. Test count **2104 across 447 result
-classes** (§126 phase 3's baseline was 2088/445 — this phase added 16 tests and 2 classes).
+unchanged at **62**, and **§128 carried no migration either** — `test_case_draft` and its RLS policy
+have both existed since `V1`; the slice gave the table its first writer. Test count **2130 across
+453 result classes** (§127 phase 1's baseline was 2104/447 — this slice added 26 tests and 6
+classes).
+
+---
+
+## §128 — THE AUTOSAVE BUFFER, AND THE VERSION THE STALE-EDITOR CHECK CANNOT SEE
+
+Decision round 3's step 8 (#57). `test_case_draft` had a `V1` comment describing its whole flow and
+no writer; three verbs on `/projects/{p}/cases/{c}/draft` now serve it.
+
+- **`CaseDraftService` is the only writer, and there is NO promote endpoint.** `V1`'s comment says a
+  save "promotes this into `test_case`", which reads like a method this class should have. It would
+  be a second write path into `test_case` whose input is by construction unvalidated — either a
+  duplicate of `CaseEdit` (two definitions of a legal case, free to disagree) or no validation at
+  all. Promotion is the client restoring into the form and the user pressing the ordinary `PATCH`.
+- **`CaseUpdateService.apply` clears the buffer on every successful save**, in the same transaction
+  as the version row, via `TestCaseDraftRepository.deleteForCase` (a `@Modifying` bulk delete —
+  usually zero rows, on the hottest write path). Placed **after** validation: a clear at the top of
+  the method destroys the work a refused save was protecting, and passes every other test.
+- **`CaseDraftInput.lockVersion` is the field the existing concurrency machinery is blind to.** A
+  restored draft's save carries an `If-Match` from the *fresh* read, so it is correct and the
+  stale-editor check passes — silently overwriting the edit made while the draft sat there. The
+  buffer is the only thing that knows what the draft was written *against*. `stale` is computed in
+  `render` and is advisory; the content is always served.
+- **`case_id` IS the primary key, so the buffer is per case and not per person.** `updatedBy` is on
+  the wire for that reason, not as an audit column. `TestCaseDraft`'s header records the per-person
+  key as the option **not** taken.
+- **Nothing in `content` is validated and there is no `@Version`** — both deliberate, both with the
+  failure they prevent in the javadoc. `MAX_CONTENT_BYTES` is 256 KB measured in UTF-8 **bytes**.
+- **`Outcome.Empty` is a 204 and is not `NotFound`.** Almost every case has no draft almost always.
+- **`case:edit` gates all three verbs including the GET** — the one gate here that looks harmless to
+  relax; `CD-3` is its mutation.
+- **FIXTURE COLLISIONS ARE NOT ONLY UUIDs.** `CaseDraftEndpointTest` died 26/26 in `@BeforeEach` on
+  the company **slug** `cd-acme` and its email domain, both already `CaseDeleteEndpointTest`'s and
+  both globally unique. §19's family, sixth instance, through fields the convention does not name.
+  **Check the slug and the email domain as well as the UUID prefix.**
 
 ---
 

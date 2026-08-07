@@ -2,26 +2,54 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-08 (**§127 phase 2** — the one doc-block renderer; §126 phase 4 — the
-three attachment surfaces before it; §124 — the `BEST`
-removal's frontend half; §121 phase 4 — the flake panel and the quarantine action; §121 phase 3 —
-the board's quarantine card; §120 — automation drift; §119 — the ingestion history and the binder;
-§118 — the token screen; §115 — the coverage matrix's frontend arm; §107 — the mock layer is
-deleted — before them)
-**Baseline commit:** `46583e0` (§127 phase 1) (trust the body over the header and re-grep what a
+**Last verified:** 2026-08-08 (**§128** — the case editor's autosave buffer; **§127 phases 2–3** —
+the one doc-block renderer and the editor's three new types; §126 phase 4 — the three attachment
+surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the flake panel and the
+quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
+ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
+arm; §107 — the mock layer is deleted — before them)
+**Baseline commit:** `99c0dea` (§128 phase 2) (trust the body over the header and re-grep what a
 later commit could have moved).
 
-**§127 PHASE 2 ADDED TWO FILES** — `components/DocBlockBody.tsx` + `components/DocBlockBody.test.tsx`
-— and changed `api/queries/{keys,documentation,index}.ts`, `features/docs/DocsPage.tsx`,
-`features/plans/PlanDocumentPanel.tsx`. **PHASE 3 ADDED NO FILE**: it changed
-`features/docs/DocPageEditorPage.tsx` (+ its test). **Test count is 1105 across 84 files** —
-measured on a solo run, +17/+1 over §126 phase 4's measured 1088/83.
+**§128 ADDED THREE FILES** — `features/cases/useCaseAutosave.ts` + its test, and
+`features/cases/casePayload.test.ts` — and changed `api/queries/{cases,keys,index}.ts`,
+`api/types.ts`, `features/cases/caseSchema.ts`, `features/cases/CaseEditorPage.tsx` (+ its test).
+**Test count is 1144 across 86 files** — measured on a solo run, +39/+2 over §127's measured 1105/84.
 
-> **⚠ ONE FULL RUN IN FOUR WENT RED WITH 2 FAILURES AND WAS NOT REPRODUCED.** It happened on a
-> loaded machine (that run's test time was 780s against 373s on a quiet one); three subsequent full
-> runs and three targeted runs of the changed surface are green, and the failing test **names were
-> not captured**. Recorded rather than dismissed: an unidentified flake is a standing claim about
-> this suite, not a fact about that afternoon.
+> **⚠ ONE FULL RUN IN FOUR WENT RED WITH 2 FAILURES AT §127 AND WAS NOT REPRODUCED.** It happened on
+> a loaded machine (that run's test time was 780s against 373s on a quiet one); the failing test
+> **names were not captured**. §128's full run was green at 359s. Recorded rather than dismissed: an
+> unidentified flake is a standing claim about this suite, not a fact about one afternoon.
+
+## §128 — THE AUTOSAVE BUFFER, AND THE GATE THAT HAS TO CLOSE FIRST
+
+- **`useCaseAutosave` (`features/cases/useCaseAutosave.ts`) is the debounce**, 2s, keyed on the
+  **serialized payload** rather than on a render or a change count. `save` is held in a ref so the
+  effect does not depend on a callback whose identity changes every render — an effect that did
+  would restart the timer on each keystroke's re-render and never reach its deadline.
+- **`enabled` MUST include "the restore prompt has been answered", and the editor supplies that.**
+  Without it the first keystroke buffers the saved case over the draft the editor is about to offer;
+  the user is then shown a restore prompt for work that no longer exists, and accepting it hands
+  back what they had already saved. Nothing errors, nothing is logged. The gate lives in
+  `CaseEditorPage` rather than the hook because a hook that guessed would be a second opinion about
+  a sequence only the screen can see. A **failed** draft read opens the gate too, deliberately.
+- **`toCasePayload` / `fromCasePayload` live in `caseSchema.ts` and are THE mapping pair.**
+  `toCasePayload` moved out of the submit handler when autosave became its second consumer; a second
+  hand-written copy is how a field wired into Save and forgotten in the buffer **restores as empty**.
+  `fromCasePayload` decodes **defensively** — the buffer is unvalidated by design and may have been
+  written by an older build, so nothing in it throws and a wrong-typed field reads as absent. The
+  round trip is asserted directly in `casePayload.test.ts`.
+- **`reset(values, { keepDefaultValues: true })` on restore, NOT `keepDirty`.** `keepDirty` preserves
+  the dirty flag *as it stands*, which on mount is `false` — so a restored draft lands in a form the
+  editor considers pristine, with Save disabled reading "Nothing has changed yet" over a form full of
+  unsaved work, and the autosave gated off with it.
+- **`useCaseDraft` normalises the 204 to `null`.** `api.get` maps 204 to `undefined`, and TanStack
+  Query throws *"Query data cannot be undefined"* — so the ordinary "no unsaved work" answer would
+  surface as a failed query. `refetchOnWindowFocus` is **off** here and only here: the row's current
+  value is on screen in the form, and a refetch landing mid-typing would offer to restore the draft
+  the author is currently writing.
+- **A failed autosave is a status line and no toast** (`meta.handled`) — the caller is a timer.
+- **The create form has no autosave**, asserted: the buffer's key is an FK to `test_case`.
 
 ## §127 phase 3 — THE EDITOR COULD AUTHOR THREE OF SIX TYPES, AND ONE FIELD WAS READ-ONLY
 
