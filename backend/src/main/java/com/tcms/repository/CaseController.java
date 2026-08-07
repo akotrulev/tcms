@@ -72,6 +72,7 @@ public class CaseController {
     private final CaseDeleteService deletion;
     private final CaseBulkService bulk;
     private final CaseQuarantineService quarantine;
+    private final CaseDraftService drafts;
 
     public CaseController(
             CaseService search,
@@ -81,7 +82,8 @@ public class CaseController {
             CaseCreateService creation,
             CaseDeleteService deletion,
             CaseBulkService bulk,
-            CaseQuarantineService quarantine) {
+            CaseQuarantineService quarantine,
+            CaseDraftService drafts) {
         this.search = search;
         this.detail = detail;
         this.history = history;
@@ -90,6 +92,7 @@ public class CaseController {
         this.deletion = deletion;
         this.bulk = bulk;
         this.quarantine = quarantine;
+        this.drafts = drafts;
     }
 
     /**
@@ -409,6 +412,102 @@ public class CaseController {
             // own transaction, because CaseOwners reads app_user through the tenancy filter and a
             // resolution done out here would run with no company set and name nobody.
             case CaseQuarantineService.Outcome.Done done -> ResponseEntity.ok(done.flake());
+        };
+    }
+
+    /**
+     * Buffers the editor's unsaved state — the autosave, called on a timer and not by a person.
+     *
+     * <h2>Here rather than in a controller of its own</h2>
+     *
+     * <p>{@link CaseAttachmentController} split off this class for a stated technical reason —
+     * {@code multipart/form-data} and an {@link #onTooLarge}-style handler that would otherwise
+     * apply to every case endpoint beside it. The draft has neither: same media type, same gates,
+     * same 404 rule, no exception handler of its own. Splitting it out anyway would copy that
+     * class's shape without its argument, and the case's own sub-resources belong with the case.
+     *
+     * <h2>200 with the stored draft, not 204</h2>
+     *
+     * <p>There is something the caller cannot compute: {@code updatedAt} comes from the server's
+     * clock, and on a screen whose entire job is telling you when your work was last safe, the
+     * client's own clock is the wrong source. It also carries {@code stale}, which needs the case
+     * row.
+     *
+     * <h2>No {@code If-Match}</h2>
+     *
+     * <p>Deliberate, and {@link CaseDraftInput} gives the reason: the version the draft was written
+     * against is <em>recorded</em>, not enforced. An autosave that answers 409 is one the user
+     * cannot resolve — they did not ask for it and there is no dialog — so refusing to buffer would
+     * discard exactly the keystrokes the table exists to keep.
+     */
+    @PutMapping("/{caseId}/draft")
+    public ResponseEntity<Object> saveDraft(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID caseId,
+            @RequestBody CaseDraftInput request) {
+
+        return draftResponse(drafts.save(
+                UUID.fromString(jwt.getSubject()), projectId, caseId, request));
+    }
+
+    /**
+     * The case's buffered draft, if it has one.
+     *
+     * <h2>204 for "no draft", and it is not the 404 next to it</h2>
+     *
+     * <p>Almost every case has no draft almost all of the time — an ordinary state of a perfectly
+     * readable case, not a missing resource. 404 is kept for what it means everywhere else on this
+     * controller: an unreachable project, a case that is not in it, a deleted case. Collapsing the
+     * two would tell an editor their case was gone every time they opened one they had not left
+     * work in, which is §35's argument for answering {@code 200 []} rather than 404 on a case with
+     * no versions, arriving at a different status code because there is no collection to be empty.
+     */
+    @GetMapping("/{caseId}/draft")
+    public ResponseEntity<Object> findDraft(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID caseId) {
+
+        return draftResponse(drafts.findOne(UUID.fromString(jwt.getSubject()), projectId, caseId));
+    }
+
+    /**
+     * Throws the buffered draft away.
+     *
+     * <p>204 and idempotent: discarding a draft that is not there succeeds, because the caller asked
+     * for a state and that is the state it is in. See {@link CaseDraftService#discard} — a second
+     * click, a retry after a timeout, and a concurrent save that already cleared the row must none
+     * of them read as an error.
+     */
+    @DeleteMapping("/{caseId}/draft")
+    public ResponseEntity<Object> discardDraft(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID caseId) {
+
+        return draftResponse(drafts.discard(UUID.fromString(jwt.getSubject()), projectId, caseId));
+    }
+
+    /**
+     * One mapping for the three draft verbs, because they share every outcome.
+     *
+     * <p>The switch is over a sealed interface, so a seventh outcome added later is a compile error
+     * here rather than a silently defaulted response — the property {@link CaseUpdateService.Outcome}
+     * is sealed for.
+     */
+    private static ResponseEntity<Object> draftResponse(CaseDraftService.Outcome outcome) {
+        return switch (outcome) {
+            case CaseDraftService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
+            case CaseDraftService.Outcome.Forbidden ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiProblem.forbidden(
+                            "You do not have permission to edit test cases in this project."));
+            case CaseDraftService.Outcome.Invalid invalid ->
+                    ResponseEntity.badRequest().body(ApiProblem.validation(
+                            Map.of(invalid.field(), List.of(invalid.message()))));
+            case CaseDraftService.Outcome.Empty ignored -> ResponseEntity.noContent().build();
+            case CaseDraftService.Outcome.Found found -> ResponseEntity.ok(found.draft());
+            case CaseDraftService.Outcome.Discarded ignored -> ResponseEntity.noContent().build();
         };
     }
 

@@ -105,6 +105,7 @@ public class CaseUpdateService {
     private final CaseVersions versions;
     private final ReviewService reviews;
     private final AuditEventRepository auditEvents;
+    private final TestCaseDraftRepository drafts;
     private final Clock clock;
 
     public CaseUpdateService(
@@ -122,6 +123,7 @@ public class CaseUpdateService {
             CaseVersions versions,
             ReviewService reviews,
             AuditEventRepository auditEvents,
+            TestCaseDraftRepository drafts,
             Clock clock) {
 
         this.projects = projects;
@@ -138,6 +140,7 @@ public class CaseUpdateService {
         this.versions = versions;
         this.reviews = reviews;
         this.auditEvents = auditEvents;
+        this.drafts = drafts;
         this.clock = clock;
     }
 
@@ -328,6 +331,28 @@ public class CaseUpdateService {
 
         TestCaseDetailView view = renderer.render(testCase, liveSuites, vocabularies, companyId);
         versions.write(testCase, edit, decision, view, userId, now);
+
+        // "An explicit save promotes this into test_case + a new test_case_version and CLEARS THE
+        // ROW" — V1's own comment on test_case_draft, and the clause that had no code behind it
+        // until §128 (decision round 3, #57).
+        //
+        // In this transaction, not after it, for the reason the version row is: a committed save
+        // whose buffer survived would make the editor offer to restore, on its next mount, content
+        // the user has already saved — which reads as "your save did not land" about a save that
+        // did, on the one screen where that doubt is most expensive.
+        //
+        // Cleared on EVERY successful save, including one whose content hash was unchanged and
+        // which therefore wrote no version. The buffer's job ends when somebody presses Save; it is
+        // not a record of what changed.
+        //
+        // Cleared regardless of WHO saved, because the buffer is per case and not per person (see
+        // TestCaseDraft) — a colleague's save discards your unsaved draft. That is the 1:1 primary
+        // key's cost showing up a second time, and it is why CaseDraftView carries updatedBy: the
+        // shape is honest about being shared or it is not honest at all.
+        //
+        // Usually deletes nothing. Most saves are not preceded by an autosave, so this is one
+        // statement affecting zero rows rather than a load-then-delete — see the repository.
+        drafts.deleteForCase(testCase.getId());
 
         auditEvents.save(AuditEvent.record(
                 project.getId(),

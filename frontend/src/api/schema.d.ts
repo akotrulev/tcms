@@ -2119,6 +2119,193 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/cases/{caseId}/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                /**
+                 * @description UUID only. Display keys (TC-1) are deliberately NOT accepted here: they are
+                 *     sequential per company and therefore trivially guessable, so allowing one as a
+                 *     path identifier hands out an enumeration oracle (plan §6t). Resolve a key the
+                 *     user typed or pasted through the search endpoint, which returns not-found —
+                 *     never forbidden — for a key in a project the caller cannot reach.
+                 */
+                caseId: components["parameters"]["CaseId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The case's buffered autosave draft
+         * @description The editor's unsaved state for this case, if any (plan §6j, decision round 3 #57).
+         *
+         *     **`204` means "no draft", and it is not the `404` beside it.** Almost every case has
+         *     no draft almost all of the time — an ordinary state of a perfectly readable case,
+         *     not a missing resource. `404` keeps the meaning it has everywhere else on this
+         *     controller: unreachable project, case not in it, deleted case.
+         *
+         *     **Gated on `case:edit`, not `project:read`.** The content is the case's own content,
+         *     so a Viewer would learn nothing from it that reading the case does not already
+         *     disclose — but a draft is somebody's unfinished sentence, shown nowhere else in the
+         *     product, and a Viewer is the client's stakeholder invited to read coverage rather
+         *     than to watch it being written.
+         *
+         *     **There is one buffer per case, not one per person.** `test_case_draft.case_id` is
+         *     the primary key, so two people editing one case share it and the last keystroke
+         *     wins. `updatedBy` is served for exactly that reason: a returning editor must be told
+         *     whose words they are being offered before adopting them.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                    /**
+                     * @description UUID only. Display keys (TC-1) are deliberately NOT accepted here: they are
+                     *     sequential per company and therefore trivially guessable, so allowing one as a
+                     *     path identifier hands out an enumeration oracle (plan §6t). Resolve a key the
+                     *     user typed or pasted through the search endpoint, which returns not-found —
+                     *     never forbidden — for a key in a project the caller cannot reach.
+                     */
+                    caseId: components["parameters"]["CaseId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The buffered draft */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CaseDraft"];
+                    };
+                };
+                /** @description The case is readable and has no buffered draft */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        /**
+         * Buffer the editor's unsaved state
+         * @description Autosave. Called on a timer rather than by a person pressing a button, and it
+         *     replaces whatever was buffered rather than merging into it.
+         *
+         *     **Nothing in `content` is validated.** A draft is half-written by definition: the
+         *     title may be blank, a step may reference a retired shared step, `automationKey` may
+         *     collide. All three are refused by `PATCH` and must be — validating here would make
+         *     autosave fail while somebody is mid-sentence. The stated consequence is that **a
+         *     draft which restores cleanly can still be refused when the user presses Save**.
+         *
+         *     **There is no promote operation, deliberately.** Promotion is the client restoring
+         *     the draft into the form and the user pressing Save, which is the ordinary `PATCH` —
+         *     validated, versioned, audited, `If-Match`ed. A server-side promote would be a second
+         *     write path into `test_case` whose input is by construction unvalidated.
+         *
+         *     **A successful `PATCH` clears this buffer**, whoever saved.
+         *
+         *     **No `If-Match`.** `lockVersion` is recorded, not enforced: an autosave that answered
+         *     `409` is one the user cannot resolve, because they never asked for it and there is no
+         *     dialog to show them.
+         *
+         *     `lockVersion` is **required** and its absence is a `400` rather than a default —
+         *     every value it could default to is a claim about which version the draft was written
+         *     against, and guessing it wrong is how a restore silently overwrites a colleague's
+         *     committed edit. See `CaseDraft.stale`.
+         *
+         *     Content over **256 KB** serialized is a `400` field error. Nothing else bounds this
+         *     row: the content is unvalidated, the caller is a timer, and no retention prunes the
+         *     table.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                    /**
+                     * @description UUID only. Display keys (TC-1) are deliberately NOT accepted here: they are
+                     *     sequential per company and therefore trivially guessable, so allowing one as a
+                     *     path identifier hands out an enumeration oracle (plan §6t). Resolve a key the
+                     *     user typed or pasted through the search endpoint, which returns not-found —
+                     *     never forbidden — for a key in a project the caller cannot reach.
+                     */
+                    caseId: components["parameters"]["CaseId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CaseDraftInput"];
+                };
+            };
+            responses: {
+                /** @description Buffered */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CaseDraft"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        post?: never;
+        /**
+         * Discard the buffered draft
+         * @description Throws the buffer away. **Idempotent**: discarding a draft that is not there
+         *     succeeds, because the caller asked for a state and that is the state it is in. A
+         *     second click, a retry after a timeout, and a concurrent save that already cleared the
+         *     row must none of them read as an error.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                    /**
+                     * @description UUID only. Display keys (TC-1) are deliberately NOT accepted here: they are
+                     *     sequential per company and therefore trivially guessable, so allowing one as a
+                     *     path identifier hands out an enumeration oracle (plan §6t). Resolve a key the
+                     *     user typed or pasted through the search endpoint, which returns not-found —
+                     *     never forbidden — for a key in a project the caller cannot reach.
+                     */
+                    caseId: components["parameters"]["CaseId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Discarded */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/cases/{caseId}/history": {
         parameters: {
             query?: never;
@@ -7199,6 +7386,78 @@ export interface components {
              *     the form can land on.
              */
             reason?: string;
+        };
+        CaseDraftInput: {
+            /**
+             * Format: int64
+             * @description The `lockVersion` of the case the editor was holding when it started typing —
+             *     the same value it would send as `If-Match` were it saving.
+             *
+             *     **Required, and it is the field that stops a restore eating a committed edit.**
+             *     Ana opens `TC-9` at `lockVersion 3` and types; the draft is buffered. Bob saves
+             *     `TC-9`, which becomes `lockVersion 4`. Ana returns, the editor loads the case
+             *     fresh at `4` and offers to restore her draft, she accepts and saves. That save's
+             *     `If-Match` is `4` — it came from the fresh read — so the stale-editor check
+             *     passes and Bob's change is overwritten by text written before it existed. The
+             *     check cannot see this: it compares what the client read against what is stored,
+             *     and the client did read the current version. What nothing asked is what the
+             *     **draft** was written against.
+             *
+             *     Recorded, not enforced. A draft written against a stale version is still the
+             *     author's work; the decision is the returning editor's, informed by
+             *     `CaseDraft.stale`.
+             */
+            lockVersion: number;
+            /**
+             * @description The editor's current form state — exactly the shape `PATCH` takes, which is what
+             *     makes "restore" mean "put this back in the form".
+             *
+             *     **Not validated.** See the operation description.
+             */
+            content: components["schemas"]["TestCaseInput"];
+        };
+        /**
+         * @description A buffered draft, and everything a returning editor needs in order to decide whether
+         *     to adopt it.
+         */
+        CaseDraft: {
+            /**
+             * Format: int64
+             * @description The case's `lockVersion` when this draft was written.
+             */
+            lockVersion: number;
+            /**
+             * @description `true` when the case has moved since the draft was written.
+             *
+             *     **Computed by the server, not left to the client.** The client holds both
+             *     numbers and could compare them, and that is precisely how two screens end up
+             *     disagreeing about whether the same draft is safe.
+             *
+             *     **Advisory, never enforcing.** A stale draft is served in full — the words are
+             *     the author's and are often exactly what they want, particularly when the
+             *     intervening save touched a different field. Dropping it would be the product
+             *     deciding that somebody else's edit invalidates your sentence.
+             */
+            stale: boolean;
+            /**
+             * Format: date-time
+             * @description When it was last buffered, from the server's clock. "Restore unsaved changes"
+             *     means something different for work from four minutes ago and work from four
+             *     weeks ago.
+             */
+            updatedAt: string;
+            /**
+             * @description Who typed it. **This field carries the cost of the 1:1 primary key**: there is
+             *     one buffer per case, so the draft on offer may be a colleague's, and restoring it
+             *     silently would publish their half-finished sentence under your name.
+             *
+             *     Null when the account no longer resolves — "somebody, no longer in this
+             *     company", which is the honest answer and the reason it is not defaulted to the
+             *     caller.
+             */
+            updatedBy?: components["schemas"]["UserRef"] | null;
+            /** @description The buffered form state, unvalidated. */
+            content: components["schemas"]["TestCaseInput"];
         };
         /**
          * @description One file attached to something that is **authored content** — a test case's
