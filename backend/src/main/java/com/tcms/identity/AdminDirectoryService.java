@@ -130,6 +130,7 @@ public class AdminDirectoryService {
         // Asked of the same already-resolved term, so the org-chart gate costs no extra query —
         // and is asked as its own key rather than folded into companyWide. See AdminReach.
         boolean manageTeams = companyTerm.has(TeamWriteService.MANAGE_TEAMS);
+        boolean issueTokens = companyTerm.has(ApiTokenService.ISSUE_TOKENS);
         boolean readsCompany = companyTerm.has(READ_COMPANY);
 
         Set<UUID> visible = new LinkedHashSet<>();
@@ -144,7 +145,8 @@ public class AdminDirectoryService {
             }
         }
         return new AdminReach(
-                Set.copyOf(visible), Set.copyOf(staffable), companyWide, manageTeams, readsCompany);
+                Set.copyOf(visible), Set.copyOf(staffable),
+                companyWide, manageTeams, issueTokens, readsCompany);
     }
 
     /**

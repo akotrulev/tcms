@@ -4412,6 +4412,186 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api-tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * This company's API and CI tokens
+         * @description Gated on **`token:issue`** at COMPANY scope — Company Admin and Instance Admin only, per
+         *     roles spec §A3 ("API / CI tokens"). This is that permission's first consumer: it has been
+         *     seeded and granted since `V3` with nothing ever asking it.
+         *
+         *     **The list is refused rather than filtered** for a caller who does not hold it, unlike
+         *     `GET /role-assignments`. There is no partial-visibility story for a credential — a token
+         *     belongs to the company rather than to a project — so an empty array would be a claim
+         *     that this company has no tokens, told to somebody who may simply not ask.
+         *
+         *     **Revoked tokens stay in the list**, carrying `revokedAt`. A credential that was live in
+         *     a pipeline yesterday is evidence, and dropping the row reads as though it never existed.
+         *
+         *     The secret is **not here and cannot be recovered**. `tokenPrefix` — the first 12
+         *     characters — is what identifies a row against a CI configuration.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The company's tokens, newest first */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApiToken"][];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        put?: never;
+        /**
+         * Issue an API token
+         * @description Mints a non-human credential — **the way a CI job reaches this instance**, and the
+         *     precondition for everything else in M3. `test_execution.executed_by_token` and
+         *     `audit_event.actor_token_id` have been columns since `V1` with nothing able to fill them.
+         *
+         *     **The secret is in this response and nowhere else, ever.** Only its SHA-256 is stored.
+         *     A caller who loses it revokes the token and issues another; there is no recovery path
+         *     and adding one would mean storing the credential.
+         *
+         *     **A token carries a ROLE, never the rights of the person who issued it.** `roleId` is
+         *     the grant; Automation Service is the intended answer and roles spec §A6 states what that
+         *     costs an attacker who steals one ("can post results and add quarantine stubs; cannot
+         *     edit or delete a real case, close a run, or read reports"). The server does not require
+         *     that particular role — code checks permissions, never role names.
+         *
+         *     **The effective permission set is the intersection of the role and the owner's own
+         *     grants**, so a token can never exceed either, and demoting the issuer shrinks the tokens
+         *     they issued. `projectId`, when present, is a hard scope: the token is inert everywhere
+         *     else.
+         *
+         *     **There is no `ownerId` field.** The owner is the caller. A nominated owner would be a
+         *     way to mint a credential more powerful than yourself by naming somebody more powerful —
+         *     the exact escalation the intersection exists to prevent.
+         *
+         *     SYSTEM-scope roles are refused (`400` on `roleId`): those grants live in
+         *     `instance_role_assignment` and a company-bound credential carrying one would be a tier
+         *     the model does not have.
+         *
+         *     `expiresAt` may be omitted, and that is deliberate: a credential that dies mid-release
+         *     without anybody deciding to withdraw it is an outage. The withdrawal that *is* a
+         *     decision is `DELETE`.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ApiTokenInput"];
+                };
+            };
+            responses: {
+                /** @description Issued. The only response in this API carrying a secret. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["IssuedApiToken"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                /**
+                 * @description `projectId` names a project that does not exist, or that this session cannot reach.
+                 *     One status for both, per §6t — the response must not be usable as an oracle.
+                 */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api-tokens/{tokenId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tokenId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke an API token
+         * @description Withdraws the credential. Gated on **`token:issue`**, the same permission that issued it.
+         *
+         *     **Idempotent, and the first revocation is the one that counts.** Revoking an
+         *     already-revoked token answers `204` and does *not* move `revokedAt` — the trail must
+         *     report when the token stopped working, not when somebody clicked a second time.
+         *
+         *     The row is **kept**, revoked. Deleting it would remove the evidence and orphan every
+         *     `executed_by_token` reference pointing at it.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tokenId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Revoked */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                /** @description No such token in this company */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/teams": {
         parameters: {
             query?: never;
@@ -7260,6 +7440,103 @@ export interface components {
              *     the person is already an active member.
              */
             expiresAt: string | null;
+        };
+        /**
+         * @description A non-human credential — **everything about it except the credential**. The secret appears
+         *     exactly once, in the response to `POST /api-tokens`, and is unrecoverable afterwards.
+         */
+        ApiToken: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description Unique among the company's **live** tokens. A revoked name is reusable, because the
+             *     name is written into somebody's CI configuration and rotation is issue-then-revoke.
+             */
+            name: string;
+            /**
+             * @description The first 12 characters of the secret, so a row can be matched against a CI
+             *     configuration. A deliberate partial disclosure of a 256-bit secret, and not a
+             *     credential: nothing accepts it.
+             */
+            tokenPrefix: string;
+            /**
+             * Format: uuid
+             * @description The person answerable for it, and a **permission input** rather than provenance —
+             *     their own grants cap what the token can do.
+             */
+            ownerId: string;
+            /** Format: uuid */
+            roleId: string;
+            /**
+             * @description Expanded because a uuid tells an administrator nothing about what a leaked token could
+             *     do. A label: nothing checks it, and the grant is resolved from `roleId`.
+             */
+            roleName: string;
+            /**
+             * Format: uuid
+             * @description One project, or null for every project the owner can reach. When set it is a **hard
+             *     scope** — the token is inert on every other project.
+             */
+            projectId: string | null;
+            /**
+             * Format: date-time
+             * @description Null for a token that does not expire.
+             */
+            expiresAt: string | null;
+            /**
+             * Format: date-time
+             * @description **Always null today.** The column exists and has no writer: a write on every
+             *     authenticated request is a write-amplification decision that wants a batching answer,
+             *     not an `UPDATE` inside a filter. On the wire so a client is built against the shape.
+             */
+            lastUsedAt: string | null;
+            /**
+             * Format: date-time
+             * @description When the credential was withdrawn, or null while it is live. Revoked tokens stay in
+             *     the list — see `GET /api-tokens`.
+             */
+            revokedAt: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        /**
+         * @description **There is no `ownerId`.** The owner is the caller — see `POST /api-tokens` for why a
+         *     nominated owner would be an escalation path rather than a convenience.
+         */
+        ApiTokenInput: {
+            /**
+             * @description What this token is for, in the issuer's words. A clash with another live token is a
+             *     field error on `name`: two rows called "CI" are two rows nobody can tell apart when
+             *     one has to be revoked in a hurry.
+             */
+            name: string;
+            /**
+             * Format: uuid
+             * @description The role the token carries — **not the caller's own**. SYSTEM-scope roles are refused,
+             *     and so is the membership baseline, which is a consequence of membership rather than a
+             *     role anybody chooses.
+             */
+            roleId: string;
+            /** Format: uuid */
+            projectId: string | null;
+            /**
+             * Format: date-time
+             * @description Must be in the future when present. Null means it does not expire.
+             */
+            expiresAt: string | null;
+        };
+        /**
+         * @description The creation response, and **the only shape in this API that carries a secret**. Kept as
+         *     its own type rather than a nullable field on `ApiToken`, so that no read path is one
+         *     forgotten null away from serving a credential.
+         */
+        IssuedApiToken: {
+            token: components["schemas"]["ApiToken"];
+            /**
+             * @description The plaintext, shown once. Store it in the CI system's secret store immediately; it
+             *     cannot be recovered, and nothing here can show it again.
+             */
+            secret: string;
         };
         Team: {
             /** Format: uuid */

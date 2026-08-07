@@ -57,6 +57,13 @@ class SchemaConventionTest extends IntegrationTestBase {
             // recorded in ERD §0.1; the row carries no email or name, and the token is
             // stored only as a digest.
             "membership_invitation",
+            // The same decision one credential over, made in V36. An API token is presented
+            // BEFORE authentication, so the "which company issued this digest" question has to
+            // be answerable with no context open — under RLS it returns zero rows, which is V7's
+            // defect. The row holds a digest, a token id and a company id and NOTHING else: no
+            // name, owner, role or project. Every authorization fact still comes from the
+            // POLICED api_token row, read after the context is open. Recorded in ERD §0.1.
+            "api_token_lookup",
             "instance_setting",           // infrastructure
             "instance_audit_event",       // operator actions across companies
             "flyway_schema_history");     // infrastructure

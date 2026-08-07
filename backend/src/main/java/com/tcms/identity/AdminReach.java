@@ -39,6 +39,13 @@ import java.util.UUID;
  *                          future role that holds {@code company:members} alone. That the seeded
  *                          data makes them coincide is an accident of the seed, not a rule; the
  *                          {@code case:approve} gate §62 built states the same distinction.
+ * @param issueTokens       the caller holds {@code token:issue}: they may issue and revoke this
+ *                          company's API and CI tokens. Company Admin and Instance Admin, per roles
+ *                          spec §A3. <strong>A separate term again</strong>, for the reason
+ *                          {@link #manageTeams} already states — and it is worth stating twice,
+ *                          because a token is the credential a CI job authenticates with and
+ *                          folding it into {@link #companyWide} would silently hand token issuance
+ *                          to any future role holding {@code company:members} alone.
  * @param readsCompany      the caller holds {@code company:read} <strong>at company scope</strong>.
  *                          This read "or on any project they hold" until handoff §43, because five
  *                          of the six built-in roles carry {@code company:read} on a PROJECT-scope
@@ -53,6 +60,7 @@ public record AdminReach(
         Set<UUID> staffableProjects,
         boolean companyWide,
         boolean manageTeams,
+        boolean issueTokens,
         boolean readsCompany) {
 
     /**
