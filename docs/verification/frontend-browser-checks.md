@@ -1389,3 +1389,49 @@ in `F`.
 - **No row for re-uploading or detaching an artifact's file**, because neither exists:
   `attachment_id` is `updatable = false` and replacing the document is *superseding* it (plan §6n).
   The absence is the design; a row asserting a control is missing would be a row nobody could fail.
+
+## §127 — the four unrendered block types, and the editor that could author three (M3 #48)
+
+**Nine rows in one lane, plus one that belongs in `F`.** `DocBlockType` has had six values since M0
+and only two were rendered; four of the six now have a renderer and three have an editor control.
+Everything here needs a documentation page, so the rows sit in **`A2`**, after `M3-65` has attached
+`wire-diagram.png` to `DOC-1` — that attachment is the fixture `M3-72` and `M3-73` depend on, and no
+new file has to be authored for this slice.
+
+> **The two rows most worth driving first are `M3-73` and `M3-75`.** `M3-73` is the one no gate can
+> reach — an image that renders at all proves the credential travelled, and the failure mode it
+> catches (a broken image on a specification) is exactly what §126 phase 4 predicted for
+> `EvidencePanel`. `M3-75` is the round trip §93 left half-open for four months.
+
+### A2 — the six block types, read and written
+
+| Row | Drive | Expect |
+|---|---|---|
+| `M3-70` | Open `DOC-1` → **Edit**. Add a block, set its type to **Table**, press **Start the table** | Two cells appear labelled **Column 1** and **Column 2**, with a *Column name* placeholder. The first row's **Remove row** is **disabled** — there is no "has a header" switch anywhere, because the first row always is one. Fill in `Tier` / `Daily limit`, **Add row**, fill `Basic` / `1000`, put `Transfer limits` in **Caption**, Save. |
+| `M3-71` | Read `DOC-1` back | The table renders as a **grid with a heading row**, under the caption. Not a caption above nothing, and not the word "Transfer limits" alone — which is what this page did before, for every table anyone stored. Then open the same page through a plan's **Business requirements** tab if one is linked: **identical rendering**. Two `BlockView`s used to disagree here. |
+| `M3-72` | Back in the editor, press **Add column** | A third cell appears on **every** row at once, header included — never on the row you were in. The server refuses a ragged table by naming the short row's index, and this is what stops anyone ever seeing that message. Then **Remove last column**, Save, and confirm the reader shows two columns again. |
+| `M3-73` | Add a block, type **Image**. Choose `wire-diagram.png` from **File**, put `The checkout screen wireframe` in **Alt text**, Save | **The picture renders on the page**, with the alt text as a visible caption beneath it. **This is the row that cannot be reached by any gate**: an `<img src="/api/v1/…">` sends no credential in this app and answers 401 while rendering as a broken image, so a broken-image icon here is the defect and not a missing file. Check the network panel: the request carries an `Authorization` header and the `<img>`'s `src` is a `blob:` URL. |
+| `M3-74` | With that image block saved, go to the page's **Attachments** panel and **Remove** `wire-diagram.png` | Refused with a **409** naming the block: *"An image block on this page shows this file. Remove or repoint that block first."* The row stays, and the picture stays. Then delete the block in the editor, Save, and remove the file again: **204**, gone. There is no foreign key doing this — the reference lives inside a JSONB document. |
+| `M3-75` | Add a **List** block. The control beside the type now reads **Indent**, not Depth | Set it to `3`, Save, and read the page back: the bullet is **indented three levels**. §93 gave a bullet an indent depth and the reader has drawn it ever since; **this control did not exist**, so the field could be read and never written. Drive it on both screens — the documentation page did not indent bullets at all before this slice. |
+| `M3-76` | Add a **Code** block with three lines including a long unbroken URL | Renders **monospace, in a bordered panel, with the line breaks kept**. The long line **wraps or scrolls inside the block** — the page itself must not gain a horizontal scrollbar. Before this slice a code block was an ordinary paragraph with its newlines collapsed. |
+| `M3-77` | In the editor, change the **Image** block's type to **Paragraph** and Save | Accepted, with no 400. Every type-specific field is dropped at submit based on the type, so the file reference does not travel with it — and switching type while writing is ordinary. Do the same from **Table** to **Paragraph**: the cells go and the caption stays as the text. |
+| `M3-78` | On a page with **no** attachments, add an **Image** block | The File control is replaced by a message pointing at the page itself, not an empty dropdown. Then try to Save with the alt text blank on a page that *does* have a file: refused on the **Alt text** field (*"Describe what this image shows…"*), landing on that block's row rather than as a banner. An empty **paragraph** stays legal — that rule is one `else if` away and must not be made to agree. |
+
+### F — the transport lane
+
+| Row | Drive | Expect |
+|---|---|---|
+| `F-11` | On a page with an image block, run `tcmsFaults.status(503, 30)` and reload | The image block shows a **failure beside itself with a working download link**, not a broken image and not only a corner toast. The bytes may be perfectly fine and unrenderable (a TIFF, a PDF attached as a diagram), so the download is the point. `tcmsFaults.off()` after, and confirm the picture returns. |
+
+**Not driven, and stated rather than left to look like oversights:**
+
+- **A create still cannot carry an image block, by design.** A page has no attachments until it
+  exists, so the server refuses one on `POST` with a message naming the sequence (create, attach,
+  reference). There is no create-time block editor on any screen, so there is nothing to drive —
+  the refusal is reachable only from a hand-written request, and `DocPageEndpointTest` owns it.
+- **`EvidencePanel` still has the un-fixed `<img src>` and `<a href>`.** `M4-7` remains expected to
+  **fail**. This slice built the credentialed image path (`useAttachmentBlob` + `DocBlockBody`) and
+  deliberately did not sweep evidence with it; that is a separate slice and one more surface.
+- **No row asserts a seventh block type renders as prose.** The renderer's `default` arm exists for
+  a server a version ahead of the bundle, and no deployment can produce one — a unit test drives it
+  instead, which is the only observer that can.
