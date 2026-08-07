@@ -489,6 +489,195 @@ class ExecutionSource {
                 .executeUpdate();
     }
 
+    /**
+     * Re-derive every case's flake evidence in the open company into {@code case_flake} —
+     * <strong>M3 slice 6, and §6l's flakiness rule computed rather than described.</strong>
+     *
+     * <h2>Why this is here and not in {@code repository.ExecutionFacts}, where §120's pair went</h2>
+     *
+     * <p>§120 put the automation-drift pair in {@code repository} and gave the deciding reason: drift
+     * needs {@code test_case.automation_status}, which is not on the star schema and should not be
+     * (R7's argument about mutable case columns), so it had to read {@code test_execution}.
+     *
+     * <p><strong>Flake needs nothing but executions</strong> — {@code case_id},
+     * {@code configuration_id}, {@code case_version_id}, {@code executed_at} and the outcome — and
+     * the fact log carries all five. That makes this exactly the shape of
+     * {@link #recomputeFailingRepeatedly}, which already writes a case-level read model from here,
+     * and it buys the property that matters most: <strong>R7's inconsistency callout reads the same
+     * rows.</strong> {@code AggregateExecutionReport.inconsistentCases} and this statement answer
+     * nearly the same question, and two implementations over two different tables would disagree
+     * the day somebody changes what a recorded execution is — with both looking correct.
+     *
+     * <h2>A cell is {@code (case, configuration, case version)}, and it is R7's cell</h2>
+     *
+     * <p>Straight out of §6l: <em>"flakiness — pass/fail alternation within a single version and
+     * configuration, which is the only scoping under which flakiness means anything. Alternation
+     * across versions is just change, and reporting it as flake is a false signal."</em> The
+     * {@code PARTITION BY} is that sentence. Without the {@code case_version_id} term, a case that
+     * passed at v2 and fails at v3 — the ordinary shape of a test catching a real regression after
+     * an edit — is scored as a flake, and the one case the signal most needs to leave alone is the
+     * one it reports loudest.
+     *
+     * <p>{@code AggregateExecutionReport.inconsistentCases} groups by the same triple for
+     * {@code within_one_cell}. That is not a coincidence to be tidied away into a shared helper: the
+     * two live in different modules and read through different seams, and the agreement is asserted
+     * by test rather than by construction, exactly as R6's cross-check is.
+     *
+     * <h2>Non-outcomes are removed BEFORE the sequence is formed, which is not the same as ignoring
+     * them</h2>
+     *
+     * <p>The {@code WHERE} keeps only rows that are a pass or a {@code FAILED}. {@code BLOCKED},
+     * {@code SKIPPED}, {@code RETEST} and {@code UNTESTED} never enter the window function's input,
+     * so two passes with a blocked run between them are <em>adjacent</em>.
+     *
+     * <p>The alternative — leaving them in and treating "not a pass" as the other value — is the
+     * implementation anybody would write first, and it scores a perfectly stable test at
+     * {@code 1.0}: pass, blocked, pass reads as two alternations out of two transitions. This is
+     * R7's <em>"a pass and a BLOCK is not an inconsistency"</em> rule applied to a sequence instead
+     * of to a set, and {@link #recomputeFailingRepeatedly}'s {@code FAILED}-not-{@code NOT
+     * counts_as_pass} argument in its third shape. It is the mutation this statement most needs.
+     *
+     * <h2>{@code status_kind = 'PASSED'}, NOT {@code counts_as_pass} — this is the THIRD
+     * implementation of §6l's sentence, and the two that share its name must agree</h2>
+     *
+     * <p>{@code execution.CaseHistoryService.flakiness} has computed this since §49, for §6p's
+     * per-case timeline, from the same §6l sentence and under the same name. It groups by
+     * {@code (version, configuration)}, keeps only {@code PASSED} and {@code FAILED}, counts
+     * transitions over adjacent pairs, and answers null when there is no pair — the same
+     * computation this statement performs in SQL over the fact log.
+     *
+     * <p><strong>{@code kind} and {@code counts_as_pass} are independent columns on
+     * {@code case_status}</strong>, so a project that defines "Passed with known issues" as
+     * {@code kind = 'RETEST', counts_as_pass = true} makes the two spellings disagree: that row is a
+     * pass to one and not a verdict at all to the other. On the six seeded defaults they agree
+     * exactly, which is what makes this the kind of divergence that <em>ships</em> — correct in
+     * every test and in every project that has not customised its status vocabulary, wrong in the
+     * first one that has, and presenting as a case page and a worklist quoting different numbers
+     * with no way to tell which is right.
+     *
+     * <p>So this takes {@code CaseHistoryService}'s spelling rather than R7's, and the choice is
+     * about which question is being answered rather than which column is nearer. Two computations
+     * that both answer <em>"how flaky is this case"</em> must not disagree; R7's callout answers a
+     * different one — <em>did this case both pass and fail inside this selection</em> — where
+     * {@code counts_as_pass} is the spelling consistent with the pass rate printed beside it.
+     *
+     * <p>The two remaining differences from {@code CaseHistoryService} are deliberate and are
+     * differences of <em>scope</em> rather than of rule. That one is unbounded and scores from a
+     * single pair, because it renders the number directly above the sequence it came from, where a
+     * reader can see it was drawn from two results. This one is windowed and refuses to score below
+     * the evidence floor, because a worklist row carries no such context.
+     *
+     * <h2>No {@code source} predicate — flakiness is a property of results, not of the door</h2>
+     *
+     * <p>Deliberately unlike §120's pair, which filters {@code source = 'INGESTED'} because that
+     * signal is literally about whether the CI pipeline is posting. A manual test that alternates
+     * pass and fail on one configuration at one version is genuinely flaky, and R7's callout — the
+     * statement this one must agree with — has no source predicate either.
+     *
+     * <h2>{@code transitions}, not {@code executions}, is the denominator</h2>
+     *
+     * <p>A case with six results spread across six cells has six executions and <em>zero</em>
+     * transitions: nothing in it ever ran twice under the same conditions, so there is no evidence
+     * about stability at all. Dividing by the execution count would score that case {@code 0.0} —
+     * "evidently stable" — on evidence that says nothing, which is the confident zero in its most
+     * misleading form, because the case looks like the ones that really are stable.
+     *
+     * <h2>The score is NULL below the floor, and the row is written anyway</h2>
+     *
+     * <p>Null is <em>not enough evidence to say</em>; {@code 0.0} is <em>evidently stable</em>. The
+     * counts are stored either way, so the screen can show why there is no score rather than an
+     * unexplained blank — and a case with no qualifying executions at all still gets a row with
+     * zeroes and a fresh {@code computed_at}, which is what tells "nobody has looked" from "we
+     * looked and there is nothing".
+     *
+     * <h2>The {@code ON CONFLICT} names seven columns and never the four quarantine ones</h2>
+     *
+     * <p>{@link #recomputeFailingRepeatedly}'s rule, and the first time it binds two writers of one
+     * <em>table</em> rather than of one row across modules. A set-list of {@code EXCLUDED.*} here
+     * would release every quarantined test on the next tick — silently, in the safe-looking
+     * direction, and presenting as a board whose quarantine column empties itself overnight.
+     *
+     * <h2>Ordering inside a cell, and why {@code execution_id} is in it</h2>
+     *
+     * <p>{@code executed_at} ascending, because a sequence is read forwards; {@code execution_id} as
+     * the tie-break for {@link #recomputeFailingRepeatedly}'s reason exactly — two results recorded
+     * in the same microsecond must resolve the same way on every tick, or this job is not idempotent
+     * in precisely the case where a CI run posts a batch, and the score would flicker between two
+     * values with no input changing. Undated facts are excluded outright rather than sorted last:
+     * a row with no {@code executed_at} has no position in a sequence, and giving it one invents the
+     * adjacency the whole computation is about.
+     *
+     * @param cutoff the oldest execution the window admits. Passed in rather than computed here so
+     *     the caller owns the clock and a test can put the boundary where it needs it — §120's
+     *     signature, for §120's reason.
+     * @param minimumTransitions the evidence floor; below it {@code flake_score} is null
+     * @param now stamped into {@code computed_at}
+     * @return how many cases were re-derived — every live case in the company, logged rather than
+     *     acted on, for the reason {@code ExecutionFactRefreshService} states
+     */
+    int recomputeFlakeScores(Instant cutoff, int minimumTransitions, Instant now) {
+        return entities.createNativeQuery("""
+                WITH outcomes AS (
+                    SELECT ef.case_id,
+                           ef.configuration_id,
+                           ef.case_version_id,
+                           ef.executed_at,
+                           ef.status_kind = 'PASSED' AS passed,
+                           lag(ef.status_kind = 'PASSED') OVER (
+                               PARTITION BY ef.case_id, ef.configuration_id, ef.case_version_id
+                               ORDER BY ef.executed_at, ef.execution_id) AS previous_passed
+                      FROM execution_fact ef
+                     WHERE ef.executed_at IS NOT NULL
+                       AND ef.executed_at >= :cutoff
+                       AND ef.status_kind IN ('PASSED', 'FAILED')
+                )
+                , per_case AS (
+                    SELECT o.case_id,
+                           count(*)                                                AS executions,
+                           count(*) FILTER (
+                               WHERE o.previous_passed IS NOT NULL)                AS transitions,
+                           count(*) FILTER (
+                               WHERE o.previous_passed IS NOT NULL
+                                 AND o.previous_passed <> o.passed)                AS alternations,
+                           count(DISTINCT (o.configuration_id, o.case_version_id)) AS cells,
+                           max(o.executed_at) FILTER (
+                               WHERE o.previous_passed IS NOT NULL
+                                 AND o.previous_passed <> o.passed)                AS last_alternation_at
+                      FROM outcomes o
+                     GROUP BY o.case_id
+                )
+                INSERT INTO case_flake (
+                        case_id, company_id, project_id,
+                        executions, transitions, alternations, cells,
+                        flake_score, last_alternation_at, computed_at)
+                SELECT c.id, c.company_id, c.project_id,
+                       coalesce(p.executions, 0),
+                       coalesce(p.transitions, 0),
+                       coalesce(p.alternations, 0),
+                       coalesce(p.cells, 0),
+                       CASE WHEN coalesce(p.transitions, 0) >= CAST(:minimumTransitions AS bigint)
+                            THEN round(p.alternations::numeric / p.transitions, 4)
+                            END,
+                       p.last_alternation_at,
+                       :now
+                  FROM test_case c
+                  LEFT JOIN per_case p ON p.case_id = c.id
+                 WHERE c.deleted_at IS NULL
+                    ON CONFLICT (case_id) DO UPDATE
+                   SET executions          = EXCLUDED.executions,
+                       transitions         = EXCLUDED.transitions,
+                       alternations        = EXCLUDED.alternations,
+                       cells               = EXCLUDED.cells,
+                       flake_score         = EXCLUDED.flake_score,
+                       last_alternation_at = EXCLUDED.last_alternation_at,
+                       computed_at         = EXCLUDED.computed_at
+                """)
+                .setParameter("cutoff", cutoff)
+                .setParameter("minimumTransitions", minimumTransitions)
+                .setParameter("now", now)
+                .executeUpdate();
+    }
+
     // =========================================================================
     // The M2 rollups (§6p) — §101
     // =========================================================================

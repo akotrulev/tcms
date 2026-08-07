@@ -2,6 +2,7 @@ package com.tcms.reporting;
 
 import com.tcms.tenancy.CompanyContext;
 import java.time.Clock;
+import java.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -88,12 +89,21 @@ public class ExecutionFactRefreshService {
     public int refresh() {
         CompanyContext.require();
 
-        int facts = source.projectRecordedExecutions();
-        int signals = source.recomputeFailingRepeatedly(
-                thresholds.failingRepeatedlyWindow(), clock.instant());
+        Instant now = clock.instant();
 
-        log.debug("Projected {} execution facts and re-derived failing_repeatedly for {} cases",
-                facts, signals);
+        int facts = source.projectRecordedExecutions();
+        int signals = source.recomputeFailingRepeatedly(thresholds.failingRepeatedlyWindow(), now);
+        // Third statement, one transaction, same order and the same reason: case_flake is derived
+        // from execution_fact, so a scoring pass that ran before the projection would score the
+        // previous tick's facts. It is deliberately NOT a fourth scheduled job — it reads exactly
+        // the rows the projection just wrote, and a separate schedule would mean the score and the
+        // signal above it could disagree about which executions exist, with no way to tell which
+        // one was stale.
+        int scored = source.recomputeFlakeScores(
+                now.minus(thresholds.flakeWindow()), thresholds.flakeMinimumTransitions(), now);
+
+        log.debug("Projected {} execution facts, re-derived failing_repeatedly for {} cases "
+                + "and flake evidence for {} cases", facts, signals, scored);
         return facts;
     }
 }

@@ -186,6 +186,30 @@ tcms:
     # time would silently mean something different per project.
     failing-repeatedly-window: ${TCMS_FAILING_REPEATEDLY_WINDOW:3}
 
+    # How far back case_flake's scoring reads (§6l's flakiness rule, M3 slice 6).
+    #
+    # Bounded for §120's reason arriving from the other direction: an unbounded flake score
+    # can NEVER GO FALSE, so a test that flapped badly last spring and has been solid ever
+    # since keeps a high score for ever with nothing anybody can do about it. §120 rejected
+    # exactly that shape for UNDECLARED_AUTOMATION.
+    #
+    # A DURATION here, the opposite call to failing-repeatedly-window directly above, and
+    # the two are consistent rather than inconsistent: that one is a count because three
+    # failures mean the same thing nightly or quarterly, this one is a duration because it
+    # answers "is this test flaky NOW" and a fixed count of results would mean a week of
+    # history for a nightly suite and two years for a quarterly one.
+    flake-window: ${TCMS_FLAKE_WINDOW:P90D}
+
+    # How many adjacent pairs of outcomes INSIDE ONE CELL — (configuration, case version) —
+    # are needed before a score is claimed at all. Below this, flake_score is NULL, which is
+    # a different claim from 0: null is "not enough evidence to say", 0 is "evidently stable".
+    #
+    # Four, because two results that went pass then fail score a perfect 1.0 on any ratio
+    # definition and that is noise, not a flake — and the number a human would then use to
+    # decide whether to quarantine a test. At a floor of 1 a single flip is a perfect score;
+    # at 2 a flip and a recovery still is. ReportingProperties refuses to start below 1.
+    flake-minimum-transitions: ${TCMS_FLAKE_MINIMUM_TRANSITIONS:4}
+
   # spring.mail.host is deliberately NOT defaulted. Boot only auto-configures a
   # JavaMailSender when it is set, and MailConfiguration turns its absence into a loud
   # warning rather than a startup failure — an install with no relay still works, it just

@@ -1,6 +1,7 @@
 package com.tcms.reporting;
 
 import jakarta.validation.constraints.NotNull;
+import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
@@ -37,6 +38,25 @@ import org.springframework.validation.annotation.Validated;
  *        §6o words this one as a <em>count of executions</em> and not as an age: a case run nightly
  *        and a case run quarterly are both failing repeatedly after three failures, and expressing
  *        it in time would make the signal mean something different per project without saying so.
+ * @param flakeWindow how far back {@code case_flake}'s scoring reads (§6l, M3 slice 6). Ninety days.
+ *        <p><strong>Bounded for §120's reason, arriving from the other direction.</strong> An
+ *        unbounded flake score is one that <em>can never go false</em>: a test that flapped badly
+ *        last spring and has been solid ever since keeps a high score for ever, with nothing anybody
+ *        can do about it. §120 rejected exactly that shape for {@code UNDECLARED_AUTOMATION} and
+ *        gave the rule — a derived claim with no route back is as dishonest as a stored one.
+ *        <p>A {@link Duration} rather than a count of executions, and it is the opposite call to
+ *        {@link #failingRepeatedlyWindow} two fields up. That one is a count because §6o words it as
+ *        one and because a nightly case and a quarterly case are both failing repeatedly after three
+ *        failures. This one is a duration because it answers "is this test flaky <em>now</em>", and
+ *        a fixed count of results means a week of history for a nightly suite and two years for a
+ *        quarterly one — the same knob meaning different things per project without saying so.
+ * @param flakeMinimumTransitions how many adjacent pairs of outcomes inside one cell are needed
+ *        before a score is claimed at all. Below it {@code flake_score} is <strong>null</strong>,
+ *        which is a different claim from {@code 0}.
+ *        <p>Two results that went pass then fail score {@code 1.0} on any ratio definition, and that
+ *        is noise rather than a flake — the number a human would then use to decide whether to
+ *        quarantine a test. Four is the smallest floor that survives one coincidence: at {@code 1} a
+ *        single flip is a perfect score, and at {@code 2} a flip and a recovery still is.
  * @param enabled whether {@link ExecutionFactScheduler} is registered at all.
  *        <p><strong>Its real job is the test suite</strong>, exactly as
  *        {@code tcms.case-health.enabled}'s is, and the reason is worth restating because the
@@ -53,7 +73,11 @@ import org.springframework.validation.annotation.Validated;
  */
 @ConfigurationProperties(prefix = "tcms.reporting")
 @Validated
-public record ReportingProperties(@NotNull Integer failingRepeatedlyWindow, boolean enabled) {
+public record ReportingProperties(
+        @NotNull Integer failingRepeatedlyWindow,
+        @NotNull Duration flakeWindow,
+        @NotNull Integer flakeMinimumTransitions,
+        boolean enabled) {
 
     /**
      * Compact constructor, because the bound that matters is not "positive".
@@ -62,6 +86,9 @@ public record ReportingProperties(@NotNull Integer failingRepeatedlyWindow, bool
      * result on every case that has ever failed — which reads on the dashboard as a repository in
      * catastrophic health rather than as a misconfigured number, and self-heals never, because it
      * is doing exactly what it was told. That is the shape that should refuse to start.
+     *
+     * <p>The same argument covers all three checks below: each rejects a value that <em>works</em>
+     * and produces a confidently wrong number, rather than one that fails.
      */
     public ReportingProperties {
         if (failingRepeatedlyWindow != null && failingRepeatedlyWindow < 2) {
@@ -69,6 +96,23 @@ public record ReportingProperties(@NotNull Integer failingRepeatedlyWindow, bool
                     "tcms.reporting.failing-repeatedly-window must be at least 2 — a window of 1 "
                             + "makes FAILING_REPEATEDLY mean 'failed', which every other surface "
                             + "already says. Was " + failingRepeatedlyWindow);
+        }
+        // Bean Validation has no validator for Duration — @Positive is defined over numbers, and
+        // annotating a Duration with it fails CONTEXT STARTUP with HV000030 rather than the value.
+        // CaseHealthProperties records that it looked right and was caught only by booting.
+        if (flakeWindow != null && (flakeWindow.isZero() || flakeWindow.isNegative())) {
+            throw new IllegalArgumentException(
+                    "tcms.reporting.flake-window must be a positive duration — a non-positive "
+                            + "window selects no executions, so every case scores null and the "
+                            + "board's quarantine worklist is empty for a reason nobody can see. "
+                            + "Was " + flakeWindow);
+        }
+        if (flakeMinimumTransitions != null && flakeMinimumTransitions < 1) {
+            throw new IllegalArgumentException(
+                    "tcms.reporting.flake-minimum-transitions must be at least 1 — a floor of 0 "
+                            + "gives every case that ever ran twice a score, and the first case to "
+                            + "go pass-then-fail reports a perfect 1.0. Was "
+                            + flakeMinimumTransitions);
         }
     }
 }
