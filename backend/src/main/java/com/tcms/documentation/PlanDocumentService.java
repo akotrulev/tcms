@@ -75,6 +75,7 @@ public class PlanDocumentService {
     private final DocPageRepository pages;
     private final DocBlockRepository blocks;
     private final BlockLinks links;
+    private final PageAttachments attachments;
     private final PlanFacts plans;
     private final DocPageWriteService writes;
 
@@ -83,6 +84,7 @@ public class PlanDocumentService {
             DocPageRepository pages,
             DocBlockRepository blocks,
             BlockLinks links,
+            PageAttachments attachments,
             PlanFacts plans,
             DocPageWriteService writes) {
 
@@ -90,6 +92,7 @@ public class PlanDocumentService {
         this.pages = pages;
         this.blocks = blocks;
         this.links = links;
+        this.attachments = attachments;
         this.plans = plans;
         this.writes = writes;
     }
@@ -253,6 +256,7 @@ public class PlanDocumentService {
         return DocPageView.of(
                 page,
                 blocks.findForPage(page.getId()),
-                links.forPage(page.getProjectId(), page.getId()));
+                links.forPage(page.getProjectId(), page.getId()),
+                attachments.forPage(page.getProjectId(), page.getId()));
     }
 }

@@ -21,6 +21,11 @@ import java.util.UUID;
  *
  * @param blocks never null; empty is a real state and the SPA has copy for it ("This page has no
  *               content yet"). A page is created before anything is written into it.
+ * @param attachments never null, for {@code TestCase.attachments}' reason: unlike the {@code flake}
+ *               beside that one there is no third state to express — a page with no files and a page
+ *               nobody has looked at are the same page — so a nullable list would hand the SPA two
+ *               spellings of nothing. Detail-only: {@link DocPageSummaryView} has no such field,
+ *               because the tree renders hundreds of rows and none of them show a file.
  * @param lockVersion on the wire because the SPA sends it back as {@code If-Match}, so a concurrent
  *               edit is a 409 rather than a silent overwrite (plan §6j).
  */
@@ -35,11 +40,20 @@ public record DocPageView(
         String subjectType,
         UUID subjectId,
         List<DocBlockView> blocks,
+        List<DocPageAttachmentView> attachments,
         int currentVersionNo,
         long lockVersion) {
 
+    /**
+     * The just-created page.
+     *
+     * <p>No links and no attachments, and neither is an omission: every block was created a
+     * statement ago so nothing can link to one yet, and a page cannot have a file before it has an
+     * id to hang one off. Asking either collaborator here would be one guaranteed-empty query per
+     * create.
+     */
     static DocPageView of(DocPage page, List<DocBlock> blocks) {
-        return of(page, blocks, Map.of());
+        return of(page, blocks, Map.of(), List.of());
     }
 
     /**
@@ -47,9 +61,13 @@ public record DocPageView(
      *                     which is the ordinary case and is served as {@code []} — see
      *                     {@link DocBlockView}, where the difference between an empty list and an
      *                     absent {@code coverage} is the whole point.
+     * @param attachments  the page's files, oldest first, as {@link PageAttachments} assembled them.
      */
     static DocPageView of(
-            DocPage page, List<DocBlock> blocks, Map<UUID, List<BlockLinkView>> linksByBlock) {
+            DocPage page,
+            List<DocBlock> blocks,
+            Map<UUID, List<BlockLinkView>> linksByBlock,
+            List<DocPageAttachmentView> attachments) {
 
         DocPageSummaryView summary = DocPageSummaryView.of(page);
         return new DocPageView(
@@ -67,6 +85,7 @@ public record DocPageView(
                                 block,
                                 linksByBlock.getOrDefault(block.getId(), List.of())))
                         .toList(),
+                attachments,
                 page.getCurrentVersionNo(),
                 page.getLockVersion());
     }

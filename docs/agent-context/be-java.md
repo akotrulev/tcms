@@ -2,18 +2,79 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-07 (**§126 phase 1** — attachment owners, `CASE`; **§125** before it —
+**Last verified:** 2026-08-07 (**§126 phase 2** — attachment owners, `DOC_PAGE`; **§126 phase 1**
+before it — the `CASE` owner; **§125** before that —
 the `storage` module extraction; **§124** — the `BEST` removal and the two unwired permission keys;
 §122's grant-instance-admin, §121's four phases, §120's automation drift, §119's ingestion history,
 §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `d27ac08` (§125's handoff) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `18399b0` (§126 phase 1) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
 **SCHEMA HEAD IS `V39__attachment_owner_types.sql`; `V40` is next free.** It adds no table, so the
-policy count is unchanged at **62**. Test count **2050 across 434 result classes** (§125's baseline
-was 2028/428).
+policy count is unchanged at **62**. Test count **2072 across 439 result classes** (phase 1's
+baseline was 2050/434).
 
 ---
+
+## §126 phase 2 — `documentation` DECLARES `storage`, AND THE WIRE SCHEMA IS NO LONGER CASE-SHAPED
+
+**`documentation`'s `allowedDependencies` is `{"tenancy", "project", "identity", "storage"}`** — the
+**second** module to declare `storage` after `repository`. What it asks of it is *hold these bytes
+and give them back*, and the download is why `storage` is a foundation module rather than an event
+peer: a request has to answer with the bytes.
+
+- **The contract's `CaseAttachment` schema IS NOW `Attachment`**, serving `CASE`, `DOC_PAGE` and
+  (phase 3) `ARTIFACT`. One schema because the shapes are identical field for field *and* meaning
+  for meaning — only `url`'s value differs — and three identical generated types would re-create by
+  hand, on the wire, the polymorphism-by-duplication `storage` removed in the code. The rename was
+  free: nothing in `frontend/src/` named the old type, only the generated `schema.d.ts`.
+  **`Evidence` stays separate** — it has a caption and it is a record rather than authored content,
+  which is what decides the `OWN` arm on its delete.
+- **ONE wire schema, TWO Java records** — `repository.CaseAttachmentView` and
+  `documentation.DocPageAttachmentView`. Not shared, and there is nowhere to share it: the two
+  modules cannot import each other, and `storage` (which both reach) declares `tenancy` alone and
+  must not learn what a route or a `UserRef` is. `UserRefView` is already duplicated four ways for
+  this reason. **A field added to one and not the other is a response that omits it on one owner,
+  and nothing but the contract test observes that** — mutation `DA-9`.
+- **`documentation.PageAttachments.forPage(projectId, pageId)`** is the assembly seam —
+  `BlockLinks.forPage`'s shape, and the one place a page's file list is built. **Singular where
+  `CaseRenderer.attachmentsFor` is plural, deliberately**: pages are rendered one at a time (the
+  tree serves `DocPageSummaryView`, which has no file list), so a batch form would be a seam ahead
+  of its consumer. Uploaders resolve through the existing `ArtifactPeople`.
+- **`DocPageAttachmentService` + `DocPageAttachmentController`**, its own controller because
+  multipart brings a `MaxUploadSizeExceededException` handler and an `@ExceptionHandler` is scoped
+  to its controller — on `DocPageController` an oversized upload's 413 would answer a JSON `PATCH`.
+  **`DocPageController.validationProblem` / `forbiddenProblem` went package-private** so the second
+  controller reuses them rather than becoming the fourth hand-rolled problem envelope.
+- **THE GATE IS `doc:edit` ON BOTH WRITES, NOT `doc:publish`.** An attachment is *content*, so
+  whoever may rewrite the paragraphs may attach the diagram they describe; the other choice leaves a
+  Test Engineer able to author a specification they cannot illustrate, and **every other doc write
+  they make would keep working**, so nothing else in the suite would catch the drift. No `OWN` arm
+  on the delete, for `CaseAttachmentService`'s reason. Download costs nothing beyond the page read.
+- **NO `If-Match`, NO version row, NO status arm — three deliberate non-copies from the page's own
+  writes.** Blocks are reconciled by id so a stale client carries stale ids; an attachment is
+  addressed by its own id and never reconciled. `doc_page_version` snapshots blocks, so a version
+  row here would be a history entry whose diff says nothing changed. And **an `ARCHIVED` page still
+  accepts files** — `ARCHIVED` keeps links resolvable, and making it a retention control is a
+  different decision (mutation `DA-5`).
+- **`DocPage.attachments` is required and never null**, detail-only. `DocPageView.of` now has a
+  4-arg form; the 2-arg create form passes `List.of()` because a page cannot have a file before it
+  has an id. **`DocPageWriteService.edit` and `setStatus` RE-READ the attachments** — the `PATCH`
+  response is what the SPA renders, so serving `[]` makes a save appear to delete every file until
+  the next `GET` (mutation `DA-8`).
+- **Two red runs, both the test's fault and both worth keeping:** (1) an `UMBRA`-owned
+  `role_assignment` inserted inside the `ACME` context block — **RLS refused it**, 22/22 failed;
+  seed each company's rows under its own context. (2) `"\211PNG"` is a Java **octal escape**
+  (U+0089, two bytes in UTF-8), so a 4-character literal is 5 bytes. Also: the `DOC-n` counter is
+  **per company** and every page any test in the class creates advances it, so a literal `DOC-1`
+  was right on the first run and wrong on the second — read the key off the row.
+- Fixture prefix **`df`** (`DocPageAttachmentEndpointTest`, 22), checked against every prefix in
+  `src/test/java` first. It has a fifth persona, `OTHER_LEAD`, purely so the ungranted sibling
+  project's page can be *authored* — a page in a project nobody holds cannot be created through the
+  endpoint, and hand-seeding one produces a page shaped unlike every real one.
+- **`ArchitectureRulesTest` does NOT guard a consumer's declaration.** `storageDependsOnTenancyAlone`
+  checks `storage`'s own; widening `documentation`'s would pass every rule in the file. Recorded as
+  gap `DA-14`, not as a check.
 
 ## §126 phase 1 — THE ATTACHMENT OWNER VOCABULARY IS A TYPE, AND THE PORT WAS RENAMED
 
@@ -36,8 +97,8 @@ NOT renamed** — renaming it relocates the root on the next deploy and orphans 
 - **`AttachmentRepository.findOwnedBy` is PLURAL and has no singular sibling, on purpose** — a
   per-owner read is an N+1 inside `CaseBulkService`'s 500-case loop. `findOwnedById(owner, ownerId,
   id)` is the scoped point lookup; both halves of its predicate are load-bearing.
-- **`repository` declares `{"tenancy", "project", "identity", "storage"}`.** `documentation` does
-  **not** yet — phases 2 and 3 add it.
+- **`repository` declares `{"tenancy", "project", "identity", "storage"}`.** ~~`documentation` does
+  **not** yet — phases 2 and 3 add it.~~ → **phase 2 added it**; see the section above.
 - **The `CASE` family is `CaseAttachmentService` + `CaseAttachmentController`**, its own controller
   because multipart brings a `MaxUploadSizeExceededException` handler. Gate is **`case:edit` on both
   writes with no `OWN` arm** (the delete deliberately does not copy `evidence:delete`); the download

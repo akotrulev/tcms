@@ -30,17 +30,20 @@ public class DocPageService {
     private final DocPageRepository pages;
     private final DocBlockRepository blocks;
     private final BlockLinks links;
+    private final PageAttachments attachments;
 
     public DocPageService(
             ProjectService projects,
             DocPageRepository pages,
             DocBlockRepository blocks,
-            BlockLinks links) {
+            BlockLinks links,
+            PageAttachments attachments) {
 
         this.projects = projects;
         this.pages = pages;
         this.blocks = blocks;
         this.links = links;
+        this.attachments = attachments;
     }
 
     /**
@@ -74,6 +77,7 @@ public class DocPageService {
                 .map(page -> DocPageView.of(
                         page,
                         blocks.findForPage(page.getId()),
-                        links.forPage(page.getProjectId(), page.getId())));
+                        links.forPage(page.getProjectId(), page.getId()),
+                        attachments.forPage(page.getProjectId(), page.getId())));
     }
 }

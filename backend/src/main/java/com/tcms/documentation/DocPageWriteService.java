@@ -64,6 +64,7 @@ public class DocPageWriteService {
     private final DocPageRepository pages;
     private final DocBlockRepository blocks;
     private final BlockLinks blockLinks;
+    private final PageAttachments attachments;
     private final DocSpaceRepository spaces;
     private final PageVersions versions;
     private final DisplayKeys displayKeys;
@@ -75,6 +76,7 @@ public class DocPageWriteService {
             DocPageRepository pages,
             DocBlockRepository blocks,
             BlockLinks blockLinks,
+            PageAttachments attachments,
             DocSpaceRepository spaces,
             PageVersions versions,
             DisplayKeys displayKeys,
@@ -85,6 +87,7 @@ public class DocPageWriteService {
         this.pages = pages;
         this.blocks = blocks;
         this.blockLinks = blockLinks;
+        this.attachments = attachments;
         this.spaces = spaces;
         this.versions = versions;
         this.displayKeys = displayKeys;
@@ -365,8 +368,14 @@ public class DocPageWriteService {
 
             audit(project.getId(), userId, "doc_page.edited", page, now);
 
+            // The attachments are re-read rather than carried: an edit does not touch them, but the
+            // response is what the SPA renders next, and serving an empty list here would make a
+            // save appear to delete every file on the page until the next GET put them back.
             return new Outcome.Updated(DocPageView.of(
-                    page, content, blockLinks.forPage(page.getProjectId(), page.getId())));
+                    page,
+                    content,
+                    blockLinks.forPage(page.getProjectId(), page.getId()),
+                    attachments.forPage(page.getProjectId(), page.getId())));
         }));
     }
 
@@ -446,7 +455,8 @@ public class DocPageWriteService {
             return new Outcome.Updated(DocPageView.of(
                     page,
                     blocks.findForPage(page.getId()),
-                    blockLinks.forPage(page.getProjectId(), page.getId())));
+                    blockLinks.forPage(page.getProjectId(), page.getId()),
+                    attachments.forPage(page.getProjectId(), page.getId())));
         }));
     }
 

@@ -343,7 +343,13 @@ public class DocPageController {
         return problem;
     }
 
-    private static ProblemDetail validationProblem(Map<String, List<String>> errors) {
+    /**
+     * Package-private rather than private since #49: {@link DocPageAttachmentController} is a second
+     * controller in this module and must answer with the same envelope. A copy there would be the
+     * fourth hand-rolled problem body in the product, which is the exact thing this module's header
+     * declines to become.
+     */
+    static ProblemDetail validationProblem(Map<String, List<String>> errors) {
         ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
         problem.setTitle("Validation failed");
         // The SPA renders the per-field messages beside the inputs, so this line must not repeat
@@ -353,7 +359,8 @@ public class DocPageController {
         return problem;
     }
 
-    private static ProblemDetail forbiddenProblem(String detail) {
+    /** Package-private for {@link #validationProblem}'s reason. */
+    static ProblemDetail forbiddenProblem(String detail) {
         ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
         problem.setTitle("Not allowed");
         problem.setDetail(detail);

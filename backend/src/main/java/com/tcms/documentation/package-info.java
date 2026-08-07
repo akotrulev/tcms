@@ -41,7 +41,15 @@
  *
  * <h2>Allowed dependencies</h2>
  *
- * <p>{@code tenancy}, {@code project} and — since the artifact register — {@code identity}.
+ * <p>{@code tenancy}, {@code project}, — since the artifact register — {@code identity}, and —
+ * since #49 gave {@code attachment.owner_type = 'DOC_PAGE'} a writer — {@code storage}.
+ *
+ * <p>{@code storage} is the fourth foundation module (§125) and this is the second module to declare
+ * it after {@code repository}. What is asked of it is <em>hold these bytes and give them back</em>:
+ * {@link com.tcms.documentation.DocPageAttachmentService} names {@code Attachment},
+ * {@code AttachmentRepository} and {@code AttachmentStore} and nothing else, and the download cannot
+ * be an event because a request has to answer with the bytes — which is the whole argument for
+ * {@code storage} being a foundation module rather than an event peer.
  *
  * <p>~~Not {@code identity}: unlike {@code repository}, {@code execution} and {@code work}, nothing
  * here renders a person. A page has {@code created_by} and {@code updated_by} columns and the
@@ -84,5 +92,5 @@
  * waiting for this module.
  */
 @org.springframework.modulith.ApplicationModule(
-        allowedDependencies = {"tenancy", "project", "identity"})
+        allowedDependencies = {"tenancy", "project", "identity", "storage"})
 package com.tcms.documentation;

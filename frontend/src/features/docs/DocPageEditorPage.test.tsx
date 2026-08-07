@@ -43,6 +43,11 @@ const page: DocPage = {
     { id: 'block-heading', position: 0, blockType: 'heading', level: 2, text: 'Full refudns' },
     { id: 'block-body', position: 1, blockType: 'paragraph', level: null, text: 'Within 5 days.' },
   ],
+  // Required since #49 phase 2 gave `DOC_PAGE` a writer. The editor does not render files — that
+  // is phase 4's screen — but the fixture has to be a page the server could actually send, and
+  // `required` is what turned "this fixture is stale" into a compile error rather than a shape
+  // only the browser would have disagreed with.
+  attachments: [],
 }
 
 const sessionRecovery = {

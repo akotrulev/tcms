@@ -2038,7 +2038,7 @@ export interface paths {
         };
         /**
          * The file's bytes
-         * @description What `CaseAttachment.url` points at.
+         * @description What `Attachment.url` points at.
          *
          *     **No permission beyond the case read gate.** Anyone who may read the case may read
          *     what is attached to it, and the catalogue has no `attachment:read` — inventing one
@@ -4129,6 +4129,155 @@ export interface paths {
                 404: components["responses"]["NotFound"];
             };
         };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/doc-pages/{pageId}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                pageId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Attach a file to a documentation page
+         * @description Decision round 3's #49, phase 2 — `attachment.owner_type = 'DOC_PAGE'`, declared by
+         *     `V1` and writerless for the whole life of the product until this endpoint. A
+         *     specification is not only prose: it is the wireframe, the signed-off mock-up and the
+         *     data sheet the paragraphs describe, and until this the product could hold the
+         *     paragraph and not the picture it was written about.
+         *
+         *     **Requires `doc:edit`, not `doc:publish`.** This module's defining split is that
+         *     `doc:edit` writes content and `doc:publish` moves the publication state, with Test
+         *     Engineer holding the first and not the second (roles spec §A2). An attachment is
+         *     **content** — somebody who may rewrite every paragraph may attach the diagram those
+         *     paragraphs describe, and the other choice would leave a Test Engineer able to author a
+         *     specification they could not illustrate.
+         *
+         *     The delete below costs the same key with **no author arm**, which is the same call
+         *     `case:edit` makes one module over and for the same reason: `doc:edit` already lets its
+         *     holder delete a lead's paragraph, so refusing them the image beside it would make the
+         *     attachment stricter than the text referencing it.
+         *
+         *     **No new permission was invented.** The catalogue has no `attachment:*` key and one
+         *     seeded to nobody is a `403` no administrator can grant their way out of.
+         *
+         *     **No `If-Match` and no version row**, unlike the page's own `PATCH`. Blocks are
+         *     reconciled by id so a stale client carries stale ids; an attachment is addressed by
+         *     its own id and never reconciled, so two people attaching two files are not in
+         *     conflict — they are both attaching. And `doc_page_version` snapshots the blocks, so a
+         *     version row here would be a history entry whose diff says nothing changed.
+         *
+         *     **An archived page still accepts files.** `ARCHIVED` takes a page out of circulation
+         *     while keeping its links resolvable; making it a retention control is a different
+         *     decision, and the page's own `PATCH` has no status arm either.
+         *
+         *     **The upload proxies through the API** rather than going browser-direct to a signed
+         *     URL: the storage port's filesystem adapter cannot issue one (plan §8 #28). So the
+         *     instance's `spring.servlet.multipart.max-file-size` is a real limit and a file over it
+         *     is a **413** rather than a `400` — the request is refused before it reaches the
+         *     handler, so there is no field to hang a message on.
+         *
+         *     **There is no `GET` here.** The list is `DocPage.attachments` on the page detail,
+         *     which is the only screen that shows it; a second read path would be a second answer to
+         *     "what is attached to this page", free to disagree the moment one grew a filter.
+         */
+        post: operations["attachDocPageFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/doc-pages/{pageId}/attachments/{attachmentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                pageId: string;
+                /**
+                 * @description An `attachment` row's id. Scoped by its owner as well as by its id everywhere it is
+                 *     used — the two-segment gate — so a caller cannot reach another owner's file by
+                 *     guessing this one.
+                 */
+                attachmentId: components["parameters"]["AttachmentId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a file from a documentation page
+         * @description Costs `doc:edit` — the same key the upload does, with **no author arm**. See the
+         *     `POST` above for why, and note the consequence stated plainly: whoever may edit the
+         *     page may remove any of its files, including one somebody else attached.
+         *
+         *     **A hard delete, and the bytes go with the row** — unlike the page itself, which is
+         *     soft-deleted. A file removed on request has to actually leave the disk: a soft-deleted
+         *     row pointing at retained bytes is a deletion that did not delete, which is the wrong
+         *     answer for the one thing here a customer may need removed for privacy rather than
+         *     tidiness. The row is removed first and the bytes second, so a failure between them
+         *     leaves an unreferenced blob an operator can sweep rather than a thumbnail that renders
+         *     and never opens.
+         *
+         *     The audit row carries the filename, and it is the **only** surviving statement that
+         *     the file existed once both the row and the bytes are gone.
+         *
+         *     `404` when `attachmentId` names nothing on **this** page — the two-segment gate, so
+         *     `/doc-pages/{a}/attachments/{belongs-to-b}` cannot reach another page's file.
+         */
+        delete: operations["deleteDocPageFile"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/doc-pages/{pageId}/attachments/{attachmentId}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                pageId: string;
+                /**
+                 * @description An `attachment` row's id. Scoped by its owner as well as by its id everywhere it is
+                 *     used — the two-segment gate — so a caller cannot reach another owner's file by
+                 *     guessing this one.
+                 */
+                attachmentId: components["parameters"]["AttachmentId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The file's bytes
+         * @description What `Attachment.url` points at.
+         *
+         *     **No permission beyond the page read gate.** Anyone who may read the page may read
+         *     what is attached to it, and the catalogue has no `attachment:read` — inventing one
+         *     would be a permission no role is granted, which is a `403` nobody can fix. It is also
+         *     the only rule that does not make the SPA reason about two permissions per thumbnail.
+         *
+         *     Served `inline` with the stored content type, so a diagram renders in place beside the
+         *     paragraphs it belongs to. The filename reaches a response **header**, where a carriage
+         *     return is header injection rather than an odd name; it is neutralised on the way out.
+         *
+         *     `404` also when the row exists and its blob does not — the orphan the write ordering
+         *     deliberately produces rather than the reverse. An empty `200` would hand the browser
+         *     a corrupt file.
+         */
+        get: operations["downloadDocPageFile"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -6477,7 +6626,7 @@ export interface components {
              *     Detail only, for `flake`'s reason: a paperclip count is not worth a per-row join
              *     on the hottest list read in the product.
              */
-            attachments: components["schemas"]["CaseAttachment"][];
+            attachments: components["schemas"]["Attachment"][];
             flake: components["schemas"]["CaseFlake"] | null;
             /**
              * @description Every classification value this case carries, as ids — the same assignments
@@ -6943,14 +7092,26 @@ export interface components {
             reason?: string;
         };
         /**
-         * @description One file on a test case's definition — `attachment.owner_type = 'CASE'`.
+         * @description One file attached to something that is **authored content** — a test case's
+         *     definition (`attachment.owner_type = 'CASE'`), a documentation page (`DOC_PAGE`), or
+         *     an artifact's bytes (`ARTIFACT`).
          *
-         *     **No caption**, unlike `Evidence`. A caption is somebody saying what a screenshot
-         *     *shows*, which is a claim about a moment that has passed; a case attachment is
-         *     described by its filename, and a second free-text name for the same file is a field
-         *     two people will fill in differently.
+         *     **One schema for all three, and that is a decision.** The shapes are identical field
+         *     for field *and* meaning for meaning — only the value of `url` differs, and the server
+         *     builds that — so three structurally-identical types would make the SPA's one
+         *     attachment list generic over nothing, and would re-create by hand, on the outside,
+         *     the polymorphism-by-duplication the `storage` module removed on the inside:
+         *     `storage.Attachment` is one entity for five owner types. It was `CaseAttachment`
+         *     until #49's phase 2, when a second owner made the case-specific name wrong.
+         *
+         *     **Not `Evidence`, which stays its own schema.** Evidence has a **caption** —
+         *     somebody saying what a screenshot *shows*, a claim about a moment that has passed —
+         *     and it is a record of something that happened rather than authored content. That
+         *     difference is what decides the delete gate everywhere: an authorship arm on evidence,
+         *     none here. A caption on this schema would be a second free-text name for a file that
+         *     already has one, which two people will fill in differently.
          */
-        CaseAttachment: {
+        Attachment: {
             /** Format: uuid */
             id: string;
             /**
@@ -7983,6 +8144,25 @@ export interface components {
         };
         DocPage: components["schemas"]["DocPageSummary"] & {
             blocks: components["schemas"]["DocBlock"][];
+            /**
+             * @description Files on the page — the wireframe, the signed-off mock-up, the data sheet the
+             *     paragraphs describe. `attachment.owner_type = 'DOC_PAGE'`, which `V1` declared
+             *     and nothing wrote until decision round 3's #49.
+             *
+             *     **Detail-only**, like `TestCase.attachments`: `DocPageSummary` has no such
+             *     field, because the tree renders every page in the project and none of those
+             *     rows show a file.
+             *
+             *     Never null. A page with no files and a page nobody has attached to are the
+             *     same page, so unlike the `flake` on a case there is no third state to express
+             *     and a nullable list would be two spellings of nothing.
+             *
+             *     Written and removed through the endpoints below, both costing **`doc:edit`** —
+             *     an attachment is *content*, so whoever may rewrite the paragraphs may attach
+             *     the diagram they describe. Not `doc:publish`, which would leave a Test
+             *     Engineer able to author a specification they could not illustrate.
+             */
+            attachments: components["schemas"]["Attachment"][];
             currentVersionNo: number;
             lockVersion: number;
         };
@@ -9114,7 +9294,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CaseAttachment"];
+                    "application/json": components["schemas"]["Attachment"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -9452,6 +9632,117 @@ export interface operations {
                     "application/octet-stream": string;
                 };
             };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    attachDocPageFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                pageId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description The bytes. Filename and content type travel in the part's own headers, and
+                     *     the filename is stored in a column — it never becomes part of a storage key.
+                     */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Attached */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Attachment"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /**
+             * @description The file is larger than this instance's upload limit. Refused by the servlet
+             *     container before the handler runs.
+             */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deleteDocPageFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                pageId: string;
+                /**
+                 * @description An `attachment` row's id. Scoped by its owner as well as by its id everywhere it is
+                 *     used — the two-segment gate — so a caller cannot reach another owner's file by
+                 *     guessing this one.
+                 */
+                attachmentId: components["parameters"]["AttachmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    downloadDocPageFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                pageId: string;
+                /**
+                 * @description An `attachment` row's id. Scoped by its owner as well as by its id everywhere it is
+                 *     used — the two-segment gate — so a caller cannot reach another owner's file by
+                 *     guessing this one.
+                 */
+                attachmentId: components["parameters"]["AttachmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The bytes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
         };
     };

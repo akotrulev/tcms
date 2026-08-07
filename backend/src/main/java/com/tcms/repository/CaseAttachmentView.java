@@ -5,7 +5,16 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * {@code CaseAttachment} in {@code docs/specs/openapi.yaml} — one file on a case's definition.
+ * {@code Attachment} in {@code docs/specs/openapi.yaml} — one file on a case's definition.
+ *
+ * <p>The schema was {@code CaseAttachment} until #49's phase 2 gave documentation pages a second
+ * owner; it is one schema for all three authored-content owners now, and this record is its
+ * {@code CASE} half. {@code documentation.DocPageAttachmentView} is the other one that exists today
+ * — a second record rather than a shared one because {@code repository} and {@code documentation}
+ * cannot import each other, and {@code storage} (which both may reach) declares {@code tenancy}
+ * alone and has no business knowing what a route or a {@code UserRef} is. <strong>A field added to
+ * one and not the other is a response that omits it on one owner</strong>, and nothing but the
+ * contract test observes that.
  *
  * @param url where the bytes are. Absolute-from-root, built here rather than by the SPA, for the
  *            reason {@code EvidenceView} gives: a client that composes the path is a second place
