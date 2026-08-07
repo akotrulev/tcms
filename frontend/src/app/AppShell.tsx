@@ -17,6 +17,7 @@ import {
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import AssignmentIndOutlinedIcon from '@mui/icons-material/AssignmentIndOutlined';
 import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined';
+import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
@@ -169,6 +170,21 @@ function projectNav(projectId: string): { heading: string; items: NavItem[] }[] 
           and go by permission, which is the opposite of §31's disable-don't-hide.
         */
         { label: 'Reports', to: `${p}/reports`, icon: <AssessmentOutlinedIcon fontSize="small" /> },
+        /*
+          §119. Execution, beside Test runs, because an ingested report *is* a run's results
+          arriving by another door — and because the person who goes looking for "why did my CI
+          results not show up" is looking at the run that should have them.
+
+          Ungated, like every item in this rail. The history needs only membership; the binding
+          inside it costs `case:edit` and is disabled with a reason there (§31). Hiding the entry
+          would teach a Test Engineer that this instance has no CI integration, which is the same
+          lie an empty list would tell.
+        */
+        {
+          label: 'CI ingestion',
+          to: `${p}/ingestions`,
+          icon: <CloudUploadOutlinedIcon fontSize="small" />,
+        },
       ],
     },
     {

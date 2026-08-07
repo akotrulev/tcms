@@ -160,6 +160,34 @@ export type CriterionMetric = NonNullable<S['CriterionInput']['metric']>;
 export type ResultCounts = S['ResultCounts'];
 export type DefectLink = S['DefectLink'];
 
+/**
+ * CI ingestion.
+ *
+ * **`IngestionJobSummary` and `IngestionJob` are two types on purpose** and neither is assignable
+ * to the other: the summary the history list serves has no `unmatched` array at all, because the
+ * names are not a column and reading every job's stored payload to render one screen is what the
+ * split exists to avoid. A component that wants the names must have loaded the job.
+ */
+export type IngestionJobSummary = S['IngestionJobSummary'];
+export type IngestionJob = S['IngestionJob'];
+export type UnmatchedTest = S['UnmatchedTest'];
+export type IngestedOutcome = S['IngestedOutcome'];
+/**
+ * Which CI dialect a report was — **named `IngestionFormat` here, though the schema is
+ * `ReportFormat`.**
+ *
+ * The contract has two unrelated things called a report format: this one (JUnit, TestNG, Allure,
+ * Cucumber — what a runner emitted) and the *export* format of a generated report (Markdown, HTML,
+ * PDF), which owns the `ReportFormat` name in this file already and is what `lib/labels.ts`
+ * satisfies over. Aliasing the schema name would have been a duplicate identifier at best and, had
+ * the two lived in different files, a picker offering PDF to a CI parser at worst. The divergence
+ * is deliberate and is recorded on both sides.
+ */
+export type IngestionFormat = S['ReportFormat'];
+export type IngestionStatus = S['IngestionStatus'];
+export type AutomationMapping = S['AutomationMapping'];
+export type AutomationMappingInput = S['AutomationMappingInput'];
+
 // history & reporting
 export type CaseHistorySummary = S['CaseHistorySummary'];
 export type ExecutionHistoryEntry = S['ExecutionHistoryEntry'];

@@ -65,6 +65,16 @@ export const keys = {
   run: (p: string, id: string) => ['projects', p, 'runs', id] as const,
   execution: (p: string, runId: string, id: string) =>
     ['projects', p, 'runs', runId, 'executions', id] as const,
+  /**
+   * The ingestion history, and one job.
+   *
+   * Two keys rather than one with a `find` over the list, because the two endpoints serve
+   * **different shapes**: the list carries no `unmatched` array at all. A detail read served out of
+   * the list's cache would render an empty binder over a job with twelve unmatched tests.
+   */
+  ingestions: (p: string) => ['projects', p, 'ingestions'] as const,
+  ingestion: (p: string, id: string) => ['projects', p, 'ingestions', id] as const,
+  automationMappings: (p: string) => ['projects', p, 'automation-mappings'] as const,
   docPages: (p: string) => ['projects', p, 'doc-pages'] as const,
   docPage: (p: string, id: string) => ['projects', p, 'doc-pages', id] as const,
   /*

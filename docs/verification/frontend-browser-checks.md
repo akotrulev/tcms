@@ -576,6 +576,37 @@ them, or `L4` stalls for a quarter of an hour twice.*
 | M4-28 | Switch **all three review opt-ins off**, leave a gate on, repeat `M4-23` and `M4-25` | The gates **still fire** and no review panel renders. Gating reads the status ladder; review's opt-in suppresses the apparatus. A build where they are coupled looks identical until this row. **`A4` starts by switching plans back on — this row is why `M5-1` is not a no-op.** | §82-12 |
 | M4-29 | Gate on for `OLB`, repeat `M4-23` in `MOB` | `MOB` unaffected. The read is `useProjectSettings(projectId)`; a cache keyed too broadly leaks one project's policy into the other. | §82-13 |
 
+### CI ingestion — the history and the binder (§119)
+
+*Still A3, and deliberately at the end of it: these rows need real cases (`A1`) so a report can
+match something, and they leave two ingestion jobs and one confirmed mapping behind.*
+
+**They need a live credential and `A0-15` revoked the one `A0-11` issued.** Issue a second one
+first — `Ingestion pass`, role **Automation Service**, no project, no expiry — from
+`/admin/tokens`. That is a deliberate dependency and not a gap: it re-drives §118's issue path a
+second time, which is the only thing in this file that would catch a screen that mints one working
+credential and then stops.
+
+| # | Drive | Expect | src |
+|---|---|---|---|
+| A3-4 | The rail's **Execution** group → **CI ingestion** on `OLB`, before posting anything new | The item sits **beside Test runs** and is enabled for every persona. The history shows **one row** — `A0-12`'s report, posted before any case existed. Its Run cell reads **"No run"** and *not* a dash: nothing matched, so no run was opened, and a run of zero cases would have reported 0 of 0, 100%, complete. Matched **0**, Unmatched **1**. | §119-1 |
+| A3-5 | Open that row (the timestamp is the link) | The job screen, with the blue *"Nothing in this report matched a case, so no run was opened"* alert, and one unmatched row naming the test **as the report wrote it** — mixed case intact. **This is the screen that makes declining §6c's auto-created case stubs defensible**; before it, the only way to read this list was `curl`. | §119-2 |
+| A3-6 | `curl` a JUnit report into `OLB` with two `<testcase>`s: one named `refunds in full [<TC-key of a real case>]`, one named `com.acme.GhostTest#nothing names this`, with a fresh `Idempotency-Key` | 201. The history gains a row: Matched **1**, Unmatched **1**, and a **`TR-n` link** — follow it and the run holds one execution against that case with the reported verdict, `Executed by` **blank** (the verdict was the machine's, not the token holder's). The first row still reads "No run". | §119-3 |
+| A3-7 | Re-post the **same** report under the **same** `Idempotency-Key` | 200, not 201, and the history is **still two rows**. Read the response body: `unmatched` carries the **name**, not an empty array beside a count of 1. That was the shape before §119 read the payload back, and the retry is the caller that most needs it. | §119-4 |
+| A3-8 | On the newest job, press **Bind** on the ghost test → pick a case by key → **Bind** | The dialog names the test **read-only** and posts it **raw**; it closes on success. **Check the request body in the Network tab**: `testName` must be exactly what the row shows, mixed case and all. A client that lower-cased it would look identical on screen and would break every mapping the day the two rules diverge — the Network tab is the only observer. | §119-5 |
+| A3-9 | Back on the history screen, read **Test name mappings** | One row: the test in the mono font **normalized by the server** (lower-cased, whitespace collapsed) beside the case key it now means. The name in this table is deliberately not the one the previous row typed — that difference *is* the server's rule, visible. | §119-6 |
+| A3-10 | `curl` the same report a third time with a **new** `Idempotency-Key` | 201, and now **Matched 2, Unmatched 0** — the mapping placed the test that had matched nothing. §6c's third ladder rung, end to end through the product. | §119-7 |
+| A3-11 | As `engineer` (holds `case:read`, not `case:edit`), open the same two screens | Both **render in full** — the history is membership-gated, and hiding it would tell a Test Engineer this instance has no CI integration. **Bind** and **Remove** are **disabled with a reason on hover**, never absent (§31). | §119-8 |
+| A3-12 | As `viewer`, open `/projects/{OLB}/ingestions` | The history renders. The mappings panel is the one to watch: `case:read` is what it costs, and whatever the server answers must render as data or as a refusal — **never as a global "Something didn't load" over a working screen**. Record which it does; if it is a refusal, that is a finding about the panel's gating and not about the endpoint. | §119-9 |
+| A3-13 | Delete the case the mapping points at (as `lead`), then re-read Test name mappings | The row is **still there**, its Case cell reading **"Deleted case"** with the tooltip. It still consumes the test name, so every build still resolves that test to a case that is gone — filtering it out would hide the only thing that can be removed to fix it. **Remove** it, and confirm the dialog says results already recorded stay where they are. | §119-10 |
+| A3-14 | `psql`: `SELECT count(*) FROM ingestion_job WHERE project_id = '<MOB>'`, then open `MOB` → CI ingestion | **0**, and the screen shows the empty state naming the endpoint and the API-token screen — the only place this product ever says how to start posting. A project's history must not show another project's jobs: the read is gated on `projectId` over RLS, and this is the browser-lane half of `IH-1`. | §119-11 |
+
+**One row this pass cannot drive.** A **capped** unmatched list (`Ingestion.Capped`, "Showing the
+first 50 of N") needs a report with more than 50 unmatched tests. Generating one is a `curl` with a
+scripted body rather than a browser action, and it is left out rather than faked: the alternative is
+lowering the cap for the pass, which would verify a constant nobody ships. The unit test covers the
+banner; what is unverified is the real 50-name response.
+
 ### Before leaving this lane — start the three clocks
 
 | # | Drive | Expect | src |
@@ -1120,3 +1151,28 @@ Three of them carry more than their own weight:
 
 **No mutation rows.** This slice adds no server behaviour; §116's twelve cover the endpoints it
 calls, and `A0-12`/`A0-15` exercise the credential's two ends from the browser lane instead.
+
+---
+
+## §119 — the ingestion history and the unmatched-test binder
+
+**Eleven rows, all in the A3 lane** (`A3-4`…`A3-14`), because they need `A1`'s cases to match
+against and `A0-12`'s already-posted report to read. They are the first rows in this file to drive
+`/automation-mappings` from a browser — §117 shipped those three endpoints with no consumer in
+`src/`, and §118's `A0-12` reached ingestion by `curl` alone.
+
+Three carry more than their own weight:
+
+- **`A3-8`** asserts a **request body**, not a screen. A client that normalized `testName` would
+  look identical in every pixel and would break every mapping in the company the day its rule and
+  the parser's diverge — silently, because a mapping that matches nothing looks exactly like a test
+  nobody bound.
+- **`A3-10`** closes §6c's ladder end to end through the product: a test that matched nothing,
+  bound by a person, matching on the next build. Until this row exists the binder is a screen whose
+  effect is only asserted in a unit test.
+- **`A3-14`** is the browser half of `IH-1` — a project's history must not show another project's
+  jobs, and the read layers a `projectId` predicate over RLS in one of the seven files §117's
+  closing note names.
+
+**No mutation rows here.** §119's eight (`IH-1`…`IH-8`) are in the backend queue; these are the
+same properties observed from the other side where a browser can see them.

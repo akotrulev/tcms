@@ -2,11 +2,14 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-07 (**§117** — CI result ingestion, M3's second slice; §116's API tokens,
-§115's coverage matrix, R8/§114, R7/§112, R6 phases 1–4 / §111 and §108 before it)
-**Baseline commit:** `7daa12c` (§117 phase 1) **+ the §117 phase-2 commit this line ships in** (its
-own SHA cannot be written into itself; per `CLAUDE.md`, trust the body over the header and re-grep
-what a later commit could have moved).
+**Last verified:** 2026-08-07 (**§119** — the ingestion history reads, M3's fourth slice; §117's CI
+ingestion, §116's API tokens, §115's coverage matrix, R8/§114, R7/§112, R6 phases 1–4 / §111 and
+§108 before it)
+**Baseline commit:** `32968e2` (§119 phase 1) (per `CLAUDE.md`, trust the body over the header and
+re-grep what a later commit could have moved).
+**§119 CARRIED NO MIGRATION EITHER** — `V36` still head, **`V37` still free**, policy count still
+**61**. Four new `execution` files, seven new tests inside `IngestionEndpointTest`, and one
+**contract addition** (`GET /ingestions`, `GET /ingestions/{jobId}`, `IngestionJobSummary`).
 **§117 CARRIED NO MIGRATION** — `V36` is still the head, **`V37` still free**, policy count still
 **61**. Every table, column and `CHECK` it writes to has been in `V1` since M0; what was missing was
 never the schema. Sixteen new `execution` files, two test classes (`d7`, and a database-free one),
@@ -107,6 +110,35 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   no context, needs no database, strips comments first (the mail block legitimately quotes
   `${SMTP_HOST:-}` when explaining compose), and its negative case has been run. **Add config
   invariants there, not to a reading.** `#confirmed`
+
+- **§119 — THE INGESTION HISTORY READS.** `IngestionReadService` (`list`/`findOne`, both
+  `readVisible` — membership, no new key), `IngestionJobSummary`, `IngestionJobRow`,
+  `UnmatchedTests`. Two `GET`s on `IngestionController`; the second is the resource
+  `POST /ingestions`' `Location` header has named since it shipped, at which there had never been a
+  `GET`.
+
+  **The list and the detail serve DIFFERENT shapes and must stay that way.**
+  `IngestionJobRepository.findSummariesInProject` is a **JPQL constructor projection** into
+  `IngestionJobRow`, so `raw_payload` — a `JSONB` blob, megabytes for a 5,000-test report — is never
+  selected. `IngestionJobSummary` therefore has no `unmatched` field at all rather than an empty one:
+  an empty array beside `unmatchedCount: 12` reads as *"the list was cut"*, which is the meaning that
+  field is documented to carry. Reuniting them is a one-line temptation and it is mutation `IH-5`,
+  which **no test can catch** — the check is the query log.
+
+  `UnmatchedTests` re-reads the names out of the payload (`caseId` absent, or `recorded: false`) and
+  is a **second implementation of `IngestionService.unmatchedIn`**, legal only because
+  `IngestionEndpointTest.History.theDetailAgreesWithThePost` asserts the two against each other. It
+  also repaired the **replay**, which served `unmatched: []` beside a non-zero count.
+  `IngestionService.cap` is shared with it so the 50-name bound is not applied twice.
+
+  `TestRunRepository.findRunKeys` is `findPlanKeys`' shape for run keys — one query per page, and
+  `deletedAt IS NULL` so a deleted run yields a null key beside a non-null `runId`, which is what
+  the summary tells "matched nothing" apart from "run deleted" by.
+
+  **The `d7` fixture now seeds a SECOND PROJECT** (`SAVINGS`) and asserts that its job id is a 404
+  through `findOneInProject`. That is the two-project fixture the project-predicate-over-RLS family
+  has wanted since §115's CM-6; one of the seven files now has a test behind it, and the pattern to
+  copy is `seedJobInSavings`.
 
 - **§117 — CI RESULT INGESTION, AND `V1`'s LAST TWO WRITERLESS TABLES GET WRITERS.**
   **NO migration** (`V36` head, `V37` free, 61 policies). Sixteen files, all `execution`:
@@ -1484,6 +1516,18 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   a caller may or may not see. `#confirmed`
 
 ## Session log
+
+- 2026-08-07 · EXTEND · **The ingestion history reads** (§119 phase 1, M3 slice 4). Two `GET`s over
+  `ingestion_job`; the detail is the resource `POST /ingestions`' `Location` has always named and
+  never had. New: `IngestionReadService`, `IngestionJobSummary`, `IngestionJobRow`, `UnmatchedTests`;
+  `findSummariesInProject` (constructor projection) and `findOneInProject` replace the caller-less
+  `findByProjectIdOrderByCreatedAtDesc`; `TestRunRepository.findRunKeys`. **No migration, no key, no
+  entity.** Gate: **1953 across 408 classes, 0 failures, 0 skipped** (1946/407 → 1953/408).
+  **Two findings.** The replay served `unmatchedCount: N` beside `unmatched: []` — the names were
+  computed once and only ever lived in the blob, and the caller who gets a replay is a CI *retry*.
+  And `ReportFormat` names two unrelated things in one contract (CI dialect vs report export
+  format), which surfaced as a duplicate identifier on the frontend and is aliased `IngestionFormat`
+  there. 8 mutation + 11 browser rows queued, none run.
 
 - 2026-08-06 · EXTEND · **Version divergence** (§114, **R8** — the last slice in M2.5's reporting
   plan). A sixth section on `AggregateExecutionReport` over `selectedCte`, one row per (case,

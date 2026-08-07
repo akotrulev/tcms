@@ -135,6 +135,13 @@ export {
   useUpdateDocPage,
 } from './documentation';
 export {
+  useAutomationMappings,
+  useConfirmAutomationMapping,
+  useDeleteAutomationMapping,
+  useIngestion,
+  useIngestions,
+} from './ingestion';
+export {
   isJobFinished,
   TERMINAL_JOB_STATES,
   useDashboard,

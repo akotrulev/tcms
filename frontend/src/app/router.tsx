@@ -73,6 +73,12 @@ const DocPageEditorPage = lazy(() =>
 const ReportsPage = lazy(() =>
   import('../features/reports/ReportsPage').then((m) => ({ default: m.ReportsPage })),
 );
+const IngestionsPage = lazy(() =>
+  import('../features/ingestion/IngestionsPage').then((m) => ({ default: m.IngestionsPage })),
+);
+const IngestionJobPage = lazy(() =>
+  import('../features/ingestion/IngestionJobPage').then((m) => ({ default: m.IngestionJobPage })),
+);
 const ReportViewPage = lazy(() =>
   import('../features/reports/ReportViewPage').then((m) => ({ default: m.ReportViewPage })),
 );
@@ -411,6 +417,33 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <ReportViewPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            CI ingestion (§119). Under the project segment for the reason Reports is: what a report
+            was posted *to* is one project, and switching projects genuinely changes what this
+            screen is about.
+
+            Two routes rather than a dialog over the list, because the two ENDPOINTS serve
+            different shapes — the list carries no unmatched names at all — so opening a job is a
+            fetch and not an expansion, and a job's URL is something a person pastes to whoever
+            owns the tests that did not bind.
+          */}
+          <Route
+            path="/projects/:projectId/ingestions"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <IngestionsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/projects/:projectId/ingestions/:jobId"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <IngestionJobPage />
               </Suspense>
             }
           />

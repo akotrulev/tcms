@@ -1,7 +1,7 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-07 · **Branch:** `master` · **Latest slice:** [§118 — the token
-screen](handoff/118-the-token-screen.md)
+**Date:** 2026-08-07 · **Branch:** `master` · **Latest slice:** [§119 — the ingestion history and
+the binder](handoff/119-the-ingestion-history-and-the-binder.md)
 
 This file is an **index**. Every section is its own file under [`docs/handoff/`](handoff/), numbered
 by its § number, and the slice log below is where the narrative lives — one row per slice, each row
@@ -30,17 +30,21 @@ are down to **zero**. M3 slice 2 needed **no migration**: every table, column an
 to has been there since M0. **§118 is M3's third slice** and the first frontend one since §115: the
 token screen both §116 and §117 named on their way out, which gives `/api-tokens` its first consumer
 in `src/` and makes obtaining a CI credential something the product can do rather than something
-`curl` can. It carried no contract change either.
+`curl` can. It carried no contract change either. **§119 is M3's fourth slice and closes the loop**:
+`GET /ingestions` and `GET /ingestions/{jobId}` — the second being the resource `POST /ingestions`'
+`Location` header has named since it shipped, at which there had never been a `GET` — plus the
+history screen and the unmatched-test binder, which give `/automation-mappings` its first consumer
+and make §117's refusal of §6c's auto-created case stubs defensible for somebody who cannot read
+JSON. Its contract change is additive (one operation, one path, one schema).
 
-**Gates, as of §118** — both run locally, and only locally. §118 is frontend-only, so the backend
-row is §117's figure unchanged rather than a fresh run:
+**Gates, as of §119** — both run locally, and only locally. Both halves were re-run for §119:
 
 | Gate | State |
 |---|---|
-| `cd backend && ./gradlew build` | **BUILD SUCCESSFUL — 1946 tests across 407 result classes, 0 failures, 0 skipped** |
+| `cd backend && ./gradlew build` | **BUILD SUCCESSFUL — 1953 tests across 408 result classes, 0 failures, 0 skipped** |
 | `cd frontend && npm run build` | clean |
 | `npm run lint` | 0 warnings |
-| `npm run test:run` | **992/992 across 73 files** (§118. The 962 figure carried here was stale — the measured baseline before §118's 24 new tests was 968) |
+| `npm run test:run` | **1018/1018 across 76 files** (§119's 16 new over a **measured** baseline of 1002. The 992 carried here was stale — the fourth time this figure has been wrong in the same direction, so read it off a run rather than off this table) |
 
 **CI runs no backend tests** — `.github/workflows/ci.yml` has run `./gradlew build -x test` since
 §59, so `-Werror` and the Modulith wiring are checked and nothing else is. `./gradlew build` on your
@@ -54,7 +58,7 @@ structurally cannot observe.
 > file's existence as coverage.
 
 **Schema.** Flyway head is still **`V36__api_token_lookup.sql`**; **`V37` is the next free number**
-— §117 carried no migration. Still
+— neither §117 nor §119 carried a migration. Still
 61 tables under `FORCE ROW LEVEL SECURITY` — `V36`'s `api_token_lookup` is the **twelfth**
 instance-level table and the ERD §0.1 exception list's newest entry, decided rather than assumed. Flyway owns all DDL
 (`hibernate.ddl-auto: validate`).
@@ -271,3 +275,4 @@ Open actions above. The gap is deliberate; do not renumber around it.
 | [§116](handoff/116-api-tokens.md) | API tokens — M3's first slice and `api_token`'s first writer since `V1`: the credential is presented **before any company context can exist**, so `V36` adds an instance-level `api_token_lookup` (`V8`'s own recorded answer, and `V6`'s decision a second time), the digest **moves** rather than being copied, and the ERD §0.1 exception list gains one entry with the cost stated. A token's permissions are its owner's **intersected** with its role's — never a second resolution path — so it can exceed neither, and `api_token.name`'s uniqueness, which ERD §0.1 names by name, turned out never to have been created **(built and unverified — 12 mutation rows, none run; no browser rows, and the token screen is the slice that will carry them. THE SLICE HAD A REAL RED RUN: the context opened inside an already-begun transaction never reaches the GUC, so every valid credential 401'd)** |
 | [§117](handoff/117-result-ingestion.md) | CI result ingestion — M3's second slice, and the last two `V1` tables get writers: four parsers behind one Strategy whose values **are** `ingestion_job.format`'s `CHECK`, each with a different shape that reads a red suite as **green** (the worst being a Cucumber scenario failing mid-way, whose last step is skipped). §6c's ladder is **three batched passes, not a chain per test** — 3 queries, not 15,000 — and each rung is tested **alone**, because one collapsed to rung 1 would keep its count and pass. Nothing is auto-created for an unmatched test, which is a design rather than a gap only because `automation_key_mapping` gets its writer in the same slice — gated on **`case:edit`, which Automation Service does not hold**, so a leaked CI token can post results and cannot launder a red suite into a green one. `ReportXml` is the application's only `DocumentBuilderFactory`, and **a mutation corrected its own comment about which flag stops what**. §116's self-invoked-`@Transactional` defect was written and corrected before it ran **(built and unverified — 8 mutations RUN and stated as a deviation, 4 queued; no browser rows, and the two screens it names are recorded as unbuilt)** |
 | [§118](handoff/118-the-token-screen.md) | The token screen — M3's third slice and §116's endpoints' first consumer: the reveal is a **second step of the dialog that refuses Esc and a backdrop click**, because every other create dialog in the area closes on success and a refactor toward that consistency destroys a credential with a success message on top. The list is **refused rather than narrowed**, so the read is gated by the caller's own verdict and the check is an *absent* request that nothing on screen can show. `lastUsedAt` is on the wire and deliberately **not a column**; expired and revoked are **not collapsed**, because revoking a lapsed credential is a real act and one dead state would take it away **(built and unverified — 11 browser rows across two lanes, none run; no mutation rows, §116's twelve cover the endpoints)** |
+| [§119](handoff/119-the-ingestion-history-and-the-binder.md) | The ingestion history and the unmatched-test binder — M3's fourth slice: `POST /ingestions` has answered 201 with a `Location` naming a resource that **404s** since it shipped, and the two `GET`s that make the claim true serve **different shapes on purpose** — the list has no `unmatched` array at all, because the names live in a `JSONB` blob and an empty array beside a count of 12 reads as *cut*, which is the meaning `unmatchedCount` is documented to carry. Reading the payload back repaired the **replay**, which served `unmatchedCount: 12` beside `unmatched: []` to the one caller that most needs the names — a CI retry — and it is a **second implementation** of `unmatchedIn`, legal only because the two are asserted against each other. The fixture grew a **second project**, so one of the seven project-predicate-over-RLS files finally has a test behind it. The binder **closes on success**, deliberately the opposite of §118's dialog, and sends the test name **raw**: the only observer of a client that normalized is the request body, so that is what the check asserts **(built and unverified — 11 browser, 8 mutation rows, none run)** |

@@ -2,11 +2,21 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-07 (§118 — the token screen; §115 — the coverage matrix's frontend arm;
-§107 — the mock layer is deleted — before them)
-**Baseline commit:** `6fc053d` **+ the §118 commit this line ships in** (its own SHA
-cannot be written into itself; trust the body over the header and re-grep what a later commit
+**Last verified:** 2026-08-07 (§119 — the ingestion history and the binder; §118 — the token screen;
+§115 — the coverage matrix's frontend arm; §107 — the mock layer is deleted — before them)
+**Baseline commit:** `32968e2` (§119 phase 1) **+ the §119 phase-2 commit this line ships in** (its
+own SHA cannot be written into itself; trust the body over the header and re-grep what a later commit
 could have moved).
+**§119 added six files** — `features/ingestion/{IngestionsPage,IngestionJobPage,BindTestDialog,UnbindMappingDialog}.tsx`
+plus `api/queries/ingestion.ts` — and three test files; it touched
+`api/{types.ts,queries/{keys,index}.ts}`, `lib/labels.ts`, `app/{router,AppShell}.tsx`.
+**⚠ `ReportFormat` NAMES TWO UNRELATED THINGS IN THE CONTRACT** — the CI dialect
+(JUNIT/TESTNG/ALLURE/CUCUMBER, schema-level) and a generated report's export format
+(MD/HTML/PDF, read off `generateReport`'s body). `api/types.ts` already used the name for the
+second, so the first is aliased **`IngestionFormat`**. The collision was a build error, which is the
+good way to find it; do not "fix" the divergence by renaming either back.
+**Test count is 1018 across 76 files** — measured. The **baseline before §119 was 1002, not the 992
+the handoff carried**; this figure has now been stale in the same direction four times.
 **§116 and §117 are backend-only** — they moved nothing under `frontend/src` except a regenerated
 `api/schema.d.ts`. **§118 added five files** (`features/admin/{ApiTokensPage,IssueTokenDialog,RevokeTokenDialog}.tsx`,
 `components/CopyField.tsx`, `lib/apiTokens.ts`) plus three test files, and touched
@@ -1009,6 +1019,20 @@ directly above the switcher) and the wordmark links there too.
   with the reasoning recorded in `vite.config.ts`.
 
 ## Session log
+
+- 2026-08-07 · EXTEND · **The ingestion history and the unmatched-test binder** (§119 phase 2) —
+  `/projects/:projectId/ingestions` and `/…/ingestions/:jobId`, giving §117's `/automation-mappings`
+  its first consumer in `src/`. Six new files under `features/ingestion/` plus
+  `api/queries/ingestion.ts`; three new enum label maps. **Two routes rather than a dialog**, because
+  the list and the detail serve *different shapes* — the list carries no unmatched names at all, so
+  opening a job is a fetch and a dialog fed from the row would render an empty binder over a job with
+  twelve unmatched tests. **`BindTestDialog` must never normalize `testName`**: the rule lives on the
+  server beside the parser, and a client copy breaks every mapping in the company silently the day the
+  two diverge — the assertion is on the **request body**, since nothing on screen can show it. The
+  binder **closes on success**, deliberately the opposite of §118's reveal, because nothing here is
+  unrecoverable. `runId: null` (matched nothing) and `runKey: null` (run deleted) render as different
+  sentences; one dash for both was the obvious version and it misreports a deleted run.
+  **1018/1018 across 76 files** (measured baseline 1002), build and lint clean.
 
 - 2026-08-07 · EXTEND · **The token screen** (§118) — `/admin/tokens`, giving §116's `/api-tokens`
   endpoints their first consumer in `src/`. Three new feature files, `components/CopyField.tsx` (the

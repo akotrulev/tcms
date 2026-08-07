@@ -16,6 +16,9 @@ import type {
   DocPageStatus,
   EditAfterApproval,
   HealthSignal,
+  IngestedOutcome,
+  IngestionFormat,
+  IngestionStatus,
   LifecycleStatus,
   PlanStatus,
   Priority,
@@ -147,6 +150,51 @@ export const runStatusLabels = {
   COMPLETED: 'Completed',
   ABORTED: 'Aborted',
 } as const satisfies Record<RunStatus, string>;
+
+/**
+ * The four CI dialects, spelled the way their own projects spell them.
+ *
+ * Case matters here in a way it does not for most enums in this file: these are product names a
+ * person matches against their `pom.xml` or their CI config, and "Junit" reads as a typo to
+ * somebody looking for the one they configured.
+ */
+export const ingestionFormatLabels = {
+  JUNIT: 'JUnit XML',
+  TESTNG: 'TestNG XML',
+  ALLURE: 'Allure JSON',
+  CUCUMBER: 'Cucumber JSON',
+} as const satisfies Record<IngestionFormat, string>;
+
+/**
+ * What the runner said about one test, before it became one of the project's own statuses.
+ *
+ * **`ERRORED` is not a synonym for `Failed`** and is worded to keep them apart: JUnit and TestNG
+ * separate `<failure>` (an assertion the test made and lost) from `<error>` (the test throwing
+ * before it could assert), and the second usually means the fixture or the environment rather than
+ * the thing under test. They land on the same `StatusKind`, which is exactly why the distinction has
+ * to survive on the screen that shows what was *reported*.
+ */
+export const ingestedOutcomeLabels = {
+  PASSED: 'Passed',
+  FAILED: 'Failed',
+  ERRORED: 'Errored',
+  SKIPPED: 'Skipped',
+} as const satisfies Record<IngestedOutcome, string>;
+
+/**
+ * A posted report's four states.
+ *
+ * **Only `COMPLETED` is reachable today** — the synchronous lane writes nothing else, and a report
+ * that cannot be parsed leaves no row at all. The other three are labeled rather than omitted
+ * because the enum is the contract's, an asynchronous lane is a named next step, and a screen that
+ * rendered a raw `PROCESSING` the day it arrives is the drift this file exists to prevent.
+ */
+export const ingestionStatusLabels = {
+  PENDING: 'Queued',
+  PROCESSING: 'Reading',
+  COMPLETED: 'Ingested',
+  FAILED: 'Failed',
+} as const satisfies Record<IngestionStatus, string>;
 
 /** Beside the labels, so a status cannot be worded in one place and coloured in another. */
 export const runStatusColors = {
