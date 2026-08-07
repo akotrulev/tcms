@@ -2,14 +2,54 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-07 (**§126 phase 4** — the three attachment surfaces; §124 — the `BEST`
+**Last verified:** 2026-08-08 (**§127 phase 2** — the one doc-block renderer; §126 phase 4 — the
+three attachment surfaces before it; §124 — the `BEST`
 removal's frontend half; §121 phase 4 — the flake panel and the quarantine action; §121 phase 3 —
 the board's quarantine card; §120 — automation drift; §119 — the ingestion history and the binder;
 §118 — the token screen; §115 — the coverage matrix's frontend arm; §107 — the mock layer is
 deleted — before them)
-**Baseline commit:** `e95ef1a` (§126 phase 3, the last committed one; **phase 4's frontend files are
-in the working tree at the time of writing and land in this slice's own commit**) (trust the body
-over the header and re-grep what a later commit could have moved).
+**Baseline commit:** `46583e0` (§127 phase 1) (trust the body over the header and re-grep what a
+later commit could have moved).
+
+**§127 PHASE 2 ADDED TWO FILES** — `components/DocBlockBody.tsx` + `components/DocBlockBody.test.tsx`
+— and changed `api/queries/{keys,documentation,index}.ts`, `features/docs/DocsPage.tsx`,
+`features/plans/PlanDocumentPanel.tsx`. **Test count is 1098 across 84 files** — measured on a solo
+run, +10/+1 over §126 phase 4's measured 1088/83.
+
+> **⚠ THERE WERE TWO `BlockView`s BRANCHING ON `blockType`, AND THEY DISAGREED.** `DocsPage`'s and
+> `PlanDocumentPanel`'s: the plan panel indented list bullets and set a monospace face on `code`,
+> the documentation page did neither — so **one stored outline read as an outline on one screen and
+> as flat prose on the other**, with nothing failing. `components/DocBlockBody.tsx` is the single
+> renderer now. The callers keep only the chrome that genuinely differs: `DocsPage` anchors each
+> block by id and hangs the coverage marker in the margin, `PlanDocumentPanel` renders link chips.
+> **Four of the six types had no branch at all** — `paragraph`, `code`, `table`, `image` all fell
+> through to a paragraph, and every one of those *type-checked*, because `text` is a required string
+> on every block. That is why it survived from M1.
+> **THE `default` ARM IS NOT DEAD CODE.** `blockType` is a generated union so a new member is a
+> compile error at every `case` — but the value arriving at runtime comes from a server that may be
+> a version ahead of the bundle (`BlockContent` carries `ignoreUnknown` for the mirror reason). A
+> test drives it.
+> **AN IMAGE IS FETCHED, NEVER `<img src={url}>`** — §126 phase 4's finding, now with its first fix
+> in place. `useAttachmentBlob` (`api/queries/documentation.ts`) reads through `fetchArtifact` and
+> **caches the `Blob`, never an object URL**: a URL is a lifetime, not a value, and a revoked one
+> sitting in the query cache is a broken image on the next mount. The component derives the URL in
+> an effect and revokes it on unmount. `staleTime: Infinity` — an attachment is never rewritten,
+> only hard-deleted. **`EvidencePanel` STILL HAS THE UNFIXED `<img>`** and is not swept here.
+> **AN IMAGE BLOCK GETS BYTES WHERE AN ATTACHMENT ROW DOES NOT**, and that is not a reversal of
+> §126 phase 4's no-thumbnail decision. That decision was about fetching *every* file of a page into
+> memory on load, unbounded, to decorate a list. Here the picture **is** the content, the count is
+> bounded by blocks somebody wrote, and rendering nothing is a missing paragraph rather than a
+> plainer row.
+> **A TABLE IS A REAL `<table>` WITH `scope="col"` AND A `<caption>`.** The test asserts
+> `getByRole('columnheader')` and not the header's text: a `<td>` holding the same word renders
+> identically and announces as an ordinary cell, so a text assertion passes against the broken
+> version. The caption is `block.text`, which is also what the coverage matrix reads as the block's
+> statement.
+> **`toHaveStyle({paddingLeft: '48px'})` SILENTLY PASSES NOTHING under MUI v7 + jsdom** — the emitted
+> value is `calc(6 * var(--mui-spacing))` and jsdom does not resolve the variable, so the matcher
+> compares against an empty string. Assert the `calc()` string; the multiplier is the arithmetic.
+> `#confirmed`
+
 
 **§126 PHASE 4 ADDED FIVE FILES** — `lib/attachments.ts` + `lib/attachments.test.ts`,
 `components/{AttachmentList,FileDownloadLink}.tsx` + `components/AttachmentList.test.tsx` — plus

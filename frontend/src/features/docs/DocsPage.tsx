@@ -12,6 +12,7 @@ import {
   useSetDocPageStatus,
 } from '../../api/queries';
 import { AttachmentsPanel } from '../../components/AttachmentList';
+import { DocBlockBody } from '../../components/DocBlockBody';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
@@ -348,7 +349,12 @@ function PageView({
         <>
           <Box sx={{ maxWidth: '78ch' }}>
             {blocks.map((block) => (
-              <BlockView key={block.id} block={block} projectId={projectId} />
+              <BlockView
+                key={block.id}
+                block={block}
+                projectId={projectId}
+                attachments={page.attachments}
+              />
             ))}
           </Box>
           <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 3 }}>
@@ -486,7 +492,15 @@ function PageActions({
   );
 }
 
-function BlockView({ block, projectId }: { block: DocBlock; projectId: string }) {
+function BlockView({
+  block,
+  projectId,
+  attachments,
+}: {
+  block: DocBlock;
+  projectId: string;
+  attachments: DocPage['attachments'];
+}) {
   const isHeading = block.blockType === 'heading';
 
   return (
@@ -509,17 +523,14 @@ function BlockView({ block, projectId }: { block: DocBlock; projectId: string })
       }}
     >
       {isHeading ? (
-        <Typography
-          variant={block.level === 1 ? 'h2' : block.level === 2 ? 'h3' : 'h4'}
-          component={block.level === 1 ? 'h2' : block.level === 2 ? 'h3' : 'h4'}
-        >
-          {block.text}
-        </Typography>
+        // No coverage margin on a heading, which is not a styling choice: a heading is structure
+        // rather than a requirement, and the page's own aggregate excludes it for the same reason.
+        <DocBlockBody block={block} attachments={attachments} testId="Docs.Block" />
       ) : (
         <Stack direction="row" sx={{ gap: 2, alignItems: 'flex-start' }}>
-          <Typography variant="body1" sx={{ flex: 1, minWidth: 0 }}>
-            {block.text}
-          </Typography>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <DocBlockBody block={block} attachments={attachments} testId="Docs.Block" />
+          </Box>
           <CoverageMarker coverage={block.coverage} projectId={projectId} />
         </Stack>
       )}

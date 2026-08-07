@@ -125,6 +125,7 @@ export {
 export {
   useArtifacts,
   useAttachDocPageFile,
+  useAttachmentBlob,
   useCreateArtifact,
   useCreateDocPage,
   useDeleteDocPage,

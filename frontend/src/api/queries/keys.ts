@@ -78,6 +78,15 @@ export const keys = {
   docPages: (p: string) => ['projects', p, 'doc-pages'] as const,
   docPage: (p: string, id: string) => ['projects', p, 'doc-pages', id] as const,
   /*
+    An attachment's BYTES, keyed by the server's own content URL.
+
+    Keyed on the URL rather than on (project, page, attachment) because the thing being cached is
+    one immutable response and the URL is what identifies it — an attachment's bytes never change,
+    the row is hard-deleted instead. That also makes the key correct for any future owner (a case's
+    screenshot, an artifact) with no second spelling of the same idea.
+  */
+  attachmentBlob: (url: string) => ['attachment-blob', url] as const,
+  /*
     A plan's document.
 
     Deliberately NOT nested under `docPage`, even though it resolves to one. The plan id is what

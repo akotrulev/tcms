@@ -21,6 +21,7 @@ import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PermissionGate } from '../../components/PermissionGate';
 import { Panel } from '../../components/PageHeader';
+import { DocBlockBody } from '../../components/DocBlockBody';
 import { describeError } from '../../lib/describeError';
 import { docPageStatusLabel } from '../../lib/labels';
 
@@ -256,7 +257,12 @@ function DocumentBody({
             </Typography>
           ) : (
             page.blocks.map((block) => (
-              <BlockView key={block.id} projectId={projectId} block={block} />
+              <BlockView
+                key={block.id}
+                projectId={projectId}
+                block={block}
+                attachments={page.attachments}
+              />
             ))
           )}
         </Stack>
@@ -274,10 +280,16 @@ function DocumentBody({
  * unlinking a case from a block is the documentation editor's affordance, on the screen that owns
  * the page.
  */
-function BlockView({ projectId, block }: { projectId: string; block: DocBlock }) {
-  const depth = block.level ?? 1;
+function BlockView({
+  projectId,
+  block,
+  attachments,
+}: {
+  projectId: string;
+  block: DocBlock;
+  attachments: DocPage['attachments'];
+}) {
   const isHeading = block.blockType === 'heading';
-  const isBullet = block.blockType === 'list';
 
   return (
     <Box
@@ -286,30 +298,17 @@ function BlockView({ projectId, block }: { projectId: string; block: DocBlock })
         display: 'flex',
         alignItems: 'flex-start',
         gap: 1,
-        pl: isBullet ? (depth - 1) * 3 : 0,
         mt: isHeading ? 2 : 0,
       }}
     >
-      {isBullet && (
-        <Typography sx={{ color: 'text.secondary', lineHeight: 1.6 }} aria-hidden>
-          •
-        </Typography>
-      )}
       <Stack sx={{ flex: 1, gap: 0.5, minWidth: 0 }}>
-        <Typography
-          component={isHeading ? 'h3' : 'p'}
-          sx={{
-            // `pre-wrap`, so a paragraph somebody wrote across several lines reads as they wrote
-            // it. The editor stores the newlines; a renderer that collapsed them would show a
-            // different document from the one being edited two clicks away.
-            whiteSpace: 'pre-wrap',
-            fontSize: isHeading ? `${1.5 - (depth - 1) * 0.18}rem` : '0.95rem',
-            fontWeight: isHeading ? 600 : 400,
-            fontFamily: block.blockType === 'code' ? 'var(--font-mono)' : undefined,
-          }}
-        >
-          {block.text}
-        </Typography>
+        {/*
+          The bullet, its indent and the monospace face used to be spelled out here and nowhere
+          else — so this panel rendered an outline while the documentation page rendered the same
+          blocks as flat prose. `DocBlockBody` is the one renderer now; what stays here is the
+          chrome this screen owns, which is the link chips below.
+        */}
+        <DocBlockBody block={block} attachments={attachments} testId="PlanDocument.Block" />
         {block.links && block.links.length > 0 && (
           <Stack direction="row" sx={{ gap: 0.5, flexWrap: 'wrap' }}>
             {block.links.map((link) => (

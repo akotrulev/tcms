@@ -1,6 +1,6 @@
 /** The documentation space and the artifact register. */
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
-import { ApiError, api, qs } from '../client';
+import { ApiError, api, fetchArtifact, qs } from '../client';
 import type {
   Artifact,
   ArtifactFileInput,
@@ -27,6 +27,47 @@ export function useDocPage(projectId: string, pageId: string | undefined): UseQu
     queryKey: keys.docPage(projectId, pageId ?? ''),
     queryFn: ({ signal }) => api.get<DocPage>(`${base(projectId)}/doc-pages/${pageId}`, { signal }),
     enabled: !!pageId,
+  });
+}
+
+/**
+ * An attachment's **bytes**, for the one surface that has to render them rather than offer them.
+ *
+ * ## Why this exists at all, and why it is not an `<img src>`
+ *
+ * The session is a bearer token this client sets per request — `SecurityConfiguration` is
+ * `STATELESS` and there is no cookie anywhere — so a browser-initiated request to an `/api/v1/…`
+ * URL carries **no credential** and answers **401**. An `<img src={attachment.url}>` renders as a
+ * broken image with nothing failing in any gate, which is exactly the hole `FileDownloadLink` was
+ * extracted to close for anchors. `fetchArtifact` is the same guarded, budgeted, credential-carrying
+ * read both use.
+ *
+ * ## Why an image block gets this and an attachment ROW does not
+ *
+ * §126 phase 4 recorded the absence of thumbnails as a decision: honouring them on the file list
+ * would mean fetching **every** attachment of a page into memory on load, unbounded, with no
+ * thumbnail endpoint to ask for something smaller. An `image` block is the opposite case on all
+ * three counts — the picture *is* the content, the count is bounded by the blocks somebody wrote,
+ * and a block that renders nothing is not a tidier list but a missing paragraph.
+ *
+ * ## The cached value is the `Blob`, never an object URL
+ *
+ * An object URL is a **lifetime**, not a value: whoever creates one must revoke it, and a revoked
+ * URL sitting in a query cache is a broken image on the next mount that reads it. So the cache holds
+ * the blob — an ordinary immutable value — and the component derives a URL from it in an effect and
+ * revokes that URL when it unmounts. Two blocks showing one file then share a single download.
+ *
+ * `staleTime: Infinity` because these bytes cannot change: an attachment is never rewritten, it is
+ * hard-deleted, and a deleted one takes the block with it (the server refuses the delete otherwise).
+ */
+export function useAttachmentBlob(
+  url: string | undefined,
+): UseQueryResult<Blob> {
+  return useQuery({
+    queryKey: keys.attachmentBlob(url ?? ''),
+    queryFn: ({ signal }) => fetchArtifact(url ?? '', { signal }).then((result) => result.blob),
+    enabled: !!url,
+    staleTime: Infinity,
   });
 }
 
