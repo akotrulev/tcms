@@ -1,6 +1,7 @@
 import { Box, Chip, Stack, Table, TableBody, TableCell, TableHead, TableRow, Tooltip, Typography } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import type { Artifact } from '../../api/types';
+import { FileDownloadLink } from '../../components/FileDownloadLink';
 import { Identifier } from '../../components/Identifier';
 import { formatAge, formatBytes, formatDateTime } from '../../lib/format';
 import { humanize } from '../../lib/labels';
@@ -87,6 +88,31 @@ export function ArtifactTable({
                         (opens in a new tab)
                       </Box>
                     </Box>
+                  ) : artifact.kind === 'FILE' && artifact.url ? (
+                    /*
+                      An uploaded document downloads, and it is a BUTTON rather than an anchor.
+
+                      The session is a bearer token, so `<a href="/api/v1/…">` sends no credential
+                      and answers 401 while rendering as a working link — `FileDownloadLink` owns
+                      that whole problem, and this row is why it was extracted rather than copied
+                      out of the attachment panel.
+
+                      Keyed on `url` as well as `kind`, like the two branches above: the field is
+                      nullable on the wire and a `FILE` row that somehow carries none must render as
+                      a title, not as a control that cannot work.
+                    */
+                    <FileDownloadLink
+                      url={artifact.url}
+                      // The uploaded name when there is one — the server sends this artifact
+                      // `Content-Disposition: attachment` with it, so the fallback is only reached
+                      // if that header goes missing. The title is the honest second answer; a name
+                      // invented from the media type would not be.
+                      filename={artifact.filename ?? artifact.title}
+                      testId="Artifacts.Row.Download"
+                      sx={{ fontWeight: 500, fontSize: '0.8125rem' }}
+                    >
+                      {artifact.title}
+                    </FileDownloadLink>
                   ) : (
                     <Typography variant="body2" sx={{ fontWeight: 500 }} data-testid="Artifacts.Row.Title">
                       {artifact.title}

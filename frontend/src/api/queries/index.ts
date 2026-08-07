@@ -54,6 +54,7 @@ export {
   type SuiteInput,
 } from './suites';
 export {
+  useAttachCaseFile,
   useBulkCases,
   useCase,
   useCaseHistory,
@@ -63,6 +64,7 @@ export {
   useCreatePlanCase,
   useProjectTags,
   useDeleteCase,
+  useDeleteCaseFile,
   useQuarantineCase,
   useReferencedCases,
   useUpdateCase,
@@ -122,14 +124,17 @@ export {
 } from './runs';
 export {
   useArtifacts,
+  useAttachDocPageFile,
   useCreateArtifact,
   useCreateDocPage,
   useDeleteDocPage,
+  useDeleteDocPageFile,
   useDocPage,
   useDocPages,
   useLinkBlock,
   useLinkPlanDocument,
   usePlanDocument,
+  useRegisterArtifactFile,
   useSetDocPageStatus,
   useUnlinkBlock,
   useUnlinkPlanDocument,

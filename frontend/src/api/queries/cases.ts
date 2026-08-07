@@ -11,6 +11,7 @@ import {
 import { useRef } from 'react';
 import { TIMEOUTS, api, newIntentKey, qs } from '../client';
 import type {
+  Attachment,
   BulkOperation,
   BulkResult,
   CaseFilters,
@@ -482,3 +483,58 @@ export function useCreatePlanCase(projectId: string) {
   is the third shape again — a key per ROW, see `useCreatePlanCase` above — because it writes N in
   one loop and must survive being pressed twice.
 */
+
+/**
+ * Attaches a file to a case's **definition** (#49).
+ *
+ * `api.upload`, never `api.post`: the body is `FormData`, and the client's one rule about that is
+ * that no `Content-Type` may be hand-set — the browser generates `multipart/form-data; boundary=…`
+ * and the boundary is the only thing telling the server where a part ends. `upload` also defaults
+ * to the **long** budget, because a 10MB file over hotel wifi outruns the 10s interactive one and
+ * the failure then reads as a broken server rather than a slow link.
+ *
+ * ## The case is invalidated, not patched
+ *
+ * The response is the new `Attachment` and the screen renders `TestCase.attachments`, so a
+ * `setQueryData` here would be the client re-assembling a list the server already serves — §67's
+ * own reasoning for the evidence strip, and the shape §52's mock/client divergence came out of.
+ * The list is **detail-only** (`TestCaseSummary` has no `attachments`), so no grid key moves.
+ *
+ * `handled`, because the panel renders the refusal in place: a **413** carries no problem document
+ * at all (the servlet container refuses the request before any handler runs), and a corner toast
+ * for it would be detached from the control that raised it.
+ */
+export function useAttachCaseFile(projectId: string, caseId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => {
+      const form = new FormData();
+      form.append('file', file);
+      return api.upload<Attachment>(`${base(projectId)}/cases/${caseId}/attachments`, form);
+    },
+    meta: { handled: true },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.case(projectId, caseId) });
+    },
+  });
+}
+
+/**
+ * Removes a file from a case. **A hard delete — the bytes go with the row.**
+ *
+ * Costs `case:edit`, the same key the upload does, and deliberately **without** `evidence:delete`'s
+ * `OWN` arm: whoever may edit the case may remove any of its files, including one somebody else
+ * attached. See `components/AttachmentList.tsx` and the endpoint's own description — an authorship
+ * arm here would make removing the screenshot stricter than removing the step that references it.
+ */
+export function useDeleteCaseFile(projectId: string, caseId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (attachmentId: string) =>
+      api.del<void>(`${base(projectId)}/cases/${caseId}/attachments/${attachmentId}`),
+    meta: { handled: true },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.case(projectId, caseId) });
+    },
+  });
+}

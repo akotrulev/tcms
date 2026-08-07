@@ -3,7 +3,15 @@ import AddIcon from '@mui/icons-material/AddOutlined';
 import { useEffect, useMemo, useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import type { DocPage, DocBlock, DocPageStatus, DocPageSummary } from '../../api/types';
-import { useDocPage, useDocPages, useProject, useSetDocPageStatus } from '../../api/queries';
+import {
+  useAttachDocPageFile,
+  useDeleteDocPageFile,
+  useDocPage,
+  useDocPages,
+  useProject,
+  useSetDocPageStatus,
+} from '../../api/queries';
+import { AttachmentsPanel } from '../../components/AttachmentList';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
@@ -156,7 +164,10 @@ export function DocsPage() {
           {pageId ? (
             <DataRegion testId="Docs.Page" state={{ ...page, refetch: () => void page.refetch() }}>
               {(data) => (
-                <PageView page={data} projectId={projectId} onDelete={setDeleting} />
+                <Stack sx={{ gap: 2 }}>
+                  <PageView page={data} projectId={projectId} onDelete={setDeleting} />
+                  <PageAttachments page={data} projectId={projectId} />
+                </Stack>
               )}
             </DataRegion>
           ) : (
@@ -364,6 +375,39 @@ function PageView({
  * own verb, and only the ones that make sense from the current state are offered — from `DRAFT`
  * there is nothing to unpublish.
  */
+/**
+ * A page's files.
+ *
+ * **Its own `Panel` beneath the page rather than a section inside `Docs.Content`**, because the page
+ * body is prose with a coverage margin and an attachment strip is neither — dropping rows into the
+ * block flow would put a file list where a reader is scanning for the next paragraph. Below the
+ * content for the same reason a case's sits below its steps: it is supporting material.
+ *
+ * Mounted only for a loaded page, so `pageId` is real and both hooks have something to write to.
+ */
+function PageAttachments({ page, projectId }: { page: DocPage; projectId: string }) {
+  const attach = useAttachDocPageFile(projectId, page.id);
+  const remove = useDeleteDocPageFile(projectId, page.id);
+
+  return (
+    <AttachmentsPanel
+      projectId={projectId}
+      // `doc:edit` — the key that already rewrites every block on this page. Not `doc:publish`,
+      // which Test Engineer does not hold: an image is part of what the page says, and publication
+      // is a separate act.
+      permission="doc:edit"
+      attachments={page.attachments}
+      onAttach={(file) => attach.mutate(file)}
+      attaching={attach.isPending}
+      attachError={attach.isError ? attach.error : null}
+      onDelete={(id) => remove.mutate(id)}
+      deleting={remove.isPending}
+      testId="Docs.Attachments"
+      emptyBody="No files attached. Diagrams, exports and anything this specification refers to go here."
+    />
+  );
+}
+
 function PageActions({
   page,
   projectId,

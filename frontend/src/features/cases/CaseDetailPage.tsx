@@ -19,7 +19,8 @@ import HistoryIcon from '@mui/icons-material/History';
 import { useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import type { CaseConditionRef, DocLink, TestCase, TestStep } from '../../api/types';
-import { useCase, useProject } from '../../api/queries';
+import { useAttachCaseFile, useCase, useDeleteCaseFile, useProject } from '../../api/queries';
+import { AttachmentsPanel } from '../../components/AttachmentList';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
@@ -205,6 +206,15 @@ export function CaseDetailPage() {
                   emptyBody="No postconditions. Nothing needs cleaning up after this case."
                 />
 
+                {/*
+                  Below the steps and the conditions, above traceability: an attachment on a case is
+                  supporting material for the procedure above it — a reference screenshot, a sample
+                  CSV — and traceability is about a different question (what requirement this
+                  covers). It is in the CONTENT column and not the metadata sidebar for the same
+                  reason: a tester reads it while executing.
+                */}
+                <CaseAttachments projectId={projectId} caseId={caseId} attachments={data.attachments} />
+
                 <DocLinksPanel links={data.relatedDocuments ?? []} projectId={projectId} />
               </Stack>
 
@@ -356,6 +366,51 @@ export function CaseDetailPage() {
         )}
       </DataRegion>
     </Box>
+  );
+}
+
+/**
+ * The case's files.
+ *
+ * A component rather than the panel inline, because the two mutation hooks need `caseId` and hooks
+ * cannot be called inside the `DataRegion` render prop's conditional branches without moving the
+ * whole page's hook order under the query's state. `StepActionField` exists for the same reason one
+ * screen over.
+ *
+ * **The list is `TestCase.attachments` and there is no `GET .../attachments`.** `TestCaseSummary`
+ * carries none, so this is detail-only exactly as §121 landed `TestCase.flake` — a second read path
+ * would be a second answer to "what is attached to this case", free to disagree the moment one grew
+ * a filter.
+ */
+function CaseAttachments({
+  projectId,
+  caseId,
+  attachments,
+}: {
+  projectId: string;
+  caseId: string;
+  attachments: TestCase['attachments'];
+}) {
+  const attach = useAttachCaseFile(projectId, caseId);
+  const remove = useDeleteCaseFile(projectId, caseId);
+
+  return (
+    <AttachmentsPanel
+      projectId={projectId}
+      // `case:edit`, with NO author arm — the slice's decision, argued in the plan, in the
+      // endpoint's description and in `AttachmentList`'s header. Not `case:delete`, which is the
+      // OWN-qualified key beside it and would refuse a lead's own screenshot to the engineer who
+      // may rewrite every step of that case.
+      permission="case:edit"
+      attachments={attachments}
+      onAttach={(file) => attach.mutate(file)}
+      attaching={attach.isPending}
+      attachError={attach.isError ? attach.error : null}
+      onDelete={(id) => remove.mutate(id)}
+      deleting={remove.isPending}
+      testId="CaseDetail.Attachments"
+      emptyBody="No files attached. Reference screenshots, sample data and anything else the steps above depend on go here."
+    />
   );
 }
 

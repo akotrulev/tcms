@@ -463,7 +463,7 @@ rules — and leaves `TP-1`…`TP-5` for `A3` to run against.*
 | # | Drive | Expect | src |
 |---|---|---|---|
 | M3-30 | **Test artefacts** on a plan whose project has artifacts | The plan's register with project rows marked *from project* — the same `ArtifactTable` as `/artifacts`, so a broken inheritance marker breaks in one place. Register one at project scope as `lead` first. | §97p4-126 |
-| M3-38 | **Test artefacts** → **Register**, with the plan pre-selected | The scope is `PLAN` and the plan is *this* one, the kind offers only `DOC_PAGE_REF` and `EXTERNAL_URL` (no upload control — the storage port does not exist), and the registered row appears in the tab **without the plan's Save banner ever appearing**: the register writes itself. | §97p5-140 |
+| M3-38 | **Test artefacts** → **Register**, with the plan pre-selected | The scope is `PLAN` and the plan is *this* one, and the registered row appears in the tab **without the plan's Save banner ever appearing**: the register writes itself. ~~the kind offers only `DOC_PAGE_REF` and `EXTERNAL_URL` (no upload control — the storage port does not exist)~~ → **corrected by §126**: the kind now offers **three**, and *A file to upload and keep here* is the third and last. Driving this row against the old wording would report a defect that is the feature. | §97p5-140, §126 |
 | M3-39 | As **`engineer`** (`artifact:edit` = `PLAN_SCOPE`), open the same dialog from this tab | Register is **enabled** and the scope selector is pinned to `PLAN` — this tab can only ever register at plan scope, which is the one scope every holder of the key has. | §97p5-141 |
 
 ### The Test cases tab, and the sections that resolve live
@@ -1319,3 +1319,73 @@ is one dropdown losing a value in two places.
   claimed: the delete control, its confirmation, and the two 409 sentences it must render are a
   frontend slice, and §118's dialog is the pattern it should follow. **Until it is built there is no
   browser row to write**, because there is nothing on any screen to drive.
+
+---
+
+## §126 — attachment owners: the case, the page, and the file artifact (M3 slice 10, phase 4)
+
+**Eleven rows in three lanes, and one deliberate absence.** `attachment.owner_type` had two writers
+of six until this slice; it now has five, and three of them have a screen. The rows below split by
+the lane whose **state** they need: a case exists in `A1`, a doc page and the artifact register in
+`A2`, and the two rows about a credential and a byte limit belong with the other transport failures
+in `F`.
+
+**Every one of these needs a real file to hand.** Author them once, at the top of `A1`, and reuse:
+
+| File | Make it | Used by |
+|---|---|---|
+| `wire-diagram.png` | any small PNG | `M2-62`, `M3-65` |
+| `sample-data.csv` | three lines of text | `M2-63`, `M2-64` |
+| `sign-off.pdf` | any small PDF | `M3-66`, `M3-67` |
+| `empty.txt` | `: > empty.txt` — **zero bytes** | `F-9` |
+| `dump.zip` | `mkfile 25m dump.zip` (or `dd`) — **over the 10MB limit** | `F-8` |
+
+### A1 — a case's own files
+
+| Row | Drive | Expect |
+|---|---|---|
+| `M2-62` | On `TC-1`'s detail, **Attachments** → *Attach a file* → `wire-diagram.png` | A row appears with the filename, `180 kB`-ish, **your name** and the time. The panel sits **below the steps and above Traceability**, in the content column and not the metadata sidebar. Then **reload**: it is still there — the list is `TestCase.attachments` on the detail read, so a row that vanishes on reload means the invalidation fired and the server did not write. |
+| `M2-63` | Attach `sample-data.csv` as well, then click **each filename** | Both download to disk under their own names. **Neither opens in a tab and neither renders a thumbnail** — that is the current design, not a defect (see the absence note below). A **401** or a sign-in page here is the failure this row exists to catch. |
+| `M2-64` | As **`engineer`** (holds `case:edit`, `case:delete` only `OWN`), open a case **`lead` created** and attached a file to | **Attach is enabled and Remove is enabled**, on a case whose own **Delete button is disabled**. Two opposite verdicts in one screen is the check: an authorship arm copied from evidence would disable Remove here, and it would look like security working. |
+| `M2-65` | As **`viewer`**, open the same case | The files are **listed and downloadable**; Attach and Remove are **disabled with a reason on hover** (§31). Not hidden — a reader needs the sample data the steps depend on. |
+| `M2-66` | Remove a row, then reload | Gone, and staying gone. Then check the disk if you can reach it: this is a **hard** delete and the bytes go with the row. `psql`: `SELECT count(*) FROM attachment WHERE owner_type='CASE'` drops by one. |
+
+### A2 — a page's files, and the register's third kind
+
+| Row | Drive | Expect |
+|---|---|---|
+| `M3-65` | On `DOC-1` in `/docs`, the **Attachments** panel below the page → attach `wire-diagram.png` | A row appears. The panel is its **own card beneath the prose**, not a block inside it. Then open `TP-2`'s **Business requirements** tab (which shows the same page if it is linked): the attachment is there too — one page, two keys, and `invalidatePageEverywhere` is what keeps them in step. |
+| `M3-66` | `/artifacts` → **Register** → *What is it?* → **A file to upload and keep here** | The URL and page pickers disappear and a **Choose a file** button takes their place, with the helper text naming the 10MB limit **and** saying the bytes are fixed at registration. Press Register with **no file chosen**: refused on the picker (*"Choose a file to register."*), no request sent. |
+| `M3-67` | Choose `sign-off.pdf`, category **SignOff**, scope **One plan** → `TP-1`, Register | **One** request in the network panel: `POST /projects/{id}/artifacts/files`, `multipart/form-data` **with a boundary**, two parts — `artifact` with `Content-Type: application/json` and `file`. A part sent as `text/plain` is the failure mode, and it surfaces as a 415 about media types rather than anything about artifacts. The row lands in the register with kind **File**, the filename under the title and the size in the Size column. |
+| `M3-68` | Click the registered file's title | It **downloads** rather than opening — the one attachment response in the product served `Content-Disposition: attachment`. Beside it, an `EXTERNAL_URL` row still opens in a new tab. Two adjacent rows, two behaviours, and the check is that the file row is not an anchor. |
+| `M3-69` | As **`engineer`** (`artifact:edit` = `PLAN_SCOPE`), open the dialog and pick the file kind | The scope selector is still pinned to **One plan** with the project option disabled and its reason on hover. **Bytes change nothing about who may write a row** — a second dialog for uploads is exactly where this would have been forgotten. |
+
+### F — what only a fault or a bad file shows
+
+| Row | Drive | Expect |
+|---|---|---|
+| `F-8` | On a case's Attachments, pick `dump.zip` (25MB) | Refused **client-side**, before any upload, naming the file and both numbers (*"26 MB … up to 10 MB"*). Nothing in the network panel. The server's own answer is a **413 refused by the servlet container before any handler runs**, so it carries no problem document and there is nothing the SPA could render beside a control — this refusal is the only place the user can be told. |
+| `F-9` | Pick `empty.txt` (zero bytes) | Refused with a **different** sentence (*"…is empty"*), not the size one. `POST /artifacts/files` answers a zero-byte part with a 400; the case and page endpoints would happily store an attachment whose download is a zero-length file. |
+| `F-10` | Attach a file, then `tcmsFaults.hang()` and click the filename | The download **gives up on the 60s budget** with a message beside the row, and the row stays on screen to press again. Not a corner toast, and not a spinner that never ends. `tcmsFaults.off()` after. |
+
+**Not driven, and stated rather than left to look like an oversight:**
+
+- **There is no inline preview and no thumbnail, on purpose.** The server serves a case's and a
+  page's attachments `inline` with their stored content type, and the contract's own copy talks
+  about a screenshot rendering beside the steps — but **an `<img src="/api/v1/…">` sends no
+  credential in this app** (the session is a bearer token; `SecurityConfiguration` is `STATELESS`
+  with no cookie), so it answers 401 and renders as a broken image on every row. Making it work
+  means fetching each image into an object URL, i.e. an eager full-size download of every image on
+  page load with no thumbnail endpoint to make it cheap. Shipped as download-only and recorded here;
+  the real fix is a server-side thumbnail route or a credentialed navigation path, and both are
+  slices. **`EvidencePanel` has the un-fixed version of exactly this** — an `<img src>` and an
+  `<a href>` against `Evidence.url` — which is why `M4-7`'s *"rendered thumbnail (not a broken
+  image)"* is expected to **fail** against a real deployment. That row was written in mock mode and
+  has never been driven live.
+- **`artifact:delete` still has no screen**, unchanged from §124's note. This slice made a `FILE`
+  artifact the first kind whose deletion destroys bytes, which makes the missing control more
+  costly rather than less — but building it is a separate frontend slice and there is still nothing
+  on any screen to drive.
+- **No row for re-uploading or detaching an artifact's file**, because neither exists:
+  `attachment_id` is `updatable = false` and replacing the document is *superseding* it (plan §6n).
+  The absence is the design; a row asserting a control is missing would be a row nobody could fail.

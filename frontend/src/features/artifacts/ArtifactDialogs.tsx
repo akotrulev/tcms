@@ -1,23 +1,28 @@
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 import {
   Alert,
+  Box,
   Button,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormHelperText,
   MenuItem,
   Stack,
   TextField,
 } from '@mui/material';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import type { Artifact, DocPageSummary, TestPlanSummary } from '../../api/types';
 import { ApiError } from '../../api/client';
-import { useCreateArtifact } from '../../api/queries';
+import { useCreateArtifact, useRegisterArtifactFile } from '../../api/queries';
 import { useCan } from '../../auth/useCan';
+import { MAX_UPLOAD_BYTES, uploadRefusal } from '../../lib/attachments';
 import { describeError } from '../../lib/describeError';
+import { formatBytes } from '../../lib/format';
 
 /**
  * Registering an artifact.
@@ -27,10 +32,30 @@ import { describeError } from '../../lib/describeError';
  * target is a page or a URL. Both are enforced server-side and both are mirrored here, so the
  * common mistakes are caught without a round trip while the server stays the authority.
  *
- * There is deliberately no upload control. `FILE` needs the storage port (open question #28,
- * resolved as a filesystem adapter and not built), so the contract's `ArtifactInput.kind` is a
- * narrower enum than `Artifact.kind` and an upload is not expressible here at all — rather than
- * being a control that renders and then fails.
+ * ~~There is deliberately no upload control. `FILE` needs the storage port (open question #28,
+ * resolved as a filesystem adapter and not built)…~~ → **superseded 2026-08-07 (#49 phase 3).**
+ * `ArtifactKind.FILE` has a writer, and it is a **different endpoint**:
+ * `POST /projects/{projectId}/artifacts/files`, one multipart request carrying an
+ * `ArtifactFileInput` and the bytes together.
+ *
+ * ## One dialog offering three kinds, over two endpoints
+ *
+ * The obvious alternative is a second **Upload** button beside Register with its own dialog, and it
+ * is worse in the way `ui-rules` §8 keeps naming: scope, the plan requirement, the category list,
+ * the title limit, the description limit, the `403`-as-a-field-error mapping and the plan-scope
+ * qualifier are all shared, so a second form would be a second implementation of every one of them,
+ * agreeing until the first change. It would also make the user choose an endpoint before choosing a
+ * kind — "Register" and "Upload" are the same act from where they are standing, and only the wire
+ * knows otherwise.
+ *
+ * What the split does cost is one honest asymmetry, kept visible rather than smoothed over: the
+ * form's `kind` is **wider than `ArtifactInput.kind`**, so `FILE` is a value the JSON create can
+ * never receive. The submit branches on it before it builds a payload, and the two payloads are
+ * built from two different contract types — `ArtifactInput` and `ArtifactFileInput` — so a field
+ * that exists on only one of them is a compile error rather than a silently-dropped property.
+ *
+ * `GENERATED_REPORT` is offered by neither: nothing in `reporting` writes one, and a kind with no
+ * writer in a picker is `ui-rules`' control-the-write-path-ignores.
  */
 
 const MAX_TITLE = 200;
@@ -61,7 +86,12 @@ const ArtifactSchema = z
     scope: z.enum(['PROJECT', 'PLAN']),
     planId: z.string(),
     category: z.string().min(1, 'Choose a category.').max(MAX_CATEGORY),
-    kind: z.enum(['DOC_PAGE_REF', 'EXTERNAL_URL']),
+    /*
+      Wider than `ArtifactInput.kind` on purpose — see the module header. `FILE` is a form value
+      that routes to a different endpoint, never a value sent to the JSON create (which answers a
+      `kind: FILE` with a 400 naming the upload path).
+    */
+    kind: z.enum(['DOC_PAGE_REF', 'EXTERNAL_URL', 'FILE']),
     title: z
       .string()
       .min(1, 'Give the artifact a title.')
@@ -69,6 +99,16 @@ const ArtifactSchema = z
     description: z.string().max(MAX_DESCRIPTION, `Keep it to ${MAX_DESCRIPTION} characters.`),
     docPageId: z.string(),
     url: z.string(),
+    /*
+      The chosen file's NAME, not the file.
+
+      A `File` is an opaque handle from a native input and is not form state a resolver can
+      usefully validate; the handle itself lives in component state. Keeping its name here is what
+      gives the picker a real field — so the "choose one" rule is a Zod issue like every other rule
+      in this form, and so the server's own `errors.file` (a zero-byte part is a 400 naming exactly
+      that key) lands on the control instead of falling through to the form-level banner.
+    */
+    file: z.string(),
   })
   /*
     The cross-field rules, mirroring the server's. `superRefine` rather than a discriminated union
@@ -90,6 +130,9 @@ const ArtifactSchema = z
         message: 'Choose the page this artifact points to.',
       });
     }
+    if (values.kind === 'FILE' && !values.file) {
+      ctx.addIssue({ code: 'custom', path: ['file'], message: 'Choose a file to register.' });
+    }
     if (values.kind === 'EXTERNAL_URL') {
       if (!values.url.trim()) {
         ctx.addIssue({ code: 'custom', path: ['url'], message: 'Give the link.' });
@@ -109,10 +152,20 @@ const ArtifactSchema = z
 type ArtifactFormInput = z.infer<typeof ArtifactSchema>;
 
 type FieldName = 'scope' | 'planId' | 'category' | 'kind' | 'title' | 'description' | 'docPageId'
-  | 'url' | 'root';
+  | 'url' | 'file' | 'root';
 
+/*
+  `file` is on this list and NOT on the Zod schema, and both halves are deliberate.
+
+  A `File` is not form state react-hook-form can usefully hold — it is an opaque handle picked from
+  a native input, and registering it would mean either storing it in the resolver's value or
+  carrying a `FileList` through Zod for one field. It lives in component state instead. But the
+  SERVER answers a zero-byte part with `errors.file` (`ArtifactFileController.register`), so the key
+  has to be here or that refusal falls through to the form-level banner and the message about the
+  file is rendered nowhere near the file picker.
+*/
 const FIELDS: readonly FieldName[] = [
-  'scope', 'planId', 'category', 'kind', 'title', 'description', 'docPageId', 'url',
+  'scope', 'planId', 'category', 'kind', 'title', 'description', 'docPageId', 'url', 'file',
 ];
 
 const TestIdPrefix = 'Artifacts.Dialog';
@@ -181,7 +234,15 @@ export function RegisterArtifactDialog({
   onRegistered: (artifact: Artifact) => void;
 }) {
   const create = useCreateArtifact(projectId);
+  const upload = useRegisterArtifactFile(projectId);
   const gate = useCan(projectId);
+
+  /*
+    The picked file, beside the form rather than in it. `fileInput` is the hidden native control;
+    `picked` is what the submit sends and what the Zod field mirrors by name.
+  */
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [picked, setPicked] = useState<File | null>(null);
 
   /**
    * May this caller register at PROJECT scope?
@@ -212,6 +273,7 @@ export function RegisterArtifactDialog({
       description: '',
       docPageId: '',
       url: '',
+      file: '',
     },
     mode: 'onBlur',
   });
@@ -245,18 +307,42 @@ export function RegisterArtifactDialog({
 
   const submit = handleSubmit(async (values) => {
     try {
-      const artifact = await create.mutateAsync({
-        scope: values.scope,
-        // The server refuses a plan id at PROJECT scope rather than ignoring it, so the form must
-        // not send one — this is the client half of that agreement, not a defensive trim.
-        planId: values.scope === 'PLAN' ? values.planId : null,
-        category: values.category,
-        kind: values.kind,
-        title: values.title,
-        description: values.description.trim() || null,
-        docPageId: values.kind === 'DOC_PAGE_REF' ? values.docPageId : null,
-        url: values.kind === 'EXTERNAL_URL' ? values.url.trim() : null,
-      });
+      /*
+        Two endpoints, two contract types, one set of shared fields.
+
+        The branch is on `kind` and it happens BEFORE either payload is built, so neither payload
+        can carry a field the other's schema declares — `ArtifactFileInput` has no `kind`, no `url`
+        and no `docPageId`, and TypeScript refuses a payload that tries. That is the contract's own
+        narrowing (its description: "a client generating types from this contract cannot express
+        the contradiction at all") doing work on this side of the wire.
+      */
+      const artifact =
+        values.kind === 'FILE'
+          ? await upload.mutateAsync({
+              artifact: {
+                scope: values.scope,
+                planId: values.scope === 'PLAN' ? values.planId : null,
+                category: values.category,
+                title: values.title,
+                description: values.description.trim() || null,
+              },
+              // Non-null by the schema's own rule: `kind === 'FILE'` with no `file` is a Zod issue
+              // and `handleSubmit` never reaches here. The assertion is the narrowing Zod cannot
+              // express, because the field it validates is the NAME and this is the handle.
+              file: picked as File,
+            })
+          : await create.mutateAsync({
+              scope: values.scope,
+              // The server refuses a plan id at PROJECT scope rather than ignoring it, so the form
+              // must not send one — this is the client half of that agreement, not a defensive trim.
+              planId: values.scope === 'PLAN' ? values.planId : null,
+              category: values.category,
+              kind: values.kind,
+              title: values.title,
+              description: values.description.trim() || null,
+              docPageId: values.kind === 'DOC_PAGE_REF' ? values.docPageId : null,
+              url: values.kind === 'EXTERNAL_URL' ? values.url.trim() : null,
+            });
       onRegistered(artifact);
       onClose();
     } catch (error) {
@@ -360,6 +446,13 @@ export function RegisterArtifactDialog({
               */}
               <MenuItem value="DOC_PAGE_REF">A page in this project's documentation</MenuItem>
               <MenuItem value="EXTERNAL_URL">A link to somewhere else</MenuItem>
+              {/*
+                Last, and that ordering is the same steering as the first item being first. Plan
+                §6n calls a register of uploaded copies "a graveyard of outdated copies"; the upload
+                exists because some documents genuinely are files (a signed PDF, a data export) and
+                not because it is the recommended shape.
+              */}
+              <MenuItem value="FILE">A file to upload and keep here</MenuItem>
             </TextField>
 
             {kind === 'DOC_PAGE_REF' && (
@@ -383,6 +476,53 @@ export function RegisterArtifactDialog({
                   </MenuItem>
                 ))}
               </TextField>
+            )}
+
+            {kind === 'FILE' && (
+              <Box>
+                <input
+                  ref={fileInput}
+                  type="file"
+                  hidden
+                  data-testid={`${TestIdPrefix}.FileInput`}
+                  onChange={(event) => {
+                    const chosen = event.target.files?.[0];
+                    // Cleared so re-picking the SAME file fires `change` again — §67's finding,
+                    // and the first thing anyone does after a refused upload.
+                    event.target.value = '';
+                    if (!chosen) return;
+                    const refusal = uploadRefusal(chosen);
+                    if (refusal) {
+                      // Client-side copy, not security: the servlet container answers a file over
+                      // the limit with a 413 refused before any handler runs, so there is no
+                      // problem document and nothing to land on a field. This exists so the user
+                      // finds out before pushing 10MB over a slow link.
+                      setPicked(null);
+                      setValue('file', '', { shouldValidate: false });
+                      setError('file', { type: 'client', message: refusal });
+                      return;
+                    }
+                    setPicked(chosen);
+                    // The name is the form's value; validating it here clears the "choose a file"
+                    // issue in the same tick the file lands, rather than at the next submit.
+                    setValue('file', chosen.name, { shouldValidate: true });
+                  }}
+                />
+                <Button
+                  variant="outlined"
+                  startIcon={<UploadFileIcon />}
+                  onClick={() => fileInput.current?.click()}
+                  data-testid={`${TestIdPrefix}.ChooseFile`}
+                >
+                  {picked ? 'Choose a different file' : 'Choose a file'}
+                </Button>
+                <FormHelperText error={!!errors.file} data-testid={`${TestIdPrefix}.FileHelp`}>
+                  {errors.file?.message ??
+                    (picked
+                      ? `${picked.name} · ${formatBytes(picked.size)}`
+                      : `Up to ${formatBytes(MAX_UPLOAD_BYTES)}. The bytes are fixed at registration — replacing the document means registering a new artifact that supersedes this one.`)}
+                </FormHelperText>
+              </Box>
             )}
 
             {kind === 'EXTERNAL_URL' && (

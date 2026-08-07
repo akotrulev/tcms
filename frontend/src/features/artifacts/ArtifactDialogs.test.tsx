@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '../../api/client'
@@ -255,6 +255,110 @@ describe('RegisterArtifactDialog', () => {
       kind: 'DOC_PAGE_REF',
       docPageId: 'page-1',
       url: null,
+    })
+  })
+
+  /*
+    #49 phase 3 — the third kind, which is a different ENDPOINT rather than a different payload.
+
+    Everything here is invisible to the build: `api.upload` is generic over its response, the
+    `FormData` it takes has no type at all, and a part sent with the wrong media type fails at the
+    transport layer with a message about media types rather than about the artifact.
+  */
+  describe('an uploaded file goes to /artifacts/files, not to /artifacts', () => {
+    /** A `File` of a stated size without allocating it — `size` is read-only on the real thing. */
+    function sized(name: string, size: number): File {
+      const file = new File(['x'], name, { type: 'application/pdf' })
+      Object.defineProperty(file, 'size', { value: size })
+      return file
+    }
+
+    /** `fireEvent`, not `userEvent.upload`: the input is `hidden` and pointer events cannot reach it. */
+    function pick(file: File) {
+      fireEvent.change(screen.getByTestId('Artifacts.Dialog.FileInput'), {
+        target: { files: [file] },
+      })
+    }
+
+    it('sends one multipart request whose artifact part is JSON and carries no kind', async () => {
+      const upload = vi.spyOn(api, 'upload').mockResolvedValue(registered as never)
+      const post = vi.spyOn(api, 'post')
+      renderDialog('plan-1')
+
+      await userEvent.type(screen.getByTestId('Artifacts.Dialog.TitleField'), 'Release sign-off')
+      await choose('Artifacts.Dialog.Kind', /file to upload/i)
+      pick(sized('sign-off.pdf', 12_000))
+      await userEvent.click(screen.getByTestId('Artifacts.Dialog.Submit'))
+
+      await waitFor(() => expect(upload).toHaveBeenCalled())
+      // The JSON create is not reached at all. A form that built an `ArtifactInput` with
+      // `kind: 'FILE'` and posted it would be answered 400 by the server, minutes of confusion later.
+      expect(post).not.toHaveBeenCalled()
+      expect(upload.mock.calls[0][0]).toBe('/projects/p1/artifacts/files')
+
+      const form = upload.mock.calls[0][1]
+      const artifact = form.get('artifact') as Blob
+      // The media type is the load-bearing part: `@RequestPart` picks its converter from the
+      // part's own Content-Type, and a plain string part arrives as `text/plain` with no converter.
+      expect(artifact.type).toBe('application/json')
+      expect(JSON.parse(await artifact.text())).toEqual({
+        scope: 'PLAN',
+        planId: 'plan-1',
+        category: 'Strategy',
+        title: 'Release sign-off',
+        description: null,
+      })
+      expect((form.get('file') as File).name).toBe('sign-off.pdf')
+    })
+
+    it('refuses to submit with no file chosen, without asking the server', async () => {
+      const upload = vi.spyOn(api, 'upload')
+      renderDialog('plan-1')
+
+      await userEvent.type(screen.getByTestId('Artifacts.Dialog.TitleField'), 'Release sign-off')
+      await choose('Artifacts.Dialog.Kind', /file to upload/i)
+      await userEvent.click(screen.getByTestId('Artifacts.Dialog.Submit'))
+
+      await waitFor(() =>
+        expect(screen.getByText(/choose a file to register/i)).toBeInTheDocument(),
+      )
+      expect(upload).not.toHaveBeenCalled()
+    })
+
+    it('refuses a file over the instance limit on the picker, not in a banner', async () => {
+      // A 413 is refused by the servlet container before any handler runs, so it carries no problem
+      // document and there is nothing for `applyServerError` to land. This is the only place the
+      // user can be told, and it has to be told before the bytes go up a slow link.
+      const upload = vi.spyOn(api, 'upload')
+      renderDialog('plan-1')
+
+      await userEvent.type(screen.getByTestId('Artifacts.Dialog.TitleField'), 'Huge export')
+      await choose('Artifacts.Dialog.Kind', /file to upload/i)
+      pick(sized('dump.zip', 25 * 1024 * 1024))
+
+      expect(screen.getByTestId('Artifacts.Dialog.FileHelp')).toHaveTextContent(/dump\.zip/)
+      await userEvent.click(screen.getByTestId('Artifacts.Dialog.Submit'))
+      expect(upload).not.toHaveBeenCalled()
+    })
+
+    it('keeps the scope qualifier for an upload — bytes change nothing about who may write a row', async () => {
+      // The same `PLAN_SCOPE` restriction as the reference create, on the same control. A second
+      // dialog for uploads is where this would have been forgotten.
+      mockPermissions(['artifact:edit'], { 'artifact:edit': 'PLAN_SCOPE' })
+      renderDialog()
+
+      await choose('Artifacts.Dialog.Kind', /file to upload/i)
+      await waitFor(() => expect(screen.getByTestId('Artifacts.Dialog.Scope')).toHaveValue('PLAN'))
+    })
+
+    it('offers no upload control for the two reference kinds', async () => {
+      // The guard: without it every assertion above passes equally well against a dialog that
+      // always shows a file picker, which would invite an upload the JSON endpoint cannot take.
+      renderDialog('plan-1')
+
+      expect(screen.queryByTestId('Artifacts.Dialog.FileInput')).toBeNull()
+      await choose('Artifacts.Dialog.Kind', /page in this project's documentation/i)
+      expect(screen.queryByTestId('Artifacts.Dialog.FileInput')).toBeNull()
     })
   })
 

@@ -151,6 +151,17 @@ export type TestExecution = S['TestExecution'];
 export type TestExecutionSummary = S['TestExecutionSummary'];
 export type StepResult = S['StepResult'];
 export type Evidence = S['Evidence'];
+/**
+ * One file attached to **authored content** — a case's definition, a documentation page, or an
+ * artifact's bytes. One schema for all three owners (the contract's own decision), which is what
+ * lets `components/AttachmentList.tsx` be one component instead of three.
+ *
+ * **Deliberately not `Evidence`, and the two must not be merged.** Evidence carries a `caption` and
+ * is a record of something that happened; the delete gate reads authorship for it (`evidence:delete`
+ * has an `OWN` arm) and deliberately does **not** here — a case attachment is part of the case
+ * definition that `case:edit` already owns wholesale.
+ */
+export type Attachment = S['Attachment'];
 export type Configuration = S['Configuration'];
 export type Criterion = S['Criterion'];
 /**
@@ -240,6 +251,16 @@ export type DocSubjectType = NonNullable<S['DocPageSummary']['subjectType']>;
 export type DocLink = S['DocLink'];
 export type Artifact = S['Artifact'];
 export type ArtifactInput = S['ArtifactInput'];
+/**
+ * The register fields that travel **beside an uploaded file** — the `artifact` part of
+ * `POST /projects/{projectId}/artifacts/files`.
+ *
+ * It carries no `kind`, and that absence is the contract's design rather than an omission: the kind
+ * is `FILE` by construction, so a client generating types from this spec cannot express a payload
+ * that disagrees with the endpoint it was sent to. Everything `ArtifactInput` and this share
+ * (scope, planId, category, title, description) is validated by one server-side path.
+ */
+export type ArtifactFileInput = S['ArtifactFileInput'];
 
 // work
 export type WorkItem = S['WorkItem'];

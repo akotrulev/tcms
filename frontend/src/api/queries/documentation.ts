@@ -3,7 +3,9 @@ import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tan
 import { ApiError, api, qs } from '../client';
 import type {
   Artifact,
+  ArtifactFileInput,
   ArtifactInput,
+  Attachment,
   BlockLink,
   BlockLinkInput,
   DocPage,
@@ -120,6 +122,50 @@ export function useDeleteDocPage(projectId: string) {
   });
 }
 
+/**
+ * Attaches a file to a documentation page (#49), gated on **`doc:edit`**.
+ *
+ * `doc:edit` and not `doc:publish`: an image on a page is part of what the page says, and the
+ * publication state is a separate act with a separate key. It is also **not** author-qualified, for
+ * `useAttachCaseFile`'s reason one entity over — the same key already rewrites every block on the
+ * page, so an authorship arm on the picture would be stricter than the paragraph beside it.
+ *
+ * ## Both keys, because one page is reached two ways
+ *
+ * A page that documents a plan is served under `keys.docPage` *and* under that plan's
+ * `keys.planDocument`, which is why `invalidatePageEverywhere` exists at the bottom of this file.
+ * A file attached from `/docs` must not leave the plan's Business-requirements tab one attachment
+ * short, and vice versa. Reusing that helper rather than invalidating the page key is the whole
+ * difference.
+ */
+export function useAttachDocPageFile(projectId: string, pageId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => {
+      // FormData, and no hand-set Content-Type — `api.upload` is the one call that leaves it to the
+      // browser so the multipart boundary survives. It also carries the long budget.
+      const form = new FormData();
+      form.append('file', file);
+      return api.upload<Attachment>(`${base(projectId)}/doc-pages/${pageId}/attachments`, form);
+    },
+    // The panel renders the refusal beside the control. A 413 is refused by the servlet container
+    // before any handler runs, so it carries no field to land on and no problem document to read.
+    meta: { handled: true },
+    onSuccess: () => invalidatePageEverywhere(client, projectId, pageId),
+  });
+}
+
+/** Removes a file from a page. Hard delete, `doc:edit`, no author arm — see the attach above. */
+export function useDeleteDocPageFile(projectId: string, pageId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (attachmentId: string) =>
+      api.del<void>(`${base(projectId)}/doc-pages/${pageId}/attachments/${attachmentId}`),
+    meta: { handled: true },
+    onSuccess: () => invalidatePageEverywhere(client, projectId, pageId),
+  });
+}
+
 export function useArtifacts(
   projectId: string,
   scope?: 'PROJECT' | 'PLAN',
@@ -154,6 +200,54 @@ export function useCreateArtifact(projectId: string) {
     // The dialog renders field errors on its own inputs — including the scope-qualified 403, which
     // the server words as advice about the scope selector — so the global notification would be a
     // second, vaguer copy of a message already on screen.
+    meta: { handled: true },
+    onSuccess: () =>
+      client.invalidateQueries({ queryKey: ['projects', projectId, 'artifacts'] }),
+  });
+}
+
+/**
+ * Registers an **uploaded file** as an artifact — one request carrying the register fields and the
+ * bytes together (#49 phase 3).
+ *
+ * ## This is deliberately not a third copy of the attachment family
+ *
+ * A case and a page *have* files; a `FILE` artifact **is** one. `V1` gives `artifact` a single
+ * nullable `attachment_id` beside three sibling payload columns — four kinds, four payloads — so
+ * there is no list here, no attach-afterwards, no `PUT` and no detach. Replacing the document is
+ * *superseding* it (plan §6n), which is a second row naming the first, not new bytes under the old
+ * author and timestamp. A hook offering re-upload would be an affordance for an endpoint that does
+ * not exist.
+ *
+ * ## The `artifact` part is a JSON **Blob**, and a plain string would 415
+ *
+ * The server binds it with `@RequestPart("artifact") ArtifactFileInput`, which resolves through a
+ * message converter chosen by *that part's own* `Content-Type`. `form.append('artifact', json)` with
+ * a string sends `text/plain` and no converter matches; wrapping it in a `Blob` typed
+ * `application/json` is what makes the part readable. It is a one-word difference that fails at the
+ * transport layer with a message about media types, nowhere near the field it is really about.
+ *
+ * ## Both scopes are invalidated
+ *
+ * `useCreateArtifact`'s rule, unchanged and for the same reason: a project-scope artifact appears in
+ * every plan's register as an inherited row, so writing one changes lists this mutation never named.
+ * The prefix is what makes the inherited copy refresh.
+ *
+ * `handled` because the dialog lands the server's `errors` map on its own controls — including the
+ * scope-qualified 403, which the server words as advice about the scope selector.
+ */
+export function useRegisterArtifactFile(projectId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ artifact, file }: { artifact: ArtifactFileInput; file: File }) => {
+      const form = new FormData();
+      form.append(
+        'artifact',
+        new Blob([JSON.stringify(artifact)], { type: 'application/json' }),
+      );
+      form.append('file', file);
+      return api.upload<Artifact>(`${base(projectId)}/artifacts/files`, form);
+    },
     meta: { handled: true },
     onSuccess: () =>
       client.invalidateQueries({ queryKey: ['projects', projectId, 'artifacts'] }),

@@ -183,3 +183,62 @@ describe('CaseDetailPage — the Delete gate reads the row, not just the caller'
     await waitFor(() => expect(deleteButton()).toBeEnabled())
   })
 })
+
+/**
+ * The attachment panel's **wiring**, which is a different defect from the panel itself.
+ *
+ * `AttachmentList.test.tsx` proves the panel gates on whatever key it is handed and refuses no row
+ * on authorship. Nothing there proves this page hands it `case:edit` — and the two plausible wrong
+ * answers are both silent. `case:delete` would compile, render, and refuse a Test Engineer their
+ * own screenshot on a case a lead created (that key is OWN-qualified one gate up on this very
+ * page). `evidence:attach` would compile too and refuse everybody outside a run.
+ *
+ * So the check is a caller who holds `case:edit` and whose `case:delete` is `OWN`-qualified over a
+ * **colleague's** case: Delete on the case is disabled, and Attach on its files is not. One
+ * fixture, two opposite verdicts, and only the right key produces both.
+ */
+describe('CaseDetailPage — the attachment panel is gated on case:edit', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('offers Attach to a Test Engineer who may not delete this case', async () => {
+    mockReads(COLLEAGUE, 'OWN')
+    renderPage()
+    await permissionsResolved()
+
+    await waitFor(() =>
+      expect(screen.getByTestId('CaseDetail.Attachments.Attach')).toBeEnabled(),
+    )
+    // The same render, the same caller: the two gates disagree, which is what proves they are
+    // reading different keys rather than one verdict shared by accident.
+    expect(deleteButton()).toBeDisabled()
+  })
+
+  it('refuses Attach to a caller with no case:edit', async () => {
+    // The guard: without it the test above passes against a panel gated on nothing at all.
+    vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
+      if (path.startsWith('/me/permissions')) return heldPermissions(['case:read'])
+      if (path.includes('/cases/')) return caseBody(CALLER)
+      if (path.startsWith('/projects/')) return { id: PROJECT, name: 'Banking' }
+      return []
+    }) as never)
+    renderPage()
+
+    await waitFor(() =>
+      expect(screen.getByTestId('CaseDetail.Attachments')).toBeInTheDocument(),
+    )
+    expect(screen.getByTestId('CaseDetail.Attachments.Attach')).toBeDisabled()
+  })
+
+  it('says what belongs there rather than hiding the panel on a case with no files', async () => {
+    // `attachments: []` is the ordinary state and the panel is unconditional — a section that
+    // appears only once something is in it is a section nobody discovers.
+    mockReads(CALLER)
+    renderPage()
+
+    await waitFor(() =>
+      expect(screen.getByTestId('CaseDetail.Attachments.Empty')).toBeInTheDocument(),
+    )
+  })
+})
