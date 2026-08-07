@@ -417,7 +417,6 @@ export const aggregationLabels = {
   LATEST: 'Latest result per case',
   LATEST_PER_CONFIG: 'Latest result per case, per configuration',
   WORST: 'Worst result per case',
-  BEST: 'Best result per case',
   ALL: 'Every execution counted',
 } as const satisfies Record<AggregationPolicy, string>;
 
@@ -427,7 +426,6 @@ export const aggregationHelp = {
     'A case executed on three configurations counts three times — once per configuration — so the total exceeds the case count.',
   WORST:
     'Each case counts once, using its worst result across every run: a case that failed anywhere counts as failed.',
-  BEST: 'Each case counts once, using its best result across every run. Flatters a flaky suite — use with care.',
   ALL: 'Every execution is counted separately, so a case retried four times contributes four results.',
 } as const satisfies Record<AggregationPolicy, string>;
 

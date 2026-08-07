@@ -372,7 +372,7 @@ class AggregateVariabilityTest extends IntegrationTestBase {
             assertThat(retryOutcomes(policy("LATEST")))
                     .as("the default policy must not erase this section")
                     .isEqualTo(retryOutcomes(policy("ALL")))
-                    .isEqualTo(retryOutcomes(policy("BEST")));
+                    .isEqualTo(retryOutcomes(policy("WORST")));
             assertThat(retryOutcomes(policy("LATEST")).get("Passed only after a retry"))
                     .as("and it is non-zero, so the equality above is not two zeroes agreeing")
                     .isEqualTo(2L);

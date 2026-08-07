@@ -57,8 +57,6 @@ import org.springframework.transaction.annotation.Transactional;
  *       <td>same, partitioned by (case, configuration)</td></tr>
  *   <tr><td>{@code WORST}</td><td>verdicts first, then {@code -severityIndex}</td>
  *       <td>{@code is_verdict DESC, severity ASC, execution_id DESC}</td></tr>
- *   <tr><td>{@code BEST}</td><td>verdicts first, then {@code +severityIndex}</td>
- *       <td>{@code is_verdict DESC, severity DESC, execution_id DESC}</td></tr>
  * </table>
  *
  * <h3>Two asymmetries that are NOT defects, and had to be found before the cross-check could be believed</h3>
@@ -82,8 +80,8 @@ import org.springframework.transaction.annotation.Transactional;
  * orders differently in Java (signed 64-bit halves) and in Postgres (unsigned bytes), so the
  * {@code execution_id} tiebreak can pick different rows. It only reaches a <em>count</em> under
  * {@code LATEST}/{@code LATEST_PER_CONFIG}, where two executions of one case share an
- * {@code executed_at} to the microsecond and carry different statuses; under {@code WORST} and
- * {@code BEST} a tie is by construction between rows of the same kind, so the winner's identity
+ * {@code executed_at} to the microsecond and carry different statuses; under {@code WORST}
+ * a tie is by construction between rows of the same kind, so the winner's identity
  * moves and no number does. The tiebreak exists to be <em>stable</em>, not meaningful
  * ({@code resolve} says so), and the cross-check fixture gives every execution a distinct timestamp
  * so the test asserts the rule rather than the coin toss.
@@ -462,7 +460,7 @@ class AggregateExecutionReport implements ReportComputation {
      *   <li>Under {@code LATEST} one version survives per case, so the totals do not blend and the
      *       older version's results are in <strong>no</strong> total in this report. That is not
      *       harmless, it is a different fact, and a section that said "blended" would be lying.
-     *   <li>Under {@code WORST} / {@code BEST} the surviving row is chosen by severity <em>across</em>
+     *   <li>Under {@code WORST} the surviving row is chosen by severity <em>across</em>
      *       versions, so a failure recorded against text that has since been rewritten can outrank a
      *       pass against the current text.
      *   <li>Under {@code LATEST_PER_CONFIG} both happen at once: one version per configuration, and
@@ -732,7 +730,6 @@ class AggregateExecutionReport implements ReportComputation {
             // Without it, an UNTESTED row would outrank PASSED under WORST and a case that has
             // passed in every run it was recorded in would read as owed a verdict.
             case WORST -> verdictFirst() + ", " + severityRank("s") + " ASC, s.execution_id DESC";
-            case BEST -> verdictFirst() + ", " + severityRank("s") + " DESC, s.execution_id DESC";
             case ALL -> throw new IllegalStateException("handled above");
         };
 

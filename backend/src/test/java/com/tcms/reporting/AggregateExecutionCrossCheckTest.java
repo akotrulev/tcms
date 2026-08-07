@@ -91,7 +91,7 @@ class AggregateExecutionCrossCheckTest extends IntegrationTestBase {
 
     /** Failed, then passed — {@code LATEST} and {@code WORST} must disagree about this one. */
     private static final UUID RECOVERED = UUID.fromString("c1004000-0000-4000-8000-000000000001");
-    /** Passed, then failed — the mirror, so {@code BEST} is not just {@code LATEST} renamed. */
+    /** Passed, then failed — the mirror of RECOVERED, so no two policies rank the pair alike. */
     private static final UUID REGRESSED = UUID.fromString("c1004000-0000-4000-8000-000000000002");
     /** Blocked once. Neither a pass nor a failure under any policy. */
     private static final UUID BLOCKED = UUID.fromString("c1004000-0000-4000-8000-000000000003");
@@ -203,15 +203,18 @@ class AggregateExecutionCrossCheckTest extends IntegrationTestBase {
     void theFixtureDiscriminates() {
         Map<String, Long> latest = inTransaction(() -> statusCounts(policy("LATEST")));
         Map<String, Long> worst = inTransaction(() -> statusCounts(policy("WORST")));
-        Map<String, Long> best = inTransaction(() -> statusCounts(policy("BEST")));
+        Map<String, Long> perConfig = inTransaction(() -> statusCounts(policy("LATEST_PER_CONFIG")));
         Map<String, Long> all = inTransaction(() -> statusCounts(policy("ALL")));
 
         // Without this the agreement below would pass against a report that ignored the policy
         // parameter entirely, which is exactly the defect decision D is protecting against.
+        // BEST was the fourth picture here until 2026-08-07 (plan §8 #47); LATEST_PER_CONFIG takes
+        // its place in the discrimination, and RECOVERED/REGRESSED still make LATEST and WORST
+        // rank the same two cases in opposite orders.
         assertThat(latest).as("LATEST vs WORST").isNotEqualTo(worst);
-        assertThat(latest).as("LATEST vs BEST").isNotEqualTo(best);
-        assertThat(worst).as("WORST vs BEST").isNotEqualTo(best);
         assertThat(all).as("ALL counts every execution, not every case").isNotEqualTo(latest);
+        assertThat(all).as("ALL vs WORST").isNotEqualTo(worst);
+        assertThat(perConfig).as("LATEST_PER_CONFIG counts per configuration").isNotEqualTo(all);
 
         assertThat(all.values().stream().mapToLong(Long::longValue).sum())
                 .as("ALL contributes one row per recorded execution")

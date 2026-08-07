@@ -47,8 +47,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * <h2>There is no direct seam for the live path, so the switch is driven by the POLICY</h2>
  *
  * <p>{@code PlanStatisticsService} chooses its source from the aggregation policy, so the two paths
- * are reached by asking for {@code LATEST} (rollup) and {@code ALL}/{@code WORST}/{@code BEST}
- * (live). {@code LATEST} and {@code WORST} answer the same thing over a fixture where each case's
+ * are reached by asking for {@code LATEST} (rollup) and {@code ALL}/{@code WORST} (live). {@code LATEST} and {@code WORST} answer the same thing over a fixture where each case's
  * latest result <em>is</em> its worst — which this fixture deliberately is not, so the comparison
  * below is against {@code LATEST} computed before the rollup was ever refreshed. That is the only
  * way to see the live {@code LATEST} at all, and it is what makes this an oracle rather than a
@@ -225,15 +224,15 @@ class RollupAgreementTest extends IntegrationTestBase {
     }
 
     @Test
-    @DisplayName("WORST, BEST and ALL stay live, and say so with a null computedAt")
-    void theThreeUnservableePoliciesStayLive() {
+    @DisplayName("WORST and ALL stay live, and say so with a null computedAt")
+    void theUnservablePoliciesStayLive() {
         // Asserting the null is what stops a later refactor from quietly serving WORST out of a
         // latest-only table — which would be wrong in the one direction nobody checks, because it
         // would make a plan look BETTER than it is.
         refresh();
 
         for (AggregationPolicy policy
-                : List.of(AggregationPolicy.WORST, AggregationPolicy.BEST, AggregationPolicy.ALL)) {
+                : List.of(AggregationPolicy.WORST, AggregationPolicy.ALL)) {
             assertThat(inTransaction(() -> plan(policy)).computedAt())
                     .as("%s needs every execution and cannot come from plan_snapshot", policy)
                     .isNull();

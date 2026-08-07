@@ -130,9 +130,11 @@ const COVERAGE = 'coverage_matrix';
  *
  * `satisfies` against the generated union, so a policy added to the contract is a **compile error
  * here** rather than a report this form cannot ask for. That is the same argument `lib/labels.ts`
- * makes for every enum map in the product.
+ * makes for every enum map in the product — and it works in the removing direction too: `BEST` was
+ * dropped from the contract on 2026-08-07 (plan §8 #47) and this line stopped compiling, which is
+ * the only reason a menu item offering a policy the server now refuses could not survive the change.
  */
-const POLICIES = ['LATEST', 'LATEST_PER_CONFIG', 'WORST', 'BEST', 'ALL'] as const satisfies
+const POLICIES = ['LATEST', 'LATEST_PER_CONFIG', 'WORST', 'ALL'] as const satisfies
   readonly AggregationPolicy[];
 
 const ReportSchema = z

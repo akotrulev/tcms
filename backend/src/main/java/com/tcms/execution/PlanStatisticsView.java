@@ -29,7 +29,7 @@ import java.util.UUID;
  *                        these figures was written, or <strong>null when they were computed
  *                        live</strong>. A plan executed an hour ago and rolled up ten minutes ago is
  *                        fresh by one measure and ten minutes behind by the other. Null is always
- *                        the answer for {@code WORST}, {@code BEST} and {@code ALL}, which a
+ *                        the answer for {@code WORST} and {@code ALL}, which a
  *                        latest-result-per-case rollup structurally cannot serve.
  * @param bySuite         every suite holding an in-scope case, including suites where nothing has
  *                        been executed — those are the rows a release meeting is looking for, and a

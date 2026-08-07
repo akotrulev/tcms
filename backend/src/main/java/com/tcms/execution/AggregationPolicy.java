@@ -10,8 +10,8 @@ package com.tcms.execution;
  * is echoed on every response and the SPA is required to display it; that requirement is the reason
  * this is an enum on the wire rather than a server-side default nobody can see.
  *
- * <p>The five are not variations on a theme — they answer different questions, and the two at the
- * ends exist to be argued with:
+ * <p>The four are not variations on a theme — they answer different questions, and {@link #WORST}
+ * exists to be argued with:
  *
  * <ul>
  *   <li>{@link #LATEST} — <em>the default, and the one §6p specifies for a plan page.</em> Each case
@@ -22,16 +22,32 @@ package com.tcms.execution;
  *       policy under which that is correct rather than a bug: a plan passing on Chrome and failing
  *       on Safari must not average into a single reassuring number.</li>
  *   <li>{@link #WORST} — a case that failed anywhere counts as failed. The release-gate reading.</li>
- *   <li>{@link #BEST} — a case that passed anywhere counts as passed. <strong>Flatters a flaky
- *       suite</strong>, which is exactly why it is offered by name instead of arrived at by
- *       accident: "it passed on the re-run" is a real argument someone will make, and it is better
- *       made in the open under a label than smuggled into a default.</li>
  *   <li>{@link #ALL} — every execution counted separately; a case retried four times contributes
  *       four results. The only policy that is not a statement about cases.</li>
  * </ul>
  *
- * <p>Ordering matters for {@link #WORST} and {@link #BEST} and it is deliberately <em>not</em> this
- * enum's declaration order — it is a severity order over {@link com.tcms.project.StatusKind}, which
+ * <h2>{@code BEST} was removed on 2026-08-07, and this paragraph is why it was ever here</h2>
+ *
+ * <p>A fifth value — "a case that passed anywhere counts as passed" — shipped in M2 on the argument
+ * that <em>"it passed on the re-run" is a real thing somebody will say, and it is better said in the
+ * open under a label than smuggled into a default.</em> That argument is not wrong about people and
+ * it is wrong about products: <strong>a label does not merely surface the argument, it wins it</strong>,
+ * because a dropdown value carries the product's endorsement and a policy named "best" reads as the
+ * generous reading rather than the dishonest one. What it produces is a red suite reported green, on
+ * a screen whose whole purpose (§6e) is that two teams quoting one pass rate mean the same thing.
+ *
+ * <p>It cost nothing to drop because the reading it would have been traded against — {@code WORST},
+ * the release gate — is still here, and because the product has since grown the honest way to make
+ * the same point: <strong>§121's flake detection says a case is unreliable without calling it
+ * green</strong>, and §112's variability section shows the retries a policy would have collapsed.
+ * A flaky case is now a fact with a name, rather than a number chosen by whoever picked the dropdown.
+ *
+ * <p>Plan §8 #17 decided this on 2026-08-01 and nothing applied it for six days; #47 is that
+ * application. Recorded here rather than only in the plan because the next person to want a
+ * generous policy will be reading this file, not §8.
+ *
+ * <p>Ordering matters for {@link #WORST} and it is deliberately <em>not</em> this enum's declaration
+ * order — it is a severity order over {@link com.tcms.project.StatusKind}, which
  * {@code PlanStatisticsService} states explicitly.
  */
 public enum AggregationPolicy {
@@ -39,7 +55,6 @@ public enum AggregationPolicy {
     LATEST,
     LATEST_PER_CONFIG,
     WORST,
-    BEST,
     ALL;
 
     /** The contract's {@code default: LATEST}, applied when the caller omits the parameter. */

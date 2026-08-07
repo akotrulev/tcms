@@ -25,10 +25,14 @@ import java.util.Optional;
  * question — and {@code AggregateExecutionCrossCheckTest} asserts the two agree against
  * <em>each other</em> rather than against literals.
  *
- * <p>Five values and no more. A value added to one copy and not the other is a report that silently
- * refuses a policy the plan page offers, so {@code AggregateExecutionPolicyTest} pins the two name
- * sets equal — the check that makes a duplicated enum survivable, since nothing else in the build
- * can see that these two files are supposed to be the same list.
+ * <p><strong>Four values and no more.</strong> A value added to one copy and not the other is a
+ * report that silently refuses a policy the plan page offers, so {@code AggregateExecutionPolicyTest}
+ * pins the two name sets equal — the check that makes a duplicated enum survivable, since nothing
+ * else in the build can see that these two files are supposed to be the same list. It earned its
+ * keep on 2026-08-07: {@code BEST} was removed (plan §8 #47) and that check is what makes removing
+ * it from <em>one</em> file impossible to land, which matters more for a deletion than for an
+ * addition — a missing value fails closed and loudly here, but a copy that still <em>accepts</em>
+ * a retired policy would answer a number the plan page can no longer produce.
  */
 enum AggregationPolicy {
 
@@ -40,9 +44,6 @@ enum AggregationPolicy {
 
     /** A case that failed anywhere counts as failed. The release-gate reading. */
     WORST,
-
-    /** A case that passed anywhere counts as passed. Flatters a flaky suite, by name rather than by accident. */
-    BEST,
 
     /** Every execution counted separately. The only policy that is not a statement about cases. */
     ALL;

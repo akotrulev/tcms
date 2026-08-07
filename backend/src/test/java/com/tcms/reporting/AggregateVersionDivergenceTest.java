@@ -372,8 +372,9 @@ class AggregateVersionDivergenceTest extends IntegrationTestBase {
             assertThat(countedVersions(policy("WORST")).get("TC-1 — Case TC-1"))
                     .as("the failure at v1 outranks the pass at v2, and it is v1 in the totals")
                     .containsExactly("v1");
-            assertThat(countedVersions(policy("BEST")).get("TC-1 — Case TC-1"))
-                    .as("and the other way round under BEST")
+            assertThat(countedVersions(policy("LATEST")).get("TC-1 — Case TC-1"))
+                    .as("and the other way round under LATEST, which is what makes this a "
+                            + "consequence of the POLICY rather than a property of the fixture")
                     .containsExactly("v2");
         }
     }

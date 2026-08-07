@@ -5925,10 +5925,23 @@ export interface components {
         HealthSignal: "OUTDATED_SPEC_CHANGED" | "STALE_APPROVAL" | "CONDITION_DRIFT" | "STALE_AUTOMATION" | "NEVER_EXECUTED" | "LONG_UNEXECUTED" | "UNLINKED" | "FAILING_REPEATEDLY" | "ORPHANED" | "INCOMPLETE" | "UNDECLARED_AUTOMATION";
         /**
          * @description How a case executed many times resolves to one result (plan §6e).
+         *
+         *     **`BEST` was removed on 2026-08-07** (plan §8 #17, applied as #47). "A case that passed
+         *     anywhere counts as passed" is how a red suite gets reported green, and the reading it would
+         *     have been argued against — `WORST` — is still here. It was offered on the theory that "it
+         *     passed on the re-run" is better made in the open under a label than smuggled into a default;
+         *     what the theory missed is that a label makes the argument *easier to win*, and the product
+         *     has since grown the honest way to make it: flake detection (§121) says a case is unreliable
+         *     without calling it green, and the aggregate report's variability section (§112) shows the
+         *     retries a policy would have collapsed.
+         *
+         *     A caller that still sends `BEST` gets a 400 naming the four that remain — not a silent
+         *     fallback to `LATEST`, which would answer a question nobody asked with a number they would
+         *     read as theirs.
          * @default LATEST
          * @enum {string}
          */
-        AggregationPolicy: "LATEST" | "LATEST_PER_CONFIG" | "WORST" | "BEST" | "ALL";
+        AggregationPolicy: "LATEST" | "LATEST_PER_CONFIG" | "WORST" | "ALL";
         InvitationPreview: {
             /** @description The address the invitation was sent to. */
             email: string;
@@ -7505,7 +7518,7 @@ export interface components {
              *     written (§6p, §101). **Null means the answer was computed live** and is current as of
              *     this request — a positive statement, not a missing value.
              *
-             *     Live is the answer for the `WORST`, `BEST` and `ALL` aggregation policies, which a
+             *     Live is the answer for the `WORST` and `ALL` aggregation policies, which a
              *     latest-result-per-case rollup **structurally cannot serve**: each needs every
              *     execution, and this table keeps one row per case per configuration. `LATEST` and
              *     `LATEST_PER_CONFIG` are served from the rollup. It is also the answer for a plan whose
@@ -9222,7 +9235,7 @@ export interface operations {
                      *     anything" means:
                      *
                      *     - `policy` — one of `LATEST` (the default), `LATEST_PER_CONFIG`, `WORST`,
-                     *       `BEST`, `ALL`; the same five values, with the same meanings, that
+                     *       `ALL`; the same four values, with the same meanings, that
                      *       `GET /plans/{planId}/statistics` takes. The report prints the policy it
                      *       used and prints **both** the execution count and the distinct-case count,
                      *       because those two are equal under `LATEST` and differ under the others,

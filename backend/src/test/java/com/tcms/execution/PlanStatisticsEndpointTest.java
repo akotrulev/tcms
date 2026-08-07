@@ -56,10 +56,13 @@ import org.springframework.transaction.support.TransactionTemplate;
  *       execution row with no verdict, so it contributes an {@code UNTESTED} result <em>and</em>
  *       looks un-executed. Counting both makes {@code total} exceed the scope by roughly the size of
  *       every open run. Found while writing this class, before it ever ran.</li>
- *   <li><strong>The five policies collapsing into one.</strong> The fixture is built so that
- *       {@code LATEST}, {@code WORST}, {@code BEST}, {@code LATEST_PER_CONFIG} and {@code ALL} give
- *       <em>five different</em> count vectors over the same rows. An implementation that ignored the
- *       parameter would pass any one of these assertions and fails the set.</li>
+ *   <li><strong>The four policies collapsing into one.</strong> The fixture is built so that
+ *       {@code LATEST}, {@code WORST}, {@code LATEST_PER_CONFIG} and {@code ALL} give <em>four
+ *       different</em> count vectors over the same rows. An implementation that ignored the
+ *       parameter would pass any one of these assertions and fails the set. <strong>There were five
+ *       until 2026-08-07</strong>, when {@code BEST} was removed (plan §8 #47) — and the fixture
+ *       still discriminates without it, because caseA's latest ({@code BLOCKED}) and worst
+ *       ({@code FAILED}) were never the same verdict.</li>
  *   <li><strong>Coverage moving with the policy.</strong> It must not: a case is covered or it is
  *       not. Coverage is the figure §6p puts beside the pass rate precisely so the pass rate cannot
  *       be read alone, and a coverage that changed with a dropdown would be worthless for that.</li>
@@ -235,9 +238,11 @@ class PlanStatisticsEndpointTest extends IntegrationTestBase {
         record(r2, caseA, passedStatus());
         moveRunInTime(r2, 2);
 
-        // caseA is now FAILED then PASSED then BLOCKED, which is the point: its latest, its worst
-        // and its best are three DIFFERENT verdicts, so LATEST, WORST and BEST cannot agree about
-        // it. Two of them agreeing is how a policy parameter gets ignored without any test noticing.
+        // caseA is now FAILED then PASSED then BLOCKED, which is the point: its latest and its
+        // worst are DIFFERENT verdicts, so LATEST and WORST cannot agree about it. Two policies
+        // agreeing is how a policy parameter gets ignored without any test noticing. The middle
+        // PASSED is kept deliberately even though BEST is gone (#47): it is what makes caseA a case
+        // that HAS passed and is still a blocker, which is the property the removal protects.
         UUID r3 = createRun("Second environment", SECOND_CONFIG);
         record(r3, caseA, blockedStatus());
         record(r3, caseB, passedStatus());
@@ -315,11 +320,11 @@ class PlanStatisticsEndpointTest extends IntegrationTestBase {
     }
 
     // =====================================================================
-    // The five policies
+    // The four policies
     // =====================================================================
 
     @Nested
-    @DisplayName("Aggregation — five policies, five different answers over the same rows")
+    @DisplayName("Aggregation — four policies, four different answers over the same rows")
     class Aggregation {
 
         /** caseA's latest is R3's BLOCKED; caseB's is R3's PASSED; caseC and caseD are owed. */
@@ -363,13 +368,29 @@ class PlanStatisticsEndpointTest extends IntegrationTestBase {
                     .isEqualTo(1L);
         }
 
-        /** caseA passed in R2, so BEST disagrees with both of the above. */
+        /**
+         * <strong>The removal, pinned from the outside.</strong>
+         *
+         * <p>{@code BEST} answered {@code [2, 0, 0, 0, 2, 4]} here until 2026-08-07 — caseA failed,
+         * then passed, then was blocked, and {@code BEST} was the one policy that called it green.
+         * That is the count vector the plan page can no longer produce, and this test is what says
+         * so rather than the value's absence from an enum.
+         *
+         * <p><strong>400 and not a silent fall back to {@code LATEST}</strong>: a saved URL, a
+         * bookmark or a screenshot's query string carrying {@code BEST} must not answer a different
+         * question under the same name. The refusal names the four that remain, so a reader fixes it
+         * in one attempt.
+         */
         @Test
-        @DisplayName("BEST — a case that passed anywhere counts as passed, and it flatters caseA")
-        void best() throws Exception {
-            assertThat(countsOf(statistics(LEAD, "BEST")))
-                    .as("caseA failed, then passed, then blocked; only BEST calls it green")
-                    .containsExactly(2L, 0L, 0L, 0L, 2L, 4L);
+        @DisplayName("BEST is gone — a request for it is refused, not quietly answered as LATEST")
+        void bestIsRefused() throws Exception {
+            MvcResult refused = raw(LEAD, ACME, planPath() + "/statistics?aggregation=BEST");
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            String problem = refused.getResponse().getContentAsString();
+            assertThat(problem)
+                    .as("the four that remain, so the caller does not have to guess")
+                    .contains("LATEST", "LATEST_PER_CONFIG", "WORST", "ALL");
         }
 
         @Test
@@ -407,13 +428,14 @@ class PlanStatisticsEndpointTest extends IntegrationTestBase {
         @DisplayName("THE cross-check — no two policies give the same count vector")
         void thePoliciesActuallyDiffer() throws Exception {
             List<List<Long>> vectors = new ArrayList<>();
-            for (String policy : List.of("LATEST", "WORST", "BEST", "LATEST_PER_CONFIG", "ALL")) {
+            for (String policy : List.of("LATEST", "WORST", "LATEST_PER_CONFIG", "ALL")) {
                 vectors.add(countsOf(statistics(LEAD, policy)));
             }
             assertThat(vectors)
-                    .as("all FIVE, which the fixture only distinguishes because caseA's latest, "
-                            + "worst and best verdicts are three different ones. An implementation "
-                            + "that ignored the parameter passes any single assertion above and "
+                    .as("all FOUR, which the fixture distinguishes because caseA's latest and "
+                            + "worst verdicts are different ones and the two per-execution "
+                            + "policies count rows rather than cases. An implementation that "
+                            + "ignored the parameter passes any single assertion above and "
                             + "fails this one.")
                     .doesNotHaveDuplicates();
         }
@@ -422,7 +444,7 @@ class PlanStatisticsEndpointTest extends IntegrationTestBase {
         @DisplayName("coverage does NOT move with the policy — a case is covered or it is not")
         void coverageIsPolicyIndependent() throws Exception {
             List<Double> coverages = new ArrayList<>();
-            for (String policy : List.of("LATEST", "WORST", "BEST", "LATEST_PER_CONFIG", "ALL")) {
+            for (String policy : List.of("LATEST", "WORST", "LATEST_PER_CONFIG", "ALL")) {
                 coverages.add(statistics(LEAD, policy).get("coveragePercent").asDouble());
             }
             // caseA and caseB carry verdicts; caseC and caseD do not. Two of four.
@@ -431,13 +453,13 @@ class PlanStatisticsEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("an unknown policy is 400 and names the five, not a Java type")
+        @DisplayName("an unknown policy is 400 and names the four, not a Java type")
         void anUnknownPolicyIsRefused() throws Exception {
             MvcResult refused = raw(LEAD, ACME, planPath() + "/statistics?aggregation=AVERAGE");
 
             assertThat(refused.getResponse().getStatus()).isEqualTo(400);
             String problem = refused.getResponse().getContentAsString();
-            assertThat(problem).contains("LATEST", "WORST", "BEST", "ALL");
+            assertThat(problem).contains("LATEST", "WORST", "ALL");
             assertThat(problem)
                     .as("the rejected value's Java type is an internal detail")
                     .doesNotContain("AggregationPolicy");
@@ -490,7 +512,7 @@ class PlanStatisticsEndpointTest extends IntegrationTestBase {
         @Test
         @DisplayName("both configurations have a row under EVERY policy — the matrix is a matrix")
         void neitherEnvironmentDisappears() throws Exception {
-            for (String policy : List.of("LATEST", "WORST", "BEST", "LATEST_PER_CONFIG", "ALL")) {
+            for (String policy : List.of("LATEST", "WORST", "LATEST_PER_CONFIG", "ALL")) {
                 JsonNode byConfiguration = statistics(LEAD, policy).get("byConfiguration");
 
                 List<String> names = new ArrayList<>();
@@ -543,13 +565,32 @@ class PlanStatisticsEndpointTest extends IntegrationTestBase {
             assertThat(blockers.get(0).get("defects")).isEmpty();
         }
 
+        /**
+         * <strong>What #47 bought, asserted as a property rather than as an absence.</strong>
+         *
+         * <p>This test used to say the opposite: under {@code BEST} caseA was green and the blocker
+         * list was empty, which was correct behaviour for a policy that should not have existed.
+         * caseA failed, later passed, and is currently blocked — the exact case a generous policy
+         * clears — and under every policy the product still offers, it stays on the list a release
+         * meeting reads.
+         *
+         * <p>The list is not policy-independent, and this does not claim it is: it is driven by the
+         * resolved contributions, so caseA appears as blocked under {@code LATEST} and as failed
+         * under {@code WORST}. What no longer exists is a policy under which it appears at all.
+         */
         @Test
-        @DisplayName("blockers follow the policy — under BEST caseA is green and the list is empty")
-        void blockersAgreeWithTheCounts() throws Exception {
-            assertThat(statistics(LEAD, "BEST").get("blockers"))
-                    .as("a headline saying 2 passed beside a blocker list naming one of them is "
-                            + "the contradiction this screen exists to remove")
-                    .isEmpty();
+        @DisplayName("a case that failed and later passed is a blocker under EVERY policy that remains")
+        void noPolicyClearsTheBlockerList() throws Exception {
+            for (String policy : List.of("LATEST", "WORST", "LATEST_PER_CONFIG", "ALL")) {
+                JsonNode blockers = statistics(LEAD, policy).get("blockers");
+
+                List<String> caseIds = new ArrayList<>();
+                blockers.forEach(blocker -> caseIds.add(blocker.get("caseId").asText()));
+
+                assertThat(caseIds)
+                        .as("under %s, the case standing between here and a release vanished", policy)
+                        .contains(caseA.toString());
+            }
         }
 
         @Test
@@ -578,7 +619,7 @@ class PlanStatisticsEndpointTest extends IntegrationTestBase {
         @Test
         @DisplayName("the trend ignores the aggregation policy — a per-run series cannot resolve one")
         void trendIsPolicyIndependent() throws Exception {
-            assertThat(statistics(LEAD, "BEST").get("trend").toString())
+            assertThat(statistics(LEAD, "ALL").get("trend").toString())
                     .isEqualTo(statistics(LEAD, "WORST").get("trend").toString());
         }
     }
@@ -627,13 +668,40 @@ class PlanStatisticsEndpointTest extends IntegrationTestBase {
             assertThat(criterion.get("actual").isNull()).isTrue();
         }
 
+        /**
+         * <p>Asserted against the response's <em>own</em> counts rather than a literal, which is
+         * both stronger and what the claim actually is: the gate reads the numbers printed above
+         * it. A literal would pass an implementation that computed the criterion from a different
+         * denominator that happened to land on the same figure.
+         *
+         * <p>{@code ALL} rather than {@code WORST} since #47 removed {@code BEST}: under
+         * {@code LATEST} and {@code WORST} caseA is un-passed either way, so both give 25% and
+         * neither would show movement. {@code ALL} counts executions — thirteen rows, three of them
+         * passed — so the same gate reads a different number under a different dropdown, which is
+         * the whole point.
+         */
         @Test
         @DisplayName("the criteria move with the policy, as the counts above them do")
         void criteriaFollowTheDisplayedCounts() throws Exception {
-            // BEST calls two of four passed, so the same gate reads 50 rather than 25. A criterion
-            // pinned to one policy while the counts followed another would be the contradiction.
-            assertThat(criteriaOf(statistics(LEAD, "BEST")).get("pass_rate").get("actual")
-                    .asDouble()).isEqualTo(50.0);
+            JsonNode latest = statistics(LEAD, "LATEST");
+            JsonNode all = statistics(LEAD, "ALL");
+
+            double allRate = criteriaOf(all).get("pass_rate").get("actual").asDouble();
+
+            // The tolerance is 0.05 and not 0.01 because `actual` is rounded to one decimal for
+            // display — three of thirteen is 23.0769… and the response says 23.1. That rounding is
+            // the endpoint's, it is deliberate, and a test asserting the unrounded value would be
+            // asserting against a number no screen ever shows. It still discriminates by a wide
+            // margin: LATEST answers 25.0 on the same fixture.
+            assertThat(allRate)
+                    .as("the gate is computed from the counts on the same screen, not from a "
+                            + "denominator only the criteria panel knows about")
+                    .isCloseTo(100.0 * all.get("counts").get("passed").asDouble()
+                            / all.get("counts").get("total").asDouble(), within(0.05));
+            assertThat(allRate)
+                    .as("a criterion pinned to one policy while the counts above it followed "
+                            + "another would be the contradiction this asserts against")
+                    .isNotEqualTo(criteriaOf(latest).get("pass_rate").get("actual").asDouble());
         }
 
         @Test

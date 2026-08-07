@@ -79,9 +79,8 @@ public class PlanStatisticsService {
     static final Duration STALE_AFTER = Duration.ofDays(14);
 
     /**
-     * Severity, worst first — the order {@link AggregationPolicy#WORST} and {@link
-     * AggregationPolicy#BEST} pick along, and deliberately not the declaration order of
-     * {@link StatusKind}.
+     * Severity, worst first — the order {@link AggregationPolicy#WORST} picks along, and
+     * deliberately not the declaration order of {@link StatusKind}.
      *
      * <p>The two ends are uncontroversial. The middle is a judgement and is written down here so it
      * can be argued with rather than rediscovered: a <em>blocked</em> case is worse than one owed a
@@ -223,9 +222,8 @@ public class PlanStatisticsService {
      * latest-per-case-per-config <em>is</em> latest-per-case, and both keep the larger execution id
      * on a tie).
      *
-     * <p>{@link AggregationPolicy#WORST}, {@link AggregationPolicy#BEST} and
-     * {@link AggregationPolicy#ALL} each need <em>every</em> execution: the worst result a case ever
-     * had is not derivable from its most recent one. They keep the live path, and the response says
+     * <p>{@link AggregationPolicy#WORST} and {@link AggregationPolicy#ALL} each need <em>every</em>
+     * execution: the worst result a case ever had is not derivable from its most recent one. They keep the live path, and the response says
      * so through a null {@code computedAt} rather than leaving a reader to discover that the same
      * screen has two staleness behaviours depending on a dropdown.
      */
@@ -504,13 +502,11 @@ public class PlanStatisticsService {
             // what its label says.
             case WORST -> verdictsFirst().thenComparingInt(
                     row -> -WORST_FIRST.indexOf(row.kind()));
-            case BEST -> verdictsFirst().thenComparingInt(
-                    row -> WORST_FIRST.indexOf(row.kind()));
             case ALL -> throw new IllegalStateException("handled above");
         };
 
         // Ties are real and common: three runs of a plan nobody has recorded give a case three rows
-        // with no executedAt and the same kind, and under WORST or BEST every row of one kind ties
+        // with no executedAt and the same kind, and under WORST every row of one kind ties
         // by construction. Without a tiebreak the winner is whichever row the database happened to
         // return first, so the SAME request could answer a different configuration in
         // `byConfiguration` between two calls. Execution id is arbitrary but stable, which is the
@@ -752,8 +748,8 @@ public class PlanStatisticsService {
      * The failed and blocked cases, named rather than counted — the list a release meeting reads.
      *
      * <p>Driven by the <em>resolved</em> contributions, so it agrees with the counts above it: under
-     * {@code BEST} a case that failed once and later passed is green in the headline and must not
-     * appear here, and under {@code WORST} the reverse.
+     * {@code WORST} a case that passed and later failed appears here, while under {@code LATEST} the
+     * same case is green in the headline and must not.
      *
      * <p>Ordered by the pinned case's key sequence — {@link ExecutionViews#render}'s own order —
      * rather than by case priority as §6p asks. Priority is a {@code repository} column that would
@@ -912,7 +908,7 @@ public class PlanStatisticsService {
      *
      * <p>It therefore moves with the aggregation policy, as the counts do. That is the honest
      * behaviour and not a loophole: the policy is stated at the top of the same page and carried in
-     * the URL, so a gate evaluated under {@code BEST} announces itself. A criterion pinned to one
+     * the URL, so a gate evaluated under {@code WORST} announces itself. A criterion pinned to one
      * policy while the counts above it followed another would be the contradiction instead.
      */
     private static Map<String, Double> actuals(ResultCountsView counts, double coveragePercent) {
