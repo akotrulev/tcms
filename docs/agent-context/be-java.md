@@ -2,11 +2,33 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-07 (**§121** — flake detection and quarantine, M3's sixth slice, phases
-1–2 of 4; §120's automation drift, §119's ingestion history, §117's CI ingestion, §116's API tokens
-before it)
-**Baseline commit:** `7af1c3c` (§121 phase 2) (per `CLAUDE.md`, trust the body over the header and
+**Last verified:** 2026-08-07 (**§122** — grant-instance-admin, M3's seventh slice; §121's flake
+detection and quarantine (phases 1–2 of 4), §120's automation drift, §119's ingestion history,
+§117's CI ingestion, §116's API tokens before it)
+**Baseline commit:** `f8c928f` (§121) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
+
+**§122 CARRIED NO MIGRATION.** Schema head is still `V38`, `V39` next free, policy count 62 —
+every table it touches (`app_user`, `instance_role_assignment`) has existed since `V1`.
+
+**New seams §122 created — `provisioning`:**
+- `provisioning.GrantInstanceAdminService.grant(email, actorUserId)` — **the only writer of
+  `instance_role_assignment` in `src/main`.** Before this slice there were none: `V3` seeds
+  `Role.INSTANCE_ADMIN_ID`, `PermissionEvaluator` resolves the SYSTEM term, the table has existed
+  since `V1`, and only three *test* classes had ever called `InstanceRoleAssignment.forUser`.
+  **Runs with NO `CompanyContext` open, deliberately** — both tables are on the ERD §0.1 exception
+  list, `CompanyAwareTransactionManager.doBegin` treats a context-less transaction as legitimate,
+  and opening one would imply an instance-wide power belongs to one client. Contrast
+  `IssueInvitationService`, which must resolve its company id before opening the context.
+- `provisioning.GrantInstanceAdminResult` — four outcomes. **`ALREADY_HELD` exits 0 where
+  `IssueInvitationResult.ALREADY_ACTIVE` exits non-zero**; a grant is a *state*, an invitation is
+  an *artifact*. `INVITED` is grantable (`provision-company` leaves its first admin `INVITED`, so
+  refusing it makes the first operator uncreatable); `DEACTIVATED` is refused (inert today, widest
+  power in the product on reactivation).
+- `provisioning.GrantInstanceAdminCommand` — `ApplicationRunner`. **Its verb MUST be in
+  `OperatorCommands`**: `TcmsApplication.main:36` reads that set before the context exists to pick
+  `WebApplicationType.NONE`, and an unregistered verb boots a web server, so the command succeeds,
+  prints, and then hangs for ever. One line, in a second file, invisible to a service-level test.
 
 **§121 MOVED THE SCHEMA HEAD AND THE POLICY COUNT — `V38__case_flake.sql`, `V39` next free, and
 policy count 61 → 62.** The first count move since `V31`: `V38` adds a **new company-owned table**,
@@ -1593,6 +1615,17 @@ exist**, and the slice plan's decision E declines to create it for two storage p
 
 ## Session log
 
+- 2026-08-07 · EXTEND · **grant-instance-admin** (§122, M3 slice 7). The operator tier's first and
+  only writer. `GrantInstanceAdminService` / `…Result` / `…Command` in `provisioning`, plus the verb
+  in `OperatorCommands`; `GrantInstanceAdminServiceTest` (7, `gia-` namespace). No migration, no
+  HTTP surface, no screen — and none should exist until an instance-admin surface does
+  (`RoleGrantService`'s own header). **The find worth carrying forward:** this is the third slice
+  running where a thing the schema *and the docs* both describe turned out to have no writer at all
+  (§120's `stale_automation`, §121's open question #24, now the whole SYSTEM tier). Ask it of any
+  `V1` column before assuming it is live. Ten mutation rows queued, none run.
+  **Written concurrently with §121's lane in the same tree** — `compileJava` went red on an
+  untracked file that had not existed ninety seconds earlier, and the correct move was to stop
+  rather than repair it. `#confirmed`
 - 2026-08-07 · EXTEND · **The ingestion history reads** (§119 phase 1, M3 slice 4). Two `GET`s over
   `ingestion_job`; the detail is the resource `POST /ingestions`' `Location` has always named and
   never had. New: `IngestionReadService`, `IngestionJobSummary`, `IngestionJobRow`, `UnmatchedTests`;

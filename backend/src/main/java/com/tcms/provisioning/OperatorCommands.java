@@ -18,8 +18,10 @@ public final class OperatorCommands {
 
     static final String PROVISION_COMPANY = "provision-company";
     static final String ISSUE_INVITATION = "issue-invitation";
+    static final String GRANT_INSTANCE_ADMIN = "grant-instance-admin";
 
-    private static final Set<String> ALL = Set.of(PROVISION_COMPANY, ISSUE_INVITATION);
+    private static final Set<String> ALL =
+            Set.of(PROVISION_COMPANY, ISSUE_INVITATION, GRANT_INSTANCE_ADMIN);
 
     private OperatorCommands() {
     }
