@@ -2,11 +2,30 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-07 (§121 phase 4 — the flake panel and the quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the ingestion history and the binder;
-§118 — the token screen; §115 — the coverage matrix's frontend arm; §107 — the mock layer is deleted
-— before them)
-**Baseline commit:** `bbe7ec9` (ci: stop the backend job claiming to run Testcontainers) (trust the
-body over the header and re-grep what a later commit could have moved).
+**Last verified:** 2026-08-07 (**§124** — the `BEST` removal's frontend half; §121 phase 4 — the flake
+panel and the quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift;
+§119 — the ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's
+frontend arm; §107 — the mock layer is deleted — before them)
+**Baseline commit:** `768ff8d` (§124 phase 3) (trust the body over the header and re-grep what a
+later commit could have moved).
+
+**§124 ADDED NO FILE AND NO TEST** — 1045/1045 across 79 files, unchanged. It **removed** an enum
+member, and the three `satisfies` guards are what found every consumer:
+
+- `lib/labels.ts` — `aggregationLabels` and `aggregationHelp` lost their `BEST` entries. Both are
+  `satisfies Record<AggregationPolicy, string>`, so they stopped compiling until edited. **That guard
+  is always described in the adding direction and works exactly as well when removing.**
+- `features/reports/GenerateReportDialog.tsx` — `POLICIES` is
+  `satisfies readonly AggregationPolicy[]`; it is the reason a menu item offering a policy the server
+  now refuses could not survive the change. Four values, ordered as the plan page orders them.
+- `features/runs/ExecutionGrid.tsx` — **comment only.** The server now also demands `run:execute` on
+  the result endpoint, and this `PermissionGate` deliberately does **not** ask for it: the only
+  principal the key withholds from is a CI token, which never renders a screen. Revisit if roles
+  become authorable (§110's F5).
+
+**`DELETE /projects/{id}/artifacts/{artifactId}` exists and has NO CONSUMER in `src/`.** The artifact
+register still cannot remove a mis-registered link through the product; the control, its confirmation
+and its two 409 sentences are an unbuilt frontend slice, and §118's dialog is the pattern.
 
 **§121 PHASE 4 ADDED FOUR FILES** — `lib/flake.ts` + `lib/flake.test.ts`,
 `features/cases/{FlakePanel,QuarantineDialog}.tsx` + `FlakePanel.test.tsx` — and touched

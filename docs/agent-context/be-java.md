@@ -2,14 +2,36 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-07 (**§121 phase 4** — the flake read path; §121 phase 3 — the board's
-fourth derived-item generator; §122's grant-instance-admin, §121's phases 1–2, §120's automation
-drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `bbe7ec9` (ci: stop the backend job claiming to run Testcontainers) (per
-`CLAUDE.md`, trust the body over the header and re-grep what a later commit could have moved).
+**Last verified:** 2026-08-07 (**§124** — the `BEST` removal and the two unwired permission keys;
+§122's grant-instance-admin, §121's four phases, §120's automation drift, §119's ingestion history,
+§117's CI ingestion, §116's API tokens before it)
+**Baseline commit:** `768ff8d` (§124 phase 3) (per `CLAUDE.md`, trust the body over the header and
+re-grep what a later commit could have moved).
 
-**§121 PHASE 4 CARRIED NO MIGRATION EITHER** — schema head is still `V38`, `V39` next free, policy
-count 62. Test count **2014 across 426 result classes** (phase 3's was 2008/425).
+**§124 CARRIED NO MIGRATION** — schema head is still `V38`, `V39` next free, policy count 62. Test
+count **2024 across 427 result classes** (§122's baseline was 2014/426).
+
+**§124's three changes, all of them removals or first-consumers rather than new machinery:**
+
+- **`AggregationPolicy` has FOUR values.** `BEST` is gone from **both** copies —
+  `execution.AggregationPolicy` and `reporting.AggregationPolicy` — and
+  `AggregateExecutionPolicyTest` pins the two name sets equal, which is what makes removing from one
+  file impossible to land. An unrecognised policy is a **400 naming the four**, from
+  `PlanController`'s message derived off `values()`; there is no fallback to `LATEST`.
+- **`ExecutionService.record` asks `run:execute` INSIDE the verdict gate**, not before it —
+  `projects.holds(userId, projectId, EXECUTE_RUN)` in the `writeGranted` callback, answering
+  `Outcome.NotExecuting` (a **new sealed arm**, so `RunController`'s switch is exhaustive). Order is
+  load-bearing: in front of the gate a Viewer gets advice to use an endpoint they also may not use.
+  Automation Service is the only role `V3` withholds `run:execute` from, and `ExecutionEndpointTest`
+  now carries a `ROBOT` persona (`e2003000-…-06`) for exactly that.
+- **`ArtifactWriteService.delete` + `DELETE /projects/{id}/artifacts/{artifactId}`** — gated on
+  `artifact:delete` (**not** `PERMISSION`, which is `artifact:edit`), unqualified per `V19`'s own
+  comment. Two 409s via `Outcome.Undeletable(message)`: `write_once`, and
+  `ArtifactRepository.isSupersedingSomething` (**native**, because `superseded_by_id` is deliberately
+  unmapped on the entity). `findInProject(projectId, artifactId)` is the new lookup — `findById`
+  would delete a sibling project's row through a gate that legitimately passed.
+- **`Artifact`'s javadoc claim that "nothing targets an artifact" is struck through and corrected.**
+  It described a self-FK from memory and nothing could disprove it while nothing could delete.
 
 **Contract changes §121 phase 4 made — both on shapes, neither a new operation:**
 - **`TestCase.flake`** (nullable, required) — **`CaseFlake` had NO READ PATH.** It was served only

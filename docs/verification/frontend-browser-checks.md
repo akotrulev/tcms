@@ -1289,3 +1289,33 @@ where the case detail already lives. They name:
 **A row that cannot be driven yet is recorded as absent with its reason, never as a lane nobody
 notices is empty** — which is the failure mode the generator above has been in for the whole life of
 the board, and the one this slice exists to end.
+
+---
+
+## §124 — the BEST removal and the two unwired gates (M3 slice 8)
+
+**Four rows, and two deliberate absences.** This slice is mostly server-side; what reaches a screen
+is one dropdown losing a value in two places.
+
+| Row | Lane | What to drive |
+|---|---|---|
+| `M3-63` | A2 (plans) | On a plan's **Progress** tab, open the aggregation dropdown. **Four options** — Latest result per case · Latest result per case, per configuration · Worst result per case · Every execution counted. **No "Best result per case".** Then edit the URL by hand to `?aggregation=BEST` and reload: the region must **fail with a message**, not fall back to Latest and render a number. A saved link answering a different question under the same name is the whole harm the removal exists to prevent, and the URL is the only place a stale `BEST` can still arrive from. |
+| `M3-64` | A2 (plans) | Under the same dropdown, switch **Latest → Worst** on `TP-1` and watch the **blockers list**. It must not empty: the case that failed and later passed stays on it under every policy the product still offers. That was the one thing `BEST` changed on this screen, and it is what a release meeting reads. |
+| `M6-41` | A6 (reports) | **Generate report** → `aggregate_execution`: the policy select offers the same four, in the **same order** as the plan page. Two screens offering one dropdown in two orders means the same click does two things. |
+| `M6-42` | A6 (reports) | Generate an aggregate report under **Worst** and read the header: the policy is printed by name on the rendered report. This is the row that proves the removal reached the printed artefact and not only the picker. |
+
+**Not driven, and stated rather than left to look like an oversight:**
+
+- **`run:execute` has no browser row and cannot have one.** The only principal V3 withholds it from
+  is Automation Service, which is a token attached to a CI job and never renders a screen. Every
+  human role that can reach the execution grid holds it. The gate is asserted where it is
+  observable — `RX-1` in the mutation queue, which was run. `ExecutionGrid`'s header records why the
+  SPA's `PermissionGate` deliberately does not ask for it, and what would change that (§110's F5:
+  authorable roles).
+- **`artifact:delete` has an endpoint and NO SCREEN.** `DELETE /projects/{id}/artifacts/{id}` has no
+  consumer anywhere in `src/`, so the register still has no way to remove a mis-registered link
+  through the product. That is a *smaller* version of the shape this slice exists to close — a key
+  with no consumer became an endpoint with no consumer — and it is recorded as unbuilt rather than
+  claimed: the delete control, its confirmation, and the two 409 sentences it must render are a
+  frontend slice, and §118's dialog is the pattern it should follow. **Until it is built there is no
+  browser row to write**, because there is nothing on any screen to drive.

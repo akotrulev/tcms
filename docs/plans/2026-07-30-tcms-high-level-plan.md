@@ -2240,8 +2240,8 @@ everything this round ships.**
 |---:|---|---|
 | 1 | **#46** register the shanks runner | An hour's work that changes what every later gate can see. Everything below lands on a Linux observer instead of on macOS alone. |
 | 2 | **#56** JWT rotation | The oldest open action, and a live instance is signing tokens with a public key while it waits. **Not optional and not carryable**: `application.yml`'s colon-less spelling means a box whose env file lacks the variable cannot be deployed to at all, so the next release is blocked until this is done. |
-| 3 | **#60** write §110's section | Pure evidence decay — cheapest now, and it is the artifact §2.3 of the assessment is cross-checked against. |
-| 4 | **#47 + #53** | One small slice: the `BEST` removal is a contract change and the two permission gates are near-zero design. Both are decisions already taken, so nothing new is being designed. |
+| 3 | ~~**#60** write §110's section~~ | **DONE 2026-08-07 — `docs/handoff/110-the-live-pass-runs.md`.** Six product findings in ~60 driven rows, none reachable by any gate; six of the fourteen findings were about the observer rather than the product. |
+| 4 | ~~**#47 + #53**~~ | **DONE 2026-08-07 — §124**, three phases. Two corrections to this row's estimate, both worth carrying into the steps below. **`#53` was not "near-zero design"**: `artifact:delete` had no endpoint at all, so wiring the gate meant building the operation, and `run:execute` needed a decision about *where* the check sits that the first draft got wrong. **And `#47` touched two enums, not one** — `reporting` carries a deliberate copy. A round-3 row's scope is a starting estimate, not a bound. |
 | 5 | **#51** extract `storage` | The architectural move, alone. `ModuleStructureTest` and §3 change here and nowhere else. |
 | 6 | **#49 + #50** attachment owners | Depends on 5. `CASE`, `DOC_PAGE`, `ARTIFACT` get writers; `STEP` leaves the `CHECK`. |
 | 7 | **#48** doc blocks | Depends on 6 for `IMAGE`'s `DOC_PAGE` owner. |
