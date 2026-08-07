@@ -22,17 +22,23 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * One execution — the read, and <strong>the write that is the point of this module</strong>.
  *
- * <h2>Two permissions, and collapsing them undoes a boundary the roles spec draws</h2>
+ * <h2>Three permissions, and collapsing any two undoes a boundary the roles spec draws</h2>
  *
- * <p>Recording a verdict where none exists needs {@code result:submit}, which a Test Engineer and
- * even the Automation Service hold. Changing a verdict that is already there needs
+ * <p><strong>Every call needs {@code run:execute}</strong> — added 2026-08-07 as plan §8 #53, the
+ * key's first consumer since {@code V3} seeded it in M0. See {@link #EXECUTE_RUN}: it is the only
+ * permission in the catalogue that separates a person from a credential rather than one role from
+ * another, and it is the reason a leaked CI token can post a red suite and cannot hand-record a
+ * green verdict over the top of it.
+ *
+ * <p>On top of that: recording a verdict where none exists needs {@code result:submit}, which a Test
+ * Engineer and even the Automation Service hold. Changing a verdict that is already there needs
  * {@code result:amend}, which is <strong>Lead-only</strong> — roles spec §A4 lists it beside
  * {@code suite:delete} under "creative vs destructive": a Test Engineer is never blocked from
  * producing, only from unmaking somebody else's work, and overwriting a recorded result is unmaking
  * it. Gate both on {@code result:submit} and a leaked CI token can rewrite a human's verdict, which
  * is precisely the smallest-role argument §A6 makes about that token.
  *
- * <p><strong>The two 403s are worded differently</strong>, for §32's reason: telling a tester who
+ * <p><strong>The three 403s are worded differently</strong>, for §32's reason: telling a tester who
  * records results every day that they may not record results sends them to ask an administrator for
  * a permission they already hold, about a screen they are looking at.
  *
@@ -66,11 +72,22 @@ import org.springframework.transaction.annotation.Transactional;
  * {@code test_run.status} was written once, at creation, and every run in the product read "not
  * started" forever. {@link TestRun#begin} is called on every result and answers whether this one was
  * the first; it needs no permission of its own, because the caller has just passed
- * {@code result:submit} and a second gate here would let a tester record a result the run then
+ * the gates above and a second one here would let a tester record a result the run then
  * declines to acknowledge.
  */
 @Service
 public class ExecutionService {
+
+    /**
+     * Roles spec §A4 — <em>"Execute test cases in a run"</em>, held by Test Engineer and up and
+     * withheld from <strong>Automation Service alone</strong>.
+     *
+     * <p>That single withholding is the entire value of this key, and it is why it is worth having
+     * beside {@code result:submit} rather than folded into it. Every other execution permission
+     * separates a lead from an engineer; this one separates a <em>person</em> from a
+     * <em>credential</em>, which no other key in the catalogue does.
+     */
+    private static final String EXECUTE_RUN = "run:execute";
 
     private final ProjectService projects;
     private final ExecutionTargets targets;
@@ -136,6 +153,19 @@ public class ExecutionService {
         record Forbidden(boolean amending) implements Outcome {
         }
 
+        /**
+         * Readable, and this caller may not <em>execute</em> the run at all — the refusal that
+         * separates a person working through a checklist from a credential posting a CI report.
+         *
+         * <p>A separate outcome from {@link Forbidden} because the two need opposite advice. A
+         * caller refused {@code result:amend} should ask a lead; a caller refused here should stop
+         * using this endpoint and use ingestion, and telling them "you do not have permission to
+         * record results" would be actively misleading, since the thing they are trying to do is
+         * supported and this is not the door for it.
+         */
+        record NotExecuting() implements Outcome {
+        }
+
         /** Field name to messages, for the form to land on its inputs. */
         record Invalid(Map<String, List<String>> errors) implements Outcome {
         }
@@ -198,8 +228,25 @@ public class ExecutionService {
         boolean amending = execution.hasResult();
         String permission = amending ? "result:amend" : "result:submit";
 
+        // `run:execute`'s first consumer since V3 seeded it in M0 (plan §8 #53) — asked INSIDE
+        // the verdict gate, which is the whole design of it.
+        //
+        // The two keys answer different questions and V3 gives them to different principals.
+        // `result:submit` is "may a result for this project be written at all", and Automation
+        // Service holds it: ingesting a CI report is its entire purpose. `run:execute` is "may
+        // this caller work a run by hand", and Automation Service is the ONE role V3 withholds it
+        // from. Without this a leaked CI token could PATCH executions here one at a time — with an
+        // If-Match, with evidence, indistinguishable in the audit trail from a tester — which is
+        // the laundering §117 and §121 each closed one door on.
+        //
+        // ORDER IS THE POINT, and the first draft had it wrong. Asked before the gate, a Viewer —
+        // who holds neither key — would be told to use the ingestion endpoint, which they may not
+        // use either. NotExecuting means "you have the other door", so it may only be raised for a
+        // caller who demonstrably does: past the verdict gate, the sentence is true by construction.
         GateResult<Outcome> gate = projects.writeGranted(userId, projectId, permission,
-                project -> apply(companyId, userId, target, request, expectedVersion, now));
+                project -> projects.holds(userId, projectId, EXECUTE_RUN)
+                        ? apply(companyId, userId, target, request, expectedVersion, now)
+                        : new Outcome.NotExecuting());
 
         return switch (gate) {
             case GateResult.Allowed<Outcome> allowed -> allowed.value();

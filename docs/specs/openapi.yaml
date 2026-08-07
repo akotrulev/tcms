@@ -2271,19 +2271,34 @@ paths:
       description: |
         Optimistic locking via If-Match — several testers may work one run at once.
 
-        **Two permissions, not one.** Recording a verdict where none was recorded needs
-        `result:submit` (Test Engineer and Automation Service upward). Changing a verdict that
-        is already there needs `result:amend`, which is **Lead-only** (roles spec §A4 —
-        `result:amend` is listed beside `suite:delete` as destructive rather than creative). The
-        two 403s carry different sentences: telling a tester who records results every day that
-        they may not record results sends them to ask for a permission they already hold.
+        **Three permissions, not one.** Every call here needs `run:execute` — *"execute test
+        cases in a run"*, which V3 grants to Test Engineer and up and **withholds from Automation
+        Service alone**. On top of that, recording a verdict where none was recorded needs
+        `result:submit`, and changing a verdict that is already there needs `result:amend`, which
+        is **Lead-only** (roles spec §A4 — `result:amend` is listed beside `suite:delete` as
+        destructive rather than creative).
+
+        **What `run:execute` buys, since it looks redundant beside `result:submit`:** every other
+        execution permission separates a lead from an engineer, and this one separates a *person*
+        from a *credential*. Automation Service holds `result:submit` because ingesting a CI
+        report is its entire purpose; without this gate the same credential could also PATCH
+        executions here one at a time, with an `If-Match` and evidence, indistinguishable in the
+        audit trail from a tester working a checklist. A CI token posts to `POST /ingestions` and
+        nowhere else. Wired 2026-08-07 (plan §8 #53) — the key was seeded in M0 and had no
+        consumer until then.
+
+        The three 403s carry different sentences: telling a tester who records results every day
+        that they may not record results sends them to ask for a permission they already hold,
+        and telling a CI job it lacks permission hides that the thing it wants is supported at a
+        different address.
 
         A `statusId` naming a status outside this project's vocabulary is a **400 on the field**,
         not a 404 — the target resolved and the picker is where the message belongs.
 
         **Recording the first result starts the run** — `NOT_STARTED → IN_PROGRESS`, stamping
         `startedAt` from the same instant as the result. No extra permission: the caller has
-        already passed the gate above.
+        already passed the gates above, and a second one here would mean a tester records a
+        result the run then declines to acknowledge.
 
         **`409` now has two causes.** A stale `If-Match` is one. The other is a run that has
         ended: `V1`'s "immutable once the run closes", which freezes the verdict and its evidence

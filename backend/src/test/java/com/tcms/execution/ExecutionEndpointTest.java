@@ -97,6 +97,16 @@ class ExecutionEndpointTest extends IntegrationTestBase {
     private static final UUID NO_GRANT = UUID.fromString("e2003000-0000-4000-8000-000000000004");
     /** Test Lead in Umbra only. */
     private static final UUID OUTSIDER = UUID.fromString("e2003000-0000-4000-8000-000000000005");
+    /**
+     * <strong>Automation Service — the persona {@code run:execute} exists for.</strong>
+     *
+     * <p>Holds {@code result:submit} (ingesting a CI report is its entire purpose) and is the one
+     * role {@code V3} withholds {@code run:execute} from. It is therefore the only caller in the
+     * product that can tell those two keys apart, which is what makes the gate wired in plan §8 #53
+     * assertable at all — and what makes a mutation deleting that gate redden a test rather than
+     * nothing.
+     */
+    private static final UUID ROBOT = UUID.fromString("e2003000-0000-4000-8000-000000000006");
 
     private static final UUID PAYMENTS = UUID.fromString("e2004000-0000-4000-8000-000000000001");
     private static final UUID REFUNDS = UUID.fromString("e2004000-0000-4000-8000-000000000002");
@@ -178,6 +188,7 @@ class ExecutionEndpointTest extends IntegrationTestBase {
             activeUser(VIEWER, "viewer@ex-acme.test", "V. Viewer", now);
             activeUser(NO_GRANT, "nogrant@ex-acme.test", "N. Grant", now);
             activeUser(OUTSIDER, "out@ex-umbra.test", "O. Outsider", now);
+            activeUser(ROBOT, "ci@ex-acme.test", "CI Robot", now);
         });
 
         inCompany(ACME, () -> tx.executeWithoutResult(status -> {
@@ -188,11 +199,13 @@ class ExecutionEndpointTest extends IntegrationTestBase {
             member(ACME, ENGINEER, "E. Engineer", now);
             member(ACME, VIEWER, "V. Viewer", now);
             member(ACME, NO_GRANT, "N. Grant", now);
+            member(ACME, ROBOT, "CI Robot", now);
 
             grantOnProject("ex-lead-banking", ACME, Role.TEST_LEAD_ID, LEAD, ACME_BANKING, now);
             grantOnProject("ex-lead-mobile", ACME, Role.TEST_LEAD_ID, LEAD, ACME_MOBILE, now);
             grantOnProject("ex-eng", ACME, Role.TEST_ENGINEER_ID, ENGINEER, ACME_BANKING, now);
             grantOnProject("ex-view", ACME, Role.VIEWER_ID, VIEWER, ACME_BANKING, now);
+            grantOnProject("ex-robot", ACME, Role.AUTOMATION_SERVICE_ID, ROBOT, ACME_BANKING, now);
         }));
 
         inCompany(UMBRA, () -> tx.executeWithoutResult(status -> {
@@ -551,7 +564,7 @@ class ExecutionEndpointTest extends IntegrationTestBase {
     // =====================================================================
 
     @Nested
-    @DisplayName("Recording a result — two permissions, and the lock that makes them safe")
+    @DisplayName("Recording a result — three permissions, and the lock that makes them safe")
     class Recording {
 
         @Test
@@ -657,16 +670,72 @@ class ExecutionEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("neither 403 names a permission key")
+        @DisplayName("no 403 names a permission key")
         void theRefusalsNameNoKey() throws Exception {
             // A key is not actionable by someone who cannot grant it to themselves, and naming it
             // publishes the catalogue to exactly the caller not entitled to it.
-            assertThat(body(patch(VIEWER, ACME, RUN, EXEC_A,
-                    resultPayload(passedStatus(), null), "0")).get("detail").asText())
-                    .doesNotContain("result:");
-            assertThat(body(patch(ENGINEER, ACME, RUN, EXEC_B,
-                    resultPayload(failedStatus(), null), "0")).get("detail").asText())
-                    .doesNotContain("result:");
+            for (MvcResult refused : List.of(
+                    patch(VIEWER, ACME, RUN, EXEC_A, resultPayload(passedStatus(), null), "0"),
+                    patch(ENGINEER, ACME, RUN, EXEC_B, resultPayload(failedStatus(), null), "0"),
+                    patch(ROBOT, ACME, RUN, EXEC_A, resultPayload(passedStatus(), null), "0"))) {
+                assertThat(body(refused).get("detail").asText())
+                        .doesNotContain("result:")
+                        .doesNotContain("run:");
+            }
+        }
+
+        /**
+         * <strong>{@code run:execute}'s reason for existing, asserted by the one persona that can
+         * see it</strong> — plan §8 #53, the key's first consumer since {@code V3} seeded it in M0.
+         *
+         * <p>The robot holds {@code result:submit}: it may write results into this project, and
+         * {@code IngestionEndpointTest} proves it does. What it may not do is work the run by hand
+         * through the same endpoint a tester uses. Without the gate this call is a 200 that is
+         * indistinguishable, in the row and in the audit trail, from a person recording a verdict —
+         * which is how a red suite becomes green without anybody's suite being re-run.
+         *
+         * <p>Deleting the gate turns this into a 200 and reddens exactly this test, which is the
+         * property {@code company:teams} (§71) never had and which made that key's wiring
+         * unassertable.
+         */
+        @Test
+        @DisplayName("Automation Service may NOT hand-record a result, and nothing is written")
+        void theRobotCannotExecuteByHand() throws Exception {
+            MvcResult refused =
+                    patch(ROBOT, ACME, RUN, EXEC_A, resultPayload(passedStatus(), null), "0");
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(403);
+            assertThat(statusKindOf(EXEC_A))
+                    .as("a 403 that wrote anyway is worse than either")
+                    .isNull();
+            assertThat(auditEvents(ACME)).isEmpty();
+        }
+
+        /**
+         * The refusal points at the other door, and a Viewer's does not — <strong>which is why the
+         * check sits inside the verdict gate rather than in front of it.</strong>
+         *
+         * <p>The first draft asked {@code run:execute} first. A Viewer holds neither key, and would
+         * have been told to use the ingestion endpoint they may not use either: advice that is
+         * confidently wrong is worse than a flat refusal. Past the {@code result:submit} gate the
+         * sentence is true by construction — this caller really does have somewhere else to post.
+         */
+        @Test
+        @DisplayName("the robot is sent to ingestion; a Viewer, who has no other door, is not")
+        void theTwoRefusalsGiveOppositeAdvice() throws Exception {
+            String robot = body(patch(ROBOT, ACME, RUN, EXEC_A,
+                    resultPayload(passedStatus(), null), "0")).get("detail").asText();
+            String viewer = body(patch(VIEWER, ACME, RUN, EXEC_A,
+                    resultPayload(passedStatus(), null), "0")).get("detail").asText();
+
+            assertThat(robot)
+                    .as("the way forward, not the refusal — this caller CAN post results")
+                    .contains("ingestion");
+            assertThat(viewer)
+                    .as("a Viewer has no other door, and sending them to one is worse than a "
+                            + "flat refusal")
+                    .doesNotContain("ingestion")
+                    .isEqualTo("You do not have permission to record results in this project.");
         }
 
         @Test

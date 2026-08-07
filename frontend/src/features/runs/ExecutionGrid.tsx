@@ -34,6 +34,15 @@ import { orderedQueue } from './queueOrder';
  * the table. Gating the table on `result:submit` would give a Test Engineer a screen of enabled
  * buttons, of which every one over an already-recorded row 403s.
  *
+ * The server also demands `run:execute` on this endpoint since 2026-08-07 (plan §8 #53), and this
+ * gate deliberately **does not** ask for it. That is not an oversight and it is not §31's
+ * disable-don't-hide rule being broken: `run:execute` is withheld from exactly one principal,
+ * Automation Service, which is a token attached to a CI job and never renders a screen. Every human
+ * role holding `result:submit` holds it too, so adding it here could not change what any person
+ * sees — it would only add a key to a check whose answer is already fixed. If roles ever become
+ * authorable (§110's F5), revisit this: a cloned role that splits the two would then be expressible
+ * and this comment stops being true.
+ *
  * **3. Every write carries `If-Match`.** A run may legitimately have two testers on it, which is
  * exactly why the lock exists — and bulk marking is the surface where silently overwriting
  * somebody else's result is easiest. `lockVersion` lives on the full `TestExecution` and not on

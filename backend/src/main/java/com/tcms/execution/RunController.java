@@ -260,6 +260,8 @@ public class RunController {
             case ExecutionService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
             case ExecutionService.Outcome.Forbidden forbidden ->
                     ResponseEntity.status(HttpStatus.FORBIDDEN).body(forbiddenProblem(forbidden));
+            case ExecutionService.Outcome.NotExecuting ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(notExecutingProblem());
             case ExecutionService.Outcome.Invalid invalid ->
                     ResponseEntity.badRequest().body(validationProblem(invalid.errors()));
             case ExecutionService.Outcome.Stale ignored ->
@@ -321,6 +323,30 @@ public class RunController {
         problem.setDetail(forbidden.amending()
                 ? "A result has already been recorded here, and changing one needs a test lead."
                 : "You do not have permission to record results in this project.");
+        return problem;
+    }
+
+    /**
+     * The refusal that points at the other door.
+     *
+     * <p>Every other 403 in this controller ends the conversation: the caller cannot do the thing
+     * and must ask somebody. This one is different — the caller <em>can</em> post results, through
+     * {@code POST /ingestions}, and is holding the wrong endpoint. So the sentence names the way
+     * forward rather than the refusal, which is the same judgement {@link #forbiddenProblem} makes
+     * when it distinguishes amending from recording.
+     *
+     * <p>No permission key, for this file's standing reason: a key is not actionable by somebody
+     * who cannot grant it to themselves, and naming it publishes the catalogue to exactly the
+     * caller not entitled to it. "This credential" rather than "you", because the reader here is
+     * a CI job's log and not a person at a screen.
+     */
+    private static ProblemDetail notExecutingProblem() {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
+        problem.setTitle("Not allowed");
+        problem.setDetail(
+                "Recording a result here is part of executing the run by hand, which this "
+                        + "credential may not do. Post an automated suite's results to the "
+                        + "ingestion endpoint instead.");
         return problem;
     }
 
