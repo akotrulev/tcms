@@ -582,3 +582,36 @@ the `PermissionEvaluator` intersection that caps a token by its role **and** its
 | AT-10 | `SecurityConfiguration.bearerTokenResolver` returns `resolved` unconditionally | The resource server tries to parse `tcms_…` as a JWT and 401s before the token filter is reached — a valid credential failing in a way that looks exactly like an invalid one. Should redden every test in `ApiTokenAuthenticationTest.Resolving` except `anUnknownSecretIs401`, which passes for the wrong reason. | ⬜ NOT RUN |
 | AT-11 | `PermissionVersionFilter`'s token branch drops the `!user.get().isActive()` check | Deactivating a person leaves every credential they issued working — the instance-wide off switch with a hole in it. Should redden `deactivatingTheOwnerKillsTheToken`. | ⬜ NOT RUN |
 | AT-12 | `ApiTokenLookupRepository.findByTokenHash` is moved onto `api_token` (i.e. `V36` reverted) | **The defect this slice exists to prevent.** Expected to redden all of `Resolving` — and it is recorded because reverting it is a one-line temptation the day somebody asks why there are two tables. | ⬜ NOT RUN |
+
+---
+
+## §117 — CI result ingestion, and `automation_key_mapping`'s writer
+
+`IngestionEndpointTest` (fixture prefix `d7`, 21 tests) and `ReportParserTest` (17 tests, no
+database). Both were **green first time**, which §114's header names as the weakness — so this
+slice ran mutations rather than queuing them, and the rows below record what was measured.
+
+> **EIGHT MUTATIONS WERE RUN — a stated §65 deviation, for §115's reason.** The deferral is about
+> *browser passes and manual mutation checks*, not about whether a class that went green on its
+> first run has been shown capable of going red. Every mutation below reddened its intended
+> assertion and only that one, except where noted.
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| IN-1 | `ReportXml.parse` sets `disallow-doctype-decl` to `false` | An XXE payload reads a file off the application server as `tcms_app` — the production signing key, the database password, the SMTP credentials — through a feature working as designed. | ✅ **RUN — and the result corrected the code's own comment.** It reddened only `entityExpansionIsRefused`, **not** `externalEntitiesAreRefused`: the `external-*-entities` features and `ACCESS_EXTERNAL_DTD` refuse the file read on their own. So the DOCTYPE ban is what stands between this endpoint and a billion-laughs expansion, and the entity pair is what stands between it and disclosure. Neither is redundant; `ReportXml`'s header now says which is which. |
+| IN-2 | `CucumberReportParser`'s severity ladder ranks `SKIPPED` above `FAILED` | A scenario that fails mid-way reads as skipped, because Cucumber marks every later step skipped. The all-green direction on the format most used for acceptance tests. | ✅ RUN — reddened `theWorstStepWins` alone. |
+| IN-3 | `AutomationMatcher` drops ladder steps 2 and 3 (rung 1 only) | A ladder that silently collapsed to its first rung. | ✅ RUN — reddened `embeddedDisplayKey`, `learnedMapping` and `reconfirmingMoves`. **This is why the three rungs are exercised ALONE**: one report using all three would have kept its count and passed. |
+| IN-4 | `TestRun.create` hard-codes `RunSource.MANUAL` again | Every ingested run reads as a person's. `test_run.source` has had one value written to it since M0 and nothing but this test reads the other. | ✅ RUN — reddened `theRunIsIngestedAndStarted` alone. |
+| IN-5 | `IngestionService`'s idempotency lookup always returns empty | **Every** CI retry ingests a second time — a second run over which one build's results are split, each reporting a pass rate over a denominator nobody chose. Also the shape a lost transaction would produce, since the lookup is RLS-protected. | ✅ RUN — reddened `aRetryReplays` alone. |
+| IN-6 | `worstPerCase` keeps the last match rather than the most severe | A parameterised test whose second run failed reports the case as passed. | ✅ RUN — reddened `severalTestsCollapseToTheWorst` alone. |
+| IN-7 | The run is opened even when nothing matched | A run of zero cases reports 0 of 0, 100%, complete — §99's defect one screen over, on the *first* report a team posts. | ✅ RUN — reddened `nothingMatchedMeansNoRun` and `unmatchedIsNamedAndCreatesNothing`. |
+| IN-8 | `AutomationMappingService.EDIT_CASE` becomes `result:submit` | **The security property of the whole feature.** A leaked CI token could bind every failing test's name to a throwaway case and launder a red suite into a green one, with an audit log recording nothing unusual. | ✅ RUN — reddened `theTokenCannotRepointResults` alone. |
+
+**Still queued, not run** — these need state the automated fixture does not build:
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| IN-9 | `IngestionEdit.MAX_REPORT_BYTES` removed | A 400 MB payload becomes an out-of-memory fault taking the instance down for every other company on it, rather than a refusal naming the cap. Needs a large body, so it is a manual check. | ⬜ NOT RUN |
+| IN-10 | `AutomationMatcher.soleKey` returns the first key instead of refusing a name that yields two | A test named after two cases posts its result to whichever the regex found first. Needs a two-key fixture. | ⬜ NOT RUN |
+| IN-11 | `CaseFacts.caseIdsByAutomationKey` drops its `project_id` predicate | A sibling project's case is materialised into this project's run — a `test_execution` and its `test_case` in two different projects, which every read in the module assumes cannot happen. **The sixth file layering a project predicate over RLS with nothing checking it** (`PlanFacts`, `CatalogueFacts`, `ExecutionSource`×3, `DocumentationSource`); the fix is still one two-project fixture written once for the seam, not a row per method. | ⬜ NOT RUN — same gap §115's CM-6 records. |
+| IN-12 | `IngestionService.write` records a result on a case whose execution is absent from a named run | A CI job silently grows a checklist a person is working through, and its denominator. Needs a `runId` whose scope excludes a matched case. | ⬜ NOT RUN |

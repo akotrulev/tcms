@@ -131,10 +131,14 @@ public class TestRun {
      * here would make every abandoned run look like one that ran for months, and it would make the
      * duration of a run the time since somebody clicked "New run" in a meeting.
      *
-     * <p>{@code source} is {@code MANUAL} because this endpoint is a person with a session. An
-     * ingested run arrives through M3's CI path and sets {@code INGESTED} there; deciding it from
-     * the caller's role instead would make a Test Lead's run "manual" and an Automation Service's
-     * run "ingested" while both came through the same browser-shaped request.
+     * <p><strong>{@code source} is a PARAMETER as of M3 slice 2, and it is the caller's entry point
+     * that decides it — never the caller's role.</strong> This header said so before the ingestion
+     * path existed: deciding it from the role would make a Test Lead's run "manual" and an
+     * Automation Service's run "ingested" while both came through the same browser-shaped request,
+     * and a token holding {@code run:create} is exactly the caller for whom that would be wrong.
+     * {@code RunCreateService} passes {@link RunSource#MANUAL} because its endpoint is a person with
+     * a session; {@code IngestionService} passes {@link RunSource#INGESTED} because its endpoint is
+     * a posted report. The distinction is which door the request came through.
      */
     static TestRun create(
             UUID projectId,
@@ -142,6 +146,7 @@ public class TestRun {
             String key,
             long keySeq,
             RunEdit edit,
+            RunSource source,
             UUID creatorId,
             String idempotencyKey,
             Instant now) {
@@ -160,7 +165,7 @@ public class TestRun {
         // The one place either is assigned. See the field comment.
         created.releaseSortKey = ReleaseSortKey.of(edit.releaseVersion());
         created.buildNumber = edit.buildNumber();
-        created.source = RunSource.MANUAL;
+        created.source = source;
         created.startedAt = null;
         created.completedAt = null;
         created.createdAt = now;

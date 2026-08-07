@@ -652,6 +652,116 @@ class CaseFacts {
     }
 
     /**
+     * <strong>Ladder step 1</strong> — which cases carry these {@code automation_key}s (§6c).
+     *
+     * <p>The exact-match arm of ingestion, and the only one a team can control from the case side.
+     * Keyed on the key <em>as sent</em>: {@code automation_key} is free text that a human copied out
+     * of their test source, so lower-casing it here would match {@code OrderTest#cancels} against a
+     * stored {@code ordertest#cancels} and silently make two distinct FQCNs one — which is the
+     * opposite of what an <em>exact</em> step is for. The forgiving comparison is step 3's, where a
+     * person has vouched for the pair.
+     *
+     * <p><strong>Bounded to the project though {@code test_case_automation_key_idx} is
+     * company-unique.</strong> §6c scopes the key to the company so a CI job need not know which
+     * project owns the case; this endpoint is project-scoped, and materialising a sibling project's
+     * case into this project's run would put a {@code test_execution} and its {@code test_case} in
+     * two different projects — a state every read in this module assumes cannot arise. The company
+     * scope still buys what it was for: the key is unambiguous, so the project bound can never
+     * silently pick the wrong one of two candidates. There is only ever one.
+     *
+     * <p>Soft-deleted cases are excluded. A deleted case is not somewhere results may land, and
+     * including it would revive one as a run member with no way to see why.
+     *
+     * @return key → case id, for the keys that matched; absent keys are the caller's step 2
+     */
+    Map<String, UUID> caseIdsByAutomationKey(UUID projectId, Collection<String> keys) {
+        return keyedLookup("c.automation_key", projectId, keys);
+    }
+
+    /**
+     * <strong>Ladder step 2</strong> — which cases these display keys name (§6c's
+     * {@code @TC-1042} annotation, extracted from the test name by {@link AutomationMatcher}).
+     *
+     * <p>{@code test_case.key} is the display key (§6t) and {@code uq_case_key} makes it unique per
+     * project, so a token that is not a key of <em>this</em> project matches nothing here. That is
+     * what makes the fixed extraction pattern safe where §6c's "configurable regex per project"
+     * would not be: a false extraction costs one entry in the {@code IN} list and can never produce
+     * a wrong match, because the wrong project's keys are not in this result at all.
+     *
+     * <p>Separate from {@link #caseIdsByAutomationKey} rather than one method over a column name
+     * the caller passes: the two differ in what a miss <em>means</em> and in what the caller does
+     * next, and a shared entry point would be one refactor away from a caller choosing the column.
+     */
+    Map<String, UUID> caseIdsByDisplayKey(UUID projectId, Collection<String> keys) {
+        return keyedLookup("c.key", projectId, keys);
+    }
+
+    /**
+     * The display keys of these cases — what a list of mappings shows beside each id.
+     *
+     * <p>Not a fourteenth crossing so much as the read half of {@link #unapprovedCases}, which
+     * already returns keys: {@code test_case.key} is a {@code repository} fact and this module holds
+     * ids into it, so the key can only be resolved here. A mapping list is read to answer "which
+     * case does this test point at", and an id is not an answer a person can check against the case
+     * grid they are looking at.
+     *
+     * <p><strong>No {@code deleted_at} predicate</strong>, unlike every other method here. A mapping
+     * whose case has since been deleted must still render — it is a row a person has to see in order
+     * to delete it — and dropping the key would render it as a blank, which reads as a bug rather
+     * than as a stale binding.
+     */
+    Map<UUID, String> caseKeys(UUID projectId, Collection<UUID> caseIds) {
+        if (caseIds.isEmpty()) {
+            return Map.of();
+        }
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = entities.createNativeQuery("""
+                        SELECT c.id, c.key
+                        FROM test_case c
+                        WHERE c.project_id = :projectId AND c.id IN (:caseIds)
+                        """)
+                .setParameter("projectId", projectId)
+                .setParameter("caseIds", caseIds)
+                .getResultList();
+
+        Map<UUID, String> keys = new HashMap<>();
+        for (Object[] row : rows) {
+            keys.put((UUID) row[0], (String) row[1]);
+        }
+        return keys;
+    }
+
+    /**
+     * @param column one of two literals chosen by the two methods above, never a parameter reaching
+     *               this class from outside it — {@link #liveIds}' rule, and here it is the
+     *               difference between an exact-match step and a display-key step
+     */
+    private Map<String, UUID> keyedLookup(
+            String column, UUID projectId, Collection<String> keys) {
+
+        if (keys.isEmpty()) {
+            // IN () is a syntax error and IN (NULL) is never true — §99's trap, and here the empty
+            // case is the COMMON one: a report every test of which matched at step 1 reaches step 2
+            // with nothing left to ask about.
+            return Map.of();
+        }
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = entities.createNativeQuery(
+                        "SELECT " + column + ", c.id FROM test_case c "
+                                + "WHERE c.project_id = :projectId AND c.deleted_at IS NULL "
+                                + "AND " + column + " IN (:keys)")
+                .setParameter("projectId", projectId)
+                .setParameter("keys", keys)
+                .getResultList();
+
+        Map<String, UUID> byKey = new HashMap<>();
+        for (Object[] row : rows) {
+            byKey.put((String) row[0], (UUID) row[1]);
+        }
+        return byKey;
+    }
+
+    /**
      * @param table one of two literals chosen by the two callers above, never a parameter reaching
      *              this class from outside it — the two tables have identical shapes for this
      *              question and two near-identical methods is how one of them loses its

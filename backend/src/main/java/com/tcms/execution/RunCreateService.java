@@ -197,8 +197,44 @@ public class RunCreateService {
     public Outcome create(
             UUID userId, UUID projectId, RunWriteRequest request, String idempotencyKey) {
 
+        return create(userId, projectId, request, idempotencyKey, RunSource.MANUAL);
+    }
+
+    /**
+     * The same create, for the run an ingested report lands in — {@code IngestionService}'s only
+     * way to make one.
+     *
+     * <p><strong>This exists so that ingestion does not grow a second run-creation path.</strong>
+     * Materialising a run is not one row: it resolves a case set, resolves each case's current
+     * version, allocates a display key, writes an execution per case and audits the whole thing as
+     * one transaction. A copy of that in {@code IngestionService} would be a second implementation
+     * of the pin — the one thing this class's header says must be resolved once and never
+     * re-resolved — and the two would drift on the first change to either.
+     *
+     * <p>So the CI path enters here, and {@code run:create} is asked <strong>here</strong>, exactly
+     * as it is for a person. That is the whole reason §A6 grants an Automation Service token
+     * {@code run:create}: this class's header already argues that a CI job opening the run it is
+     * about to post into is the widest write gate in the product and a bounded one.
+     *
+     * <p>Package-private, and {@code source} is not a parameter a caller chooses from a request
+     * field: there are exactly two doors and each names its own. See {@link TestRun#create}.
+     */
+    @Transactional
+    Outcome createIngested(
+            UUID userId, UUID projectId, RunWriteRequest request, String idempotencyKey) {
+
+        return create(userId, projectId, request, idempotencyKey, RunSource.INGESTED);
+    }
+
+    private Outcome create(
+            UUID userId,
+            UUID projectId,
+            RunWriteRequest request,
+            String idempotencyKey,
+            RunSource source) {
+
         GateResult<Outcome> gated = projects.writeGranted(userId, projectId, CREATE_RUN,
-                project -> apply(userId, project, request, idempotencyKey));
+                project -> apply(userId, project, request, idempotencyKey, source));
 
         return switch (gated) {
             case GateResult.Unreachable<Outcome> ignored -> new Outcome.NotFound();
@@ -208,7 +244,11 @@ public class RunCreateService {
     }
 
     private Outcome apply(
-            UUID userId, Project project, RunWriteRequest request, String idempotencyKey) {
+            UUID userId,
+            Project project,
+            RunWriteRequest request,
+            String idempotencyKey,
+            RunSource source) {
 
         UUID companyId = CompanyContext.require();
 
@@ -304,6 +344,10 @@ public class RunCreateService {
                 allocated.keyAt(0),
                 allocated.seqAt(0),
                 edit,
+                // The DOOR the request came through, never the caller's role. See TestRun#create's
+                // header: an Automation Service token creating a run through the public endpoint
+                // has created a MANUAL run, and only a posted report creates an INGESTED one.
+                source,
                 userId,
                 idempotencyKey,
                 now);

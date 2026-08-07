@@ -2,11 +2,15 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-07 (**§116** — API tokens, M3's first slice; §115's coverage matrix,
-R8/§114, R7/§112, R6 phases 1–4 / §111 and §108 before it)
-**Baseline commit:** `863037a` (§116 phase 1) **+ the §116 phase-2 commit this line ships in** (its
+**Last verified:** 2026-08-07 (**§117** — CI result ingestion, M3's second slice; §116's API tokens,
+§115's coverage matrix, R8/§114, R7/§112, R6 phases 1–4 / §111 and §108 before it)
+**Baseline commit:** `7daa12c` (§117 phase 1) **+ the §117 phase-2 commit this line ships in** (its
 own SHA cannot be written into itself; per `CLAUDE.md`, trust the body over the header and re-grep
 what a later commit could have moved).
+**§117 CARRIED NO MIGRATION** — `V36` is still the head, **`V37` still free**, policy count still
+**61**. Every table, column and `CHECK` it writes to has been in `V1` since M0; what was missing was
+never the schema. Sixteen new `execution` files, two test classes (`d7`, and a database-free one),
+and `V1`'s three writerless tables are now **zero**.
 **§116 is the first M3 slice and it MOVED THE SCHEMA HEAD** — `V36__api_token_lookup.sql`, **`V37`
 next free**; policy count still **61** (the new table is instance-level, no RLS). Ten new
 `identity` files + three `auth` ones, two test classes, and the **twelfth** entry on ERD §0.1's
@@ -104,6 +108,83 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   `${SMTP_HOST:-}` when explaining compose), and its negative case has been run. **Add config
   invariants there, not to a reading.** `#confirmed`
 
+- **§117 — CI RESULT INGESTION, AND `V1`'s LAST TWO WRITERLESS TABLES GET WRITERS.**
+  **NO migration** (`V36` head, `V37` free, 61 policies). Sixteen files, all `execution`:
+  `ReportFormat` · `IngestedOutcome` · `IngestedResult` · `ReportXml` · `ReportJson` ·
+  `ReportParser` + four parsers + `ReportParsers` · `IngestionJob`/`IngestionStatus`/
+  `IngestionJobRepository` · `AutomationKeyMapping`/`AutomationKeyMappingRepository` ·
+  `AutomationMatcher` · `IngestionEdit` · `IngestionService` · `IngestionController` ·
+  `IngestionJobView`/`UnmatchedTestView` · `AutomationMappingService`/`…Controller`/`…View`/
+  `…Request`. Fixture prefix **`d7`** (`IngestionEndpointTest`, 21) plus **`ReportParserTest`**
+  (17, **no database** — the parsers are pure).
+  - **`ReportXml` IS THE ONLY `DocumentBuilderFactory` IN THE APPLICATION, and that is the whole
+    defence.** This endpoint takes XML over the network from a credential holder; default JAXP
+    inlines `file:///etc/tcms/tcms.env` into a test name, which is stored, matched and served back.
+    A second construction site is the entire vulnerability and is what somebody adding a fifth
+    format will write. **THE FLAG OVERLAP WAS MEASURED AND IT CORRECTED THE HEADER**: dropping
+    `disallow-doctype-decl` leaves the external-entity test **GREEN** (the `external-*-entities`
+    pair and `ACCESS_EXTERNAL_DTD` refuse the file read alone) and reddens only the
+    billion-laughs test. Entity pair ⇒ disclosure; DOCTYPE ban ⇒ DoS. **Neither is redundant.**
+  - **EACH PARSER HAS ONE SHAPE THAT READS A RED SUITE AS GREEN, and they are four different
+    bugs.** JUnit: a pass says *nothing*, so the outcome is an ABSENCE — `getElementsByTagName`
+    searches descendants, so a suite-level `<error>` lands on the first case. TestNG: an
+    unrecognised `status` falling through to passed, and `is-config="true"` ingesting a
+    `@BeforeSuite` as a test. Allure: `broken`/`unknown` are real statuses and neither is a pass.
+    **Cucumber is the big one** — a scenario is the WORST of its steps, and "take the last step"
+    reports a mid-way failure as skipped because Cucumber skips everything after a failure.
+  - **`IngestedOutcome.severity()` HAS TWO CALLERS ON PURPOSE** — the Cucumber scenario reduction
+    and `IngestionService`'s several-tests-one-case reduction. Same question at two altitudes; the
+    copy is where one ranks a skip above a failure.
+  - **THE LADDER IS THREE BATCHED PASSES, NEVER A CHAIN PER TEST.** 3 queries for a 5,000-test
+    report, not 15,000 — the shape that works on every fixture and times out on the first customer.
+    **Each rung is tested ALONE** (only case 1 has an `automation_key`, case 2 only a display key in
+    its name, case 3 only a mapping): a ladder collapsed to rung 1 keeps its matched count and
+    passes a report exercising all three. Mutation IN-3 confirms it.
+  - **STEP 2's PATTERN IS FIXED — a stated departure from §6c's "configurable regex per
+    project".** `\b([A-Z][A-Z0-9]{0,9}-\d+)\b`, looked up against **this project's**
+    `test_case.key`. That bound is what makes a fixed pattern safe: a false extraction
+    (`HTTP-404`) costs one `IN` entry and matches nothing, where a wrong *configurable* regex could
+    match a real key. **A name yielding two distinct keys matches NEITHER.**
+  - **MATCHING IS BOUNDED TO THE PROJECT though `automation_key` is company-unique.** A sibling
+    project's case would put a `test_execution` and its `test_case` in two projects. Company scope
+    still buys unambiguity, so the bound cannot silently pick the wrong one of two.
+  - **NOTHING IS AUTO-CREATED FOR AN UNMATCHED TEST** (§6c's optional stub, declined): a CI job that
+    can mint cases turns every test RENAME into a permanent duplicate — the identity problem
+    `automationKey` exists to solve. **That is a design rather than a gap only because
+    `automation_key_mapping` got its writer in the same slice**, and the response serves
+    `normalizedName` so no client re-implements the one rule that must agree exactly.
+  - **THE MAPPING WRITE COSTS `case:edit`, AND THAT IS THE FEATURE'S SECURITY PROPERTY.** §A6 gives
+    Automation Service `result:submit` + `run:create` and NOT `case:edit`, so **a leaked token can
+    post results and cannot re-point where anybody's results land** — otherwise it could bind every
+    failing test to a throwaway case and launder a red suite green. No new key (§67, eleventh time).
+    Re-confirming **MOVES** the row; a 409 makes correcting a mis-binding a delete-then-create with
+    a silent non-matching window.
+  - **`TestRun.create` GAINED A `source` PARAMETER AND ITS HEADER HAD ALREADY SPECIFIED THE RULE**:
+    the DOOR the request came through, never the caller's role. `RunCreateService` passes `MANUAL`
+    even for an Automation Service token; only `IngestionService` passes `INGESTED`.
+    **`RunCreateService.createIngested` exists so ingestion grows NO second run-creation path** —
+    a copy would be a second implementation of the pin.
+  - **§116's SELF-INVOKED-`@Transactional` DEFECT WAS WRITTEN AND CORRECTED BEFORE IT RAN.** The
+    parse must be outside the transaction (a megabyte of XML under a held connection), so the
+    transaction starts mid-method — and a private `@Transactional` is not intercepted, which under
+    `CompanyAwareTransactionManager` means no GUC and zero rows everywhere. Here the symptom is the
+    idempotency lookup finding nothing, so **every** retry ingests twice. `TransactionTemplate`.
+  - **A MALFORMED REPORT WRITES NO ROW**, because a `FAILED` row consumes the idempotency key and
+    the corrected retry would replay the failure for ever. So `PENDING`/`PROCESSING`/`FAILED` have
+    **no writer** in this lane — the async lane's, `CHECK` left wide (§93's reason, with the
+    distinction noted: these name real states where `LinkSourceType`'s extra arms name nothing).
+  - **A REPORT MATCHING NOTHING OPENS NO RUN** — a run of zero cases reads 0 of 0, 100%, complete
+    (§99 one screen over), and it is the FIRST report a team posts that most often matches nothing.
+  - **`CaseFacts` GREW THREE METHODS** (`caseIdsByAutomationKey`, `caseIdsByDisplayKey`,
+    `caseKeys`) — the seam stays the one file naming a `repository` table. **The
+    project-predicate-over-RLS gap is now SEVEN files** and is overdue; the fix is still one
+    two-project fixture written once for the seam (§115's CM-6).
+  - **EIGHT MUTATIONS WERE RUN — a stated §65 deviation, because both classes went green first
+    time**, which is §114's own weakness. Each reddened its intended assertion and only that one,
+    except IN-1, which corrected the code. Four more are queued. **No browser rows: there is no
+    frontend surface**, and the two screens the slice names (ingestion history, unmatched-test
+    binder) are recorded in the browser queue as unbuilt.
+
 - **§116 — API TOKENS, AND THE FIRST CREDENTIAL RESOLVED BEFORE A COMPANY EXISTS.**
   `V36__api_token_lookup.sql` (**head; `V37` next free; policy count STILL 61** — the new table is
   instance-level). `ApiToken` · `ApiTokenLookup` · two repositories · `ApiTokenSecrets` ·
@@ -143,7 +224,8 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   - `AdminReach` grew a fifth term, `issueTokens` — separate from `companyWide`/`manageTeams` for
     that record's own recorded reason. `token:issue`'s **first consumer**, the fifth permission to
     be correct-and-inert (§54, §62, §64, §69).
-  - **`ingestion_job` and `automation_key_mapping` STILL HAVE NO WRITER.** M3 slice 2.
+  - ~~**`ingestion_job` and `automation_key_mapping` STILL HAVE NO WRITER.** M3 slice 2.~~ →
+    **closed by §117**, above. `V1`'s writerless tables are now zero.
 
 - **§115 — THE COVERAGE MATRIX, AND `reporting`'s SECOND FOREIGN-MODULE SEAM.**
   `CoverageMatrixReport` (`type()` = `coverage_matrix`) + **`DocumentationSource`** (`doc_page` ·

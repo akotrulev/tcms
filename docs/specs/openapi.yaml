@@ -3258,6 +3258,162 @@ paths:
           # COMPLETED job whose download 404s means the store lost the file.
           $ref: '#/components/responses/NotFound'
 
+  # ------------------------------------------------------------ ingestion ----
+  /projects/{projectId}/ingestions:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+    post:
+      tags: [execution]
+      operationId: ingestResults
+      summary: Post a CI report
+      description: |
+        **The one endpoint in this API whose expected caller is not a browser.** A CI job posts
+        the report its runner emitted; the server parses it, joins each test to a case through
+        §6c's four-step ladder, opens a run and records the verdicts.
+
+        **Two permissions, and neither is new**: `result:submit` for the results and
+        `run:create` for the run, both asked exactly where they are asked for a person. Both are
+        in Automation Service's five (roles spec §A6), which is what that role exists for. A
+        third `results:ingest` key was refused — a key seeded to nobody is a 403 nobody can
+        grant their way out of.
+
+        **`Idempotency-Key` is REQUIRED here**, where `POST /runs` makes it optional. CI is the
+        one caller that retries automatically, and its retry re-posts a whole report rather than
+        one row: a replay answers **200** with the original job and writes nothing. Absent, this
+        is a 400 with the field named `Idempotency-Key`.
+
+        **The report travels as a string in `report`, not as `multipart/form-data`.** Two of the
+        four dialects are XML and two are JSON, so a `Content-Type` would distinguish neither
+        JUnit from TestNG nor Allure from Cucumber. `format` says which, and it is never
+        inferred — sniffing would make a malformed report of one dialect read as a valid report
+        of another.
+
+        **A report that matches no case creates NO run** and answers 201 with `runId: null` and
+        every test in `unmatched`. A run of zero cases would report 0 of 0, 100%, complete —
+        and the report that most often matches nothing is the first one a team posts, while they
+        are still deciding whether the integration works.
+
+        **Nothing is auto-created for an unmatched test.** §6c offers a case stub; it is
+        declined, because a CI job that can mint cases turns every test *rename* into a permanent
+        duplicate of a case that already exists. The names come back in `unmatched` with the
+        exact `normalizedName` that `POST /automation-mappings` takes, which is the supported way
+        to bind them.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: |
+            Required — see above. At most 200 characters.
+          schema: { type: string, maxLength: 200 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IngestionInput' }
+      responses:
+        '201':
+          description: Ingested
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IngestionJob' }
+        '200':
+          description: |
+            A replay of an `Idempotency-Key` already used — the original job, and no second set
+            of results.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IngestionJob' }
+        '400':
+          # A malformed or unreadable report (`report`), a missing key (`Idempotency-Key`), an
+          # unknown format (`format`), or a project with no result status of a kind the report
+          # needs (`report`). The last is refused rather than substituted: recording a skip as a
+          # failure would be a verdict nobody's runner reported.
+          $ref: '#/components/responses/BadRequest'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          # The run named by `runId` has ended, so its results are frozen. Reopen it to post more.
+          # A state refusal rather than the lost-update Conflict's usual sense — ExecutionService's
+          # RunClosed, reached by the same rule.
+          $ref: '#/components/responses/Conflict'
+
+  /projects/{projectId}/automation-mappings:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+    get:
+      tags: [execution]
+      operationId: listAutomationMappings
+      summary: Learned test-name mappings
+      description: |
+        §6c's third ladder step — *"once a human confirms 'this test name means this case', the
+        mapping survives renames of everything except the test itself"*. `case:read`.
+      responses:
+        '200':
+          description: Mappings, by test name
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AutomationMapping' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [execution]
+      operationId: confirmAutomationMapping
+      summary: Confirm that a test name means a case
+      description: |
+        **`case:edit`, and Automation Service deliberately does not hold it.** Confirming a
+        mapping is the same statement as writing the case's `automationKey`: it decides where
+        that test's results land. So a leaked CI token can post results and **cannot re-point
+        where anybody's results land** — without the split it could bind every failing test to a
+        throwaway case and launder a red suite into a green one.
+
+        **200, not 201, and re-confirming MOVES the row.** The key is
+        `(company_id, normalized_test_name)`, so a second post of the same name is the same
+        resource re-pointed rather than a new one. A 409 would make correcting a mis-binding a
+        delete-then-create, with a window in the middle during which the CI job silently stops
+        matching.
+
+        `testName` is sent **raw** and normalized server-side. The client must not normalize:
+        the rule has to agree exactly with the one the parser applies, and a second
+        implementation of it is how every mapping silently stops matching.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AutomationMappingInput' }
+      responses:
+        '200':
+          description: Confirmed — created, or re-pointed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AutomationMapping' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /projects/{projectId}/automation-mappings/{mappingId}:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - name: mappingId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [execution]
+      operationId: deleteAutomationMapping
+      summary: Remove a mapping
+      description: |
+        `case:edit`. 204 whether the mapping was there or not — delete is idempotent.
+      responses:
+        '204': { description: Removed }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   # --------------------------------------------------------------- admin ----
   /users:
     get:
@@ -5851,6 +6007,176 @@ components:
         attributes:
           type: object
           additionalProperties: { type: string }
+
+    # --------------------------------------------------------- ingestion ---
+    ReportFormat:
+      type: string
+      description: |
+        Which CI dialect `report` is. **Never inferred** — `application/xml` is true of both
+        JUNIT and TESTNG and distinguishes neither, and sniffing the payload would make a
+        malformed report of one dialect read as a valid report of another. These four are
+        `ingestion_job.format`'s own CHECK, so the set cannot grow without a migration.
+      enum: [JUNIT, TESTNG, ALLURE, CUCUMBER]
+
+    IngestedOutcome:
+      type: string
+      description: |
+        What the runner said about one test, before it becomes one of the project's own result
+        statuses. Four values mapping to three `StatusKind`s: `ERRORED` is `FAILED`'s kind and is
+        kept distinct in the parse because JUnit and TestNG separate `<failure>` (an assertion the
+        test made and lost) from `<error>` (the test throwing before it could assert), and the
+        messages differ. It is **not** a fifth bucket in a vocabulary the project owns.
+      enum: [PASSED, FAILED, ERRORED, SKIPPED]
+
+    IngestionStatus:
+      type: string
+      description: |
+        Where the job got to. **The synchronous lane writes only `COMPLETED`.** A report that
+        cannot be parsed leaves no row at all — a `FAILED` row would consume the idempotency key,
+        so the *corrected* retry under the key CI generated once would replay the failure. The
+        other three belong to an asynchronous lane that does not exist yet.
+      enum: [PENDING, PROCESSING, COMPLETED, FAILED]
+
+    IngestionInput:
+      type: object
+      required: [format, report]
+      properties:
+        format: { $ref: '#/components/schemas/ReportFormat' }
+        report:
+          type: string
+          description: |
+            The report file, verbatim. Capped at 1 MiB of UTF-8 — this is the only endpoint that
+            takes an arbitrary blob into a `JSONB` column, and unbounded it is an out-of-memory
+            fault rather than a refusal, taking the instance down for every other company on it.
+            The cap is named in the 400 so a caller can split the report.
+          maxLength: 1048576
+        runId:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            Post into this existing run instead of opening one. When given, the other run fields
+            are **ignored rather than refused**: a CI configuration that sets `releaseVersion` on
+            every post should not start failing the day somebody adds `runId`, and none of them
+            could change a run that already exists.
+
+            A matched case that is **not in that run's checklist** is reported in `unmatched`
+            rather than added: silently growing a checklist somebody is working through, and its
+            denominator, from a CI job is not this endpoint's to do.
+        runName:
+          type: string
+          nullable: true
+          description: |
+            The opened run's name. Defaulted rather than required — a CI job has a build number
+            and rarely a name, and requiring one produces "run" on every row. Absent, the run is
+            named after `buildNumber`.
+        configurationId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Which environment. The project's default when absent, as for `POST /runs`.
+        releaseVersion: { type: string, nullable: true }
+        buildNumber:
+          type: string
+          nullable: true
+          description: |
+            The CI build. The one field that makes an ingested run traceable back to the job that
+            posted it, which is why it is a field rather than left to the name.
+
+    UnmatchedTest:
+      type: object
+      required: [name, normalizedName, outcome]
+      description: |
+        A test the ladder could not place. **This is what makes declining §6c's auto-created case
+        stubs workable**: a person reads this list, decides which case each name means, and posts
+        it to `POST /automation-mappings`.
+      properties:
+        name:
+          type: string
+          description: The test as the report named it, `className#name`.
+        normalizedName:
+          type: string
+          description: |
+            The exact key `POST /automation-mappings` stores. Served rather than left for the
+            client to recompute — the normalization rule lives in one place on purpose, and a
+            client re-deriving it is a second implementation of the one thing that must agree
+            exactly or every mapping silently stops matching.
+        outcome:
+          allOf: [{ $ref: '#/components/schemas/IngestedOutcome' }]
+          description: |
+            Present because it changes the urgency: an unmatched **failure** is a red test nobody
+            is being told about, where an unmatched pass is only unrecorded coverage.
+
+    IngestionJob:
+      type: object
+      required: [id, status, format, runId, runKey, matchedCount, unmatchedCount, unmatched, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/IngestionStatus' }
+        format: { $ref: '#/components/schemas/ReportFormat' }
+        runId:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            The run the results landed in. **Null exactly when nothing matched** — see the
+            endpoint on why a report matching nothing opens no run.
+        runKey:
+          type: string
+          nullable: true
+          example: TR-4
+          description: Beside the id, so a CI log line is something a person can search for.
+        matchedCount: { type: integer }
+        unmatchedCount:
+          type: integer
+          description: The true total, so a caller can always tell that `unmatched` was cut.
+        unmatched:
+          type: array
+          description: |
+            Capped at 50. A first integration attempt matches nothing, so the unbounded list is
+            the *common* case at exactly the moment the response is largest.
+          items: { $ref: '#/components/schemas/UnmatchedTest' }
+        createdAt: { type: string, format: date-time }
+
+    AutomationMappingInput:
+      type: object
+      required: [testName, caseId]
+      properties:
+        testName:
+          type: string
+          maxLength: 500
+          description: |
+            The test as a report names it. Sent **raw** — the server normalizes, because the rule
+            has to agree exactly with the one the parser applies. Pasting an `UnmatchedTest`'s
+            `normalizedName` back works too; it is already in the canonical form.
+        caseId: { type: string, format: uuid }
+
+    AutomationMapping:
+      type: object
+      required: [id, testName, caseId, caseKey, confirmedBy, confirmedAt]
+      properties:
+        id: { type: string, format: uuid }
+        testName:
+          type: string
+          description: |
+            The normalized key the match is made on. Named `testName` rather than
+            `normalizedTestName` because it is the only name a client ever sees or sends — the raw
+            form a report used is not stored, and a second field would invite one.
+        caseId: { type: string, format: uuid }
+        caseKey:
+          type: string
+          nullable: true
+          example: TC-42
+          description: |
+            Beside the id — a mapping list is read to answer "which case does this point at", and
+            an id is not an answer a person can check. Null when the case has since been deleted,
+            which is a row somebody has to see in order to remove it.
+        confirmedBy:
+          type: string
+          format: uuid
+          nullable: true
+          description: Who vouched for it — the whole value of the row.
+        confirmedAt: { type: string, format: date-time }
 
     TestRun:
       type: object

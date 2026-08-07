@@ -1,7 +1,7 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-07 · **Branch:** `master` · **Latest slice:** [§116 — API
-tokens](handoff/116-api-tokens.md)
+**Date:** 2026-08-07 · **Branch:** `master` · **Latest slice:** [§117 — CI result
+ingestion](handoff/117-result-ingestion.md)
 
 This file is an **index**. Every section is its own file under [`docs/handoff/`](handoff/), numbered
 by its § number, and the slice log below is where the narrative lives — one row per slice, each row
@@ -24,14 +24,16 @@ scheduled reports need a notification channel). The organization-model restateme
 outstanding. **The next slice is re-derived from the code, not from this plan's tail** (§28, §29,
 §46) — and that re-derivation landed **M3** at §116: three `V1` tables had never had a writer
 (`api_token`, `ingestion_job`, `automation_key_mapping`), and §116 gave the first of them one,
-because the other two have no caller without a credential. **`ingestion_job` and
-`automation_key_mapping` still have none**, and the ingestion endpoint is M3 slice 2.
+because the other two have no caller without a credential. ~~**`ingestion_job` and
+`automation_key_mapping` still have none**~~ → **§117 gave both one**, so `V1`'s writerless tables
+are down to **zero**. M3 slice 2 needed **no migration**: every table, column and `CHECK` it writes
+to has been there since M0.
 
-**Gates, as of §116** — both run locally, and only locally:
+**Gates, as of §117** — both run locally, and only locally:
 
 | Gate | State |
 |---|---|
-| `cd backend && ./gradlew build` | **BUILD SUCCESSFUL — 1909 tests across 394 result classes, 0 failures, 0 skipped** |
+| `cd backend && ./gradlew build` | **BUILD SUCCESSFUL — 1946 tests across 407 result classes, 0 failures, 0 skipped** |
 | `cd frontend && npm run build` | clean |
 | `npm run lint` | 0 warnings |
 | `npm run test:run` | **962/962 across 70 files** |
@@ -47,7 +49,8 @@ structurally cannot observe.
 > (`deploy/shanks/install-runner.sh`), so the paragraph above still holds in full. Do not read the
 > file's existence as coverage.
 
-**Schema.** Flyway head is **`V36__api_token_lookup.sql`**; **`V37` is the next free number**. Still
+**Schema.** Flyway head is still **`V36__api_token_lookup.sql`**; **`V37` is the next free number**
+— §117 carried no migration. Still
 61 tables under `FORCE ROW LEVEL SECURITY` — `V36`'s `api_token_lookup` is the **twelfth**
 instance-level table and the ERD §0.1 exception list's newest entry, decided rather than assumed. Flyway owns all DDL
 (`hibernate.ddl-auto: validate`).
@@ -262,3 +265,4 @@ Open actions above. The gap is deliberate; do not renumber around it.
 | [§114](handoff/114-version-divergence.md) | Version divergence — M2.5's R8 and the last reporting slice: the section reads the un-collapsed rows for R7's reason, is **wider** than the callout because §6e's harm is the blending and not the disagreement, and each row says whether that version reached the totals as a **computed** column rather than a sentence keyed on the policy's name **(built and unverified — 4 browser, 7 mutation rows, and NO RED run)** |
 | [§115](handoff/115-the-coverage-matrix.md) | The coverage matrix — §6e's *requirement → cases → last result* with a **document as its spine**, unblocked by a writer §93 shipped two slices earlier and nobody noticed; a second foreign-module seam, a statement definition that refuses to call a specification's prose an untested requirement, and a frontend gate that stopped being a negation before a third report type made the negation wrong **(built and unverified — 7 browser, 9 mutation rows, five of the nine RUN and stated as a deviation)** |
 | [§116](handoff/116-api-tokens.md) | API tokens — M3's first slice and `api_token`'s first writer since `V1`: the credential is presented **before any company context can exist**, so `V36` adds an instance-level `api_token_lookup` (`V8`'s own recorded answer, and `V6`'s decision a second time), the digest **moves** rather than being copied, and the ERD §0.1 exception list gains one entry with the cost stated. A token's permissions are its owner's **intersected** with its role's — never a second resolution path — so it can exceed neither, and `api_token.name`'s uniqueness, which ERD §0.1 names by name, turned out never to have been created **(built and unverified — 12 mutation rows, none run; no browser rows, and the token screen is the slice that will carry them. THE SLICE HAD A REAL RED RUN: the context opened inside an already-begun transaction never reaches the GUC, so every valid credential 401'd)** |
+| [§117](handoff/117-result-ingestion.md) | CI result ingestion — M3's second slice, and the last two `V1` tables get writers: four parsers behind one Strategy whose values **are** `ingestion_job.format`'s `CHECK`, each with a different shape that reads a red suite as **green** (the worst being a Cucumber scenario failing mid-way, whose last step is skipped). §6c's ladder is **three batched passes, not a chain per test** — 3 queries, not 15,000 — and each rung is tested **alone**, because one collapsed to rung 1 would keep its count and pass. Nothing is auto-created for an unmatched test, which is a design rather than a gap only because `automation_key_mapping` gets its writer in the same slice — gated on **`case:edit`, which Automation Service does not hold**, so a leaked CI token can post results and cannot launder a red suite into a green one. `ReportXml` is the application's only `DocumentBuilderFactory`, and **a mutation corrected its own comment about which flag stops what**. §116's self-invoked-`@Transactional` defect was written and corrected before it ran **(built and unverified — 8 mutations RUN and stated as a deviation, 4 queued; no browser rows, and the two screens it names are recorded as unbuilt)** |

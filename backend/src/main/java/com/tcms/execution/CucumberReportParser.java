@@ -22,7 +22,9 @@ import org.springframework.stereotype.Component;
  * <p>This is the whole difficulty of the dialect. Cucumber records a result per <em>step</em>, and
  * what TCMS records is a verdict per <em>case</em>, so the scenario's outcome has to be derived. The
  * rule is severity: any failed step fails the scenario, then errored, then a scenario every one of
- * whose steps was skipped or undefined is skipped, and only an all-passed scenario passes.
+ * whose steps was skipped or undefined is skipped, and only an all-passed scenario passes. The
+ * ordering is {@link IngestedOutcome#severity()} — shared with {@link IngestionService}, which asks
+ * the same question one altitude up about several tests matching one case.
  *
  * <p>Written as "take the last step's status" — which is tempting, because the last step is usually
  * the assertion — a scenario that fails in the middle reads as <strong>passed</strong>, because
@@ -115,7 +117,7 @@ class CucumberReportParser implements ReportParser {
             anyStep = true;
             JsonNode result = step.path("result");
             IngestedOutcome outcome = outcomeOf(ReportJson.text(result, "status"));
-            if (worst == null || severity(outcome) > severity(worst)) {
+            if (worst == null || outcome.severity() > worst.severity()) {
                 worst = outcome;
             }
             if (message == null) {
@@ -166,13 +168,4 @@ class CucumberReportParser implements ReportParser {
         };
     }
 
-    /** Failed beats errored beats skipped beats passed — {@link #walk}'s ordering. */
-    private static int severity(IngestedOutcome outcome) {
-        return switch (outcome) {
-            case FAILED -> 3;
-            case ERRORED -> 2;
-            case SKIPPED -> 1;
-            case PASSED -> 0;
-        };
-    }
 }

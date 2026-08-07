@@ -4224,6 +4224,122 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/ingestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post a CI report
+         * @description **The one endpoint in this API whose expected caller is not a browser.** A CI job posts
+         *     the report its runner emitted; the server parses it, joins each test to a case through
+         *     §6c's four-step ladder, opens a run and records the verdicts.
+         *
+         *     **Two permissions, and neither is new**: `result:submit` for the results and
+         *     `run:create` for the run, both asked exactly where they are asked for a person. Both are
+         *     in Automation Service's five (roles spec §A6), which is what that role exists for. A
+         *     third `results:ingest` key was refused — a key seeded to nobody is a 403 nobody can
+         *     grant their way out of.
+         *
+         *     **`Idempotency-Key` is REQUIRED here**, where `POST /runs` makes it optional. CI is the
+         *     one caller that retries automatically, and its retry re-posts a whole report rather than
+         *     one row: a replay answers **200** with the original job and writes nothing. Absent, this
+         *     is a 400 with the field named `Idempotency-Key`.
+         *
+         *     **The report travels as a string in `report`, not as `multipart/form-data`.** Two of the
+         *     four dialects are XML and two are JSON, so a `Content-Type` would distinguish neither
+         *     JUnit from TestNG nor Allure from Cucumber. `format` says which, and it is never
+         *     inferred — sniffing would make a malformed report of one dialect read as a valid report
+         *     of another.
+         *
+         *     **A report that matches no case creates NO run** and answers 201 with `runId: null` and
+         *     every test in `unmatched`. A run of zero cases would report 0 of 0, 100%, complete —
+         *     and the report that most often matches nothing is the first one a team posts, while they
+         *     are still deciding whether the integration works.
+         *
+         *     **Nothing is auto-created for an unmatched test.** §6c offers a case stub; it is
+         *     declined, because a CI job that can mint cases turns every test *rename* into a permanent
+         *     duplicate of a case that already exists. The names come back in `unmatched` with the
+         *     exact `normalizedName` that `POST /automation-mappings` takes, which is the supported way
+         *     to bind them.
+         */
+        post: operations["ingestResults"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/automation-mappings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Learned test-name mappings
+         * @description §6c's third ladder step — *"once a human confirms 'this test name means this case', the
+         *     mapping survives renames of everything except the test itself"*. `case:read`.
+         */
+        get: operations["listAutomationMappings"];
+        put?: never;
+        /**
+         * Confirm that a test name means a case
+         * @description **`case:edit`, and Automation Service deliberately does not hold it.** Confirming a
+         *     mapping is the same statement as writing the case's `automationKey`: it decides where
+         *     that test's results land. So a leaked CI token can post results and **cannot re-point
+         *     where anybody's results land** — without the split it could bind every failing test to a
+         *     throwaway case and launder a red suite into a green one.
+         *
+         *     **200, not 201, and re-confirming MOVES the row.** The key is
+         *     `(company_id, normalized_test_name)`, so a second post of the same name is the same
+         *     resource re-pointed rather than a new one. A 409 would make correcting a mis-binding a
+         *     delete-then-create, with a window in the middle during which the CI job silently stops
+         *     matching.
+         *
+         *     `testName` is sent **raw** and normalized server-side. The client must not normalize:
+         *     the rule has to agree exactly with the one the parser applies, and a second
+         *     implementation of it is how every mapping silently stops matching.
+         */
+        post: operations["confirmAutomationMapping"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/automation-mappings/{mappingId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                mappingId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a mapping
+         * @description `case:edit`. 204 whether the mapping was there or not — delete is idempotent.
+         */
+        delete: operations["deleteAutomationMapping"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/users": {
         parameters: {
             query?: never;
@@ -6562,6 +6678,154 @@ export interface components {
                 [key: string]: string;
             };
         };
+        /**
+         * @description Which CI dialect `report` is. **Never inferred** — `application/xml` is true of both
+         *     JUNIT and TESTNG and distinguishes neither, and sniffing the payload would make a
+         *     malformed report of one dialect read as a valid report of another. These four are
+         *     `ingestion_job.format`'s own CHECK, so the set cannot grow without a migration.
+         * @enum {string}
+         */
+        ReportFormat: "JUNIT" | "TESTNG" | "ALLURE" | "CUCUMBER";
+        /**
+         * @description What the runner said about one test, before it becomes one of the project's own result
+         *     statuses. Four values mapping to three `StatusKind`s: `ERRORED` is `FAILED`'s kind and is
+         *     kept distinct in the parse because JUnit and TestNG separate `<failure>` (an assertion the
+         *     test made and lost) from `<error>` (the test throwing before it could assert), and the
+         *     messages differ. It is **not** a fifth bucket in a vocabulary the project owns.
+         * @enum {string}
+         */
+        IngestedOutcome: "PASSED" | "FAILED" | "ERRORED" | "SKIPPED";
+        /**
+         * @description Where the job got to. **The synchronous lane writes only `COMPLETED`.** A report that
+         *     cannot be parsed leaves no row at all — a `FAILED` row would consume the idempotency key,
+         *     so the *corrected* retry under the key CI generated once would replay the failure. The
+         *     other three belong to an asynchronous lane that does not exist yet.
+         * @enum {string}
+         */
+        IngestionStatus: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
+        IngestionInput: {
+            format: components["schemas"]["ReportFormat"];
+            /**
+             * @description The report file, verbatim. Capped at 1 MiB of UTF-8 — this is the only endpoint that
+             *     takes an arbitrary blob into a `JSONB` column, and unbounded it is an out-of-memory
+             *     fault rather than a refusal, taking the instance down for every other company on it.
+             *     The cap is named in the 400 so a caller can split the report.
+             */
+            report: string;
+            /**
+             * Format: uuid
+             * @description Post into this existing run instead of opening one. When given, the other run fields
+             *     are **ignored rather than refused**: a CI configuration that sets `releaseVersion` on
+             *     every post should not start failing the day somebody adds `runId`, and none of them
+             *     could change a run that already exists.
+             *
+             *     A matched case that is **not in that run's checklist** is reported in `unmatched`
+             *     rather than added: silently growing a checklist somebody is working through, and its
+             *     denominator, from a CI job is not this endpoint's to do.
+             */
+            runId?: string | null;
+            /**
+             * @description The opened run's name. Defaulted rather than required — a CI job has a build number
+             *     and rarely a name, and requiring one produces "run" on every row. Absent, the run is
+             *     named after `buildNumber`.
+             */
+            runName?: string | null;
+            /**
+             * Format: uuid
+             * @description Which environment. The project's default when absent, as for `POST /runs`.
+             */
+            configurationId?: string | null;
+            releaseVersion?: string | null;
+            /**
+             * @description The CI build. The one field that makes an ingested run traceable back to the job that
+             *     posted it, which is why it is a field rather than left to the name.
+             */
+            buildNumber?: string | null;
+        };
+        /**
+         * @description A test the ladder could not place. **This is what makes declining §6c's auto-created case
+         *     stubs workable**: a person reads this list, decides which case each name means, and posts
+         *     it to `POST /automation-mappings`.
+         */
+        UnmatchedTest: {
+            /** @description The test as the report named it, `className#name`. */
+            name: string;
+            /**
+             * @description The exact key `POST /automation-mappings` stores. Served rather than left for the
+             *     client to recompute — the normalization rule lives in one place on purpose, and a
+             *     client re-deriving it is a second implementation of the one thing that must agree
+             *     exactly or every mapping silently stops matching.
+             */
+            normalizedName: string;
+            /**
+             * @description Present because it changes the urgency: an unmatched **failure** is a red test nobody
+             *     is being told about, where an unmatched pass is only unrecorded coverage.
+             */
+            outcome: components["schemas"]["IngestedOutcome"];
+        };
+        IngestionJob: {
+            /** Format: uuid */
+            id: string;
+            status: components["schemas"]["IngestionStatus"];
+            format: components["schemas"]["ReportFormat"];
+            /**
+             * Format: uuid
+             * @description The run the results landed in. **Null exactly when nothing matched** — see the
+             *     endpoint on why a report matching nothing opens no run.
+             */
+            runId: string | null;
+            /**
+             * @description Beside the id, so a CI log line is something a person can search for.
+             * @example TR-4
+             */
+            runKey: string | null;
+            matchedCount: number;
+            /** @description The true total, so a caller can always tell that `unmatched` was cut. */
+            unmatchedCount: number;
+            /**
+             * @description Capped at 50. A first integration attempt matches nothing, so the unbounded list is
+             *     the *common* case at exactly the moment the response is largest.
+             */
+            unmatched: components["schemas"]["UnmatchedTest"][];
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AutomationMappingInput: {
+            /**
+             * @description The test as a report names it. Sent **raw** — the server normalizes, because the rule
+             *     has to agree exactly with the one the parser applies. Pasting an `UnmatchedTest`'s
+             *     `normalizedName` back works too; it is already in the canonical form.
+             */
+            testName: string;
+            /** Format: uuid */
+            caseId: string;
+        };
+        AutomationMapping: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description The normalized key the match is made on. Named `testName` rather than
+             *     `normalizedTestName` because it is the only name a client ever sees or sends — the raw
+             *     form a report used is not stored, and a second field would invite one.
+             */
+            testName: string;
+            /** Format: uuid */
+            caseId: string;
+            /**
+             * @description Beside the id — a mapping list is read to answer "which case does this point at", and
+             *     an id is not an answer a person can check. Null when the case has since been deleted,
+             *     which is a row somebody has to see in order to remove it.
+             * @example TC-42
+             */
+            caseKey: string | null;
+            /**
+             * Format: uuid
+             * @description Who vouched for it — the whole value of the row.
+             */
+            confirmedBy: string | null;
+            /** Format: date-time */
+            confirmedAt: string;
+        };
         TestRun: {
             /** Format: uuid */
             id: string;
@@ -8782,6 +9046,131 @@ export interface operations {
                 content: {
                     "application/octet-stream": string;
                 };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    ingestResults: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required — see above. At most 200 characters. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IngestionInput"];
+            };
+        };
+        responses: {
+            /**
+             * @description A replay of an `Idempotency-Key` already used — the original job, and no second set
+             *     of results.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionJob"];
+                };
+            };
+            /** @description Ingested */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionJob"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listAutomationMappings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Mappings, by test name */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationMapping"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    confirmAutomationMapping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutomationMappingInput"];
+            };
+        };
+        responses: {
+            /** @description Confirmed — created, or re-pointed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationMapping"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteAutomationMapping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                mappingId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];

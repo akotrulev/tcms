@@ -51,4 +51,26 @@ public enum IngestedOutcome {
     public StatusKind kind() {
         return kind;
     }
+
+    /**
+     * How bad this is, for the two places that reduce several outcomes to one.
+     *
+     * <p>Failed beats errored beats skipped beats passed. <strong>Two callers, one ordering</strong>
+     * — {@link CucumberReportParser} reducing a scenario's steps to the scenario's verdict, and
+     * {@link IngestionService} reducing several tests that matched one case to that case's result.
+     * They are the same question at two altitudes, and a second copy is how one of them ends up
+     * ranking a skip above a failure: the direction in which a red suite reads as green.
+     *
+     * <p>Failed above errored, not the other way round, because a failure is a claim the test
+     * <em>made</em> and lost, where an error is the test never getting to make one. When both are
+     * present the assertion is the more informative report.
+     */
+    int severity() {
+        return switch (this) {
+            case FAILED -> 3;
+            case ERRORED -> 2;
+            case SKIPPED -> 1;
+            case PASSED -> 0;
+        };
+    }
 }

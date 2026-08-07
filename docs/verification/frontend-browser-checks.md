@@ -1051,3 +1051,24 @@ provisioned company does not have, and each row says the same thing where it sit
 
 
 
+
+---
+
+## §117 — CI result ingestion
+
+**No rows, and the reason is that there is no frontend surface.** This slice is backend-only: three
+endpoints (`POST /ingestions`, and `GET`/`POST`/`DELETE /automation-mappings`) whose caller is a CI
+job, not a browser. `openapi.yaml` and `schema.d.ts` carry the shapes; nothing in `src/` calls them.
+
+Two screens are named by the slice and are not built, so **their rows belong to the slices that
+build them**, not here:
+
+- **The ingestion history** — `ingestion_job` per project, with each job's unmatched list. The
+  repository read exists (`IngestionJobRepository.findByProjectIdOrderByCreatedAtDesc`) and has no
+  endpoint, deliberately: an endpoint with no consumer is the shape §116's dead reads had.
+- **The unmatched-test binder** — the screen that turns an ingestion's `unmatched` array into
+  `POST /automation-mappings` calls. This is the surface that makes declining §6c's auto-created
+  case stubs a design rather than a gap, and **until it exists that decision is only defensible for
+  a caller who can read JSON**. Worth stating plainly rather than leaving implied.
+
+The token screen (§116) is still the next frontend slice; this one adds a second reason for it.
