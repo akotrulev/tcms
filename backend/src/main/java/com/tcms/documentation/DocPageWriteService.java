@@ -267,10 +267,7 @@ public class DocPageWriteService {
         for (int position = 0; position < submitted.size(); position++) {
             DocBlockInput block = submitted.get(position);
             written.add(DocBlock.create(
-                    created.getId(),
-                    position,
-                    block.blockType(),
-                    new BlockContent(block.text(), block.level())));
+                    created.getId(), position, block.blockType(), BlockContent.of(block)));
         }
         blocks.saveAll(written);
 
@@ -314,8 +311,15 @@ public class DocPageWriteService {
                 existingIds.add(block.getId());
             }
 
-            PageContent.Outcome validated =
-                    PageContent.validateEdit(input, page.getParentId(), existingIds);
+            // Read ONCE, before validation, and reused for the response below. An edit cannot
+            // change what is attached — the file endpoints are separate and this transaction holds
+            // — so a second read would be a second answer to one question, and the one an `image`
+            // block was validated against is the one the client must be shown.
+            List<DocPageAttachmentView> files =
+                    attachments.forPage(page.getProjectId(), page.getId());
+
+            PageContent.Outcome validated = PageContent.validateEdit(
+                    input, page.getParentId(), existingIds, PageAttachments.idsOf(files));
             if (validated instanceof PageContent.Outcome.Invalid invalid) {
                 return new Outcome.Invalid(invalid.errors());
             }
@@ -368,14 +372,15 @@ public class DocPageWriteService {
 
             audit(project.getId(), userId, "doc_page.edited", page, now);
 
-            // The attachments are re-read rather than carried: an edit does not touch them, but the
-            // response is what the SPA renders next, and serving an empty list here would make a
-            // save appear to delete every file on the page until the next GET put them back.
+            // The attachments are carried from the read above rather than omitted: an edit does not
+            // touch them, but the response is what the SPA renders next, and serving an empty list
+            // here would make a save appear to delete every file on the page until the next GET put
+            // them back.
             return new Outcome.Updated(DocPageView.of(
                     page,
                     content,
                     blockLinks.forPage(page.getProjectId(), page.getId()),
-                    attachments.forPage(page.getProjectId(), page.getId())));
+                    files));
         }));
     }
 

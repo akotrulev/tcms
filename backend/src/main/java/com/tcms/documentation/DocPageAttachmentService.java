@@ -69,6 +69,15 @@ import org.springframework.transaction.annotation.Transactional;
  * control. Inventing the arm would also make the attachment stricter than the blocks again, since
  * {@link DocPageWriteService#edit} has no status arm either.
  *
+ * <h2>A referenced file is not deletable (#48)</h2>
+ *
+ * <p>An {@code image} block stores an attachment id and nothing else, so this endpoint became able
+ * to break a page the moment blocks could point at files. The delete is refused with a 409 while any
+ * block names the file — the same refusal, and the same reason, as removing a block a case links to:
+ * the reference is somebody's authored content, not collateral of a tidy-up. There is no foreign key
+ * doing this, because the reference lives inside a JSONB document; the count is explicit and it runs
+ * <strong>before</strong> the bytes, which do not come back.
+ *
  * <h2>Rows first, bytes second</h2>
  *
  * <p>{@code EvidenceService}'s ordering, and the argument is the failure rather than the convention:
@@ -88,6 +97,7 @@ public class DocPageAttachmentService {
 
     private final ProjectService projects;
     private final DocPageRepository pages;
+    private final DocBlockRepository blocks;
     private final AttachmentRepository attachments;
     private final AttachmentStore store;
     private final AuditEventRepository auditEvents;
@@ -97,6 +107,7 @@ public class DocPageAttachmentService {
     DocPageAttachmentService(
             ProjectService projects,
             DocPageRepository pages,
+            DocBlockRepository blocks,
             AttachmentRepository attachments,
             AttachmentStore store,
             AuditEventRepository auditEvents,
@@ -105,6 +116,7 @@ public class DocPageAttachmentService {
 
         this.projects = projects;
         this.pages = pages;
+        this.blocks = blocks;
         this.attachments = attachments;
         this.store = store;
         this.auditEvents = auditEvents;
@@ -141,6 +153,16 @@ public class DocPageAttachmentService {
 
         /** Removed. 204. */
         record Deleted() implements Outcome {
+        }
+
+        /**
+         * Refused: an {@code image} block on the page names this file. 409.
+         *
+         * <p>Carries the count rather than a sentence, for {@code DocPageWriteService.WouldBreak}'s
+         * reason — a service that returns prose is a service two callers eventually word
+         * differently.
+         */
+        record InUse(long blocks) implements Outcome {
         }
     }
 
@@ -240,6 +262,16 @@ public class DocPageAttachmentService {
             return new Outcome.NotFound();
         }
         Attachment row = found.get();
+
+        // BEFORE anything is written, and before the bytes in particular — the store does not roll
+        // back, so a refusal raised after `store.delete` is a file that is gone whatever this method
+        // returns. Same placement, and the same argument, as the link guard in
+        // `DocPageWriteService.edit`.
+        long referencing = blocks.countBlocksReferencing(
+                CompanyContext.require(), page.getId(), attachmentId.toString());
+        if (referencing > 0) {
+            return new Outcome.InUse(referencing);
+        }
 
         Instant now = clock.instant();
 

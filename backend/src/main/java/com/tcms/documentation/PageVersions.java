@@ -1,5 +1,6 @@
 package com.tcms.documentation;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.security.MessageDigest;
@@ -69,7 +70,31 @@ class PageVersions {
     private record Snapshot(String title, List<SnapshotBlock> blocks) {
     }
 
-    private record SnapshotBlock(UUID id, DocBlockType blockType, Integer level, String text) {
+    /**
+     * One block, as the version history remembers it.
+     *
+     * <p><strong>Every field of {@code BlockContent} has to be here, and the failure of forgetting
+     * one is silent in the direction that looks like success.</strong> The hash below is computed
+     * over this record, and {@link #recordEdit} writes a version only when the hash moved — so a
+     * content field the snapshot does not carry is a field somebody can edit all day without ever
+     * producing a version row. Rewriting a table's cells would report success, change the page, and
+     * leave a history saying nothing happened. When {@code BlockContent} grows, this grows.
+     *
+     * <p>{@code @JsonInclude(NON_NULL)} on the two newest components and <em>not</em> on the older
+     * two, which is not an inconsistency but the whole reason those annotations are there: without
+     * them every stored hash in every deployment changes, and the first save of every untouched
+     * page writes a version whose diff is empty — the exact history-noise entry this class exists to
+     * suppress, delivered once per page as a migration artefact. With them, a heading, paragraph,
+     * list or code block serialises byte-for-byte as it did before this field existed. Annotating
+     * the older two as well would have the same effect in reverse and is the tempting tidy-up.
+     */
+    private record SnapshotBlock(
+            UUID id,
+            DocBlockType blockType,
+            Integer level,
+            String text,
+            @JsonInclude(JsonInclude.Include.NON_NULL) List<List<String>> rows,
+            @JsonInclude(JsonInclude.Include.NON_NULL) UUID attachmentId) {
     }
 
     /**
@@ -121,11 +146,16 @@ class PageVersions {
                 blocks.stream()
                         .sorted((left, right) ->
                                 Integer.compare(left.getPosition(), right.getPosition()))
-                        .map(block -> new SnapshotBlock(
-                                block.getId(),
-                                block.getBlockType(),
-                                block.getContent() == null ? null : block.getContent().level(),
-                                block.getContent() == null ? null : block.getContent().text()))
+                        .map(block -> {
+                            BlockContent content = block.getContent();
+                            return new SnapshotBlock(
+                                    block.getId(),
+                                    block.getBlockType(),
+                                    content == null ? null : content.level(),
+                                    content == null ? null : content.text(),
+                                    content == null ? null : content.rows(),
+                                    content == null ? null : content.attachmentId());
+                        })
                         .toList());
     }
 

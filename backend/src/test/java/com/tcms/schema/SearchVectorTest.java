@@ -212,6 +212,33 @@ class SearchVectorTest extends IntegrationTestBase {
     }
 
     @Test
+    @DisplayName("a table block's CELLS are indexed too, with no change to the trigger (#48)")
+    void tableCellsAreSearchable() throws SQLException {
+        UUID page = UUID.randomUUID();
+        execute("""
+                INSERT INTO doc_page
+                    (id, company_id, space_id, project_id, key, key_seq, path, slug, title)
+                VALUES ('%s', '%s', '%s', '%s', 'DOC-3', 3, 'limits', 'limits', 'Transfer limits')
+                """.formatted(page, COMPANY, SPACE, PROJECT));
+        execute("""
+                INSERT INTO doc_block (id, company_id, page_id, position, block_type, content)
+                VALUES ('%s', '%s', '%s', 0, 'table',
+                        '{"text":"Limits by tier",
+                          "rows":[["Tier","Ceiling"],["Platinum","unlimited"]]}'::jsonb)
+                """.formatted(UUID.randomUUID(), COMPANY, page));
+
+        // `jsonb_to_tsvector(…, '["string"]')` walks the WHOLE document, at any depth — so the
+        // cells became searchable the moment they could be stored, and no migration was needed.
+        // Worth pinning rather than assuming: a trigger narrowed to `content ->> 'text'` would
+        // read as a tidy-up and would silently make every table's contents unfindable.
+        String vector = queryOne(
+                "SELECT search_vector::text FROM doc_page WHERE id = '" + page + "'");
+        assertThat(vector).as("the caption").contains("'limit'");
+        assertThat(vector).as("a header cell").contains("'ceil'");
+        assertThat(vector).as("a body cell").contains("'platinum'");
+    }
+
+    @Test
     @DisplayName("a title edit re-reads the blocks rather than dropping them")
     void titleEditPreservesBlockTerms() throws SQLException {
         UUID page = UUID.randomUUID();

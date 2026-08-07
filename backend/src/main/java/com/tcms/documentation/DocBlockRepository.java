@@ -63,4 +63,34 @@ public interface DocBlockRepository extends JpaRepository<DocBlock, UUID> {
             """)
     long countLinksTargeting(
             @Param("companyId") UUID companyId, @Param("blockIds") Collection<UUID> blockIds);
+
+    /**
+     * How many blocks on this page name this attachment.
+     *
+     * <p><strong>The guard that keeps a file delete from leaving a hole in a page.</strong> An
+     * {@code image} block stores an attachment id and nothing else — no bytes, no URL — so removing
+     * the attachment underneath it leaves a block that renders as a broken image on a specification.
+     * There is no foreign key to lean on: the reference lives inside a JSONB document, which is
+     * precisely why this count has to exist rather than being left to the database.
+     *
+     * <p>Native for the JSONB operator, and {@code company_id} is spelled out because a Hibernate
+     * filter does not apply to a native query — {@link #countLinksTargeting}'s reason, one method up,
+     * and the page bound is here as well so a delete cannot be blocked by another page's block.
+     *
+     * <p>{@code ->>} yields the id as text, so the parameter is bound as text too. Comparing a
+     * {@code uuid} to a {@code text} is an operator Postgres does not have, and the failure is a
+     * 500 rather than a wrong answer — worth knowing, because the tempting "fix" is a cast that
+     * makes a malformed stored value throw instead of simply not matching.
+     */
+    @Query(nativeQuery = true, value = """
+            SELECT COUNT(*)
+              FROM doc_block b
+             WHERE b.company_id = :companyId
+               AND b.page_id = :pageId
+               AND b.content ->> 'attachmentId' = :attachmentId
+            """)
+    long countBlocksReferencing(
+            @Param("companyId") UUID companyId,
+            @Param("pageId") UUID pageId,
+            @Param("attachmentId") String attachmentId);
 }

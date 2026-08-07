@@ -4236,6 +4236,11 @@ export interface paths {
          *
          *     `404` when `attachmentId` names nothing on **this** page — the two-segment gate, so
          *     `/doc-pages/{a}/attachments/{belongs-to-b}` cannot reach another page's file.
+         *
+         *     `409` when an `image` block on the page names this file. The block would otherwise
+         *     keep a `attachmentId` pointing at nothing and render as a hole — the same refusal, and
+         *     the same reason, as removing a block a case links to: the reference is somebody's
+         *     authored content and not collateral of a tidy-up. Remove the block first.
          */
         delete: operations["deleteDocPageFile"];
         options?: never;
@@ -8284,6 +8289,37 @@ export interface components {
             level?: number | null;
             text: string;
             /**
+             * @description A `table` block's cells, row-major. Null on every other type.
+             *
+             *     **The first row is the header, always, and there is no flag saying so.** A boolean
+             *     would have two states that look identical in an editor and differ only in what a
+             *     screen reader announces for every cell below — so it gets set wrong and nothing
+             *     reports it. A table in a specification whose columns are unnamed is one where a
+             *     reader cannot tell what a cell means; if a table genuinely has no header, its first
+             *     row names the columns anyway.
+             *
+             *     Every row has the same length — the server refuses a ragged one rather than padding
+             *     it, because a padded table cannot say which cell was missing.
+             *
+             *     `text` on a `table` is the **caption**, and it is what the coverage matrix reads as
+             *     the block's statement. The cells are data, not requirements.
+             */
+            rows?: string[][] | null;
+            /**
+             * Format: uuid
+             * @description An `image` block's file — an attachment **on this page** (`DocPage.attachments`).
+             *     Null on every other type.
+             *
+             *     A block does not carry the bytes or the URL: it names a file the page already
+             *     holds, so the image has one owner, one delete path and one 10 MB ceiling. Removing
+             *     that attachment while a block names it is a `409`, not a broken image.
+             *
+             *     `text` on an `image` is its **alt text** and may not be blank — an image in a
+             *     specification is never decorative, and the words are what a reader who cannot see it
+             *     gets.
+             */
+            attachmentId?: string | null;
+            /**
              * @description What is linked to this block — the reverse of `TestCase.relatedDocuments`, read from the
              *     same `doc_link` rows.
              *
@@ -8361,6 +8397,33 @@ export interface components {
              */
             level?: number | null;
             text: string;
+            /**
+             * @description Required on a `table` and refused on every other type, for `level`'s reason: rows on
+             *     a paragraph mean the client believes it is sending a table.
+             *
+             *     At least one row, at most 100, at most 12 columns, every row the same length, every
+             *     cell present and at most 500 characters. The bounds are product rules rather than
+             *     schema ones — a table wider than a dozen columns is a data extract rather than a
+             *     specification, and a cell longer than a sentence is a paragraph that should have
+             *     been its own block so a case could link to it.
+             *
+             *     The first row is the header. See `DocBlock.rows`.
+             */
+            rows?: string[][] | null;
+            /**
+             * Format: uuid
+             * @description Required on an `image` and refused on every other type.
+             *
+             *     Must name a file already attached to **this** page. A `400` otherwise, for
+             *     `parentId`'s reason: an unchecked id would let a block reference another page's
+             *     file, which every read then fails to resolve — a block created successfully and
+             *     immediately broken.
+             *
+             *     **A create can never carry one.** A page has no attachments until it exists, so an
+             *     image block is added by a second save: create the page, attach the file, reference
+             *     it. The refusal says that rather than reporting the id as unknown.
+             */
+            attachmentId?: string | null;
         };
         PlanDocumentLinkInput: {
             /**
@@ -9871,6 +9934,15 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            /** @description An `image` block on this page references the file. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     downloadDocPageFile: {

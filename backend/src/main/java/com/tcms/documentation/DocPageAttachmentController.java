@@ -158,6 +158,19 @@ public class DocPageAttachmentController {
             case DocPageAttachmentService.Outcome.Invalid invalid ->
                     ResponseEntity.badRequest().body(DocPageController.validationProblem(
                             Map.of(invalid.field(), List.of(invalid.message()))));
+            // 409 and not 400: nothing about the request is malformed, and the user fixes it by
+            // editing the page rather than by resending this. The sentence names the count and the
+            // remedy, because "in use" alone leaves somebody hunting a page for the block.
+            case DocPageAttachmentService.Outcome.InUse inUse -> {
+                ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+                problem.setTitle("File is in use");
+                problem.setDetail(inUse.blocks() == 1
+                        ? "An image block on this page shows this file. Remove or repoint that "
+                                + "block first."
+                        : inUse.blocks() + " image blocks on this page show this file. Remove or "
+                                + "repoint them first.");
+                yield ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+            }
             // The two success shapes. Reached only if a call site above routes one here — each
             // handles its own success and delegates the rest — so these arms exist to satisfy
             // exhaustiveness, not as a fallback that quietly renders an upload as an error.

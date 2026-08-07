@@ -2,18 +2,60 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-07 (**§126 phase 3** — attachment owners, `ARTIFACT`; **§126 phase 2**
-before it — the `DOC_PAGE` owner; **§126 phase 1** — the `CASE` owner; **§125** before that —
-the `storage` module extraction; **§124** — the `BEST` removal and the two unwired permission keys;
-§122's grant-instance-admin, §121's four phases, §120's automation drift, §119's ingestion history,
-§117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `f541f84` (§126 phase 2) (per `CLAUDE.md`, trust the body over the header and
+**Last verified:** 2026-08-07 (**§127 phase 1** — the table and image block payloads; **§126
+phases 1–4** before it — attachment owners; **§125** — the `storage` module extraction; **§124** —
+the `BEST` removal and the two unwired permission keys; §122's grant-instance-admin, §121's four
+phases, §120's automation drift, §119's ingestion history, §117's CI ingestion, §116's API tokens
+before it)
+**Baseline commit:** `a6d40a0` (§126 phase 4) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
-**SCHEMA HEAD IS `V39__attachment_owner_types.sql`; `V40` is next free.** It adds no table, so the
-policy count is unchanged at **62**. **Phase 3 carried no migration either** — `attachment_id` has
-been a column since `V1`; what changed is that it is now *mapped*. Test count **2088 across 445
-result classes** (phase 2's baseline was 2072/439 — this phase added 16 tests).
+**SCHEMA HEAD IS STILL `V39__attachment_owner_types.sql`; `V40` is next free.** The policy count is
+unchanged at **62**, and **§127 phase 1 carried no migration either** — `doc_block.content` is JSONB
+and the two new fields are a record's components, nothing more. Test count **2104 across 447 result
+classes** (§126 phase 3's baseline was 2088/445 — this phase added 16 tests and 2 classes).
+
+---
+
+## §127 phase 1 — A BLOCK'S PAYLOAD IS PART OF THE VERSION SNAPSHOT, OR ITS HISTORY LIES
+
+Decision round 3's step 7 (#48): `DocBlockType` had six values and `BlockContent` modelled the two
+fields four of them share. `table` and `image` now carry their own payload.
+
+- **`BlockContent` is `(text, level, rows, attachmentId)` and `BlockContent.of(input)` is the ONE
+  mapping.** `DocPageWriteService.applyCreate` and `PageContent.reconcile` each spelled the
+  constructor out — two copies of one mapping, where a field wired into the edit path and forgotten
+  on the create path gives a page whose table renders on save and comes back empty when it is first
+  created, with nothing failing at either end.
+- **`PageVersions.SnapshotBlock` HAD TO GROW WITH IT, and forgetting that is silent in the direction
+  that looks like success.** The hash decides whether a version row is written, and it is computed
+  over that record — so a content field the snapshot does not carry is a field somebody can rewrite
+  all day while the history says nothing happened. Every other assertion about tables passes without
+  it. `TableBlocks.aCellEditIsAuthorship` is the guard.
+- **`@JsonInclude(NON_NULL)` on the two NEW snapshot components and deliberately not on the older
+  two.** Without it every stored `content_hash` in every deployment changes on deploy and the first
+  save of each untouched page writes an empty-diff version — history noise delivered once per page
+  as a migration artefact. Nothing in a test run can see this (every hash in a run is computed by
+  one build), so the assertion is that a paragraph's stored snapshot has **no `rows` key**.
+- **Three payload fields, one rule: refused on the types that do not have it.** `level` (heading /
+  list), `rows` (table), `attachmentId` (image). A field on the wrong type means the client believes
+  it is sending something else.
+- **An `image` names an attachment ON THIS PAGE — `parentId`'s rule one field over.** So **a create
+  can never carry an image block** (a page has no files until it exists), and the refusal says
+  *"create the page, attach the image, then add the block"* rather than reporting a valid id as
+  unknown. `PageAttachments.idsOf(files)` derives the set from the **same read** the response
+  renders, so the validator and the client cannot be shown different worlds.
+- **`text` is the alt text on an `image` and blank is REFUSED** — the one block type where empty
+  text is not legal, one `else if` away from the empty-paragraph rule that must stay legal.
+- **A ragged table row is refused, not padded**, and **row 0 decides the width** because row 0 is the
+  header. Taking the widest row lets a stray cell silently widen the table.
+- **`DocBlockRepository.countBlocksReferencing` is a new guard with no foreign key behind it** — the
+  reference lives inside a JSONB document, so `DELETE /attachments/{id}` is a **409** while a block
+  names the file, checked *before* the bytes, which do not come back. Native, `content ->>
+  'attachmentId'` compared as **text** (a `uuid`-to-`text` comparison is a 500, not a wrong answer).
+- **The V2 search trigger needed no change**: `jsonb_to_tsvector(…, '["string"]')` walks the whole
+  document, so a table's cells were searchable the moment they could be stored. `SearchVectorTest`
+  pins it, because narrowing that trigger to `content ->> 'text'` reads as a tidy-up.
 
 ---
 

@@ -75,4 +75,21 @@ class PageAttachments {
         }
         return views;
     }
+
+    /**
+     * Which files an {@code image} block on this page may name.
+     *
+     * <p>Derived from the views rather than querying again, so <strong>the set an edit is validated
+     * against and the set the response renders are the same read.</strong> Two queries here would be
+     * two answers to "what is attached to this page" inside one transaction, and the one that
+     * matters is the one the validator used: a client shown a file it may not reference — or refused
+     * one it can see — is being told about a state that never existed.
+     */
+    static Set<UUID> idsOf(List<DocPageAttachmentView> files) {
+        Set<UUID> ids = new HashSet<>();
+        for (DocPageAttachmentView file : files) {
+            ids.add(file.id());
+        }
+        return ids;
+    }
 }

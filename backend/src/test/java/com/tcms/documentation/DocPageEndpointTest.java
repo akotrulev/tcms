@@ -32,6 +32,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
@@ -916,6 +917,274 @@ class DocPageEndpointTest extends IntegrationTestBase {
     }
 
     // =====================================================================
+    // Table blocks
+    // =====================================================================
+
+    @Nested
+    @DisplayName("Table blocks — the cells, and the shape rules that keep them honest (#48)")
+    class TableBlocks {
+
+        @Test
+        @DisplayName("a table's rows round-trip, and the caption stays on `text`")
+        void aTableKeepsItsCells() throws Exception {
+            MvcResult created = create(LEAD, ACME_BANKING, pageWithBlocks("Limits",
+                    tableBlock(null, "Transfer limits by tier",
+                            new String[][] {{"Tier", "Daily limit"}, {"Basic", "1000"}})));
+
+            assertThat(created.getResponse().getStatus()).isEqualTo(201);
+
+            JsonNode block = blocksOf(created).get(0);
+            assertThat(block.get("blockType").asText()).isEqualTo("table");
+            assertThat(block.get("text").asText()).isEqualTo("Transfer limits by tier");
+            assertThat(block.get("rows").get(0).get(1).asText()).isEqualTo("Daily limit");
+            assertThat(block.get("rows").get(1).get(0).asText()).isEqualTo("Basic");
+
+            // Read back through the GET rather than trusting the write's own response: the two are
+            // assembled by different code paths, and a field the create echoes from its input and
+            // never persists reads perfectly here and is gone on the next page load.
+            JsonNode reread = blocksOf(read(LEAD, ACME_BANKING, idOf(created))).get(0);
+            assertThat(reread.get("rows").get(1).get(1).asText()).isEqualTo("1000");
+        }
+
+        @Test
+        @DisplayName("rows on a paragraph, and a table with none, are both 400s")
+        void theRowsRuleGoesBothWays() throws Exception {
+            MvcResult onAParagraph = create(LEAD, ACME_BANKING, pageWithBlocks("Doc",
+                    tableBlock(null, "Not a table", new String[][] {{"a"}})
+                            .replace("\"table\"", "\"paragraph\"")));
+            assertThat(onAParagraph.getResponse().getStatus()).isEqualTo(400);
+            assertThat(onAParagraph.getResponse().getContentAsString())
+                    .contains("blocks[0].rows");
+
+            MvcResult empty = create(LEAD, ACME_BANKING,
+                    pageWithBlocks("Doc", tableBlock(null, "Empty", new String[][] {})));
+            assertThat(empty.getResponse().getStatus()).isEqualTo(400);
+            assertThat(empty.getResponse().getContentAsString()).contains("blocks[0].rows");
+        }
+
+        @Test
+        @DisplayName("a ragged row is refused naming its own index, and nothing is padded")
+        void aShortRowIsRefusedRatherThanFilledIn() throws Exception {
+            MvcResult refused = create(LEAD, ACME_BANKING, pageWithBlocks("Doc",
+                    tableBlock(null, "Limits", new String[][] {
+                        {"Tier", "Daily limit", "Monthly limit"},
+                        {"Basic", "1000"}})));
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+
+            // The row, not the block. Padding would render cleanly and be wrong in a way nothing
+            // can point at: an empty cell the author typed and a cell the server invented look
+            // identical, and in a specification they mean opposite things.
+            assertThat(refused.getResponse().getContentAsString()).contains("blocks[0].rows[1]");
+        }
+
+        @Test
+        @DisplayName("a cell over the cap is refused, and the message says why a cell is not a paragraph")
+        void aCellIsNotAParagraph() throws Exception {
+            MvcResult refused = create(LEAD, ACME_BANKING, pageWithBlocks("Doc",
+                    tableBlock(null, "Limits", new String[][] {
+                        {"Tier", "Note"},
+                        {"Basic", "x".repeat(501)}})));
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(refused.getResponse().getContentAsString())
+                    .contains("blocks[0].rows[1][1]")
+                    .contains("cannot link to a cell");
+        }
+
+        @Test
+        @DisplayName("more columns than the header names is the same refusal as fewer")
+        void aWideRowIsRaggedToo() throws Exception {
+            MvcResult refused = create(LEAD, ACME_BANKING, pageWithBlocks("Doc",
+                    tableBlock(null, "Limits", new String[][] {
+                        {"Tier", "Daily limit"},
+                        {"Basic", "1000", "and a stray cell"}})));
+
+            // The HEADER decides the width, not the widest row: taking the maximum instead would
+            // let a stray cell silently widen the table and leave the header a column short.
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(refused.getResponse().getContentAsString()).contains("blocks[0].rows[1]");
+        }
+
+        @Test
+        @DisplayName("EDITING ONE CELL WRITES A VERSION — the snapshot has to carry the rows")
+        void aCellEditIsAuthorship() throws Exception {
+            MvcResult created = create(LEAD, ACME_BANKING, pageWithBlocks("Limits",
+                    tableBlock(null, "Transfer limits", new String[][] {
+                        {"Tier", "Daily limit"},
+                        {"Basic", "1000"}})));
+            UUID id = idOf(created);
+            UUID blockId = UUID.fromString(blocksOf(created).get(0).get("id").asText());
+
+            edit(LEAD, ACME_BANKING, id, pageWithBlocks("Limits",
+                    tableBlock(blockId, "Transfer limits", new String[][] {
+                        {"Tier", "Daily limit"},
+                        {"Basic", "2500"}})), null);
+
+            /*
+              THE regression guard for this slice, and the failure it catches is silent in the
+              direction that looks like success. `PageVersions` writes a version only when the
+              snapshot's hash moved, and the snapshot is built field by field — so a content field
+              it does not carry is a field somebody can rewrite all day while the history says
+              nothing happened. Every other assertion about tables passes with `rows` missing from
+              `SnapshotBlock`: the page saves, reads back correct, and quietly loses its history.
+            */
+            assertThat(versionNumbersOf(ACME, id)).containsExactly(1, 2);
+        }
+
+        @Test
+        @DisplayName("a paragraph's stored snapshot carries no `rows` key — the old hashes stand")
+        void theSnapshotStaysByteIdenticalForBlocksWithNoPayload() throws Exception {
+            UUID id = idOf(create(LEAD, ACME_BANKING,
+                    pageWithBlocks("Doc", block(null, "paragraph", null, "Body"))));
+
+            /*
+              `@JsonInclude(NON_NULL)` on the two newest snapshot components, asserted from outside
+              rather than trusted. Without it every stored `content_hash` in every deployment
+              changes the day this ships, and the first save of every untouched page writes a
+              version whose diff is empty — the exact history-noise `PageVersions` exists to
+              suppress, delivered once per page as a migration artefact. Nothing else in the suite
+              can see that, because every hash in a test run is computed by the same build.
+            */
+            // Read back through `CAST(snapshot AS text)`, so Postgres has re-rendered the document
+            // — keys reordered, one space after each colon. That normalisation is why the
+            // assertion is about a key being ABSENT rather than about the byte string: a
+            // `"rows": null` written by Jackson would survive into the column as a key, and it is
+            // the key's presence that moves the hash.
+            assertThat(snapshotOf(ACME, id))
+                    .contains("\"text\": \"Body\"")
+                    .doesNotContain("rows")
+                    .doesNotContain("attachmentId");
+        }
+    }
+
+    // =====================================================================
+    // Image blocks
+    // =====================================================================
+
+    @Nested
+    @DisplayName("Image blocks — a block names a file the page already holds (#48)")
+    class ImageBlocks {
+
+        @Test
+        @DisplayName("an image block round-trips its attachment id, with the alt text on `text`")
+        void anImageNamesOneOfThePagesFiles() throws Exception {
+            UUID id = idOf(create(LEAD, ACME_BANKING, page("Checkout", null)));
+            UUID fileId = attachTo(id, "wireframe.png");
+
+            MvcResult edited = edit(LEAD, ACME_BANKING, id, pageWithBlocks("Checkout",
+                    imageBlock(null, "The checkout screen, with the totals panel on the right",
+                            fileId)), null);
+
+            assertThat(edited.getResponse().getStatus()).isEqualTo(200);
+            JsonNode block = blocksOf(edited).get(0);
+            assertThat(block.get("blockType").asText()).isEqualTo("image");
+            assertThat(block.get("attachmentId").asText()).isEqualTo(fileId.toString());
+            assertThat(block.get("text").asText()).startsWith("The checkout screen");
+
+            // And the file list is still on the response. An edit does not touch the attachments,
+            // and a save that appeared to delete every file on the page until the next GET is the
+            // regression the write service carries them for.
+            assertThat(body(edited).get("attachments")).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("an image on a CREATE is refused, and the message says what to do instead")
+        void aNewPageHasNoFilesToReference() throws Exception {
+            MvcResult refused = create(LEAD, ACME_BANKING, pageWithBlocks("Checkout",
+                    imageBlock(null, "A wireframe", UUID.randomUUID())));
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+
+            // Not "that file is not attached to this page", which would be true and useless: on a
+            // create no id can pass, so a perfectly valid attachment id would be reported as
+            // unknown and send the author hunting a mistake they did not make.
+            assertThat(refused.getResponse().getContentAsString())
+                    .contains("blocks[0].attachmentId")
+                    .contains("Create the page");
+        }
+
+        @Test
+        @DisplayName("an image naming ANOTHER page's file is a 400, not a broken block")
+        void aForeignAttachmentIsRefused() throws Exception {
+            UUID mine = idOf(create(LEAD, ACME_BANKING, page("Mine", null)));
+            UUID theirs = idOf(create(LEAD, ACME_BANKING, page("Theirs", null)));
+            UUID theirFile = attachTo(theirs, "diagram.png");
+
+            MvcResult refused = edit(LEAD, ACME_BANKING, mine,
+                    pageWithBlocks("Mine", imageBlock(null, "Their diagram", theirFile)), null);
+
+            // `parentId`'s rule one field over: an unchecked id is a block saved successfully and
+            // immediately broken, because the read that resolves it is scoped to this page.
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(refused.getResponse().getContentAsString())
+                    .contains("blocks[0].attachmentId");
+        }
+
+        @Test
+        @DisplayName("blank alt text is a 400 — an image in a specification is never decorative")
+        void anImageMustBeDescribed() throws Exception {
+            UUID id = idOf(create(LEAD, ACME_BANKING, page("Checkout", null)));
+            UUID fileId = attachTo(id, "wireframe.png");
+
+            MvcResult refused = edit(LEAD, ACME_BANKING, id,
+                    pageWithBlocks("Checkout", imageBlock(null, "   ", fileId)), null);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(refused.getResponse().getContentAsString()).contains("blocks[0].text");
+
+            // The one type where empty text is refused. An empty PARAGRAPH is a spacer somebody
+            // typed and stays legal — the two rules live one `else if` apart and it would be easy
+            // to make them agree.
+            assertThat(edit(LEAD, ACME_BANKING, id,
+                    pageWithBlocks("Checkout", block(null, "paragraph", null, "")), null)
+                    .getResponse().getStatus())
+                    .isEqualTo(200);
+        }
+
+        @Test
+        @DisplayName("an attachment id on a paragraph is refused, like a level and like rows")
+        void onlyAnImageNamesAFile() throws Exception {
+            UUID id = idOf(create(LEAD, ACME_BANKING, page("Checkout", null)));
+            UUID fileId = attachTo(id, "wireframe.png");
+
+            MvcResult refused = edit(LEAD, ACME_BANKING, id, pageWithBlocks("Checkout",
+                    imageBlock(null, "Body", fileId).replace("\"image\"", "\"paragraph\"")), null);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(refused.getResponse().getContentAsString())
+                    .contains("blocks[0].attachmentId");
+        }
+
+        @Test
+        @DisplayName("an image block with no file at all is a 400")
+        void anImageWithoutAFileIsNotAnImage() throws Exception {
+            UUID id = idOf(create(LEAD, ACME_BANKING, page("Checkout", null)));
+
+            MvcResult refused = edit(LEAD, ACME_BANKING, id,
+                    pageWithBlocks("Checkout", imageBlock(null, "A wireframe", null)), null);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(refused.getResponse().getContentAsString())
+                    .contains("blocks[0].attachmentId");
+        }
+
+        /** Attaches a one-pixel file to a page and returns its id. */
+        private UUID attachTo(UUID pageId, String filename) throws Exception {
+            MvcResult attached = mvc.perform(MockMvcRequestBuilders
+                            .multipart("/api/v1/projects/" + ACME_BANKING + "/doc-pages/" + pageId
+                                    + "/attachments")
+                            .file(new MockMultipartFile(
+                                    "file", filename, "image/png", new byte[] {1, 2, 3}))
+                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(LEAD, ACME)))
+                    .andReturn();
+
+            assertThat(attached.getResponse().getStatus()).isEqualTo(201);
+            return UUID.fromString(body(attached).get("id").asText());
+        }
+    }
+
+    // =====================================================================
     // Isolation
     // =====================================================================
 
@@ -1044,6 +1313,32 @@ class DocPageEndpointTest extends IntegrationTestBase {
                 + ",\"text\":" + quote(text) + "}";
     }
 
+    /**
+     * A {@code table} block. The caption goes on {@code text}, which is where the coverage matrix
+     * reads a block's statement from.
+     */
+    private String tableBlock(UUID id, String caption, String[][] rows) {
+        List<String> serialized = new ArrayList<>();
+        for (String[] row : rows) {
+            List<String> cells = new ArrayList<>();
+            for (String cell : row) {
+                cells.add(quote(cell));
+            }
+            serialized.add("[" + String.join(",", cells) + "]");
+        }
+        return "{" + (id == null ? "" : "\"id\":\"" + id + "\",")
+                + "\"blockType\":\"table\",\"text\":" + quote(caption)
+                + ",\"rows\":[" + String.join(",", serialized) + "]}";
+    }
+
+    /** An {@code image} block. {@code text} is the alt text and a null file is sent as JSON null. */
+    private String imageBlock(UUID id, String alt, UUID attachmentId) {
+        return "{" + (id == null ? "" : "\"id\":\"" + id + "\",")
+                + "\"blockType\":\"image\",\"text\":" + quote(alt)
+                + ",\"attachmentId\":"
+                + (attachmentId == null ? "null" : "\"" + attachmentId + "\"") + "}";
+    }
+
     private String quote(String value) {
         try {
             return json.writeValueAsString(value);
@@ -1116,6 +1411,14 @@ class DocPageEndpointTest extends IntegrationTestBase {
             }
         }
         return ids;
+    }
+
+    /** The latest version's stored snapshot, as raw JSON — the text the hash is computed over. */
+    private String snapshotOf(UUID companyId, UUID pageId) throws SQLException {
+        return scalarString(companyId,
+                "SELECT CAST(snapshot AS text) FROM doc_page_version "
+                        + "WHERE page_id = CAST(? AS uuid) ORDER BY version_no DESC LIMIT 1",
+                pageId.toString());
     }
 
     private List<Integer> versionNumbersOf(UUID companyId, UUID pageId) throws SQLException {

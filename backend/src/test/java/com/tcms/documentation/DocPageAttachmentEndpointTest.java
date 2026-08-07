@@ -576,6 +576,55 @@ class DocPageAttachmentEndpointTest extends IntegrationTestBase {
         }
 
         @Test
+        @DisplayName("A FILE AN IMAGE BLOCK SHOWS CANNOT BE DELETED — 409, and the bytes survive")
+        void aReferencedFileIsRefused() throws Exception {
+            UUID file = attached(LEAD, ACME_BANKING, page, "wireframe.png");
+            String key = storageKeyOf(ACME, file);
+
+            assertThat(edit(LEAD, ACME, ACME_BANKING, page,
+                    "{\"title\":\"Checkout specification\",\"blocks\":[{\"blockType\":\"image\","
+                            + "\"text\":\"The checkout screen\",\"attachmentId\":\"" + file
+                            + "\"}]}")
+                    .getResponse().getStatus())
+                    .isEqualTo(200);
+
+            MvcResult refused = remove(LEAD, ACME, ACME_BANKING, page, file);
+
+            // An `image` block stores an id and nothing else — no bytes, no URL — so deleting the
+            // attachment underneath it leaves a specification with a hole in it. There is no
+            // foreign key doing this: the reference lives inside a JSONB document.
+            assertThat(refused.getResponse().getStatus()).isEqualTo(409);
+            assertThat(refused.getResponse().getContentAsString())
+                    .contains("image block")
+                    .contains("Remove or repoint");
+
+            // AND NOTHING HAPPENED. The guard runs before the row and long before the bytes, which
+            // do not come back — a 409 raised after `store.delete` would be a refusal that had
+            // already destroyed the thing it refused to destroy.
+            assertThat(attachmentRows(ACME, page)).isEqualTo(1);
+            assertThat(store.exists(key)).isTrue();
+        }
+
+        @Test
+        @DisplayName("removing the block releases the file, and another page's block never held it")
+        void theRefusalIsScopedToTheBlockThatCausedIt() throws Exception {
+            UUID file = attached(LEAD, ACME_BANKING, page, "wireframe.png");
+            edit(LEAD, ACME, ACME_BANKING, page,
+                    "{\"title\":\"Checkout specification\",\"blocks\":[{\"blockType\":\"image\","
+                            + "\"text\":\"The checkout screen\",\"attachmentId\":\"" + file
+                            + "\"}]}");
+
+            // The remedy the 409's sentence names, driven: drop the block, then the file goes.
+            edit(LEAD, ACME, ACME_BANKING, page,
+                    "{\"title\":\"Checkout specification\",\"blocks\":[]}");
+
+            assertThat(remove(LEAD, ACME, ACME_BANKING, page, file)
+                    .getResponse().getStatus())
+                    .isEqualTo(204);
+            assertThat(attachmentRows(ACME, page)).isZero();
+        }
+
+        @Test
         @DisplayName("the trail names the page by its key, so the page's history reads as one")
         void auditNamesThePage() throws Exception {
             attached(LEAD, ACME_BANKING, page, "diagram.svg");

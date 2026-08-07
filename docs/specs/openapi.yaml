@@ -3093,11 +3093,21 @@ paths:
 
         `404` when `attachmentId` names nothing on **this** page — the two-segment gate, so
         `/doc-pages/{a}/attachments/{belongs-to-b}` cannot reach another page's file.
+
+        `409` when an `image` block on the page names this file. The block would otherwise
+        keep a `attachmentId` pointing at nothing and render as a hole — the same refusal, and
+        the same reason, as removing a block a case links to: the reference is somebody's
+        authored content and not collateral of a tidy-up. Remove the block first.
       responses:
         '204': { description: Removed }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: An `image` block on this page references the file.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
 
   /projects/{projectId}/doc-pages/{pageId}/attachments/{attachmentId}/content:
     parameters:
@@ -7797,6 +7807,42 @@ components:
           description: |
             Heading depth on a `heading`; **indent depth on a `list`**; null on every other type.
         text: { type: string }
+        rows:
+          description: |
+            A `table` block's cells, row-major. Null on every other type.
+
+            **The first row is the header, always, and there is no flag saying so.** A boolean
+            would have two states that look identical in an editor and differ only in what a
+            screen reader announces for every cell below — so it gets set wrong and nothing
+            reports it. A table in a specification whose columns are unnamed is one where a
+            reader cannot tell what a cell means; if a table genuinely has no header, its first
+            row names the columns anyway.
+
+            Every row has the same length — the server refuses a ragged one rather than padding
+            it, because a padded table cannot say which cell was missing.
+
+            `text` on a `table` is the **caption**, and it is what the coverage matrix reads as
+            the block's statement. The cells are data, not requirements.
+          type: array
+          nullable: true
+          items:
+            type: array
+            items: { type: string }
+        attachmentId:
+          description: |
+            An `image` block's file — an attachment **on this page** (`DocPage.attachments`).
+            Null on every other type.
+
+            A block does not carry the bytes or the URL: it names a file the page already
+            holds, so the image has one owner, one delete path and one 10 MB ceiling. Removing
+            that attachment while a block names it is a `409`, not a broken image.
+
+            `text` on an `image` is its **alt text** and may not be blank — an image in a
+            specification is never decorative, and the words are what a reader who cannot see it
+            gets.
+          type: string
+          format: uuid
+          nullable: true
         links:
           description: |
             What is linked to this block — the reverse of `TestCase.relatedDocuments`, read from the
@@ -7891,6 +7937,40 @@ components:
             settles it — **linked**: a `doc_link` targets a block, so a scenario a case can verify
             has to be its own block rather than a line inside one.
         text: { type: string }
+        rows:
+          description: |
+            Required on a `table` and refused on every other type, for `level`'s reason: rows on
+            a paragraph mean the client believes it is sending a table.
+
+            At least one row, at most 100, at most 12 columns, every row the same length, every
+            cell present and at most 500 characters. The bounds are product rules rather than
+            schema ones — a table wider than a dozen columns is a data extract rather than a
+            specification, and a cell longer than a sentence is a paragraph that should have
+            been its own block so a case could link to it.
+
+            The first row is the header. See `DocBlock.rows`.
+          type: array
+          nullable: true
+          maxItems: 100
+          items:
+            type: array
+            maxItems: 12
+            items: { type: string, maxLength: 500 }
+        attachmentId:
+          description: |
+            Required on an `image` and refused on every other type.
+
+            Must name a file already attached to **this** page. A `400` otherwise, for
+            `parentId`'s reason: an unchecked id would let a block reference another page's
+            file, which every read then fails to resolve — a block created successfully and
+            immediately broken.
+
+            **A create can never carry one.** A page has no attachments until it exists, so an
+            image block is added by a second save: create the page, attach the file, reference
+            it. The refusal says that rather than reporting the id as unknown.
+          type: string
+          format: uuid
+          nullable: true
 
     PlanDocumentLinkInput:
       type: object

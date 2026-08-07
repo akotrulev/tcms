@@ -29,6 +29,12 @@ import java.util.UUID;
  * @param level null on every type but {@code heading} and {@code list}. On a heading it is the
  *              heading depth; on a list it is the bullet's indent depth, which is what makes a
  *              nested test-scenario outline renderable — see {@link PageContent}.
+ * @param rows  a {@code table}'s cells, first row the header; null on every other type. Served
+ *              <strong>as stored</strong> and never normalised on the way out: the validator
+ *              refuses a ragged table on the way in, so a renderer that met one here would be
+ *              looking at a row this build did not write, and padding it would hide that.
+ * @param attachmentId an {@code image}'s file; null on every other type. The renderer composes the
+ *              download URL from it and the route it is already on — see {@code BlockContent}.
  * @param links never null. Empty is the ordinary state and is a real statement, unlike an absent
  *              {@code coverage}, which is the absence of one.
  */
@@ -38,6 +44,8 @@ public record DocBlockView(
         DocBlockType blockType,
         Integer level,
         String text,
+        List<List<String>> rows,
+        UUID attachmentId,
         List<BlockLinkView> links) {
 
     static DocBlockView of(DocBlock block, List<BlockLinkView> links) {
@@ -51,6 +59,12 @@ public record DocBlockView(
                 // content row is somehow unreadable must not make the whole page fail its own
                 // schema. An empty paragraph renders as an empty paragraph, which is visible.
                 content == null || content.text() == null ? "" : content.text(),
+                // Null rather than empty, and the asymmetry with `text` above is deliberate: the
+                // contract makes both nullable and absent means "this block type has none", which
+                // an empty array does not — an empty array is a table with no rows, a state the
+                // validator refuses precisely because it renders as nothing.
+                content == null ? null : content.rows(),
+                content == null ? null : content.attachmentId(),
                 links);
     }
 }

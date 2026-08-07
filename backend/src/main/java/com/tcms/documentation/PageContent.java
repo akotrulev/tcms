@@ -63,6 +63,29 @@ final class PageContent {
     /** The most blocks one page may hold. Beyond this it is a document set, not a page. */
     static final int MAX_BLOCKS = 500;
 
+    /**
+     * The most rows a {@code table} block may carry, header included.
+     *
+     * <p>Product rules again, and the two bounds have different reasons. A table wider than a dozen
+     * columns does not fit any page this product renders and is a data extract rather than a
+     * specification; past a hundred rows it is a data <em>set</em>, which belongs in an attachment
+     * where it can be downloaded and diffed rather than in a block a case links to.
+     */
+    static final int MAX_TABLE_ROWS = 100;
+
+    /** The most columns a {@code table} block may carry. See {@link #MAX_TABLE_ROWS}. */
+    static final int MAX_TABLE_COLUMNS = 12;
+
+    /**
+     * The longest a single cell may be.
+     *
+     * <p>Deliberately far below {@link #MAX_TEXT} rather than a share of it: a cell longer than a
+     * sentence is a paragraph, and a paragraph inside a table is the one thing on this page a case
+     * <strong>cannot link to</strong> — {@code doc_link} targets a block, and a cell is not one.
+     * The cap is what keeps a requirement from being written where nothing can point at it.
+     */
+    static final int MAX_CELL = 500;
+
     private PageContent() {
     }
 
@@ -101,7 +124,11 @@ final class PageContent {
         // belong to does not exist yet. Refused rather than ignored, for the reason the edit refuses
         // an unknown one — a client sending ids here has mistaken a create for an edit, and
         // accepting it would answer 201 to a request that meant to change something else.
-        List<DocBlockInput> blocks = validBlocks(input.blocks(), Set.of(), true, errors);
+        //
+        // The empty attachment set is the same fact one field over: a page has no files until it
+        // exists, so an image block cannot be created with the page. `onCreate` is what lets the
+        // refusal say that rather than reporting a perfectly real attachment id as unknown.
+        List<DocBlockInput> blocks = validBlocks(input.blocks(), Set.of(), Set.of(), true, errors);
 
         return errors.isEmpty()
                 ? new Outcome.Valid(title, parentId, blocks)
@@ -118,9 +145,17 @@ final class PageContent {
      *
      * @param currentParentId the page's stored parent, null for a root page
      * @param existingBlockIds every block currently on this page
+     * @param pageAttachmentIds every file currently attached to this page. An {@code image} block
+     *                         naming anything outside this set is refused, for {@code parentId}'s
+     *                         reason: an unchecked id would let a block point at another page's
+     *                         file — or at nothing — and every read then fails to resolve it, so
+     *                         the block is saved successfully and immediately broken.
      */
     static Outcome validateEdit(
-            DocPageInput input, UUID currentParentId, Set<UUID> existingBlockIds) {
+            DocPageInput input,
+            UUID currentParentId,
+            Set<UUID> existingBlockIds,
+            Set<UUID> pageAttachmentIds) {
 
         Map<String, List<String>> errors = new LinkedHashMap<>();
 
@@ -132,7 +167,8 @@ final class PageContent {
                     .add("Moving a page is not supported yet. Leave the parent unchanged.");
         }
 
-        List<DocBlockInput> blocks = validBlocks(input.blocks(), existingBlockIds, false, errors);
+        List<DocBlockInput> blocks =
+                validBlocks(input.blocks(), existingBlockIds, pageAttachmentIds, false, errors);
 
         return errors.isEmpty()
                 ? new Outcome.Valid(title, currentParentId, blocks)
@@ -160,12 +196,13 @@ final class PageContent {
      * message on the block that caused it. A page being edited has many blocks and "one of your
      * blocks is wrong" is not a message anybody can act on.
      *
-     * @param onCreate true when no id may be present at all
+     * @param onCreate true when no id may be present at all, and when the page can have no files
      * @return null when {@code submitted} was null, which means "leave the content alone"
      */
     private static List<DocBlockInput> validBlocks(
             List<DocBlockInput> submitted,
             Set<UUID> existingBlockIds,
+            Set<UUID> pageAttachmentIds,
             boolean onCreate,
             Map<String, List<String>> errors) {
 
@@ -203,6 +240,16 @@ final class PageContent {
 
             if (block.text() == null) {
                 errors.computeIfAbsent(at + ".text", key -> new ArrayList<>()).add("Enter text.");
+            } else if (block.blockType() == DocBlockType.IMAGE && block.text().isBlank()) {
+                // The ONE type where empty text is refused, and it is refused because the field
+                // stops being the block's words and becomes its alt text. An image in a
+                // specification is never decorative — it is the wireframe or the data sheet the
+                // paragraphs describe — so a blank alt is not "no caption needed", it is the whole
+                // block being unreadable to somebody, silently, in the one product surface whose
+                // purpose is stating what the system must do.
+                errors.computeIfAbsent(at + ".text", key -> new ArrayList<>())
+                        .add("Describe what this image shows. A reader who cannot see it has only "
+                                + "these words.");
             } else if (block.text().length() > MAX_TEXT) {
                 errors.computeIfAbsent(at + ".text", key -> new ArrayList<>())
                         .add("Keep a block under " + MAX_TEXT + " characters. Split it into "
@@ -242,6 +289,14 @@ final class PageContent {
                         .add("Only a heading or a list bullet has a depth.");
             }
 
+            // The same two-armed rule as `level`, twice more — required on the one type that has
+            // the field, refused on the other five. Refused rather than dropped for `level`'s
+            // reason, which is the only reason any of the three needs: rows on a paragraph mean
+            // the client believes it is sending a table, and storing the type it named while
+            // discarding the cells renders that belief as an empty paragraph with nothing reported.
+            validRows(block, at, errors);
+            validImage(block, at, pageAttachmentIds, onCreate, errors);
+
             UUID id = block.id();
             if (id == null) {
                 continue;
@@ -259,6 +314,129 @@ final class PageContent {
             }
         }
         return submitted;
+    }
+
+    /**
+     * A {@code table}'s cells, or the refusal of rows on a type that has none.
+     *
+     * <p>Four bounds and one shape rule, and the shape rule is the one worth stating. <strong>A
+     * ragged table is refused rather than padded.</strong> Padding produces a table that renders
+     * cleanly and is wrong in a way nothing can point at: the reader cannot tell an empty cell the
+     * author typed from a cell the server invented, and the two mean opposite things in a
+     * specification — "this combination is not applicable" against "somebody's row is truncated".
+     * The refusal names the row, so the author fixes the one that is short.
+     *
+     * <p>A null cell is refused for the same reason one layer down. JSON permits it, an empty string
+     * renders identically, and only one of them is something a person typed.
+     */
+    private static void validRows(
+            DocBlockInput block, String at, Map<String, List<String>> errors) {
+
+        List<List<String>> rows = block.rows();
+
+        if (block.blockType() != DocBlockType.TABLE) {
+            if (rows != null) {
+                errors.computeIfAbsent(at + ".rows", key -> new ArrayList<>())
+                        .add("Only a table has rows.");
+            }
+            return;
+        }
+
+        if (rows == null || rows.isEmpty()) {
+            // An empty table is not an empty state, it is a block that renders as nothing — the
+            // same thing an omitted block would be, except that this one occupies a position and
+            // has an id something may already link to.
+            errors.computeIfAbsent(at + ".rows", key -> new ArrayList<>())
+                    .add("Add at least one row. The first row is the table's header.");
+            return;
+        }
+        if (rows.size() > MAX_TABLE_ROWS) {
+            errors.computeIfAbsent(at + ".rows", key -> new ArrayList<>())
+                    .add("A table holds at most " + MAX_TABLE_ROWS + " rows. Attach the data as a "
+                            + "file instead.");
+            return;
+        }
+
+        // Row 0 decides the width, because row 0 is the header: the columns are named there, so it
+        // is the row that says how many there are. Taking the widest row instead would let a stray
+        // extra cell silently widen the table and leave the header short.
+        List<String> header = rows.get(0);
+        if (header == null || header.isEmpty()) {
+            errors.computeIfAbsent(at + ".rows[0]", key -> new ArrayList<>())
+                    .add("Name the columns in the first row.");
+            return;
+        }
+        if (header.size() > MAX_TABLE_COLUMNS) {
+            errors.computeIfAbsent(at + ".rows[0]", key -> new ArrayList<>())
+                    .add("A table holds at most " + MAX_TABLE_COLUMNS + " columns. Split it, or "
+                            + "attach the data as a file.");
+            return;
+        }
+
+        for (int row = 0; row < rows.size(); row++) {
+            String rowAt = at + ".rows[" + row + "]";
+            List<String> cells = rows.get(row);
+
+            if (cells == null || cells.size() != header.size()) {
+                errors.computeIfAbsent(rowAt, key -> new ArrayList<>())
+                        .add("Every row needs " + header.size() + " cells, to match the header.");
+                continue;
+            }
+            for (int cell = 0; cell < cells.size(); cell++) {
+                String value = cells.get(cell);
+                if (value == null) {
+                    errors.computeIfAbsent(rowAt + "[" + cell + "]", key -> new ArrayList<>())
+                            .add("Leave the cell empty rather than sending nothing.");
+                } else if (value.length() > MAX_CELL) {
+                    errors.computeIfAbsent(rowAt + "[" + cell + "]", key -> new ArrayList<>())
+                            .add("Keep a cell under " + MAX_CELL + " characters. Anything longer is "
+                                    + "a paragraph, and a case cannot link to a cell.");
+                }
+            }
+        }
+    }
+
+    /**
+     * An {@code image}'s file, or the refusal of one on a type that has none.
+     *
+     * <p>The create arm exists so the refusal is <em>true</em>. A page has no attachments until it
+     * exists, so on a create every id fails the membership test — and reporting a real, valid
+     * attachment id as "not attached to this page" would send the author looking for a mistake they
+     * did not make. The sequence is: create the page, attach the file, then reference it.
+     */
+    private static void validImage(
+            DocBlockInput block,
+            String at,
+            Set<UUID> pageAttachmentIds,
+            boolean onCreate,
+            Map<String, List<String>> errors) {
+
+        UUID attachmentId = block.attachmentId();
+
+        if (block.blockType() != DocBlockType.IMAGE) {
+            if (attachmentId != null) {
+                errors.computeIfAbsent(at + ".attachmentId", key -> new ArrayList<>())
+                        .add("Only an image block names a file.");
+            }
+            return;
+        }
+
+        if (onCreate) {
+            errors.computeIfAbsent(at + ".attachmentId", key -> new ArrayList<>())
+                    .add("A new page has no files yet. Create the page, attach the image, then add "
+                            + "the block.");
+            return;
+        }
+        if (attachmentId == null) {
+            errors.computeIfAbsent(at + ".attachmentId", key -> new ArrayList<>())
+                    .add("Choose one of this page's files.");
+            return;
+        }
+        if (!pageAttachmentIds.contains(attachmentId)) {
+            errors.computeIfAbsent(at + ".attachmentId", key -> new ArrayList<>())
+                    .add("That file is not attached to this page. Attach it first, then reference "
+                            + "it here.");
+        }
     }
 
     /**
@@ -303,7 +481,7 @@ final class PageContent {
 
         for (int position = 0; position < submitted.size(); position++) {
             DocBlockInput input = submitted.get(position);
-            BlockContent content = new BlockContent(input.text(), input.level());
+            BlockContent content = BlockContent.of(input);
 
             if (input.id() != null) {
                 kept.add(input.id());
