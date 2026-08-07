@@ -46,6 +46,27 @@ public interface RoleRepository extends JpaRepository<Role, UUID> {
             """)
     java.util.List<RolePermission> findAllRolePermissions();
 
+    /**
+     * What <strong>one</strong> role confers, with the qualifier stored beside each key — the upper
+     * bound an API token is capped to ({@link PermissionEvaluator}).
+     *
+     * <p>Its own query rather than a filter over {@link #findAllRolePermissions}, for two reasons
+     * that are both about the qualifier: that projection does not carry one, and adding it there
+     * would change what {@code GET /roles} renders. The shape here is {@link HeldPermissionRow},
+     * the same one every grant query in this module returns, so the cap folds into the evaluator's
+     * existing merge instead of introducing a second way to read a permission.
+     *
+     * <p>Native and unfiltered by company for {@link #findAllRolePermissions}'s reason: {@code role}
+     * and {@code role_permission} are instance-level reference data on the ERD §0.1 exception list.
+     */
+    @org.springframework.data.jpa.repository.Query(nativeQuery = true, value = """
+            SELECT DISTINCT permission_key AS permissionKey, qualifier AS qualifier
+              FROM role_permission
+             WHERE role_id = :roleId
+            """)
+    java.util.List<HeldPermissionRow> findHeldPermissionsForRole(
+            @org.springframework.data.repository.query.Param("roleId") UUID roleId);
+
     /** One row of {@code role_permission}, which has no entity of its own. */
     interface RolePermission {
 

@@ -1,7 +1,7 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-07 · **Branch:** `master` · **Latest slice:** [§115 — the coverage
-matrix](handoff/115-the-coverage-matrix.md)
+**Date:** 2026-08-07 · **Branch:** `master` · **Latest slice:** [§116 — API
+tokens](handoff/116-api-tokens.md)
 
 This file is an **index**. Every section is its own file under [`docs/handoff/`](handoff/), numbered
 by its § number, and the slice log below is where the narrative lives — one row per slice, each row
@@ -22,13 +22,16 @@ is blocked on infrastructure or on a deferred decision rather than on a writer (
 SVG pre-render both need a headless renderer; evidence-bundle export needs the `shared` module;
 scheduled reports need a notification channel). The organization-model restatement (§97, §98, §99) is complete with nothing
 outstanding. **The next slice is re-derived from the code, not from this plan's tail** (§28, §29,
-§46).
+§46) — and that re-derivation landed **M3** at §116: three `V1` tables had never had a writer
+(`api_token`, `ingestion_job`, `automation_key_mapping`), and §116 gave the first of them one,
+because the other two have no caller without a credential. **`ingestion_job` and
+`automation_key_mapping` still have none**, and the ingestion endpoint is M3 slice 2.
 
-**Gates, as of §115** — both run locally, and only locally:
+**Gates, as of §116** — both run locally, and only locally:
 
 | Gate | State |
 |---|---|
-| `cd backend && ./gradlew build` | **BUILD SUCCESSFUL — 1870 tests across 383 result classes, 0 failures, 0 skipped** |
+| `cd backend && ./gradlew build` | **BUILD SUCCESSFUL — 1909 tests across 394 result classes, 0 failures, 0 skipped** |
 | `cd frontend && npm run build` | clean |
 | `npm run lint` | 0 warnings |
 | `npm run test:run` | **962/962 across 70 files** |
@@ -44,8 +47,9 @@ structurally cannot observe.
 > (`deploy/shanks/install-runner.sh`), so the paragraph above still holds in full. Do not read the
 > file's existence as coverage.
 
-**Schema.** Flyway head is **`V35__rollup_freshness_columns.sql`**; **`V36` is the next free
-number**. 61 tables under `FORCE ROW LEVEL SECURITY`. Flyway owns all DDL
+**Schema.** Flyway head is **`V36__api_token_lookup.sql`**; **`V37` is the next free number**. Still
+61 tables under `FORCE ROW LEVEL SECURITY` — `V36`'s `api_token_lookup` is the **twelfth**
+instance-level table and the ERD §0.1 exception list's newest entry, decided rather than assumed. Flyway owns all DDL
 (`hibernate.ddl-auto: validate`).
 
 **There is no mock API** (§107). `src/mocks/` — ~9,300 lines of MSW handlers and fixtures — and
@@ -257,3 +261,4 @@ Open actions above. The gap is deliberate; do not renumber around it.
 | [§113](handoff/113-the-deploy-learns-a-second-target.md) | The deploy learns a second target — a `lab` job that runs **on** the homelab box via a self-hosted runner (no SSH key, no stored secret), the nightly Linux gate `ci.yml` gave up, and the `target` default that had to stay `production` or every existing release command would have silently shipped elsewhere **(built and unverified — nothing has run on shanks)** |
 | [§114](handoff/114-version-divergence.md) | Version divergence — M2.5's R8 and the last reporting slice: the section reads the un-collapsed rows for R7's reason, is **wider** than the callout because §6e's harm is the blending and not the disagreement, and each row says whether that version reached the totals as a **computed** column rather than a sentence keyed on the policy's name **(built and unverified — 4 browser, 7 mutation rows, and NO RED run)** |
 | [§115](handoff/115-the-coverage-matrix.md) | The coverage matrix — §6e's *requirement → cases → last result* with a **document as its spine**, unblocked by a writer §93 shipped two slices earlier and nobody noticed; a second foreign-module seam, a statement definition that refuses to call a specification's prose an untested requirement, and a frontend gate that stopped being a negation before a third report type made the negation wrong **(built and unverified — 7 browser, 9 mutation rows, five of the nine RUN and stated as a deviation)** |
+| [§116](handoff/116-api-tokens.md) | API tokens — M3's first slice and `api_token`'s first writer since `V1`: the credential is presented **before any company context can exist**, so `V36` adds an instance-level `api_token_lookup` (`V8`'s own recorded answer, and `V6`'s decision a second time), the digest **moves** rather than being copied, and the ERD §0.1 exception list gains one entry with the cost stated. A token's permissions are its owner's **intersected** with its role's — never a second resolution path — so it can exceed neither, and `api_token.name`'s uniqueness, which ERD §0.1 names by name, turned out never to have been created **(built and unverified — 12 mutation rows, none run; no browser rows, and the token screen is the slice that will carry them. THE SLICE HAD A REAL RED RUN: the context opened inside an already-begun transaction never reaches the GUC, so every valid credential 401'd)** |

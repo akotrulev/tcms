@@ -1,5 +1,6 @@
 package com.tcms.auth;
 
+import com.tcms.identity.ApiTokenSecrets;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -9,6 +10,9 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
+import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 
 /**
@@ -44,9 +48,31 @@ import org.springframework.security.web.authentication.www.BasicAuthenticationFi
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class SecurityConfiguration {
 
+    /**
+     * Keeps the resource server's hands off an API token.
+     *
+     * <p>{@code BearerTokenAuthenticationFilter} resolves whatever is in the {@code Authorization}
+     * header and hands it to the JWT decoder. A {@code tcms_…} credential is not a JWT, so without
+     * this the decoder fails and the request is 401'd <strong>before</strong>
+     * {@link ApiTokenAuthenticationFilter} can be asked — an outcome that would look exactly like a
+     * wrong credential and be caused by the right one.
+     *
+     * <p>Returning null is "no bearer token here as far as you are concerned", which is the honest
+     * answer: this string is a credential for a different mechanism.
+     */
+    @Bean
+    public BearerTokenResolver bearerTokenResolver() {
+        DefaultBearerTokenResolver sessions = new DefaultBearerTokenResolver();
+        return request -> {
+            String resolved = sessions.resolve(request);
+            return resolved != null && resolved.startsWith(ApiTokenSecrets.PREFIX) ? null : resolved;
+        };
+    }
+
     @Bean
     public SecurityFilterChain filterChain(
             HttpSecurity http,
+            ApiTokenAuthenticationFilter apiTokenFilter,
             PermissionVersionFilter permissionVersionFilter,
             CompanyContextFilter companyContextFilter) throws Exception {
         return http
@@ -68,8 +94,12 @@ public class SecurityConfiguration {
                 // would make the browser render its own credential dialog over it.
                 .exceptionHandling(handling -> handling
                         .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
-                // Order is load-bearing: pv first, so a token that predates a revocation is
-                // rejected before its company is ever opened.
+                // Order is load-bearing, and there are now three rungs. The API-token filter runs
+                // BEFORE the bearer filter, so a CI credential is resolved and the request is
+                // already authenticated by the time the session machinery looks at it; pv next,
+                // so a token that predates a revocation is rejected before its company is ever
+                // opened; the company last, because it reads the principal the other two settled.
+                .addFilterBefore(apiTokenFilter, BearerTokenAuthenticationFilter.class)
                 .addFilterAfter(permissionVersionFilter, BasicAuthenticationFilter.class)
                 .addFilterAfter(companyContextFilter, PermissionVersionFilter.class)
                 .build();

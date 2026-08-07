@@ -2,11 +2,15 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-07 (**§115** — the coverage matrix, the first slice past M2.5's reporting
-plan; R8/§114, R7/§112, R6 phases 1–4 / §111 and §108 before it)
-**Baseline commit:** `0a16c67` (the `provision-host` strand — **a concurrent strand's commit**, not
-this lane's) **+ the §115 commit this line ships in** (its own SHA cannot be written into itself;
-per `CLAUDE.md`, trust the body over the header and re-grep what a later commit could have moved).
+**Last verified:** 2026-08-07 (**§116** — API tokens, M3's first slice; §115's coverage matrix,
+R8/§114, R7/§112, R6 phases 1–4 / §111 and §108 before it)
+**Baseline commit:** `863037a` (§116 phase 1) **+ the §116 phase-2 commit this line ships in** (its
+own SHA cannot be written into itself; per `CLAUDE.md`, trust the body over the header and re-grep
+what a later commit could have moved).
+**§116 is the first M3 slice and it MOVED THE SCHEMA HEAD** — `V36__api_token_lookup.sql`, **`V37`
+next free**; policy count still **61** (the new table is instance-level, no RLS). Ten new
+`identity` files + three `auth` ones, two test classes, and the **twelfth** entry on ERD §0.1's
+exception list.
 **§115 added two files and one test class** — `DocumentationSource`, `CoverageMatrixReport`,
 `CoverageMatrixReportTest` — plus contract prose and one frontend arm. No migration, no entity, no
 endpoint, no key; `V35` still head, `V36` still free, policy count still 61.
@@ -99,6 +103,47 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   no context, needs no database, strips comments first (the mail block legitimately quotes
   `${SMTP_HOST:-}` when explaining compose), and its negative case has been run. **Add config
   invariants there, not to a reading.** `#confirmed`
+
+- **§116 — API TOKENS, AND THE FIRST CREDENTIAL RESOLVED BEFORE A COMPANY EXISTS.**
+  `V36__api_token_lookup.sql` (**head; `V37` next free; policy count STILL 61** — the new table is
+  instance-level). `ApiToken` · `ApiTokenLookup` · two repositories · `ApiTokenSecrets` ·
+  `ApiTokenService` · `ApiTokenController` · `ApiTokenView` · `IssuedApiTokenView` ·
+  `ApiTokenIssueRequest` · `TokenContext` (all `identity`), plus `ApiTokenAuthenticationService` /
+  `ApiTokenAuthenticationFilter` and a `BearerTokenResolver` bean (`auth`). Fixture prefixes **`9d`**
+  (`ApiTokenEndpointTest`, 26) and **`9e`** (`ApiTokenAuthenticationTest`, 13).
+  - **`api_token` IS UNDER RLS AND THE CREDENTIAL ARRIVES BEFORE ANY CONTEXT.** That lookup returns
+    zero rows — `V7`'s defect — so `api_token_lookup` is instance-level and holds a **digest, a
+    token id and a company id and nothing else**. `V1`'s `api_token.token_hash` is **dropped**, not
+    duplicated: one home for a credential digest. Lifecycle (`expires_at`, `revoked_at`) stays on
+    the policed row and is checked **after** the context opens.
+  - **THE CONTEXT MUST BE OPENED OUTSIDE THE TRANSACTION THAT READS THE POLICED ROW.**
+    `CompanyAwareTransactionManager` sets the filter and the GUC in **`doBegin`**, so a transaction
+    that *begins* without a context runs to completion without one however many `CompanyContext.open`
+    calls happen inside it. The first draft was one `@Transactional` method and **every valid token
+    401'd**; the fix is two `TransactionTemplate` calls (self-invocation would not have helped —
+    `ReportJobRunner`'s argument). **This generalises to every future pre-auth lookup.**
+  - **A TOKEN'S PERMISSIONS ARE AN INTERSECTION, IN `PermissionEvaluator` AND NOWHERE ELSE.**
+    `cappedToToken` narrows the owner's answer by `RoleRepository.findHeldPermissionsForRole`, and
+    `TokenContext`'s `projectId` is a hard bound applied **before** the project lookup. Never a
+    union; never a second resolution beside the evaluator (`SessionTokens`' §6b argument).
+    `PermissionQualifier.narrowedBy` is the **meet** to `strongest`'s join, and `OWN`∧`PLAN_SCOPE`
+    answers `NONE` where the join **throws** — a narrowing that cannot be expressed has a safe
+    answer and a widening does not.
+  - **THE FILTER PRODUCES A `Jwt` VALUE**, carrying `sub` (the **owner**), `co`, and `tkn`. That is
+    what lets every existing controller keep `@AuthenticationPrincipal Jwt` unchanged and lets
+    `CompanyContextFilter` open the company by one path. It carries **no grant** — nothing signs it.
+    `PermissionVersionFilter` branches on `tkn`: **no epoch** (the row is read every request), **yes
+    account gate** (deactivation must kill issued credentials).
+  - **WITHOUT THE `BearerTokenResolver` BEAN a valid token 401s before the filter is reached** — the
+    resource server parses `tcms_…` as a JWT and fails. Right credential, wrong-credential symptom.
+  - **`api_token.name`'s per-company uniqueness is named in ERD §0.1 point 3 and `V1` NEVER CREATED
+    IT.** `SchemaConventionTest` asserts `company_id` leads every index *that exists*, which is
+    silent about one that does not. `V36` adds it **partial on `revoked_at IS NULL`** so rotation can
+    reuse the name. **Check for the missing index, not only the wrong one.**
+  - `AdminReach` grew a fifth term, `issueTokens` — separate from `companyWide`/`manageTeams` for
+    that record's own recorded reason. `token:issue`'s **first consumer**, the fifth permission to
+    be correct-and-inert (§54, §62, §64, §69).
+  - **`ingestion_job` and `automation_key_mapping` STILL HAVE NO WRITER.** M3 slice 2.
 
 - **§115 — THE COVERAGE MATRIX, AND `reporting`'s SECOND FOREIGN-MODULE SEAM.**
   `CoverageMatrixReport` (`type()` = `coverage_matrix`) + **`DocumentationSource`** (`doc_page` ·

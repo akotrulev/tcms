@@ -111,6 +111,39 @@ public enum PermissionQualifier {
     }
 
     /**
+     * The <strong>narrower</strong> of two — the meet, where {@link #strongest} is the join.
+     *
+     * <p>Its one caller is the API-token cap ({@link PermissionEvaluator}): a token's effective set
+     * is its role's <em>intersected</em> with its owner's, so it can exceed neither. That is a
+     * different operation from unioning grants and it needs the other end of the same lattice:
+     * {@link #ALL} is the identity here and absorbs there, {@link #NONE} absorbs here and is the
+     * identity there.
+     *
+     * <p><strong>{@link #OWN} against {@link #PLAN_SCOPE} answers {@link #NONE}, where
+     * {@link #strongest} throws — and the asymmetry is the point.</strong> Their intersection is
+     * "rows I wrote AND at plan scope", which this enum cannot say either. But a narrowing that
+     * cannot be expressed has a safe answer and a widening does not: under-granting refuses a
+     * request somebody may retry, over-granting is a capability nobody asked for. So this one fails
+     * closed and its sibling refuses to guess. Unreachable against the seeded catalogue in both
+     * cases, for {@code SeedDataTest}'s reason.
+     */
+    PermissionQualifier narrowedBy(PermissionQualifier other) {
+        if (this == other) {
+            return this;
+        }
+        if (this == NONE || other == NONE) {
+            return NONE;
+        }
+        if (this == ALL) {
+            return other;
+        }
+        if (other == ALL) {
+            return this;
+        }
+        return NONE;
+    }
+
+    /**
      * Reads the stored value.
      *
      * <p>Throws on anything else rather than defaulting: the column has a CHECK constraint, so an

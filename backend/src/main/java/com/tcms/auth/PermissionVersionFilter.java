@@ -66,30 +66,56 @@ public class PermissionVersionFilter extends OncePerRequestFilter {
             return;
         }
 
+        UUID userId = parseUuid(jwt.get().getSubject());
+        Optional<AppUser> user = userId == null ? Optional.empty() : users.findById(userId);
+
+        if (jwt.get().getClaim(ApiTokenAuthenticationFilter.CLAIM_TOKEN) != null) {
+            // An API token, not a session. The epoch does not apply and fabricating one would be
+            // a comparison against a number this same request had just produced.
+            //
+            // It does not need to apply: `pv` exists because a SIGNED token is valid until it
+            // expires, so a revoked grant would otherwise survive in an artifact the server cannot
+            // reach. An API token is looked up in the database on EVERY request, so a revocation
+            // is already effective on the next one and a grant change is already reflected by the
+            // evaluator reading the owner's rows.
+            //
+            // The account gate still applies, and it is the half that matters here: deactivating a
+            // person must stop the credentials they issued, and nothing else in the token path
+            // asks about their account at all.
+            if (user.isEmpty() || !user.get().isActive()) {
+                refuse(response, userId);
+                return;
+            }
+            chain.doFilter(request, response);
+            return;
+        }
+
         // Number, not Integer. A JSON integer comes back from Nimbus as a Long regardless
         // of what was encoded, so a typed getClaim(...) here throws ClassCastException on
         // EVERY authenticated request — a 500 where a 401 or a 200 belongs, and one that
         // no amount of reading the encoder side would reveal.
         Number presented = jwt.get().getClaim(SessionTokens.CLAIM_PERMISSION_VERSION);
-        UUID userId = parseUuid(jwt.get().getSubject());
-        Optional<AppUser> user = userId == null ? Optional.empty() : users.findById(userId);
 
         if (presented == null || user.isEmpty() || !user.get().isActive()
                 || user.get().getPermissionVersion() != presented.intValue()) {
-            // Cleared, not just 401'd: leaving a rejected authentication in the context
-            // would let anything later in the chain read a principal this filter has
-            // already decided is not entitled to one.
-            SecurityContextHolder.clearContext();
-            log.info("Session refused for subject {} — the token predates a change to what "
-                    + "that account may do, or the account is no longer active", userId);
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            // Names the remedy without naming the cause: the client must re-authenticate,
-            // and which of the four conditions failed is not something to publish.
-            response.setHeader("WWW-Authenticate", "Bearer error=\"invalid_token\"");
+            refuse(response, userId);
             return;
         }
 
         chain.doFilter(request, response);
+    }
+
+    private static void refuse(HttpServletResponse response, UUID userId) {
+        // Cleared, not just 401'd: leaving a rejected authentication in the context
+        // would let anything later in the chain read a principal this filter has
+        // already decided is not entitled to one.
+        SecurityContextHolder.clearContext();
+        log.info("Session refused for subject {} — the token predates a change to what "
+                + "that account may do, or the account is no longer active", userId);
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        // Names the remedy without naming the cause: the client must re-authenticate,
+        // and which of the four conditions failed is not something to publish.
+        response.setHeader("WWW-Authenticate", "Bearer error=\"invalid_token\"");
     }
 
     private static Optional<Jwt> currentJwt() {

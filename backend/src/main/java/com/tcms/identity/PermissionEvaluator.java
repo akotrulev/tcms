@@ -31,6 +31,11 @@ import org.springframework.transaction.annotation.Transactional;
  * 4.  PROJECT term      role_assignment, project_id = :project   | + any of their teams'
  * </pre>
  *
+ * <p>Since M3 there is a fourth step, and it is the only one that <em>removes</em>: when the request
+ * is authenticated by an API token, the answer is intersected with what that token's role confers
+ * and bounded to the project it names. See {@link #cappedToToken} — including why it is an
+ * intersection over this class's own answer rather than a second resolution beside it.
+ *
  * <h2>Why the SYSTEM term is not behind the company gate</h2>
  *
  * <p>{@code role_assignment}'s table comment lists the membership gate above the SYSTEM
@@ -80,6 +85,7 @@ public class PermissionEvaluator {
     private final ProjectRepository projects;
     private final RoleAssignmentRepository roleAssignments;
     private final InstanceRoleAssignmentRepository instanceRoleAssignments;
+    private final RoleRepository roles;
     private final PermissionCatalogue catalogue;
 
     public PermissionEvaluator(
@@ -89,6 +95,7 @@ public class PermissionEvaluator {
             ProjectRepository projects,
             RoleAssignmentRepository roleAssignments,
             InstanceRoleAssignmentRepository instanceRoleAssignments,
+            RoleRepository roles,
             PermissionCatalogue catalogue) {
         this.users = users;
         this.companies = companies;
@@ -96,6 +103,7 @@ public class PermissionEvaluator {
         this.projects = projects;
         this.roleAssignments = roleAssignments;
         this.instanceRoleAssignments = instanceRoleAssignments;
+        this.roles = roles;
         this.catalogue = catalogue;
     }
 
@@ -117,6 +125,15 @@ public class PermissionEvaluator {
                             + "question than the caller asked.");
         }
         UUID companyId = CompanyContext.require();
+
+        // A token that names a project is inert on every other one, and the refusal happens here
+        // rather than after the intersection: the project bound is about WHICH project, not about
+        // which permissions, so intersecting first would answer "you hold case:read" about a
+        // project this credential may not touch at all.
+        TokenContext.ApiTokenPrincipal token = TokenContext.currentOrNull();
+        if (token != null && token.projectId() != null && !token.projectId().equals(projectId)) {
+            return PermissionSet.empty(catalogue);
+        }
 
         // The project must belong to the ACTIVE company, and this check is not redundant
         // with the query predicates below. COMPANY-scope grants carry no project id — they
@@ -143,7 +160,7 @@ public class PermissionEvaluator {
             merge(held, roleAssignments.findCompanyRoleHeldPermissions(companyId, userId));
             merge(held, projectTerm(companyId, userId, projectId));
         }
-        return PermissionSet.of(catalogue, held);
+        return PermissionSet.of(catalogue, cappedToToken(held));
     }
 
     /**
@@ -269,7 +286,7 @@ public class PermissionEvaluator {
             // let a company-wide Test Lead create projects because they lead all the existing ones.
             merge(held, roleAssignments.findCompanyRoleHeldPermissions(companyId, userId));
         }
-        return PermissionSet.of(catalogue, held);
+        return PermissionSet.of(catalogue, cappedToToken(held));
     }
 
     /**
@@ -280,8 +297,65 @@ public class PermissionEvaluator {
     @Transactional(readOnly = true)
     public PermissionSet evaluateInstanceWide(UUID userId) {
         return systemTermIfAccountActive(userId)
-                .map(held -> PermissionSet.of(catalogue, held))
+                .map(held -> PermissionSet.of(catalogue, cappedToToken(held)))
                 .orElseGet(() -> PermissionSet.empty(catalogue));
+    }
+
+    /**
+     * Intersects the answer with what an API token may confer — <strong>the one narrowing in this
+     * class, and the only place a token's bound is applied.</strong>
+     *
+     * <p>A no-op for an ordinary session, which is every request that is not from a CI job.
+     *
+     * <h2>Intersection, never union, and never a resolution of its own</h2>
+     *
+     * <p>{@code SessionTokens}' header refuses to put grant claims in the session JWT, quoting plan
+     * §6b: <em>"a permission resolved inconsistently between two code paths is the bug class the
+     * design exists to prevent."</em> A token principal that resolved its own permissions would be
+     * that second path. So the terms above are resolved exactly as they are for the token's
+     * <em>owner</em> — same gates, same union, same replace-don't-union boundary — and this method
+     * only removes. Three properties follow by construction rather than by remembering:
+     *
+     * <ul>
+     *   <li><strong>A token can never exceed its role.</strong> Roles spec §A6's list is an upper
+     *       bound because it is one side of an intersection, not because somebody granted exactly
+     *       it.</li>
+     *   <li><strong>A token can never exceed its owner.</strong> A Test Engineer cannot mint
+     *       themselves a Company Admin credential, and demoting a person shrinks every token they
+     *       issued — on the next request, with no revocation step.</li>
+     *   <li><strong>Every gate in the product is covered.</strong> Not the ones somebody remembered
+     *       to guard: a new endpoint asks this evaluator, so it is capped the day it is written.</li>
+     * </ul>
+     *
+     * <p>The qualifier is intersected too, through {@link PermissionQualifier#narrowedBy} — a
+     * company-wide {@code ALL} capped by a role's {@code OWN} is {@code OWN}, so a token cannot use
+     * its owner's seniority to reach rows its role is restricted from. Taking the owner's qualifier
+     * whole would make the key-level intersection decorative on every {@code OWN}-qualified key.
+     */
+    private Map<String, PermissionQualifier> cappedToToken(Map<String, PermissionQualifier> held) {
+        TokenContext.ApiTokenPrincipal token = TokenContext.currentOrNull();
+        if (token == null) {
+            return held;
+        }
+
+        Map<String, PermissionQualifier> roleGrant = new HashMap<>();
+        merge(roleGrant, roles.findHeldPermissionsForRole(token.roleId()));
+
+        Map<String, PermissionQualifier> capped = new HashMap<>();
+        for (Map.Entry<String, PermissionQualifier> entry : held.entrySet()) {
+            PermissionQualifier bound = roleGrant.get(entry.getKey());
+            if (bound == null) {
+                // Not conferred by the role at all. Dropped rather than kept-and-qualified: NONE
+                // and "absent" are the same answer to PermissionSet, and building the map from the
+                // intersection keeps that true without relying on it.
+                continue;
+            }
+            PermissionQualifier narrowed = entry.getValue().narrowedBy(bound);
+            if (narrowed != PermissionQualifier.NONE) {
+                capped.put(entry.getKey(), narrowed);
+            }
+        }
+        return capped;
     }
 
     /**
