@@ -61,14 +61,24 @@
  *
  * <h2>What is deliberately not built</h2>
  *
- * <p>§6l lists five derived-item generators. <strong>Three exist here since §81</strong> —
- * {@code REVIEW} landed once §76–§80 had built the workflow and, in {@code review_assignment}, the
- * one table that records who was <em>asked</em>. {@code DOC_UPDATE} needs §6i's stale-case flagging,
+ * <p>§6l lists five derived-item generators. <strong>Four exist here since §121</strong> —
+ * {@code REVIEW} landed in §81, once §76–§80 had built the workflow and, in
+ * {@code review_assignment}, the one table that records who was <em>asked</em>; {@code QUARANTINE}
+ * landed once §121 created {@code case_flake}, which is the table open question #24 said the
+ * generator had no data without. {@code DOC_UPDATE} needs §6i's stale-case flagging,
  * which the documentation module does not compute, and {@code DEFECT} needs the local defect record,
  * which nothing writes. They are <em>absent</em> rather than returning empty: a generator that
  * always yields nothing is indistinguishable from a broken one, and the contract's {@code kind} enum
- * keeps all six so the SPA's labels stay complete for the day they land — which is exactly what
+ * keeps them so the SPA's labels stay complete for the day they land — which is exactly what
  * {@code REVIEW} then needed, no contract change at all.
+ *
+ * <p><strong>{@code QUARANTINE} is the one that did need a contract change, and the reason is worth
+ * keeping.</strong> §53's six kinds were chosen to cover §6l's generator list, and *"quarantined
+ * flaky test"* is not any of them: {@code CASE_MAINTENANCE} is {@code case_health}'s, whose card
+ * description the SPA splits on commas and labels code by code. A quarantine reason is a sentence a
+ * person wrote, and filed under that kind it renders as its own fragments joined by a middot with
+ * nothing failing anywhere. A seventh member, and the enum's habit of being ahead of its generators
+ * paid for the other three.
  *
  * <p>Also not built, and named because the inbox makes it matter more: <strong>per-project
  * generator toggles</strong>. §6l says each generator is individually toggleable and that all of

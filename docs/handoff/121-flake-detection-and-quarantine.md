@@ -1,6 +1,6 @@
 # §121. Flake detection and quarantine — the third implementation of one sentence, and the gate that is the slice
 
-**M3 slice 6, phases 1 and 2 of 4.** The plan's milestone table says what M3 is:
+**M3 slice 6, phases 1, 2 and 3 of 4.** The plan's milestone table says what M3 is:
 
 > **M3 — Automation ingestion** | Result parsers, automation-key matching, API tokens, **quarantine
 > flow** | 2–3 weeks
@@ -151,13 +151,62 @@ A third was caught by the *schema*: `case_flake_quarantine_complete` refused thi
 fixture, which quarantined with a null `quarantined_by` because no `app_user` row existed. The
 constraint proved it does something before any production caller reached it.
 
+## Phase 3 — the board's fourth generator, and the seam that guessed its caller wrong
+
+**`CaseFlakeRepository.findQuarantined` could never have been called by the generator its own javadoc
+named, and it is deleted.** It was written in phase 1 for §6l's fourth derived-item generator; that
+generator lives in `work`, whose `@ApplicationModule(allowedDependencies = {"tenancy", "project",
+"identity"})` makes the import an ArchUnit failure. The board reads foreign rows the way it has read
+`case_health` since §53 — native SQL in `work.BoardFacts`, the one file in the module permitted to
+name a foreign table — so the query landed there as `quarantinedCases`, and the repository method
+kept a comment where it used to be.
+
+This is the same shape as the writerless tables this slice was started over, **one level up**: a seam
+built ahead of its consumer is a guess about that consumer, and this one guessed a module boundary
+wrong. Its `ORDER BY flake_score DESC NULLS LAST` was wrong for the board too — `BoardService.sorted`
+re-sorts every assembled card by (overdue, priority, id), so any order established in a generator is
+discarded a few frames later. That ordering belongs to a flake worklist, which does not exist.
+
+**`QUARANTINE` is a seventh `kind`, and the reason is a rendering fact rather than a taxonomy
+preference.** §53 declared six kinds ahead of their generators precisely so a new one would need no
+contract change, and that paid for `REVIEW` in §81. It does not pay here: `CASE_MAINTENANCE` is
+`case_health`'s, and `BoardPage.describeCard` splits such a card's description on commas and looks
+each fragment up in the `HealthSignal` label map. A quarantine reason is a sentence somebody typed —
+*"Flaky on Firefox, races the login redirect"* — so filed under that kind it renders as its own
+fragments joined by a middot. Plausible, wrong, and nothing fails on either side.
+
+**The id prefix is `quarantine:` and not `case:`**, which is one line and the difference between two
+cards and one: a case that is both flagged and quarantined is two cards about one case id, and the
+shared prefix gives them the same id on the one screen whose whole job is to be a list.
+
+**The assignee is the case owner; the decider is in the sentence.** `quarantined_by` is the tempting
+choice because it is the only person the row names, and it would make pulling somebody else's flaky
+test out of the gate an act that moves their debt onto your own board. The fixture is the only thing
+that can tell the two apart, so `TC-12` is owned by `VIEWER` and quarantined by `LEAD`.
+
+**This card is the one derived card that does not clear itself**, and that asymmetry is the design:
+a health signal self-heals when the condition is fixed (§53), while a quarantine is an authored
+decision and leaves the board only when a person releases the test. A card derived from the *score*
+would vanish the moment the test stopped flaking, taking the debt with it while the test was still
+out of the gate — which is `CaseFlake`'s argument for authoring the flag, arriving at the consumer
+that argument was made for.
+
+**The one red run of this phase was a fixture-id collision, and it failed somewhere else.** The two
+new case ids were `…000c`/`…000d`; `…000c` was already `TEAM_ELSEWHERE`, declared eighty lines away
+in another block. Every case helper is `ON CONFLICT (id) DO NOTHING`, so the collision silently
+dropped the *later* insert and `TEAM_ELSEWHERE`'s execution pointed at this slice's case, in the
+wrong project, with the wrong owner. **The only test that went red was §84's team-board bound**, which
+has nothing to do with either row — sixth instance of the family §19 opened, and the durable half is
+that a collision does not fail where you added it.
+
 ## Gates
 
 | Gate | State |
 |---|---|
-| `cd backend && ./gradlew build` | **BUILD SUCCESSFUL — 2003 tests across 424 result classes, 0 failures** (§120's baseline was 1963/410; +15 flake, +18 quarantine, +2 the schema count) |
+| `cd backend && ./gradlew build` | **BUILD SUCCESSFUL — 2008 tests across 425 result classes, 0 failures** (phase 3; phase 2's was 2003/424, §120's baseline 1963/410) |
 | `cd frontend && npm run build` | clean |
 | `npm run lint` | 0 warnings |
+| `npm run test:run` | 1021/1021 across 77 files (measured — unchanged by phase 3, which added no component) |
 
 Schema head is **`V38__case_flake.sql`**; **`V39` is the next free number**. Policy count goes
 **61 → 62** — a new company-owned table, unlike `V37`, which added a column to an already-policed
@@ -172,26 +221,30 @@ queued. Two of the queued rows say they **may redden nothing**, which would be t
 `FQ-14` (the filter-versus-RLS layering, where a suite that cannot see the difference is exactly why
 the rule is written down).
 
-**No browser rows, and that is a statement rather than an omission** — §116's and §117's shape. There
-is no screen. The queue records what phase 4's rows will name, including the one thing the flake
-panel must not do: render a null score as `0`, which passes every type check.
+~~**No browser rows, and that is a statement rather than an omission**~~ → **true of phases 1–2 and
+no longer of the slice.** Phase 3 puts a new card on an existing screen, so it owes six:
+`M1-29`…`M1-34`, in the A5 board lane where the state they need already lives. They **author their
+own fixture from the console**, because there is still no screen that quarantines — the shape
+`M6-1`…`M6-8` use for the report pipeline. Six more mutation rows (`FQ-15`…`FQ-20`), none run.
 
-## What is NOT done — this slice is HALF SHIPPED
+The phase-4 rows the queue already records still stand, including the one thing the flake panel must
+not do: render a null score as `0`, which passes every type check.
 
-**Phases 3 and 4 are not built**, and the slice must be described that way:
+## What is NOT done — this slice is THREE QUARTERS SHIPPED
 
-- **Phase 3 — the board's fourth generator.** `BoardFacts` still implements three of §6l's four, and
-  the quarantined-flaky card source is still silently empty. `CaseFlakeRepository.findQuarantined`
-  exists and has **no caller** — which is the writerless-table shape this slice was started to fix,
-  reproduced one level up. Note `work_item.kind` has no `CHECK` and derived cards are not rows, so
-  this needs no migration.
+- ~~**Phase 3 — the board's fourth generator.**~~ → **shipped, above.** `BoardFacts` implements four
+  of §6l's five and the quarantined-flaky card source is real. It needed **no migration**
+  (`work_item.kind` has no `CHECK` and derived cards are not rows) and **one additive contract
+  change** — a seventh `kind`.
 - **Phase 4 — the frontend.** No SPA consumer for `PUT …/quarantine` or for `CaseFlake`. The
-  contract and `schema.d.ts` carry both.
+  contract and `schema.d.ts` carry both. **The board now renders a quarantine it cannot create**,
+  which is §117's position with one screen's worth of it closed: the card is visible, and the only
+  way to raise or clear one is the console snippet in the browser queue.
 
 ## What is next
 
-- **Phase 3, then phase 4** — above. The endpoint without a screen is §117's position exactly, and
-  §118 is what it looked like to close.
+- **Phase 4** — above. The endpoint without a screen is §117's position exactly, and §118 is what it
+  looked like to close.
 - **`lastUsedAt` needs a writer** (§118), still — named for the fourth slice running now. §28's rule
   says that is a reason to check whether it is blocked rather than to repeat it: it is not.
 - **Async ingestion** — `PENDING`/`PROCESSING`/`FAILED` and `raw_storage_key`, which §117 left

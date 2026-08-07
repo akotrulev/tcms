@@ -694,6 +694,24 @@ and two case versions** — the smallest shape that can tell §6l's three false 
 | FQ-13 | `case_flake_quarantine_complete` dropped from `V38` | The reason becomes optional at the storage layer, so any future caller — a bulk action, a board drag — can quarantine without one. **Not assertable by the current suite**, whose only writer already sends all four; recorded because the constraint is what stops the one-argument toggle from being addable, and because it is the check that caught this slice's own fixture writing a null `quarantined_by`. | ⬜ NOT RUN — not assertable without a second writer |
 | FQ-14 | `CaseQuarantineService` looks the flake row up with `findById` rather than `findScopedById` | The Hibernate company filter does not apply to the primary-key path (`TestCaseRepository.findLiveInProject`'s javadoc). RLS still covers it, so **this may redden nothing** — which is the point of the row: it removes one of two layers, and a suite that cannot see the difference is exactly why the rule is written down rather than tested. | ⬜ NOT RUN — may redden nothing, which is the finding |
 
+### §121 phase 3 — the board's fourth generator
+
+`BoardEndpointTest.Quarantine` (5, inside the existing `b0…` fixture, which grew two cases and five
+`case_flake` rows).
+
+> **NO MUTATIONS WERE RUN.** The class went green on the second run — the first failed on a
+> **fixture-id collision**, not on the implementation, and that is recorded as `FQ-19` below because
+> it is the only finding of the phase that a mutation could not have produced.
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| FQ-15 | `BoardFacts.quarantinedCases` selects on `f.flake_score >= 0.5` rather than on `f.quarantined` | The version §121 argued against, arriving as a query rather than as a schema: the card then **vanishes the moment the test stops flaking**, taking the debt off the board while the test is still excluded from the gate. Should redden `onlyLiveQuarantinesAreCards` on `TC-13` alone — the one fixture row with a high score and no decision. | ⬜ NOT RUN |
+| FQ-16 | `PREFIX_QUARANTINE` becomes `PREFIX_CASE` — the natural "it is a case card" simplification | A case that is both flagged and quarantined produces **two cards with one id**. The API returns both, the board renders both, and the SPA's list key collides silently. Nothing throws on either side. Should redden `twoSourcesAreTwoCards`. | ⬜ NOT RUN |
+| FQ-17 | The card's assignee becomes `flake.quarantinedBy()` instead of `flake.ownerId()` | Quarantining somebody else's flaky test moves **their** debt onto **your** personal board, and off the board of the person who can fix it. Both boards still render perfectly. Should redden `theDebtBelongsToTheOwner` in both directions. | ⬜ NOT RUN |
+| FQ-18 | The `test_case` join drops `AND c.deleted_at IS NULL` | A soft-deleted case keeps its flake row (only a hard delete cascades, `V38`), so the board grows a permanent card for a test nobody is running and nobody can release from a screen. `assignedExecutions` and `pendingReviews` both carry this predicate; this is the third place it matters. Should redden `onlyLiveQuarantinesAreCards` on `TC-8`. | ⬜ NOT RUN |
+| FQ-19 | *(not a mutation — the finding itself)* The fixture's two new case ids were `…000c`/`…000d`, and `…000c` was already `TEAM_ELSEWHERE`, declared 80 lines away | **Sixth instance of the family the handoff has tracked since §19.** Every case helper is `ON CONFLICT (id) DO NOTHING`, so the collision silently dropped the *later* insert and `TEAM_ELSEWHERE`'s execution pointed at this slice's case — wrong project, wrong owner. The only red test was §84's team-board bound, which is nothing to do with either row: **a collision fails somewhere else.** | ✅ **FOUND AND FIXED** — ids moved to `…000e`/`…000f` |
+| FQ-20 | `cardFor(QuarantinedCase…)` returns a non-empty `allowedTransitions` | A quarantined card becomes draggable and the drop is refused by the id prefix instead — 409 after the gesture rather than no gesture at all (`ui-rules`, §106-6). Releasing a test needs `case:edit` **and a reason**, which a drag has nowhere to collect. Should redden `derivedCardsCannotBeMoved`, which iterates every derived card rather than naming kinds. | ⬜ NOT RUN |
+
 ---
 
 ## §122 — grant-instance-admin (M3 slice 7)

@@ -2,15 +2,28 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-07 (§121 — flake detection and quarantine, backend-only so far; §120 — automation drift; §119 — the ingestion history and the binder;
+**Last verified:** 2026-08-07 (§121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the ingestion history and the binder;
 §118 — the token screen; §115 — the coverage matrix's frontend arm; §107 — the mock layer is deleted
 — before them)
-**Baseline commit:** `7af1c3c` (§121 phase 2) (trust the body over the header and re-grep what a
+**Baseline commit:** `4542959` (lab deploy) (trust the body over the header and re-grep what a
 later commit could have moved).
 **§121 (M3 slice 6, phases 1–2) touched ONE frontend file — a regenerated `api/schema.d.ts`.**
 The contract gained `PUT /projects/{projectId}/cases/{caseId}/quarantine` plus two schemas,
 `CaseQuarantineInput` and `CaseFlake`. **There is NO consumer in `src/` — phase 4 is not built**, so
 both types are generated and unreferenced. Test count is unchanged at **1021 across 77 files**.
+
+**§121 PHASE 3 ADDED A SEVENTH `WorkItem['kind']` — `QUARANTINE` — AND THREE `Record<Union, …>`
+MAPS ARE WHAT MADE IT SAFE.** `BoardPage.kindLabels`, `cardMove.derivedNouns`, and the contract's
+own enum: a new member is a compile error in both maps until it is worded, which is the pattern the
+board has used since §81. Three lines changed under `src/` plus the regenerated `schema.d.ts` and
+one subtitle; **no new component, no new query, no test count change (still 1021/77 — measured)**.
+**⚠ `BoardPage.describeCard` GATES ON `kind === 'CASE_MAINTENANCE'` AND THAT GATE IS LOAD-BEARING.**
+It splits that kind's description on commas and looks each fragment up in `healthLabels`, because a
+maintenance card's description is a list of raw `HealthSignal` codes the server refuses to word. A
+quarantine reason is a sentence a person typed, so the whole reason `QUARANTINE` is a separate kind
+rather than a second `CASE_MAINTENANCE` source is that filed there it would render as its own
+fragments joined by a middot — with nothing failing on either side. Any future kind whose
+description is prose gets the pass-through by default; do not widen the gate.
 
 **⚠ WHEN PHASE 4 IS BUILT, `CaseFlake.flakeScore` IS NULLABLE AND NULL DOES NOT MEAN ZERO.** Null is
 *not enough evidence to say*; `0` is *evidently stable*. They are opposite claims about a test, and

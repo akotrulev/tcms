@@ -18,7 +18,7 @@ import org.springframework.stereotype.Component;
  * reads them through exactly one file — a shared row is not a shared class, and what §3 forbids is
  * two modules becoming deployable only together.
  *
- * <p>Three facts live on the other side, one per implemented generator:
+ * <p>Four facts live on the other side, one per implemented generator:
  *
  * <ol>
  *   <li><strong>Which executions are outstanding, and for whom</strong> — {@link #assignedExecutions},
@@ -35,6 +35,11 @@ import org.springframework.stereotype.Component;
  *       generator that reads tables from <em>three</em> modules at once — which is exactly why it
  *       is here rather than in {@code project}, whose {@code allowedDependencies} is
  *       {@code tenancy} alone.</li>
+ *   <li><strong>Which tests somebody has stopped gating on</strong> —
+ *       {@link #quarantinedCases}, over {@code case_flake}'s <em>authored</em> half joined to
+ *       {@code test_case}. This is the {@code QUARANTINE} card, §6l's fourth generator, and it was
+ *       the one of the four that had no data of any kind until §121 created the table — open
+ *       question #24's *"no data until M3 ingestion exists"*, which §117 removed.</li>
  * </ol>
  *
  * <p>A fourth crossing since §84, and it is not a generator: {@link #teamMembers} reads
@@ -48,7 +53,7 @@ import org.springframework.stereotype.Component;
  * <p>Since §83 the board is not always about one project — §6l's "My Work" aggregates every project
  * the caller can see, and asking each generator once per project would be 3N round trips for the
  * person the board was designed for, the one working on three. So the predicate is
- * {@code project_id IN (:projectIds)} in all three, and the project-scoped board passes a set of one.
+ * {@code project_id IN (:projectIds)} in all four, and the project-scoped board passes a set of one.
  * A per-project overload beside it would be a second spelling of each query for the older caller to
  * keep in step with (§58's E1) — and the two would drift in the direction nobody tests, since only
  * one board would exercise each.
@@ -398,6 +403,92 @@ class BoardFacts {
                         (String) row[3],
                         (UUID) row[4],
                         List.of((String[]) row[5])))
+                .toList();
+    }
+
+    /**
+     * One test somebody has decided to stop gating on.
+     *
+     * @param ownerId       the case's owner, nullable — this is the card's <em>assignee</em>, and it
+     *                      is deliberately not {@code quarantinedBy}. Whoever pulled a test out of
+     *                      the gate is rarely the person who owes the fix, and a board that put the
+     *                      card on their list would make quarantining somebody else's test an act
+     *                      that assigns the debt to yourself.
+     * @param quarantinedBy who decided, and never null: {@code case_flake_quarantine_complete}
+     *                      makes the four authored columns all-or-nothing, so a quarantined row has
+     *                      one. It may still fail to <em>resolve</em> to a name — the column
+     *                      references instance-level {@code app_user}, so somebody offboarded from
+     *                      the company leaves a decision nobody is named for, exactly as
+     *                      {@code review_assignment.assigned_by} does.
+     * @param reason        never null, for the same {@code CHECK}'s reason. It is the whole value of
+     *                      the card: a card saying a test is excluded without saying why is debt
+     *                      nobody can evaluate without reading the test.
+     */
+    record QuarantinedCase(
+            UUID caseId,
+            UUID projectId,
+            String caseKey,
+            String caseTitle,
+            UUID ownerId,
+            UUID quarantinedBy,
+            String reason) {
+    }
+
+    /**
+     * Cases whose flake row carries a live quarantine — §6l's fourth derived-item generator, and the
+     * one that had been silently empty for the whole life of the board.
+     *
+     * <h2>The card is the reason quarantine is authored rather than derived</h2>
+     *
+     * <p>{@code CaseFlake}'s header makes the argument from the schema side and it lands here: a
+     * card generated from the <em>score</em> crossing a threshold would vanish the moment the test
+     * stopped flaking — taking the debt off the board while the test was still excluded from
+     * gating. Reading the authored flag instead means the card leaves when somebody
+     * <strong>releases</strong> the test, which is the act it is asking for.
+     *
+     * <p>So this generator is the one whose card does <em>not</em> clear itself, unlike
+     * {@link #casesNeedingAttention}, where §53's whole argument is that the signal self-heals when
+     * the underlying condition is fixed. That asymmetry is the design and not an oversight in this
+     * query: a derived signal is a claim about the world and an authored flag is a decision, and a
+     * decision is undone by a person.
+     *
+     * <h2>Only the seven derived columns are absent from this query, and that is deliberate</h2>
+     *
+     * <p>{@code flake_score} is not selected. It is what the case's own screen shows and what a
+     * flake worklist would rank by, but a board card has one line for its reason and the reason is
+     * the sentence a human wrote. Ordering by it does not survive either: {@code BoardService}
+     * re-sorts the whole assembled board by (overdue, priority, id), so a score order established
+     * here would be discarded a few frames later — which is worth knowing before somebody adds an
+     * {@code ORDER BY flake_score} to make a worklist out of this. The order is {@code key_seq},
+     * matching both siblings, because what it actually has to be is total and stable.
+     *
+     * <p>The {@code test_case} join drops a soft-deleted case for {@link #assignedExecutions}'
+     * reason: the flake row survives a soft delete (only a hard delete cascades, {@code V38}), and
+     * "this test is excluded from the gate" is not something to say about a case nobody is running.
+     */
+    List<QuarantinedCase> quarantinedCases(Collection<UUID> projectIds) {
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = entities.createNativeQuery("""
+                SELECT c.id, c.project_id, c.key, c.title, c.owner_id,
+                       f.quarantined_by, f.quarantine_reason
+                  FROM case_flake f
+                  JOIN test_case c ON c.id = f.case_id AND c.deleted_at IS NULL
+                 WHERE f.project_id IN (:projectIds)
+                   AND f.quarantined
+                 ORDER BY c.key_seq
+                """)
+                .setParameter("projectIds", projectIds)
+                .getResultList();
+
+        return rows.stream()
+                .map(row -> new QuarantinedCase(
+                        (UUID) row[0],
+                        (UUID) row[1],
+                        (String) row[2],
+                        (String) row[3],
+                        (UUID) row[4],
+                        (UUID) row[5],
+                        (String) row[6]))
                 .toList();
     }
 }

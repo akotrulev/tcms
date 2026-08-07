@@ -49,27 +49,16 @@ public interface CaseFlakeRepository extends JpaRepository<CaseFlake, UUID> {
             """)
     Optional<CaseFlake> findScopedById(@Param("caseId") UUID caseId);
 
-    /**
-     * Every quarantined case in a set of projects, worst score first.
-     *
-     * <p>§6l's fourth derived-item generator reads this, and the set-of-projects signature is
-     * {@code BoardFacts}' rule rather than this repository's preference: since §83 the board is not
-     * always about one project, and a per-project overload beside this one would be a second
-     * spelling for the older caller to keep in step with.
-     *
-     * <p><strong>The caller must not pass an empty collection.</strong> {@code IN ()} is a syntax
-     * error rather than a query matching nothing — the same guard {@code BoardFacts} states at each
-     * of its own grouped queries.
-     *
-     * <p>Nulls last, so a case quarantined before it was ever scored — the ordinary sequence, since
-     * a red run is quarantined within the hour and the fact-log refresh is on a schedule — sorts
-     * below cases with real evidence instead of above them.
-     */
-    @Query("""
-            SELECT f FROM CaseFlake f
-             WHERE f.projectId IN :projectIds
-               AND f.quarantined = true
-             ORDER BY f.flakeScore DESC NULLS LAST, f.caseId
-            """)
-    List<CaseFlake> findQuarantined(@Param("projectIds") Collection<UUID> projectIds);
+    // There was a findQuarantined(Collection<UUID> projectIds) here until §121 phase 3, and it was
+    // dead in a way worth recording rather than merely unused: its javadoc named §6l's fourth
+    // derived-item generator as its caller, and that caller CANNOT CALL IT. The generator lives in
+    // `work`, whose @ApplicationModule allows tenancy/project/identity alone, so ArchUnit refuses
+    // the import — the board reads foreign rows through native SQL in work.BoardFacts, exactly as
+    // it reads case_health without touching CaseHealthRepository.
+    //
+    // The lesson is the one this slice was started over, one level up: a seam written for a caller
+    // that does not exist yet is a guess about the caller, and this one guessed a module boundary
+    // wrong. Adding it back needs a consumer INSIDE this module — a flake worklist screen would be
+    // one — and the ORDER BY it carried (flake_score DESC NULLS LAST) belongs to that reader, not
+    // to the board, which re-sorts every card by (overdue, priority, id) regardless.
 }

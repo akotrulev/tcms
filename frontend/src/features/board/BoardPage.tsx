@@ -80,6 +80,7 @@ const kindLabels: Record<WorkItem['kind'], string> = {
   DOC_UPDATE: 'Documentation',
   CASE_MAINTENANCE: 'Maintenance',
   DEFECT: 'Defect',
+  QUARANTINE: 'Quarantined',
 };
 
 export function BoardPage() {
@@ -102,7 +103,7 @@ export function BoardPage() {
           { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
           { label: 'Board' },
         ]}
-        subtitle="Tasks alongside the work the repository already knows about — assigned executions, pending reviews and cases that need attention."
+        subtitle="Tasks alongside the work the repository already knows about — assigned executions, pending reviews, cases that need attention and tests somebody has quarantined."
         actions={
           <Stack direction="row" sx={{ gap: 0.5, alignItems: 'center' }}>
             {(
@@ -195,6 +196,12 @@ export function BoardPage() {
  * attention" panel uses**. An unrecognised code falls through as itself rather than being dropped:
  * a signal the SPA has no word for yet is still a reason, and silently discarding it would put the
  * card back in the state this function exists to fix.
+ *
+ * **The `kind` check is what a `QUARANTINE` card depends on, and it is why that kind exists.** Its
+ * description is a sentence a person wrote — *"Quarantined by Ana — flaky on Firefox, sometimes"* —
+ * so filed under `CASE_MAINTENANCE` it would be split on its commas and looked up word by word,
+ * rendering as its own fragments joined by a middot with nothing failing anywhere. Anything else
+ * passes through untouched, which is the behaviour every future kind gets by default.
  */
 function describeCard(item: WorkItem): string {
   if (item.kind !== 'CASE_MAINTENANCE' || !item.description) return item.description ?? '';

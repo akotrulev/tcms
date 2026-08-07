@@ -34,8 +34,8 @@ import org.springframework.transaction.annotation.Transactional;
  *       expected to run it; a flagged case is {@code TODO} because nobody has started. There is no
  *       code path that writes either.</li>
  *   <li><strong>A derived card's id is synthetic</strong> and cannot collide with a task's, because
- *       it is prefixed. {@link #PREFIX_EXECUTION}, {@link #PREFIX_CASE} and {@link #PREFIX_REVIEW}
- *       are also what {@link #move} uses to <em>recognise</em> a derived id and refuse it — the
+ *       it is prefixed. {@link #PREFIX_EXECUTION}, {@link #PREFIX_CASE}, {@link #PREFIX_REVIEW}
+ *       and {@link #PREFIX_QUARANTINE} are also what {@link #move} uses to <em>recognise</em> a derived id and refuse it — the
  *       refusal is driven by the same constant that produced the id, so the two cannot drift
  *       apart.</li>
  *   <li><strong>{@code allowedTransitions} is a property of the card, not of the column</strong>
@@ -65,9 +65,21 @@ public class BoardService {
      * other two prefixes get: {@code UUID.fromString} would have thrown on this either way, so
      * nothing is lost, but the prefix check in {@link #isDerived} is now the <em>only</em> thing
      * standing between a review card and a {@code PATCH}. Worth knowing before a fourth generator
-     * decides ids are free-form.
+     * decides ids are free-form — §121's did not: {@link #PREFIX_QUARANTINE} is prefix-plus-one-UUID
+     * and keeps the accidental second guard.
      */
     private static final String PREFIX_REVIEW = "review:";
+
+    /**
+     * The quarantine prefix, and the reason it is not {@link #PREFIX_CASE}.
+     *
+     * <p>Both cards are about a case and both carry its id, so {@code case:{caseId}} would have been
+     * the obvious spelling — and a case that is <em>both</em> flagged by the health computation and
+     * quarantined would then produce two cards with <strong>the same id</strong>. Nothing would
+     * fail: the API returns both, the board renders both, and the SPA's list key collides silently
+     * on the one screen whose whole job is to be a list. Two sources, two ids.
+     */
+    private static final String PREFIX_QUARANTINE = "quarantine:";
 
     /** {@code CaseCreateService}'s cap, for its reason: the header is attacker-controlled. */
     private static final int MAX_IDEMPOTENCY_KEY = 200;
@@ -403,6 +415,7 @@ public class BoardService {
         List<BoardFacts.AssignedExecution> executions = facts.assignedExecutions(projectIds);
         List<BoardFacts.FlaggedCase> flagged = facts.casesNeedingAttention(projectIds);
         List<BoardFacts.PendingReview> reviews = facts.pendingReviews(projectIds);
+        List<BoardFacts.QuarantinedCase> quarantined = facts.quarantinedCases(projectIds);
 
         // One resolution for the whole board, across all four sources — see BoardPeople on why
         // this is not done per card. A review contributes TWO ids, the reviewer and whoever asked
@@ -415,6 +428,10 @@ public class BoardService {
         reviews.forEach(review -> {
             addIfPresent(peopleIds, review.reviewerId());
             addIfPresent(peopleIds, review.requestedBy());
+        });
+        quarantined.forEach(flake -> {
+            addIfPresent(peopleIds, flake.ownerId());
+            addIfPresent(peopleIds, flake.quarantinedBy());
         });
         Map<UUID, UserRefView> resolved =
                 people.resolve(CompanyContext.require(), peopleIds);
@@ -431,6 +448,9 @@ public class BoardService {
         }
         for (BoardFacts.PendingReview review : reviews) {
             cards.add(cardFor(review, byId.get(review.projectId()), resolved));
+        }
+        for (BoardFacts.QuarantinedCase flake : quarantined) {
+            cards.add(cardFor(flake, byId.get(flake.projectId()), resolved));
         }
         return cards;
     }
@@ -590,6 +610,67 @@ public class BoardService {
     }
 
     /**
+     * A card for a test somebody has stopped gating on — §6l's fourth generator (§121).
+     *
+     * <h2>This is the one derived card that does not clear itself</h2>
+     *
+     * <p>Every other card here leaves the board because its source moved on: an execution is
+     * recorded, a reviewer speaks, a health signal self-heals when the condition is fixed. A
+     * quarantine is <em>authored</em>, so this one leaves only when a person releases the test —
+     * which is exactly what makes it worth having. {@code CaseFlake}'s header states the
+     * alternative: a card derived from the flake score would vanish the moment the test stopped
+     * flaking, taking the debt with it while the test was still out of the gate.
+     *
+     * <p>{@code TODO}, computed, for the maintenance card's reason. There is no code path that
+     * writes it, and it cannot be dragged out of the column — {@code allowedTransitions} is empty,
+     * because releasing a test is a gated write ({@code case:edit}, §121) with its own endpoint and
+     * a reason field that a drag has nowhere to collect.
+     *
+     * <h2>The assignee is the case OWNER and the description names the DECIDER</h2>
+     *
+     * <p>Two different people, and putting either in the other's place is a plausible mistake with a
+     * visible cost. The owner is who the debt belongs to, so the card lands on their personal board
+     * (§83) — assigning it to whoever quarantined the test would make pulling somebody else's flaky
+     * test out of the gate an act that moves their work onto your own list. The decider goes in the
+     * sentence instead, because <em>who decided this</em> is the first thing a reader asks and the
+     * one thing the reason alone cannot say.
+     *
+     * <p>The unresolved-decider fallback is {@code PendingReview}'s exactly: {@code quarantined_by}
+     * references instance-level {@code app_user}, so an offboarded account leaves a live quarantine
+     * with nobody to name, and naming somebody would attribute the decision.
+     */
+    private WorkItemView cardFor(
+            BoardFacts.QuarantinedCase flake,
+            Project project,
+            Map<UUID, UserRefView> resolved) {
+
+        UserRefView decider =
+                flake.quarantinedBy() == null ? null : resolved.get(flake.quarantinedBy());
+
+        return new WorkItemView(
+                PREFIX_QUARANTINE + flake.caseId(),
+                true,
+                // CASE, like the maintenance card: sourceType is what the card OPENS (the review
+                // card's rule), and what a quarantine card opens is the case it is about.
+                "CASE",
+                flake.caseId(),
+                "QUARANTINE",
+                flake.caseTitle(),
+                decider == null
+                        ? "Quarantined — " + flake.reason()
+                        : "Quarantined by " + decider.displayName() + " — " + flake.reason(),
+                WorkItemStatus.TODO,
+                Priority.MEDIUM,
+                null,
+                false,
+                flake.ownerId() == null ? null : resolved.get(flake.ownerId()),
+                project.getId(),
+                project.getKey(),
+                flake.caseKey(),
+                List.of());
+    }
+
+    /**
      * The signals as a sentence.
      *
      * <p>Deliberately not labelled here. {@code repository.HealthSignal} owns the human-readable
@@ -692,7 +773,8 @@ public class BoardService {
     private static boolean isDerived(String cardId) {
         return cardId.startsWith(PREFIX_EXECUTION)
                 || cardId.startsWith(PREFIX_CASE)
-                || cardId.startsWith(PREFIX_REVIEW);
+                || cardId.startsWith(PREFIX_REVIEW)
+                || cardId.startsWith(PREFIX_QUARANTINE);
     }
 
     private static void addIfPresent(Set<UUID> ids, UUID id) {

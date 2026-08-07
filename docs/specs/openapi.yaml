@@ -4074,12 +4074,12 @@ paths:
         sourceType/sourceId and are NOT stored — their status is computed from the
         source on every read, so a card can never diverge from its execution (plan §6l).
 
-        **Three of the five §6l generators are implemented.** `EXECUTION` cards come from
+        **Four of §6l's generators are implemented.** `EXECUTION` cards come from
         assigned, unrecorded executions in live runs; `CASE_MAINTENANCE` cards come from
-        `case_health`; `REVIEW` cards come from outstanding review requests (§81).
-        `DOC_UPDATE` and `DEFECT` require features nothing computes or writes yet and are
-        absent rather than empty — the `kind` enum keeps them so the SPA's labels stay
-        complete.
+        `case_health`; `REVIEW` cards come from outstanding review requests (§81);
+        `QUARANTINE` cards come from `case_flake`'s authored half (§121). `DOC_UPDATE` and
+        `DEFECT` require features nothing computes or writes yet and are absent rather than
+        empty — the `kind` enum keeps them so the SPA's labels stay complete.
 
         **With no `projectId` this is §6l's personal "My Work" board (§83)** — every card
         assigned to the caller across every project they can see, in one company. It is
@@ -7934,7 +7934,21 @@ components:
         sourceId: { type: string, format: uuid, nullable: true }
         kind:
           type: string
-          enum: [TASK, EXECUTION, REVIEW, DOC_UPDATE, CASE_MAINTENANCE, DEFECT]
+          description: |
+            What the card is, which is what the SPA labels and groups by. Six of these
+            were declared in §53 ahead of their generators so a new one would need no
+            contract change; `QUARANTINE` is the seventh and it needed one, because §6l's
+            "quarantined flaky test" is not any of the six.
+
+            **It is deliberately not `CASE_MAINTENANCE`, and that is a rendering fact
+            rather than a taxonomy preference.** A `CASE_MAINTENANCE` card's `description`
+            is a comma-separated list of raw `HealthSignal` codes that the SPA labels from
+            the contract's own enum (`BoardPage.describeCard`). A quarantine card's
+            description is a sentence a person wrote. Filed under the same kind it would be
+            split on commas and label-looked-up word by word, so "Quarantined by Ana —
+            flaky on Firefox, sometimes" renders as its own fragments joined by a middot,
+            with nothing failing anywhere.
+          enum: [TASK, EXECUTION, REVIEW, DOC_UPDATE, CASE_MAINTENANCE, DEFECT, QUARANTINE]
         title: { type: string }
         description: { type: string, nullable: true }
         status: { $ref: '#/components/schemas/WorkItemStatus' }

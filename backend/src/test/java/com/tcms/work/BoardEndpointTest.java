@@ -148,6 +148,38 @@ class BoardEndpointTest extends IntegrationTestBase {
     /** Umbra's case, keyed identically to prove only ids scope this. */
     private static final UUID FOREIGN = UUID.fromString("b0005000-0000-4000-8000-000000000005");
 
+    // §121 phase 3's fixture — the fourth generator. Every row here exists to make one card either
+    // appear or not appear, and the two that must NOT appear are the ones a plausible
+    // implementation gets wrong: a row that carries evidence but no decision, and a decision on a
+    // case nobody is running any more.
+    //
+    // These two ids started at ...000c/...000d and COLLIDED WITH TEAM_ELSEWHERE, which is declared
+    // 80 lines further down in a different block. Sixth instance of the family the handoff has
+    // tracked since §19: every case helper here is ON CONFLICT (id) DO NOTHING, so the collision
+    // silently DROPPED the later insert and TEAM_ELSEWHERE's execution pointed at this case, in
+    // the wrong project, with the wrong owner. The only test that failed was §84's team-board
+    // bound, which is nothing to do with either row. Grep the whole prefix before taking one.
+
+    /**
+     * Quarantined, and <strong>owned by VIEWER while LEAD is who quarantined it</strong>.
+     *
+     * <p>The only configuration in which "the card belongs to the owner" and "the card belongs to
+     * whoever decided" give different answers. With one person in both roles, a board that assigns
+     * the debt to the decider passes every assertion — and ships a product where pulling somebody
+     * else's flaky test out of the gate moves their work onto your own list.
+     */
+    private static final UUID QUARANTINED = UUID.fromString("b0005000-0000-4000-8000-00000000000e");
+    /**
+     * A {@code case_flake} row with a <strong>high score and no quarantine</strong> — the trap.
+     *
+     * <p>The generator reads the authored flag, never the derived score, and this is the row that
+     * can tell them apart: a query written over {@code flake_score} produces a card here, and every
+     * other test in this class still passes, because every other quarantined case in the fixture
+     * would also be flaky. Deriving the card from the score is the version §121 argued against, so
+     * it needs a row that fails.
+     */
+    private static final UUID RELEASED = UUID.fromString("b0005000-0000-4000-8000-00000000000f");
+
     /** Outstanding in SECOND_PROJECT and assigned to LEAD — the card only §83's board can show. */
     private static final UUID ELSEWHERE = UUID.fromString("b0005000-0000-4000-8000-00000000000a");
     /**
@@ -306,6 +338,14 @@ class BoardEndpointTest extends IntegrationTestBase {
 
             health(acme, ACME, PROJECT, FLAGGED, "never_executed");
 
+            // §121's quarantine fixture. TC-4 is deliberately BOTH flagged and quarantined: two
+            // sources, one case, and the two cards must not share an id.
+            testCase(acme, QUARANTINED, ACME, PROJECT, SUITE, "TC-12", 12, VIEWER);
+            testCase(acme, RELEASED, ACME, PROJECT, SUITE, "TC-13", 13, LEAD);
+            flake(acme, ACME, PROJECT, QUARANTINED, "0.7500", LEAD, "Flaky on Firefox");
+            flake(acme, ACME, PROJECT, FLAGGED, "0.5000", LEAD, "Races the login redirect");
+            flake(acme, ACME, PROJECT, RELEASED, "0.9000", null, null);
+
             // The review fixture. VIEWER is in the team on purpose: the suite review is asked of
             // nobody by name, so if the expansion is missing, VIEWER's board is silently empty and
             // the only test that fails is the one written for it.
@@ -314,6 +354,10 @@ class BoardEndpointTest extends IntegrationTestBase {
             testCase(acme, SIGNED_OFF, ACME, PROJECT, SUITE, "TC-7", 7, LEAD);
             testCase(acme, GONE, ACME, PROJECT, SUITE, "TC-8", 8, LEAD);
             softDelete(acme, GONE);
+            // Quarantined AND since soft-deleted. "This test is excluded from the gate" is not
+            // something to say about a case nobody is running — and only a hard delete cascades
+            // the flake row away (V38), so the row is still there to be selected.
+            flake(acme, ACME, PROJECT, GONE, "0.6000", LEAD, "Deleted, and still quarantined");
 
             team(acme, TEAM, ACME, "Board Reviewers");
             teamMember(acme, ACME, TEAM, VIEWER);
@@ -375,6 +419,10 @@ class BoardEndpointTest extends IntegrationTestBase {
             seedProjectDefaults(umbra, UMBRA, UMBRA_PROJECT);
             suite(umbra, UMBRA_SUITE, UMBRA, UMBRA_PROJECT, "TS-1", "Root");
             testCase(umbra, FOREIGN, UMBRA, UMBRA_PROJECT, UMBRA_SUITE, "TC-1", 1, null);
+
+            // Umbra's own quarantine, on a case keyed TC-1 exactly like Acme's — so only the
+            // company predicate can keep it off Acme's board, never the key.
+            flake(umbra, UMBRA, UMBRA_PROJECT, FOREIGN, "0.8000", LEAD, "Umbra's own decision");
 
             review(umbra, REVIEW_FOREIGN, UMBRA, UMBRA_PROJECT, "CASE", FOREIGN, "IN_REVIEW");
             askUser(umbra, UMBRA, REVIEW_FOREIGN, LEAD, null);
@@ -637,6 +685,86 @@ class BoardEndpointTest extends IntegrationTestBase {
             // 409, not 404: the card is real and only its storage is not. §6l's eventual behaviour
             // is that dragging it to Done performs the approval — which is a gated act with an
             // If-Match behind it, so a drag would be a second, unguarded door to the sign-off.
+            patchAs(LEAD, cardId, "DONE", 409);
+        }
+    }
+
+    @Nested
+    @DisplayName("Quarantine cards — §6l's fourth generator, silently empty until §121")
+    class Quarantine {
+
+        @Test
+        @DisplayName("a quarantined case is a card naming who decided and why")
+        void quarantinedCasesAreCards() throws Exception {
+            JsonNode card = cardOfKind(boardAs(LEAD, PROJECT), "QUARANTINE", "TC-12");
+
+            assertThat(card.get("linkedKey").asText()).isEqualTo("TC-12");
+            assertThat(card.get("id").asText())
+                    .as("a derived card has no row to have an id, and this prefix is what PATCH "
+                            + "recognises it by")
+                    .isEqualTo("quarantine:" + QUARANTINED);
+            assertThat(card.get("sourceType").asText())
+                    .as("sourceType is what the card OPENS, and a quarantine has no page of its "
+                            + "own — the case is what a reader needs to reach")
+                    .isEqualTo("CASE");
+            assertThat(card.get("description").asText())
+                    .as("a card that says a test is excluded and cannot say why or by whom is "
+                            + "debt nobody can evaluate without reading the test (V38's comment)")
+                    .contains("Flaky on Firefox")
+                    .contains("Lead");
+            assertThat(card.get("status").asText()).isEqualTo("TODO");
+        }
+
+        @Test
+        @DisplayName("the whole set: live, quarantined cases in this company and nothing else")
+        void onlyLiveQuarantinesAreCards() throws Exception {
+            // The exact set rather than three absences, for §81's reason and one of its own: the
+            // failure most available here is a card generated from the SCORE instead of the flag,
+            // and TC-13 — high score, no decision — is the only row in the fixture that can fail
+            // on it. TC-8 is quarantined and soft-deleted; Umbra's TC-1 is another company's.
+            assertThat(keysOfKind(boardAs(LEAD, PROJECT), "QUARANTINE"))
+                    .containsExactlyInAnyOrder("TC-4", "TC-12");
+        }
+
+        @Test
+        @DisplayName("a case that is both flagged and quarantined is two cards with two ids")
+        void twoSourcesAreTwoCards() throws Exception {
+            // TC-4 is in case_health AND in case_flake. Sharing the `case:` prefix would give both
+            // cards the id `case:{TC-4}` — the API returns both, the board renders both, and the
+            // SPA's list key collides silently on the one screen whose whole job is to be a list.
+            List<String> ids = new ArrayList<>();
+            for (JsonNode card : boardAs(LEAD, PROJECT)) {
+                if ("TC-4".equals(card.path("linkedKey").asText())) {
+                    ids.add(card.get("id").asText());
+                }
+            }
+
+            assertThat(ids).containsExactlyInAnyOrder(
+                    "case:" + FLAGGED, "quarantine:" + FLAGGED);
+        }
+
+        @Test
+        @DisplayName("the card is the case OWNER's, not the decider's")
+        void theDebtBelongsToTheOwner() throws Exception {
+            // TC-12 is owned by VIEWER and was quarantined by LEAD. Assigning the card to whoever
+            // quarantined the test would make pulling somebody else's flaky test out of the gate an
+            // act that moves their work onto your own board — and the decider is named in the
+            // sentence, which is where "who decided this" belongs.
+            assertThat(keysOfKind(boardAs(VIEWER, PROJECT, true), "QUARANTINE"))
+                    .containsExactly("TC-12");
+            assertThat(keysOfKind(boardAs(LEAD, PROJECT, true), "QUARANTINE"))
+                    .as("LEAD quarantined TC-12 and does not own it")
+                    .doesNotContain("TC-12");
+        }
+
+        @Test
+        @DisplayName("a quarantine card cannot be dragged — releasing a test is a gated write")
+        void quarantineCardsAreNotMovable() throws Exception {
+            String cardId =
+                    cardOfKind(boardAs(LEAD, PROJECT), "QUARANTINE", "TC-12").get("id").asText();
+
+            // 409, for the execution card's reason. And its own: releasing a test needs case:edit
+            // and a reason field (§121), neither of which a drag has anywhere to collect.
             patchAs(LEAD, cardId, "DONE", 409);
         }
     }
@@ -1358,6 +1486,24 @@ class BoardEndpointTest extends IntegrationTestBase {
         return keys;
     }
 
+    /**
+     * The one card of this kind about this artifact.
+     *
+     * <p>{@link #cardOfKind} takes the <em>first</em> card of a kind, which was unambiguous while
+     * every generator produced at most one card per board. §121's fixture has two quarantine cards
+     * on purpose, and the board's sort is by id — so "the first QUARANTINE card" is whichever UUID
+     * sorts lower, which is not a thing any test means.
+     */
+    private static JsonNode cardOfKind(JsonNode board, String kind, String linkedKey) {
+        for (JsonNode card : board) {
+            if (kind.equals(card.get("kind").asText())
+                    && linkedKey.equals(card.path("linkedKey").asText())) {
+                return card;
+            }
+        }
+        throw new AssertionError("no " + kind + " card for " + linkedKey + " on the board");
+    }
+
     private static JsonNode cardOfKind(JsonNode board, String kind) {
         for (JsonNode card : board) {
             if (kind.equals(card.get("kind").asText())) {
@@ -1439,6 +1585,7 @@ class BoardEndpointTest extends IntegrationTestBase {
                 // the review of it — the subject triple has no FK at all, which is what lets one
                 // record serve three artifacts (§76).
                 for (String table : List.of("work_item_link", "work_item", "case_health",
+                        "case_flake",
                         "step_result", "test_execution", "test_run", "review_assignment",
                         "review_participation", "review_comment", "review", "team_membership",
                         "team", "test_case_version", "test_case", "suite")) {
@@ -1669,6 +1816,43 @@ class BoardEndpointTest extends IntegrationTestBase {
             statement.setString(2, reviewId.toString());
             statement.setString(3, userId.toString());
             statement.setString(4, verdict);
+            statement.executeUpdate();
+        }
+    }
+
+    /**
+     * A {@code case_flake} row — evidence always, a quarantine only when {@code by} is given.
+     *
+     * <p>The four authored columns are set together or not at all, which is not this helper being
+     * tidy: {@code case_flake_quarantine_complete} in {@code V38} refuses any other combination, so
+     * a two-argument version of this could not compile a passing fixture. §121 records the
+     * constraint catching its own first draft, which quarantined with a null
+     * {@code quarantined_by}.
+     *
+     * @param by     null for a row that carries evidence and no decision — the one case the
+     *               generator must not turn into a card
+     * @param reason must be present exactly when {@code by} is
+     */
+    private void flake(Connection connection, UUID companyId, UUID projectId, UUID caseId,
+            String score, UUID by, String reason) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO case_flake
+                    (case_id, company_id, project_id, executions, transitions, alternations, cells,
+                     flake_score, computed_at, quarantined, quarantined_at, quarantined_by,
+                     quarantine_reason)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), 8, 6, 3, 2,
+                        CAST(? AS numeric), now(), ?,
+                        CASE WHEN ? THEN now() END, CAST(? AS uuid), ?)
+                ON CONFLICT (case_id) DO NOTHING
+                """)) {
+            statement.setString(1, caseId.toString());
+            statement.setString(2, companyId.toString());
+            statement.setString(3, projectId.toString());
+            statement.setString(4, score);
+            statement.setBoolean(5, by != null);
+            statement.setBoolean(6, by != null);
+            statement.setString(7, by == null ? null : by.toString());
+            statement.setString(8, reason);
             statement.executeUpdate();
         }
     }

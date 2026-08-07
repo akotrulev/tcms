@@ -2,11 +2,39 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-07 (**§122** — grant-instance-admin, M3's seventh slice; §121's flake
-detection and quarantine (phases 1–2 of 4), §120's automation drift, §119's ingestion history,
+**Last verified:** 2026-08-07 (**§121 phase 3** — the board's fourth derived-item generator; §122's
+grant-instance-admin, §121's phases 1–2, §120's automation drift, §119's ingestion history,
 §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `f8c928f` (§121) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `4542959` (lab deploy) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
+
+**§121 PHASE 3 CARRIED NO MIGRATION** — schema head is still `V38`, `V39` next free, policy count
+62. One additive contract change (a seventh `WorkItem.kind`).
+
+**New seams §121 phase 3 created — `work`:**
+- `work.BoardFacts.quarantinedCases(projectIds)` — the **fourth** generator's fact, native SQL over
+  `case_flake` joined to `test_case`. `BoardFacts` is still the one file in this module allowed to
+  name a foreign table.
+- `work.BoardService.PREFIX_QUARANTINE` (`quarantine:`) + `cardFor(QuarantinedCase…)`. **Not
+  `case:`** — a case both flagged and quarantined would otherwise be two cards with one id.
+- **`repository.CaseFlakeRepository.findQuarantined` IS DELETED**, and the reason generalises: its
+  javadoc named §6l's fourth generator as its caller, and that generator lives in `work`, whose
+  `allowedDependencies` are `tenancy`/`project`/`identity` — ArchUnit refuses the import. **A seam
+  written ahead of its consumer is a guess about the consumer.** Its `ORDER BY flake_score` was
+  wrong for the board too: `BoardService.sorted` re-sorts every card by (overdue, priority, id).
+- **`QUARANTINE` is the seventh `WorkItem.kind` and the FIRST that needed a contract change.** §53
+  declared six ahead of their generators; this is not one of them. It is deliberately not
+  `CASE_MAINTENANCE`, because `BoardPage.describeCard` splits *that* kind's description on commas
+  and looks each fragment up in the `HealthSignal` label map — a typed sentence renders as its own
+  fragments joined by a middot, with nothing failing on either side.
+- Card decisions worth not re-litigating: assignee is the **case owner** (the decider is named in
+  the sentence, or the debt lands on whoever quarantined somebody else's test); `TODO`, computed;
+  `allowedTransitions` empty; **this is the one derived card that does not clear itself**, because a
+  quarantine is authored and a health signal self-heals.
+- Fixture: `BoardEndpointTest.Quarantine` (5). **The phase's one red run was an id collision** —
+  `…000c` was already `TEAM_ELSEWHERE` eighty lines away, every case helper is
+  `ON CONFLICT DO NOTHING`, and the only red test was §84's team-board bound. Sixth instance of
+  §19's family; **a collision fails somewhere else.**
 
 **§122 CARRIED NO MIGRATION.** Schema head is still `V38`, `V39` next free, policy count 62 —
 every table it touches (`app_user`, `instance_role_assignment`) has existed since `V1`.
@@ -36,10 +64,9 @@ where `V36`'s was instance-level and `V37`'s was a column on an already-policed 
 `SchemaConventionTest`'s pinned count (`SchemaConventionTest.java:270`) is what turns that into a
 decision — it failed on arrival and had to be moved deliberately.
 
-**§121 IS HALF SHIPPED. Phases 3 and 4 are NOT BUILT** — the board's fourth derived-item generator
-and any frontend at all. Two seams exist with no caller and that is the state, not an oversight:
-`CaseFlakeRepository.findQuarantined` (for `work.BoardFacts`) and `CaseFlakeView` / the
-`CaseQuarantineInput` contract schema (for the SPA).
+~~**§121 IS HALF SHIPPED. Phases 3 and 4 are NOT BUILT**~~ → **phase 3 shipped (above); only phase 4,
+any frontend at all, is left.** One seam still has no caller and that is the state, not an
+oversight: `CaseFlakeView` / the `CaseQuarantineInput` contract schema, for the SPA.
 
 **New seams §121 created, in dependency order:**
 - `repository.CaseFlake` — entity over `case_flake`. **The only half-derived, half-authored row in

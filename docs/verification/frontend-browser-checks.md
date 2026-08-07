@@ -735,6 +735,30 @@ the same value"*, which is invisible from a single project — hence `MOB`.
 | M1-27 | Same, with a screen reader running | The failure is **announced** — "…did not move. …". The snap-back is otherwise completely silent, which is the one state a sighted user gets for free and a screen-reader user does not. | §106-9 |
 | M1-28 | `tcmsFaults.hang()` scoped to `/work-items`, drag a card, then drag it again immediately | The first drop moves it optimistically; the second is a move from the new column, not a repeat of the first. Watch for **two identical PATCHes** — a card that looks like it did not move is the thing users re-drag. Disarm afterwards. | §106-10 |
 
+### The quarantine card — §6l's fourth generator (§121 phase 3)
+
+*The generator has been on by default and silently empty since the board shipped; open question #24
+said it would have no data until M3 ingestion existed, and §117 removed that. There is still **no
+screen that quarantines**, so the fixture for this block is authored from the console — which is the
+same shape `M6-1`…`M6-8` use, and it is what makes these rows drivable before phase 4 exists.*
+
+```js
+// `P` is the project id from the URL; `C` a case id from the case list. As `lead`.
+const H = { 'Content-Type': 'application/json',
+            Authorization: 'Bearer ' + localStorage.getItem('tcms.token') };
+await fetch(`/api/v1/projects/${P}/cases/${C}/quarantine`, { method: 'PUT', headers: H,
+  body: JSON.stringify({ quarantined: true, reason: 'Flaky on Firefox, races the login redirect' }) });
+```
+
+| # | Drive | Expect | src |
+|---|---|---|---|
+| M1-29 | Quarantine a case with the snippet above, then reload the project **Board** | A card in **To do** labelled **Quarantined**, `linked`, with the case's key, reading *"Quarantined by L. Lead — Flaky on Firefox, races the login redirect"*. **To do, not In review** — nobody has started clearing the debt. | §121-14 |
+| M1-30 | Read that card's sentence **character by character**, commas included | It renders **exactly as written**. This is the whole reason `QUARANTINE` is its own `kind`: a `CASE_MAINTENANCE` description is a comma-separated list of raw `HealthSignal` codes that the board splits and labels code by code, so filed under that kind this sentence renders as *"Flaky on Firefox · races the login redirect"* — plausible, wrong, and nothing fails anywhere. | §121-15 |
+| M1-31 | Quarantine a case that is **also** flagged in health (one with a Maintenance card already), reload, and watch the devtools console | **Two cards** for one case — one Maintenance, one Quarantined — and **no React duplicate-key warning**. Both cards are about the same case id, and a shared `case:` prefix would give them one id on the one screen whose whole job is to be a list. | §121-16 |
+| M1-32 | Try to drag the quarantined card; then hover its disabled column buttons | No drag handle at all (`M1-24`'s rule), and the tooltip names **this card's own** source — *"… mirrors a quarantined test, so it can't be moved to Done. Update the quarantine and the card follows."* Not "an execution", not "a review". | §121-17 |
+| M1-33 | Sign in as the case's **owner** and open **My work**; then as the person who ran the snippet | The card is on the **owner's** board and **not** on the quarantiner's. The decider is named in the sentence and is not the assignee — otherwise pulling somebody else's flaky test out of the gate moves their debt onto your own list. | §121-18 |
+| M1-34 | Re-run the snippet with `{quarantined:false, reason:null}`, reload the board | The card is **gone**, and the case's other cards are not. This card leaves only when a person releases the test — deliberately unlike the Maintenance card beside it, which clears itself when the underlying condition is fixed. | §121-19 |
+
 ---
 
 # A6 — reports: the pipeline, the screen, the view, the definitions
@@ -1228,8 +1252,10 @@ built. Its rows will name:
   a component that formats `score ?? 0` passes every type check.
 - The quarantine action, its required reason, and the **release path clearing the reason on screen**
   rather than only in the row.
-- The board's quarantined-flaky card (**phase 3**, also not built) — §6l's fourth generator, which
-  #24 put on by default and which has been silently empty since the board shipped.
+- ~~The board's quarantined-flaky card (**phase 3**, also not built)~~ → **phase 3 shipped, and its
+  six rows are `M1-29`…`M1-34` in the A5 board lane**, where the state they need already lives. They
+  author their own fixture from the console, because there is still no screen that quarantines —
+  the same shape `M6-1`…`M6-8` use for the report pipeline.
 
 **A row that cannot be driven yet is recorded as absent with its reason, never as a lane nobody
 notices is empty** — which is the failure mode the generator above has been in for the whole life of

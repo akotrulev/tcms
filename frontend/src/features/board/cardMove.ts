@@ -61,6 +61,7 @@ const derivedNouns: Record<WorkItem['kind'], { indefinite: string; bare: string 
   DOC_UPDATE: { indefinite: 'a documentation page', bare: 'page' },
   CASE_MAINTENANCE: { indefinite: 'a test case', bare: 'case' },
   DEFECT: { indefinite: 'a defect', bare: 'defect' },
+  QUARANTINE: { indefinite: 'a quarantined test', bare: 'quarantine' },
 };
 
 /**
