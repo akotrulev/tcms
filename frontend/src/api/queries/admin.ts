@@ -8,6 +8,9 @@ import {
 } from '@tanstack/react-query';
 import { api } from '../client';
 import type {
+  ApiToken,
+  ApiTokenInput,
+  IssuedApiToken,
   Role,
   RoleAssignment,
   RoleAssignmentInput,
@@ -303,6 +306,78 @@ export function useRevokeRole(): UseMutationResult<void, Error, string> {
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: keys.roleAssignments });
       void client.invalidateQueries({ queryKey: keys.projects });
+    },
+  });
+}
+
+/**
+ * The company's API and CI tokens — §116's endpoint getting its first consumer.
+ *
+ * **`enabled` is the whole reason this takes a parameter.** The server *refuses* this list for a
+ * caller without `token:issue` rather than narrowing it, deliberately: an empty array would tell
+ * somebody who may simply not ask that this company has no credentials. That is the right server
+ * behaviour and the wrong thing to fire blindly from a screen — an ungated read would 403 for
+ * every Test Lead who opened the page and raise a global "Something didn't load" over a screen
+ * that is not broken. The caller passes the gate's verdict, so the request happens only when it
+ * can succeed, and the page renders the refusal itself as a sentence instead.
+ *
+ * `staleTime` is deliberately short. A token list is read while somebody is rotating a credential
+ * in a pipeline, and a five-minute cache is how the row they just revoked still reads as live in
+ * the other tab they have open.
+ */
+export function useApiTokens(enabled: boolean): UseQueryResult<ApiToken[]> {
+  return useQuery({
+    queryKey: keys.apiTokens,
+    queryFn: ({ signal }) => api.get<ApiToken[]>('/api-tokens', { signal }),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * Issues a token — the one mutation in this app whose **response is a credential**.
+ *
+ * Three decisions, and the first is the one that would be a real disclosure if it were wrong:
+ *
+ *   - **Nothing here writes the secret anywhere.** No `setQueryData`, no optimistic insert into
+ *     `keys.apiTokens`, no logging. The plaintext lives in this mutation's own `data` — memory
+ *     held by the dialog's hook instance — and dies when the dialog unmounts. Seeding it into the
+ *     query cache is the obvious "avoid a refetch" optimisation and it would persist a credential
+ *     into a store the whole app reads, kept alive by every other consumer of that key.
+ *   - **`meta: { handled: true }`.** The dialog lands `name` / `roleId` / `expiresAt` field errors
+ *     on its own inputs; a global toast would be a vaguer second copy of a message already on the
+ *     screen being read.
+ *   - **Only the token list is invalidated.** A token confers nothing on anybody who is signed in
+ *     — it is a credential a machine presents, not a grant — so `role-assignments` and `projects`
+ *     cannot have changed. This is `useInviteUser`'s reasoning, not `useGrantRole`'s.
+ */
+export function useIssueApiToken(): UseMutationResult<IssuedApiToken, Error, ApiTokenInput> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ApiTokenInput) => api.post<IssuedApiToken>('/api-tokens', input),
+    meta: { handled: true },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.apiTokens });
+    },
+  });
+}
+
+/**
+ * Revokes a token. `204` whether it was live or already revoked, so a second click is not an error
+ * and the trail still reports the moment the credential stopped working rather than the moment
+ * somebody clicked again.
+ *
+ * The row is **kept**, revoked — so this invalidates rather than removes, and the list is expected
+ * to come back the same length. A revoked credential that was live in a pipeline yesterday is
+ * evidence; a list that dropped the row would read as though it had never existed.
+ */
+export function useRevokeApiToken(): UseMutationResult<void, Error, string> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (tokenId: string) => api.del<void>(`/api-tokens/${encodeURIComponent(tokenId)}`),
+    meta: { handled: true },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.apiTokens });
     },
   });
 }

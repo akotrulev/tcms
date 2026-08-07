@@ -85,6 +85,9 @@ const TeamBoardPage = lazy(() =>
   import('../features/board/TeamBoardPage').then((m) => ({ default: m.TeamBoardPage })),
 );
 const TeamsPage = lazy(() => import('../features/admin/TeamsPage').then((m) => ({ default: m.TeamsPage })));
+const ApiTokensPage = lazy(() =>
+  import('../features/admin/ApiTokensPage').then((m) => ({ default: m.ApiTokensPage })),
+);
 const ProjectAccessPage = lazy(() =>
   import('../features/admin/ProjectAccessPage').then((m) => ({ default: m.ProjectAccessPage })),
 );
@@ -427,6 +430,21 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <TeamsPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            API tokens (§118). Company-scoped like `/admin/teams` and for the same reason: a token
+            belongs to the company that issued it even when its `projectId` pins it to one project,
+            so a route under `/projects/:projectId` would make the rail's project switcher appear
+            to change a list it cannot change.
+          */}
+          <Route
+            path="/admin/tokens"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <ApiTokensPage />
               </Suspense>
             }
           />

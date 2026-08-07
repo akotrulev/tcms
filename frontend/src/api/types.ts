@@ -32,6 +32,16 @@ export type PermissionKey = S['PermissionKey'];
 export type EffectivePermissions = S['EffectivePermissions'];
 export type RoleName = Role['name'];
 export type RoleScope = Role['scope'];
+export type ApiToken = S['ApiToken'];
+export type ApiTokenInput = S['ApiTokenInput'];
+/**
+ * The issue response — **the only shape in this contract that carries a credential**.
+ *
+ * Kept as its own alias rather than reached through `ApiToken` because that is the contract's own
+ * decision: a nullable `secret` on the read type would leave every list one forgotten null away
+ * from serving a plaintext token. Nothing that renders a list may name this type.
+ */
+export type IssuedApiToken = S['IssuedApiToken'];
 
 // project
 export type Project = S['Project'];

@@ -1,7 +1,7 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-07 · **Branch:** `master` · **Latest slice:** [§117 — CI result
-ingestion](handoff/117-result-ingestion.md)
+**Date:** 2026-08-07 · **Branch:** `master` · **Latest slice:** [§118 — the token
+screen](handoff/118-the-token-screen.md)
 
 This file is an **index**. Every section is its own file under [`docs/handoff/`](handoff/), numbered
 by its § number, and the slice log below is where the narrative lives — one row per slice, each row
@@ -27,16 +27,20 @@ outstanding. **The next slice is re-derived from the code, not from this plan's 
 because the other two have no caller without a credential. ~~**`ingestion_job` and
 `automation_key_mapping` still have none**~~ → **§117 gave both one**, so `V1`'s writerless tables
 are down to **zero**. M3 slice 2 needed **no migration**: every table, column and `CHECK` it writes
-to has been there since M0.
+to has been there since M0. **§118 is M3's third slice** and the first frontend one since §115: the
+token screen both §116 and §117 named on their way out, which gives `/api-tokens` its first consumer
+in `src/` and makes obtaining a CI credential something the product can do rather than something
+`curl` can. It carried no contract change either.
 
-**Gates, as of §117** — both run locally, and only locally:
+**Gates, as of §118** — both run locally, and only locally. §118 is frontend-only, so the backend
+row is §117's figure unchanged rather than a fresh run:
 
 | Gate | State |
 |---|---|
 | `cd backend && ./gradlew build` | **BUILD SUCCESSFUL — 1946 tests across 407 result classes, 0 failures, 0 skipped** |
 | `cd frontend && npm run build` | clean |
 | `npm run lint` | 0 warnings |
-| `npm run test:run` | **962/962 across 70 files** |
+| `npm run test:run` | **992/992 across 73 files** (§118. The 962 figure carried here was stale — the measured baseline before §118's 24 new tests was 968) |
 
 **CI runs no backend tests** — `.github/workflows/ci.yml` has run `./gradlew build -x test` since
 §59, so `-Werror` and the Modulith wiring are checked and nothing else is. `./gradlew build` on your
@@ -266,3 +270,4 @@ Open actions above. The gap is deliberate; do not renumber around it.
 | [§115](handoff/115-the-coverage-matrix.md) | The coverage matrix — §6e's *requirement → cases → last result* with a **document as its spine**, unblocked by a writer §93 shipped two slices earlier and nobody noticed; a second foreign-module seam, a statement definition that refuses to call a specification's prose an untested requirement, and a frontend gate that stopped being a negation before a third report type made the negation wrong **(built and unverified — 7 browser, 9 mutation rows, five of the nine RUN and stated as a deviation)** |
 | [§116](handoff/116-api-tokens.md) | API tokens — M3's first slice and `api_token`'s first writer since `V1`: the credential is presented **before any company context can exist**, so `V36` adds an instance-level `api_token_lookup` (`V8`'s own recorded answer, and `V6`'s decision a second time), the digest **moves** rather than being copied, and the ERD §0.1 exception list gains one entry with the cost stated. A token's permissions are its owner's **intersected** with its role's — never a second resolution path — so it can exceed neither, and `api_token.name`'s uniqueness, which ERD §0.1 names by name, turned out never to have been created **(built and unverified — 12 mutation rows, none run; no browser rows, and the token screen is the slice that will carry them. THE SLICE HAD A REAL RED RUN: the context opened inside an already-begun transaction never reaches the GUC, so every valid credential 401'd)** |
 | [§117](handoff/117-result-ingestion.md) | CI result ingestion — M3's second slice, and the last two `V1` tables get writers: four parsers behind one Strategy whose values **are** `ingestion_job.format`'s `CHECK`, each with a different shape that reads a red suite as **green** (the worst being a Cucumber scenario failing mid-way, whose last step is skipped). §6c's ladder is **three batched passes, not a chain per test** — 3 queries, not 15,000 — and each rung is tested **alone**, because one collapsed to rung 1 would keep its count and pass. Nothing is auto-created for an unmatched test, which is a design rather than a gap only because `automation_key_mapping` gets its writer in the same slice — gated on **`case:edit`, which Automation Service does not hold**, so a leaked CI token can post results and cannot launder a red suite into a green one. `ReportXml` is the application's only `DocumentBuilderFactory`, and **a mutation corrected its own comment about which flag stops what**. §116's self-invoked-`@Transactional` defect was written and corrected before it ran **(built and unverified — 8 mutations RUN and stated as a deviation, 4 queued; no browser rows, and the two screens it names are recorded as unbuilt)** |
+| [§118](handoff/118-the-token-screen.md) | The token screen — M3's third slice and §116's endpoints' first consumer: the reveal is a **second step of the dialog that refuses Esc and a backdrop click**, because every other create dialog in the area closes on success and a refactor toward that consistency destroys a credential with a success message on top. The list is **refused rather than narrowed**, so the read is gated by the caller's own verdict and the check is an *absent* request that nothing on screen can show. `lastUsedAt` is on the wire and deliberately **not a column**; expired and revoked are **not collapsed**, because revoking a lapsed credential is a real act and one dead state would take it away **(built and unverified — 11 browser rows across two lanes, none run; no mutation rows, §116's twelve cover the endpoints)** |

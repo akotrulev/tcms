@@ -28,6 +28,7 @@ import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
 import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import InventoryOutlinedIcon from '@mui/icons-material/Inventory2Outlined';
+import KeyOutlinedIcon from '@mui/icons-material/KeyOutlined';
 import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
 import LogoutIcon from '@mui/icons-material/Logout';
 import MenuIcon from '@mui/icons-material/Menu';
@@ -225,6 +226,17 @@ function projectNav(projectId: string): { heading: string; items: NavItem[] }[] 
       heading: 'Company',
       items: [
         { label: 'Teams & roles', to: '/admin/teams', icon: <GroupsOutlinedIcon fontSize="small" /> },
+        /*
+          Company, beside Teams & roles, for the same reason that one is here: a token belongs to
+          the company, and switching projects does not change the list.
+
+          **Shown to everyone, not gated.** Every other item in this rail leads to a screen a
+          member can read; this one leads to a screen that tells a non-administrator the list is
+          not theirs to see. That is §31's rule at rail altitude — hiding it would teach a Test
+          Lead that this product has no CI credentials, which is the same lie a filtered-to-empty
+          list would have told, and the screen itself already says who to ask.
+        */
+        { label: 'API tokens', to: '/admin/tokens', icon: <KeyOutlinedIcon fontSize="small" /> },
       ],
     },
   ];

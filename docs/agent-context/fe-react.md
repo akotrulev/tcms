@@ -2,14 +2,19 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-07 (§115 — the coverage matrix's frontend arm; §107 — the mock layer is
-deleted — before it)
-**Baseline commit:** `0a16c67` **+ the §115 commit this line ships in** (its own SHA
+**Last verified:** 2026-08-07 (§118 — the token screen; §115 — the coverage matrix's frontend arm;
+§107 — the mock layer is deleted — before them)
+**Baseline commit:** `6fc053d` **+ the §118 commit this line ships in** (its own SHA
 cannot be written into itself; trust the body over the header and re-grep what a later commit
 could have moved).
-**§115 touched two frontend files** — `features/reports/GenerateReportDialog.{tsx,test.tsx}` — plus
-a regenerated `api/schema.d.ts` (prose only, **no type moved**). Test count is now **962 across 70
-files**.
+**§116 and §117 are backend-only** — they moved nothing under `frontend/src` except a regenerated
+`api/schema.d.ts`. **§118 added five files** (`features/admin/{ApiTokensPage,IssueTokenDialog,RevokeTokenDialog}.tsx`,
+`components/CopyField.tsx`, `lib/apiTokens.ts`) plus three test files, and touched
+`api/{types.ts,queries/{keys,admin,index}.ts}`, `app/{router,AppShell}.tsx`.
+**Test count is now 992 across 73 files.** The 962 in the previous header was **stale** — the
+measured baseline before §118 was 968, so this figure has now drifted three times and is worth
+reading off a run rather than trusting.
+**§115 touched two frontend files** — `features/reports/GenerateReportDialog.{tsx,test.tsx}`.
 
 > **§107 invalidated a lot of this file at once.** `src/mocks/` is gone — every "the mock does X"
 > statement in the slice entries below is now history rather than current state, and is left in
@@ -65,7 +70,8 @@ files**.
 
 `src/{api,app,auth,components,features,lib,notifications,a11y,test}` — **no `mocks/` since §107**. Feature folders under
 `features/<area>/`; routes are project-scoped under `/projects/:projectId/*` (`app/router.tsx`, lazy).
-**Four routes are NOT** — `/` (project list), `/admin/teams` (company), `/my-work` (§83, the
+**Five routes are NOT** — `/` (project list), `/admin/teams` (company), `/admin/tokens` (§118, company:
+a token belongs to the company even when its `projectId` pins it to one project), `/my-work` (§83, the
 cross-project personal board) and `/teams/:teamId/board` (§85, the team board). A screen whose
 subject is not a project does not live under one. **`/projects/:projectId/reports` (§89) lands on
 the other side of that test**: a report is computed over one project's facts and its own header
@@ -85,6 +91,35 @@ directly above the switcher) and the wordmark links there too.
 > slice's shape. `docs/handoff/00-plugin-skills-are-mandatory.md` step 0 now states the protocol.
 
 ## Seams to reuse
+
+- **A SECRET IS SHOWN ONCE, AND THE DIALOG THAT SHOWS IT REFUSES `onClose` (§118).**
+  `features/admin/IssueTokenDialog.tsx`'s reveal branch + `components/CopyField.tsx` +
+  `lib/apiTokens.ts` + `useIssueApiToken`/`useApiTokens`/`useRevokeApiToken` (`api/queries/admin.ts`,
+  key `keys.apiTokens`). Screen is `ApiTokensPage` at **`/admin/tokens`**, testids `Admin.Tokens.*`,
+  `Admin.TokenIssue.*`, `Admin.TokenRevoke.*`.
+  **THE REVEAL BRANCH PASSES NO `onClose` TO `Dialog` — the only one in the app that does not.**
+  Esc and a backdrop click would destroy a value nothing can produce again. **The dangerous change
+  here is the tidy one**: all four sibling dialogs in `features/admin` close on success, so a
+  refactor toward consistency throws away a credential *with a success message on top*. One test
+  exists only to hold that (`shows the secret and stays open`).
+  **THE SECRET NEVER TOUCHES THE QUERY CACHE.** No `setQueryData`, no optimistic insert — the
+  plaintext lives in the mutation's own `data` and dies with the conditionally-mounted dialog. The
+  test asserts over **every** cache entry, not the token key, because it is an absence.
+  **THE LIST READ IS GATED BY THE CALLER'S OWN VERDICT** (`useApiTokens(enabled)`): the server
+  *refuses* rather than narrows, so an ungated read is a guaranteed 403 raising a global error over
+  a working screen. **Nothing on screen distinguishes the two implementations** — the check is an
+  absent request. Deferred on **`Gate.pending`**, never rendered as a denial, or a Company Admin is
+  told they lack access on every visit.
+  **`CopyField` ASSUMES NO CLIPBOARD.** `navigator.clipboard` is absent on an insecure origin and
+  this product is self-hosted over plain HTTP today, so the value is always rendered as selectable
+  text and the button is an accelerator whose failure says what to do instead.
+  **`tokenState` KEEPS EXPIRED AND REVOKED APART** — revoking a lapsed credential is a real act and
+  the collapse disables it; revocation outranks expiry when both. Derived, never served: expiry is a
+  comparison against *now* and a served status goes stale in the cache.
+  **`lastUsedAt` IS ON THE WIRE AND IS NOT A COLUMN** (always null today — `ui-rules`' no-column-the-
+  write-path-never-fills rule). **The role filter is `scope !== 'SYSTEM'` and NOT `GrantRoleDialog`'s
+  scope-dependent one** — a token's project is a ceiling on where it works, not a claim about the
+  role's scope, and copying the neighbour hides roles the server accepts. `#confirmed`
 
 - **A PER-TYPE GATE MUST KEY ON WHAT THE TYPE NEEDS, NEVER ON WHAT IT IS NOT (§115).**
   `GenerateReportDialog` offers three report types since §115 (`run_summary` ·
@@ -975,6 +1010,15 @@ directly above the switcher) and the wordmark links there too.
 
 ## Session log
 
+- 2026-08-07 · EXTEND · **The token screen** (§118) — `/admin/tokens`, giving §116's `/api-tokens`
+  endpoints their first consumer in `src/`. Three new feature files, `components/CopyField.tsx` (the
+  app's first clipboard affordance, written to work **without** a clipboard), `lib/apiTokens.ts`
+  (the derived LIVE/EXPIRED/REVOKED state). **No contract change and no `gen:api`** — every shape
+  was already on the wire. The two decisions worth knowing before touching it: the reveal dialog
+  passes **no `onClose`**, and the list read is gated by the caller's own permission verdict because
+  the server refuses rather than narrows. Three mutations were run to prove the new tests can fail
+  (`enabled`→`true`, EXPIRED→REVOKED, `onClose()` on success) and each reddened exactly its own
+  rows. **992/992 across 73 files**, build and lint clean.
 - 2026-08-06 · EXTEND · **The board learns to be dragged** (§106) — the ask was for drag-and-drop on
   the kanban board, **which already had it**: native HTML5, working on a desktop mouse and on
   nothing else. Replaced with `@dnd-kit` (`useDraggable`/`useDroppable`, not sortable), plus a

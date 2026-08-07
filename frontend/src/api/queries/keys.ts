@@ -115,6 +115,15 @@ export const keys = {
    * list and partitions it, which also means every consumer shares this cache entry.
    */
   roleAssignments: ['role-assignments'] as const,
+  /**
+   * The company's API tokens (§118).
+   *
+   * No project segment and no filter parameter, and both absences are the contract's: a token
+   * belongs to the *company* even when its `projectId` pins it to one project, and the list is
+   * **refused** rather than narrowed for a caller who may not read it. So there is exactly one
+   * entry for the whole company and nothing to key it by.
+   */
+  apiTokens: ['api-tokens'] as const,
   workItems: (p: string, mine: boolean) => ['work-items', p, mine] as const,
   /**
    * §6l's cross-project personal board (§83) — **under the same `work-items` root as the project

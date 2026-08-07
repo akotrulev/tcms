@@ -144,10 +144,13 @@ export {
   useReportModel,
 } from './reporting';
 export {
+  useApiTokens,
   useGrantRole,
   useCreateTeam,
   useDeleteTeam,
   useInviteUser,
+  useIssueApiToken,
+  useRevokeApiToken,
   usePutTeamMember,
   useRemoveTeamMember,
   useRemoveUser,

@@ -219,6 +219,27 @@ constraints only fit in this order.
 | L4-7 | ~~`UPDATE team SET parent_team_id = gen_random_uuid() WHERE name = 'Platform';` — and then a cycle~~ | 🚫 **UNDRIVEABLE — §110 F8, and the product is the reason.** The row assumed *"the API refuses both twice over, so `psql` is the only way in"*. There is a **third** guard: `tcms_enforce_team_hierarchy`, a trigger in **`V2` since M0**, refuses the orphan (*"parent team … is not visible in this company"*) and the cycle (*"… is already an ancestor of …, so this edge would create a cycle"*) at the database. The state this row wanted to observe **cannot exist in this schema**. Kept, not deleted: the question it asks — does the chart drop a row it cannot place? — is fair and simply unreachable from the data side. | §71 note |
 | L3-12 | Members dialog: tick a person, close, reopen, untick | 204 both times, no duplicate row: `team_membership` gained one row and lost it. Moved out of `L3` because it is a write, and this is where the writes to `team` happen. | §71-13 |
 
+### API tokens (§118)
+
+*Still A0: a token is company-level, issued by the Company Admin, and the rows below need `MOB` to
+exist so the project picker has something in it. Drive them **after** the projects are created and
+**before** leaving this lane.*
+
+**`A0-11` is the only row in this file that puts a live credential on a clipboard.** Paste it into
+the `curl` in `A0-12`, then discard it — it is not needed again, and `A0-13` revokes it.
+
+| # | Drive | Expect | src |
+|---|---|---|---|
+| A0-8 | The rail's **Company** group → **API tokens** | The item is **present and enabled**, sits beside Teams & roles, and marks itself current (`aria-current`, not colour alone). The screen renders the empty state *"No tokens yet — issue one so a CI job can post its results"*, **not** a failed region. The rail item is deliberately ungated: a Test Lead must be able to find out this capability exists. | §118-1 |
+| A0-9 | **Issue a token** → open the Role select | **Instance Admin is absent**; Company Admin, Test Lead, Test Engineer, Automation Service and Viewer are all offered. Then pick **Acme Online Banking** in *Where it works* and re-open Role: **the list does not change** — a token's project is a ceiling on where it works, not a statement about the role's scope, and narrowing here would be `GrantRoleDialog`'s filter copied into a dialog that must not have it. | §118-2 |
+| A0-10 | Same dialog: leave **Expires** empty; read the two hints | *Where it works* reads *"Every project you can reach, including ones created later"* until a project is picked, then *"A hard limit: the token is inert on every other project."* Expires reads *"Optional. Leave it empty and the token lasts until it is revoked."* — never a blank field with no explanation. The blue hint says the token **never exceeds your own access**. | §118-3 |
+| A0-11 | Name it `Nightly regression`, role **Automation Service**, no project, no expiry → **Issue token**. Then press **Esc**, then click the **backdrop**. | The form is **replaced** by the secret, in full, in the mono font, with the warning *"This is the only time this token is shown."* **Esc does nothing. The backdrop does nothing.** This is the one dialog in the app that refuses both, and it is the row that matters most: every other create dialog here closes on success, and a copy of that shape destroys a value nothing can produce again. Press **Copy** — either *"Copied."* appears, or, on a plain-HTTP origin, *"Your browser blocked the clipboard — select the text above and copy it"*, **never a button that silently does nothing**. Record which, and paste the secret somewhere for the next row. | §118-4 |
+| A0-12 | With that secret, `curl -X POST …/api/v1/projects/{OLB}/ingestions` per §117's shape (`Authorization: Bearer <secret>`, an `Idempotency-Key`, a small JUnit XML) | **The credential works** — a 201 and an ingestion job. This is the only row in the pass that proves the screen produced a usable token rather than a plausible-looking string, and it closes M3's loop end to end: §116 mints, §118 hands over, §117 ingests. A 401 here is a finding about the *issue* path, not about ingestion. | §118-5 |
+| A0-13 | Close the dialog and read the row | Name, then the **prefix as its own column** in the mono font — check it is the **first 12 characters of what you pasted**. Role `Automation Service`, *Where it works* the **wide sentence** and not a blank cell, Owner your **display name** and not a uuid, Expires *"Does not expire"*, Status **Live**. **There is no "Last used" column** — the contract says the field is always null today, and shipping the column would leave it empty on every row of every deployment for ever. | §118-6 |
+| A0-14 | Issue a second token called `Nightly regression`; then a third with an expiry **in the past**; then a fourth pinned to `MOB` with an expiry **tomorrow at 14:00 local** | First two are **400s landing on the field that caused them** — the name error quotes the existing token and tells you to revoke it first; the expiry error says the token would be unusable the moment it was issued. Neither reaches the reveal, and what was typed is still there. The fourth succeeds: its row names **MOB** and its Expires cell is a **UTC-labelled** time that is tomorrow 14:00 **converted from your zone** — a screen showing `14:00 UTC` for a `+03:00` browser means the local wall clock was posted verbatim and the token dies three hours early. | §118-7 |
+| A0-15 | **Revoke** `Nightly regression`, reading the dialog before confirming | It names the token **and** its prefix — two tokens can share a name a year apart, and the prefix is what matches a CI configuration. It says the credential stops working immediately, that it cannot be undone, and that **the row stays**. Confirm: the list is the **same length**, the row is muted and reads **Revoked**, and its Revoke is now **disabled** with *"This token was already revoked."* Then re-run `A0-12` with the same secret → **401**. | §118-8 |
+| A0-16 | The row whose expiry has passed (`A0-14`'s third, if it was accepted — otherwise wait out the fourth, or `UPDATE api_token SET expires_at = now() - interval '1 day'` on it) | Status **Expired**, in the muted lifecycle colour and **not red** — a credential reaching its stated end date is the system working. **Revoke is enabled on it**, unlike the revoked row: closing a lapsed credential deliberately is a real act, and a screen that collapsed the two dead states into one would take it away. | §118-9 |
+
 ### Calibrate the browser before A0-5 and A0-6, or their result means nothing
 
 **A password manager that is switched off looks exactly like an application that fails to ask it.**
@@ -809,6 +830,8 @@ to: there is no other mode, and this is the only lane where the tiers are visibl
 | L1-13 | A plan in review: the reviewer picker (`plan:review`, not `plan:approve`) | Picker and **Ask enabled**. The gate decision made visible: the request must not be confined to the people whose sign-off it prepares. | §80-4 |
 | L1-14 | A run's Grid mode (`result:submit`, not `result:amend`) | A row that already has a result: four keys **disabled with the amend tooltip**; an untested row's are live. The permission is **per row**, because half a run may be recorded and half not. | §100-112 |
 | L1-15 | Start a run from a plan of draft cases with cases gating on (no `case:approve`) | **Create it anyway** is **present and disabled** with the gate's why-tooltip. Hidden instead of disabled is the defect: the person who has to go and ask would not know the way out exists. | §82-6 |
+| L1-21 | **API tokens**, with the Network tab open (Test Engineer holds neither `token:issue` nor `company:members`) | The rail item is **there and works** — the screen renders, and says *"You do not have permission to issue API tokens in this company… A company administrator can issue one for you."* **Issue a token** is **disabled with its why-tooltip**, never hidden. And the row's real assertion: **no request to `/api-tokens` is made at all.** The server *refuses* that list rather than narrowing it, so an ungated read is a guaranteed 403 and a global "Something didn't load" over a screen that is behaving correctly. A page that fires it looks identical apart from that one line in the Network tab. | §118-10 |
+| L1-22 | Same screen as **`viewer`**, then reload it twice watching the panel | Same refusal, same disabled button. On reload the panel must **never flash the refusal before settling** — the page defers on `Gate.pending`, because the permission verdict is fail-closed while it loads and a Company Admin would otherwise be told they lack access on every single visit. Then sign in as **Company Admin** and confirm the list is live: without that half, both rows above pass equally well against a screen that is broken for everybody. | §118-11 |
 | L1-16 | Teams & roles (no `company:teams`) | The three admin buttons disabled with a reason, **Board live**. A Board button written as a fourth child of that gate looks identical until this sign-in. | §85-2 |
 
 ### Test Lead / Company Admin — the control-is-live half
@@ -1072,3 +1095,28 @@ build them**, not here:
   a caller who can read JSON**. Worth stating plainly rather than leaving implied.
 
 The token screen (§116) is still the next frontend slice; this one adds a second reason for it.
+→ **built in §118**, and `A0-12` is where its credential meets this slice's endpoint.
+
+---
+
+## §118 — the token screen
+
+**Twelve rows, and they are not in one block.** `A0-8`…`A0-16` sit in the **A0** lane because that
+is where a Company Admin is signed in and where `MOB` gets created — the project picker needs it,
+and the rows write a company-level fixture the way A0's other rows do. `L1-21` and `L1-22` are in
+the **permission matrix**, because what they check is a tier and not a feature.
+
+Three of them carry more than their own weight:
+
+- **`A0-11`** is the pass's only irreversible screen. Esc and the backdrop must do nothing, and the
+  reason is that every other create dialog in this area closes on success — the defect is a
+  *refactor toward consistency*, and it destroys a credential with a success message on top.
+- **`A0-12`** is the only row in the whole file that proves the screen produced a **working**
+  credential rather than a plausible string, and it closes M3 end to end: §116 mints, §118 hands
+  over, §117 ingests. It is also the only browser-lane row that reaches an endpoint with no
+  browser surface.
+- **`L1-21`**'s assertion is an *absent* request. Nothing on screen distinguishes a page that gated
+  its read from one that fired it and swallowed the 403 — the Network tab is the whole check.
+
+**No mutation rows.** This slice adds no server behaviour; §116's twelve cover the endpoints it
+calls, and `A0-12`/`A0-15` exercise the credential's two ends from the browser lane instead.
