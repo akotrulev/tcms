@@ -3,6 +3,7 @@ import {
   Box,
   Button,
   IconButton,
+  Link as MuiLink,
   MenuItem,
   Stack,
   TextField,
@@ -16,7 +17,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useSnackbar } from 'notistack';
 import { Controller, useFieldArray, useForm } from 'react-hook-form';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { z } from 'zod';
 import { ApiError } from '../../api/client';
 import { useDocPage, useProject, useUpdateDocPage } from '../../api/queries';
@@ -65,9 +66,20 @@ const BlockSchema = z.object({
   /** Null for a block being added here. See the header: NOT `id`. */
   blockId: z.string().nullable(),
   blockType: z.enum(BLOCK_TYPES),
-  /** A string because it is bound to a `<select>`; empty on everything but a heading. */
+  /** A string because it is bound to a `<select>`; empty on the four types with no depth. */
   level: z.string(),
   text: z.string(),
+  /**
+   * A `table`'s cells, row-major, first row the header.
+   *
+   * Held as the real shape rather than as delimited text in one field. A textarea where lines are
+   * rows and tabs are cells is a quarter of the code and it is the mistake §93 already refused one
+   * field over: a cell containing the delimiter silently splits into two, and a table cannot be
+   * indented, re-columned or validated per cell. Empty on every other type.
+   */
+  rows: z.array(z.array(z.string())),
+  /** An `image`'s file. Empty string means none chosen — a `<select>` has no null. */
+  attachmentId: z.string(),
 });
 
 const PageSchema = z.object({
@@ -81,6 +93,30 @@ const PageSchema = z.object({
 type PageFormInput = z.infer<typeof PageSchema>;
 
 const TestIdPrefix = 'DocEditor';
+
+/**
+ * What `text` is called, per type — because it is three different fields wearing one name.
+ *
+ * `satisfies Record<...>` for `lib/labels.ts`' reason: a seventh block type becomes a compile error
+ * here rather than a control silently labelled "Text" on the one screen that authors it.
+ */
+const TEXT_LABEL = {
+  heading: 'Heading',
+  paragraph: 'Text',
+  list: 'Bullet',
+  code: 'Code',
+  table: 'Caption',
+  image: 'Alt text',
+} as const satisfies Record<(typeof BLOCK_TYPES)[number], string>;
+
+const TEXT_HINT = {
+  heading: undefined,
+  paragraph: undefined,
+  list: undefined,
+  code: undefined,
+  table: 'Names the table for anyone reading it, and is what a case links to.',
+  image: 'Required. What a reader who cannot see the image gets instead.',
+} as const satisfies Record<(typeof BLOCK_TYPES)[number], string | undefined>;
 
 export function DocPageEditorPage() {
   const { projectId = '', pageId = '' } = useParams();
@@ -142,6 +178,10 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
           blockType: block.blockType,
           level: block.level == null ? '' : String(block.level),
           text: block.text,
+          // Copied out of the response rather than referenced: the form owns its own array from
+          // here, and mutating the cached page's would edit what the reader beside it renders.
+          rows: (block.rows ?? []).map((row) => [...row]),
+          attachmentId: block.attachmentId ?? '',
         })),
     },
   });
@@ -162,11 +202,26 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
           // without asserting one.
           ...(block.blockId ? { id: block.blockId } : {}),
           blockType: block.blockType,
-          // Only a heading carries a depth, and the server refuses one on anything else rather
-          // than dropping it. Derived from the type here rather than from whatever the select
-          // last held, so switching a heading to a paragraph cannot leave a stale 2 behind.
-          level: block.blockType === 'heading' ? Number(block.level || '1') : null,
+          /*
+            Every type-specific field is derived from the TYPE here, never from whatever the
+            control last held. That is one rule applied three times and it is the reason all three
+            lines look alike: the server refuses each of these on a type that does not have it, so
+            a table turned into a paragraph with its cells still in form state is a 400 the user
+            cannot see the cause of. Switching type is an ordinary thing to do while writing.
+
+            `level` is now sent for a LIST as well as a heading, which is a fix rather than a new
+            feature: §93 widened the contract to make a nested outline authorable, the reader has
+            indented bullets ever since, and this form has never sent the depth — so the control
+            existed on one side of a round trip only.
+          */
+          level:
+            block.blockType === 'heading' || block.blockType === 'list'
+              ? Number(block.level || '1')
+              : null,
           text: block.text,
+          rows: block.blockType === 'table' ? block.rows : null,
+          attachmentId:
+            block.blockType === 'image' ? block.attachmentId || null : null,
         })),
       });
       enqueueSnackbar(`Saved ${saved.key} as v${saved.currentVersionNo}`, { variant: 'success' });
@@ -295,11 +350,17 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
                       )}
                     />
                     {/*
-                      Rendered only for a heading, because only a heading has one — the server
-                      refuses a level on anything else rather than ignoring it, so offering the
-                      control everywhere would invite a rejection the client could have prevented.
+                      Rendered for the two types that HAVE a depth — the server refuses a level on
+                      the other four rather than ignoring it, so offering the control everywhere
+                      would invite a rejection the client could have prevented.
+
+                      The list arm is §93's other half arriving: a bullet's indent is what makes a
+                      nested scenario outline authorable, the reader has rendered it since, and
+                      this control was heading-only, so the depth could be read and never written.
+                      The label differs because the two are different things — H3 is a rank, an
+                      indent is a position.
                     */}
-                    {type === 'heading' && (
+                    {(type === 'heading' || type === 'list') && (
                       <Controller
                         control={control}
                         name={`blocks.${index}.level`}
@@ -309,7 +370,7 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
                             value={select.value || '1'}
                             select
                             size="small"
-                            label="Depth"
+                            label={type === 'heading' ? 'Depth' : 'Indent'}
                             sx={{ width: 96 }}
                             error={!!blockErrors?.level}
                             slotProps={{
@@ -318,7 +379,7 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
                           >
                             {[1, 2, 3, 4, 5, 6].map((value) => (
                               <MenuItem key={value} value={String(value)}>
-                                H{value}
+                                {type === 'heading' ? `H${value}` : value}
                               </MenuItem>
                             ))}
                           </TextField>
@@ -327,17 +388,63 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
                     )}
                   </Stack>
 
-                  <TextField
-                    {...register(`blocks.${index}.text`)}
-                    label="Text"
-                    fullWidth
-                    multiline
-                    minRows={type === 'heading' ? 1 : 2}
-                    size="small"
-                    error={!!blockErrors?.text}
-                    helperText={blockErrors?.text?.message}
-                    slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Block.Text` } }}
-                  />
+                  <Stack sx={{ flex: 1, gap: 1, minWidth: 0 }}>
+                    {/*
+                      `text` means three different things across the six types, so the label says
+                      which one. On a table it is the caption and on an image the alt text — and
+                      the alt text is the field the server refuses when blank, which a control
+                      labelled "Text" gives somebody no reason to fill in.
+                    */}
+                    <TextField
+                      {...register(`blocks.${index}.text`)}
+                      label={TEXT_LABEL[type]}
+                      fullWidth
+                      multiline
+                      minRows={type === 'heading' || type === 'image' ? 1 : 2}
+                      size="small"
+                      required={type === 'image'}
+                      error={!!blockErrors?.text}
+                      helperText={blockErrors?.text?.message ?? TEXT_HINT[type]}
+                      slotProps={{
+                        htmlInput: {
+                          'data-testid': `${TestIdPrefix}.Block.Text`,
+                          // The monospace face follows the content, so a code block is edited in
+                          // the shape it is read in — two clicks away on the same page.
+                          style: type === 'code' ? { fontFamily: 'var(--font-mono)' } : undefined,
+                        },
+                      }}
+                    />
+
+                    {type === 'table' && (
+                      <Controller
+                        control={control}
+                        name={`blocks.${index}.rows`}
+                        render={({ field: cells }) => (
+                          <TableRowsEditor
+                            rows={cells.value}
+                            onChange={cells.onChange}
+                            testId={`${TestIdPrefix}.Block.Rows`}
+                          />
+                        )}
+                      />
+                    )}
+
+                    {type === 'image' && (
+                      <Controller
+                        control={control}
+                        name={`blocks.${index}.attachmentId`}
+                        render={({ field: select }) => (
+                          <ImageFilePicker
+                            {...select}
+                            attachments={page.attachments}
+                            projectId={projectId}
+                            pageId={page.id}
+                            testId={`${TestIdPrefix}.Block.File`}
+                          />
+                        )}
+                      />
+                    )}
+                  </Stack>
 
                   <Stack direction="row" sx={{ flexShrink: 0 }}>
                     <IconButton
@@ -386,7 +493,14 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
                   // blockId null — the server issues one. This is the ONLY way a new id is
                   // created, which is what keeps "the client sent no id" and "this is new" the
                   // same fact.
-                  blocks.append({ blockId: null, blockType: 'paragraph', level: '', text: '' })
+                  blocks.append({
+                    blockId: null,
+                    blockType: 'paragraph',
+                    level: '',
+                    text: '',
+                    rows: [],
+                    attachmentId: '',
+                  })
                 }
                 data-testid={`${TestIdPrefix}.AddBlock`}
               >
@@ -397,5 +511,196 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
         </Stack>
       </Panel>
     </form>
+  );
+}
+
+/**
+ * A table's cells, edited as a grid.
+ *
+ * ## Why a grid rather than a textarea of delimited lines
+ *
+ * A single field where lines are rows and tabs are cells is a quarter of this code, and it is the
+ * mistake §93 already refused one field over. A cell containing the delimiter splits into two with
+ * nothing reported; a column cannot be inserted; and a ragged row — which the server refuses by
+ * naming its index — is something the author can only find by counting characters. The grid makes
+ * ragged **unconstructable**: rows are added and removed whole, columns across every row at once.
+ *
+ * ## The first row is the header, and it says so on screen
+ *
+ * There is no "this table has a header" switch, on the server or here. A boolean would have two
+ * states that look identical in an editor and differ only in what a screen reader announces for
+ * every cell below it, so it gets set wrong and nothing reports it. What the editor owes the author
+ * instead is to be plain about the rule, which is the first row's label.
+ *
+ * Uncontrolled-to-controlled is deliberately avoided: every cell always has a string, because a
+ * `undefined` cell would make its input switch modes mid-edit and lose the caret.
+ */
+function TableRowsEditor({
+  rows,
+  onChange,
+  testId,
+}: {
+  rows: string[][];
+  onChange: (rows: string[][]) => void;
+  testId: string;
+}) {
+  const columns = rows[0]?.length ?? 0;
+
+  const setCell = (rowIndex: number, cellIndex: number, value: string) =>
+    onChange(
+      rows.map((row, r) => (r === rowIndex ? row.map((cell, c) => (c === cellIndex ? value : cell)) : row)),
+    );
+
+  // Every mutation below rebuilds the WHOLE grid rather than editing one row, which is what keeps
+  // the rectangle a rectangle. Adding a column to "the current row" is the shape that produces the
+  // ragged payload the server refuses.
+  const addRow = () => onChange([...rows, Array.from({ length: Math.max(columns, 1) }, () => '')]);
+  const removeRow = (rowIndex: number) => onChange(rows.filter((_, r) => r !== rowIndex));
+  const addColumn = () => onChange(rows.map((row) => [...row, '']));
+  const removeColumn = () => onChange(rows.map((row) => row.slice(0, -1)));
+
+  if (rows.length === 0) {
+    return (
+      <Stack sx={{ gap: 1, alignItems: 'flex-start' }}>
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          This table has no rows yet. The first row you add names the columns.
+        </Typography>
+        <Button
+          size="small"
+          startIcon={<AddIcon />}
+          onClick={() => onChange([['', '']])}
+          data-testid={`${testId}.Start`}
+        >
+          Start the table
+        </Button>
+      </Stack>
+    );
+  }
+
+  return (
+    <Stack sx={{ gap: 1 }} data-testid={testId}>
+      {rows.map((row, rowIndex) => (
+        <Stack
+          // Index keys, and correct here: a cell is a bare string with no identity, and rows are
+          // only ever appended or removed — there is no reorder for a key to attach to the wrong
+          // row, and the inputs are controlled by the value above rather than by their own state.
+          key={rowIndex}
+          direction="row"
+          sx={{ gap: 1, alignItems: 'center' }}
+          data-testid={`${testId}.Row`}
+        >
+          {row.map((cell, cellIndex) => (
+            <TextField
+              key={cellIndex}
+              value={cell}
+              onChange={(event) => setCell(rowIndex, cellIndex, event.target.value)}
+              size="small"
+              // The header row labels itself, which is how the author learns the rule without a
+              // switch that could disagree with it.
+              label={rowIndex === 0 ? `Column ${cellIndex + 1}` : undefined}
+              placeholder={rowIndex === 0 ? 'Column name' : undefined}
+              sx={{ flex: 1, minWidth: 90 }}
+              slotProps={{ htmlInput: { 'data-testid': `${testId}.Cell` } }}
+            />
+          ))}
+          <Tooltip title={rowIndex === 0 ? 'The header row cannot be removed' : 'Remove this row'}>
+            {/* A span, because a disabled button fires no events and MUI's tooltip needs one to
+                listen to — so the reason for the refusal would otherwise be unreachable. */}
+            <span>
+              <IconButton
+                aria-label="Remove row"
+                size="small"
+                disabled={rowIndex === 0}
+                onClick={() => removeRow(rowIndex)}
+                data-testid={`${testId}.RemoveRow`}
+              >
+                <DeleteOutlineIcon fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+        </Stack>
+      ))}
+      <Stack direction="row" sx={{ gap: 1, flexWrap: 'wrap' }}>
+        <Button size="small" onClick={addRow} data-testid={`${testId}.AddRow`}>
+          Add row
+        </Button>
+        <Button size="small" onClick={addColumn} data-testid={`${testId}.AddColumn`}>
+          Add column
+        </Button>
+        <Button
+          size="small"
+          disabled={columns <= 1}
+          onClick={removeColumn}
+          data-testid={`${testId}.RemoveColumn`}
+        >
+          Remove last column
+        </Button>
+      </Stack>
+    </Stack>
+  );
+}
+
+/**
+ * Which of the page's files an image block shows.
+ *
+ * **A picker over what is already attached, and deliberately not an upload control.** A block names
+ * an `attachment` the page owns — the server refuses an id that is not on this page — so the file
+ * arrives through the page's own attachment panel, which owns the size limit, the empty-file
+ * refusal and the 413. An upload here would be a second copy of all three, and it would have to
+ * happen *before* Save while everything else on this form happens at Save.
+ *
+ * The empty state therefore says where to go rather than offering a way out of it, and the control
+ * stays visible-but-empty instead of disappearing: a block that showed no file chooser at all would
+ * read as an image block that does not take a file.
+ */
+function ImageFilePicker({
+  value,
+  onChange,
+  onBlur,
+  name,
+  attachments,
+  projectId,
+  pageId,
+  testId,
+}: {
+  value: string;
+  onChange: (event: unknown) => void;
+  onBlur: () => void;
+  name: string;
+  attachments: DocPage['attachments'];
+  projectId: string;
+  pageId: string;
+  testId: string;
+}) {
+  if (attachments.length === 0) {
+    return (
+      <Alert severity="info" data-testid={`${testId}.None`}>
+        This page has no files yet. Attach the image on the{' '}
+        <MuiLink component={RouterLink} to={`/projects/${projectId}/docs/${pageId}`}>
+          page itself
+        </MuiLink>
+        , then come back and choose it here.
+      </Alert>
+    );
+  }
+
+  return (
+    <TextField
+      select
+      name={name}
+      value={value}
+      onChange={onChange}
+      onBlur={onBlur}
+      size="small"
+      label="File"
+      helperText="One of this page's attachments."
+      slotProps={{ htmlInput: { 'data-testid': testId } }}
+    >
+      {attachments.map((attachment) => (
+        <MenuItem key={attachment.id} value={attachment.id}>
+          {attachment.filename}
+        </MenuItem>
+      ))}
+    </TextField>
   );
 }

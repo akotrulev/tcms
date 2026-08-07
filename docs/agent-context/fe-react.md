@@ -13,8 +13,43 @@ later commit could have moved).
 
 **§127 PHASE 2 ADDED TWO FILES** — `components/DocBlockBody.tsx` + `components/DocBlockBody.test.tsx`
 — and changed `api/queries/{keys,documentation,index}.ts`, `features/docs/DocsPage.tsx`,
-`features/plans/PlanDocumentPanel.tsx`. **Test count is 1098 across 84 files** — measured on a solo
-run, +10/+1 over §126 phase 4's measured 1088/83.
+`features/plans/PlanDocumentPanel.tsx`. **PHASE 3 ADDED NO FILE**: it changed
+`features/docs/DocPageEditorPage.tsx` (+ its test). **Test count is 1105 across 84 files** —
+measured on a solo run, +17/+1 over §126 phase 4's measured 1088/83.
+
+> **⚠ ONE FULL RUN IN FOUR WENT RED WITH 2 FAILURES AND WAS NOT REPRODUCED.** It happened on a
+> loaded machine (that run's test time was 780s against 373s on a quiet one); three subsequent full
+> runs and three targeted runs of the changed surface are green, and the failing test **names were
+> not captured**. Recorded rather than dismissed: an unidentified flake is a standing claim about
+> this suite, not a fact about that afternoon.
+
+## §127 phase 3 — THE EDITOR COULD AUTHOR THREE OF SIX TYPES, AND ONE FIELD WAS READ-ONLY
+
+- **`DocPageEditorPage` had no control for `table` or `image`**, so the only way to put either on a
+  page was a hand-written request.
+- **THE LIST DEPTH IS THE WORSE ONE AND IT IS A FIX, NOT A FEATURE.** §93 widened the contract so a
+  bullet carries an indent, the reader has rendered that indent ever since, and the Depth control
+  was `type === 'heading'` only — so `level` could be **read and never written**. Half a round trip,
+  invisible from either end alone.
+- **Every type-specific field is derived from the TYPE at submit**, never from what the control last
+  held — one rule, three lines (`level`, `rows`, `attachmentId`). Switching a table to a paragraph
+  with cells still in form state is a 400 the author cannot see the cause of, on an ordinary act.
+- **`TableRowsEditor` is a grid, not a delimited textarea.** The textarea is a quarter of the code
+  and is §93's mistake one field over: a cell containing the delimiter splits silently. Rows are
+  added/removed whole and columns across **every** row at once, which makes ragged
+  *unconstructable* rather than merely refused. The header row's Remove is disabled.
+- **`ImageFilePicker` is a picker over the page's existing attachments and deliberately not an
+  upload.** The upload lives on the page's own panel, which owns the size limit, the empty-file
+  refusal and the 413; a second one here would copy all three and would have to happen *before*
+  Save while everything else happens at Save. With no files it says where to go.
+- **`TEXT_LABEL`/`TEXT_HINT` are `satisfies Record<blockType, …>`** — `text` means Heading, Bullet,
+  Caption or Alt text depending on the type, and a control labelled "Text" gives nobody a reason to
+  fill in the one the server refuses when blank.
+- **`data-testid` ON A MUI SELECT SITS ON THE HIDDEN `<input>`** (`slotProps.htmlInput`), which
+  carries `pointer-events: none` — `userEvent.click(getByTestId(…))` **throws**. The repo's idiom is
+  `closest('.MuiInputBase-root')` → `getByRole('combobox')` → the option in the portal
+  (`ArtifactDialogs.test.tsx`); `DocPageEditorPage.test.tsx` now has its own `choose()` helper.
+  `#confirmed`
 
 > **⚠ THERE WERE TWO `BlockView`s BRANCHING ON `blockType`, AND THEY DISAGREED.** `DocsPage`'s and
 > `PlanDocumentPanel`'s: the plan panel indented list bullets and set a monospace face on `code`,

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { SnackbarProvider } from 'notistack'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -57,7 +57,7 @@ const sessionRecovery = {
   registerReauthHandler: () => () => {},
 }
 
-function renderEditor() {
+function renderEditor(subject: DocPage = page) {
   return render(
     <TestProviders client={createTestQueryClient()} route="/projects/p1/docs/page-1/edit">
       {/*
@@ -68,18 +68,38 @@ function renderEditor() {
       */}
       <SessionRecoveryContext.Provider value={sessionRecovery}>
         <SnackbarProvider>
-          <DocPageEditor projectId="p1" page={page} />
+          <DocPageEditor projectId="p1" page={subject} />
         </SnackbarProvider>
       </SessionRecoveryContext.Provider>
     </TestProviders>,
   )
 }
 
+/**
+ * Opens a MUI select and picks an option.
+ *
+ * The `data-testid` sits on the hidden `<input>` (`slotProps.htmlInput`), which carries
+ * `pointer-events: none` — so clicking it throws rather than opening the menu. The visible control
+ * is the sibling `combobox`, and the options render into a portal on the document.
+ */
+async function choose(testId: string, optionName: string | RegExp) {
+  const select = screen.getByTestId(testId).closest('.MuiInputBase-root')!
+  await userEvent.click(within(select as HTMLElement).getByRole('combobox'))
+  await userEvent.click(await screen.findByRole('option', { name: optionName }))
+}
+
 /** The body of the one PATCH the editor sent. */
 function patchedBody(patch: ReturnType<typeof vi.spyOn>) {
   return (patch.mock.calls[0] as unknown[])[1] as {
     title: string
-    blocks: { id?: string; blockType: string; level: number | null; text: string }[]
+    blocks: {
+      id?: string
+      blockType: string
+      level: number | null
+      text: string
+      rows: string[][] | null
+      attachmentId: string | null
+    }[]
   }
 }
 
@@ -219,5 +239,161 @@ describe('DocPageEditorPage', () => {
     // be fifty blocks long.
     expect(await screen.findByText('Enter text.')).toBeInTheDocument()
     expect(screen.queryByTestId('DocEditor.Error')).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * The three types this form could not author until #48 phase 3 — and the one it could read and
+ * never write.
+ *
+ * A `table` and an `image` carry a payload beyond `text`, and the form had no control for either,
+ * so the only way to put one on a page was a hand-written request. The **list** case is different
+ * and worse: §93 widened the contract so a bullet could carry an indent depth, the reader has
+ * rendered that indent ever since, and this form offered the Depth control to headings only — so
+ * the field could be read and never authored. A round trip with one end missing.
+ */
+describe('DocPageEditorPage — the payload-carrying block types', () => {
+  const withTable: DocPage = {
+    ...page,
+    blocks: [
+      {
+        id: 'block-table',
+        position: 0,
+        blockType: 'table',
+        level: null,
+        text: 'Transfer limits',
+        rows: [
+          ['Tier', 'Daily limit'],
+          ['Basic', '1000'],
+        ],
+      },
+    ],
+  } as DocPage
+
+  const withImage: DocPage = {
+    ...page,
+    blocks: [
+      {
+        id: 'block-image',
+        position: 0,
+        blockType: 'image',
+        level: null,
+        text: 'The checkout screen',
+        attachmentId: 'file-1',
+      },
+    ],
+    attachments: [
+      {
+        id: 'file-1',
+        filename: 'wireframe.png',
+        contentType: 'image/png',
+        sizeBytes: 2048,
+        url: '/api/v1/projects/p1/doc-pages/page-1/attachments/file-1/content',
+        uploadedAt: '2026-08-01T09:00:00Z',
+        uploadedBy: null,
+      },
+    ],
+  } as DocPage
+
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('edits a cell in the grid and sends the whole table back as rows', async () => {
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue({ ...withTable, currentVersionNo: 4 } as never)
+    renderEditor(withTable)
+
+    const cells = await screen.findAllByTestId('DocEditor.Block.Rows.Cell')
+    await userEvent.clear(cells[3])
+    await userEvent.type(cells[3], '2500')
+    await userEvent.click(screen.getByTestId('DocEditor.Save'))
+
+    await waitFor(() => expect(patch).toHaveBeenCalled())
+    expect(patchedBody(patch).blocks[0].rows).toEqual([
+      ['Tier', 'Daily limit'],
+      ['Basic', '2500'],
+    ])
+  })
+
+  it('ADDS A COLUMN TO EVERY ROW — a ragged table is unconstructable here', async () => {
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue({ ...withTable, currentVersionNo: 4 } as never)
+    renderEditor(withTable)
+
+    await userEvent.click(await screen.findByTestId('DocEditor.Block.Rows.AddColumn'))
+    await userEvent.click(screen.getByTestId('DocEditor.Save'))
+
+    // The server refuses a ragged table by naming the short row, which is a message the author can
+    // only act on by counting. Widening the whole grid at once means they never see it.
+    await waitFor(() => expect(patch).toHaveBeenCalled())
+    const rows = patchedBody(patch).blocks[0].rows ?? []
+    expect(rows.map((row) => row.length)).toEqual([3, 3])
+  })
+
+  it('refuses to remove the header row, and says why', async () => {
+    renderEditor(withTable)
+
+    // The first row IS the header — there is no flag saying so, on the server or here, because a
+    // boolean's two states look identical in an editor and differ only in what a screen reader
+    // announces for every cell below.
+    const removals = await screen.findAllByTestId('DocEditor.Block.Rows.RemoveRow')
+    expect(removals[0]).toBeDisabled()
+    expect(removals[1]).toBeEnabled()
+  })
+
+  it('SENDS A LIST BULLET’S INDENT — the half of §93 that was never authorable', async () => {
+    const withList: DocPage = {
+      ...page,
+      blocks: [
+        { id: 'block-list', position: 0, blockType: 'list', level: 1, text: 'The refund is partial.' },
+      ],
+    } as DocPage
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue({ ...withList, currentVersionNo: 4 } as never)
+    renderEditor(withList)
+
+    // The control exists for a list at all, which it did not before: the reader has indented
+    // bullets by this field since §93 and nothing could set it.
+    await screen.findByTestId('DocEditor.Block.Level')
+    await choose('DocEditor.Block.Level', '3')
+    await userEvent.click(screen.getByTestId('DocEditor.Save'))
+
+    await waitFor(() => expect(patch).toHaveBeenCalled())
+    expect(patchedBody(patch).blocks[0].level).toBe(3)
+  })
+
+  it('picks an image from the page’s own files and sends its id', async () => {
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue({ ...withImage, currentVersionNo: 4 } as never)
+    renderEditor(withImage)
+
+    expect(await screen.findByTestId('DocEditor.Block.File')).toBeInTheDocument()
+    await userEvent.click(screen.getByTestId('DocEditor.Save'))
+
+    await waitFor(() => expect(patch).toHaveBeenCalled())
+    expect(patchedBody(patch).blocks[0].attachmentId).toBe('file-1')
+    // And the alt text is `text`, which the server refuses when blank.
+    expect(patchedBody(patch).blocks[0].text).toBe('The checkout screen')
+  })
+
+  it('tells an author with no files where to attach one, instead of an empty picker', async () => {
+    // A block names an attachment the page already owns, so the upload lives on the page's own
+    // panel — which owns the size limit, the empty-file refusal and the 413. An upload control
+    // here would be a second copy of all three.
+    renderEditor({ ...withImage, attachments: [] } as DocPage)
+
+    expect(await screen.findByTestId('DocEditor.Block.File.None')).toBeInTheDocument()
+  })
+
+  it('DROPS THE CELLS when a table is turned into a paragraph', async () => {
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue({ ...withTable, currentVersionNo: 4 } as never)
+    renderEditor(withTable)
+
+    await screen.findByTestId('DocEditor.Block.Type')
+    await choose('DocEditor.Block.Type', 'Paragraph')
+    await userEvent.click(screen.getByTestId('DocEditor.Save'))
+
+    // Every type-specific field is derived from the TYPE at submit, never from what the control
+    // last held. Sending the rows anyway is a 400 the author cannot see the cause of, on an
+    // ordinary thing to do while writing.
+    await waitFor(() => expect(patch).toHaveBeenCalled())
+    expect(patchedBody(patch).blocks[0].rows).toBeNull()
   })
 })
