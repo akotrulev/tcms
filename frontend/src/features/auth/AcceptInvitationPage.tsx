@@ -274,6 +274,8 @@ function AcceptForm({ token, email, displayName, passwordRequired }: AcceptFormP
               type="email"
               name="email"
               autoComplete="username"
+              /* See `LoginPage` — `id` is one of the four signals, and MUI's generated one is not. */
+              id="email"
               value={email}
               fullWidth
               slotProps={{
@@ -286,6 +288,7 @@ function AcceptForm({ token, email, displayName, passwordRequired }: AcceptFormP
               label="Password"
               type="password"
               autoComplete="new-password"
+              id="new-password"
               fullWidth
               error={!!errors.password}
               helperText={errors.password?.message ?? 'At least 12 characters.'}
@@ -300,6 +303,7 @@ function AcceptForm({ token, email, displayName, passwordRequired }: AcceptFormP
               label="Confirm password"
               type="password"
               autoComplete="new-password"
+              id="confirm-new-password"
               fullWidth
               error={!!errors.confirmPassword}
               helperText={errors.confirmPassword?.message}

@@ -86,7 +86,7 @@ export function LoginPage() {
 
   const onSubmit = handleSubmit(async (data) => {
     try {
-      await login(data.email, data.password, data.rememberMe);
+      const signedIn = await login(data.email, data.password, data.rememberMe);
       /*
         Offer the credential to the browser's password manager, and only now — the contract of the
         Credential Management API is "these worked", so a store before the await would teach the
@@ -96,7 +96,19 @@ export function LoginPage() {
         because the document does not unload; awaiting it would hold the user on the sign-in form
         for as long as they took to answer a dialog that is not ours.
       */
-      void offerToSaveCredentials({ id: data.email, password: data.password });
+      void offerToSaveCredentials({
+        id: data.email,
+        password: data.password,
+        // The label the manager's own account picker shows. The accept-invitation form has always
+        // passed one; omitting it here filed sign-in-saved entries under a blank name while
+        // signup-saved ones read properly, for no reason beyond the auth API not returning a user.
+        name: signedIn.displayName,
+      });
+      /*
+        And this line is the mechanism, not the one above it — `navigate` is a `replaceState` that
+        unmounts this route, which is exactly the "emulate navigation and remove the password form"
+        that Google documents as how a password manager learns a fetch-driven sign-in succeeded.
+      */
       navigate(from, { replace: true });
     } catch (error) {
       if (error instanceof ApiError && error.hasFieldErrors) {
@@ -187,6 +199,12 @@ export function LoginPage() {
               label="Email"
               type="email"
               autoComplete="username"
+              /*
+                `id` and `name` are on Google's list of the signals a manager reads, beside
+                `autocomplete` and `type` — and MUI would otherwise generate an opaque `:r3:`-style
+                id. `name` arrives from `register('email')` below.
+              */
+              id="email"
               fullWidth
               error={!!errors.email}
               helperText={errors.email?.message}
@@ -201,6 +219,7 @@ export function LoginPage() {
               label="Password"
               type="password"
               autoComplete="current-password"
+              id="current-password"
               fullWidth
               error={!!errors.password}
               helperText={errors.password?.message}

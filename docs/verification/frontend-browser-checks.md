@@ -205,6 +205,8 @@ constraints only fit in this order.
 | # | Drive | Expect | src |
 |---|---|---|---|
 | A0-1 | Invite the five colleagues (`POST /api/v1/users` from the console, then `issue-invitation` for each link) and redeem each in a private window | Each lands on `/accept-invitation`, chooses a password, and signs in. The response body of the invite **never carries the link** — if it does, that is a disclosure defect and the row for it. | §109 |
+| A0-5 | **Calibrate the browser FIRST — see the note under this table; a negative result is meaningless without it.** Then, **as part of A0-1 and not after it** (tokens are single-use, so there is no second chance): redeem **one** of the five invites in a **normal** Chrome window signed into a Google profile rather than the private window A0-1 otherwise calls for, since a private window suppresses the offer. Complete the accept form and land on `/login` | Chrome offers **"Save password?"** filed under the invitee's **email address**, not under no account. Then the `/login` form autofills both fields from that entry. ~~The offer comes from `navigator.credentials.store`, so an absent prompt means the API path failed, not the markup.~~ → **superseded 2026-08-07**, and it had the mechanism backwards. The offer is expected to come from the **route change**: `navigate()` is a `replaceState` that unmounts the form, which is what Google documents as how a manager learns a fetch-driven sign-in succeeded. `store()` is a belt-and-braces addition that was observed doing nothing. So an absent prompt indicts the **markup and the unmount**, not the API. **This is still §63's only observer** — the slice shipped both mechanisms and neither has ever been seen to fire. | §63 |
+| A0-6 | **Calibrate first, as A0-5.** Then the same two forms in **Safari**, signed into an Apple ID (iCloud Keychain) | Safari implements no Credential Management API for passwords, so this row exercises the **markup alone**: the strong-password suggestion appears on the accept form's `new-password` field, Keychain offers to save under the email after submit, and `/login` then autofills. A failure here is a **markup** finding — `method`/`action`, the read-only username field, `readOnly` vs `disabled` — and not a `credentials.ts` one. The two rows fail independently and for opposite reasons; running only one proves nothing about the other. | §63 |
 | A0-2 | Create project **`MOB`** as the Company Admin; grant `lead` on both projects and `engineer` on `OLB` only | Both projects in the switcher for `lead`, one for `engineer`. `L4-37` and `M1-3` both rest on this asymmetry. | §109 |
 | A0-3 | Build the custom role (`project:read` + `report:view`, no `report:export`) and grant it to `watcher` on `OLB` | The role saves and the grant takes. **If the role editor cannot express a role without `report:export`, stop and record it** — §87 had to build this role in Java because no built-in has the shape, and this is the first time a person has to build it through the product. | §87 |
 | L4-1 | New team → "Platform" → Create | Appears in the tree; `SELECT id, name, parent_team_id FROM team` shows **exactly one row**, `company_id` the caller's. Run this before the other two teams exist or the assertion is not the one written. | §71-2 |
@@ -216,6 +218,30 @@ constraints only fit in this order.
 | L4-5 | Delete a team that holds a grant; then one with children | **409** listing *"1 role grant is made through this team…"* — cancel and the grant is still in the Role assignments table. Then 409 naming the child count; delete the child first, then the parent → 204. | §71-9,10 |
 | L4-7 | ~~`UPDATE team SET parent_team_id = gen_random_uuid() WHERE name = 'Platform';` — and then a cycle~~ | 🚫 **UNDRIVEABLE — §110 F8, and the product is the reason.** The row assumed *"the API refuses both twice over, so `psql` is the only way in"*. There is a **third** guard: `tcms_enforce_team_hierarchy`, a trigger in **`V2` since M0**, refuses the orphan (*"parent team … is not visible in this company"*) and the cycle (*"… is already an ancestor of …, so this edge would create a cycle"*) at the database. The state this row wanted to observe **cannot exist in this schema**. Kept, not deleted: the question it asks — does the chart drop a row it cannot place? — is fair and simply unreachable from the data side. | §71 note |
 | L3-12 | Members dialog: tick a person, close, reopen, untick | 204 both times, no duplicate row: `team_membership` gained one row and lost it. Moved out of `L3` because it is a write, and this is where the writes to `team` happen. | §71-13 |
+
+### Calibrate the browser before A0-5 and A0-6, or their result means nothing
+
+**A password manager that is switched off looks exactly like an application that fails to ask it.**
+On 2026-08-07 a Chrome profile produced no save prompt on the TCMS forms *and* none on a plain,
+JS-free HTML login form that did a real POST and a real navigation — the most manager-friendly login
+form that can be written. The app was not the variable. Without the second observation the first
+reads as a §63 defect, and it is not one.
+
+So **before driving either row, prove the browser prompts at all**:
+
+1. Serve a throwaway page with a `<form method="post">`, an `autocomplete="username"` input and an
+   `autocomplete="current-password"` input, posting to a path that answers 303 to a second page.
+2. Submit it. **A "Save password?" bubble must appear.** If it does not, stop — nothing about A0-5
+   or A0-6 is observable yet, and the cause is in the browser: an Incognito or Guest window (which
+   never prompts), `chrome://settings/passwords` → "Offer to save passwords" off, the origin sitting
+   in `chrome://password-manager/settings` → **"Never saved"** (one stray "Never" click during dev
+   blocks it permanently, and `localhost` is a dev-heavy origin), or a managed-device
+   `PasswordManagerEnabled` policy at `chrome://policy`.
+3. Only once that bubble appears do A0-5 and A0-6 carry a verdict.
+
+**Record the calibration result alongside the row**, whichever way it went. "Not driven, the browser
+could not prompt" is a legitimate outcome; "no prompt, therefore broken" is the wrong finding and
+the expensive one.
 
 ---
 

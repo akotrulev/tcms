@@ -13,16 +13,34 @@
  *
  * So the offer is made explicitly, and the markup is fixed too — they are not alternatives:
  *
- *   - **This function** calls the Credential Management API, whose whole purpose is a page telling
- *     the browser "these credentials were just used successfully; offer to store them". Chrome,
- *     Edge and other Chromium browsers implement it, which covers Google Password Manager.
- *   - **The form markup** carries `autocomplete="username"` and `current-password` /
- *     `new-password`, a real `<form>`, and a username field even where the address is already
- *     known. Safari implements **no** Credential Management API for passwords, so iCloud Keychain
- *     is reached through the markup alone — which is why the accept-invitation form gained a
- *     read-only email field rather than keeping the address as a caption. A password form with no
- *     username field is the classic reason a manager either declines to save or saves the entry
- *     under no account at all.
+ *   - **The form markup and the route change are the mechanism that actually carries this**, and
+ *     they are what Google documents. `sign-in-form-best-practices` says a password manager learns
+ *     a form was submitted in one of two ways: navigate to a different page, or "emulate navigation
+ *     with `History.pushState()` or `History.replaceState()`, and remove the password form" — which
+ *     is precisely what React Router's `navigate()` does when it unmounts the sign-in route. So the
+ *     forms carry `autocomplete="username"` and `current-password` / `new-password`, a real
+ *     `<form>`, `id` and `name` on every field, and a username field even where the address is
+ *     already known. A password form with no username field is the classic reason a manager either
+ *     declines to save or saves the entry under no account at all — which is why the
+ *     accept-invitation form gained a read-only email field rather than keeping the address as a
+ *     caption. Safari, which implements no Credential Management API for passwords, has only this.
+ *   - **This function** calls the Credential Management API on top, and it is a **belt-and-braces
+ *     addition, not the Chromium mechanism.** ~~Chrome, Edge and other Chromium browsers implement
+ *     it, which covers Google Password Manager.~~ → **superseded 2026-08-07.** That was the claim
+ *     this file shipped with and it does not survive checking. Google's own Credential Management
+ *     post now opens "This API has been drastically updated and sample codes in this article won't
+ *     work any longer", was last revised in 2016, and steers readers to One Tap; the 2025 identity
+ *     update never recommends `store()` for saving a password, only the `autocomplete` attributes
+ *     and `/.well-known/change-password`. Driven live on 2026-08-07 the call **resolved and stored
+ *     nothing** — before and inside a user gesture, in a top-level secure context with
+ *     `navigator.webdriver` false. That observation is not conclusive on its own, because the same
+ *     browser also declined to prompt on a plain navigating HTML form, so its password manager was
+ *     suppressed for reasons of its own. What *is* settled is that this call cannot be assumed to
+ *     do anything, and nothing here may be described as verified on the strength of it resolving.
+ *
+ * **A resolved promise from `store()` is not evidence the browser acted**, and reading it as such
+ * is how this file came to be believed. The only observation that counts is the browser's own
+ * prompt appearing.
  *
  * ## It never throws, and never blocks the caller
  *
@@ -71,6 +89,10 @@ export function canStoreCredentials(): boolean {
  *
  * `await`-able, and awaiting it is optional — the caller may navigate immediately. Chrome keeps the
  * prompt across the client-side route change because the document does not unload.
+ *
+ * **Call it before the route change, not after.** The route change is the mechanism (see the file
+ * note); this is the addition. Ordering them the other way would leave the addition firing against
+ * an unmounted form.
  */
 export async function offerToSaveCredentials(credential: {
   /** The username the manager files the entry under — this product's is the email address. */

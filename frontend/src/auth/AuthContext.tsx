@@ -161,6 +161,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Published after storage is written, never before: a sibling adopts by *reading* storage,
     // so a broadcast that overtook the write would have it adopt the session it already had.
     publishSession({ type: 'signed-in', email: result.user.email });
+    return result.user;
   }, []);
 
   const logout = useCallback(() => {

@@ -20,7 +20,13 @@ export type SessionStatus = 'restoring' | 'ready';
 export interface AuthValue {
   user: CurrentUser | null;
   status: SessionStatus;
-  login: (email: string, password: string, rememberMe: boolean) => Promise<void>;
+  /**
+   * Resolves with the signed-in user rather than `void` so the caller can label the credential it
+   * offers the password manager with a display name. The provider's own `user` state is set by
+   * this call, but a caller awaiting it still holds the pre-login render's closure, so reading it
+   * from context instead would read `null`.
+   */
+  login: (email: string, password: string, rememberMe: boolean) => Promise<CurrentUser>;
   logout: () => void;
 }
 

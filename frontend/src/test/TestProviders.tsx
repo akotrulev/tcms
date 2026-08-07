@@ -58,7 +58,9 @@ export function TestProviders({
   const session: AuthValue = {
     user: { id: userId } as CurrentUser,
     status: 'ready',
-    login: async () => {},
+    // Resolves with the same stub user the provider exposes: `login` returns the signed-in user so
+    // the caller can label the credential it offers the password manager.
+    login: async () => ({ id: userId }) as CurrentUser,
     logout: () => {},
   }
   return <AuthContext value={session}>{tree}</AuthContext>
