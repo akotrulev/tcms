@@ -21,8 +21,15 @@ COPY settings.gradle.kts build.gradle.kts ./
 # `|| true`: this warm-up exists purely to populate the cache mount. A resolution failure
 # here must not fail the build — the real resolution happens in the bootJar step below,
 # where a failure genuinely is one.
+#
+# ~~--refresh-dependencies~~ → REMOVED 2026-08-07. It tells Gradle to IGNORE cached module
+# metadata and re-check every dependency against the remote repositories, which is the exact
+# opposite of "populate the cache mount" — the flag made this step re-do on every build the
+# work the mount exists to avoid. It buys correctness only against mutating versions, and
+# this build has none: the version catalog pins every dependency and there are no dynamic
+# ranges or -SNAPSHOTs in it. Put it back if that stops being true.
 RUN --mount=type=cache,target=/root/.gradle \
-    ./gradlew dependencies --no-daemon --refresh-dependencies || true
+    ./gradlew dependencies --no-daemon || true
 
 COPY src src
 
