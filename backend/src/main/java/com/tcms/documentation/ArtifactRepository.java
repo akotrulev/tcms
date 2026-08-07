@@ -1,6 +1,7 @@
 package com.tcms.documentation;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -58,4 +59,48 @@ public interface ArtifactRepository extends JpaRepository<Artifact, UUID> {
             """)
     List<Artifact> findForPlan(
             @Param("projectId") UUID projectId, @Param("planId") UUID planId);
+
+    /**
+     * One artifact of <em>this</em> project, whatever its scope.
+     *
+     * <p>{@code projectId} is in the predicate for {@link #findForPlan}'s reason and it is doing
+     * more work here, because this feeds a delete: {@code findById} would resolve a sibling
+     * project's artifact through a path naming a project the caller <em>can</em> write, and the
+     * gate would already have passed. The path segment must select the row, not merely authorise
+     * the call. RLS keeps another company out; this keeps another project out.
+     */
+    @Query("""
+            SELECT a FROM Artifact a
+             WHERE a.projectId = :projectId
+               AND a.id = :artifactId
+            """)
+    Optional<Artifact> findInProject(
+            @Param("projectId") UUID projectId, @Param("artifactId") UUID artifactId);
+
+    /**
+     * Whether any artifact names this one as its replacement — <strong>the inbound edge this
+     * entity's own javadoc said did not exist</strong>.
+     *
+     * <p>{@code Artifact}'s header argues it is not soft-deleted because "nothing targets an
+     * artifact: {@code superseded_by_id} points the other way … so removing a row breaks no inbound
+     * edge." One end of that is true and the other is not: whichever direction the column is read,
+     * it is a self-referencing foreign key, and the row it points <em>at</em> has an inbound edge by
+     * definition. A delete without this check is a constraint violation the caller reads as a 500.
+     * §100's rule for the fourth time — a comment stating a fact about another file is not a check,
+     * and here the other file was the schema.
+     *
+     * <p><strong>Native, because the column is deliberately unmapped.</strong> The entity leaves
+     * {@code superseded_by_id} off on the argument that a field this slice cannot set would put an
+     * always-null accessor on the wire; that argument is still sound, and mapping the column to
+     * satisfy a derived query name would undo it for a check nothing renders. Native SQL is
+     * governed by RLS rather than by the Hibernate company filter — which is the stronger of the
+     * two, and the precedent is {@code BoardFacts} since §53.
+     *
+     * <p>Nothing writes the column yet, so this answers false in every deployment today. That is
+     * exactly why the refusal is written now rather than when superseding ships: a guard added
+     * after the thing it guards was absent for the whole window that mattered.
+     */
+    @Query(value = "SELECT EXISTS (SELECT 1 FROM artifact WHERE superseded_by_id = :artifactId)",
+            nativeQuery = true)
+    boolean isSupersedingSomething(@Param("artifactId") UUID artifactId);
 }

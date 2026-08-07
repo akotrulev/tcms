@@ -18,11 +18,18 @@ import org.hibernate.annotations.Filter;
  *
  * <p>Not soft-deleted, unlike {@link DocPage}, and the difference is worth stating because the two
  * sit in one module. A doc page is soft-deleted because a case's {@code doc_link} targets a
- * <em>block</em> of it and removing the row would leave that link resolving to nothing. Nothing
- * targets an artifact: {@code superseded_by_id} points the other way, from the replacement to the
- * replaced, so removing a row breaks no inbound edge. What replaces soft deletion here is
- * {@link ArtifactStatus#SUPERSEDED} — a record that stays reachable *because it is still the truth
- * about what was signed off*, not because something points at it.
+ * <em>block</em> of it and removing the row would leave that link resolving to nothing. What
+ * replaces soft deletion here is {@link ArtifactStatus#SUPERSEDED} — a record that stays reachable
+ * *because it is still the truth about what was signed off*, not because something points at it.
+ *
+ * <p>~~Nothing targets an artifact: {@code superseded_by_id} points the other way, from the
+ * replacement to the replaced, so removing a row breaks no inbound edge.~~ <strong>→ corrected
+ * 2026-08-07, when {@code artifact:delete} got its endpoint (plan §8 #53).</strong> That sentence
+ * was written when nothing could delete a row, so nothing could disprove it. {@code superseded_by_id}
+ * is a self-referencing foreign key: whichever direction it is read in, the row it points <em>at</em>
+ * has an inbound edge, and deleting that row is a constraint violation. {@code ArtifactRepository}
+ * refuses it explicitly rather than letting the database answer with a 500. The claim survived
+ * because it described the schema from memory and no check read the schema.
  *
  * <p><strong>Four columns of {@code V1}'s table are deliberately unmapped:</strong>
  * {@code attachment_id}, {@code report_artifact_id} and the two halves of the tags/version story

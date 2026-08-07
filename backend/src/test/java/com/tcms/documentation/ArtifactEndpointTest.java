@@ -24,6 +24,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -683,8 +684,197 @@ class ArtifactEndpointTest extends IntegrationTestBase {
     }
 
     // =====================================================================
+    // Deletion — artifact:delete's first consumer, and the two things it must refuse
+    // =====================================================================
+
+    /**
+     * <strong>{@code artifact:delete} had been in the catalogue since M0 with no consumer</strong>,
+     * so there was no delete endpoint at all (plan §8 #53). These are the assertions that make the
+     * key mean something, and the first is the one that would have been got wrong: reusing
+     * {@code artifact:edit} compiles, passes review, and hands every Test Engineer the ability to
+     * remove a lead's sign-off record.
+     */
+    @Nested
+    @DisplayName("Deleting an artifact — the key that is not artifact:edit")
+    class Deletion {
+
+        @Test
+        @DisplayName("a Test Lead unregisters a mis-registered link, and the row is GONE")
+        void theLeadDeletes() throws Exception {
+            UUID id = createdId(create(LEAD, ACME_BANKING, urlBody("Wrong link")));
+
+            MvcResult removed = delete(LEAD, ACME_BANKING, id);
+
+            assertThat(removed.getResponse().getStatus()).isEqualTo(204);
+            assertThat(removed.getResponse().getContentAsString())
+                    .as("204 carries no body — there is no row left to render")
+                    .isEmpty();
+            assertThat(countArtifacts(ACME))
+                    .as("artifact has no deleted_at, unlike case and suite; the schema's own "
+                            + "answer is that the row is gone, and hiding it instead would be a "
+                            + "second lifecycle nobody asked for")
+                    .isZero();
+            assertThat(titlesOf(list(LEAD, ACME_BANKING, null, null))).isEmpty();
+        }
+
+        /**
+         * <strong>THE gate assertion.</strong> The engineer created this artifact one line earlier —
+         * they hold {@code artifact:edit} at plan scope and may register — and they may not remove
+         * it. Swapping the service's constant to {@code artifact:edit} turns this 403 into a 204.
+         */
+        @Test
+        @DisplayName("a Test Engineer may register a plan artifact and may NOT delete it")
+        void theEngineerCannotDeleteWhatTheyMayCreate() throws Exception {
+            UUID id = createdId(create(ENGINEER, ACME_BANKING, planBody("Engineer's own row")));
+
+            assertThat(delete(ENGINEER, ACME_BANKING, id).getResponse().getStatus())
+                    .as("creative versus destructive, roles spec §A — and the artefact being "
+                            + "destroyed here IS the audit trail")
+                    .isEqualTo(403);
+            assertThat(countArtifacts(ACME))
+                    .as("a 403 that deleted anyway is worse than either")
+                    .isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("a Viewer is refused too, and neither 403 carries a body")
+        void theViewerIsRefused() throws Exception {
+            UUID id = createdId(create(LEAD, ACME_BANKING, urlBody("Anything")));
+
+            MvcResult refused = delete(VIEWER, ACME_BANKING, id);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(403);
+            assertThat(refused.getResponse().getContentAsString()).isEmpty();
+        }
+
+        /**
+         * <strong>The write-once guard, made reachable by the fixture.</strong>
+         *
+         * <p>{@code artifact.write_once} has had a comment since {@code V1} — "sign-off records:
+         * corrections supersede, never edit" — and no enforcement anywhere, and nothing in the
+         * product sets it {@code true} yet. So this test flips the column directly, which is the
+         * only way the guard can be observed today.
+         *
+         * <p>Writing the check before its writer is deliberate and it is the opposite call from
+         * §121 phase 3's deleted seam. A seam guesses at a consumer that may not want it; a
+         * <em>refusal</em> guesses at nothing — it is the column's documented meaning, enforced. The
+         * alternative is the {@code Company.suspend()} shape the plan recorded two days ago: a
+         * guarantee written in a comment, believed by everyone, and doing nothing.
+         */
+        @Test
+        @DisplayName("a write-once sign-off record is refused with 409, and survives")
+        void aSignOffRecordCannotBeDeleted() throws Exception {
+            UUID id = createdId(create(LEAD, ACME_BANKING, urlBody("Release 1 sign-off")));
+            setWriteOnce(id);
+
+            MvcResult refused = delete(LEAD, ACME_BANKING, id);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(409);
+            assertThat(body(refused).get("detail").asText())
+                    .as("names the way forward — a 409 that only says no leaves the lead with "
+                            + "no next action, and superseding is the one they want")
+                    .contains("Supersede");
+            assertThat(countArtifacts(ACME)).isEqualTo(1);
+        }
+
+        /**
+         * The inbound edge {@code Artifact}'s javadoc said did not exist — see
+         * {@code ArtifactRepository.isSupersedingSomething}. Without the check this is a foreign-key
+         * violation surfacing as a 500.
+         */
+        @Test
+        @DisplayName("an artifact that superseded another is refused with 409, not a 500")
+        void theReplacementCannotBeDeleted() throws Exception {
+            UUID replaced = createdId(create(LEAD, ACME_BANKING, urlBody("Old sign-off")));
+            UUID replacement = createdId(create(LEAD, ACME_BANKING, urlBody("Corrected sign-off")));
+            setSupersededBy(replaced, replacement);
+
+            MvcResult refused = delete(LEAD, ACME_BANKING, replacement);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(409);
+            assertThat(body(refused).get("detail").asText()).contains("pointing at nothing");
+
+            assertThat(delete(LEAD, ACME_BANKING, replaced).getResponse().getStatus())
+                    .as("the OTHER end of the same edge is deletable — the guard is about the "
+                            + "direction of the pointer, not about superseding in general")
+                    .isEqualTo(204);
+        }
+
+        @Test
+        @DisplayName("the removal is audited with the row's content, since the row will be gone")
+        void theRemovalIsAudited() throws Exception {
+            UUID id = createdId(create(LEAD, ACME_BANKING, urlBody("Compliance evidence")));
+
+            assertThat(delete(LEAD, ACME_BANKING, id).getResponse().getStatus()).isEqualTo(204);
+
+            assertThat(auditChanges(ACME, "ARTIFACT_REMOVED"))
+                    .as("a target id alone names something an auditor cannot look up — this is "
+                            + "the one case where the event must carry the content")
+                    .hasSize(1)
+                    .allSatisfy(changes -> assertThat(changes)
+                            .contains("Compliance evidence")
+                            .contains("https://"));
+        }
+
+        /**
+         * <strong>The sharpest of the reachability rows, and the reason the repository query takes
+         * a {@code projectId}.</strong>
+         *
+         * <p>Everything lines up for this to succeed by accident: the row is in the caller's own
+         * company so RLS admits it, the caller is a Test Lead who holds {@code artifact:delete}, and
+         * the project in the path is one they are fully granted on — so the gate passes. Only the
+         * predicate on {@code project_id} stops the delete. A {@code findById} here would remove an
+         * artifact from a project the caller was never gated on, through a path that never named it.
+         *
+         * <p>Seeded by SQL because {@code ACME_LOCKED} is granted to nobody in this class: the API
+         * cannot put a row there, which is what makes it the right home for this fixture.
+         */
+        @Test
+        @DisplayName("a sibling project's artifact is 404 through this project's path, not 403")
+        void anotherProjectsArtifactIsNotReachable() throws Exception {
+            UUID locked = UUID.fromString("af009000-0000-4000-8000-000000000001");
+            insertArtifact(locked, ACME, ACME_LOCKED, "Internal doc");
+
+            assertThat(delete(LEAD, ACME_BANKING, locked).getResponse().getStatus())
+                    .as("the caller holds the strongest key in this module and is gated on the "
+                            + "project they named; neither entitles them to a row in another one")
+                    .isEqualTo(404);
+            assertThat(countArtifacts(ACME))
+                    .as("the sibling project's register is untouched")
+                    .isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("an id that never existed is the same 404")
+        void anAbsentArtifactIs404() throws Exception {
+            assertThat(delete(LEAD, ACME_BANKING,
+                    UUID.fromString("afdead00-0000-4000-8000-00000000dead"))
+                    .getResponse().getStatus())
+                    .isEqualTo(404);
+        }
+
+        @Test
+        @DisplayName("another company's artifact is 404, and RLS is the backstop under the check")
+        void anotherCompanyIs404() throws Exception {
+            UUID theirs = createdId(create(OUTSIDER, UMBRA_BANKING, urlBody("Umbra's doc")));
+
+            assertThat(delete(LEAD, UMBRA_BANKING, theirs).getResponse().getStatus()).isEqualTo(404);
+            assertThat(countArtifacts(UMBRA))
+                    .as("the row is untouched in the company that owns it")
+                    .isEqualTo(1);
+        }
+    }
+
+    // =====================================================================
     // helpers — requests
     // =====================================================================
+
+    private MvcResult delete(UUID userId, UUID projectId, UUID artifactId) throws Exception {
+        return mvc.perform(MockMvcRequestBuilders
+                        .delete("/api/v1/projects/" + projectId + "/artifacts/" + artifactId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(userId)))
+                .andReturn();
+    }
 
     private MvcResult create(UUID userId, UUID projectId, String body) throws Exception {
         return mvc.perform(MockMvcRequestBuilders
@@ -780,6 +970,25 @@ class ArtifactEndpointTest extends IntegrationTestBase {
         return body.toString();
     }
 
+    /** A project-scope external link — the ordinary registration these tests delete. */
+    private String urlBody(String title) {
+        return link("PROJECT", null, "Compliance", title,
+                "https://docs.example.test/" + title.toLowerCase(Locale.ROOT).replace(' ', '-'));
+    }
+
+    /** A plan-scope one, which is the only scope a Test Engineer may register at. */
+    private String planBody(String title) {
+        return link("PLAN", BANKING_PLAN, "Cycle", title, "https://docs.example.test/plan-doc");
+    }
+
+    private UUID createdId(MvcResult result) throws Exception {
+        assertThat(result.getResponse().getStatus())
+                .as("the fixture's own create must succeed, or the assertion under test is "
+                        + "measuring the wrong failure")
+                .isEqualTo(201);
+        return UUID.fromString(body(result).get("id").asText());
+    }
+
     private String quote(String value) {
         try {
             return json.writeValueAsString(value);
@@ -814,6 +1023,68 @@ class ArtifactEndpointTest extends IntegrationTestBase {
             rows.next();
             return rows.getLong(1);
         }
+    }
+
+    /** A PROJECT-scope external link, straight into the table — for projects the API cannot reach. */
+    private void insertArtifact(UUID id, UUID companyId, UUID projectId, String title)
+            throws SQLException {
+
+        try (Connection connection = appConnection(companyId);
+             var statement = connection.prepareStatement("""
+                     INSERT INTO artifact (id, company_id, scope, project_id, category, kind,
+                                           title, status, external_url)
+                     VALUES (?, ?, 'PROJECT', ?, 'Compliance', 'EXTERNAL_URL', ?, 'ACTIVE',
+                             'https://docs.example.test/internal')
+                     """)) {
+            statement.setObject(1, id);
+            statement.setObject(2, companyId);
+            statement.setObject(3, projectId);
+            statement.setString(4, title);
+            statement.executeUpdate();
+        }
+    }
+
+    /**
+     * Flips {@code write_once}, which nothing in the product can set.
+     *
+     * <p>Raw SQL is the only way to reach it and that is the point of the test it serves: the
+     * column has carried its meaning in a {@code V1} comment since M0, and the guard that honours
+     * it is unreachable until something writes it. A fixture is what makes an early guard
+     * assertable instead of aspirational.
+     */
+    private void setWriteOnce(UUID artifactId) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+             var statement = connection.prepareStatement(
+                     "UPDATE artifact SET write_once = true WHERE id = ?")) {
+            statement.setObject(1, artifactId);
+            statement.executeUpdate();
+        }
+    }
+
+    /** Points {@code replaced} at {@code replacement} — the self-FK nothing writes yet. */
+    private void setSupersededBy(UUID replaced, UUID replacement) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+             var statement = connection.prepareStatement(
+                     "UPDATE artifact SET superseded_by_id = ? WHERE id = ?")) {
+            statement.setObject(1, replacement);
+            statement.setObject(2, replaced);
+            statement.executeUpdate();
+        }
+    }
+
+    private List<String> auditChanges(UUID companyId, String action) throws SQLException {
+        List<String> details = new ArrayList<>();
+        try (Connection connection = appConnection(companyId);
+             var statement = connection.prepareStatement(
+                     "SELECT changes FROM audit_event WHERE action = ?")) {
+            statement.setString(1, action);
+            try (ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) {
+                    details.add(rows.getString(1));
+                }
+            }
+        }
+        return details;
     }
 
     private List<String> auditChanges(UUID companyId) throws SQLException {

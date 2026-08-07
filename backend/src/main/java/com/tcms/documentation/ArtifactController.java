@@ -9,6 +9,7 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -107,7 +108,58 @@ public class ArtifactController {
                     .status(HttpStatus.FORBIDDEN)
                     .body(scopeProblem());
             case ArtifactWriteService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
+            // The delete's two outcomes. Unreachable here, and written out rather than defaulted
+            // for the reason the delete's own switch gives.
+            case ArtifactWriteService.Outcome.Deleted ignored ->
+                    ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            case ArtifactWriteService.Outcome.Undeletable ignored ->
+                    ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         };
+    }
+
+    /**
+     * Unregisters an artifact. 204, and nothing in the body — there is no row left to render.
+     *
+     * <p>The 403 here is {@code artifact:delete}, which is a <em>different</em> refusal from every
+     * other one in this controller: a Test Engineer who may register a plan's documents may not
+     * remove one. It is bodiless like the create's, and unlike the scope refusal, because there is
+     * no field to land a sentence on and nothing the caller can change about the request.
+     */
+    @DeleteMapping("/{artifactId}")
+    public ResponseEntity<Object> delete(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID artifactId) {
+
+        ArtifactWriteService.Outcome outcome =
+                writes.delete(UUID.fromString(jwt.getSubject()), projectId, artifactId);
+
+        return switch (outcome) {
+            case ArtifactWriteService.Outcome.Deleted ignored -> ResponseEntity.noContent().build();
+            case ArtifactWriteService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
+            case ArtifactWriteService.Outcome.Forbidden ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            case ArtifactWriteService.Outcome.Undeletable refused -> ResponseEntity
+                    .status(HttpStatus.CONFLICT)
+                    .body(conflict(refused.message()));
+            // Unreachable on this path — the create's three outcomes. The arms stay written rather
+            // than collapsed into a default, because a sealed interface's whole value is that
+            // adding a fourth outcome fails to compile here instead of falling into one.
+            case ArtifactWriteService.Outcome.Created ignored ->
+                    ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            case ArtifactWriteService.Outcome.Invalid ignored ->
+                    ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            case ArtifactWriteService.Outcome.ForbiddenAtScope ignored ->
+                    ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        };
+    }
+
+    /** The register's own refusal, worded by the service — see {@code Outcome.Undeletable}. */
+    private static ProblemDetail conflict(String message) {
+        ProblemDetail detail =
+                ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, message);
+        detail.setTitle("This artifact cannot be removed");
+        return detail;
     }
 
     /**

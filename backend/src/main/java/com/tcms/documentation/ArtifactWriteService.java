@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,6 +51,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class ArtifactWriteService {
 
     private static final String PERMISSION = "artifact:edit";
+
+    /**
+     * Roles spec §A: Instance Admin, Company Admin and Test Lead — and <strong>not</strong> Test
+     * Engineer, who holds {@link #PERMISSION} at plan scope and this at no scope at all. That one
+     * difference is the reason this constant exists rather than the delete reusing the create's.
+     */
+    private static final String DELETE_PERMISSION = "artifact:delete";
     private static final String AUDIT_TARGET = "ARTIFACT";
 
     private final ProjectService projects;
@@ -113,6 +121,23 @@ public class ArtifactWriteService {
         /** A new artifact. 201. */
         record Created(ArtifactView view) implements Outcome {
         }
+
+        /**
+         * The register refuses to lose the row — a <strong>409</strong>, not a 403.
+         *
+         * <p>The caller's permissions are not the problem and asking an administrator would not
+         * help: it is this artifact that may not be removed, and the message says which of the two
+         * reasons applies and what to do instead. Same call {@code RunLifecycle} makes for a closed
+         * run and {@code SuiteWriteService} for a suite that still holds cases.
+         *
+         * @param message written for the person looking at the register, naming the way forward
+         */
+        record Undeletable(String message) implements Outcome {
+        }
+
+        /** Gone. 204. */
+        record Deleted() implements Outcome {
+        }
     }
 
     /**
@@ -161,6 +186,69 @@ public class ArtifactWriteService {
                     // own. It only becomes inherited when read from inside a plan.
                     return new Outcome.Created(ArtifactView.of(artifact, false, authors));
                 }));
+    }
+
+    /**
+     * Unregisters an artifact — <strong>{@code artifact:delete}'s first consumer</strong>.
+     *
+     * <p>The key has been in {@code V3}'s catalogue since M0 and nothing had ever asked for it, so
+     * there was no delete endpoint at all: the sixth instance of the shape §116, §117, §120, §121
+     * and §122 each closed one of, and the one the scope assessment called a cheap win in two
+     * consecutive rounds without anybody taking it (plan §8 #53).
+     *
+     * <h2>The gate is {@code artifact:delete} and NOT {@code artifact:edit}</h2>
+     *
+     * <p>This is the whole point of wiring it. A Test Engineer holds {@code artifact:edit} at plan
+     * scope, so they may register a cycle's documents; {@code V3} withholds {@code artifact:delete}
+     * from them entirely. Reusing {@link #PERMISSION} here would have compiled, passed review, and
+     * quietly given every engineer the ability to remove a lead's sign-off record from the
+     * register — the roles spec's creative-versus-destructive line, in the one module where the
+     * artefact being destroyed <em>is</em> the audit trail.
+     *
+     * <p><strong>Unqualified, unlike the create.</strong> {@link ProjectService#writeGranted} rather
+     * than {@code writeGrantedByRowScope}, because {@code V19}'s own comment says so: "artifact:read
+     * is unqualified for everyone who holds it and artifact:delete" likewise. Only the three roles
+     * that hold it at all hold it everywhere, so there is no scope for a qualifier to narrow.
+     *
+     * <h2>Delete is for a mis-registration; everything else supersedes or archives</h2>
+     *
+     * <p>Plan §6n makes the register's value the audit trail, and both non-current states keep the
+     * row readable. Deletion answers a narrower question — <em>"that link should never have been in
+     * here"</em> — where keeping the row leaves the register asserting something untrue about the
+     * project. The two refusals below are what keep it from answering any wider one.
+     */
+    @Transactional
+    public Outcome delete(UUID userId, UUID projectId, UUID artifactId) {
+        return gated(projects.writeGranted(userId, projectId, DELETE_PERMISSION, project -> {
+            Optional<Artifact> found = artifacts.findInProject(project.getId(), artifactId);
+            if (found.isEmpty()) {
+                // Absent, another project's, and another company's are one bodiless 404 (§6t) —
+                // and the caller holds the strongest key in this module, which does not entitle
+                // them to learn that a sibling project has an artifact by this id.
+                return new Outcome.NotFound();
+            }
+            Artifact artifact = found.get();
+
+            if (artifact.isWriteOnce()) {
+                return new Outcome.Undeletable(
+                        "This is a sign-off record, and the register keeps those for the audit "
+                                + "trail. Supersede it with a correction instead.");
+            }
+            if (artifacts.isSupersedingSomething(artifactId)) {
+                return new Outcome.Undeletable(
+                        "Another artifact was superseded by this one. Deleting it would leave "
+                                + "that record pointing at nothing.");
+            }
+
+            Instant now = clock.instant();
+            // The audit row before the delete, and inside the same transaction: it names an id
+            // that is about to stop existing, which is the point — "who removed the strategy
+            // document" is unanswerable from a register the row is no longer in. A rollback takes
+            // both, so the trail can never record a removal that did not happen.
+            auditRemoval(project.getId(), userId, artifact, now);
+            artifacts.delete(artifact);
+            return new Outcome.Deleted();
+        }));
     }
 
     /**
@@ -312,6 +400,32 @@ public class ArtifactWriteService {
             case GateResult.Denied<Outcome> ignored -> new Outcome.Forbidden();
             case GateResult.Allowed<Outcome> allowed -> allowed.value();
         };
+    }
+
+    /**
+     * The removal, recorded with enough of the row to be readable after the row is gone.
+     *
+     * <p>A target id alone would name something an auditor cannot look up, which is the one case
+     * where the event body has to carry the content rather than a pointer to it. The URL is
+     * included for exactly that reason and only for {@code EXTERNAL_URL}: "who took the compliance
+     * link out of the register" is answerable only if the link is in the event.
+     */
+    private void auditRemoval(UUID projectId, UUID userId, Artifact artifact, Instant now) {
+        auditEvents.save(AuditEvent.record(
+                projectId,
+                userId,
+                "ARTIFACT_REMOVED",
+                AUDIT_TARGET,
+                List.of(artifact.getId()),
+                "{\"title\":" + AuditEvent.jsonString(artifact.getTitle())
+                        + ",\"scope\":\"" + artifact.getScope() + "\""
+                        + ",\"kind\":\"" + artifact.getKind() + "\""
+                        + ",\"status\":\"" + artifact.getStatus() + "\""
+                        + ",\"category\":" + AuditEvent.jsonString(artifact.getCategory())
+                        + (artifact.getExternalUrl() == null ? ""
+                                : ",\"url\":" + AuditEvent.jsonString(artifact.getExternalUrl()))
+                        + "}",
+                now));
     }
 
     private void audit(UUID projectId, UUID userId, Artifact artifact, Instant now) {

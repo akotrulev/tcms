@@ -4090,6 +4090,79 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/artifacts/{artifactId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                artifactId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove an artifact from the register
+         * @description Requires **`artifact:delete`** — Lead and up, and deliberately **not** held by a Test
+         *     Engineer, who may register a plan-scope artifact (`artifact:edit`, plan-scope-qualified)
+         *     and may not unregister one. That is the same creative-versus-destructive line the roles
+         *     spec draws for `result:submit` against `result:amend`. Wired 2026-08-07 (plan §8 #53); the
+         *     key had been in the catalogue since M0 with no consumer, so deletion did not exist at all.
+         *
+         *     **This is for a mis-registration, not for an artifact that has served its purpose.** Plan
+         *     §6n is explicit that the register's value is the audit trail: an artifact that is no longer
+         *     current is `SUPERSEDED` (a newer one names it) or `ARCHIVED` ("no longer relevant, kept for
+         *     the record"), and both stay readable. Deletion is the answer to *"that link should never
+         *     have been in here"* — a wrong URL, a page pointing at another team's document — where
+         *     keeping the row would leave the register asserting something untrue.
+         *
+         *     There is no `deleted_at` on `artifact`, unlike cases, suites and runs. That is the schema's
+         *     own answer and it is honoured here: **the row is gone**, not hidden.
+         *
+         *     Two refusals, both `409`, and both about the record rather than about the caller:
+         *
+         *     - **A write-once artifact cannot be deleted.** `artifact.write_once` marks a sign-off
+         *       record, whose whole point is that corrections supersede and never overwrite. The column
+         *       has had no enforcement since `V1` and nothing sets it `true` yet — it is honoured now
+         *       rather than when a writer appears, because enforcement that arrives *after* the control
+         *       it protects is the `Company.suspend()` shape: a guarantee that is believed and does
+         *       nothing.
+         *     - **An artifact another one supersedes cannot be deleted.** `superseded_by_id` would be
+         *       left dangling, and a correction pointing at a record that no longer exists is worse than
+         *       either row alone.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                    artifactId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Removed */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/dashboard": {
         parameters: {
             query?: never;
