@@ -5,7 +5,8 @@ import com.tcms.project.GateResult;
 import com.tcms.project.ProjectService;
 import com.tcms.storage.Attachment;
 import com.tcms.storage.AttachmentRepository;
-import com.tcms.storage.EvidenceStore;
+import com.tcms.storage.AttachmentStore;
+import com.tcms.storage.BlobUpload;
 import com.tcms.storage.StoredBlob;
 import com.tcms.tenancy.CompanyContext;
 import java.time.Clock;
@@ -78,7 +79,7 @@ public class EvidenceService {
     private final EvidenceRepository evidenceRows;
     private final AttachmentRepository attachments;
     private final StepOutcomeRepository stepOutcomes;
-    private final EvidenceStore store;
+    private final AttachmentStore store;
     private final EvidenceViews views;
     private final Clock clock;
 
@@ -88,7 +89,7 @@ public class EvidenceService {
             EvidenceRepository evidenceRows,
             AttachmentRepository attachments,
             StepOutcomeRepository stepOutcomes,
-            EvidenceStore store,
+            AttachmentStore store,
             EvidenceViews views,
             Clock clock) {
 
@@ -282,18 +283,15 @@ public class EvidenceService {
             stepResultId = outcome.get().getId();
         }
 
-        String key = storageKey(companyId, execution.getId());
+        String key = BlobUpload.key(companyId, execution.getId());
 
         // The attachment's owner is the step result when there is one, so attachment.owner_type
         // tells the truth about what the file documents — and a future sweep by owner finds it
         // where V1's polymorphic table says to look.
         Attachment attachment = stepResultId == null
                 ? Attachment.forExecution(
-                        companyId, execution.getId(), key, upload.filename(), upload.contentType(),
-                        upload.sizeBytes(), upload.checksum(), userId, now)
-                : Attachment.forStepResult(
-                        companyId, stepResultId, key, upload.filename(), upload.contentType(),
-                        upload.sizeBytes(), upload.checksum(), userId, now);
+                        companyId, execution.getId(), key, upload.file(), userId, now)
+                : Attachment.forStepResult(companyId, stepResultId, key, upload.file(), userId, now);
         attachments.saveAndFlush(attachment);
 
         Evidence evidence = Evidence.attach(
@@ -301,7 +299,7 @@ public class EvidenceService {
                 userId, now);
         evidenceRows.saveAndFlush(evidence);
 
-        store.put(key, upload.bytes());
+        store.put(key, upload.file().bytes());
 
         return new Outcome.Attached(
                 views.render(companyId, projectId, runId, List.of(evidence)).getFirst());
@@ -346,18 +344,4 @@ public class EvidenceService {
 
         return new Outcome.Deleted();
     }
-
-    /**
-     * Where one file's bytes live. <strong>Every segment is a UUID this server produced</strong> —
-     * the company, the execution, and a fresh random id per file.
-     *
-     * <p>Nothing the client sent appears here, which is the whole traversal defence: the uploaded
-     * filename is stored in a column and rendered from there. The company leads so an operator
-     * looking at the directory can see whose bytes are whose, and so a per-company sweep is a
-     * subtree rather than a scan.
-     */
-    private static String storageKey(UUID companyId, UUID executionId) {
-        return companyId + "/" + executionId + "/" + UUID.randomUUID();
-    }
-
 }

@@ -52,7 +52,7 @@
  *
  * <h2>Two ports, one implementation body, and deliberately not one port</h2>
  *
- * <p>{@link com.tcms.storage.EvidenceStore} and {@link com.tcms.storage.ReportStore} are the same
+ * <p>{@link com.tcms.storage.AttachmentStore} and {@link com.tcms.storage.ReportStore} are the same
  * four methods over an opaque key. Until §125 that was a <em>documented copy</em> — §58's E1, the
  * copy that drifts — accepted only because {@code reporting} could not import {@code execution}, so
  * the type was unreachable rather than unnoticed. Co-located here, that argument is gone and both

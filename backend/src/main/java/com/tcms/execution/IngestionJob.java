@@ -38,7 +38,7 @@ import org.hibernate.type.SqlTypes;
  * <h2>{@code raw_payload} holds what was UNDERSTOOD, not the file</h2>
  *
  * <p>The verbatim report belongs in an object store, which is what {@code raw_storage_key} is for
- * and there is no adapter (§67's port argument, {@code storage.EvidenceStore}) — so that column
+ * and there is no adapter (§67's port argument, {@code storage.AttachmentStore}) — so that column
  * stays null
  * and says so. What makes this row useful afterwards is the normalized parse and the match outcome
  * per test: that is what a human binding an unmatched name needs to see, and it is the only record

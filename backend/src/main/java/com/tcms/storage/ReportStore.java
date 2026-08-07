@@ -4,7 +4,7 @@ import java.util.Optional;
 
 /**
  * Where generated report bytes live — <strong>the port</strong>, so an S3 adapter is additive, the
- * same shape and for the same reason as {@link EvidenceStore} (plan §8 open question #28, resolved
+ * same shape and for the same reason as {@link AttachmentStore} (plan §8 open question #28, resolved
  * in §51: filesystem now, object storage later).
  *
  * <h2>~~THIS IS A DELIBERATE COPY OF {@code execution.EvidenceStore}~~ → the reason expired (§125)</h2>

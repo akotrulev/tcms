@@ -1,5 +1,6 @@
 package com.tcms.execution;
 
+import com.tcms.storage.BlobUpload;
 import java.io.IOException;
 import java.net.URI;
 import java.util.HashMap;
@@ -73,8 +74,8 @@ public class EvidenceController {
                     "file", List.of("Choose a file to attach."))));
         }
 
-        EvidenceUpload upload = new EvidenceUpload(
-                EvidenceUpload.sanitizeFilename(file.getOriginalFilename()),
+        EvidenceUpload upload = new EvidenceUpload(new BlobUpload(
+                BlobUpload.sanitizeFilename(file.getOriginalFilename()),
                 // A client that sends no content type gets the generic one rather than a null in a
                 // NOT NULL column. Guessing from the extension would be worse: it would state a
                 // type nobody claimed, and the browser trusts this header when rendering.
@@ -82,7 +83,7 @@ public class EvidenceController {
                         ? MediaType.APPLICATION_OCTET_STREAM_VALUE
                         : file.getContentType(),
                 file.getSize(),
-                file.getBytes(),
+                file.getBytes()),
                 caption);
 
         EvidenceService.Outcome outcome = evidence.attach(
@@ -196,7 +197,7 @@ public class EvidenceController {
                 // is header injection rather than an odd name; headerSafeFilename neutralises it.
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "inline; filename=\""
-                                + EvidenceUpload.headerSafeFilename(download.filename()) + "\"")
+                                + BlobUpload.headerSafeFilename(download.filename()) + "\"")
                 .body(new InputStreamResource(download.blob().stream()));
     }
 

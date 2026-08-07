@@ -44,12 +44,6 @@ import org.hibernate.annotations.Filter;
 @Filter(name = CompanyFilter.NAME, condition = CompanyFilter.CONDITION)
 public class Attachment {
 
-    /** Evidence attached to the execution as a whole. */
-    private static final String OWNER_EXECUTION = "EXECUTION";
-
-    /** Evidence attached to one step's recorded result. */
-    private static final String OWNER_STEP_RESULT = "STEP_RESULT";
-
     @Id
     @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
@@ -64,7 +58,7 @@ public class Attachment {
     private UUID ownerId;
 
     /**
-     * The opaque key {@link EvidenceStore} stores the bytes under — three server-generated UUIDs.
+     * The opaque key {@link AttachmentStore} stores the bytes under — three server-generated UUIDs.
      * Never derived from {@link #filename}, which is the whole of the traversal defence.
      */
     @Column(name = "storage_key", nullable = false, updatable = false)
@@ -98,57 +92,70 @@ public class Attachment {
     }
 
     public static Attachment forExecution(
-            UUID companyId,
-            UUID executionId,
-            String storageKey,
-            String filename,
-            String contentType,
-            long sizeBytes,
-            String checksum,
-            UUID userId,
+            UUID companyId, UUID executionId, String storageKey, BlobUpload upload, UUID userId,
             Instant now) {
 
-        return create(companyId, OWNER_EXECUTION, executionId, storageKey, filename, contentType,
-                sizeBytes, checksum, userId, now);
+        return create(
+                companyId, AttachmentOwner.EXECUTION, executionId, storageKey, upload, userId, now);
     }
 
     public static Attachment forStepResult(
-            UUID companyId,
-            UUID stepResultId,
-            String storageKey,
-            String filename,
-            String contentType,
-            long sizeBytes,
-            String checksum,
-            UUID userId,
+            UUID companyId, UUID stepResultId, String storageKey, BlobUpload upload, UUID userId,
             Instant now) {
 
-        return create(companyId, OWNER_STEP_RESULT, stepResultId, storageKey, filename, contentType,
-                sizeBytes, checksum, userId, now);
+        return create(companyId, AttachmentOwner.STEP_RESULT, stepResultId, storageKey, upload,
+                userId, now);
     }
 
+    /** A file on a case's definition — {@code repository.CaseAttachmentService}'s only writer. */
+    public static Attachment forCase(
+            UUID companyId, UUID caseId, String storageKey, BlobUpload upload, UUID userId,
+            Instant now) {
+
+        return create(companyId, AttachmentOwner.CASE, caseId, storageKey, upload, userId, now);
+    }
+
+    /** A file on a documentation page — {@code documentation.DocPageAttachmentService}'s. */
+    public static Attachment forDocPage(
+            UUID companyId, UUID pageId, String storageKey, BlobUpload upload, UUID userId,
+            Instant now) {
+
+        return create(companyId, AttachmentOwner.DOC_PAGE, pageId, storageKey, upload, userId, now);
+    }
+
+    /** The bytes behind a {@code FILE} artifact — {@code documentation.ArtifactWriteService}'s. */
+    public static Attachment forArtifact(
+            UUID companyId, UUID artifactId, String storageKey, BlobUpload upload, UUID userId,
+            Instant now) {
+
+        return create(
+                companyId, AttachmentOwner.ARTIFACT, artifactId, storageKey, upload, userId, now);
+    }
+
+    /**
+     * The one place an {@code owner_type} string is written, and the five factories above are the
+     * one place each is <em>chosen</em>. No call site anywhere spells one — the property §125 said
+     * made the module extraction mechanical, kept deliberately as the owner set triples.
+     */
     private static Attachment create(
             UUID companyId,
-            String ownerType,
+            AttachmentOwner ownerType,
             UUID ownerId,
             String storageKey,
-            String filename,
-            String contentType,
-            long sizeBytes,
-            String checksum,
+            BlobUpload upload,
             UUID userId,
             Instant now) {
 
         Attachment attachment = new Attachment();
         attachment.id = UUID.randomUUID();
         attachment.companyId = companyId;
-        attachment.ownerType = ownerType;
+        attachment.ownerType = ownerType.name();
         attachment.ownerId = ownerId;
         attachment.storageKey = storageKey;
-        attachment.filename = filename;
-        attachment.contentType = contentType;
-        attachment.sizeBytes = sizeBytes;
-        attachment.checksum = checksum;
+        attachment.filename = upload.filename();
+        attachment.contentType = upload.contentType();
+        attachment.sizeBytes = upload.sizeBytes();
+        attachment.checksum = upload.checksum();
         attachment.createdAt = now;
         attachment.createdBy = userId;
         return attachment;
@@ -156,6 +163,11 @@ public class Attachment {
 
     public UUID getId() {
         return id;
+    }
+
+    /** Which case, page, artifact, execution or step result this hangs off. Never resolved here. */
+    public UUID getOwnerId() {
+        return ownerId;
     }
 
     public String getStorageKey() {
@@ -172,5 +184,13 @@ public class Attachment {
 
     public long getSizeBytes() {
         return sizeBytes;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public UUID getCreatedBy() {
+        return createdBy;
     }
 }

@@ -5,7 +5,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
- * {@link ReportStore} over a directory on the box — {@link FilesystemEvidenceStore}'s twin, under a
+ * {@link ReportStore} over a directory on the box — {@link FilesystemAttachmentStore}'s twin, under a
  * root of its own and sharing its body ({@link FilesystemBlobStore}) since §125.
  *
  * <h2>A separate root, not a subdirectory of the evidence one</h2>

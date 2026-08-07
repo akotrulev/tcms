@@ -2,6 +2,9 @@ package com.tcms.repository;
 
 import com.tcms.project.ClassificationDimensionView;
 import com.tcms.project.ProjectConfigurationService;
+import com.tcms.storage.Attachment;
+import com.tcms.storage.AttachmentOwner;
+import com.tcms.storage.AttachmentRepository;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +42,7 @@ class CaseRenderer {
     private final CaseAutomationTagRepository automationTags;
     private final TestStepRepository stepRows;
     private final CaseFlakeRepository flakes;
+    private final AttachmentRepository attachments;
     private final CaseOwners people;
 
     CaseRenderer(
@@ -49,6 +53,7 @@ class CaseRenderer {
             CaseAutomationTagRepository automationTags,
             TestStepRepository stepRows,
             CaseFlakeRepository flakes,
+            AttachmentRepository attachments,
             CaseOwners people) {
 
         this.configuration = configuration;
@@ -58,6 +63,7 @@ class CaseRenderer {
         this.automationTags = automationTags;
         this.stepRows = stepRows;
         this.flakes = flakes;
+        this.attachments = attachments;
         this.people = people;
     }
 
@@ -88,7 +94,64 @@ class CaseRenderer {
             List<ClassificationDimensionView> vocabularies,
             UUID companyId) {
 
-        return render(row, liveSuites, vocabularies, companyId, flakesFor(companyId, List.of(row)));
+        return render(row, liveSuites, vocabularies, companyId,
+                flakesFor(companyId, List.of(row)), attachmentsFor(companyId, List.of(row)));
+    }
+
+    /**
+     * Resolves the attached files for a whole batch of cases — <strong>two queries for any number
+     * of rows</strong>, on the same terms as {@link #flakesFor} and for the same caller.
+     *
+     * <p>The second query names the uploaders and runs only when something is attached, which on the
+     * bulk path is almost never: {@link CaseOwners#resolve} over an empty collection is not worth a
+     * round trip. {@code created_by} is <strong>nullable</strong>, so the map is a {@link HashMap} on
+     * both arms — §38's trap, which §121 phase 4 shipped a 500 for by copying the words of that
+     * comment and not its behaviour. The same nullable column is being keyed on here.
+     */
+    Map<UUID, List<CaseAttachmentView>> attachmentsFor(UUID companyId, List<TestCase> rows) {
+        List<Attachment> found = attachments.findOwnedBy(
+                AttachmentOwner.CASE, rows.stream().map(TestCase::getId).toList());
+        if (found.isEmpty()) {
+            return Map.of();
+        }
+
+        Set<UUID> uploaders = found.stream()
+                .map(Attachment::getCreatedBy)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, UserRefView> named = uploaders.isEmpty()
+                ? new HashMap<>()
+                : people.resolve(companyId, uploaders);
+
+        // Keyed on the case, and each list keeps the query's created_at order — the panel reads as
+        // a history of what somebody added, and re-sorting by filename here would make the newest
+        // upload land in the middle of the list it was just appended to.
+        Map<UUID, List<CaseAttachmentView>> byCase = new HashMap<>();
+        for (Attachment row : found) {
+            byCase.computeIfAbsent(row.getOwnerId(), ignored -> new java.util.ArrayList<>());
+        }
+        for (Attachment row : found) {
+            byCase.get(row.getOwnerId()).add(CaseAttachmentView.of(
+                    projectOf(rows, row.getOwnerId()), row.getOwnerId(), row,
+                    named.get(row.getCreatedBy())));
+        }
+        return byCase;
+    }
+
+    /**
+     * The project the case in this batch belongs to — needed only to build the download URL.
+     *
+     * <p>Taken from the batch rather than from a second read: every row here was loaded by a caller
+     * that had already resolved the project, and {@code TestCase.projectId} is on the row.
+     */
+    private static UUID projectOf(List<TestCase> rows, UUID caseId) {
+        return rows.stream()
+                .filter(row -> row.getId().equals(caseId))
+                .findFirst()
+                .map(TestCase::getProjectId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "attachment for a case that is not in the batch that asked for it: "
+                                + caseId));
     }
 
     /**
@@ -146,7 +209,8 @@ class CaseRenderer {
             List<Suite> liveSuites,
             List<ClassificationDimensionView> vocabularies,
             UUID companyId,
-            Map<UUID, CaseFlakeView> flakeViews) {
+            Map<UUID, CaseFlakeView> flakeViews,
+            Map<UUID, List<CaseAttachmentView>> attachmentViews) {
 
         TestCaseSummaryView summary =
                 summaries.render(companyId, List.of(row), liveSuites, vocabularies).getFirst();
@@ -167,7 +231,12 @@ class CaseRenderer {
                         .toList(),
                 stepRows.findForCase(row.getId()).stream().map(TestStepView::of).toList(),
                 conditions.forCase(row, liveSuites),
-                flakeViews.get(row.getId()));
+                flakeViews.get(row.getId()),
+                // Never null, unlike `flake` one line up, and the difference is what the absence
+                // means: no case_flake row is a THIRD state ("nobody has looked"), while no
+                // attachment row is simply an empty list. A nullable list would make the SPA
+                // distinguish two spellings of nothing.
+                attachmentViews.getOrDefault(row.getId(), List.of()));
     }
 
     /** The project's classification dimensions, or none when the caller cannot read them. */

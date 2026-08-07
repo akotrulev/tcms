@@ -81,6 +81,10 @@ function caseBody(createdBy: string | null): TestCase {
     // the contract, so leaving it off is a build error rather than a panel that silently renders
     // its "not assessed" branch for the wrong reason — §65's cast class, caught by `required`.
     flake: null,
+    // Empty, not absent — and it is a LIST where `flake` above is nullable, because the two
+    // absences are different claims. No `case_flake` row means nobody has looked; no attachment
+    // row means nothing is attached, which is an ordinary state with one spelling.
+    attachments: [],
   } as TestCase
 }
 

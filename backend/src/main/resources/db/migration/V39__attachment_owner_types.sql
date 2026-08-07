@@ -1,0 +1,55 @@
+-- =============================================================================
+-- V39 — attachment.owner_type loses STEP, because STEP is not a gap
+--
+-- Decision round 3 #50, landing in the same slice as #49. V1 declared the
+-- polymorphic attachment table over six owner types and TWO of them have ever been
+-- written: EXECUTION and STEP_RESULT, both by execution.EvidenceService since §67.
+-- M3 slice 10 gives CASE, DOC_PAGE and ARTIFACT writers. That leaves STEP, and the
+-- decision is that it should never get one.
+--
+-- -----------------------------------------------------------------------------
+-- WHY STEP IS DROPPED RATHER THAN LEFT FOR LATER
+-- -----------------------------------------------------------------------------
+--
+-- A step's attachment belongs to the RECORDED RESULT, not to the case definition.
+-- The distinction is the whole of it:
+--
+--   STEP        would mean "this file is attached to step 3 of the case", i.e. part
+--               of the case's authored content, versioned with it, copied by a clone,
+--               and frozen into every version snapshot that ever quoted the step.
+--   STEP_RESULT means "this file is what step 3 looked like when Anna ran it on
+--               Tuesday" — which is what a screenshot behind a step actually is, and
+--               is written already.
+--
+-- Nothing in the product ever wanted the first. §67 wrote the second and did not
+-- write the first, and four sessions of scope assessment have since counted STEP as
+-- an unbuilt feature. It is not one; it is a value the design reconsidered.
+--
+-- The cost of leaving it is the reason this migration exists at all rather than a
+-- comment. The scope assessment's enum-with-no-consumer check derives dead vocabulary
+-- by comparing a CHECK constraint's values against the values any writer spells. A
+-- check that permanently reports one entry nobody intends to act on is a check that
+-- gets skimmed, and then the entry that DOES matter is skimmed with it. Round 3 exists
+-- because exactly that happened to §8's open-question list: it did not stay closed, it
+-- stopped being read.
+--
+-- -----------------------------------------------------------------------------
+-- WHY THIS IS SAFE TO RUN ON A LIVE DATABASE
+-- -----------------------------------------------------------------------------
+--
+-- No row can violate the narrowed constraint, because no code path has ever produced
+-- one: Attachment.forExecution and Attachment.forStepResult are the only two places in
+-- src/main that have ever spelled an owner type, and neither spells STEP. Postgres
+-- still validates the existing rows when the new constraint is added, so a hand-written
+-- INSERT would fail this migration loudly rather than be silently dropped — which is
+-- the right outcome. There is deliberately no DELETE here: a migration that destroys
+-- rows to make its own constraint pass is one that hides the thing it should report.
+--
+-- The two statements are one transaction (Flyway's default), so a failure leaves the
+-- original six-value constraint in place rather than an unconstrained column.
+-- =============================================================================
+
+ALTER TABLE attachment DROP CONSTRAINT attachment_owner_type_check;
+
+ALTER TABLE attachment ADD CONSTRAINT attachment_owner_type_check
+    CHECK (owner_type IN ('CASE', 'EXECUTION', 'STEP_RESULT', 'DOC_PAGE', 'ARTIFACT'));

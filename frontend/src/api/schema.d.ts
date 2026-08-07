@@ -1907,6 +1907,161 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/cases/{caseId}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                /**
+                 * @description UUID only. Display keys (TC-1) are deliberately NOT accepted here: they are
+                 *     sequential per company and therefore trivially guessable, so allowing one as a
+                 *     path identifier hands out an enumeration oracle (plan §6t). Resolve a key the
+                 *     user typed or pasted through the search endpoint, which returns not-found —
+                 *     never forbidden — for a key in a project the caller cannot reach.
+                 */
+                caseId: components["parameters"]["CaseId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Attach a file to a case
+         * @description Decision round 3's #49 — `attachment.owner_type = 'CASE'`, declared by `V1` and
+         *     writerless for the whole life of the product until this endpoint.
+         *
+         *     **Requires `case:edit`, and the delete below requires the same key with no `OWN`
+         *     arm.** That is the decision, and it is deliberately *not* `evidence:delete`'s shape.
+         *     Evidence is a record of something that happened, and unmaking somebody else's record
+         *     is the line the roles spec §A3 draws. A case attachment is part of the **case
+         *     definition**, which `case:edit` already owns wholesale — a Test Engineer holding it
+         *     may rewrite every step, the title and the preconditions of a lead's case. An
+         *     authorship arm would make removing the screenshot *stricter than removing the step
+         *     that references it*, which is incoherent in the direction that reads as security.
+         *
+         *     **No new permission was invented.** The roles spec is authoritative and has no
+         *     `attachment:*` key; one seeded to nobody is a `403` no administrator can grant their
+         *     way out of — the standing argument that has kept `evidence:read` out of the
+         *     catalogue since M0.
+         *
+         *     **The upload proxies through the API** rather than going browser-direct to a signed
+         *     URL: the storage port's filesystem adapter cannot issue one (plan §8 #28). So the
+         *     instance's `spring.servlet.multipart.max-file-size` is a real limit and a file over
+         *     it is a **413** rather than a `400` — the request is refused before it reaches the
+         *     handler, so there is no field to hang a message on.
+         *
+         *     **There is no `GET` here.** The list is `TestCase.attachments` on the detail, which
+         *     is the only screen that shows it; a second read path would be a second answer to
+         *     "what is attached to this case", free to disagree the moment one grew a filter.
+         */
+        post: operations["attachCaseFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/cases/{caseId}/attachments/{attachmentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                /**
+                 * @description UUID only. Display keys (TC-1) are deliberately NOT accepted here: they are
+                 *     sequential per company and therefore trivially guessable, so allowing one as a
+                 *     path identifier hands out an enumeration oracle (plan §6t). Resolve a key the
+                 *     user typed or pasted through the search endpoint, which returns not-found —
+                 *     never forbidden — for a key in a project the caller cannot reach.
+                 */
+                caseId: components["parameters"]["CaseId"];
+                /**
+                 * @description An `attachment` row's id. Scoped by its owner as well as by its id everywhere it is
+                 *     used — the two-segment gate — so a caller cannot reach another owner's file by
+                 *     guessing this one.
+                 */
+                attachmentId: components["parameters"]["AttachmentId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a file from a case
+         * @description Costs `case:edit` — the same key the upload does, with **no author arm**. See the
+         *     `POST` above for why, and note the consequence stated plainly: whoever may edit the
+         *     case may remove any of its files, including one somebody else attached.
+         *
+         *     **A hard delete, and the bytes go with the row.** A file removed on request has to
+         *     actually leave the disk — a soft-deleted row pointing at retained bytes is a deletion
+         *     that did not delete, which is the wrong answer for the one thing here a customer may
+         *     need removed for privacy rather than tidiness. The row is removed first and the bytes
+         *     second, so a failure between them leaves an unreferenced blob an operator can sweep
+         *     rather than a thumbnail that renders and never opens.
+         *
+         *     The audit row carries the filename, and it is the **only** surviving statement that
+         *     the file existed once both the row and the bytes are gone.
+         *
+         *     `404` when `attachmentId` names nothing on **this** case — the two-segment gate, so
+         *     `/cases/{a}/attachments/{belongs-to-b}` cannot reach another case's file.
+         */
+        delete: operations["deleteCaseFile"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/cases/{caseId}/attachments/{attachmentId}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                /**
+                 * @description UUID only. Display keys (TC-1) are deliberately NOT accepted here: they are
+                 *     sequential per company and therefore trivially guessable, so allowing one as a
+                 *     path identifier hands out an enumeration oracle (plan §6t). Resolve a key the
+                 *     user typed or pasted through the search endpoint, which returns not-found —
+                 *     never forbidden — for a key in a project the caller cannot reach.
+                 */
+                caseId: components["parameters"]["CaseId"];
+                /**
+                 * @description An `attachment` row's id. Scoped by its owner as well as by its id everywhere it is
+                 *     used — the two-segment gate — so a caller cannot reach another owner's file by
+                 *     guessing this one.
+                 */
+                attachmentId: components["parameters"]["AttachmentId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The file's bytes
+         * @description What `CaseAttachment.url` points at.
+         *
+         *     **No permission beyond the case read gate.** Anyone who may read the case may read
+         *     what is attached to it, and the catalogue has no `attachment:read` — inventing one
+         *     would be a permission no role is granted, which is a `403` nobody can fix. It is also
+         *     the only rule that does not make the SPA reason about two permissions per row.
+         *
+         *     Served `inline` with the stored content type, so an image renders in place. The
+         *     filename reaches a response **header**, where a carriage return is header injection
+         *     rather than an odd name; it is neutralised on the way out.
+         *
+         *     `404` also when the row exists and its blob does not — the orphan the write ordering
+         *     deliberately produces rather than the reverse. An empty `200` would hand the browser
+         *     a corrupt file.
+         */
+        get: operations["downloadCaseFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/cases/{caseId}/versions": {
         parameters: {
             query?: never;
@@ -6302,6 +6457,27 @@ export interface components {
             updatedAt: string;
         };
         TestCase: components["schemas"]["TestCaseSummary"] & {
+            /**
+             * @description Files on the case's **definition** — a spec extract, a reference screenshot, a
+             *     data sheet the steps read from. `attachment.owner_type = 'CASE'`, which `V1`
+             *     declared and nothing wrote until decision round 3's #49.
+             *
+             *     **Not evidence**, and the distinction is the whole of why `STEP` left the
+             *     `CHECK` in `V39`: what a step looked like when somebody ran it on Tuesday is a
+             *     `STEP_RESULT` attachment, written since §67 and served under
+             *     `/runs/{runId}/executions/…/evidence`. A file here is authored content, versioned
+             *     with the case and copied by a clone.
+             *
+             *     **Never null and never absent** — empty is the ordinary state. Unlike `flake`
+             *     one field up there is no third state to distinguish: no `case_flake` row means
+             *     "nobody has looked", while no `attachment` row simply means nothing is attached.
+             *     A nullable list would hand the SPA two spellings of nothing to tell apart, which
+             *     is the defect §121 phase 4 found on the field above.
+             *
+             *     Detail only, for `flake`'s reason: a paperclip count is not worth a per-row join
+             *     on the hottest list read in the product.
+             */
+            attachments: components["schemas"]["CaseAttachment"][];
             flake: components["schemas"]["CaseFlake"] | null;
             /**
              * @description Every classification value this case carries, as ids — the same assignments
@@ -6765,6 +6941,58 @@ export interface components {
              *     the form can land on.
              */
             reason?: string;
+        };
+        /**
+         * @description One file on a test case's definition — `attachment.owner_type = 'CASE'`.
+         *
+         *     **No caption**, unlike `Evidence`. A caption is somebody saying what a screenshot
+         *     *shows*, which is a claim about a moment that has passed; a case attachment is
+         *     described by its filename, and a second free-text name for the same file is a field
+         *     two people will fill in differently.
+         */
+        CaseAttachment: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description What the caller called the file, reduced to its last path segment on the way in.
+             *     It is a **column** and never part of a storage key — the key is three
+             *     server-generated UUIDs — so a traversal name was already harmless; it is reduced
+             *     anyway, because a string that looks like a path invites the next reader to use it
+             *     as one.
+             */
+            filename: string;
+            /**
+             * @description As the upload declared it, echoed back. `application/octet-stream` when the client
+             *     sent none — guessing from the extension would state a type nobody claimed, and the
+             *     browser trusts this header when rendering.
+             */
+            contentType: string;
+            /**
+             * Format: int64
+             * @description Raw bytes. Formatted by `lib/format.ts` and never here: the server has no business
+             *     deciding whether 1024 reads as "1 KB" or "1 KiB", and the SPA already has exactly
+             *     one place that decides.
+             */
+            sizeBytes: number;
+            /**
+             * @description Where the bytes are, absolute from the API root. Built by the server rather than
+             *     composed by the client, so the route is spelled in one place — a client that
+             *     composes it is a second spelling, and a route change then breaks the download with
+             *     a 404 that reads as a missing file rather than as a missing endpoint.
+             *
+             *     Served `inline` with the stored content type, so a reference screenshot renders
+             *     beside the steps instead of landing in the downloads folder.
+             */
+            url: string;
+            /** Format: date-time */
+            uploadedAt: string;
+            /**
+             * @description Who attached it. A `UserRef` and **not a bare uuid** — §100's convention, and §121's
+             *     finding that `quarantinedBy` was the only field on this API breaking it, under a
+             *     javadoc asserting it did not. Null only when `attachment.created_by` is null, which
+             *     `V1` permits and a future system actor would use.
+             */
+            uploadedBy?: components["schemas"]["UserRef"] | null;
         };
         /**
          * @description A case's flake evidence (derived, plan §6l) and its quarantine decision (authored,
@@ -8509,6 +8737,12 @@ export interface components {
     parameters: {
         ProjectId: string;
         /**
+         * @description An `attachment` row's id. Scoped by its owner as well as by its id everywhere it is
+         *     used — the two-segment gate — so a caller cannot reach another owner's file by
+         *     guessing this one.
+         */
+        AttachmentId: string;
+        /**
          * @description UUID only. Display keys (TC-1) are deliberately NOT accepted here: they are
          *     sequential per company and therefore trivially guessable, so allowing one as a
          *     path identifier hands out an enumeration oracle (plan §6t). Resolve a key the
@@ -8842,6 +9076,138 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    attachCaseFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                /**
+                 * @description UUID only. Display keys (TC-1) are deliberately NOT accepted here: they are
+                 *     sequential per company and therefore trivially guessable, so allowing one as a
+                 *     path identifier hands out an enumeration oracle (plan §6t). Resolve a key the
+                 *     user typed or pasted through the search endpoint, which returns not-found —
+                 *     never forbidden — for a key in a project the caller cannot reach.
+                 */
+                caseId: components["parameters"]["CaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description The bytes. Filename and content type travel in the part's own headers, and
+                     *     the filename is stored in a column — it never becomes part of a storage key.
+                     */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Attached */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseAttachment"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /**
+             * @description The file is larger than this instance's upload limit. Refused by the servlet
+             *     container before the handler runs.
+             */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deleteCaseFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                /**
+                 * @description UUID only. Display keys (TC-1) are deliberately NOT accepted here: they are
+                 *     sequential per company and therefore trivially guessable, so allowing one as a
+                 *     path identifier hands out an enumeration oracle (plan §6t). Resolve a key the
+                 *     user typed or pasted through the search endpoint, which returns not-found —
+                 *     never forbidden — for a key in a project the caller cannot reach.
+                 */
+                caseId: components["parameters"]["CaseId"];
+                /**
+                 * @description An `attachment` row's id. Scoped by its owner as well as by its id everywhere it is
+                 *     used — the two-segment gate — so a caller cannot reach another owner's file by
+                 *     guessing this one.
+                 */
+                attachmentId: components["parameters"]["AttachmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    downloadCaseFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                /**
+                 * @description UUID only. Display keys (TC-1) are deliberately NOT accepted here: they are
+                 *     sequential per company and therefore trivially guessable, so allowing one as a
+                 *     path identifier hands out an enumeration oracle (plan §6t). Resolve a key the
+                 *     user typed or pasted through the search endpoint, which returns not-found —
+                 *     never forbidden — for a key in a project the caller cannot reach.
+                 */
+                caseId: components["parameters"]["CaseId"];
+                /**
+                 * @description An `attachment` row's id. Scoped by its owner as well as by its id everywhere it is
+                 *     used — the two-segment gate — so a caller cannot reach another owner's file by
+                 *     guessing this one.
+                 */
+                attachmentId: components["parameters"]["AttachmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The bytes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     deletePlan: {

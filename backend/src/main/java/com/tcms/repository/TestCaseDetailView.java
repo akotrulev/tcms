@@ -72,6 +72,20 @@ import java.util.UUID;
  *              version. Making the snapshot authored-only is a real cleanup and it is a separate
  *              slice; doing it here would mean the response and the snapshot stop being one render,
  *              which is the invariant {@link CaseRenderer} exists to hold.
+ * @param attachments files on the case's <strong>definition</strong> — never null, empty being the
+ *              ordinary state. Detail only, for {@link #flake}'s reason: the grid draws what a case
+ *              <em>is</em>, and a per-row join for a paperclip count is a column nobody asked for.
+ *
+ *              <p>Unlike {@code flake} there is no third state. No {@code case_flake} row means
+ *              "nobody has looked"; no {@code attachment} row means nothing is attached, and those
+ *              are not two claims. A nullable list would give the SPA two spellings of nothing to
+ *              tell apart, which is exactly the defect §121 phase 4 found one field up.
+ *
+ *              <p>It lands in the version snapshot on the same terms {@code flake} does, and here
+ *              that is arguably <em>right</em> rather than merely accepted: an attachment is
+ *              authored content, so a v7 that records which files the case carried when somebody
+ *              saved it is describing the version honestly. The content hash is still computed over
+ *              {@link CaseEdit}, so attaching a file does not by itself write a version.
  */
 public record TestCaseDetailView(
         UUID id,
@@ -125,7 +139,8 @@ public record TestCaseDetailView(
         List<CaseConditionRefView> postconditions,
         int currentVersionNo,
         long lockVersion,
-        CaseFlakeView flake) {
+        CaseFlakeView flake,
+        List<CaseAttachmentView> attachments) {
 
     static TestCaseDetailView of(
             TestCase row,
@@ -134,7 +149,8 @@ public record TestCaseDetailView(
             List<UUID> classificationValueIds,
             List<TestStepView> steps,
             CaseConditions.Resolved conditions,
-            CaseFlakeView flake) {
+            CaseFlakeView flake,
+            List<CaseAttachmentView> attachments) {
 
         return new TestCaseDetailView(
                 summary.id(),
@@ -170,6 +186,7 @@ public record TestCaseDetailView(
                 conditions.postconditions(),
                 row.getCurrentVersionNo(),
                 row.getLockVersion(),
-                flake);
+                flake,
+                attachments);
     }
 }

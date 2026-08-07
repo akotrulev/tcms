@@ -2,17 +2,47 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-07 (**§125** — the `storage` module extraction; **§124** before it — the
-`BEST` removal and the two unwired permission keys;
+**Last verified:** 2026-08-07 (**§126 phase 1** — attachment owners, `CASE`; **§125** before it —
+the `storage` module extraction; **§124** — the `BEST` removal and the two unwired permission keys;
 §122's grant-instance-admin, §121's four phases, §120's automation drift, §119's ingestion history,
 §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `de9150b` (§125 phase 2) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `d27ac08` (§125's handoff) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
-**§125 CARRIED NO MIGRATION EITHER** — schema head is still `V38`, `V39` next free, policy count 62.
-Test count **2028 across 428 result classes** (§124's baseline was 2024/427).
+**SCHEMA HEAD IS `V39__attachment_owner_types.sql`; `V40` is next free.** It adds no table, so the
+policy count is unchanged at **62**. Test count **2050 across 434 result classes** (§125's baseline
+was 2028/428).
 
 ---
+
+## §126 phase 1 — THE ATTACHMENT OWNER VOCABULARY IS A TYPE, AND THE PORT WAS RENAMED
+
+**`EvidenceStore` is now `AttachmentStore`; `FilesystemEvidenceStore` is `FilesystemAttachmentStore`.**
+It backs four owner types, not one. **The property key `tcms.storage.evidence.root` was deliberately
+NOT renamed** — renaming it relocates the root on the next deploy and orphans every existing blob
+(§107's evidence destruction, in config form). Do not "finish" the rename.
+
+- **`storage.AttachmentOwner` is a public enum** — `CASE · EXECUTION · STEP_RESULT · DOC_PAGE ·
+  ARTIFACT`. `name()` **is** the column value, and `CaseAttachmentEndpointTest.OwnerTypes` reads the
+  `CHECK` out of the live database and asserts the two sets equal. Adding a constant without a
+  migration fails the build.
+- **`V39` dropped `STEP` from the `CHECK`** (#50). It is not a gap: a step's file belongs to the
+  recorded result (`STEP_RESULT`), not to the case definition.
+- **`Attachment` has five factories and they are still the only place an owner type is chosen** —
+  `forExecution · forStepResult · forCase · forDocPage · forArtifact`. All five take a
+  `storage.BlobUpload`, which is where the filename sanitizer, the SHA-256 and **`BlobUpload.key`**
+  (the one place a storage key is built) now live. `execution.EvidenceUpload` is a thin
+  `record EvidenceUpload(BlobUpload file, String caption)`.
+- **`AttachmentRepository.findOwnedBy` is PLURAL and has no singular sibling, on purpose** — a
+  per-owner read is an N+1 inside `CaseBulkService`'s 500-case loop. `findOwnedById(owner, ownerId,
+  id)` is the scoped point lookup; both halves of its predicate are load-bearing.
+- **`repository` declares `{"tenancy", "project", "identity", "storage"}`.** `documentation` does
+  **not** yet — phases 2 and 3 add it.
+- **The `CASE` family is `CaseAttachmentService` + `CaseAttachmentController`**, its own controller
+  because multipart brings a `MaxUploadSizeExceededException` handler. Gate is **`case:edit` on both
+  writes with no `OWN` arm** (the delete deliberately does not copy `evidence:delete`); the download
+  costs nothing beyond the case read gate. **There is no `GET` collection** — the list is
+  `TestCase.attachments`, resolved by `CaseRenderer.attachmentsFor` in two queries per batch.
 
 ## §125 — THERE IS AN ELEVENTH MODULE AND A FOURTH FOUNDATION MODULE
 
@@ -1740,6 +1770,11 @@ exist**, and the slice plan's decision E declines to create it for two storage p
 
 ## Session log
 
+- 2026-08-07 · EXTEND · **attachment owners, phase 1** (§126, M3 slice 10, decision round 3 step 6).
+  `V39` narrows `attachment.owner_type` to five values (#50); `storage` gains `AttachmentOwner`,
+  `BlobUpload` and three factories, and `EvidenceStore` is renamed `AttachmentStore` with its
+  property key deliberately kept; `repository` gains the `CASE` family and `TestCase.attachments`.
+  2050 tests. Phases 2–4 (`DOC_PAGE`, `ARTIFACT`, the frontend) are not built.
 - 2026-08-07 · EXTEND · **the `storage` module** (§125, M3 slice 9, decision round 3 step 5). Two
   phases. `Attachment` + `AttachmentRepository` + both blob ports + both filesystem adapters move to
   `com.tcms.storage`; `FOUNDATION_MODULES` gains a fourth entry and a new ArchUnit rule

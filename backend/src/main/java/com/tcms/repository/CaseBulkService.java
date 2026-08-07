@@ -629,7 +629,7 @@ public class CaseBulkService {
                 decision,
                 renderer.render(
                         row, context.liveSuites(), context.vocabularies(), companyId,
-                        context.flakes()),
+                        context.flakes(), context.attachments()),
                 userId,
                 now);
     }
@@ -714,7 +714,13 @@ public class CaseBulkService {
              * per case: resolving there would be 500 queries to render a field no bulk action
              * changes. Empty for a command that writes no version, since nothing would read it.
              */
-            Map<UUID, CaseFlakeView> flakes) {
+            Map<UUID, CaseFlakeView> flakes,
+            /**
+             * The batch's attached files, resolved once — {@link CaseRenderer#attachmentsFor}, and
+             * here for {@link #flakes}' reason exactly. No bulk action attaches or removes a file;
+             * the snapshot renders them because the snapshot is the whole response.
+             */
+            Map<UUID, List<CaseAttachmentView>> attachments) {
 
         List<CaseCondition> conditionsOf(UUID caseId) {
             return conditions.getOrDefault(caseId, List.of());
@@ -885,6 +891,9 @@ public class CaseBulkService {
                 // and the snapshot is the only thing in this class that renders a case.
                 authored && !found.isEmpty()
                         ? renderer.flakesFor(CompanyContext.require(), found)
+                        : Map.of(),
+                authored && !found.isEmpty()
+                        ? renderer.attachmentsFor(CompanyContext.require(), found)
                         : Map.of());
     }
 }

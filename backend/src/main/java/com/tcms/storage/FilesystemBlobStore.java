@@ -12,7 +12,7 @@ import java.util.Optional;
  *
  * <h2>Why this is a class the adapters hold and not the interface they implement</h2>
  *
- * <p>{@link EvidenceStore} and {@link ReportStore} are the same four methods, and until §125 they
+ * <p>{@link AttachmentStore} and {@link ReportStore} are the same four methods, and until §125 they
  * were the same four methods <em>written twice</em>, along with this body and its traversal check —
  * §58's E1, accepted while a module boundary made the type unreachable. Co-located in this package
  * the copy has no argument left, and this class is what the move actually removed: two adapters,

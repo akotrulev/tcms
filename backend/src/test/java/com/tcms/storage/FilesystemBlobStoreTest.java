@@ -109,7 +109,7 @@ class FilesystemBlobStoreTest {
         @Test
         @DisplayName("evidence")
         void evidenceAdapterRoundTripsAndRefusesTraversal() throws IOException {
-            EvidenceStore store = new FilesystemEvidenceStore(root.toString());
+            AttachmentStore store = new FilesystemAttachmentStore(root.toString());
             String key = UUID.randomUUID().toString();
 
             store.put(key, "bytes".getBytes(StandardCharsets.UTF_8));
