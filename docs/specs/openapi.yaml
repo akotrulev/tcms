@@ -3262,6 +3262,35 @@ paths:
   /projects/{projectId}/ingestions:
     parameters:
       - { $ref: '#/components/parameters/ProjectId' }
+    get:
+      tags: [execution]
+      operationId: listIngestions
+      summary: What CI has posted to this project
+      description: |
+        The ingestion history, newest first. **Project membership, and no permission key** — this
+        is gated exactly as `GET /runs` is, because a member may read this project's runs and their
+        verdicts, and a job is the record of how some of those verdicts got there. A new
+        `ingestion:read` key would be one seeded to nobody.
+
+        Reading the history is **not** confirming a mapping: the binder reads here and writes
+        through `POST /automation-mappings`, which costs `case:edit`.
+
+        **The rows are `IngestionJobSummary`, which has no `unmatched` array.** The names are not a
+        column — they live inside the job's stored payload, which for a 5,000-test build is
+        megabytes — so serving them here would read every blob in the project's history to render
+        one screen. `GET /ingestions/{jobId}` serves them, one request away. A row carrying `[]`
+        beside a count of 12 was the alternative, and it reads as "the list was cut" when the truth
+        is "not served on this endpoint".
+      responses:
+        '200':
+          description: Jobs, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/IngestionJobSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
     post:
       tags: [execution]
       operationId: ingestResults
@@ -3337,6 +3366,41 @@ paths:
           # A state refusal rather than the lost-update Conflict's usual sense — ExecutionService's
           # RunClosed, reached by the same rule.
           $ref: '#/components/responses/Conflict'
+
+  /projects/{projectId}/ingestions/{jobId}:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - name: jobId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [execution]
+      operationId: getIngestion
+      summary: One posted report, and the tests it could not place
+      description: |
+        **The resource `POST /ingestions` has been naming in its `Location` header since it
+        shipped** — and until this endpoint existed, that header pointed at a 404.
+
+        Project membership, as for the list. This is what the unmatched-test binder reads: each
+        name comes back with the `normalizedName` that `POST /automation-mappings` takes, and with
+        the outcome that says how urgent it is — an unmatched **failure** is a red test nobody is
+        being told about, where an unmatched pass is only unrecorded coverage.
+
+        `unmatched` is capped at 50, by the same constant the post's own response uses. The names
+        are re-derived from the job's stored payload rather than kept in a column; `normalizedName`
+        is recomputed server-side for the reason `AutomationMappingInput.testName` gives.
+      responses:
+        '200':
+          description: The job
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IngestionJob' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          # One bodiless 404 for an unreachable project, another project's job id, and an id that
+          # is nothing at all — §6t, so the endpoint is not an existence oracle.
+          $ref: '#/components/responses/NotFound'
 
   /projects/{projectId}/automation-mappings:
     parameters:
@@ -6136,6 +6200,37 @@ components:
             Capped at 50. A first integration attempt matches nothing, so the unbounded list is
             the *common* case at exactly the moment the response is largest.
           items: { $ref: '#/components/schemas/UnmatchedTest' }
+        createdAt: { type: string, format: date-time }
+
+    IngestionJobSummary:
+      type: object
+      required: [id, status, format, runId, runKey, matchedCount, unmatchedCount, createdAt]
+      description: |
+        One row of the ingestion history. **`IngestionJob` without `unmatched`** — see
+        `GET /ingestions` on why the names are absent rather than empty here.
+      properties:
+        id: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/IngestionStatus' }
+        format: { $ref: '#/components/schemas/ReportFormat' }
+        runId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Null exactly when the report matched nothing, so no run was opened.
+        runKey:
+          type: string
+          nullable: true
+          example: TR-4
+          description: |
+            Null in **two** cases, told apart by `runId`: no run was opened (`runId` null too), or
+            the run it opened has since been deleted (`runId` present). The key of a deleted run is
+            withheld rather than served, because it would offer a link to a screen that 404s.
+        matchedCount: { type: integer }
+        unmatchedCount:
+          type: integer
+          description: |
+            The true total. On this shape it is the *only* thing said about the unmatched tests —
+            open the job to see which they were.
         createdAt: { type: string, format: date-time }
 
     AutomationMappingInput:

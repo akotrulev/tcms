@@ -75,6 +75,12 @@ class IngestionEndpointTest extends IntegrationTestBase {
     private static final UUID ACME = UUID.fromString("d7000000-0000-4000-8000-00000000000a");
 
     private static final UUID BANKING = UUID.fromString("d7001000-0000-4000-8000-000000000001");
+    /**
+     * A second project in the SAME company — the only way to assert the {@code projectId} predicate
+     * on the history reads. RLS and the Hibernate filter both pass a sibling project's row, so a
+     * lookup by id alone would serve it to somebody holding no grant here.
+     */
+    private static final UUID SAVINGS = UUID.fromString("d7001000-0000-4000-8000-000000000002");
 
     private static final UUID LEAD = UUID.fromString("d7003000-0000-4000-8000-000000000001");
     /** Automation Service — holds {@code run:create} and {@code result:submit}, not {@code case:edit}. */
@@ -136,6 +142,7 @@ class IngestionEndpointTest extends IntegrationTestBase {
 
         inCompany(ACME, () -> tx.executeWithoutResult(status -> {
             seedProject(BANKING, ACME, "INBANK", "Online Banking", now);
+            seedProject(SAVINGS, ACME, "INSAV", "Savings", now);
             member(ACME, LEAD, "L. Lead", now);
             member(ACME, ROBOT, "CI", now);
             member(ACME, VIEWER, "V. Viewer", now);
@@ -527,6 +534,157 @@ class IngestionEndpointTest extends IntegrationTestBase {
     }
 
     // =====================================================================
+    // The history — the two reads, and the Location that used to 404
+    // =====================================================================
+
+    /**
+     * {@code GET /ingestions} and {@code GET /ingestions/{jobId}}.
+     *
+     * <p>Four things here can only be asserted from outside:
+     *
+     * <ol>
+     *   <li><strong>The {@code Location} resolves.</strong> {@code POST /ingestions} has answered
+     *       201 with a {@code Location} since it shipped and there was no {@code GET} at that path
+     *       — a claim the API made and could not honour. The test follows the header rather than
+     *       building the URL, so it fails if either side moves.</li>
+     *   <li><strong>The detail's {@code unmatched} equals the post's own.</strong>
+     *       {@link UnmatchedTests} is a second implementation of
+     *       {@code IngestionService.unmatchedIn} — read back out of the stored payload instead of
+     *       computed from the report — and this is the assertion that makes the second copy legal
+     *       rather than a liability.</li>
+     *   <li><strong>A replay carries the names.</strong> It served {@code unmatchedCount: 12} beside
+     *       {@code unmatched: []} until the payload was read back, and the retry is the caller that
+     *       most needs them.</li>
+     *   <li><strong>A sibling project's job id is a 404.</strong> The row is company-scoped by RLS,
+     *       so an id from another project in the same company resolves through {@code findById} —
+     *       the two-segment defect, asserted with a real second project rather than trusted.</li>
+     * </ol>
+     */
+    @Nested
+    @DisplayName("The history — GET /ingestions, and the Location that used to point at a 404")
+    class History {
+
+        @Test
+        @DisplayName("the list is newest first and carries no unmatched array at all")
+        void theListIsSummaries() throws Exception {
+            ingest(ROBOT, junit(testCase("com.acme.RefundTest", "refundsInFull", null)), "ik-h1");
+            ingest(ROBOT, junit(testCase("com.acme.GhostTest", "unknown", null)), "ik-h2");
+
+            JsonNode listed = body(get(LEAD, "/projects/" + BANKING + "/ingestions"));
+
+            assertThat(listed).hasSize(2);
+            // Newest first — the second post, which matched nothing and so opened no run.
+            assertThat(listed.get(0).get("matchedCount").asInt()).isZero();
+            assertThat(listed.get(0).get("unmatchedCount").asInt()).isOne();
+            assertThat(listed.get(0).get("runId").isNull()).isTrue();
+            assertThat(listed.get(1).get("matchedCount").asInt()).isOne();
+            assertThat(listed.get(1).get("runKey").asText()).startsWith("TR-");
+
+            // The names are ABSENT, not empty. An empty array beside a count of one reads as "the
+            // list was cut" — the meaning unmatchedCount is documented to carry — when the truth
+            // is that this endpoint does not serve them. Reading every job's JSONB blob to render
+            // one screen is what the shape exists to avoid.
+            assertThat(listed.get(0).has("unmatched")).isFalse();
+        }
+
+        @Test
+        @DisplayName("the Location header names a resource that resolves to the same job")
+        void theLocationResolves() throws Exception {
+            MvcResult posted = ingest(ROBOT,
+                    junit(testCase("com.acme.RefundTest", "refundsInFull", null)), "ik-h3");
+
+            String location = posted.getResponse().getHeader(HttpHeaders.LOCATION);
+            assertThat(location).isNotNull();
+
+            // Followed rather than reconstructed: a test that built the path itself would still
+            // pass if the header named something else entirely, which is exactly the defect this
+            // closes.
+            MvcResult fetched = get(LEAD, location.substring("/api/v1".length()));
+
+            assertThat(fetched.getResponse().getStatus()).isEqualTo(200);
+            assertThat(body(fetched).get("id").asText()).isEqualTo(body(posted).get("id").asText());
+        }
+
+        @Test
+        @DisplayName("the detail's unmatched list is EXACTLY the one the post answered with")
+        void theDetailAgreesWithThePost() throws Exception {
+            MvcResult posted = ingest(ROBOT, junit(
+                    testCase("com.acme.RefundTest", "refundsInFull", null),
+                    testCase("com.acme.GhostTest", "one that failed", "boom"),
+                    testCase("com.acme.GhostTest", "one that passed", null)), "ik-h4");
+
+            JsonNode fromPost = body(posted).get("unmatched");
+            JsonNode fromRead = body(get(LEAD,
+                    "/projects/" + BANKING + "/ingestions/" + body(posted).get("id").asText()))
+                    .get("unmatched");
+
+            // Two implementations of one rule, asserted against each other rather than read
+            // carefully — the standing this module gives R6's second policy in SQL (§111).
+            assertThat(fromRead).isEqualTo(fromPost);
+            assertThat(fromRead).hasSize(2);
+            // The outcome is on the wire because it changes the urgency: an unmatched FAILURE is a
+            // red test nobody is being told about.
+            assertThat(fromRead.get(0).get("outcome").asText()).isEqualTo("FAILED");
+            assertThat(fromRead.get(0).get("normalizedName").asText())
+                    .isEqualTo("com.acme.ghosttest#one that failed");
+        }
+
+        @Test
+        @DisplayName("a retry under the same key carries the NAMES again, not an empty array")
+        void aReplayCarriesTheNames() throws Exception {
+            ingest(ROBOT, junit(
+                    testCase("com.acme.GhostTest", "first", null),
+                    testCase("com.acme.GhostTest", "second", null)), "ik-h5");
+
+            MvcResult retry = ingest(ROBOT, junit(
+                    testCase("com.acme.GhostTest", "first", null),
+                    testCase("com.acme.GhostTest", "second", null)), "ik-h5");
+
+            assertThat(retry.getResponse().getStatus()).isEqualTo(200);
+            // `unmatchedCount: 2` beside `unmatched: []` was the shape before the payload was read
+            // back — and this retry is the second time one build has failed to bind these tests.
+            assertThat(body(retry).get("unmatchedCount").asInt()).isEqualTo(2);
+            assertThat(body(retry).get("unmatched")).hasSize(2);
+        }
+
+        @Test
+        @DisplayName("a Viewer may read the history — the gate is membership, not result:submit")
+        void aViewerMayRead() throws Exception {
+            ingest(ROBOT, junit(testCase("com.acme.RefundTest", "refundsInFull", null)), "ik-h6");
+
+            // The Viewer is refused the POST (see Gates) and allowed the read, because a member may
+            // read this project's runs and their verdicts, and a job is the record of how some of
+            // those verdicts got there. A new ingestion:read key would be one seeded to nobody.
+            MvcResult listed = get(VIEWER, "/projects/" + BANKING + "/ingestions");
+
+            assertThat(listed.getResponse().getStatus()).isEqualTo(200);
+            assertThat(body(listed)).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("a SIBLING PROJECT's job id is a 404, and is not in this project's list")
+        void aSiblingProjectsJobIsUnreachable() throws Exception {
+            ingest(ROBOT, junit(testCase("com.acme.RefundTest", "refundsInFull", null)), "ik-h7");
+            UUID elsewhere = seedJobInSavings();
+
+            // The row passes RLS and the Hibernate filter — it is the same company — so findById
+            // would have returned it to somebody holding no grant on the project that owns it.
+            assertThat(get(LEAD, "/projects/" + BANKING + "/ingestions/" + elsewhere)
+                    .getResponse().getStatus()).isEqualTo(404);
+            assertThat(body(get(LEAD, "/projects/" + BANKING + "/ingestions"))).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("a job id that is nothing at all is the same bodiless 404")
+        void anAbsentJobIs404() throws Exception {
+            MvcResult missing = get(LEAD, "/projects/" + BANKING + "/ingestions/" + ABSENT);
+
+            assertThat(missing.getResponse().getStatus()).isEqualTo(404);
+            assertThat(missing.getResponse().getContentAsString()).isEmpty();
+        }
+    }
+
+    // =====================================================================
     // helpers — requests
     // =====================================================================
 
@@ -692,6 +850,32 @@ class IngestionEndpointTest extends IntegrationTestBase {
                 statement.executeUpdate();
             }
         }
+    }
+
+    /**
+     * A completed job belonging to {@link #SAVINGS}, written directly.
+     *
+     * <p>Directly rather than through the endpoint, because what is under test is the
+     * {@code projectId} predicate on the read — not a second project's ingestion, which would need
+     * its own vocabulary, grants and cases to prove the same one thing.
+     */
+    private UUID seedJobInSavings() throws SQLException {
+        UUID id = UUID.fromString("d7005000-0000-4000-8000-000000000001");
+        try (Connection connection = appConnection(ACME);
+             var statement = connection.prepareStatement("""
+                     INSERT INTO ingestion_job
+                         (id, company_id, project_id, format, idempotency_key, status,
+                          matched_count, unmatched_count, created_at)
+                     VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), 'JUNIT',
+                             'elsewhere', 'COMPLETED', 0, 0, now())
+                     ON CONFLICT (id) DO NOTHING
+                     """)) {
+            statement.setString(1, id.toString());
+            statement.setString(2, ACME.toString());
+            statement.setString(3, SAVINGS.toString());
+            statement.executeUpdate();
+        }
+        return id;
     }
 
     private void clearMutableRows() throws SQLException {

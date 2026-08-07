@@ -103,6 +103,9 @@ public class IngestionService {
     private final AuditEventRepository auditEvents;
     private final ObjectMapper json;
 
+    /** Reads {@code raw_payload} back on a replay — see the call site for what it repaired. */
+    private final UnmatchedTests unmatchedTests;
+
     /**
      * <strong>A {@link TransactionTemplate}, not {@code @Transactional} on a second method of this
      * class</strong> — §116's red run, and it cost that slice eight tests and every valid
@@ -134,6 +137,7 @@ public class IngestionService {
             IngestionJobRepository jobs,
             AuditEventRepository auditEvents,
             ObjectMapper json,
+            UnmatchedTests unmatchedTests,
             TransactionTemplate transactions,
             Clock clock) {
 
@@ -147,6 +151,7 @@ public class IngestionService {
         this.jobs = jobs;
         this.auditEvents = auditEvents;
         this.json = json;
+        this.unmatchedTests = unmatchedTests;
         this.transactions = transactions;
         this.clock = clock;
     }
@@ -248,7 +253,13 @@ public class IngestionService {
         // over a run's verdicts.
         Optional<IngestionJob> already = jobs.findByIdempotencyKey(idempotencyKey);
         if (already.isPresent()) {
-            return new Outcome.Replayed(viewOf(already.get(), List.of()));
+            // The names are read back OUT of the stored payload rather than served as an empty
+            // array. Until UnmatchedTests existed this answered `unmatchedCount: 12` beside
+            // `unmatched: []`, and the retry is the caller that most needs the names: it is the
+            // second time one build has failed to bind the same tests, and the first response is
+            // long gone from the CI log by then.
+            IngestionJob job = already.get();
+            return new Outcome.Replayed(viewOf(job, unmatchedTests.of(job.getRawPayload())));
         }
 
         List<AutomationMatcher.Match> matches = matcher.match(projectId, parsed);
@@ -624,9 +635,20 @@ public class IngestionService {
                 runKey,
                 job.getMatchedCount(),
                 job.getUnmatchedCount(),
-                unmatched.size() > UNMATCHED_NAMES_SERVED
-                        ? List.copyOf(unmatched.subList(0, UNMATCHED_NAMES_SERVED))
-                        : List.copyOf(unmatched),
+                cap(unmatched),
                 job.getCreatedAt());
+    }
+
+    /**
+     * The first {@link #UNMATCHED_NAMES_SERVED} names.
+     *
+     * <p>Shared with {@link IngestionReadService} rather than reapplied there, because a detail read
+     * that could ask for all 5,000 by following this endpoint's own {@code Location} header would
+     * make the cap here cosmetic — and a second copy of a bound is how one of the two drifts.
+     */
+    static List<UnmatchedTestView> cap(List<UnmatchedTestView> unmatched) {
+        return unmatched.size() > UNMATCHED_NAMES_SERVED
+                ? List.copyOf(unmatched.subList(0, UNMATCHED_NAMES_SERVED))
+                : List.copyOf(unmatched);
     }
 }

@@ -615,3 +615,23 @@ slice ran mutations rather than queuing them, and the rows below record what was
 | IN-10 | `AutomationMatcher.soleKey` returns the first key instead of refusing a name that yields two | A test named after two cases posts its result to whichever the regex found first. Needs a two-key fixture. | ⬜ NOT RUN |
 | IN-11 | `CaseFacts.caseIdsByAutomationKey` drops its `project_id` predicate | A sibling project's case is materialised into this project's run — a `test_execution` and its `test_case` in two different projects, which every read in the module assumes cannot happen. **The sixth file layering a project predicate over RLS with nothing checking it** (`PlanFacts`, `CatalogueFacts`, `ExecutionSource`×3, `DocumentationSource`); the fix is still one two-project fixture written once for the seam, not a row per method. | ⬜ NOT RUN — same gap §115's CM-6 records. |
 | IN-12 | `IngestionService.write` records a result on a case whose execution is absent from a named run | A CI job silently grows a checklist a person is working through, and its denominator. Needs a `runId` whose scope excludes a matched case. | ⬜ NOT RUN |
+
+---
+
+## §119 — the ingestion history reads
+
+`IngestionEndpointTest.History` (7 tests, the same `d7` fixture, now with a **second project**).
+**Nothing below was run** — §65 as restated: deferred means all of them, and §117's eight-mutation
+deviation was that slice's, not a new rule. Two of these rows are the reason the slice's own
+fixture grew a sibling project.
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| IH-1 | `IngestionJobRepository.findOneInProject` drops its `projectId` predicate | A sibling project's job — its unmatched test names, its build's shape — is readable by somebody holding no grant on the project that owns it. RLS and the Hibernate filter both pass the row, so nothing else refuses it. Should redden `aSiblingProjectsJobIsUnreachable` alone. **This is IN-11's defect class with a fixture finally behind it**, on one of the seven files. | ⬜ NOT RUN |
+| IH-2 | `IngestionReadService.list`/`findOne` gate on `writeGranted(…, "result:submit")` instead of `readVisible` | A Viewer can no longer read why a test produced no result — the history becomes an administrator's screen for no reason, and the binder's read gets a stricter gate than its write needs. Should redden `aViewerMayRead` alone. | ⬜ NOT RUN |
+| IH-3 | `UnmatchedTests.landed` drops the `recorded` arm (matched ⇒ landed) | A test whose case is real but is **not in the run the caller named** disappears from the detail read while still counting in `unmatchedCount` — the two populations §117 deliberately unions come apart, and the screen shows fewer names than the number beside them. Should redden `theDetailAgreesWithThePost` on a fixture that names a `runId`; the current fixture does **not** build that state, so this is a manual check and IN-12's sibling. | ⬜ NOT RUN — needs IN-12's fixture |
+| IH-4 | `IngestionService`'s replay serves `List.of()` again | `unmatchedCount: 12` beside `unmatched: []` on the response to a CI **retry** — the caller that most needs the names, on the second time one build failed to bind the same tests. Should redden `aReplayCarriesTheNames` alone. | ⬜ NOT RUN |
+| IH-5 | `findSummariesInProject` selects the entity rather than the constructor projection | No assertion changes and no test goes red — the defect is a `JSONB` blob per row pulled across to render a list that shows none of it. **Recorded because it is invisible to the suite**: the check is the query log on a project with a 5,000-test report in its history, which is the shape of the thing this projection exists for. | ⬜ NOT RUN — not assertable, measure instead |
+| IH-6 | The list's `ORDER BY` loses its `j.id DESC` tiebreak | Two jobs posted inside one microsecond — a matrix build does it every time — swap places between reloads, moving the row somebody is reading out from under the cursor. Not reliably reddenable: the fixture's two posts differ in `createdAt`, so this needs two rows written with an identical timestamp. | ⬜ NOT RUN |
+| IH-7 | `TestRunRepository.findRunKeys` loses `deletedAt IS NULL` | The history offers a link to a deleted run, which 404s — and `IngestionJobSummary` loses the only thing that tells "matched nothing" apart from "its run was deleted". Needs a soft-deleted run in the fixture. | ⬜ NOT RUN |
+| IH-8 | `UnmatchedTests.outcomeOf` falls back to `IngestedOutcome.values()[0]` on an unknown name | Every historical row of a removed enum constant re-reads as **`PASSED`** — the all-green direction §117 spent its parsers on, arriving through the reader instead. Needs a payload written by a future build, so it is a manual check. | ⬜ NOT RUN |

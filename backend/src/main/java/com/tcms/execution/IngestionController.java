@@ -9,6 +9,7 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -32,15 +33,44 @@ import org.springframework.web.bind.annotation.RestController;
  * <p><strong>201 with a {@code Location}, and a replay is 200 without one.</strong> Both carry the
  * whole job, because the interesting part of the response is the counts and the unmatched names,
  * and a CI step that has to follow a redirect to find out whether its results landed will not.
+ *
+ * <p><strong>The two {@code GET}s are not for CI</strong>, and they are why that {@code Location}
+ * now names something. Until this slice it pointed at a resource that had never existed — a claim
+ * this API made and could not honour. They are read by a person: the history screen, and the binder
+ * that turns an unmatched name into a mapping. {@link IngestionReadService} carries the gate.
  */
 @RestController
 @RequestMapping("/api/v1/projects/{projectId}/ingestions")
 public class IngestionController {
 
     private final IngestionService ingestion;
+    private final IngestionReadService history;
 
-    public IngestionController(IngestionService ingestion) {
+    public IngestionController(IngestionService ingestion, IngestionReadService history) {
         this.ingestion = ingestion;
+        this.history = history;
+    }
+
+    /** This project's ingestion history, newest first. Project membership. */
+    @GetMapping
+    public ResponseEntity<Object> list(
+            @AuthenticationPrincipal Jwt jwt, @PathVariable UUID projectId) {
+
+        return history.list(caller(jwt), projectId)
+                .<ResponseEntity<Object>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /** One job and the tests it could not place — the resource {@code Location} names. */
+    @GetMapping("/{jobId}")
+    public ResponseEntity<Object> findOne(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID jobId) {
+
+        return history.findOne(caller(jwt), projectId, jobId)
+                .<ResponseEntity<Object>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     /** Posts a CI report. 201 when ingested, 200 on a replay of the same {@code Idempotency-Key}. */

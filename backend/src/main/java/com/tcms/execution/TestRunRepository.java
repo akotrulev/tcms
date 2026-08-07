@@ -56,6 +56,21 @@ public interface TestRunRepository extends JpaRepository<TestRun, UUID> {
     List<Object[]> findPlanKeys(@Param("planIds") Collection<UUID> planIds);
 
     /**
+     * The keys of a set of live runs, so a list naming runs resolves them in one query, not N —
+     * {@link #findPlanKeys}' shape, for the ingestion history.
+     *
+     * <p>{@code projectId} is repeated here as in every query on this repository, and
+     * {@code deletedAt IS NULL} is deliberate rather than copied: a job that opened a run somebody
+     * later deleted answers a null key beside a non-null {@code runId}, which is what
+     * {@code IngestionJobSummary} tells the two apart by. Serving the key of a deleted run would
+     * offer a link to a screen that 404s.
+     */
+    @Query("SELECT r.id, r.key FROM TestRun r WHERE r.projectId = :projectId "
+            + "AND r.id IN :runIds AND r.deletedAt IS NULL")
+    List<Object[]> findRunKeys(
+            @Param("projectId") UUID projectId, @Param("runIds") Collection<UUID> runIds);
+
+    /**
      * How many live runs were created from this plan — what {@link PlanDeleteService} refuses on.
      *
      * <p>{@code deletedAt IS NULL} on the run, so a plan whose only runs were themselves deleted can

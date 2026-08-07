@@ -4233,7 +4233,24 @@ export interface paths {
             };
             cookie?: never;
         };
-        get?: never;
+        /**
+         * What CI has posted to this project
+         * @description The ingestion history, newest first. **Project membership, and no permission key** — this
+         *     is gated exactly as `GET /runs` is, because a member may read this project's runs and their
+         *     verdicts, and a job is the record of how some of those verdicts got there. A new
+         *     `ingestion:read` key would be one seeded to nobody.
+         *
+         *     Reading the history is **not** confirming a mapping: the binder reads here and writes
+         *     through `POST /automation-mappings`, which costs `case:edit`.
+         *
+         *     **The rows are `IngestionJobSummary`, which has no `unmatched` array.** The names are not a
+         *     column — they live inside the job's stored payload, which for a 5,000-test build is
+         *     megabytes — so serving them here would read every blob in the project's history to render
+         *     one screen. `GET /ingestions/{jobId}` serves them, one request away. A row carrying `[]`
+         *     beside a count of 12 was the alternative, and it reads as "the list was cut" when the truth
+         *     is "not served on this endpoint".
+         */
+        get: operations["listIngestions"];
         put?: never;
         /**
          * Post a CI report
@@ -4270,6 +4287,39 @@ export interface paths {
          *     to bind them.
          */
         post: operations["ingestResults"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/ingestions/{jobId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                jobId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * One posted report, and the tests it could not place
+         * @description **The resource `POST /ingestions` has been naming in its `Location` header since it
+         *     shipped** — and until this endpoint existed, that header pointed at a 404.
+         *
+         *     Project membership, as for the list. This is what the unmatched-test binder reads: each
+         *     name comes back with the `normalizedName` that `POST /automation-mappings` takes, and with
+         *     the outcome that says how urgent it is — an unmatched **failure** is a red test nobody is
+         *     being told about, where an unmatched pass is only unrecorded coverage.
+         *
+         *     `unmatched` is capped at 50, by the same constant the post's own response uses. The names
+         *     are re-derived from the job's stored payload rather than kept in a column; `normalizedName`
+         *     is recomputed server-side for the reason `AutomationMappingInput.testName` gives.
+         */
+        get: operations["getIngestion"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -6790,6 +6840,36 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
         };
+        /**
+         * @description One row of the ingestion history. **`IngestionJob` without `unmatched`** — see
+         *     `GET /ingestions` on why the names are absent rather than empty here.
+         */
+        IngestionJobSummary: {
+            /** Format: uuid */
+            id: string;
+            status: components["schemas"]["IngestionStatus"];
+            format: components["schemas"]["ReportFormat"];
+            /**
+             * Format: uuid
+             * @description Null exactly when the report matched nothing, so no run was opened.
+             */
+            runId: string | null;
+            /**
+             * @description Null in **two** cases, told apart by `runId`: no run was opened (`runId` null too), or
+             *     the run it opened has since been deleted (`runId` present). The key of a deleted run is
+             *     withheld rather than served, because it would offer a link to a screen that 404s.
+             * @example TR-4
+             */
+            runKey: string | null;
+            matchedCount: number;
+            /**
+             * @description The true total. On this shape it is the *only* thing said about the unmatched tests —
+             *     open the job to see which they were.
+             */
+            unmatchedCount: number;
+            /** Format: date-time */
+            createdAt: string;
+        };
         AutomationMappingInput: {
             /**
              * @description The test as a report names it. Sent **raw** — the server normalizes, because the rule
@@ -9052,6 +9132,30 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    listIngestions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Jobs, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionJobSummary"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     ingestResults: {
         parameters: {
             query?: never;
@@ -9096,6 +9200,31 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    getIngestion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                jobId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The job */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionJob"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     listAutomationMappings: {
