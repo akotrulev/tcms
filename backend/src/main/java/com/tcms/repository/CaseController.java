@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -70,6 +71,7 @@ public class CaseController {
     private final CaseCreateService creation;
     private final CaseDeleteService deletion;
     private final CaseBulkService bulk;
+    private final CaseQuarantineService quarantine;
 
     public CaseController(
             CaseService search,
@@ -78,7 +80,8 @@ public class CaseController {
             CaseUpdateService cases,
             CaseCreateService creation,
             CaseDeleteService deletion,
-            CaseBulkService bulk) {
+            CaseBulkService bulk,
+            CaseQuarantineService quarantine) {
         this.search = search;
         this.detail = detail;
         this.history = history;
@@ -86,6 +89,7 @@ public class CaseController {
         this.creation = creation;
         this.deletion = deletion;
         this.bulk = bulk;
+        this.quarantine = quarantine;
     }
 
     /**
@@ -343,6 +347,66 @@ public class CaseController {
             case CaseBulkService.Outcome.Invalid invalid ->
                     ResponseEntity.badRequest().body(ApiProblem.validation(invalid.errors()));
             case CaseBulkService.Outcome.Done done -> ResponseEntity.ok(done.result());
+        };
+    }
+
+    /**
+     * Quarantines a flaky test, or puts it back into the gate — M3's quarantine flow.
+     *
+     * <h2>PUT with an absolute state, not POST and DELETE</h2>
+     *
+     * <p>{@link CaseQuarantineRequest}'s header carries the argument. Briefly: a client sending the
+     * same request twice must not be told 404 or 409 about a state it already asked for, and a
+     * checkbox that has to become two HTTP methods is where "the quarantine turned itself off"
+     * comes from.
+     *
+     * <h2>200 with the row, not 204</h2>
+     *
+     * <p>Unlike the delete below, there is something left to describe and the caller cannot compute
+     * it: {@code quarantinedAt}, {@code quarantinedBy} and the derived counts all come from the
+     * server. A 204 would force the screen into a refetch to render the state it just set, which is
+     * the round trip that makes a toggle feel broken.
+     *
+     * <h2>One 403, one sentence — unlike the delete</h2>
+     *
+     * <p>{@code case:edit} carries no {@code OWN} qualifier (roles spec §A5 qualifies
+     * {@code case:delete}, not this), so there is exactly one way to be refused and one thing to say
+     * about it. §31's disable-don't-hide makes it unreachable from the product's own UI, and it is
+     * answered properly anyway for anyone arriving another way.
+     *
+     * <p>Worth knowing which role this excludes and why it is the point: <strong>Automation Service
+     * does not hold {@code case:edit}</strong>, so a leaked CI token can post results here and
+     * cannot quarantine a test to stop its own red results from gating. See
+     * {@link CaseQuarantineService}.
+     */
+    @PutMapping("/{caseId}/quarantine")
+    public ResponseEntity<Object> quarantine(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID caseId,
+            @RequestBody CaseQuarantineRequest request) {
+
+        if (request == null || request.quarantined() == null) {
+            // A Boolean, so an absent field arrives as null rather than as a silent false that
+            // would release a quarantine the caller never mentioned. See the request's header.
+            return ResponseEntity.badRequest().body(ApiProblem.validation(Map.of(
+                    "quarantined", List.of("Say whether to quarantine or release."))));
+        }
+
+        CaseQuarantineService.Outcome outcome = quarantine.set(
+                UUID.fromString(jwt.getSubject()), projectId, caseId,
+                request.quarantined(), request.reason());
+
+        return switch (outcome) {
+            case CaseQuarantineService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
+            case CaseQuarantineService.Outcome.Forbidden ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiProblem.forbidden(
+                            "You do not have permission to change test cases in this project."));
+            case CaseQuarantineService.Outcome.Invalid invalid ->
+                    ResponseEntity.badRequest().body(ApiProblem.validation(
+                            Map.of(invalid.field(), List.of(invalid.message()))));
+            case CaseQuarantineService.Outcome.Done done ->
+                    ResponseEntity.ok(CaseFlakeView.of(done.flake()));
         };
     }
 

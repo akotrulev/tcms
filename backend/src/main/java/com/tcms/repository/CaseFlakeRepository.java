@@ -2,6 +2,7 @@ package com.tcms.repository;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -32,6 +33,21 @@ public interface CaseFlakeRepository extends JpaRepository<CaseFlake, UUID> {
              WHERE f.caseId IN :caseIds
             """)
     List<CaseFlake> findForCases(@Param("caseIds") Collection<UUID> caseIds);
+
+    /**
+     * One case's row, or empty.
+     *
+     * <p><strong>Not {@code findById}</strong>, and {@link TestCaseRepository#findLiveInProject}
+     * states the reason this repository inherits: a primary-key lookup resolves through the
+     * persistence context, and Hibernate filters do <em>not</em> apply to that path. RLS would still
+     * cover it, but using one layer where both are available is how a layered defence quietly
+     * becomes a single point.
+     */
+    @Query("""
+            SELECT f FROM CaseFlake f
+             WHERE f.caseId = :caseId
+            """)
+    Optional<CaseFlake> findScopedById(@Param("caseId") UUID caseId);
 
     /**
      * Every quarantined case in a set of projects, worst score first.

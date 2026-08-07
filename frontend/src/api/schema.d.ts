@@ -1813,6 +1813,100 @@ export interface paths {
         };
         trace?: never;
     };
+    "/projects/{projectId}/cases/{caseId}/quarantine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                /**
+                 * @description UUID only. Display keys (TC-1) are deliberately NOT accepted here: they are
+                 *     sequential per company and therefore trivially guessable, so allowing one as a
+                 *     path identifier hands out an enumeration oracle (plan §6t). Resolve a key the
+                 *     user typed or pasted through the search endpoint, which returns not-found —
+                 *     never forbidden — for a key in a project the caller cannot reach.
+                 */
+                caseId: components["parameters"]["CaseId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Quarantine a flaky test, or put it back in the gate
+         * @description M3's quarantine flow (plan §6c, §6l). Records the **decision** to stop gating on a
+         *     test, alongside the flake evidence the decision was made on.
+         *
+         *     **PUT with an absolute state, not POST and DELETE.** A client sending the same
+         *     request twice must not be told `404` or `409` about a state it already asked for —
+         *     releasing a case that is not quarantined succeeds, and so does quarantining one that
+         *     already is. It is also the shape a checkbox produces; a toggle that has to become
+         *     two HTTP methods is where "the quarantine turned itself off" comes from.
+         *
+         *     `reason` is **required when `quarantined` is true** and ignored when it is false.
+         *     The asymmetry is deliberate: releasing returns the test to the default, and the
+         *     exception is the thing that needs justifying. A quarantine with no reason is debt
+         *     nobody can clear — the board card says a test is excluded and cannot say why or by
+         *     whom, so the only way to evaluate it is to read the test. A missing reason is a
+         *     `400` field error, and `case_flake_quarantine_complete` refuses the row underneath
+         *     regardless of what a caller believes.
+         *
+         *     `quarantined` is required too, and its absence is a `400` rather than a default of
+         *     `false` — the one shape of this request that could destroy a decision by omission.
+         *
+         *     **Requires `case:edit`, not a new `case:quarantine` key.** The roles spec is
+         *     authoritative and has no such key. The choice also carries §117's property:
+         *     **Automation Service does not hold `case:edit`**, so a leaked CI token can post
+         *     results and cannot quarantine a test to stop its own red results from gating.
+         *
+         *     **Nothing downstream reads the flag yet.** Quarantine is recorded and surfaced; it
+         *     does not exclude the case from a run, a report, or a pass rate. Silently moving a
+         *     pass rate's denominator is how a green number stops meaning anything (§6e), so when
+         *     gating reads this column it must say so on the face of the report.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                    /**
+                     * @description UUID only. Display keys (TC-1) are deliberately NOT accepted here: they are
+                     *     sequential per company and therefore trivially guessable, so allowing one as a
+                     *     path identifier hands out an enumeration oracle (plan §6t). Resolve a key the
+                     *     user typed or pasted through the search endpoint, which returns not-found —
+                     *     never forbidden — for a key in a project the caller cannot reach.
+                     */
+                    caseId: components["parameters"]["CaseId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CaseQuarantineInput"];
+                };
+            };
+            responses: {
+                /** @description Recorded */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CaseFlake"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/cases/{caseId}/versions": {
         parameters: {
             query?: never;
@@ -6554,6 +6648,87 @@ export interface components {
             }[];
             /** Format: uuid */
             auditEventId?: string | null;
+        };
+        CaseQuarantineInput: {
+            /**
+             * @description The state to move to. Required — an absent field is a `400`, never a silent
+             *     `false`, because that is the one shape of this request that could release a
+             *     quarantine the caller never mentioned.
+             */
+            quarantined: boolean;
+            /**
+             * @description Why the test is being quarantined. **Required when `quarantined` is true**,
+             *     ignored when it is false. Not expressible as a schema-level `required`, since
+             *     it is conditional on the sibling field — the server raises it as a field error
+             *     the form can land on.
+             */
+            reason?: string;
+        };
+        /**
+         * @description A case's flake evidence (derived, plan §6l) and its quarantine decision (authored,
+         *     plan §6c). One row, two halves, written by two different things that can never
+         *     overwrite each other's columns.
+         *
+         *     Flakiness is **pass/fail alternation within a single version and configuration** —
+         *     §6l's rule, and the only scoping under which it means anything. Alternation across
+         *     versions is just change: a test that passed, was edited, and now fails caught a
+         *     regression, and reporting that as flake sends somebody to quarantine the test that
+         *     found the bug.
+         */
+        CaseFlake: {
+            /** Format: uuid */
+            caseId: string;
+            /**
+             * @description Recorded outcomes inside the scoring window that were a pass or a failure.
+             *     Blocked, skipped, retest and untested results are **removed before the sequence
+             *     is formed**, which is not the same as ignoring them: a blocked run between two
+             *     passes would otherwise read as two alternations and score a stable test at 1.0.
+             */
+            executions: number;
+            /**
+             * @description Adjacent pairs of outcomes **inside one cell** — the denominator of
+             *     `flakeScore`, and never `executions`. A case with six results spread across six
+             *     cells has six executions and zero transitions, because nothing in it ever ran
+             *     twice under the same conditions.
+             */
+            transitions: number;
+            /** @description How many of those pairs changed between a pass and a failure. */
+            alternations: number;
+            /**
+             * @description How many `(configuration, case version)` cells contributed — what tells a test
+             *     that flaps on one browser from one that flaps on five.
+             */
+            cells: number;
+            /**
+             * Format: double
+             * @description `alternations ÷ transitions`, or **null below the evidence floor**, which is a
+             *     different claim from `0`. Two results that went pass then fail score a perfect
+             *     `1.0` on any ratio definition and that is noise — and it is the number a human
+             *     would then use to decide whether to quarantine. `0` means *evidently stable*;
+             *     `null` means *not enough evidence to say*. The counts above ship precisely so a
+             *     client can render the second as "3 results, not enough to score" rather than as
+             *     an unexplained blank.
+             */
+            flakeScore?: number | null;
+            /** Format: date-time */
+            lastAlternationAt?: string | null;
+            /**
+             * Format: date-time
+             * @description When the derived half was last recomputed. On the wire for the same reason
+             *     `Dashboard.healthComputedAt` is: it is the only thing that tells "this test is
+             *     not flaky" from "nobody has looked at this test yet".
+             */
+            computedAt: string;
+            quarantined: boolean;
+            /** Format: date-time */
+            quarantinedAt?: string | null;
+            /**
+             * Format: uuid
+             * @description Null exactly when `quarantined` is false — the database refuses any other
+             *     combination.
+             */
+            quarantinedBy?: string | null;
+            quarantineReason?: string | null;
         };
         EntityVersion: {
             versionNo: number;
