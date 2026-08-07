@@ -227,6 +227,62 @@ assignment, not a new tier) → regular user. Code checks **permissions, never r
 is no wildcard permission. SYSTEM-scope grants live in `instance_role_assignment`, a separate
 instance-level table, because a nullable `company_id` under RLS is permanently unreachable.
 
+#### The permission matrix
+
+**Authoritative source is `docs/specs/2026-07-30-tcms-roles-permissions-naming.md` §A3** — this is a
+convenience copy, also in `README.md`. If they disagree the spec wins and the copies are the bug.
+55 permissions, all seeded by `V3__seed_permissions_and_roles.sql`; no migration has added one since.
+
+Roles are ordered least-permissioned first; rows run broadest-held to narrowest. `✓` granted ·
+`—` not granted · anything else is a qualifier that narrows the grant.
+
+`PROJECT` scope:
+
+| Permission | Viewer | Automation Service | Test Engineer | Test Lead | Company Admin | Instance Admin |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|
+| `case:read` · `project:read` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `case:comment` · `report:view` · `report:export` · `doc:read` · `artifact:read` | ✓ | — | ✓ | ✓ | ✓ | ✓ |
+| `case:create` | — | quarantine only | ✓ | ✓ | ✓ | ✓ |
+| `run:create` · `result:submit` · `evidence:attach` | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `suite:manage` · `case:edit` · `library:manage` | — | — | ✓ | ✓ | ✓ | ✓ |
+| `case:review` · `suite:review` · `plan:review` | — | — | ✓ | ✓ | ✓ | ✓ |
+| `plan:create` · `plan:edit` · `run:execute` | — | — | ✓ | ✓ | ✓ | ✓ |
+| `defect:create` · `workitem:manage` · `doc:edit` | — | — | ✓ | ✓ | ✓ | ✓ |
+| `case:delete` · `evidence:delete` | — | — | OWN | ✓ | ✓ | ✓ |
+| `artifact:edit` | — | — | plan scope only | ✓ | ✓ | ✓ |
+| `case:approve` · `suite:approve` · `plan:approve` | — | — | — | ✓ | ✓ | ✓ |
+| `suite:delete` · `plan:delete` · `artifact:delete` | — | — | — | ✓ | ✓ | ✓ |
+| `run:close` · `result:amend` · `doc:publish` | — | — | — | ✓ | ✓ | ✓ |
+| `project:audit` · `project:settings` · `project:members` · `integration:manage` | — | — | — | ✓ | ✓ | ✓ |
+
+`COMPANY` scope — answered from the SYSTEM + COMPANY terms only, so a PROJECT-scope role contributes
+nothing here. `company:read` reaches every member through the non-assignable **Company Member**
+baseline role (`V15`), not through the six:
+
+| Permission | Every member | Company Admin | Instance Admin |
+|---|:--:|:--:|:--:|
+| `company:read` | ✓ | ✓ | ✓ |
+| `company:settings` · `company:members` · `company:teams` · `company:vocabulary` · `company:idp` | — | ✓ | ✓ |
+| `project:create` · `token:issue` · `audit:view` | — | ✓ | ✓ |
+
+`SYSTEM` scope, Instance Admin only: `company:create` · `company:delete` · `company:suspend` ·
+`user:manage` · `role:manage` · `system:settings` · `instance:audit`.
+
+Four things that change how the table reads:
+
+- **The six are the complete assignable set** — seeded, immutable, **no custom roles, not even
+  clone-and-edit**. A client needing something between two tiers gets the higher one.
+- **An API token never confers its own permissions; it *caps* its owner's:**
+  `evaluate(ownerId, projectId) ∩ permissionsOf(token.roleId) ∩ [the token's project]`. Intersection,
+  never union — so a token exceeds neither its role nor its owner, and demoting a person shrinks
+  every token they issued. `OWN` narrows through it too (`PermissionQualifier.narrowedBy`): a
+  company-wide `ALL` capped by a role's `OWN` is `OWN`.
+- **`case:comment` is one key covering cases, suites and plans.** `suite:comment` / `plan:comment`
+  deliberately do not exist, and `evidence:read` was rejected on the same grounds: a key seeded to
+  nobody is a 403 no administrator can grant their way out of. Resolving a thread is *not*
+  commenting — it costs the subject's `*:review`.
+- **Author-cannot-approve-own-work defaults on.**
+
 ### Backend
 
 Spring Boot 3.5.6 + Java 21 + Gradle, rooted in `backend/`. Spring Modulith **monolith** whose
@@ -309,6 +365,12 @@ re-authorised once more on 2026-08-02 with a 4-agent cap, then reversed the same
 one tree produced **three silent losses of committed work** — a rebase, an unrelated commit reverting
 a doc as collateral, and a stale re-application wiping a later change — with no conflict, no error
 and a clean `git status` throughout.
+
+**One subagent at a time — ask before a second.** No agent may have more than one subagent running
+concurrently. If a task genuinely needs two or more in parallel, say why it is safe (disjoint files,
+no shared build directory, no shared contract or migration numbering) and **get the user's explicit
+permission first**. Absent that permission, run them one after another. This is the same failure
+mode as the lanes above: concurrent writers in one tree lose committed work silently.
 
 The reworks that came out of those attempts shipped and are worth having on their own terms: the
 per-section handoff, the split `api/queries/` and `mocks/` directories, and the second stack. (The
