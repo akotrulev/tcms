@@ -2,14 +2,50 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-07 (**§124** — the `BEST` removal and the two unwired permission keys;
+**Last verified:** 2026-08-07 (**§125** — the `storage` module extraction; **§124** before it — the
+`BEST` removal and the two unwired permission keys;
 §122's grant-instance-admin, §121's four phases, §120's automation drift, §119's ingestion history,
 §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `768ff8d` (§124 phase 3) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `de9150b` (§125 phase 2) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
-**§124 CARRIED NO MIGRATION** — schema head is still `V38`, `V39` next free, policy count 62. Test
-count **2024 across 427 result classes** (§122's baseline was 2014/426).
+**§125 CARRIED NO MIGRATION EITHER** — schema head is still `V38`, `V39` next free, policy count 62.
+Test count **2028 across 428 result classes** (§124's baseline was 2024/427).
+
+---
+
+## §125 — THERE IS AN ELEVENTH MODULE AND A FOURTH FOUNDATION MODULE
+
+**`com.tcms.storage`.** Read this before assuming where a type lives: `Attachment`,
+`AttachmentRepository`, `EvidenceStore`, `StoredBlob`, `FilesystemEvidenceStore`, `ReportStore`,
+`FilesystemReportStore` and the new `FilesystemBlobStore` are **all in `storage`** — they were in
+`execution` and `reporting` until 2026-08-07. `ReportBlob` **is deleted**; `ReportStore.open` returns
+`StoredBlob`.
+
+- **`ArchitectureRules.FOUNDATION_MODULES` is `{tenancy, identity, project, storage}`.** A
+  cross-module edge may point at any of the four. `execution` and `reporting` declare
+  `{"tenancy", "project", "identity", "storage"}`.
+- **`storage` declares `{"tenancy"}` and there is an ArchUnit rule enforcing it from the code** —
+  `ArchitectureRulesTest.storageDependsOnTenancyAlone`. Do not widen that declaration: it is legal
+  under every other rule in the file (identity and project are foundation modules), and the rule is
+  the only observer. The three properties that make a non-domain foundation module defensible are in
+  the constant's javadoc; **a fifth foundation module is a decision, not an import.**
+- **`Attachment`'s factories and getters are `public` now**, and the factories are the only place an
+  `owner_type` string is ever spelled. #49 adds `forCase` / `forDocPage` / `forArtifact` **there**,
+  not at call sites.
+- **The two ports stay two types deliberately.** One `BlobStore` with two qualified beans was
+  considered and refused: the wrong qualifier writes evidence under the reports root with nothing
+  failing, where the wrong type does not compile. The shared **body** is `FilesystemBlobStore`,
+  constructed (never injected) by each adapter with its own root and a `kind` label that must survive
+  — it is what tells an operator which root failed.
+- **The row/bytes ordering belongs to the caller, not to the port.** `execution.EvidenceService`
+  writes rows first; `reporting.ReportJobRunner` writes bytes first; both arguments are in their own
+  headers, and neither port has a method that would decide it for both.
+- Plan §3's `shared — storage, audit, attachments, search` is **struck through**: `shared` is now
+  `audit, search`. A foundation module may not be a grab bag.
+- **Found by the move:** `FilesystemReportStore`'s traversal guard had never been asserted —
+  `FilesystemEvidenceStoreTest` (now `FilesystemBlobStoreTest`) was the only test either adapter had.
+  Two files in two packages are never read side by side.
 
 **§124's three changes, all of them removals or first-consumers rather than new machinery:**
 
@@ -913,9 +949,10 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   **BYTES FIRST, ROW SECOND — the inverse of `EvidenceService`/§67, argued in `ReportJobRunner`'s
   header**: the job row already names the work so an orphan blob *is* findable, while a `COMPLETED`
   job whose download 404s is a client already told the report is ready.
-  **`ReportStore` is `EvidenceStore` copied, with the debt named at BOTH ends** (decision C / §58 E1)
+  ~~**`ReportStore` is `EvidenceStore` copied, with the debt named at BOTH ends** (decision C / §58 E1)
   — `reporting` may not import `execution`, and a `shared` module for two interfaces and a record was
-  refused (decision E, §76's argument). Its root is a separate property: reports are the first
+  refused (decision E, §76's argument).~~ → **§125: both ports moved to `storage`, the body is one
+  `FilesystemBlobStore`, `ReportBlob` is gone. The ports stayed two types on purpose.** Its root is a separate property: reports are the first
   storage in the product that is **not backup-critical**, because every one is regenerable from
   `execution_fact`.
   **Every job writes TWO artifacts** (decision F) — what was asked for, and the JSON model the
@@ -1107,8 +1144,8 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   private copies in `CaseCreateService` and `CaseUpdateService`. A fourth writer uses it, never a
   fourth copy. `#confirmed`
 - **Evidence bytes live outside Postgres — the first product state that does.** `EvidenceStore`
-  (port, `execution`) + `FilesystemEvidenceStore` (adapter, `tcms.storage.evidence.root`), per open
-  question #28. **`EvidenceService` writes ROWS FIRST, BYTES SECOND** in both directions, because a
+  (port, ~~`execution`~~ → **`storage` since §125**) + `FilesystemEvidenceStore` (adapter,
+  `tcms.storage.evidence.root`, delegating to `FilesystemBlobStore`), per open question #28. **`EvidenceService` writes ROWS FIRST, BYTES SECOND** in both directions, because a
   filesystem does not roll back with the transaction: the surviving inconsistency must be a row
   whose blob is missing (a 404 an operator can find by joining), never a blob no row names
   (unreachable, uncollectable). **No test asserts the ordering** — it is held by a comment, and the
@@ -1565,9 +1602,12 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   contract** — nothing in §86 is reached through an endpoint. Seven facts that pass verified against
   the code and that a reader should not re-derive (1, 2 and 6 have moved since; struck inline):
   1. ~~**There is no `com.tcms.reporting` package.**~~ → **created in §86** (see the seam above);
-     ten modules now exist and `ModuleStructureTest` hard-codes them. What is now true instead:
-     **`shared` is the last of plan §3's modules that does not exist**, and decision E declines to
-     create it for two storage ports and an enum.
+     ~~ten~~ **eleven** modules now exist and `ModuleStructureTest` hard-codes them. What is now
+     true instead: **`shared` is the last of plan §3's modules that does not exist**, and decision E
+     declined to create it for two storage ports and an enum — ~~which is still the answer~~ →
+     **§125 built `storage` instead** and struck §3's `shared — storage, audit, attachments, search`
+     down to `audit, search`. The two ports have a module; `shared` still does not, and now needs a
+     reason of its own rather than inheriting theirs.
   2. **`suite_run_summary`, `plan_snapshot`, `report_definition` and `report_artifact` are in `V1`,
      RLS-forced, and have ZERO code** — no entity, no query, no writer. ~~`execution_fact` too~~ →
      **it got its first writer in §86**; ~~the other four are untouched~~ → **`report_artifact` got
@@ -1700,6 +1740,17 @@ exist**, and the slice plan's decision E declines to create it for two storage p
 
 ## Session log
 
+- 2026-08-07 · EXTEND · **the `storage` module** (§125, M3 slice 9, decision round 3 step 5). Two
+  phases. `Attachment` + `AttachmentRepository` + both blob ports + both filesystem adapters move to
+  `com.tcms.storage`; `FOUNDATION_MODULES` gains a fourth entry and a new ArchUnit rule
+  (`storageDependsOnTenancyAlone`) guards the property that makes it legal; phase 2 deletes
+  `ReportBlob` and collapses the duplicated adapter body into `FilesystemBlobStore`.
+  **The find worth carrying forward:** a javadoc that names the *exact condition* for a future move
+  (`Attachment`'s "a second caller to design against") and a factory pair that keeps a vocabulary out
+  of call sites made this a package line and two modifiers — the opposite outcome from §121 phase 3's
+  seam, which guessed at a consumer and had to be deleted. **Commit to a shape, leave the caller
+  open.** Second find: two identical files in two packages are never read side by side, so the report
+  adapter's traversal guard went untested from §87 to §125.
 - 2026-08-07 · EXTEND · **grant-instance-admin** (§122, M3 slice 7). The operator tier's first and
   only writer. `GrantInstanceAdminService` / `…Result` / `…Command` in `provisioning`, plus the verb
   in `OperatorCommands`; `GrantInstanceAdminServiceTest` (7, `gia-` namespace). No migration, no

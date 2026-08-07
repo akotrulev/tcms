@@ -1,8 +1,8 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-07 · **Branch:** `master` · **Latest slice:** [§124 — the decided-and-unapplied,
-and the two keys nothing asked for](handoff/124-the-decided-and-the-unwired.md) (**three phases
-shipped** — decision round 3's step 4)
+**Date:** 2026-08-07 · **Branch:** `master` · **Latest slice:** [§125 — `storage` becomes a module,
+and the foundation becomes four](handoff/125-storage-becomes-a-module.md) (**two phases shipped** —
+decision round 3's step 5)
 
 This file is an **index**. Every section is its own file under [`docs/handoff/`](handoff/), numbered
 by its § number, and the slice log below is where the narrative lives — one row per slice, each row
@@ -20,8 +20,11 @@ R1–R8 plus F1–F2 have all shipped. What that plan deliberately does not cove
 and **§115 took one item off that list**: the coverage matrix, which was blocked only on `doc_link`
 having a writer — a blocker §93 had already removed. The rest of §8 stands, and every remaining entry
 is blocked on infrastructure or on a deferred decision rather than on a writer (PDF and Mermaid's
-SVG pre-render both need a headless renderer; evidence-bundle export needs the `shared` module;
-scheduled reports need a notification channel). The organization-model restatement (§97, §98, §99) is complete with nothing
+SVG pre-render both need a headless renderer; ~~evidence-bundle export needs the `shared`
+module~~ → **half-unblocked by §125**: `EvidenceStore` and `attachment` are `storage`'s now and
+`storage` is a foundation module, so the answer was never `shared`; what remains is that `evidence`
+is still an `execution` table, reachable from `reporting` only through the seam; scheduled reports
+need a notification channel). The organization-model restatement (§97, §98, §99) is complete with nothing
 outstanding. **The next slice is re-derived from the code, not from this plan's tail** (§28, §29,
 §46) — and that re-derivation landed **M3** at §116: three `V1` tables had never had a writer
 (`api_token`, `ingestion_job`, `automation_key_mapping`), and §116 gave the first of them one,
@@ -70,14 +73,32 @@ followed the convention it broke (§100's rule, third sighting). The red run was
 behaviour — 500ing every case detail on the path where *nobody* was quarantined, and reddening three
 tests about conditions, automation and steps.
 
-**Gates, as of §124 phase 3** — both run locally, and only locally:
+**§125 is decision round 3's step 5 and the round's first purely architectural slice** — no
+migration, no contract change, no frontend change, nothing a user can see. `Attachment`, both blob
+ports and both filesystem adapters left `execution` and `reporting` for a new `com.tcms.storage`,
+and the cost the plan's own row named came due: **the foundation is four modules now**, because
+`execution` and `reporting` both need bytes back *synchronously inside a request* and a download
+cannot be an event. `storage` is the first foundation module that is not a domain concept, so
+`ArchitectureRules` records the three properties that make it defensible and **a new ArchUnit rule
+checks the load-bearing one from the code** — Modulith enforces a declaration and has nothing to say
+about that declaration being *widened*, which is one legal word. §3's own list had a home for this
+(`shared — storage, audit, attachments, search`) and that is the option that was **refused**: a
+module every other module may depend on must not be a grab bag. Phase 2 collapsed §87's documented
+copy now that its stated reason had expired — `ReportBlob` deleted, one `FilesystemBlobStore` body,
+**two ports kept as two types on purpose** (one interface with two beans puts "which store is this"
+in a qualifier string, and the wrong one writes evidence under the reports root without failing).
+**The finding is that `FilesystemReportStore`'s traversal guard had never been asserted** — the
+evidence copy's test was the only test either adapter had, and the two files were in different
+packages so nothing put them side by side.
+
+**Gates, as of §125 phase 2** — both run locally, and only locally:
 
 | Gate | State |
 |---|---|
-| `cd backend && ./gradlew build` | **BUILD SUCCESSFUL — 2024 tests across 427 result classes, 0 failures** (§124 phase 3; §122's baseline was 2014/426) |
+| `cd backend && ./gradlew build` | **BUILD SUCCESSFUL — 2028 tests across 428 result classes, 0 failures** (§125 phase 2; §124's baseline was 2024/427) |
 | `cd frontend && npm run build` | clean |
 | `npm run lint` | 0 warnings |
-| `npm run test:run` | **1045/1045 across 79 files** (measured, solo run). §124 added no frontend test. **One §124 run showed `1 failed | 1044 passed` and was not captured before the green re-run overwrote it** — started concurrently with `./gradlew build`, so contention is likely, but it is recorded as an **unidentified flake** rather than explained away. **Sixth entry about this figure; read it off a solo run every time.** |
+| `npm run test:run` | **1045/1045 across 79 files** (measured, solo run). §124 added no frontend test; **§125 touched no frontend file at all**, so this figure is unchanged and unre-measured. **One §124 run showed `1 failed | 1044 passed` and was not captured before the green re-run overwrote it** — started concurrently with `./gradlew build`, so contention is likely, but it is recorded as an **unidentified flake** rather than explained away. **Sixth entry about this figure; read it off a solo run every time.** |
 
 **CI runs no backend tests** — `.github/workflows/ci.yml` has run `./gradlew build -x test` since
 §59, so `-Werror` and the Modulith wiring are checked and nothing else is. `./gradlew build` on your
@@ -90,7 +111,8 @@ structurally cannot observe.
 > (`deploy/shanks/install-runner.sh`), so the paragraph above still holds in full. Do not read the
 > file's existence as coverage.
 
-**Schema.** Flyway head is **`V38__case_flake.sql`** (§121); **`V39` is the next free number**.
+**Schema.** Flyway head is **`V38__case_flake.sql`** (§121); **`V39` is the next free number** —
+§124 and §125 both carried no migration, and #50 (step 6) is the next thing that will take it.
 `V38` adds a **new company-owned table**, unlike `V37`'s column, so the count moves to
 **62 tables under `FORCE ROW LEVEL SECURITY`** — `SchemaConventionTest` pins it, which is what makes
 a new policed table a decision rather than a side effect — `V36`'s `api_token_lookup` is the **twelfth**
@@ -106,16 +128,19 @@ now sits in front of `fetch` and faults the real backend.
 
 > **The order is fixed and it lives in the plan, not here** — `docs/plans/2026-07-30-tcms-high-level-plan.md`
 > §8, **decision round 3 (2026-08-07, sixteen questions, #45–#60)**. Nine steps: **#46 register the
-> shanks runner → #56 rotate the key → ~~#60 write §110~~ → ~~#47/#53~~ → #51 extract `storage` →
+> shanks runner → #56 rotate the key → ~~#60 write §110~~ → ~~#47/#53~~ → ~~#51 extract `storage`~~ →
 > #49/#50 attachment owners → #48 doc blocks → #57/#59 → #52 the outbox.**
 >
-> **Steps 3 and 4 are DONE** ([§110](handoff/110-the-live-pass-runs.md) and
-> [§124](handoff/124-the-decided-and-the-unwired.md)). **Steps 1 and 2 are next and both need a
+> **Steps 3, 4 and 5 are DONE** ([§110](handoff/110-the-live-pass-runs.md),
+> [§124](handoff/124-the-decided-and-the-unwired.md),
+> [§125](handoff/125-storage-becomes-a-module.md)). **Steps 1 and 2 are next and both need a
 > terminal a person is sitting at** — `sudo` on shanks cannot be answered from a tool call, and the
-> rotation touches a live instance's session keys. **Step 5 (#51, extract `storage`) is the next
-> thing an agent can do alone**, and it must not be folded into #49. Items 1–2 below are steps 2 and
-> 1; they are kept here because they were open before the round. **Steps 1 and 2 have a
-> written procedure — [`docs/plans/2026-08-07-linux-gate-and-key-rotation.md`](plans/2026-08-07-linux-gate-and-key-rotation.md).**
+> rotation touches a live instance's session keys. **Step 6 (#49 + #50, attachment owners) is the
+> next thing an agent can do alone**, and §125 unblocked it: `CASE`, `DOC_PAGE` and `ARTIFACT` get
+> writers, `STEP` leaves the `CHECK`, and that migration is **`V39`** — the round's first six steps'
+> only one. Items 1–2 below are steps 2 and 1; they are kept here because they were open before the
+> round. **Steps 1 and 2 have a written procedure —
+> [`docs/plans/2026-08-07-linux-gate-and-key-rotation.md`](plans/2026-08-07-linux-gate-and-key-rotation.md).**
 >
 > **The chosen block is "close the small gaps", NOT the verification drain.** Every item in the round
 > adds rows to both queues. §65 stands, and so does what it costs: everything below §65 remains
@@ -339,3 +364,4 @@ it would have been on the first day — which is the finding, not an apology.
 | [§122](handoff/122-the-operator-tier-gets-a-writer.md) | The operator tier gets a writer — Instance Admin was designed, enforced, documented and **unreachable**: `V3` seeds the role, `PermissionEvaluator` resolves the SYSTEM term as its own independent term, `instance_role_assignment` has existed since `V1`, and **no path in `src/main` had ever written a row into it** — only three test classes had ever called `InstanceRoleAssignment.forUser`, so a fresh instance shipped an operator role nobody could hold and a hand-written `INSERT` was the only route to it. `RoleGrantService` had promised this command in a header comment since it shipped. **`ALREADY_HELD` exits 0 where `issue-invitation`'s `ALREADY_ACTIVE` does not** — a grant is a *state* and an invitation is an *artifact*, so re-running is the supported way to make sure, as with `provision-company`. **`INVITED` is granted and `DEACTIVATED` is refused**, the two states that look alike and must not be: `provision-company` leaves its first admin `INVITED`, so refusing that one makes the command unable to create the very first operator, while a deactivated account's grant confers nothing today and everything the moment somebody reactivates them. No `CompanyContext` is opened — an instance-wide power scoped to one company is a tier the model does not have. The load-bearing line is the **verb registration**, read before the context exists to pick `WebApplicationType.NONE`; omit it and the command succeeds, prints, and then hangs for ever **(built and unverified — 10 mutation rows, NONE run; no browser rows and no screen, deliberately. The grant itself is not done — it needs a redeployed image)** |
 | [§123](handoff/123-decision-round-3.md) | Decision round 3 — sixteen questions (#45–#60), thirteen decided and three deferred **with their blockers named**, derived from the code rather than from the plan. §78 closed with *"nothing in §8 is open"* and the sentence explaining how it would decay: a decision taken in a slice and never written back. **That is precisely what happened** — none of the sixteen is a new uncertainty; every one was already visible as a writerless table, an unconsumed enum value, an unenforced permission key, or a decision applied by half. **The list did not stay closed, it stopped being read**, which is a different failure with a different fix (re-derive on a schedule — the six computed checks are what make round 4 cheap). Two entries are the failure mode in miniature: #17's `BEST` removal was resolved 2026-08-01 and **never applied**, and the draft buffer was decided beside the version snapshot that shipped in §29 and **never built**, so the editor has no autosave at all. The order is **fixed and sequenced on what each step lets the next one observe** — the shanks runner first because seven of the nine steps write backend code and would otherwise land on the gate §58 proved blind; the outbox last because it is the widest blast radius and by then a reddening is attributable. **#51 must not be folded into #49**, because `Attachment`'s javadoc names both the move and its precondition and doing them in one diff makes a module extraction indistinguishable from a feature. Also folded in: the instance operator console into M6, which reverses §6s's "no company management UI" and roughly doubles the milestone — the exclusion was load-bearing on "a week of surface, not a phase", and the cost is struck through rather than dropped **(documents only. The honesty note is the entry that will be forgotten: closing small gaps does not retire the ~790 unrun verification rows, it GROWS them)** |
 | [§124](handoff/124-the-decided-and-the-unwired.md) | The decided-and-unapplied, and the two keys nothing asked for — decision round 3's step 4, in three phases with **no new idea in any of them**: #17's `BEST` removal (resolved 2026-08-01, applied six days later), and #53's two permission keys that had been in `V3`'s catalogue since M0 with no consumer. **`BEST` went because a label is not neutral** — it was offered on the argument that *"it passed on the re-run" is better said in the open under a label than smuggled into a default*, which is right about people and wrong about products: a dropdown value carries the product's endorsement, and a policy named *best* reads as the generous reading rather than the dishonest one. It cost nothing because `WORST` was already there **and** because the product has since grown the honest way to say it (§121's flake score, §112's variability). A stale `BEST` in a saved URL is a **400 naming the four that remain**, never a silent fallback. The removal is pinned from outside — the test that asserted `BEST` emptied the blocker list now asserts **no remaining policy can** — and the duplicate-enum check that existed for additions turned out to matter more for a deletion, since a copy that still *accepts* a retired policy answers a number the plan page cannot produce. **`run:execute` is the only key in the catalogue that separates a person from a credential**: Automation Service holds `result:submit` (ingestion is its purpose) and is the one role `V3` withholds this from, so without it a leaked CI token could hand-record verdicts through the endpoint a tester uses, with an `If-Match`, with evidence, indistinguishable in the audit trail. **THE ORDER IS THE DESIGN and the first draft had it wrong**: asked in front of the verdict gate, a Viewer — holding neither key — is told to use an ingestion endpoint they may not use either, and advice that is confidently wrong is worse than a flat refusal; asked inside it, "you have another door" is true by construction. **`artifact:delete` had no endpoint at all**, and the gate is the whole point — a Test Engineer may register a plan's documents and reusing the create's `artifact:edit` would let them delete a lead's sign-off record, in the one module where the artefact being destroyed *is* the audit trail. Two 409s that **cannot fire in any deployment today**: `write_once` is honoured ahead of its writer for `Company.suspend()`'s reason (enforcement arriving after the control it protects is a guarantee that is believed and does nothing), and a fixture flipping the column by SQL is what makes an early guard assertable rather than aspirational — the opposite call from §121 phase 3's deleted seam, because a refusal guesses at nothing while a seam guesses at a consumer. And **`Artifact`'s javadoc was wrong** — *"nothing targets an artifact … removing a row breaks no inbound edge"* — about a self-referencing foreign key, surviving because it described the schema from memory and, decisively, because nothing could delete a row and therefore nothing could disprove it (§100's rule, fourth sighting) **(built and unverified — 16 mutation rows, 3 RUN as a stated deviation, 4 browser rows; `artifact:delete` ships an ENDPOINT WITH NO SCREEN, recorded as unbuilt: a key with no consumer became an endpoint with no consumer)** |
+| [§125](handoff/125-storage-becomes-a-module.md) | `storage` becomes a module, and the foundation becomes four — decision round 3's step 5 (#51), the round's first purely architectural slice: no migration, no contract change, nothing a user can see. `Attachment`, `AttachmentRepository`, both blob ports, `StoredBlob` and both filesystem adapters leave `execution` and `reporting`. **The condition was written down long before it was met and it held**: `Attachment`'s javadoc refused the move until there was "a second caller to design against" — which #49 creates twice over — and named what would make it cheap when it came, `forExecution`/`forStepResult` meaning **no call site ever spelled an owner type**. It was a package line and two modifiers. That is the **opposite** outcome from §121 phase 3's deleted seam, and the difference is the lesson: that seam guessed at a *caller*, this javadoc committed to a *shape* and left the caller open. **THE COST IS A FOURTH FOUNDATION MODULE** — `execution` and `reporting` both need bytes back *synchronously inside a request* and a download cannot be an event, so `FOUNDATION_MODULES` names four and `ModuleStructureTest` names eleven; §76's *"a fourth foundation module is a decision, not an import"* is still the rule and this is the decision. `storage` is the first entry that is not a domain concept, so the constant now carries the three properties that make it defensible (declares `tenancy` **alone** · holds no domain concept · answers a question the database cannot) and **a new ArchUnit rule checks the first from the code** — Modulith enforces a declaration and cannot object to that declaration being *widened*, and adding `identity` to it is one legal word past every other test in the file. **§3's own list had a home for this** — `shared — storage, audit, attachments, search` — and that is the option refused: a module everything may depend on **must not be a grab bag**, or audit and search become reachable from everywhere too. Phase 2 collapsed §87's documented copy now that its stated reason (`reporting` may not import `execution`) had expired: **`ReportBlob` deleted** — bytes and a length twice over, with no wrong one to be handed — one `FilesystemBlobStore` body so #55's deferred S3 adapter is **one** piece of work again, and **the two ports kept as two types on purpose**, because one `BlobStore` with two beans puts "which store is this" in a qualifier string and the wrong one writes evidence under the reports root with nothing failing. The `kind` label deliberately did not collapse: the two roots differ in retention and loss consequences, so a failure has to name which one is gone. **THE FINDING: `FilesystemReportStore`'s traversal guard had never been asserted** — the evidence adapter's test was the only test either had, and it is not a review failure but a packaging one: the two files were in different packages, so nothing in the repo ever put them side by side, and the move is what surfaced it. **NO RED RUN**, stated because a move of this shape either compiles or does not **(built and unverified — 13 mutation rows `ST-1`…`ST-13`, none run; no browser rows, deliberately: a package rename has nothing a browser pass can see)** |

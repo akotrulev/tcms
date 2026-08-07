@@ -230,10 +230,18 @@ instance-level table, because a nullable `company_id` under RLS is permanently u
 ### Backend
 
 Spring Boot 3.5.6 + Java 21 + Gradle, rooted in `backend/`. Spring Modulith **monolith** whose
-modules are Java *packages*, not Gradle subprojects: `tenancy · identity · project · repository ·
-execution · documentation · reporting · work · shared`. Cross-module FKs are allowed only toward
-`tenancy`/`identity`/`project`; everything else crosses via domain events, enforced by ArchUnit.
-`tenancy` is depended on by everything and depends on nothing.
+modules are Java *packages*, not Gradle subprojects: `tenancy · identity · project · storage ·
+repository · execution · documentation · reporting · work · shared`. Cross-module FKs are allowed
+only toward `tenancy`/`identity`/`project`/`storage`; everything else crosses via domain events,
+enforced by ArchUnit. `tenancy` is depended on by everything and depends on nothing.
+
+**`storage` is a fourth foundation module and the newest (§125, decision #51)** — the `attachment`
+row plus the two blob ports and their filesystem adapters. It exists because `execution` and
+`reporting` both need bytes back *synchronously inside a request* and a download cannot be an event.
+It is defensible as a foundation module only because it declares `tenancy` **alone**, holds no
+domain concept, and answers a question the database cannot; `ArchitectureRulesTest` checks the first
+of those from the code, because Modulith enforces a declaration and has nothing to say about that
+declaration being widened. **A fifth foundation module is a decision, not an import.**
 
 Flyway owns all DDL (`hibernate.ddl-auto: validate`, `baseline-on-migrate: false` so V1's RLS block
 always executes). `V1__initial_schema.sql` is 64 tables / 56 forced RLS policies and its comments
