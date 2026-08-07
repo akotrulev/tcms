@@ -17,8 +17,11 @@ import org.springframework.modulith.core.ApplicationModules;
  * claim mean something.
  *
  * <p>The module list in the plan (§3) is {@code tenancy · identity · project ·
- * repository · execution · documentation · reporting · work · shared}, of which four
- * exist. Nothing about "modules are Java packages" is enforced by the compiler: every
+ * repository · execution · documentation · reporting · work · shared}, all but the last
+ * of which exist — plus {@code auth}, {@code provisioning} and, since §125,
+ * {@code storage}, which the plan's list never named and which are recorded in the
+ * assertion below rather than back-fitted into it.
+ * Nothing about "modules are Java packages" is enforced by the compiler: every
  * class under {@code com.tcms} can see every other one. Without this test the module
  * boundaries are a naming convention, and a naming convention is what the first
  * deadline removes.
@@ -63,8 +66,9 @@ class ModuleStructureTest {
 
         assertThat(detected)
                 .as("""
-                        The ten modules that exist today — `execution` joined them in backend M2 \
-                        slice 1, `work` in §53, `documentation` in §57 and `reporting` in §86. \
+                        The eleven modules that exist today — `execution` joined them in backend M2 \
+                        slice 1, `work` in §53, `documentation` in §57, `reporting` in §86 and \
+                        `storage` in §125. \
                         Adding a module here is expected as the plan's remaining modules land \
                         (`shared` is the last one, and the slice plan's decision E deliberately \
                         declines to create it for two storage ports and an enum) — but it must be a \
@@ -96,10 +100,20 @@ class ModuleStructureTest {
                         at the table level — `reporting` builds those three tables from \
                         `execution`'s — and in neither direction at the Java level, which is the \
                         only level this test can see; `RollupAgreementTest` is what holds the two \
-                        sides to each other instead.""")
+                        sides to each other instead. \
+                        §125 adds `storage` and, with it, the only entry on this list that is also \
+                        an entry on `ArchitectureRules.FOUNDATION_MODULES` without being a domain \
+                        concept: `Attachment`'s javadoc had named "a second caller to design \
+                        against" as the condition for extracting it, decision #49 created that \
+                        caller twice over, and #51 took the move as its own slice BEFORE them — in \
+                        one diff a module extraction and a feature are indistinguishable. The \
+                        `shared` module the paragraph above still calls "the last one" is \
+                        unaffected: `storage` is not it, and decision E's refusal to create a \
+                        module for two interfaces and a record is what this one was measured \
+                        against rather than an argument it overturns.""")
                 .containsExactly(
                         "auth", "documentation", "execution", "identity", "project", "provisioning",
-                        "reporting", "repository", "tenancy", "work");
+                        "reporting", "repository", "storage", "tenancy", "work");
     }
 
     @Test
@@ -133,13 +147,13 @@ class ModuleStructureTest {
                         Modules whose dependencies are unconstrained. Add \
                         @ApplicationModule(allowedDependencies = {...}) to the package-info — an empty \
                         array means "no module dependencies at all", which is what tenancy declares. \
-                        Per plan §3 the only permitted targets are tenancy, identity and project; \
-                        everything else crosses via a CompanyScopedEvent.""")
+                        Per plan §3 the only permitted targets are tenancy, identity, project and \
+                        (since §125) storage; everything else crosses via a CompanyScopedEvent.""")
                 .isEmpty();
     }
 
     @Test
-    @DisplayName("no module declares a dependency on anything but tenancy, identity or project")
+    @DisplayName("no module declares a dependency outside the foundation — tenancy, identity, project, storage")
     void declarationsNameOnlyTheFoundationModules() {
         // The declarations themselves are checked, not just honoured. verify() confirms
         // a module stays inside what it declared; it has no opinion on whether the
@@ -168,10 +182,12 @@ class ModuleStructureTest {
 
         assertThat(illegal)
                 .as("""
-                        Declared dependencies on a module outside tenancy/identity/project. Cross-module \
-                        FKs and direct calls are permitted only toward those three (plan §3); every other \
-                        edge is a domain event implementing CompanyScopedEvent. Adding a fourth \
-                        foundation module is a decision, not an import.""")
+                        Declared dependencies on a module outside tenancy/identity/project/storage. \
+                        Cross-module FKs and direct calls are permitted only toward those (plan §3); \
+                        every other edge is a domain event implementing CompanyScopedEvent. Adding a \
+                        FIFTH foundation module is a decision, not an import — §125 took the fourth \
+                        one, and ArchitectureRules.FOUNDATION_MODULES states the three properties \
+                        that made storage a defensible entry rather than a precedent.""")
                 .isEmpty();
     }
 

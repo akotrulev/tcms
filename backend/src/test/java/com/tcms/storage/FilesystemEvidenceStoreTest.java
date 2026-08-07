@@ -1,4 +1,4 @@
-package com.tcms.execution;
+package com.tcms.storage;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -18,6 +18,13 @@ import org.junit.jupiter.api.io.TempDir;
  * <p>No Spring context and no database, deliberately: this is a function from a key to a path, and
  * exercising it through the endpoint would prove the endpoint works without ever saying which half
  * refused — which is the half that matters here.
+ *
+ * <p>It moved here from {@code com.tcms.execution} with its subject in §125. <strong>It was the only
+ * test either filesystem adapter had</strong> — {@code FilesystemReportStore} has the identical
+ * traversal guard, written twice, and nothing has ever asserted that the second copy refuses
+ * anything. That is the argument for the second phase of that slice in one sentence, and it is a
+ * finding of the move rather than of a review: the two files were in different packages, so nothing
+ * put them side by side until they were.
  */
 class FilesystemEvidenceStoreTest {
 

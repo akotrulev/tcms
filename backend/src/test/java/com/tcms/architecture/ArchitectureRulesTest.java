@@ -34,13 +34,17 @@ import org.springframework.context.event.EventListener;
  * The architecture rules Spring Modulith cannot express, in ArchUnit.
  *
  * <p>{@code ModuleStructureTest} covers what Modulith owns — declared dependencies and
- * cycles. Three properties fall outside it, and each one is a rule this project already
+ * cycles. Four properties fall outside it, and each one is a rule this project already
  * wrote down in prose and has so far had no mechanism for:
  *
  * <ol>
  *   <li><strong>{@code tenancy} depends on nothing</strong> — stated from the other
  *       side. Modulith checks the declaration; this checks the code, including the edge
  *       Modulith would not see at all: a dependency on the composition root.</li>
+ *   <li><strong>{@code storage} depends on {@code tenancy} alone</strong> — §125's
+ *       fourth foundation module, checked from the code rather than from its declaration,
+ *       because widening that declaration is one legal word and every other rule here
+ *       would still pass.</li>
  *   <li><strong>{@code provisioning} is a leaf.</strong>
  *       {@code allowedDependencies} constrains what a module reaches <em>out</em> to and
  *       has no vocabulary for who reaches <em>in</em>. "Nothing depends on provisioning,
@@ -128,7 +132,7 @@ class ArchitectureRulesTest {
     }
 
     @Test
-    @DisplayName("a cross-module dependency points only at tenancy, identity or project")
+    @DisplayName("a cross-module dependency points only at a foundation module")
     void crossModuleDependenciesPointOnlyAtTheFoundation() {
         // Plan §3's actual rule, and the reason it is here as well as in each
         // package-info: a module added without an @ApplicationModule declaration is
@@ -159,10 +163,50 @@ class ArchitectureRulesTest {
                     }
                 })
                 .because("""
-                        Cross-module FKs and direct calls are allowed only toward tenancy, identity and \
-                        project (plan §3); every other edge crosses as a domain event. Two feature \
-                        modules wired directly become deployable only together, which is the one \
-                        property a modulith exists to keep""");
+                        Cross-module FKs and direct calls are allowed only toward the foundation \
+                        modules — tenancy, identity, project, and storage since §125 (plan §3); every \
+                        other edge crosses as a domain event. Two feature modules wired directly \
+                        become deployable only together, which is the one property a modulith exists \
+                        to keep""");
+
+        rule.check(PRODUCTION);
+    }
+
+    @Test
+    @DisplayName("storage depends on tenancy alone — the property that makes it a legal fourth")
+    void storageDependsOnTenancyAlone() {
+        // §125 added a fourth entry to FOUNDATION_MODULES, which every module may now point
+        // at. That is safe for exactly one reason, and it is a reason about storage rather
+        // than about the modules using it: storage cannot see a person, a permission or a
+        // project, so nothing about WHICH bytes a caller may reach can migrate into it. The
+        // decision about that is a database question answered in execution.EvidenceService
+        // and reporting.ReportReadService, and both of their ports' headers say a store that
+        // could be asked "list this company's files" would be one refactor from being the
+        // second place it is decided.
+        //
+        // Modulith already enforces the declaration in storage/package-info.java. What it
+        // cannot object to is the declaration being WIDENED — adding "identity" there is one
+        // word, it is legal under the foundation rule (identity is itself a foundation
+        // module), and it would pass every other test in this class. This rule is about the
+        // code and fails on the import, which is both the earlier signal and the more useful
+        // message.
+        //
+        // Same shape as the tenancy rule above and deliberately not the same rule: tenancy
+        // may reach for nothing at all, storage may reach for tenancy, because `attachment`
+        // is a company-owned table and carries CompanyFilter like every other one.
+        ArchRule rule = noClasses()
+                .that().resideInAPackage("com.tcms.storage..")
+                .should().dependOnClassesThat(
+                        JavaClass.Predicates.resideInAPackage(ROOT_PACKAGE + "..")
+                                .and(JavaClass.Predicates.resideOutsideOfPackage("com.tcms.storage.."))
+                                .and(JavaClass.Predicates.resideOutsideOfPackage("com.tcms.tenancy..")))
+                .because("""
+                        storage is a foundation module every other module may depend on (plan §3, \
+                        decision round 3 #51), and it earns that by depending on tenancy alone: it \
+                        owns bytes and one metadata row, holds no domain concept, and never resolves \
+                        an owner_id into anything. An edge out of it toward identity or project is \
+                        the start of authorization being decided in two places, and toward a feature \
+                        module it is a cycle through the module everything else depends on""");
 
         rule.check(PRODUCTION);
     }

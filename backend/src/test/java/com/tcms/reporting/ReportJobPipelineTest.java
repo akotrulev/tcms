@@ -8,6 +8,8 @@ import com.tcms.identity.RoleAssignment;
 import com.tcms.identity.RoleAssignmentRepository;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectRepository;
+import com.tcms.storage.ReportBlob;
+import com.tcms.storage.ReportStore;
 import com.tcms.tenancy.Company;
 import com.tcms.tenancy.CompanyContext;
 import com.tcms.tenancy.CompanyRepository;

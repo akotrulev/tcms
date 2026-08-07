@@ -1,4 +1,4 @@
-package com.tcms.reporting;
+package com.tcms.storage;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -18,9 +18,11 @@ import java.io.InputStream;
  * <p>{@link Closeable} so a caller can use it in try-with-resources and the file handle is not left
  * to the garbage collector.
  *
- * <p><strong>{@code execution.StoredBlob} is this record under another name</strong>, for the reason
- * {@link ReportStore}'s header sets out at length: {@code reporting} may not import
- * {@code execution}, so the type is unreachable rather than unnoticed.
+ * <p><strong>{@link StoredBlob} is this record under another name</strong>, and since §125 they are
+ * in the same package with nothing keeping them apart — {@link ReportStore}'s header has the
+ * history. Unlike the two ports, this pair has no argument for staying two: a blob is bytes and a
+ * length, there is no wrong one to be handed, so the second phase of that slice deletes this record
+ * rather than keeping a distinction that only the file names carry.
  */
 public record ReportBlob(InputStream stream, long size) implements Closeable {
 

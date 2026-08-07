@@ -1,4 +1,4 @@
-package com.tcms.reporting;
+package com.tcms.storage;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -10,7 +10,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
- * {@link ReportStore} over a directory on the box — {@code execution.FilesystemEvidenceStore}'s
+ * {@link ReportStore} over a directory on the box — {@link FilesystemEvidenceStore}'s
  * twin, under a root of its own.
  *
  * <h2>A separate root, not a subdirectory of the evidence one</h2>

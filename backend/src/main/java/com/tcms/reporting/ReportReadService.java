@@ -2,6 +2,8 @@ package com.tcms.reporting;
 
 import com.tcms.project.GateResult;
 import com.tcms.project.ProjectService;
+import com.tcms.storage.ReportBlob;
+import com.tcms.storage.ReportStore;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;

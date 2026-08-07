@@ -1,4 +1,4 @@
-package com.tcms.execution;
+package com.tcms.storage;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -23,8 +23,8 @@ import org.springframework.stereotype.Component;
  *
  * <h2>The traversal check is here as well as in the key</h2>
  *
- * <p>Keys are server-generated UUID triples ({@code EvidenceService#storageKey}), so nothing a
- * client sends reaches a path today — the uploaded filename is stored in a <em>column</em> and never
+ * <p>Keys are server-generated UUID triples ({@code execution.EvidenceService#storageKey}), so
+ * nothing a client sends reaches a path today — the filename is stored in a <em>column</em> and never
  * becomes a path segment. The resolved path is re-checked against the root anyway: a guarantee that
  * lives only in how the caller builds its argument is one refactor from being gone, and the failure
  * it prevents — writing outside the root — is not one any test of the endpoint would ever show.

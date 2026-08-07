@@ -1,4 +1,4 @@
-package com.tcms.execution;
+package com.tcms.storage;
 
 import com.tcms.tenancy.CompanyFilter;
 import jakarta.persistence.Column;
@@ -13,23 +13,24 @@ import org.hibernate.annotations.Filter;
  * A stored blob's metadata row — {@code V1}'s polymorphic {@code attachment} table, getting its
  * first writer here after being declared since the beginning.
  *
- * <h2>Why this lives in {@code execution} and not in a module of its own</h2>
+ * <h2>~~Why this lives in {@code execution} and not in a module of its own~~ → moved, §125</h2>
  *
- * <p>{@code owner_type} spans six values ({@code CASE · STEP · EXECUTION · STEP_RESULT · DOC_PAGE ·
- * ARTIFACT}) and only two of them are this module's. The table is built to serve doc pages and
- * artifacts too, and {@code V1}'s own comment says why it is one table rather than six: <em>six
- * near-identical attachment tables is the worse trade</em>.
- *
- * <p>A {@code storage} module owning this would be the tidier home. It would also need plan §3
- * amended and two architecture tests changed — {@code ModuleStructureTest} hard-codes both the
- * module list and the rule that cross-module FKs point only at {@code tenancy}/{@code identity}/
- * {@code project} — to serve exactly <strong>one</strong> caller. So it lives here until there is a
+ * <p>This file used to argue for staying in {@code execution}: {@code owner_type} spans six values
+ * ({@code CASE · STEP · EXECUTION · STEP_RESULT · DOC_PAGE · ARTIFACT}) and only two of them were
+ * that module's, but a {@code storage} module <em>"would need plan §3 amended and two architecture
+ * tests changed … to serve exactly <strong>one</strong> caller. So it lives here until there is a
  * second caller to design against, which is the point at which the right shape is knowable rather
- * than guessed.
+ * than guessed."</em>
  *
- * <p>What keeps that honest is {@link #forExecution} and {@link #forStepResult}: <strong>no call
- * site ever spells an owner type</strong>, so the day this moves, the writers that must move with it
- * are exactly the ones this file names.
+ * <p>Decision round 3's #49 creates that second caller twice over — {@code CASE}, {@code DOC_PAGE}
+ * and {@code ARTIFACT} get writers — and #51 took the move as its own slice <strong>before</strong>
+ * them, deliberately: done in the same diff, a module extraction and a feature are
+ * indistinguishable, and the extraction is the half a reviewer cannot check by reading the feature.
+ *
+ * <p>The prediction in the old text held. {@link #forExecution} and {@link #forStepResult} meant
+ * <strong>no call site ever spelled an owner type</strong>, so the move was mechanical: a package
+ * line, and the two factories going {@code public}. The owner vocabulary is now this module's —
+ * a new owner is a factory here, not a string at a call site.
  *
  * <h2>Immutable after insert</h2>
  *
@@ -96,7 +97,7 @@ public class Attachment {
     protected Attachment() {
     }
 
-    static Attachment forExecution(
+    public static Attachment forExecution(
             UUID companyId,
             UUID executionId,
             String storageKey,
@@ -111,7 +112,7 @@ public class Attachment {
                 sizeBytes, checksum, userId, now);
     }
 
-    static Attachment forStepResult(
+    public static Attachment forStepResult(
             UUID companyId,
             UUID stepResultId,
             String storageKey,
@@ -153,23 +154,23 @@ public class Attachment {
         return attachment;
     }
 
-    UUID getId() {
+    public UUID getId() {
         return id;
     }
 
-    String getStorageKey() {
+    public String getStorageKey() {
         return storageKey;
     }
 
-    String getFilename() {
+    public String getFilename() {
         return filename;
     }
 
-    String getContentType() {
+    public String getContentType() {
         return contentType;
     }
 
-    long getSizeBytes() {
+    public long getSizeBytes() {
         return sizeBytes;
     }
 }

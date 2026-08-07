@@ -8,12 +8,24 @@
  *
  * <h2>Allowed dependencies</h2>
  *
- * <p>{@code tenancy}, {@code project} and {@code identity}, the same three {@code repository}
- * declares, and for the same three reasons: the isolation boundary, the gate
+ * <p>{@code tenancy}, {@code project}, {@code identity} — and, since §125, {@code storage}.
+ *
+ * <p>The first three are the ones {@code repository} declares, for the same three reasons: the
+ * isolation boundary, the gate
  * ({@link com.tcms.project.ProjectService#readVisible} / {@code #writeGranted}), and display names
  * for the people on an execution. As in {@code repository}, {@code identity} is asked <em>what is
  * this person called</em> and never <em>may they</em> — a permission check appearing anywhere in
  * this package is a defect regardless of what the dependency list permits.
+ *
+ * <p><strong>{@code storage} is the fourth foundation module</strong> (decision round 3 #51), and
+ * this module is one of the two callers that made it one: {@code EvidenceService} needs an
+ * {@code Attachment} row and the bytes behind it, synchronously, inside a request — a download
+ * cannot be an event, which is the one shape §3's event rule has no answer for. What
+ * {@code storage} may <em>not</em> do is the other half of why the edge is safe: it depends on
+ * {@code tenancy} alone and knows nothing about a person, a project or a run, so the gates on
+ * evidence stay here and cannot migrate there. The row/bytes <strong>ordering</strong> is this
+ * module's too — {@code EvidenceService}'s header argues it, and {@code reporting} chooses the
+ * opposite one.
  *
  * <h2>The edge this module does NOT have, and the one the schema gives it anyway</h2>
  *
@@ -76,5 +88,5 @@
  * asserted in this comment.
  */
 @org.springframework.modulith.ApplicationModule(
-        allowedDependencies = {"tenancy", "project", "identity"})
+        allowedDependencies = {"tenancy", "project", "identity", "storage"})
 package com.tcms.execution;

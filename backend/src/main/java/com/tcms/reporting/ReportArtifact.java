@@ -64,7 +64,8 @@ public class ReportArtifact {
     private ReportFormat format;
 
     /**
-     * The opaque key the bytes live under in {@link ReportStore}. Server-generated; nothing a client
+     * The opaque key the bytes live under in {@code storage.ReportStore}. Server-generated; nothing
+     * a client
      * sends becomes part of it.
      */
     @Column(name = "storage_key", nullable = false, updatable = false)

@@ -13,7 +13,8 @@ package com.tcms.reporting;
  * <h2>Bytes, not a string</h2>
  *
  * <p>The return type is the artifact itself, encoding included, because that is what
- * {@link ReportStore#put} takes and what the download endpoint serves. A renderer that returned a
+ * {@code storage.ReportStore#put} takes and what the download endpoint serves. A renderer that
+ * returned a
  * {@code String} would leave the charset decision to whoever wrote the bytes, and the two formats
  * here would then be UTF-8 by accident rather than by declaration — a report with a client's name in
  * it is the document where that shows up.

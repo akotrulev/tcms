@@ -1,5 +1,7 @@
 package com.tcms.execution;
 
+import com.tcms.storage.Attachment;
+import com.tcms.storage.AttachmentRepository;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;

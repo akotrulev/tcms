@@ -1,5 +1,6 @@
 package com.tcms.reporting;
 
+import com.tcms.storage.ReportStore;
 import com.tcms.tenancy.CompanyContext;
 import java.time.Clock;
 import java.time.Instant;
@@ -334,7 +335,8 @@ class ReportJobRunner {
      * Where a job's bytes live: {@code company/job/random.ext}.
      *
      * <p>Nothing a client sent appears in it — {@code EvidenceService}'s traversal defence, and the
-     * reason {@link FilesystemReportStore} re-checks the resolved path anyway. The company leads so
+     * reason {@code storage.FilesystemReportStore} re-checks the resolved path anyway. The company
+     * leads so
      * a per-company sweep is a subtree rather than a scan, and the job id is what makes an orphan
      * blob attributable, which is the whole basis of the bytes-first ordering above.
      */

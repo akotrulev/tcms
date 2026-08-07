@@ -1,4 +1,4 @@
-package com.tcms.execution;
+package com.tcms.storage;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -13,8 +13,8 @@ import java.io.InputStream;
  * body, and asking the stream for it would consume the stream.
  *
  * <p>{@link Closeable} so a caller can use it in try-with-resources and the file handle is not left
- * to the garbage collector — the one resource in this module that is not a database connection and
- * therefore not closed by anything else.
+ * to the garbage collector — this module's whole reason for existing is the one kind of resource
+ * that is not a database connection, and therefore is not closed by anything else.
  */
 public record StoredBlob(InputStream stream, long size) implements Closeable {
 

@@ -35,7 +35,17 @@
  * <h2>Allowed dependencies</h2>
  *
  * <p><strong>{@code tenancy · project · identity}</strong> — the same three {@code repository},
- * {@code execution} and {@code work} declare. It was {@code tenancy} alone from §86 until §87, and
+ * {@code execution} and {@code work} declare — <strong>plus {@code storage} since §125</strong>,
+ * which is decision round 3 #51 and is the fourth entry the rule below demands a reason for.
+ * {@code ReportJobRunner} writes a rendered report's bytes and {@code ReportReadService} serves
+ * them; the port that owns them moved out of this package into a module of its own, together with
+ * {@code execution}'s identical one. The edge is inward-only and stays that way because
+ * {@code storage} depends on {@code tenancy} alone — it cannot see a job, a person or a project,
+ * so nothing about <em>which</em> report a caller may download can drift into it. The bytes-first
+ * ordering this module deliberately inverts is argued in {@code ReportJobRunner} and stated in the
+ * port's header; the port itself has no opinion, which is what lets two callers disagree.
+ *
+ * <p>It was {@code tenancy} alone from §86 until §87, and
  * the history is the point rather than a footnote: nothing in R1/R2 was reached through an endpoint,
  * so there was no project gate to ask for and no person to name, and declaring the three this module
  * <em>would eventually want</em> would have made the declaration a forecast rather than a fact — a
@@ -91,5 +101,6 @@
  * <strong>The cost is that nothing checks the two sides still agree about a column</strong>, and it
  * is closed by {@code RollupAgreementTest} rather than by this paragraph.
  */
-@org.springframework.modulith.ApplicationModule(allowedDependencies = {"tenancy", "project", "identity"})
+@org.springframework.modulith.ApplicationModule(
+        allowedDependencies = {"tenancy", "project", "identity", "storage"})
 package com.tcms.reporting;

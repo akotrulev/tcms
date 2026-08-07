@@ -13,7 +13,7 @@ final class ArchitectureRules {
     static final String ROOT_PACKAGE = "com.tcms";
 
     /**
-     * The three modules a cross-module dependency may point at (plan §3). Everything else
+     * The modules a cross-module dependency may point at (plan §3). Everything else
      * crosses via a {@code CompanyScopedEvent}.
      *
      * <p>The list is short for a reason: {@code tenancy} is the isolation boundary,
@@ -21,8 +21,25 @@ final class ArchitectureRules {
      * permission is expressed against. A module that needs anything else needs an event,
      * because a direct edge would let two feature modules become jointly deployable only
      * — which is the property a modulith exists to keep.
+     *
+     * <p><strong>{@code storage} is a fourth, added in §125 (decision round 3 #51), and it
+     * is the first entry that is not a domain concept.</strong> It owns the bytes that are
+     * not in Postgres — evidence and rendered reports — and both {@code execution} and
+     * {@code reporting} need them back <em>synchronously, inside a request</em>. A download
+     * cannot be an event, so keeping the list at three was not available once the ports
+     * moved out of the two feature modules that happened to hold them.
+     *
+     * <p>Three properties make it a defensible fourth rather than a precedent for a fifth,
+     * and a proposed fifth should be held to them: it declares {@code tenancy} <em>alone</em>,
+     * so it can never become a second place authorization is decided; it holds no domain
+     * concept, so an {@code owner_id} is a {@code UUID} it never resolves; and it answers a
+     * question the database cannot, which is the test the other three pass and a feature
+     * module proposing itself will not. §76 refused a {@code review} module on exactly this
+     * bar — "a fourth foundation module is a decision, not an import" — and the sentence is
+     * still the rule; this is the decision.
      */
-    static final Set<String> FOUNDATION_MODULES = Set.of("tenancy", "identity", "project");
+    static final Set<String> FOUNDATION_MODULES =
+            Set.of("tenancy", "identity", "project", "storage");
 
     private ArchitectureRules() {
     }
