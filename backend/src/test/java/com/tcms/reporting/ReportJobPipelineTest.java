@@ -8,8 +8,8 @@ import com.tcms.identity.RoleAssignment;
 import com.tcms.identity.RoleAssignmentRepository;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectRepository;
-import com.tcms.storage.ReportBlob;
 import com.tcms.storage.ReportStore;
+import com.tcms.storage.StoredBlob;
 import com.tcms.tenancy.Company;
 import com.tcms.tenancy.CompanyContext;
 import com.tcms.tenancy.CompanyRepository;
@@ -449,9 +449,9 @@ class ReportJobPipelineTest extends IntegrationTestBase {
 
     /** The bytes as the download endpoint would serve them, straight out of the store. */
     private String read(String key) throws IOException {
-        Optional<ReportBlob> blob = store.open(key);
+        Optional<StoredBlob> blob = store.open(key);
         assertThat(blob).as("bytes under %s", key).isPresent();
-        try (ReportBlob open = blob.get(); InputStream stream = open.stream()) {
+        try (StoredBlob open = blob.get(); InputStream stream = open.stream()) {
             byte[] bytes = stream.readAllBytes();
             assertThat(open.size()).isEqualTo(bytes.length);
             return new String(bytes, StandardCharsets.UTF_8);

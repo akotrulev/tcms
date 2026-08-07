@@ -9,8 +9,8 @@ import java.util.Optional;
  *
  * <h2>~~THIS IS A DELIBERATE COPY OF {@code execution.EvidenceStore}~~ → the reason expired (§125)</h2>
  *
- * <p>Four methods, identical signatures, an identical opaque-key contract, and a {@link ReportBlob}
- * that is {@link StoredBlob} with a different name. That was §58's E1 — the copy that drifts — and
+ * <p>Four methods, identical signatures, an identical opaque-key contract, and — until §125 — a
+ * {@code ReportBlob} that was {@link StoredBlob} with a different name. That was §58's E1 — and
  * it was accepted rather than hidden on one argument: <em>"{@code reporting} may not import
  * {@code execution} …, so the existing interface is unreachable <strong>as a type</strong>"</em>,
  * with a {@code shared} module for two interfaces and a record refused as "a fourth foundation
@@ -21,7 +21,10 @@ import java.util.Optional;
  * {@code storage}, so nothing is unreachable and nothing is a copy for want of a home. They remain
  * two <em>types</em> for a reason this package's header sets out — one interface with two beans puts
  * "which store is this" in a qualifier string, and a wrong one writes evidence into the report root
- * without failing — and the duplicated <em>body</em> is what the move actually removed.
+ * without failing — and the duplicated <em>body</em> is what the move actually removed
+ * ({@link FilesystemBlobStore}). The blob record went the other way and was deleted outright: a
+ * pair of records that are bytes and a length has no wrong one to be handed, so nothing was keeping
+ * them apart but their names.
  *
  * <h2>Four methods over an opaque key, and nothing else</h2>
  *
@@ -51,7 +54,7 @@ public interface ReportStore {
     void put(String key, byte[] bytes);
 
     /** The bytes, or empty when the key names nothing. <strong>The caller closes it.</strong> */
-    Optional<ReportBlob> open(String key);
+    Optional<StoredBlob> open(String key);
 
     /** Removes the bytes. A key naming nothing is not an error — delete is idempotent. */
     void delete(String key);

@@ -65,9 +65,16 @@
  * it a compile error.
  *
  * <p>What was actually duplicated is the <em>body</em> — the traversal guard and the four filesystem
- * operations, written twice — and that is what the second phase of this slice collapses into one
- * class the two adapters delegate to, so the S3 adapter decision #55 defers is <strong>one</strong>
- * implementation with two roots rather than two.
+ * operations, written twice — and it is now {@link com.tcms.storage.FilesystemBlobStore}, one class
+ * the two adapters delegate to, so the S3 adapter decision #55 defers is <strong>one</strong>
+ * implementation with two roots rather than two. The blob record went the other way and was deleted:
+ * {@code ReportBlob} and {@link com.tcms.storage.StoredBlob} were bytes and a length twice over, and
+ * unlike the ports there is no wrong one to be handed.
+ *
+ * <p>What did <em>not</em> collapse is the label each store passes into that body. The two roots are
+ * configured separately because they have different retention and different loss consequences, so an
+ * operator reading a failure has to be told which one is full or gone — the one distinction a shared
+ * body would have quietly turned into "could not store bytes".
  *
  * <h2>Not transactional, and cannot be</h2>
  *

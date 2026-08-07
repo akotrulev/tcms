@@ -2,8 +2,8 @@ package com.tcms.reporting;
 
 import com.tcms.project.GateResult;
 import com.tcms.project.ProjectService;
-import com.tcms.storage.ReportBlob;
 import com.tcms.storage.ReportStore;
+import com.tcms.storage.StoredBlob;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -86,7 +86,7 @@ class ReportReadService {
     }
 
     /** A download, ready to be written to the response. The caller closes {@link #blob()}. */
-    record Download(String filename, String contentType, ReportBlob blob) {
+    record Download(String filename, String contentType, StoredBlob blob) {
     }
 
     /**
@@ -131,7 +131,7 @@ class ReportReadService {
 
     /** Opens the bytes for an artifact the caller has already been gated onto. */
     private Outcome<Download> read(Located artifact) {
-        Optional<ReportBlob> blob = store.open(artifact.storageKey());
+        Optional<StoredBlob> blob = store.open(artifact.storageKey());
         if (blob.isEmpty()) {
             // The row says the bytes exist and the store disagrees. Unlike evidence — where §67
             // chose row-first writes and this orphan is a designed outcome — the worker here writes
