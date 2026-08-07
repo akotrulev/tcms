@@ -2,11 +2,16 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-07 (**§119** — the ingestion history reads, M3's fourth slice; §117's CI
-ingestion, §116's API tokens, §115's coverage matrix, R8/§114, R7/§112, R6 phases 1–4 / §111 and
-§108 before it)
-**Baseline commit:** `32968e2` (§119 phase 1) (per `CLAUDE.md`, trust the body over the header and
+**Last verified:** 2026-08-07 (**§120** — automation drift, M3's fifth slice; §119's ingestion
+history reads, §117's CI ingestion, §116's API tokens, §115's coverage matrix, R8/§114, R7/§112,
+R6 phases 1–4 / §111 and §108 before it)
+**Baseline commit:** `a273a70` (§120 phase 1) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
+**§120 MOVED THE SCHEMA HEAD — `V37__case_health_undeclared_automation.sql`, `V38` next free** — and
+**policy count is still 61**: it adds one column and two partial indexes to `case_health`, which has
+been in `V1`'s `company_owned` array since M0, so the policy is inherited and there is nothing to
+register. Five files touched in `repository`, one new test class, and **one additive contract enum
+member**. No new endpoint, no new query hook, no screen.
 **§119 CARRIED NO MIGRATION EITHER** — `V36` still head, **`V37` still free**, policy count still
 **61**. Four new `execution` files, seven new tests inside `IngestionEndpointTest`, and one
 **contract addition** (`GET /ingestions`, `GET /ingestions/{jobId}`, `IngestionJobSummary`).
@@ -110,6 +115,55 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   no context, needs no database, strips comments first (the mail block legitimately quotes
   `${SMTP_HOST:-}` when explaining compose), and its negative case has been run. **Add config
   invariants there, not to a reading.** `#confirmed`
+
+- **§120 — AUTOMATION DRIFT, AND `case_health`'s FOURTH AND FIFTH SIGNALS.**
+  `V37` (**head; `V38` next free; policy count STILL 61**). Five files, all `repository`:
+  `ExecutionFacts.recomputeAutomationDrift` (a **second statement**, not a second file — that class
+  is the one place this module names an `execution` table), `HealthSignal.UNDECLARED_AUTOMATION`,
+  `CaseHealth.undeclaredAutomation`, `CaseHealthProperties.staleAutomation`,
+  `CaseHealthRecomputeService`. Tests: `CaseHealthRecomputeTest.AutomationDrift` (8, fixture `ce…`
+  extended) and **`CaseHealthAttributesTest`** (2, **no database**).
+  - **THE COLUMN WAS WRITERLESS FROM `V1` AND THE BLOCKER WAS REAL.** `stale_automation`'s predicate
+    is *"no **ingested** result in N days"*, and until §117 nothing wrote
+    `test_run.source = 'INGESTED'`. A computation over that selects the empty set in every
+    deployment — §95's `usage_count` and §100's exit criteria. **Same family as §115: re-read a
+    plan's "not covered" list against the code, third time.**
+  - **BOTH SIGNALS READ ONE FACT ON TWO SIDES OF ONE CUTOFF**, so a case can **never** raise both —
+    a property of the statement, not the schema, which is why they are one `INSERT` and not two
+    jobs. `theTwoAreMutuallyExclusive` asserts it over the whole fixture.
+  - **STALENESS REQUIRES A PREVIOUS INGESTED RESULT (`last_ci.at IS NOT NULL`).** "Stopped" presupposes
+    started, and §6c makes `automationKey` optional *precisely so* a case can be `AUTOMATED` before
+    its automation exists — the literal predicate fires an **ERROR** on every case the day a team
+    declares intent. **The hole is stated**: `AUTOMATED` and never once reported raises nothing.
+  - **THE MIRROR IS `<> 'AUTOMATED'`, NOT §6c's `MANUAL`.** `TO_BE_AUTOMATED` means the backlog is
+    counting done work; `NOT_AUTOMATABLE` is the loudest, because coverage is
+    `AUTOMATED / (total − NOT_AUTOMATABLE)` and a wrong one moves the **denominator**.
+  - **THE MIRROR IS TIME-BOUNDED TOO, AND THAT WAS A REVERSAL.** Unbounded it can never go false —
+    a case returned to manual after its automation was deleted stays flagged for ever, which is
+    `HealthSignal`'s no-button-for-lying rule from the other side. One cutoff (#30's 14 days, and
+    #34's "one figure to remember").
+  - **NO `deleted_at` PREDICATE ON THE RUN, FOR AGREEMENT NOT CORRECTNESS.** The sibling statement
+    counts every recorded execution; two neighbours disagreeing about what a result is surfaces as a
+    case both `NEVER_EXECUTED` and `STALE_AUTOMATION`.
+  - **`ON CONFLICT` NAMES THREE COLUMNS, AND THE RULE NOW BITES BOTH WAYS.**
+    `reporting.ExecutionSource` writes `failing_repeatedly` into the **same rows** on its own
+    schedule, so setting every column would blank a *live* sibling's work, not a hypothetical one's.
+  - **A MUTATION ATTEMPTED THE WRONG WAY TAUGHT THE DURABLE THING.** Deleting `IS NOT NULL` outright
+    reddens **all 19** — a NULL boolean into a `NOT NULL` column **aborts** the recompute, a crash
+    that measures nothing. Mutating to the **rival** implementation (§6c read literally) reddens
+    exactly one. **Mutate to the competing implementation, not to nothing.** `DR-1` (dropping
+    `r.source`) reddens 5, and the extra four are the right four.
+  - **`CaseHealthAttributesTest` DID NOT EXIST AND `HealthSignal`'s JAVADOC SAID IT DID** (§47 →
+    §120). §100's rule exactly. `attribute()` is a **string** for Criteria, so a typo compiles,
+    passes `-Werror` and `validate`, and throws only on the one path that filters — the chip, the
+    tile and `signals()` all keep rendering off the `switch`.
+  - **TWO STALE CLAIMS IN `HealthSignal`'s HEADER CORRECTED.** "Nothing populates it yet" (three
+    computations had landed), and the `INCOMPLETE` paragraph: the **contract lists it and the SPA
+    labels it**, so the two enums are not the same set — the wire is a superset by one member this
+    server can never send. Left as it is; both tidyings are worse.
+  - **FIVE SIGNALS STILL HAVE NO WRITER** — `OUTDATED_SPEC_CHANGED`, `STALE_APPROVAL`,
+    `CONDITION_DRIFT`, `UNLINKED`, `ORPHANED`. Each is now the shape this slice was. `UNLINKED` is
+    cheapest: `doc_link` has had a writer since §93.
 
 - **§119 — THE INGESTION HISTORY READS.** `IngestionReadService` (`list`/`findOne`, both
   `readVisible` — membership, no new key), `IngestionJobSummary`, `IngestionJobRow`,

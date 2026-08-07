@@ -2,11 +2,18 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-07 (§119 — the ingestion history and the binder; §118 — the token screen;
-§115 — the coverage matrix's frontend arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `32968e2` (§119 phase 1) **+ the §119 phase-2 commit this line ships in** (its
-own SHA cannot be written into itself; trust the body over the header and re-grep what a later commit
-could have moved).
+**Last verified:** 2026-08-07 (§120 — automation drift; §119 — the ingestion history and the binder;
+§118 — the token screen; §115 — the coverage matrix's frontend arm; §107 — the mock layer is deleted
+— before them)
+**Baseline commit:** `7935a6d` (§120 phase 2) (trust the body over the header and re-grep what a
+later commit could have moved).
+**§120 added one file** — `components/HealthChip.test.tsx` — and touched
+`api/schema.d.ts`, `lib/labels.ts`, `components/StatusChip.tsx`. **Nothing else.** The dashboard's
+"Needs attention" panel, the case grid's health facet and `HealthChip` are all generic over
+`HealthSignal`, so a new signal arrives with no screen work at all — which is exactly what the
+server's `HealthSignal` header predicted in M0 and is worth knowing before planning a signal slice
+as though it needed a UI.
+**Test count is 1021 across 77 files** — measured, over §119's measured 1018/76.
 **§119 added six files** — `features/ingestion/{IngestionsPage,IngestionJobPage,BindTestDialog,UnbindMappingDialog}.tsx`
 plus `api/queries/ingestion.ts` — and three test files; it touched
 `api/{types.ts,queries/{keys,index}.ts}`, `lib/labels.ts`, `app/{router,AppShell}.tsx`.
@@ -101,6 +108,24 @@ directly above the switcher) and the wordmark links there too.
 > slice's shape. `docs/handoff/00-plugin-skills-are-mandatory.md` step 0 now states the protocol.
 
 ## Seams to reuse
+
+- **A NEW HEALTH SIGNAL IS TWO RECORDS AND ONE DECISION — NEVER A SCREEN (§120).**
+  `lib/labels.ts`'s `healthLabels` and `StatusChip.tsx`'s `healthHelp` are both
+  `Record<HealthSignal, string>`, so a new member is a **compile error until labelled** and there is
+  nothing else to wire: the dashboard tile, the case grid's facet and `HealthChip` all iterate the
+  enum. Do not plan a signal slice as though it needs a page.
+  **THE DRIFT PAIR MUST NOT LOOK ALIKE, AND THAT IS THE WHOLE FRONTEND DECISION.**
+  `STALE_AUTOMATION` is in `SEVERE_SIGNALS` and `UNDECLARED_AUTOMATION` is deliberately **not**.
+  They are mirrors and read as a matched set, so matching their appearance is the *tidy* change —
+  and it erases the only distinction a reader acts on: stale automation is a result the team
+  believes it is getting and is not (a red test can stay invisible), while undeclared automation is
+  a result arriving that no coverage number counts (the percentage is understated, wrong in the
+  direction that costs nobody a missed defect). The server draws the same line in
+  `HealthSignal.Severity` and **severity is not on the wire for a bare signal** — only a
+  `DashboardTile` carries it — so `SEVERE_SIGNALS` is a second copy of a server decision with
+  nothing holding the two together except `HealthChip.test.tsx`, which exists for §118's reason. A
+  mutation confirms it reddens exactly one test. **If a signal ever renders with a severity beside
+  it, delete that list rather than keeping it in step.** `#confirmed`
 
 - **A SECRET IS SHOWN ONCE, AND THE DIALOG THAT SHOWS IT REFUSES `onClose` (§118).**
   `features/admin/IssueTokenDialog.tsx`'s reveal branch + `components/CopyField.tsx` +

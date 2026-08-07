@@ -944,7 +944,39 @@ what is left is what genuinely needs **a scheduler tick**, **a second company**,
 | L4-26 | With `L4-23`'s case flagged, open the board | A **`CASE_MAINTENANCE`** card naming the signal, in the right column, whose `linkFor` **resolves**. Structurally empty since §53: two of nine signals had a writer and the card was built around neither. | §86-4 |
 | L4-27 | Soft-delete a flagged case, wait a tick, reload | Tile count drops, case gone — **and the fact log keeps the deleted case's results**. Two opposite calls in one slice, and the screen is where their consistency is legible: no orphan chip, no report row lost. | §86-7 |
 | L4-28 | **Two companies**, both with a failing-repeatedly case; sign in as a member of one | Only that company's case is counted. The projection carries **no company predicate** — `FORCE ROW LEVEL SECURITY` is the entire mechanism on both the `SELECT` and the `INSERT`. **Needs a second provisioned company**; pair it with `L2-10`'s second arm and provision one throwaway company for both. | §86-6 |
-| L4-29 | A project of a few hundred cases: dashboard response time before and after a tick populates `failing_repeatedly` | No visible regression. **`V1` ships four partial indexes on `case_health` and none on `failing_repeatedly`**, so this tile is the first that has to scan. Found while reading the DDL and deliberately not fixed — if this shows a real cost, the index belongs in the next migration. **26 cases will show nothing**; either bulk-create or record it as not driven. | §86-8 |
+| L4-29 | A project of a few hundred cases: dashboard response time before and after a tick populates `failing_repeatedly` | No visible regression. **`V1` ships four partial indexes on `case_health` and none on `failing_repeatedly`**, so this tile is the first that has to scan. Found while reading the DDL and deliberately not fixed — if this shows a real cost, the index belongs in the next migration. **26 cases will show nothing**; either bulk-create or record it as not driven. **`V37` added the two `case_health` indexes the drift pair needs**, so this row is now about `failing_repeatedly` alone. | §86-8 |
+
+### Automation drift — M3 slice 5, §6c
+
+*These need `A3`'s ingestion rows to have run: without a `test_run` whose `source` is `INGESTED`,
+both signals are correctly and permanently false, which is exactly the state the column sat in from
+`V1` to M3. **`A3-6` and `A3-10` are the seed** — they leave `OLB` with two matched cases whose
+results came through the ingestion door, one of them (`A3-8`'s ghost test, bound to a case somebody
+picked) almost certainly bound to a case that is **not** marked `AUTOMATED`.*
+
+**The clock is the problem in one direction and not the other.** `UNDECLARED_AUTOMATION` fires on a
+**recent** ingested result and is drivable in a sitting. `STALE_AUTOMATION` needs one **older than 14
+days**, which a company provisioned this morning cannot have. Two honest routes, and the row says to
+pick one rather than leaving it: back-date `test_execution.executed_at` in `psql`, or restart the app
+with `TCMS_STALE_AUTOMATION=PT1M` and wait. **Do not lower the constant in `application.yml`** —
+that verifies a number nobody ships (`L4-29`'s objection to lowering the unmatched cap).
+
+| # | Drive | Expect | src |
+|---|---|---|---|
+| L4-49 | After `A3-10`, set the case `A3-8` bound the ghost test to back to **Manual** in the case editor if it is not already, wait a tick, open the dashboard | An **"Automated, but not marked so"** tile, count **1**, severity **WARNING — amber, not red**. The colour is the row's real assertion: this signal and its mirror are matched in every other way, and the one thing that distinguishes them for a reader is that only one of them can be hiding a red test. | §120-1 |
+| L4-50 | Open that case; read the chip and hover it | The chip in the **blocked/amber** colour, not the failed one, with the tooltip naming the consequence — *"…so automation coverage does not count it"* — rather than restating the label. Compare it side by side with a `STALE_AUTOMATION` chip if `L4-51` has produced one: **the two must not look the same**. | §120-2 |
+| L4-51 | Mark that same case **Automated**, back-date its ingested execution past the window (or restart with `TCMS_STALE_AUTOMATION=PT1M` and wait), tick, reload | The amber tile is **gone** and a red **"Automation stopped reporting"** tile has replaced it. **One case must never show both** — they read one fact on two sides of one cutoff, and seeing both at once means a predicate lost its `automation_status` arm. | §120-3 |
+| L4-52 | With that case stale, **record a result on it by hand** in a new manual run, tick, reload | **Still stale.** The signal does not clear, and this is the row that catches the likeliest wrong implementation: the statement directly above it in `ExecutionFacts` reads the newest result of *any* kind, and copying that lateral — the obvious edit — reports a case CI abandoned as healthy the moment a person runs it once. Mutation `DR-1`'s browser half. | §120-4 |
+| L4-53 | Set the case to **Not automatable** (the editor requires a reason), post a fresh ingested report matching it, tick, reload | The **amber** tile again. §6c says "marked `MANUAL`" and the predicate is `<> 'AUTOMATED'`; this is the arm a literal reading drops, and it is the loudest one, because automation coverage is denominated `AUTOMATED / (total − NOT_AUTOMATABLE)` — a wrong `NOT_AUTOMATABLE` moves the **denominator**. | §120-5 |
+| L4-54 | Filter the case grid by the new signal from the health facet | The facet lists **"Automated, but not marked so"** with a count, and selecting it narrows the grid to that case. **The facet count and the grid must agree** — they are the two halves `HealthSignal.attribute()` resolves, and `CaseHealthAttributesTest` now checks the name resolves but not that the two consumers pick the same rows. | §120-6 |
+| L4-55 | Two companies, one drifting case each; sign in as a member of one | Only that company's case is counted, exactly as `L4-28` asserts for `failing_repeatedly`. The new statement carries **no company predicate** either — `FORCE ROW LEVEL SECURITY` on both the `SELECT` and the `INSERT` is the whole mechanism. Fold into `L4-28`'s throwaway company rather than provisioning a third. | §120-7 |
+
+**One thing this pass cannot show.** A case marked `AUTOMATED` whose automation has **never** posted
+raises nothing (decision D3, and deliberate — otherwise the signal fires on every case the day a team
+starts declaring intent). That is an *absence*, so the row would be "open the dashboard and see no
+tile", which is equally true of the signal being broken. It is asserted in
+`automationThatNeverStartedHasNotStopped` and named here so the gap is on the record rather than
+looking like an oversight.
 
 ### The M2 rollups — §101
 

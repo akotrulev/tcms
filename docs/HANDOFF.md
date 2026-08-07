@@ -1,7 +1,7 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-07 · **Branch:** `master` · **Latest slice:** [§119 — the ingestion history and
-the binder](handoff/119-the-ingestion-history-and-the-binder.md)
+**Date:** 2026-08-07 · **Branch:** `master` · **Latest slice:** [§120 — automation
+drift](handoff/120-automation-drift.md)
 
 This file is an **index**. Every section is its own file under [`docs/handoff/`](handoff/), numbered
 by its § number, and the slice log below is where the narrative lives — one row per slice, each row
@@ -35,16 +35,24 @@ in `src/` and makes obtaining a CI credential something the product can do rathe
 `Location` header has named since it shipped, at which there had never been a `GET` — plus the
 history screen and the unmatched-test binder, which give `/automation-mappings` its first consumer
 and make §117's refusal of §6c's auto-created case stubs defensible for somebody who cannot read
-JSON. Its contract change is additive (one operation, one path, one schema).
+JSON. Its contract change is additive (one operation, one path, one schema). **§120 is M3's fifth
+slice and the first that ships no screen**: §6c's automation drift, which is the pair
+`case_health.stale_automation` has waited for since `V1` — its predicate is *"no **ingested** result
+in N days"* and until §117 nothing in the product could produce one. Five of the ten health signals
+have a writer now, up from three, and `V37` adds the mirror the schema never had
+(`undeclared_automation`, a case taking CI results while its own `automationStatus` says it has no
+automation). **The frontend half is two exhaustive records and one decision** — the dashboard tile,
+the grid facet and the chip are generic over the enum, exactly as `HealthSignal`'s header predicted
+in M0.
 
-**Gates, as of §119** — both run locally, and only locally. Both halves were re-run for §119:
+**Gates, as of §120** — both run locally, and only locally. Both halves were re-run for §120:
 
 | Gate | State |
 |---|---|
-| `cd backend && ./gradlew build` | **BUILD SUCCESSFUL — 1953 tests across 408 result classes, 0 failures, 0 skipped** |
+| `cd backend && ./gradlew build` | **BUILD SUCCESSFUL — 1963 tests across 410 result classes, 0 failures, 0 skipped** |
 | `cd frontend && npm run build` | clean |
 | `npm run lint` | 0 warnings |
-| `npm run test:run` | **1018/1018 across 76 files** (§119's 16 new over a **measured** baseline of 1002. The 992 carried here was stale — the fourth time this figure has been wrong in the same direction, so read it off a run rather than off this table) |
+| `npm run test:run` | **1021/1021 across 77 files** (measured, over §119's measured 1018/76. This figure was stale four times running before §119 started reading it off a run — keep doing that) |
 
 **CI runs no backend tests** — `.github/workflows/ci.yml` has run `./gradlew build -x test` since
 §59, so `-Werror` and the Modulith wiring are checked and nothing else is. `./gradlew build` on your
@@ -57,8 +65,9 @@ structurally cannot observe.
 > (`deploy/shanks/install-runner.sh`), so the paragraph above still holds in full. Do not read the
 > file's existence as coverage.
 
-**Schema.** Flyway head is still **`V36__api_token_lookup.sql`**; **`V37` is the next free number**
-— neither §117 nor §119 carried a migration. Still
+**Schema.** Flyway head is **`V37__case_health_undeclared_automation.sql`** (§120); **`V38` is the
+next free number**. Neither §117 nor §119 carried a migration; `V37` adds one **column** and two
+partial indexes to a table that has been policed since M0, so the count is still
 61 tables under `FORCE ROW LEVEL SECURITY` — `V36`'s `api_token_lookup` is the **twelfth**
 instance-level table and the ERD §0.1 exception list's newest entry, decided rather than assumed. Flyway owns all DDL
 (`hibernate.ddl-auto: validate`).
@@ -276,3 +285,4 @@ Open actions above. The gap is deliberate; do not renumber around it.
 | [§117](handoff/117-result-ingestion.md) | CI result ingestion — M3's second slice, and the last two `V1` tables get writers: four parsers behind one Strategy whose values **are** `ingestion_job.format`'s `CHECK`, each with a different shape that reads a red suite as **green** (the worst being a Cucumber scenario failing mid-way, whose last step is skipped). §6c's ladder is **three batched passes, not a chain per test** — 3 queries, not 15,000 — and each rung is tested **alone**, because one collapsed to rung 1 would keep its count and pass. Nothing is auto-created for an unmatched test, which is a design rather than a gap only because `automation_key_mapping` gets its writer in the same slice — gated on **`case:edit`, which Automation Service does not hold**, so a leaked CI token can post results and cannot launder a red suite into a green one. `ReportXml` is the application's only `DocumentBuilderFactory`, and **a mutation corrected its own comment about which flag stops what**. §116's self-invoked-`@Transactional` defect was written and corrected before it ran **(built and unverified — 8 mutations RUN and stated as a deviation, 4 queued; no browser rows, and the two screens it names are recorded as unbuilt)** |
 | [§118](handoff/118-the-token-screen.md) | The token screen — M3's third slice and §116's endpoints' first consumer: the reveal is a **second step of the dialog that refuses Esc and a backdrop click**, because every other create dialog in the area closes on success and a refactor toward that consistency destroys a credential with a success message on top. The list is **refused rather than narrowed**, so the read is gated by the caller's own verdict and the check is an *absent* request that nothing on screen can show. `lastUsedAt` is on the wire and deliberately **not a column**; expired and revoked are **not collapsed**, because revoking a lapsed credential is a real act and one dead state would take it away **(built and unverified — 11 browser rows across two lanes, none run; no mutation rows, §116's twelve cover the endpoints)** |
 | [§119](handoff/119-the-ingestion-history-and-the-binder.md) | The ingestion history and the unmatched-test binder — M3's fourth slice: `POST /ingestions` has answered 201 with a `Location` naming a resource that **404s** since it shipped, and the two `GET`s that make the claim true serve **different shapes on purpose** — the list has no `unmatched` array at all, because the names live in a `JSONB` blob and an empty array beside a count of 12 reads as *cut*, which is the meaning `unmatchedCount` is documented to carry. Reading the payload back repaired the **replay**, which served `unmatchedCount: 12` beside `unmatched: []` to the one caller that most needs the names — a CI retry — and it is a **second implementation** of `unmatchedIn`, legal only because the two are asserted against each other. The fixture grew a **second project**, so one of the seven project-predicate-over-RLS files finally has a test behind it. The binder **closes on success**, deliberately the opposite of §118's dialog, and sends the test name **raw**: the only observer of a client that normalized is the request body, so that is what the check asserts **(built and unverified — 11 browser, 8 mutation rows, none run)** |
+| [§120](handoff/120-automation-drift.md) | Automation drift — M3's fifth slice and the first with no screen: `case_health.stale_automation` has been a column since `V1` with no writer, and the reason was not neglect — its predicate is *"no **ingested** result in N days"* and until §117 nothing in the product could write `test_run.source = 'INGESTED'`, so the computation would have selected the empty set in every deployment and reported a confident zero. `V37` adds the mirror §6c names in the same sentence and the schema never had, and both read **one fact on two sides of one cutoff**, so a case can never raise both. Staleness requires a **previous** ingested result (*stopped* presupposes started, and §6c makes `automationKey` optional precisely so a case can be `AUTOMATED` before its automation exists — the literal predicate fires an ERROR on every case the day a team declares intent); the mirror is `<> 'AUTOMATED'` and not §6c's `MANUAL`, because `NOT_AUTOMATABLE` moves the **denominator** of §6c's own coverage formula. The frontend half is two exhaustive records and one decision: the pair **must not look alike**, because only one of them can be hiding a red test. **A mutation attempted the wrong way taught the durable thing** — deleting the `IS NOT NULL` clause reddens all 19 tests by *crashing* the insert, which measures nothing; mutating to the rival implementation reddens exactly one. Also: `CaseHealthAttributesTest` now exists, having been named in a javadoc since §47 **(built and unverified — 7 browser, 10 mutation rows, 3 of the mutations RUN and stated as a deviation)** |
