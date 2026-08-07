@@ -1,5 +1,20 @@
 # Remaining-scope assessment — what is left to build
 
+> **⚠ STALE BY 21 SLICES as of 2026-08-07 — read the method, not the shot list.** This round's
+> baseline is `ced197e`; HEAD is `e43e1b3` with §98–§122 in between, and most of its headline items
+> have closed: **#1 CI ingestion** (§117), **#2 API tokens** (§116/§118), **#3 quarantine** (§121),
+> **#13 the coverage matrix** (§115), and **all of row 24's reporting gap** — M2.5's R1–R8 shipped,
+> so §2.2's "~45% left" is 0. `V1` now has **zero** writerless tables. **M0 through M3 are complete.**
+> §3's week arithmetic is correspondingly wrong in the good direction and has not been re-derived.
+>
+> What survives intact: **§1's six computed checks** (they are the reason a round 4 is cheap), and
+> **§5.2** — the verification queues, which have grown to ~790 rows and are still essentially unrun.
+> Sixteen questions derived from re-running the checks at `e43e1b3` are resolved as **decision round
+> 3** in `docs/plans/2026-07-30-tcms-high-level-plan.md` §8 (#45–#60), with a fixed execution order.
+> Four of this document's findings are decided there and named: `DocBlockType` 2 of 6 (#48),
+> `attachment.owner_type` (#49/#50), the `outbox` (#52), and the two cheap permission wins it flagged
+> in two consecutive rounds (#53).
+
 **Date:** 2026-08-05 · **Baseline commit:** `ced197e` (§100 phase D, the design comp)
 **Round 3.** Rounds 1 and 2 are `docs/audits/2026-08-02-remaining-scope-assessment.md`, both written
 that day against `33e5843` (§62) and `98d19aa` (§77). Their figures are quoted below where the
