@@ -1,7 +1,7 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-07 · **Branch:** `master` · **Latest slice:** [§120 — automation
-drift](handoff/120-automation-drift.md)
+**Date:** 2026-08-07 · **Branch:** `master` · **Latest slice:** [§121 — flake detection and
+quarantine](handoff/121-flake-detection-and-quarantine.md) (**phases 1–2 of 4; half shipped**)
 
 This file is an **index**. Every section is its own file under [`docs/handoff/`](handoff/), numbered
 by its § number, and the slice log below is where the narrative lives — one row per slice, each row
@@ -43,13 +43,20 @@ have a writer now, up from three, and `V37` adds the mirror the schema never had
 (`undeclared_automation`, a case taking CI results while its own `automationStatus` says it has no
 automation). **The frontend half is two exhaustive records and one decision** — the dashboard tile,
 the grid facet and the chip are generic over the enum, exactly as `HealthSignal`'s header predicted
-in M0.
+in M0. **§121 is M3's sixth slice and closes the milestone's last named scope item** — "quarantine
+flow", which had no schema at all and whose blocker open question #24 stated in as many words
+(*"no data until M3 ingestion exists"*) and §117 removed. It is the **fourth** time a plan's own
+"blocked" note has outlived its blocker. `V38`'s `case_flake` is the first table whose row is half
+derived and half authored. **It is HALF SHIPPED: phases 1–2 (the scoring job and the quarantine
+endpoint) are committed and green; phases 3 (the board's fourth generator, §6l's only unimplemented
+one) and 4 (any frontend at all) are NOT BUILT.** `CaseFlakeRepository.findQuarantined` has no
+caller, which is the writerless shape this slice was started to fix, reproduced one level up.
 
-**Gates, as of §120** — both run locally, and only locally. Both halves were re-run for §120:
+**Gates, as of §121 phase 2** — both run locally, and only locally:
 
 | Gate | State |
 |---|---|
-| `cd backend && ./gradlew build` | **BUILD SUCCESSFUL — 1963 tests across 410 result classes, 0 failures, 0 skipped** |
+| `cd backend && ./gradlew build` | **BUILD SUCCESSFUL — 2003 tests across 424 result classes, 0 failures** (§121 phase 2; §120's baseline was 1963/410) |
 | `cd frontend && npm run build` | clean |
 | `npm run lint` | 0 warnings |
 | `npm run test:run` | **1021/1021 across 77 files** (measured, over §119's measured 1018/76. This figure was stale four times running before §119 started reading it off a run — keep doing that) |
@@ -65,10 +72,10 @@ structurally cannot observe.
 > (`deploy/shanks/install-runner.sh`), so the paragraph above still holds in full. Do not read the
 > file's existence as coverage.
 
-**Schema.** Flyway head is **`V37__case_health_undeclared_automation.sql`** (§120); **`V38` is the
-next free number**. Neither §117 nor §119 carried a migration; `V37` adds one **column** and two
-partial indexes to a table that has been policed since M0, so the count is still
-61 tables under `FORCE ROW LEVEL SECURITY` — `V36`'s `api_token_lookup` is the **twelfth**
+**Schema.** Flyway head is **`V38__case_flake.sql`** (§121); **`V39` is the next free number**.
+`V38` adds a **new company-owned table**, unlike `V37`'s column, so the count moves to
+**62 tables under `FORCE ROW LEVEL SECURITY`** — `SchemaConventionTest` pins it, which is what makes
+a new policed table a decision rather than a side effect — `V36`'s `api_token_lookup` is the **twelfth**
 instance-level table and the ERD §0.1 exception list's newest entry, decided rather than assumed. Flyway owns all DDL
 (`hibernate.ddl-auto: validate`).
 
@@ -286,3 +293,4 @@ Open actions above. The gap is deliberate; do not renumber around it.
 | [§118](handoff/118-the-token-screen.md) | The token screen — M3's third slice and §116's endpoints' first consumer: the reveal is a **second step of the dialog that refuses Esc and a backdrop click**, because every other create dialog in the area closes on success and a refactor toward that consistency destroys a credential with a success message on top. The list is **refused rather than narrowed**, so the read is gated by the caller's own verdict and the check is an *absent* request that nothing on screen can show. `lastUsedAt` is on the wire and deliberately **not a column**; expired and revoked are **not collapsed**, because revoking a lapsed credential is a real act and one dead state would take it away **(built and unverified — 11 browser rows across two lanes, none run; no mutation rows, §116's twelve cover the endpoints)** |
 | [§119](handoff/119-the-ingestion-history-and-the-binder.md) | The ingestion history and the unmatched-test binder — M3's fourth slice: `POST /ingestions` has answered 201 with a `Location` naming a resource that **404s** since it shipped, and the two `GET`s that make the claim true serve **different shapes on purpose** — the list has no `unmatched` array at all, because the names live in a `JSONB` blob and an empty array beside a count of 12 reads as *cut*, which is the meaning `unmatchedCount` is documented to carry. Reading the payload back repaired the **replay**, which served `unmatchedCount: 12` beside `unmatched: []` to the one caller that most needs the names — a CI retry — and it is a **second implementation** of `unmatchedIn`, legal only because the two are asserted against each other. The fixture grew a **second project**, so one of the seven project-predicate-over-RLS files finally has a test behind it. The binder **closes on success**, deliberately the opposite of §118's dialog, and sends the test name **raw**: the only observer of a client that normalized is the request body, so that is what the check asserts **(built and unverified — 11 browser, 8 mutation rows, none run)** |
 | [§120](handoff/120-automation-drift.md) | Automation drift — M3's fifth slice and the first with no screen: `case_health.stale_automation` has been a column since `V1` with no writer, and the reason was not neglect — its predicate is *"no **ingested** result in N days"* and until §117 nothing in the product could write `test_run.source = 'INGESTED'`, so the computation would have selected the empty set in every deployment and reported a confident zero. `V37` adds the mirror §6c names in the same sentence and the schema never had, and both read **one fact on two sides of one cutoff**, so a case can never raise both. Staleness requires a **previous** ingested result (*stopped* presupposes started, and §6c makes `automationKey` optional precisely so a case can be `AUTOMATED` before its automation exists — the literal predicate fires an ERROR on every case the day a team declares intent); the mirror is `<> 'AUTOMATED'` and not §6c's `MANUAL`, because `NOT_AUTOMATABLE` moves the **denominator** of §6c's own coverage formula. The frontend half is two exhaustive records and one decision: the pair **must not look alike**, because only one of them can be hiding a red test. **A mutation attempted the wrong way taught the durable thing** — deleting the `IS NOT NULL` clause reddens all 19 tests by *crashing* the insert, which measures nothing; mutating to the rival implementation reddens exactly one. Also: `CaseHealthAttributesTest` now exists, having been named in a javadoc since §47 **(built and unverified — 7 browser, 10 mutation rows, 3 of the mutations RUN and stated as a deviation)** |
+| [§121](handoff/121-flake-detection-and-quarantine.md) | Flake detection and quarantine — M3's last named scope item, whose blocker open question #24 recorded and §117 removed (the **fourth** time a plan's own "blocked" note has outlived its blocker). `V38`'s `case_flake` is the first table in the product whose row is half **derived** and half **authored**, kept apart by the `ON CONFLICT` rule now binding two writers of one *row* rather than two modules — an `EXCLUDED.*` set-list would release every quarantined test on the next tick, silently and in the reassuring direction. **THE FINDING CHANGED THE CODE**: this is the **third** implementation of §6l's one sentence — `CaseHistoryService.flakiness` has computed it since §49 under the same name — and the first draft used `counts_as_pass` where that one uses `status_kind`. Those are *independent* columns: they agree on all six seeded defaults and diverge the moment a project defines "Passed with known issues" as `RETEST`-kind counting toward the pass rate, so a case page and a worklist would quote different numbers with nothing to say which is right. **THE GATE IS THE SLICE**: `case:edit`, not the `result:submit` an endpoint about CI results looks like it should use — Automation Service does not hold it, so a leaked CI token can post results and **cannot quarantine the tests those results fail**, which with §117 is what makes "a token cannot launder a red suite" a design rather than a hope. Also: a blocked run between two passes is not two alternations; `transitions` and not `executions` is the denominator; the score is **null** below the evidence floor, which is not `0` **(built and unverified — 14 mutation rows, 3 RUN and stated as a deviation, two recorded as possibly reddening nothing; NO browser rows and no screen. PHASES 3 AND 4 ARE NOT BUILT — the board generator and the frontend — so this slice is HALF SHIPPED)** |

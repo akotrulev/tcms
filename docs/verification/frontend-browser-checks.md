@@ -1208,3 +1208,29 @@ Three carry more than their own weight:
 
 **No mutation rows here.** §119's eight (`IH-1`…`IH-8`) are in the backend queue; these are the
 same properties observed from the other side where a browser can see them.
+
+---
+
+## §121 — flake detection and quarantine (M3 slice 6, phases 1–2)
+
+**No rows, and this is a statement rather than an omission.** Phases 1 and 2 shipped the scoring
+job, `V38`'s `case_flake`, and `PUT /projects/{projectId}/cases/{caseId}/quarantine` — **and no
+screen**. Nothing in `src/` calls the endpoint, so there is no flow a browser could drive that
+`curl` would not drive better.
+
+This is §116's and §117's shape exactly: both were backend-only and both recorded "no browser rows,
+and the screen that will carry them is the next slice." Here that is **phase 4**, which is not
+built. Its rows will name:
+
+- The flake panel on the case page, and the one thing it must not do — render a **null**
+  `flakeScore` as `0`. The two mean opposite things (*not enough evidence* against *evidently
+  stable*), the API ships `executions` and `transitions` precisely so the panel can say which, and
+  a component that formats `score ?? 0` passes every type check.
+- The quarantine action, its required reason, and the **release path clearing the reason on screen**
+  rather than only in the row.
+- The board's quarantined-flaky card (**phase 3**, also not built) — §6l's fourth generator, which
+  #24 put on by default and which has been silently empty since the board shipped.
+
+**A row that cannot be driven yet is recorded as absent with its reason, never as a lane nobody
+notices is empty** — which is the failure mode the generator above has been in for the whole life of
+the board, and the one this slice exists to end.

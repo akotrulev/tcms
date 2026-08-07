@@ -2,11 +2,23 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-07 (§120 — automation drift; §119 — the ingestion history and the binder;
+**Last verified:** 2026-08-07 (§121 — flake detection and quarantine, backend-only so far; §120 — automation drift; §119 — the ingestion history and the binder;
 §118 — the token screen; §115 — the coverage matrix's frontend arm; §107 — the mock layer is deleted
 — before them)
-**Baseline commit:** `7935a6d` (§120 phase 2) (trust the body over the header and re-grep what a
+**Baseline commit:** `7af1c3c` (§121 phase 2) (trust the body over the header and re-grep what a
 later commit could have moved).
+**§121 (M3 slice 6, phases 1–2) touched ONE frontend file — a regenerated `api/schema.d.ts`.**
+The contract gained `PUT /projects/{projectId}/cases/{caseId}/quarantine` plus two schemas,
+`CaseQuarantineInput` and `CaseFlake`. **There is NO consumer in `src/` — phase 4 is not built**, so
+both types are generated and unreferenced. Test count is unchanged at **1021 across 77 files**.
+
+**⚠ WHEN PHASE 4 IS BUILT, `CaseFlake.flakeScore` IS NULLABLE AND NULL DOES NOT MEAN ZERO.** Null is
+*not enough evidence to say*; `0` is *evidently stable*. They are opposite claims about a test, and
+`score ?? 0` type-checks. The API ships `executions`, `transitions`, `alternations` and `cells`
+precisely so a panel can render "3 results, not enough to score" instead — this is the same class of
+defect as §95's `usage_count` and §100's exit criteria, in the place it costs most, because the
+number it would invent is the one a human uses to decide whether to quarantine a test.
+
 **§120 added one file** — `components/HealthChip.test.tsx` — and touched
 `api/schema.d.ts`, `lib/labels.ts`, `components/StatusChip.tsx`. **Nothing else.** The dashboard's
 "Needs attention" panel, the case grid's health facet and `HealthChip` are all generic over

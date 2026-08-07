@@ -2,52 +2,74 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-07 (**§120** — automation drift, M3's fifth slice; §119's ingestion
-history reads, §117's CI ingestion, §116's API tokens, §115's coverage matrix, R8/§114, R7/§112,
-R6 phases 1–4 / §111 and §108 before it)
-**Baseline commit:** `a273a70` (§120 phase 1) (per `CLAUDE.md`, trust the body over the header and
+**Last verified:** 2026-08-07 (**§121** — flake detection and quarantine, M3's sixth slice, phases
+1–2 of 4; §120's automation drift, §119's ingestion history, §117's CI ingestion, §116's API tokens
+before it)
+**Baseline commit:** `7af1c3c` (§121 phase 2) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
-**§120 MOVED THE SCHEMA HEAD — `V37__case_health_undeclared_automation.sql`, `V38` next free** — and
-**policy count is still 61**: it adds one column and two partial indexes to `case_health`, which has
-been in `V1`'s `company_owned` array since M0, so the policy is inherited and there is nothing to
-register. Five files touched in `repository`, one new test class, and **one additive contract enum
-member**. No new endpoint, no new query hook, no screen.
-**§119 CARRIED NO MIGRATION EITHER** — `V36` still head, **`V37` still free**, policy count still
-**61**. Four new `execution` files, seven new tests inside `IngestionEndpointTest`, and one
-**contract addition** (`GET /ingestions`, `GET /ingestions/{jobId}`, `IngestionJobSummary`).
-**§117 CARRIED NO MIGRATION** — `V36` is still the head, **`V37` still free**, policy count still
-**61**. Every table, column and `CHECK` it writes to has been in `V1` since M0; what was missing was
-never the schema. Sixteen new `execution` files, two test classes (`d7`, and a database-free one),
-and `V1`'s three writerless tables are now **zero**.
-**§116 is the first M3 slice and it MOVED THE SCHEMA HEAD** — `V36__api_token_lookup.sql`, **`V37`
-next free**; policy count still **61** (the new table is instance-level, no RLS). Ten new
-`identity` files + three `auth` ones, two test classes, and the **twelfth** entry on ERD §0.1's
-exception list.
+
+**§121 MOVED THE SCHEMA HEAD AND THE POLICY COUNT — `V38__case_flake.sql`, `V39` next free, and
+policy count 61 → 62.** The first count move since `V31`: `V38` adds a **new company-owned table**,
+where `V36`'s was instance-level and `V37`'s was a column on an already-policed one.
+`SchemaConventionTest`'s pinned count (`SchemaConventionTest.java:270`) is what turns that into a
+decision — it failed on arrival and had to be moved deliberately.
+
+**§121 IS HALF SHIPPED. Phases 3 and 4 are NOT BUILT** — the board's fourth derived-item generator
+and any frontend at all. Two seams exist with no caller and that is the state, not an oversight:
+`CaseFlakeRepository.findQuarantined` (for `work.BoardFacts`) and `CaseFlakeView` / the
+`CaseQuarantineInput` contract schema (for the SPA).
+
+**New seams §121 created, in dependency order:**
+- `repository.CaseFlake` — entity over `case_flake`. **The only half-derived, half-authored row in
+  the product.** Two writers, kept apart by their `ON CONFLICT` / setter surfaces rather than by two
+  tables. `unscored()` is the factory the quarantine path uses when the recompute has not run yet.
+- `repository.CaseFlakeRepository` — **`@Transactional` WITHOUT `readOnly`**, unlike
+  `CaseHealthRepository`: its owner writes through it, and `readOnly = true` would skip the flush so
+  the write would silently do nothing while every read assertion still passed. `findScopedById`
+  exists because `findById` bypasses the Hibernate company filter (`TestCaseRepository:45`).
+- `repository.CaseQuarantineService` — the authored writer. Gated on **`case:edit`**, deliberately
+  not `result:submit`; Automation Service does not hold it. `CaseController.quarantine` is the
+  `PUT …/cases/{caseId}/quarantine` handler.
+- `reporting.ExecutionSource.recomputeFlakeScores` — the derived writer, a **third** statement in
+  `ExecutionFactRefreshService.refresh()`, in one transaction after the projection and
+  `recomputeFailingRepeatedly`. Reads `execution_fact`, not `test_execution`.
+- `reporting.ReportingProperties` gained `flakeWindow` (P90D) and `flakeMinimumTransitions` (4),
+  both with compact-constructor bounds; `application.yml` carries the documented defaults.
+
+**⚠ THERE ARE THREE IMPLEMENTATIONS OF §6l's FLAKINESS SENTENCE, AND ONLY TWO MAY AGREE.**
+`execution.CaseHistoryService.flakiness` (§49, per-case timeline, Java over rows) and
+`reporting.ExecutionSource.recomputeFlakeScores` (§121, SQL over the fact log) both answer *"how
+flaky is this case"* and **must** agree on the predicate: `status_kind IN ('PASSED','FAILED')`.
+`AggregateExecutionReport.inconsistentCases` (R7) answers a different question and uses
+`counts_as_pass` — correctly. **`case_status.kind` and `case_status.counts_as_pass` are independent
+columns**, agreeing on all six seeded defaults and diverging on a custom status, so this is a
+divergence that ships. Do not "unify" the three.
+
+**§120 MOVED THE SCHEMA HEAD — `V37__case_health_undeclared_automation.sql`** — and **policy count
+stayed 61**: it adds one column and two partial indexes to `case_health`, which has been in `V1`'s
+`company_owned` array since M0, so the policy is inherited. Five files touched in `repository`, one
+new test class, one additive contract enum member. No new endpoint, no new query hook, no screen.
+**§119 CARRIED NO MIGRATION** — four new `execution` files, seven new tests inside
+`IngestionEndpointTest`, one contract addition (`GET /ingestions`, `GET /ingestions/{jobId}`,
+`IngestionJobSummary`).
+**§117 CARRIED NO MIGRATION** — sixteen new `execution` files, two test classes, and `V1`'s three
+writerless tables went to **zero**.
+**§116 is the first M3 slice and it MOVED THE SCHEMA HEAD** — `V36__api_token_lookup.sql`; policy
+count stayed 61 (the new table is instance-level, no RLS) and it is the **twelfth** entry on ERD
+§0.1's exception list.
 **§115 added two files and one test class** — `DocumentationSource`, `CoverageMatrixReport`,
-`CoverageMatrixReportTest` — plus contract prose and one frontend arm. No migration, no entity, no
-endpoint, no key; `V35` still head, `V36` still free, policy count still 61.
+`CoverageMatrixReportTest` — plus contract prose. No migration, entity, endpoint or key.
 **⚠ THIS HEADER WAS WRONG IN TWO PLACES AT §115 AND BOTH WERE STALE IN THE SAME DIRECTION** — §95's
-"still owed (phases 2–4)" entry below is **closed**: `CaseUpdateRequest` no longer 400s on
-`preconditions`/`postconditions`, and the frontend **does** have call sites for the condition GET,
-POST and PUT (`api/queries/library.ts`). The body claimed work that was already done, which is the
-failure mode opposite to the one the trust-the-body rule guards against. Re-grep before believing a
-"still owed".
+"still owed (phases 2–4)" entry below is **closed**. The body claimed work that was already done,
+which is the failure mode opposite to the one the trust-the-body rule guards against. Re-grep before
+believing a "still owed".
 **§114 (R8) touched three files** — `AggregateExecutionReport`, `ExecutionSource`,
-`AggregateVersionDivergenceTest` — plus contract prose. **§112 (R7) touched the same three** (with
-`AggregateVariabilityTest`). Neither carried a migration, an entity, an endpoint, a key or any
-frontend code; `V35` still head, `V36` still free, policy count still 61.
-**§101's backend half is phases 1, 2 and 4** — `V34` + `V35`, both rollup writers, and the read
-switch. Phase 3 is contract-only and phase 5 is the client. The seam list's first entry records it.
-**§99's backend half is phase 2 alone** — two request fields, one union query, and no migration;
-the seam list's first entry records it. §98's note is kept below because its shape recurs.
+`AggregateVersionDivergenceTest` — plus contract prose. **§112 (R7) touched the same three.**
+**§101's backend half is phases 1, 2 and 4** — `V34` + `V35`, both rollup writers, the read switch.
+**§99's backend half is phase 2 alone** — two request fields, one union query, no migration.
 **§98 phase 2 was the backend half of the flattening** — `V33`, the entity, the two services, the
-membership seams and a 35-file test-fixture sweep. §97's own note is kept below because its shape
-recurs.
-**§97 phases 4, 5 and 6 touched NO backend file** — they are the frontend's form spine, its tabs and
-its Test cases tab. The backend half of the slice is phases 3a–3c, and the body below already
-records it (`V32`, the three-armed `scopeMatch`, the plan ladder's reduction to three states, and
-`PUT`/`DELETE` on the plan's document). This header lagged at phase 3b while 3c updated the body,
-which is the normal shape and the reason the rule is to trust the body.
+membership seams and a 35-file test-fixture sweep.
+**§97 phases 4, 5 and 6 touched NO backend file** — the backend half of that slice is phases 3a–3c.
 **Fingerprint files:** `backend/build.gradle.kts`, `backend/gradle/libs.versions.toml`, `backend/gradle/wrapper/gradle-wrapper.properties`
 
 > Authoritative docs win over this file. `CLAUDE.md`, `docs/HANDOFF.md` (an index — sections live in
