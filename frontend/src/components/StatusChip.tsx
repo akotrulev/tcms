@@ -172,13 +172,31 @@ const healthHelp: Record<HealthSignal, string> = {
   NEVER_EXECUTED: 'This case has never been run.',
   LONG_UNEXECUTED: 'This case has not been executed in over 90 days.',
   STALE_AUTOMATION: 'Marked automated, but no automated result has arrived recently.',
+  UNDECLARED_AUTOMATION:
+    'CI has posted results for this case recently, but its automation status says it is not automated — so automation coverage does not count it.',
   UNLINKED: 'This case is not linked to any documentation, so nothing traces it to a requirement.',
   FAILING_REPEATEDLY: 'This case has failed in several consecutive runs.',
   INCOMPLETE: 'Required fields are missing.',
   ORPHANED: "This case's owner has been deactivated.",
 };
 
-/** Signals that mean something is wrong right now, rather than merely worth a look. */
+/**
+ * Signals that mean something is wrong right now, rather than merely worth a look.
+ *
+ * **`UNDECLARED_AUTOMATION` is deliberately not here, though its mirror is.** Stale
+ * automation means a result the team believes it is getting is not arriving — a red
+ * test can stay invisible for as long as it lasts. Undeclared automation means results
+ * are arriving that no coverage number counts: the percentage is understated, which is
+ * wrong in the direction that costs nobody a missed defect. The server draws the same
+ * line (`HealthSignal.Severity`: ERROR vs WARNING), and adding the new signal here
+ * "for consistency with the pair" is the tidy change that erases the distinction —
+ * `HealthChip.test.tsx` exists to catch exactly that.
+ *
+ * This list is a second copy of that server-side severity, which is only defensible
+ * because the chip has nothing to read: severity is on the wire for a `DashboardTile`
+ * and not for a bare `HealthSignal`. If a signal ever renders here with a severity
+ * beside it, this list should go rather than be kept in step.
+ */
 const SEVERE_SIGNALS: HealthSignal[] = [
   'OUTDATED_SPEC_CHANGED',
   'STALE_AUTOMATION',

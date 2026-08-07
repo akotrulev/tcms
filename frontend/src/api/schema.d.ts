@@ -5813,10 +5813,22 @@ export interface components {
          */
         StatusKind: "PASSED" | "FAILED" | "BLOCKED" | "SKIPPED" | "UNTESTED" | "RETEST" | "WIP";
         /**
-         * @description Derived, never authored — self-heals when the cause is fixed (plan §6o).
+         * @description Derived, never authored — self-heals when the cause is fixed (plan §6o). No endpoint sets
+         *     one and none ever will: a "mark as not stale" button is a button for lying.
+         *
+         *     **Five of these have a writer.** `NEVER_EXECUTED` and `LONG_UNEXECUTED` (§53),
+         *     `FAILING_REPEATEDLY`, and — since M3 slice 5 — the §6c automation-drift pair,
+         *     `STALE_AUTOMATION` and `UNDECLARED_AUTOMATION`. The rest are computed by nothing and are
+         *     therefore never sent; a client must treat an absent signal as *"nobody has looked"* rather
+         *     than as *"not raised"*, which is what `DashboardSummary.healthComputedAt` exists to
+         *     distinguish.
+         *
+         *     `INCOMPLETE` is a special case in the other direction: it is a column in the schema, it is
+         *     in this enum, and there is **no server constant for it**, so it cannot appear on the wire
+         *     today. Kept so a client's labels stay complete.
          * @enum {string}
          */
-        HealthSignal: "OUTDATED_SPEC_CHANGED" | "STALE_APPROVAL" | "CONDITION_DRIFT" | "STALE_AUTOMATION" | "NEVER_EXECUTED" | "LONG_UNEXECUTED" | "UNLINKED" | "FAILING_REPEATEDLY" | "ORPHANED" | "INCOMPLETE";
+        HealthSignal: "OUTDATED_SPEC_CHANGED" | "STALE_APPROVAL" | "CONDITION_DRIFT" | "STALE_AUTOMATION" | "NEVER_EXECUTED" | "LONG_UNEXECUTED" | "UNLINKED" | "FAILING_REPEATEDLY" | "ORPHANED" | "INCOMPLETE" | "UNDECLARED_AUTOMATION";
         /**
          * @description How a case executed many times resolves to one result (plan §6e).
          * @default LATEST

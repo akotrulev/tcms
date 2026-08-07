@@ -401,6 +401,11 @@ export const healthLabels = {
   FAILING_REPEATEDLY: 'Failing repeatedly',
   INCOMPLETE: 'Missing required fields',
   ORPHANED: 'Owner deactivated',
+  // The mirror of STALE_AUTOMATION, and the label is deliberately about the CASE rather
+  // than about CI: what the reader can act on is the automation status field, which is
+  // wrong. "Receiving CI results" describes the evidence and leaves them working out
+  // what to do with it.
+  UNDECLARED_AUTOMATION: 'Automated, but not marked so',
 } as const satisfies Record<HealthSignal, string>;
 
 /**
