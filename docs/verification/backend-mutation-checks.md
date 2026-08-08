@@ -1178,3 +1178,21 @@ Assertions live in `SeedDataTest` (3 new), `RoleGrantEndpointTest` (1 new), `Api
 | AG-7 | `V40` spells `Agent`'s `artifact:edit` qualifier as `ALL` | An agent rewrites the project-scope strategy document every plan inherits read-only (§6n). Should redden `testEngineerHoldsArtifactEditOnlyAtPlanScope`; a *different* misspelling (a new qualifier value) should instead redden `noPermissionCarriesTwoDifferentRestrictiveQualifiers`. Run both variants. | ⬜ NOT RUN |
 | AG-8 | `ApiTokenService.validate` drops the `Agent` expiry rule | Every agent token issued from `curl` is open-ended, and the form's pre-fill is the only thing standing — which is exactly the boundary §2.5 says a client cannot hold. Should redden `anAgentTokenMustExpire`. | ⬜ NOT RUN |
 | AG-9 | The intersection is asserted end-to-end: issue an `Agent` token owned by a **Viewer**, then `POST` a case with it | **Not a mutation — a missing test.** The whole design rests on `evaluate(ownerId) ∩ permissionsOf(Agent)`, and nothing drives it for an `Agent` token; §132 already recorded that `IngestionEndpointTest.Attribution` is the only place in the suite a write is authenticated by a real `api_token` at all. Expect a 403. **Known gap, and the highest-value row here.** | ⬜ NOT RUN |
+
+### §134 — Automation Service becomes non-assignable, and revoke leaves the flag (`AS-1` … `AS-5`)
+
+`V41` flips one seeded row. The slice's real content is the **split**: `RoleGrantService.grant`
+reads `assignable`, `revoke` does not, and every mutation below is a version of putting them back
+together. Assertions live in `SeedDataTest` (2, one new), `RoleGrantEndpointTest` (3 new) and the
+SPA's `IssueTokenDialog.test.tsx`.
+
+> **NONE RUN.** **`AS-2` first** — it is the one whose failure leaves data stranded on a live
+> instance rather than merely refusing something.
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| AS-1 | `V41`'s `UPDATE` is reverted (`assignable` stays true for `…0005`) | The state before this slice: `POST /role-assignments` accepts a CI capability set for a person, and every grant picker offers it. Should redden `automationServiceIsNotGrantableToAPerson` and `nonAssignableRolesAreExactlyTheThree`. | ⬜ NOT RUN |
+| AS-2 | `RoleGrantService.revoke` goes back to `Role::isAssignable` | **The row this slice exists for.** Every person-held `Automation Service` grant made before `V41` becomes permanently unrevokable while `GET /role-assignments` keeps listing it — a Revoke button that 403s forever, with no message naming a role. Should redden `anAutomationServiceGrantMadeBeforeTheRuleIsStillRevocable`. | ⬜ NOT RUN |
+| AS-3 | `AdminDirectoryService.listRoleAssignments` filters non-assignable roles' grants | The other half of the same defect, arrived at from the "tidy it up" direction: the stranded grant becomes invisible instead of unrevokable, so nobody can even see what to clean up, and the permissions keep resolving. Should redden `anAutomationServiceGrantIsStillListed`. | ⬜ NOT RUN |
+| AS-4 | `AdminDirectoryService.roleCatalogue` becomes `WHERE assignable` | `AG-2` with a second victim: `Automation Service` leaves `GET /roles` as well as `Agent`, so **no CI credential can be issued through the product**. Should redden `theRoleCatalogueIsWholeAndHasNoWildcard` and the SPA's `offers BOTH roles every grant picker hides`. | ⬜ NOT RUN |
+| AS-5 | `V41` also `DELETE`s existing person-held `Automation Service` grants | The option refused on 2026-08-08: a migration removing access on a live instance, with no actor and therefore no audit row `RoleGrantService` would have written. Reddens nothing — the fixtures create their grants after migration — which is the finding. **Known gap: the suite cannot observe a migration that deletes production data.** | ⬜ NOT RUN |

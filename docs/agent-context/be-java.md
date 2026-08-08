@@ -2,17 +2,18 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-08 (**§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-08 (**§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `f822d57` (§133 phase 2) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `bf0f6d6` (§134 phase 1) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
-**SCHEMA HEAD IS `V40__agent_role_and_assignable.sql`; `V41` is next free.** The policy count is
-**still 62**: `role` and `role_permission` are instance-level reference data on the ERD §0.1
-exception list, so `V40` adds no policy. Before it, **neither §129 nor §131 carried a migration** —
+**SCHEMA HEAD IS `V41__automation_service_not_assignable.sql`; `V42` is next free.** The policy count
+is **still 62**: `V41` adds no table and no column (it flips one seeded `role` row), and `role` /
+`role_permission` are instance-level reference data on the ERD §0.1 exception list, so `V40` added
+no policy either. Before them, **neither §129 nor §131 carried a migration** —
 a clone reuses the version snapshot (which is why #59 dropped plan *templates*: they need a table),
 and the outbox's table, `CHECK` and partial index have all been in `V1` since M0.
 
@@ -22,7 +23,49 @@ before repeating any claim about it. `ci.yml` still runs **no** backend tests.
 
 ---
 
+## §134 — `assignable` DRIVES **ONE** SITE, AND REVOKE IS NOT IT
+
+`V41` sets `assignable = false` on **`Automation Service`** (`…-000000000005`) — a CI credential's
+capability set, which `V3` has called "never people" since M0 with nothing enforcing it. Nothing
+else about the role changed: same six keys, still issuable, still listed, still the role every CI
+token carries. **Three rows are non-assignable now and one of them IS one of the six**, so
+`assignable = false` is no longer a synonym for "not one of the six".
+
+- **READ THIS BEFORE TOUCHING `RoleGrantService`. `revoke` DOES NOT READ THE FLAG ANY MORE.** It
+  compares `Role.COMPANY_MEMBER_ID`. Grant asks *may a person hold this*; revoke asks *does removing
+  this do damage the endpoint cannot repair*, and only the `V15` baseline qualifies. **Putting the
+  flag back strands data**: `AdminDirectoryService:418` lists pre-`V41` Automation Service grants, so
+  the row renders with a live Revoke button that 403s forever — §31's disable-don't-hide from the
+  server side, with nothing failing. Mutation `AS-2`, comment in place at both sites, `V41` §1 is the
+  long form.
+- **The site table, corrected.** One of five reads the flag:
+
+  | Site | After `V41` |
+  |---|---|
+  | `RoleGrantService.validate` (grant) | **the only reader of `isAssignable()`** |
+  | `RoleGrantService.revoke` | **`COMPANY_MEMBER_ID`** — changed by `V41` |
+  | `AdminDirectoryService` `GET /roles` | stays `COMPANY_MEMBER_ID` — `WHERE assignable` now hides **CI tokens' role too** |
+  | `AdminDirectoryService` `GET /role-assignments` | stays — and now it matters: it is what makes the legacy grant's Revoke reachable |
+  | `ApiTokenService.validate` | stays — the flag here makes both ceilings unissuable |
+
+- **`V41` deletes nothing.** Existing person-held grants keep conferring, stay listed, stay
+  revocable. The `DELETE`-in-a-migration alternative is recorded as refused (`AS-5`): no actor, so no
+  audit row.
+- **`SeedDataTest`**: `nonAssignableRolesAreExactlyTheTwo` → `…TheThree`, plus new
+  `theAssignableRolesAreTheFive`, which pins that **Instance Admin stays `assignable = true`** — it
+  is refused by this endpoint for a *scope* reason and must not be swept in with the ceilings.
+  `RoleGrantEndpointTest` gains three (refused grant, revocable legacy grant, listed legacy grant).
+- **Roles spec §A2's "the six are the complete set of assignable roles" is RETIRED**, not reworded.
+  Five of the six are. The surviving invariant is "no role outside the catalogue is assignable".
+- **No frontend code changed** — the pickers filter on `assignable` since §133. One stale hand-written
+  fixture (`IssueTokenDialog.test.tsx` had `assignable: true`) was the only SPA edit.
+
+---
+
 ## §133 — THERE ARE EIGHT ROLE ROWS, AND `assignable` ANSWERS ONE OF THREE QUESTIONS
+
+> **Superseded in one place by §134 above: the flag drives ONE site, not two, and the questions are
+> four rather than three.** Everything else here stands.
 
 `V40` seeds **`Agent`** (`Role.AGENT_ID`, `…-000000000008`, PROJECT, `built_in`,
 `assignable = false`) — the ceiling an API token carries for agent access, **Test Engineer minus
@@ -36,9 +79,9 @@ the only narrowing point, which is why the ceiling is a role and not validation 
   **`Agent` is non-assignable BUT issuable and MUST be listed.** Five sites compare against a role
   constant and **only two may read the flag**:
 
-  | Site | After `V40` |
+  | Site | After `V40` (see §134 for the correction to row 1) |
   |---|---|
-  | `RoleGrantService` grant + revoke | **read `isAssignable()`** |
+  | `RoleGrantService` grant + revoke | **read `isAssignable()`** — ~~both~~ → **grant only, since `V41`** |
   | `AdminDirectoryService:352` (`GET /roles`) | **stays `COMPANY_MEMBER_ID`** — `WHERE assignable` hides `Agent` from the token form |
   | `AdminDirectoryService:402` (`GET /role-assignments`) | stays — an `Agent` grant cannot exist |
   | `ApiTokenService.validate` | **stays** — the flag here makes `Agent` unissuable, the one thing it exists for |
@@ -2175,6 +2218,12 @@ exist**, and the slice plan's decision E declines to create it for two storage p
 
 ## Session log
 
+- 2026-08-08 · EXTEND · **Automation Service non-assignable** (§134, `V41`, two phases). The role
+  `V3` called token-only becomes `assignable = false`; `RoleGrantService.revoke` **stops** reading
+  the flag and names the membership baseline, because reading it there strands every pre-`V41` grant
+  behind a Revoke that 403s while the row keeps rendering. Existing grants kept, listed and
+  revocable — the migration deletes nothing. Roles spec §A2's "the six are the complete assignable
+  set" retired: five are. 2221 tests, green first run; no frontend code change.
 - 2026-08-07 · EXTEND · **attachment owners, phase 1** (§126, M3 slice 10, decision round 3 step 6).
   `V39` narrows `attachment.owner_type` to five values (#50); `storage` gains `AttachmentOwner`,
   `BlobUpload` and three factories, and `EvidenceStore` is renamed `AttachmentStore` with its

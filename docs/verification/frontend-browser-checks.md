@@ -1588,3 +1588,38 @@ endpoint — which is the thing no gate can check, because all four render a lis
   the highest-value unrun row in this slice.
 - **No row grants `Agent` to a person.** The point of `A3-19` is that no screen offers it; forcing
   the request needs a hand-built `POST`, which is `AG-3`.
+
+---
+
+## §134 — Automation Service leaves the grant pickers (M3, `V41`)
+
+**Lane:** the administration lane again, same state as §133's — a Company Admin, **Teams & roles**,
+a project's **Access** screen, and **API tokens**. No fixture is authored: `V41` flips a seeded row,
+so the state is any provisioned company.
+
+**Why there are rows at all when no frontend file changed.** That is precisely the claim to check.
+The pickers have filtered on `assignable` since §133, so the role is supposed to disappear from
+three screens and stay on the fourth with nothing edited — and "nothing edited" is exactly the
+condition under which a gate has nothing to say. Every row below is a list the server sent.
+
+**One row is about a state the product will not create afresh** (`A3-27`) and therefore needs a
+grant that already exists. Make it the way an instance made it before today: issue the `POST` by
+hand, against a **pre-`V41` database** — or, equivalently and more cheaply, insert the
+`role_assignment` row directly, which is what `RoleGrantEndpointTest` does. If neither is available
+in the pass, say so and skip it; it is the only row here that cannot be reached through the UI.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `A3-25` | **Administration → Teams & roles** → "What each role can do", then **Grant a role** at company scope and again with a project chosen | **Five cards, no `Automation Service`**, and no `Agent` — one card fewer than `A3-18` saw. The role is absent from both grant lists too. The panel must not read as short or broken: it is the *only* screen where a card disappearing looks like a rendering fault rather than a rule. |
+| `A3-26` | A project's **Access** screen → "What each role can do here" | **Three project roles** — Test Lead, Test Engineer, Viewer. `A3-20` expected four; this is the same panel one release later, and the difference is the whole slice. |
+| `A3-27` | With a pre-existing person-held `Automation Service` grant (see above), open **Teams & roles → role assignments** | The grant **is listed**, with a working **Revoke**, and revoking it succeeds. The failure this row exists for is silent: if `revoke` ever reads `assignable` again, the row still renders and the button still looks live — it just 403s, and the banner says nothing about roles. |
+| `A3-28` | **Administration → API tokens → Issue a token**, open the Role select | `Automation Service` **is** offered, with `Agent`. Issue one, confirm the secret is shown once, and read the list row. This is the row that fails if somebody unifies the four filters — and it fails by making **CI credentials unobtainable**, which is louder than `A3-21`'s failure and easier to attribute. |
+
+**Not driven, and why:**
+
+- **Nothing here checks that the refusal is enforced.** No screen sends the request, so the 400 is
+  `AS-1`'s job in the mutation queue. This lane can only show that the affordance is gone, which is
+  the §31 half of it.
+- **No row covers an existing grant still *working*.** A pre-`V41` grant keeps conferring its
+  permissions, and seeing that means signing in as its holder and posting a result — the ingestion
+  path, not an administration screen. Recorded as a gap rather than driven here.
