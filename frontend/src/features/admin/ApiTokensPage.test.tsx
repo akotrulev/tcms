@@ -179,6 +179,28 @@ describe('ApiTokensPage', () => {
     )
   })
 
+  it('says a token has never been used, and shows a date-time once it has', async () => {
+    // Both halves matter and only one of them is cosmetic. "Never used" is the answer an
+    // administrator deciding what to revoke is actually looking for, so a blank cell would report
+    // "we don't know" where the product knows. And the used value renders as a date-time rather
+    // than "3 minutes ago": the server keeps it only to within an hour by default, so a relative
+    // phrase would claim a precision the column does not have.
+    mockApi(['company:read', 'token:issue'], [
+      LIVE,
+      { ...REVOKED, lastUsedAt: '2026-07-30T11:25:00Z' },
+    ])
+    renderPage()
+
+    const rows = await screen.findAllByTestId('Admin.Tokens.Row')
+    expect(within(rows[0]).getByTestId('Admin.Tokens.Row.LastUsed')).toHaveTextContent(
+      /never used/i,
+    )
+    expect(within(rows[1]).getByTestId('Admin.Tokens.Row.LastUsed')).not.toHaveTextContent(
+      /never used/i,
+    )
+    expect(within(rows[1]).getByTestId('Admin.Tokens.Row.LastUsed')).toHaveTextContent(/2026/)
+  })
+
   it('invites the first token when the company has none', async () => {
     mockApi(['company:read', 'token:issue'], [])
     renderPage()

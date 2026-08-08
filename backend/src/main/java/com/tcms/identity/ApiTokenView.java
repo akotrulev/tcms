@@ -19,9 +19,13 @@ import java.util.UUID;
  * @param roleName the role the token carries, expanded here because a uuid tells an administrator
  *                 nothing about what a leaked token could do. It is a <em>label</em>: nothing checks
  *                 it, and {@link PermissionEvaluator} resolves the grant from {@code roleId}.
- * @param lastUsedAt always null in this slice — {@code ApiToken.lastUsedAt} has no writer yet, and
- *                 the field is on the wire so the client is built against the shape rather than
- *                 against its absence.
+ * @param lastUsedAt ~~always null in this slice — {@code ApiToken.lastUsedAt} has no writer yet~~
+ *                 → <strong>superseded 2026-08-08 (§132)</strong>: it has one, in
+ *                 {@code ApiTokenAuthenticationService}. Kept to within
+ *                 {@code tcms.api-token.last-used-resolution} (an hour by default), so it is a
+ *                 <em>coarse</em> answer to "is this credential still in use" and never a precise
+ *                 one to "when exactly". Null means never used, which is the state a revocation
+ *                 candidate is in.
  */
 public record ApiTokenView(
         UUID id,

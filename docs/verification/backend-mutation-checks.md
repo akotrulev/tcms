@@ -1137,3 +1137,21 @@ the way out. Assertions live in `IngestionEndpointTest.Attribution` (2 more, 4 t
 | TA-9 | `CaseHistoryPage.authorLine` goes back to branching on `entry.source` | **The defect this phase found.** The source is a property of the *run* and the actor a property of the *verdict*; Automation Service holds `result:submit`, so a credential posting into a MANUAL run renders as "by \<the owner's name\>". No backend test can see it — it is a frontend branch over two fields that are both correct. Reddens nothing; **a browser row**, `TA-B1`. | ⬜ NOT RUN |
 | TA-10 | `record` merges rather than overwrites — it leaves an existing `executedByToken` standing on an amendment | A person's amendment reads as a verdict a person and a credential made together, and the credential named is the one whose result was replaced. Reddens nothing today — **known gap**; the assertion is a token ingest followed by a human amend on the same execution. | ⬜ NOT RUN |
 | TA-11 | `ApiTokenRepository.findAllByIdIn` becomes `findAllById` | `EntityManager.find` does not apply the Hibernate `@Filter`, so the company predicate rests on RLS alone — one layer instead of two, on a name rendered into another company's screen if RLS is ever bypassed. Reddens nothing (RLS still holds); recorded because it is the exact trap `findScopedById`'s javadoc documents, one method away. | ⬜ NOT RUN |
+
+### §132 phase 3 — `api_token.last_used_at` (`TA-12` … `TA-15`)
+
+The third dead column, and the only one of the three with a screen. Written in
+`ApiTokenAuthenticationService`'s **second** transaction — the one already open inside the company
+on the policed row — and only when the recorded value is stale by more than
+`tcms.api-token.last-used-resolution` (`PT1H`). Assertions live in
+`ApiTokenAuthenticationTest.LastUsed` (3) and `ApiTokensPage.test.tsx` (1).
+
+> **NONE RUN.** **`TA-13` first** — it is the one whose failure is a production write-amplification
+> nobody sees in a test, on the hottest row in the table.
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| TA-12 | `markUsed` always writes (drop the staleness comparison) | The naive writer: one `UPDATE api_token` per authenticated request, every request, all contending on a busy CI token's single row — to keep a value whose only reader is an administrator who cannot tell an hour from a second. Should redden `theSecondUseIsFree`. | ⬜ NOT RUN |
+| TA-13 | The bump moves to `ApiTokenAuthenticationFilter`, in its own transaction | Two transactions per authenticated request instead of one, and the second begins **outside** the company scope — so it writes under RLS with no GUC and updates zero rows, silently. The column stays empty and every test still passes. **This is the shape §116's red run had**; reddens nothing here, so it is a **known gap** and a design to defend in review. | ⬜ NOT RUN |
+| TA-14 | `accept` is called before the `isUsable` filter | "Last used" becomes "last presented": a revoked credential somebody is still trying gets a live date, and the administrator deciding what to revoke reads a date on the one they already did. Should redden `arefusedRequestRecordsNothing`. | ⬜ NOT RUN |
+| TA-15 | `ApiToken` gains `@Version` for this write | Two concurrent requests on one CI token — the ordinary case, not the race — start 409ing an unattended pipeline over a lost timestamp bump. Reddens nothing (the suite is sequential); recorded because "add optimistic locking" is the reflex and the class header already argues the opposite for `revoke`. | ⬜ NOT RUN |

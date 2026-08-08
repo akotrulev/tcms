@@ -5,6 +5,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 import org.hibernate.annotations.Filter;
@@ -14,8 +15,12 @@ import org.hibernate.annotations.Filter;
  *
  * <p><strong>The table has been in the schema since {@code V1} and had no writer until M3.</strong>
  * Two foreign keys have been pointing at it the whole time — {@code test_execution
- * .executed_by_token} and {@code audit_event.actor_token_id} — so the product has been able to
- * <em>record</em> that a token did something since M0 and has never been able to issue one.
+ * .executed_by_token} and {@code audit_event.actor_token_id} — so the product could
+ * <em>record</em> that a token did something for two milestones before it could issue one.
+ * ~~and has never been able to issue one~~ → §116 issued the first, and the two columns then went
+ * on being unwritten for two more slices: <strong>§132</strong> gave them their writers, together
+ * with {@link #lastUsedAt} here. The shape is worth remembering — a schema can be ready for a fact
+ * years before anything records it, and nothing fails in the meantime.
  *
  * <h2>A token carries a ROLE, never the rights of the person who issued it</h2>
  *
@@ -45,11 +50,13 @@ import org.hibernate.annotations.Filter;
  *
  * <h2>No {@code @Version}</h2>
  *
- * <p>{@code V1} gave this table no {@code lock_version} and this class does not add one. The only
- * mutation is {@link #revoke}, which is idempotent and monotonic: two administrators revoking the
- * same token concurrently both want it revoked, and a 409 telling one of them to reload and reapply
- * would be advice to do the thing that already happened. That is the opposite of {@code Condition},
- * where a lost update silently discards somebody's edit.
+ * <p>{@code V1} gave this table no {@code lock_version} and this class does not add one. Both
+ * mutations are idempotent and monotonic. {@link #revoke}: two administrators revoking the same
+ * token concurrently both want it revoked, and a 409 telling one of them to reload and reapply
+ * would be advice to do the thing that already happened. {@link #markUsed}: two concurrent requests
+ * on one credential are the ordinary case for a CI token, and a lost update costs one skipped bump
+ * of a deliberately coarse timestamp. That is the opposite of {@code Condition}, where a lost
+ * update silently discards somebody's edit.
  */
 @Entity
 @Table(name = "api_token")
@@ -92,12 +99,19 @@ public class ApiToken {
     private Instant expiresAt;
 
     /**
-     * Written by the ingestion path, not by this slice.
+     * When this credential last authenticated a request, to within a configured resolution.
      *
-     * <p>Mapped so the column is not invisible to {@code ddl-auto: validate}'s counterpart —
-     * an unmapped column reads as a schema nobody owns — and deliberately never set: a write on
-     * every authenticated request is a write-amplification decision that wants the batching answer
-     * {@code plan_snapshot}'s tick already has, not a naive {@code UPDATE} inside a servlet filter.
+     * <p>~~Written by the ingestion path, not by this slice.~~ → <strong>superseded 2026-08-08
+     * (§132): it never was.</strong> Nothing anywhere set it, so the token screen's "last used"
+     * was empty on every row of every deployment and <em>"revoke the credentials nobody has
+     * used"</em> — the natural companion to any expiry policy — could not be answered at all.
+     *
+     * <p>The rest of the old comment stands and is why {@link #markUsed} takes a resolution: a
+     * write on every authenticated request is a write-amplification decision, and a busy CI token
+     * would take one {@code UPDATE} per request all contending on one row. So the row is touched
+     * only when the recorded value is <em>stale by more than that resolution</em>. Deliberately
+     * coarse: the question this answers is "has anybody used this credential", where an hour is
+     * indistinguishable from a second, and no other behaviour reads it.
      */
     @Column(name = "last_used_at")
     private Instant lastUsedAt;
@@ -154,6 +168,29 @@ public class ApiToken {
         if (revokedAt == null) {
             this.revokedAt = now;
         }
+    }
+
+    /**
+     * Records that this credential authenticated a request — <strong>and usually does nothing.</strong>
+     *
+     * <p>Returns whether the row actually changed, so the caller can skip the write rather than
+     * hand Hibernate a dirty entity on every request. Between the two, the entity decides *when*
+     * and the caller decides *whether to persist*, which keeps the resolution rule in one place.
+     *
+     * <p>There is no {@code @Version} on this table and this does not add one, for the reason the
+     * class header gives about {@link #revoke}: two concurrent writers here want the same
+     * monotonic outcome, and a lost update costs at most one skipped bump of a value that is
+     * deliberately imprecise. A 409 telling a CI job to reload and retry a *timestamp* would be
+     * the pure form of a cure worse than the disease.
+     *
+     * @param resolution how stale the recorded value may be before it is worth a write
+     */
+    public boolean markUsed(Instant now, Duration resolution) {
+        if (lastUsedAt != null && lastUsedAt.plus(resolution).isAfter(now)) {
+            return false;
+        }
+        this.lastUsedAt = now;
+        return true;
     }
 
     /**

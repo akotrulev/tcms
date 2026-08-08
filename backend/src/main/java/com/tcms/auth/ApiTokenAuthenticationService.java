@@ -3,6 +3,7 @@ package com.tcms.auth;
 import com.tcms.identity.ApiToken;
 import com.tcms.identity.ApiTokenLookup;
 import com.tcms.identity.ApiTokenLookupRepository;
+import com.tcms.identity.ApiTokenProperties;
 import com.tcms.identity.ApiTokenRepository;
 import com.tcms.identity.ApiTokenSecrets;
 import com.tcms.tenancy.CompanyContext;
@@ -70,6 +71,7 @@ public class ApiTokenAuthenticationService {
     private final ApiTokenLookupRepository lookups;
     private final ApiTokenRepository tokens;
     private final ApiTokenSecrets secrets;
+    private final ApiTokenProperties properties;
     private final TransactionTemplate transactions;
     private final Clock clock;
 
@@ -77,12 +79,14 @@ public class ApiTokenAuthenticationService {
             ApiTokenLookupRepository lookups,
             ApiTokenRepository tokens,
             ApiTokenSecrets secrets,
+            ApiTokenProperties properties,
             TransactionTemplate transactions,
             Clock clock) {
 
         this.lookups = lookups;
         this.tokens = tokens;
         this.secrets = secrets;
+        this.properties = properties;
         this.transactions = transactions;
         this.clock = clock;
     }
@@ -111,8 +115,30 @@ public class ApiTokenAuthenticationService {
             return transactions.execute(status ->
                     tokens.findScopedById(lookup.get().getTokenId())
                             .filter(token -> token.isUsable(clock.instant()))
-                            .map(ApiTokenAuthenticationService::principalOf));
+                            .map(this::accept));
         }
+    }
+
+    /**
+     * Records the use and produces the principal.
+     *
+     * <p>The {@code last_used_at} bump rides <strong>this</strong> transaction rather than getting
+     * one of its own, and that is the whole reason it is here and not in the filter: the policed
+     * row is already loaded, already company-scoped and already managed, so the cost of the write
+     * is one {@code UPDATE} and the cost of <em>not</em> writing is nothing at all.
+     * {@link ApiToken#markUsed} answers "nothing at all" for all but the first request in each
+     * resolution window, which is what keeps a CI token's row off the hot path.
+     *
+     * <p>Only a <em>usable</em> token reaches here — the filter above runs first — so a revoked or
+     * expired credential presenting itself does not move the timestamp. "Last used" means last
+     * used, not last attempted; the second is an access log's question and this column would
+     * answer it badly.
+     */
+    private TokenContext.ApiTokenPrincipal accept(ApiToken token) {
+        if (token.markUsed(clock.instant(), properties.lastUsedResolution())) {
+            tokens.save(token);
+        }
+        return principalOf(token);
     }
 
     /**

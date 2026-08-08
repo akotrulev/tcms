@@ -111,6 +111,24 @@ Phase 2 — `test_execution.executed_by_token`:
   printed the owner's name. `authorLine` in `CaseHistoryPage.tsx` branches on the actor now. No
   backend test can see it; browser row `A3-16`.
 
+Phase 3 — `api_token.last_used_at`:
+
+- **Written in `ApiTokenAuthenticationService`'s SECOND transaction**, not in the filter: that one
+  is already open inside the company on the already-loaded policed row. A writer in the filter gets
+  its own transaction, which begins *outside* the company scope and therefore updates zero rows
+  under RLS — §116's red run, one layer up.
+- **`ApiToken.markUsed(now, resolution)` returns whether the row changed**, and usually it has not.
+  `tcms.api-token.last-used-resolution` (`ApiTokenProperties`, default `PT1H`) is what keeps a busy
+  CI token's single row off the hot path. **Still no `@Version`** — two concurrent requests on one
+  credential are the ordinary case, and a lost bump of a deliberately coarse timestamp costs
+  nothing where a 409 would fail an unattended pipeline.
+- **Only a *usable* token is recorded**: the `isUsable` filter runs first, so "last used" is not
+  "last presented". An administrator reading the column to decide what to revoke must not see a
+  live date on a credential nothing accepts.
+- The token screen grew the **Last used** column its own header had promised would be "a one-line
+  change the day it gets a writer". `Never used` is a sentence, and the value renders as a
+  date-time and never as "3 minutes ago".
+
 ---
 
 ## §129 — A CLONE IS A CREATE, EXCEPT WHERE THE CREATE CONTRACT IS NARROWER THAN THE AGGREGATE

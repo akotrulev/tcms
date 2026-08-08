@@ -47,14 +47,19 @@ import { RevokeTokenDialog } from './RevokeTokenDialog';
  * while loading, which is right for disabling a button and wrong here — it would flash "you do not
  * have permission" at a Company Admin on every visit. `Gate.pending` exists for exactly this.
  *
- * ## `lastUsedAt` is on the wire and is NOT a column
+ * ## ~~`lastUsedAt` is on the wire and is NOT a column~~ → it is one, since §132
  *
- * The contract carries it and states that it is **always null today**: the column exists, and
- * writing it on every authenticated request is a write-amplification decision nobody has made. A
- * "Last used" column would therefore be empty on every row of every deployment for ever — the
- * `ui-rules` rule against shipping a column the write path never populates, in its purest form.
- * The field stays on the type so the client is built against the shape; the day it gets a writer,
- * this is a one-line change.
+ * It was not, and the reason was the `ui-rules` rule against shipping a column the write path never
+ * populates: the field was on the wire and **always null**, so "Last used" would have been empty on
+ * every row of every deployment for ever. *"The day it gets a writer, this is a one-line change"* —
+ * it got one, and it was.
+ *
+ * What the writer decided still shows here. The value is kept only to within
+ * `tcms.api-token.last-used-resolution` (an hour by default), because the naive alternative is one
+ * `UPDATE` per authenticated request on a busy CI token's single row. So the cell renders a
+ * date-time and never a relative phrase: "3 minutes ago" claims a precision this column does not
+ * have, and the question it exists to answer — *which credentials can I revoke* — cannot tell an
+ * hour from a second.
  *
  * ## The rows are not re-sorted, and revoked ones stay
  *
@@ -163,6 +168,7 @@ export function ApiTokensPage() {
                         <TableCell sx={{ color: 'text.secondary' }}>Where it works</TableCell>
                         <TableCell sx={{ color: 'text.secondary', width: 160 }}>Owner</TableCell>
                         <TableCell sx={{ color: 'text.secondary', width: 170 }}>Expires</TableCell>
+                        <TableCell sx={{ color: 'text.secondary', width: 150 }}>Last used</TableCell>
                         <TableCell sx={{ color: 'text.secondary', width: 110 }}>Status</TableCell>
                         <TableCell sx={{ color: 'text.secondary', width: 110 }} align="right">
                           {/* One action per row; the header names the column, not the verb. */}
@@ -262,6 +268,25 @@ function TokenRow({
           */
           <Typography component="span" variant="caption">
             Does not expire
+          </Typography>
+        )}
+      </TableCell>
+      <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }} data-testid={`${RowTestId}.LastUsed`}>
+        {token.lastUsedAt ? (
+          formatDateTime(token.lastUsedAt)
+        ) : (
+          /*
+            "Never used" as a positive statement, for the Expires cell's reason and one more: this
+            is the column an administrator reads to decide what to revoke, and the answer they are
+            looking for is exactly this one. A blank would read as "we don't know".
+
+            The value is coarse by design (`tcms.api-token.last-used-resolution`, an hour by
+            default) — the server does not write it on every request, because a CI token would take
+            one row update per request. Rendered as a date-time and not "3 minutes ago": a relative
+            phrase implies a precision the column does not have.
+          */
+          <Typography component="span" variant="caption">
+            Never used
           </Typography>
         )}
       </TableCell>

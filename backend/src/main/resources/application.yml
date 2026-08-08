@@ -107,6 +107,13 @@ tcms:
       ttl: PT8H
       remember-me-ttl: P30D
 
+  api-token:
+    # How stale api_token.last_used_at may be before an authenticated request is worth an UPDATE.
+    # Coarse on purpose: the naive writer is one row update per request on the hot path, all
+    # contending on a busy CI token's single row, to keep a value whose only reader is an
+    # administrator deciding whether a credential is still in use. PT0S makes it per-request.
+    last-used-resolution: PT1H
+
   storage:
     evidence:
       # Where evidence bytes land — the filesystem adapter behind the storage port (open

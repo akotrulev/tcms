@@ -28,6 +28,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -362,6 +363,61 @@ class ApiTokenAuthenticationTest extends IntegrationTestBase {
     }
 
     @Nested
+    @DisplayName("last_used_at — coarse on purpose, and only for a credential that worked")
+    class LastUsed {
+
+        @Test
+        @DisplayName("a fresh token is null until it is used, then carries a time")
+        void theFirstUseRecordsATime() throws Exception {
+            String secret = issueToken(NORTH, ADMIN, Role.AUTOMATION_SERVICE_ID, ATLAS, null);
+            UUID tokenId = tokenIdFor(secret);
+
+            // Null is not "unknown": it is the state a revocation candidate is in, and it is what
+            // every row on every deployment read before this had a writer.
+            assertThat(lastUsedOf(tokenId)).isNull();
+
+            assertThat(statusOf(get("/api/v1/projects/" + ATLAS + "/cases", secret))).isEqualTo(200);
+
+            assertThat(lastUsedOf(tokenId)).isNotNull();
+        }
+
+        @Test
+        @DisplayName("a second request inside the resolution window does NOT write again")
+        void theSecondUseIsFree() throws Exception {
+            String secret = issueToken(NORTH, ADMIN, Role.AUTOMATION_SERVICE_ID, ATLAS, null);
+            UUID tokenId = tokenIdFor(secret);
+
+            get("/api/v1/projects/" + ATLAS + "/cases", secret);
+            Instant first = lastUsedOf(tokenId);
+            get("/api/v1/projects/" + ATLAS + "/cases", secret);
+
+            // The whole point of the column being coarse. Without this the writer is one UPDATE
+            // per authenticated request, every request, all contending on one row — and a busy CI
+            // token is precisely the row that would carry it. The default resolution is an hour,
+            // so the two requests above are inside one window by construction.
+            assertThat(lastUsedOf(tokenId))
+                    .as("a second request within the resolution window must not touch the row")
+                    .isEqualTo(first);
+        }
+
+        @Test
+        @DisplayName("a REFUSED credential does not move it — last used, not last attempted")
+        void arefusedRequestRecordsNothing() throws Exception {
+            String secret = seedTokenDirectly(NORTH, ADMIN, Role.AUTOMATION_SERVICE_ID,
+                    Instant.now().minus(1, ChronoUnit.HOURS));
+            UUID tokenId = tokenIdFor(secret);
+
+            assertThat(statusOf(get("/api/v1/projects/" + ATLAS + "/cases", secret)))
+                    .isEqualTo(401);
+
+            // An expired or revoked credential still being presented is an access log's question.
+            // Answering it here would make "last used" mean "last seen", and an administrator
+            // deciding what to revoke would read a live date on a credential nothing accepts.
+            assertThat(lastUsedOf(tokenId)).isNull();
+        }
+    }
+
+    @Nested
     @DisplayName("The owner's account is still the off switch")
     class Deactivation {
 
@@ -433,6 +489,18 @@ class ApiTokenAuthenticationTest extends IntegrationTestBase {
             lookups.save(ApiTokenLookup.of(secret.hash(), id, companyId));
         }));
         return secret.secret();
+    }
+
+    /**
+     * The scope wraps the transaction, not the other way round — this class's own header explains
+     * why, and a {@code tx.execute} that opened the company inside itself would read zero rows and
+     * fail as "no such token".
+     */
+    private Instant lastUsedOf(UUID tokenId) {
+        AtomicReference<Instant> value = new AtomicReference<>();
+        inCompany(NORTH, () -> tx.executeWithoutResult(status ->
+                value.set(tokens.findScopedById(tokenId).orElseThrow().getLastUsedAt())));
+        return value.get();
     }
 
     private UUID tokenIdFor(String secret) {
