@@ -1,6 +1,19 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-08 · **Branch:** `master` · **Latest slice:** [§134 — the role V3 called
+**Date:** 2026-08-08 · **Branch:** `master` · **Latest slice:** [§135 — the tool surface, and the
+requirement model that was never a criteria list](handoff/135-the-tool-and-command-surface.md) —
+**design only, no code**, closing the MCP WIP plan's §8 question 1, its *"only genuinely blocking
+one"*. 21 MCP tools over 88 REST paths plus ~45 CLI commands, two shapes over one client. **The
+finding is that the plan's stated prerequisite was the answer**: re-reading the `documentation`
+module showed `list_criteria` has no table *and never should* — ERD resolved question #18 already
+decided a requirement **is** a `doc_block`, so §6w was reaching for a surface that existed under
+another name. Five §6w reversals recorded, including `via = MCP` written against a table with no
+`via` column. **The rule that sets the count caught a merge in the spec's own first draft**: it asks
+whether every *reachable intersection* holds both permissions, not whether a role does — a
+Viewer-owned agent token holds `case:comment` with no `*:review`. Two other merges clear only
+because §134 made `Automation Service` non-assignable.
+
+Before it: [§134 — the role V3 called
 token-only, and the axis the flag should never have carried](handoff/134-automation-service-not-assignable.md)
 — two phases, **one migration (`V41`) and a description-only contract change**. `Automation Service`
 becomes non-assignable, thirteen migrations after `V3` first described it as *"never people"* with
@@ -237,12 +250,19 @@ now sits in front of `fetch` and faults the real backend.
 > to be the slice's whole content: `V40`'s flag was carrying the revoke axis too, and reading it
 > there would have stranded exactly the grants the decision was about.
 >
-> **So the next slice is the MCP plan's §8 question 1 — the tool and command surface — or another
-> re-derivation.** Question 1 needs the documentation module read end-to-end first (§6w specified
-> `list_criteria` and `get_doc_page` against a module that did not exist then), and it is a
-> design/spec slice rather than shipped code. §134 named no standing candidate on its way out, so a
-> re-derivation starts from the code with no shortlist — which is the method working as intended
-> rather than a gap.
+> ~~**So the next slice is the MCP plan's §8 question 1 — the tool and command surface**…~~ →
+> **DONE 2026-08-08, [§135](handoff/135-the-tool-and-command-surface.md)** — design only, no code.
+> The documentation-module read that question 1 was blocked on **was** the answer: `list_criteria`
+> has no table and should not have one, because ERD resolved question #18 already decided a
+> requirement is a `doc_block`. §6 of the WIP plan is `[SETTLED]`; question 2 fell out as a side
+> effect; question 3 (the per-token permission picker) is explicitly a future refinement.
+>
+> **So the next slice is the MCP plan's phase 4 — the shared TS client generated from
+> `openapi.yaml` — or another re-derivation.** Phases 1–3 are done (§132, §133, §134) and phase 4 is
+> now the first unblocked one, with a surface to build against. **Two prerequisites §135 identified
+> are cheap and independent of it**, and either is a legitimate smaller slice on its own:
+> `Idempotency-Key` on `POST …/suites` and `POST …/doc-pages` (a contract change gating two tools),
+> and the stale `doc_link` claim in `documentation/package-info.java`.
 >
 > **The chosen block is "close the small gaps", NOT the verification drain.** Every item in the round
 > adds rows to both queues. §65 stands, and so does what it costs: everything below §65 remains
