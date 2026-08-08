@@ -1101,3 +1101,21 @@ phase 1's thirteen.
 | OB-19 | Either handler's `@ConditionalOnProperty` is removed | `tcms.reporting.enabled=false` stops meaning "the fact log does not move" and starts meaning "it does not move *on a timer*" — the module is off and its tables keep changing. Reddens nothing; **known gap**, and the assertion is a context with the property off and an event that goes DEAD. | ⬜ NOT RUN |
 | OB-21 | Either handler is renamed back so both are `ResultsChangedHandler` | **The defect this slice shipped and caught.** Two `@Component`s with one simple name share a default bean name; the context fails to start with `ConflictingBeanDefinitionException` — but **not in this suite**, because both carry `@ConditionalOnProperty` and `IntegrationTestBase` disables both, so neither bean is ever registered. Should redden `ArchitectureRulesTest.springStereotypesHaveDistinctSimpleNames` **and nothing else** — which is the entire point of that check reading bytecode rather than a context. | ⬜ NOT RUN |
 | OB-20 | `OutboxEvents.RESULTS_CHANGED` is replaced by string literals at the three call sites | The reason the constant is in a foundation module at all. One typo and the producer writes an event nobody claims — a DEAD row in production, found by an operator rather than by the build. Reddens nothing (the literals would agree on the day of the mutation), so it is **a decision to defend in review** rather than a check. | ⬜ NOT RUN |
+
+### §132 phase 1 — `audit_event.actor_token_id` (`TA-1` … `TA-6`)
+
+The first of three dead token columns. `AuditEvent.record` reads `TokenContext` ambiently; the type
+moved from `identity` to `tenancy` to make that legal, and `CompanyContextTaskDecorator` clears it.
+Assertions live in `IngestionEndpointTest.Attribution` (2) and `AsyncCompanyContextTest` (2).
+
+> **NONE RUN.** **`TA-2` first** — it is the only one whose failure writes a *false* record rather
+> than an absent one, and nothing downstream could tell the difference.
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| TA-1 | `AuditEvent.record` stops reading `TokenContext` (back to leaving `actorTokenId` null) | The pre-slice state: every CI job's audit row says a person did it. Should redden `Attribution.bothActorColumnsAreWritten` and nothing else — which is the measure of how little of the suite drives a token-authenticated write. | ⬜ NOT RUN |
+| TA-2 | `AuditEvent.record` sets `actorUserId = null` when a token is present | **The tempting tidy-up**, and the one that loses accountability: the owner is who can be asked about a leaked credential, and a row naming only the token names nobody. Should redden the `auditActorUser()` assertion in both `Attribution` tests. | ⬜ NOT RUN |
+| TA-3 | `CompanyContextTaskDecorator` clears the company but not the token (its state before this slice) | A pooled worker inherits a credential from a leaked task and every audit row it writes names that credential. Invisible on virtual threads, which are never reused — so it is one YAML line away from being live. Should redden `pooledThreadCarriesNoTokenResidue`. | ⬜ NOT RUN |
+| TA-4 | `TokenContext.clear()` drops the restore and just removes | The inline path — `CallerRunsPolicy`, a `SyncTaskExecutor` — strips a live request's token mid-flight, and the request continues **uncapped**: the one direction in which losing this context grants rather than narrows. Should redden `inlineExecutionRestoresTheCallersToken`. | ⬜ NOT RUN |
+| TA-5 | `AuditEvent.record` gains an `actorTokenId` parameter and one of the 42 call sites passes null | The design this slice refused, mutated at exactly the place it fails: the row reads correct and says a person did what a pipeline did. Reddens nothing unless the chosen call site is the ingestion one — **recorded as a known gap**, and the reason the parameter does not exist. | ⬜ NOT RUN |
+| TA-6 | `ApiTokenAuthenticationFilter` opens the token scope without try-with-resources | A servlet thread keeps the credential for the next request on it, which then writes audit rows under somebody else's token and is capped by it. Reddens nothing in the current suite — **known gap**; the assertion needs two sequential requests pinned to one thread. | ⬜ NOT RUN |

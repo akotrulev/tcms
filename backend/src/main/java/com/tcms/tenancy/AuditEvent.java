@@ -67,10 +67,16 @@ public class AuditEvent {
     /**
      * The API token that acted, when a CI runner did rather than a person.
      *
-     * <p>Mapped and always null today — nothing authenticates by token yet. It is mapped anyway
-     * because it is the column that keeps "who did this" answerable once ingestion ships: an
-     * automated result attributed to no actor at all is indistinguishable from one whose actor was
-     * lost, and the Automation Service role exists precisely so those results are attributable.
+     * <p><strong>It is set beside {@link #actorUserId} and never instead of it.</strong> The caller
+     * identity on a token-authenticated request is the token's <em>owner</em>, so both columns are
+     * filled: the person answerable for the credential, and the credential. Writing only the token
+     * would lose who is accountable; writing only the person would say a human did what a pipeline
+     * did, which is the attribution this column exists to prevent.
+     *
+     * <p>~~Mapped and always null today — nothing authenticates by token yet.~~ → <strong>superseded
+     * 2026-08-08.</strong> §116 issued the first token and §117 made CI ingest with one, so this
+     * sentence stopped being true two slices before anything wrote here. {@code #record} fills it
+     * from {@link TokenContext}.
      */
     @Column(name = "actor_token_id", updatable = false)
     private UUID actorTokenId;
@@ -112,6 +118,10 @@ public class AuditEvent {
      *
      * <p>{@code companyId} comes from {@link CompanyContext}, never from a parameter — an audit row
      * filed against a company the caller nominated is an audit row in the wrong client's trail.
+     * {@link #actorTokenId} comes from {@link TokenContext} for the same reason and a stronger one:
+     * there are 42 call sites, and a parameter is 42 places somebody can forget one. A forgotten
+     * company would be caught by the very next assertion; a forgotten token would silently record
+     * that a person did what a pipeline did, and read correct.
      *
      * @param actorUserId the authenticated caller; null only for an unattended job
      * @param changes     a JSON object, or null. Must not contain a credential, a token or a
@@ -131,6 +141,8 @@ public class AuditEvent {
         event.companyId = CompanyContext.require();
         event.projectId = projectId;
         event.actorUserId = actorUserId;
+        TokenContext.ApiTokenPrincipal token = TokenContext.currentOrNull();
+        event.actorTokenId = token == null ? null : token.tokenId();
         event.action = action;
         event.targetType = targetType;
         event.targetIds = targetIds.toArray(UUID[]::new);
@@ -184,6 +196,16 @@ public class AuditEvent {
 
     public UUID getActorUserId() {
         return actorUserId;
+    }
+
+    /**
+     * No product surface reads this yet — the audit screen is M6 (open question #54, where
+     * {@code audit:view} and {@code project:audit} still have zero consumers). It exists so the
+     * writer above is assertable, which is the difference between a column that is filled and a
+     * column somebody believes is filled.
+     */
+    public UUID getActorTokenId() {
+        return actorTokenId;
     }
 
     public String getAction() {

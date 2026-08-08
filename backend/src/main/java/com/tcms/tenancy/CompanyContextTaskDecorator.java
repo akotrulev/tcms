@@ -10,6 +10,16 @@ import org.springframework.core.task.TaskDecorator;
  * {@link CompanyContext} <strong>cleared</strong>, and the submitting thread's own
  * company is restored when the task returns.
  *
+ * <h2>It clears {@link TokenContext} too, and that is newer than the class</h2>
+ *
+ * <p>The token could not be cleared here while it lived in {@code identity}, which this module may
+ * not import — an omission {@code TokenContext.clear()} recorded and argued was survivable, because
+ * an inherited token only ever <em>narrows</em> what background work may do. That argument named
+ * its own expiry and {@link AuditEvent#record} reached it: the audit trail now reads the token to
+ * attribute, so an inherited one no longer makes a task do less, it makes the task's audit row name
+ * a credential that had nothing to do with it. Both contexts are cleared in one place, so the two
+ * cannot drift.
+ *
  * <h2>Why this is not redundant with the non-inheritable ThreadLocal</h2>
  *
  * <p>{@code CompanyContext} is not an {@code InheritableThreadLocal}, so a <em>fresh</em>
@@ -45,7 +55,8 @@ public class CompanyContextTaskDecorator implements TaskDecorator {
     @Override
     public Runnable decorate(Runnable runnable) {
         return () -> {
-            try (CompanyContext.Scope ignored = CompanyContext.clear()) {
+            try (CompanyContext.Scope ignoredCompany = CompanyContext.clear();
+                    TokenContext.Scope ignoredToken = TokenContext.clear()) {
                 runnable.run();
             }
         };

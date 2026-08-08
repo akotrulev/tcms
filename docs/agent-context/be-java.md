@@ -67,6 +67,32 @@ index since M0. New package content in `tenancy`: `OutboxEntry` · `OutboxStatus
 
 ---
 
+## §132 — TOKEN ATTRIBUTION, AND `TokenContext` IS IN `tenancy` NOW
+
+Plan: [`docs/plans/2026-08-08-token-attribution.md`](../plans/2026-08-08-token-attribution.md).
+Derived from the code after round 3 closed; lands the MCP WIP plan's §7 phase 1. **No migration, no
+contract change** — all three columns are in `V1` and both wire fields were already in
+`openapi.yaml`.
+
+- **`com.tcms.identity.TokenContext` → `com.tcms.tenancy.TokenContext`.** If you are looking for it
+  in `identity`, that is why. `AuditEvent` is in `tenancy` (every module writes there) and `tenancy`
+  may not import `identity`, so the type moved rather than the rule bending. Four import sites.
+- **`AuditEvent.record` fills `actor_token_id` from the ambient context**, exactly as it fills
+  `company_id` from `CompanyContext`. **None of the 42 call sites gained a parameter** and none
+  should: a forgotten bound defaults to the unbounded answer, a forgotten attribution defaults to
+  *"a person did this"* — a false record rather than a missing one. Both actor columns are written:
+  the owner is still answerable.
+- **`CompanyContextTaskDecorator` now clears BOTH contexts**, and `TokenContext.clear()` returns a
+  `Scope`. This guard was unbuildable before the move, and `TokenContext`'s own javadoc had argued
+  the gap away — *"this context only ever narrows"* — while naming its expiry: *"it stops holding
+  the moment anything reads this context to grant rather than to bound."* Reading it to **attribute**
+  is neither, and breaks the asymmetry from the other side.
+- **`IngestionEndpointTest.Attribution` is the only place in the suite where a write is
+  authenticated by a real `api_token`** rather than a session for a user id. That absence is how
+  three token columns sat unwritten through the two slices that shipped tokens.
+
+---
+
 ## §129 — A CLONE IS A CREATE, EXCEPT WHERE THE CREATE CONTRACT IS NARROWER THAN THE AGGREGATE
 
 Decision round 3's step 8, second half (#59). Three endpoints, all `POST …/{id}/clone`.

@@ -70,6 +70,18 @@ class AsyncCompanyContextTest extends IntegrationTestBase {
     /** Long enough that a slow container never flakes; short enough that a hang is a failure. */
     private static final int TIMEOUT_SECONDS = 30;
 
+    /**
+     * A credential that never existed — nothing here reads the database through it. The token
+     * context is a {@code ThreadLocal} of five UUIDs, and what is under test is whether a worker
+     * thread inherits one.
+     */
+    private static final TokenContext.ApiTokenPrincipal A_TOKEN = new TokenContext.ApiTokenPrincipal(
+            UUID.fromString("a55c0000-0000-4000-8000-0000000000f1"),
+            ACME,
+            UUID.fromString("a55c0000-0000-4000-8000-0000000000f2"),
+            UUID.fromString("a55c0000-0000-4000-8000-0000000000f3"),
+            null);
+
     @Autowired
     private CompanyRepository companies;
 
@@ -297,6 +309,57 @@ class AsyncCompanyContextTest extends IntegrationTestBase {
             assertThat(CompanyContext.current())
                     .as("the caller's company must survive running a decorated task inline")
                     .contains(ACME);
+        }
+    }
+
+    @Test
+    @DisplayName("a pooled thread cannot carry one task's TOKEN into the next either")
+    void pooledThreadCarriesNoTokenResidue() throws Exception {
+        // The company's twin, and until 2026-08-08 it was unguarded: TokenContext lived in
+        // `identity`, which this module may not import, so the decorator could not clear it.
+        // That was argued survivable because the token context only ever NARROWS — an
+        // inherited token makes background work do less. AuditEvent.record ended the
+        // argument by reading it to ATTRIBUTE: an inherited token now makes a scheduled
+        // job's audit row name a CI credential that had nothing to do with it.
+        ThreadPoolTaskExecutor pool = singleThreadPool();
+        try {
+            AtomicReference<Thread> firstThread = new AtomicReference<>();
+            AtomicReference<Thread> secondThread = new AtomicReference<>();
+            AtomicReference<TokenContext.ApiTokenPrincipal> residue = new AtomicReference<>();
+
+            pool.submit(() -> {
+                firstThread.set(Thread.currentThread());
+                TokenContext.open(A_TOKEN);
+            }).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+
+            pool.submit(() -> {
+                secondThread.set(Thread.currentThread());
+                residue.set(TokenContext.currentOrNull());
+            }).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+
+            assertThat(secondThread.get())
+                    .as("fixture precondition: both tasks must share a thread, or nothing is proven")
+                    .isSameAs(firstThread.get());
+            assertThat(residue.get())
+                    .as("the next task on a recycled thread must inherit no credential")
+                    .isNull();
+        } finally {
+            pool.shutdown();
+        }
+    }
+
+    @Test
+    @DisplayName("running a task inline restores the submitting request's own token")
+    void inlineExecutionRestoresTheCallersToken() {
+        // Clear-without-restore here would strip the token from a live request mid-flight,
+        // and the request would carry on UNCAPPED — the one direction in which losing this
+        // context grants rather than narrows.
+        try (var ignored = TokenContext.open(A_TOKEN)) {
+            decorator.decorate(() -> assertThat(TokenContext.currentOrNull()).isNull()).run();
+
+            assertThat(TokenContext.currentOrNull())
+                    .as("the caller's token must survive running a decorated task inline")
+                    .isEqualTo(A_TOKEN);
         }
     }
 

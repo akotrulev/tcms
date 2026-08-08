@@ -5,6 +5,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tcms.IntegrationTestBase;
+import com.tcms.identity.ApiToken;
+import com.tcms.identity.ApiTokenLookup;
+import com.tcms.identity.ApiTokenLookupRepository;
+import com.tcms.identity.ApiTokenRepository;
+import com.tcms.identity.ApiTokenSecrets;
 import com.tcms.identity.AppUser;
 import com.tcms.identity.AppUserRepository;
 import com.tcms.identity.CompanyMembership;
@@ -114,6 +119,15 @@ class IngestionEndpointTest extends IntegrationTestBase {
 
     @Autowired
     private RoleAssignmentRepository roleAssignments;
+
+    @Autowired
+    private ApiTokenRepository apiTokens;
+
+    @Autowired
+    private ApiTokenLookupRepository apiTokenLookups;
+
+    @Autowired
+    private ApiTokenSecrets secrets;
 
     @Autowired
     private TransactionTemplate tx;
@@ -685,6 +699,87 @@ class IngestionEndpointTest extends IntegrationTestBase {
     }
 
     // =====================================================================
+    // The columns that record that a CREDENTIAL acted
+    // =====================================================================
+
+    /**
+     * <strong>The only place in the suite where a write is authenticated by a real
+     * {@code api_token}.</strong> Every other endpoint test issues a session for a user id, which
+     * is the shape that let three token columns sit unwritten through two slices that shipped
+     * tokens: the code path a CI job actually takes was never driven.
+     */
+    @Nested
+    @DisplayName("Attribution — a CI job's row names the credential, not only its owner")
+    class Attribution {
+
+        @Test
+        @DisplayName("an ingestion by a token fills actor_token_id AND actor_user_id")
+        void bothActorColumnsAreWritten() throws Exception {
+            CiToken ci = seedCiToken();
+
+            MvcResult posted = ingestAs(ci.secret(),
+                    junit(testCase("com.acme.RefundTest", "refundsInFull", null)), "ik-at-1");
+
+            assertThat(posted.getResponse().getStatus()).isEqualTo(201);
+            // The owner is still the actor: they are answerable for the credential, and dropping
+            // them would leave a row nobody can be asked about. The token is recorded BESIDE them,
+            // which is what separates "L. Lead edited this" from "L. Lead's pipeline did".
+            assertThat(auditActorUser()).isEqualTo(ROBOT);
+            assertThat(auditActorToken()).isEqualTo(ci.tokenId());
+        }
+
+        @Test
+        @DisplayName("the same ingestion over a SESSION leaves actor_token_id null")
+        void aSessionWriteNamesNoCredential() throws Exception {
+            // The negative half, and the one that fails if the column is ever filled from
+            // something other than the token context — a hardcoded value, or a context leaked
+            // from a previous request on this thread.
+            MvcResult posted = ingest(ROBOT,
+                    junit(testCase("com.acme.RefundTest", "refundsInFull", null)), "ik-at-2");
+
+            assertThat(posted.getResponse().getStatus()).isEqualTo(201);
+            assertThat(auditActorUser()).isEqualTo(ROBOT);
+            assertThat(auditActorToken()).isNull();
+        }
+    }
+
+    /** A live credential for {@link #ROBOT}, scoped to BANKING — what a CI job holds. */
+    private CiToken seedCiToken() {
+        ApiTokenSecrets.NewSecret secret = secrets.generate();
+        UUID id = UUID.randomUUID();
+        inCompany(ACME, () -> tx.executeWithoutResult(status -> {
+            apiTokens.save(ApiToken.issue(id, ACME, "ci " + id, secret.prefix(),
+                    ROBOT, Role.AUTOMATION_SERVICE_ID, BANKING, null, Instant.now()));
+            apiTokenLookups.save(ApiTokenLookup.of(secret.hash(), id, ACME));
+        }));
+        return new CiToken(id, secret.secret());
+    }
+
+    private record CiToken(UUID tokenId, String secret) {
+    }
+
+    private MvcResult ingestAs(String bearer, String report, String idempotencyKey)
+            throws Exception {
+
+        return mvc.perform(MockMvcRequestBuilders
+                        .post("/api/v1/projects/" + BANKING + "/ingestions")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + bearer)
+                        .header("Idempotency-Key", idempotencyKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(ingestionPayload(report, null))))
+                .andReturn();
+    }
+
+    private UUID auditActorUser() throws SQLException {
+        return uuid("SELECT actor_user_id FROM audit_event WHERE action = 'ingestion.completed'");
+    }
+
+    private UUID auditActorToken() throws SQLException {
+        return uuid("SELECT actor_token_id FROM audit_event WHERE action = 'ingestion.completed'");
+    }
+
+    // =====================================================================
     // helpers — requests
     // =====================================================================
 
@@ -1015,6 +1110,11 @@ class IngestionEndpointTest extends IntegrationTestBase {
             rows.next();
             return rows.getLong(1);
         }
+    }
+
+    private UUID uuid(String sql) throws SQLException {
+        String value = string(sql);
+        return value == null ? null : UUID.fromString(value);
     }
 
     private String string(String sql) throws SQLException {

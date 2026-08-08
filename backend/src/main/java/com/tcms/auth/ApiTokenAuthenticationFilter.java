@@ -1,6 +1,6 @@
 package com.tcms.auth;
 
-import com.tcms.identity.TokenContext;
+import com.tcms.tenancy.TokenContext;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
