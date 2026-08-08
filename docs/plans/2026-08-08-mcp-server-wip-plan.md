@@ -518,7 +518,23 @@ but visible* affordance — the agent knows what it cannot do without holding a 
    recognise. It also found **two defects §137 shipped**: `parseArgs({ strict: false })` dropped
    every string flag on every command, and `npm run build --workspaces` ordered the packages
    alphabetically, so **CI's `packages` job had never once been green**.
-8. **MCP server** over the same client, carrying §6.2's capability summary and `whoami`.
+8. ~~**MCP server** over the same client, carrying §6.2's capability summary and `whoami`.~~ →
+   **DONE 2026-08-08, §140**, `packages/mcp`. 21 tools, no migration and no contract change.
+   **The finding: the server object cannot be a singleton.** `instructions` is a constructor
+   argument of the SDK's `Server`, sent once inside `initialize` and never re-sent — and §6.2 puts
+   the capability summary there precisely because a host loads instructions before any tool is
+   discovered. §4's remote-HTTPS deployment means one process serves many credentials, so a
+   process-wide server hands every later caller the *first* caller's name, project and reach
+   through a field that reads like documentation; `tools/list` carries the same problem one level
+   down. Nothing about it fails a test written the obvious way. Also found: **`GET /me/permissions`
+   answers `{key, qualifier}` pairs**, so a `tools/list` filtered on keys alone repeats the defect
+   §65 fixed in the SPA — the resolution is to list the tool and say what it is narrowed to, not to
+   hide it; **a third §137 defect** (`@tcms/cli`'s `whoami` printing `[object Object]`, untested);
+   and **two arms §6/§3 call *Buildable* that cannot exist on this transport** — evidence is
+   `multipart/form-data` and a tool call carries JSON, and assigning a reviewer needs a `userId` or
+   `teamId` this surface cannot look up, because §3.3 excludes `/users` and `/teams` and `V40` §6
+   withholds `company:read` from `Agent`. That is the second time that withholding has removed
+   something the spec asked for.
 9. **Rate limiting**, REST side.
 10. **Deploy** — image, compose, Caddy route, runbook.
 

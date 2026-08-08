@@ -49,7 +49,8 @@ pipelines; continuing without them produces inconsistent output.
 
 ~~The two stacks are independent.~~ **There are THREE since §137.** Gradle lives in `backend/`, npm
 in `frontend/`, and npm again in `packages/` — `@tcms/client` (the typed API client and command
-core) and `@tcms/cli`, under their own workspace root at `packages/package.json`. **No stack
+core), `@tcms/cli` and, since §140, `@tcms/mcp` (the MCP server), under their own workspace root at
+`packages/package.json`. Three packages, one stack. **No stack
 builds from the repo root** — the only thing the root runs is `docker compose`, which orchestrates
 the *system* and is therefore the one thing that legitimately spans both.
 
@@ -76,19 +77,26 @@ Point it elsewhere with `VITE_API_PROXY_TARGET`. **After changing `.env.local`, 
 renders blank with an empty console.
 
 ```bash
-# The TS client and the CLI (§137) — pure Node, no Docker, no backend needed
+# The TS client, the CLI (§137) and the MCP server (§140) — pure Node, no Docker, no backend
 cd packages
 npm install                       # one workspace root; `npm ci` in CI
 npm run build                     # THE gate: tsc over source+tests, then emit. NOT
                                   # `--workspaces` — that runs them ALPHABETICALLY, so cli goes
                                   # first and typechecks against a client that has not been
                                   # emitted. It passed locally only on a leftover dist/ and CI's
-                                  # packages job had never once been green (§139).
+                                  # packages job had never once been green (§139). The script
+                                  # names the order client → cli → mcp; mcp is THIRD for the
+                                  # same reason cli is second.
 npm run lint --workspaces         # oxlint, 0 warnings
-npm run test:run --workspaces     # 106 tests, ~0.7s — CI runs these, unlike the backend's
+npm run test:run --workspaces     # 209 tests, ~1s — CI runs these, unlike the backend's
 cd client && npm run gen:api      # THE SECOND COPY of schema.d.ts. Regenerate BOTH after any
                                   # openapi.yaml change; schemaFreshness.test.ts fails otherwise.
 node cli/dist/main.js help        # TCMS_URL + TCMS_TOKEN drive it
+node mcp/dist/main.js --help      # stdio by default; --http is the deployment shape.
+                                  # Under stdio the credential is TCMS_TOKEN; under --http it
+                                  # is each request's Authorization header, and the server is
+                                  # built PER SESSION because its instructions carry that
+                                  # caller's capability summary (§140). Put TLS in front of it.
 ```
 
 ```bash

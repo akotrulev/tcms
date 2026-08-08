@@ -179,6 +179,29 @@ Namespaced `tcms_*`. `projectId` and `companyId` **do not appear in any schema**
 Eighteen are buildable against today's contract; two need §4.2's contract addition first; one has a
 blocked arm (§5).
 
+> **~~Eighteen are buildable.~~ → AMENDED 2026-08-08 BY THE IMPLEMENTATION (§140).** §4.2's
+> contract addition landed in §136 and §5's blocked arm was unblocked by §138, so tools 9, 10 and 11
+> all shipped. **Two arms of two *Buildable* tools did not, and neither is a shortfall in the
+> implementation** — both are decisions taken elsewhere meeting a transport this table reasoned
+> about separately:
+>
+> | Tool | Arm dropped | Why it cannot exist here |
+> |---|---|---|
+> | 18 `tcms_record_result` | `evidence:attach` — `POST …/evidence` | The endpoint accepts **`multipart/form-data` only**; it takes a file. MCP tool arguments are JSON and a model has no bytes to send. The tool therefore declares `run:execute` + `result:submit` and **not** `evidence:attach`: declaring a permission it never exercises would hide it from a caller who can record results and cannot attach, which is §2's failure arriving through the declaration rather than through the merge. |
+> | 13 `tcms_review_verdict` | assignees — `POST …/reviews/{id}/assignees` | It needs a `userId` or a `teamId`, and **nothing on this surface can obtain either**: §3.3 excludes everything under `/users` and `/teams` as `COMPANY`-scope, and `V40` §6 withholds `company:read` from `Agent` deliberately — *a token is not a member*. A tool taking a UUID only a human can paste in is the CLI's job. The tool records verdicts and resolves threads. |
+>
+> This is the **second** time `V40` §6 has removed something this document asked for — §4.5's
+> refusal copy was the first (§137). The general form: *the `Agent` grant bounds what a credential
+> may **know** as well as what it may do, including the things a helpful client wants to know in
+> order to be helpful.* Both are recorded in [§140](../handoff/140-the-mcp-server.md) §3.
+>
+> **§2's rule also needs a qualifier it does not have.** `GET /me/permissions` answers
+> `{key, qualifier}` pairs and this document reasons entirely in keys; a `tools/list` filtered on
+> keys alone lists a tool for rows the caller cannot touch, which is §65's SPA defect one client
+> over. The resolution is **not** to hide — `OWN` still lets a caller act on their own rows — but to
+> list the tool and compose the narrowing into its description, per session. §140 §2 has the
+> argument.
+
 `tcms_review_verdict` declares three permissions and is the one tool listed on a **per-subject**
 basis rather than outright: a caller holding `case:review` but not `plan:review` sees it, and its
 description names which subjects it will accept. That is the honest reading of §2 — the three keys
@@ -284,7 +307,13 @@ never composed at a call site.
 
 ### 4.6 Output budgets
 
-Default page size **25** on every list tool. `_meta["anthropic/maxResultSizeChars"]` is raised above
+Default page size **25** on every list tool. **Four of the six lists have no pagination on the wire
+at all** (§140) — suites, plans, runs and doc pages answer a plain array of the project's rows, as
+`core/resolve.ts` records from the other side — so the page size there is a **client-side window
+over a response that already arrived whole**. It bounds the tokens the model sees, which is what
+this budget is for, and it buys the server nothing; the result says `truncated` rather than `more`,
+because implying a next page the endpoint does not have would be worse than saying so.
+`_meta["anthropic/maxResultSizeChars"]` is raised above
 the default on exactly two tools — `tcms_open_doc_page` and `tcms_open_case` — because both return
 one authored document whose truncation would be silently misleading grounding. Every other tool
 paginates instead of raising its ceiling.

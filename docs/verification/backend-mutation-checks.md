@@ -1308,3 +1308,34 @@ needs is one setup — `docker compose up`, `provision-company`, issue an `Agent
 and `TCMS_TOKEN` — after which every read command from §137 and every write command here is one
 invocation. It is not a browser lane and not a mutation, so neither queue owns it; it is named in
 the handoff as its own outstanding item.
+
+### §140 — the MCP server (`MS-1` … `MS-10`)
+
+**The third batch that is not `./gradlew`**, on `TS-*`'s and `CW-*`'s terms: mutate `packages/`, run
+`cd packages && npm run test:run --workspaces`, and name the file in the scope column since the
+whole suite is under a second. Assertions live in `mcp/src/session.test.ts` (15),
+`mcp/src/reads.test.ts` (11), `mcp/src/writes.test.ts` (27) and `mcp/src/server.test.ts` +
+`mcp/src/http.test.ts` (20).
+
+> **NONE RUN.** **`MS-1` first** — it is the row that pins this slice's whole finding, and its
+> failure mode is one company's session shape disclosed to another through a field that reads like
+> documentation. **`MS-4` second**, because its failure is §6t's enumeration oracle.
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| MS-1 | `http.ts` hoists `buildServer(session)` out of the request handler into a module-level singleton built from the first session | The finding, defeated. `instructions` is a constructor argument sent once during `initialize`, so every later caller receives the **first** caller's capability summary — their name, email, project key and reach — and a filtered tool list computed from somebody else's permissions. Should redden `gives each caller their own server, with their own capability summary` in `http.test.ts`. **Nothing else would fail: every tool still works and the protocol is still correct.** | ⬜ NOT RUN |
+| MS-2 | `session.ts`'s `probe` sends `projectId` to `GET /me/permissions` even when no project resolved | A token that can see three projects reports the PROJECT terms of whichever one it happened to pick, so `tools/list` offers write tools for a project the session is not bound to and every call 404s. The contract is explicit that the two answers are different sets rather than one filtered. Should redden `does not choose between several projects, and says how to bind one`. | ⬜ NOT RUN |
+| MS-3 | `session.ts` drops `qualifiers` and keeps only the keys | §65's SPA defect, one client over: a tool held at `OWN` or `PLAN_SCOPE` lists with a description claiming the whole scope, and the model offers an operation the server refuses per row — the refuse-and-retry loop the filtering exists to prevent. Should redden `keeps the qualifier, not only the key` and `lists a narrowly-held tool and says what it is narrowed to`. | ⬜ NOT RUN |
+| MS-4 | `server.ts`'s `CallTool` handler answers an unlisted tool with the tool's gate permission instead of "no tool named X" | A hidden tool confirms its own existence, and the permission it names tells the caller what the instance's model looks like — the enumeration §6w.3's hiding removes, restored through the refusal. Should redden `refuses a hidden tool without confirming that it exists`. | ⬜ NOT RUN |
+| MS-5 | `result.ts`'s `failed` returns the raw `error.detail` for every status instead of routing through `describeRefusal` | The 404 branch stops being the silent one. The server's own 404 detail can name the thing that was not found, which is the difference between "no such case, or it is not visible" and confirming the row exists to a caller in another company. Should redden `names nothing on the 404 branch` — **the one row here whose failure is a security finding rather than a defect.** | ⬜ NOT RUN |
+| MS-6 | `server.ts`'s dispatcher passes `tool.gate.permissions[0]` instead of the resolved arm's permission | A refused edit on `tcms_write_case` reports `case:create`, so the user asks an administrator for a permission they already hold and the grant that would fix it is never requested. Should redden `names the permission of the ARM that ran, not the tool's first gate key`. | ⬜ NOT RUN |
+| MS-7 | `writes.ts` replaces `requireExplicitVersion` on the `blocks` arm with the ordinary `versionFor` | §139's finding at the one place it bites here. A `blocks` array is the whole page and its content came from an earlier read, so a fresh version asserts a state that body was never based on: the server accepts, and whoever saved in between loses their paragraphs. Should redden `demands the caller's own lockVersion when replacing blocks`. **The only mutation in this section that destroys authored content.** | ⬜ NOT RUN |
+| MS-8 | `writes.ts`'s `recordResult` adds `evidence:attach` to its gate "for symmetry with the spec" | A caller holding `run:execute` and `result:submit` without `evidence:attach` loses the tool entirely — hidden by a permission it never exercises, which is §2's failure arriving through the declaration rather than the merge. Should redden `does not declare evidence:attach, because it cannot attach evidence`. | ⬜ NOT RUN |
+| MS-9 | `writes.ts`'s `openReview` picks `reviews[0]` instead of the first `IN_REVIEW` one | `CW-12` one surface over: a verdict aimed at a closed review earns a 409 the caller cannot act on, and re-submitting opens a *new* record, so the row it aimed at will never accept one. Should redden `acts on the OPEN review, not the newest one` and `explains that a closed review cannot be joined`. | ⬜ NOT RUN |
+| MS-10 | `instructions.ts`'s `fit` truncates the joined string at `INSTRUCTIONS_BUDGET` instead of dropping whole sections | The summary ends mid-permission-key, and a half-written key is what a model hands the user as the thing to ask an administrator for. Reddens **nothing** — no assertion reads the tail of a truncated summary, only its byte length. **Known gap**, and the reason the section-dropping order is written out in the function's own comment. | ⬜ NOT RUN |
+
+**The gap is three packages wide now.** `MS-*`, `CW-*` and `TS-*` all mutate code observed only by a
+stubbed `fetch`. One live setup closes all three — `docker compose up`, `provision-company`, an
+`Agent` token, `TCMS_URL`/`TCMS_TOKEN`, then the CLI's commands and an MCP host pointed at
+`tcms-mcp --http`. It is neither a browser lane nor a mutation, so neither queue owns it; it is
+named in the handoff as its own outstanding item.
