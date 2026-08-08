@@ -274,10 +274,21 @@ baseline role (`V15`), not through the six:
 `SYSTEM` scope, Instance Admin only: `company:create` · `company:delete` · `company:suspend` ·
 `user:manage` · `role:manage` · `system:settings` · `instance:audit`.
 
-Four things that change how the table reads:
+Five things that change how the table reads:
 
 - **The six are the complete assignable set** — seeded, immutable, **no custom roles, not even
   clone-and-edit**. A client needing something between two tiers gets the higher one.
+- **Two seeded rows are NOT among the six, and `role.assignable` is false for both** (`V40`).
+  `Company Member` (`V15`) is the `company:read` baseline joining confers; **`Agent`** (`V40`) is
+  the token-only ceiling for agent access — **Test Engineer minus `library:manage`, `case:delete`,
+  `evidence:delete` and `company:read`**, enumerated once in the roles spec **§A6a** and derived
+  from the catalogue by `SeedDataTest.agentIsTestEngineerMinusThree`, not copied into a fourth
+  table. `library:manage` is dropped because §A3 gates it by an *impact modal* an API caller never
+  sees; the two deletes because `OWN` follows `api_token.owner_id`, so an agent would delete what
+  the human authored. **Assignability, issuability and listedness are three different questions** —
+  `Agent` is non-assignable but issuable **and listed**, so `GET /roles` must keep returning it and
+  only `RoleGrantService` may read the flag. `V40` §2 names the three sites that must stay
+  baseline-specific; converting them is a one-line "cleanup" that makes the role unissuable.
 - **An API token never confers its own permissions; it *caps* its owner's:**
   `evaluate(ownerId, projectId) ∩ permissionsOf(token.roleId) ∩ [the token's project]`. Intersection,
   never union — so a token exceeds neither its role nor its owner, and demoting a person shrinks

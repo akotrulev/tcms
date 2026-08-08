@@ -106,13 +106,18 @@ administrator does deliberately; joining a company confers only the `Company Mem
 
 **These six are the complete set of *assignable* roles in v1.** Seeded, immutable, **not cloneable — no custom roles at all**, not even clone-and-edit. A client needing something between two tiers gets the higher one, or the built-in boundary is drawn wrong and should be fixed. Enforcement is permission-based (nothing checks a role name), so adding a role designer later is additive — phase 3, on evidence of demand.
 
-**A seventh row exists in `role` and is not one of the six** — added 2026-08-01 by `V15`, and it is the mechanism §A3's "`company:read` for every member" needed rather than a tier:
+**Two further rows exist in `role` and neither is one of the six.** Both are `assignable = false` — nobody is ever granted them — and there the resemblance ends:
 
-| Role | Scope | Built-in | Assignable | Intent |
-|---|---|---|---|---|
-| **Company Member** | COMPANY | yes | **no** | Exactly `company:read`, granted automatically to every member on joining. Never offered, never revocable. |
+| Role | Scope | Built-in | Assignable | Listed by `GET /roles` | Carried by a token | Intent |
+|---|---|---|---|:--:|:--:|---|
+| **Company Member** | COMPANY | yes | **no** | no | no | Exactly `company:read`, granted automatically to every member on joining. Never offered, never revocable. Added 2026-08-01 by `V15` — the mechanism §A3's "`company:read` for every member" needed rather than a tier. |
+| **Agent** | PROJECT | yes | **no** | **yes** | **yes** | The ceiling for an AI agent acting on behalf of the person who issued the token — Test Engineer minus three, enumerated in **§A6a**. Added 2026-08-08 by `V40`. |
 
-It is not in the table above because nobody ever *chooses* it: it is granted by the act of joining, it is filtered out of `GET /roles`, `POST /role-assignments` refuses it, and `GET /role-assignments` does not list its grants — so nothing renders a Revoke whose effect would be to take away a colleague's sight of the company with no repair short of the operator CLI. `openapi.yaml`'s `Role.name` enum therefore stays at six names, and the six are still the whole of what an administrator can do.
+**`Company Member` is not in the table above because nobody ever *chooses* it**: it is granted by the act of joining, it is filtered out of `GET /roles`, `POST /role-assignments` refuses it, and `GET /role-assignments` does not list its grants — so nothing renders a Revoke whose effect would be to take away a colleague's sight of the company with no repair short of the operator CLI.
+
+**`Agent` is not in the table above because nobody is ever *an Agent*** — it is a property of a credential, not of a person. But it *is* listed and *is* issuable, and that asymmetry is load-bearing: the token-issue form is the only place it is ever chosen, so hiding it there would make the role inert. **Three questions — may a person hold it, may a token carry it, is it listed — and `role.assignable` answers only the first.** They coincided while `Company Member` was the only non-assignable row; `V40` §2 records which enforcement sites may read the flag and which must stay baseline-specific.
+
+**The six are still the whole of what an administrator can do.** `openapi.yaml`'s `Role.name` enum gains `Agent` (it is on the wire) and keeps excluding `Company Member` (it is not); a `Role` now also carries `assignable`, so the grant pickers can tell "cannot be granted to anyone" from "wrong scope for this grant".
 
 **Why it had to be a new role rather than a reuse.** ~~The four PROJECT-scope roles cannot be granted at COMPANY scope (`RoleGrantService.scopeError` refuses the mismatch, and it should: Viewer granted company-wide would confer `project:read` and `case:read` over **every project present and future**, which is exactly the boundary §A1 draws)~~ → **superseded 2026-08-02 by §A1.1**: they can be, and that is now the inheritance feature. The conclusion here still holds for a different reason — a company-wide Viewer *does* read every project, and `Company Member` must convey nothing about any project, so the two remain different roles rather than one. Company Admin confers everything. **It is not the "company-wide read-only stakeholder"** handoff §39 anticipated as a possible seventh role — that one reads every project; this one grants nothing about any project, which is what makes it safe to hold universally. Both could exist; they are different roles.
 
@@ -306,6 +311,48 @@ knowing the project exists.
 `SeedDataTest.everyProjectScopeRoleHoldsTheVisibilityPrecondition` derives from the catalogue that
 no PROJECT-scope role holds permissions without `project:read`.
 
+### A6a. Agent — the exact grant
+
+**Token-only, PROJECT scope, seeded by `V40`.** The ceiling for an AI agent — a CLI or an MCP server — acting through the REST API on behalf of the person who issued the token. Twenty-three keys, and it is **Test Engineer minus four**:
+
+```
+suite:manage      ✓                   case:comment      ✓
+case:read         ✓                   case:review       ✓
+case:create       ✓                   suite:review      ✓
+case:edit         ✓  ALL, not OWN     plan:review       ✓
+plan:create       ✓                   report:view       ✓
+plan:edit         ✓                   report:export     ✓
+run:create        ✓                   doc:read          ✓
+run:execute       ✓                   doc:edit          ✓
+result:submit     ✓                   artifact:read     ✓
+evidence:attach   ✓                   artifact:edit     ✓  plan scope only
+defect:create     ✓                   project:read      ✓  visibility precondition (§A6)
+workitem:manage   ✓
+```
+
+**Dropped from Test Engineer**, each for its own reason:
+
+| Dropped | Why |
+|---|---|
+| `library:manage` | §A3 gates it by an **impact modal, not by permission** — editing a shared condition or step propagates to every referencing case, and the control is *informed consent* via a confirmation listing them. **An API caller never sees that modal.** Removing the permission is the only fix that also holds for raw REST; rebuilding consent at the tool layer could not. |
+| `case:delete` | `OWN` for Test Engineer, and `OWN` resolves against `created_by` while a token's owner is `api_token.owner_id` — so the agent would delete cases **the human authored**. No qualifier expresses "only what this credential made", so the key is withheld rather than narrowed. |
+| `evidence:delete` | Same. |
+| `company:read` | A token is not a member: it has no membership row and therefore no `V15` baseline grant, and a PROJECT-scope role's `company:read` is unreachable from `evaluateCompanyWide` anyway. `Automation Service`, the other token-only role, does not hold it either. |
+
+**Never held, inherited from Test Engineer's own boundary** — and each is something an agent in particular should not do: `case:approve` · `suite:approve` · `plan:approve` (author-cannot-approve-own-work defaults on, and an agent that generates cases must not approve them) · `run:close` · `result:amend` (a judgement about the *work*, not the artifact) · `doc:publish` (the human's signal that a document is ready) · `project:settings` · `project:members` · `integration:manage` · `suite:delete` · `plan:delete` · `artifact:delete`.
+
+**It never exceeds the person who issued the token.** The token intersection (plan §6p, Decision C) is unchanged and is the only narrowing point:
+
+```
+effective = evaluate(ownerId, projectId) ∩ permissionsOf(Agent) ∩ [the token's project]
+```
+
+so a Viewer's agent token resolves to Viewer's set with no branching anywhere, and demoting a person shrinks every token they issued. **`Agent` does not subsume `Automation Service` and CI must not carry it**: a leaked CI token still cannot edit or delete a real case, and that property is independent of how results arrive.
+
+**The ceiling is data, not code**, which is the reason it is a role at all: it appears in this spec, `SeedDataTest.agentIsTestEngineerMinusThree` derives the delta from the catalogue rather than transcribing it, and the boundary therefore holds on raw REST as well as through any tool list. A ceiling enforced by omitting a tool controls what an agent reaches *for*, not what it can *do* — the `tcms_` bearer authenticates against `/api/*` and can be used with `curl`.
+
+**`expiresAt` is required for an `Agent` token** and optional for every other role — see §A7's note.
+
 ### A7. Defaults & visibility
 
 | Situation | Result |
@@ -446,3 +493,4 @@ All of these are now reflected in `docs/plans/2026-07-30-tcms-high-level-plan.md
 | 2026-08-03 | **Asking somebody to review costs the subject's `*:review`** — recorded when reviewer assignment was built (`review_assignment`, `V25`). **No permission was added**, and that is the decision: a new `*:assign` key would be seeded to nobody, so on every existing instance it is a 403 no administrator can grant their way out of — §67's argument against `evidence:read` and §79's against `suite:comment`. Of the three existing candidates, `case:comment` would let a **Viewer** put work on a contributor's queue (the one thing the bottom tier is defined not to do) and `*:approve` would confine the request to the people whose sign-off it exists to *prepare*; asking is a statement about the review's progress, which is the row above's argument for resolving a thread. `V3`, `openapi.yaml` and `lib/permissions.ts` are unchanged. Separately: the **assignee** is validated on project *visibility*, not company membership, because a colleague with no grant cannot open the artifact — the bar §A3's `project:read` sets. Handoff §80. |
 | 2026-08-02 | **`case:comment` is read as the commenting TIER, covering cases, suites and plans alike** — recorded when `review_comment` got its first writer. No permission was added, removed or moved between roles, so `V3`, `openapi.yaml` and `lib/permissions.ts` are unchanged; what changed is that the key finally has a consumer, and the reading is now written down beside the table rather than implied by it. The ladder it depends on is a computed check. Handoff §79. |
 | 2026-08-01 | **Automation Service gets `project:read` (§A6), and the rule becomes a computed check.** The same shape as the row above, found the same day by the first test that asked as that role: `V3` seeded the five §A6 capabilities and no `project:read`, but every project-scoped path asks `ProjectAccess.canView` — which *is* `project:read` — before asking the permission. So all five were unreachable and the role was inert over HTTP, which would have blocked M3 ingestion. `V16` grants the precondition rather than weakening `canView`, matching the row above. `SeedDataTest.everyProjectScopeRoleHoldsTheVisibilityPrecondition` now derives the rule from the catalogue so a third instance cannot ship. `V16` also corrects `role`'s table comment, which still said "exactly six built-ins" after `V15` added the seventh. No permission was added to the catalogue, so `openapi.yaml` and `lib/permissions.ts` are unchanged. Handoff §42, §45. |
+| 2026-08-08 | **The `Agent` role (§A6a) and the `assignable` flag (§A2).** `V40` seeds an eighth `role` row — token-only, PROJECT scope, Test Engineer minus `library:manage`, `case:delete`, `evidence:delete` and `company:read` — as the capability ceiling for agent access to the repository (CLI and MCP server, `docs/plans/2026-08-08-mcp-server-wip-plan.md` §2). **No permission was added, removed or moved between the existing roles**, so `lib/permissions.ts` is unchanged; `openapi.yaml` gains `Agent` in `Role.name`'s enum and an `assignable` field, because the role is on the wire where `Company Member` is not. `PermissionEvaluator` is unchanged — the token intersection that already caps a credential is the only narrowing point, which is the reason the ceiling is a role rather than validation code. `role.assignable` replaces the two hardcoded `COMPANY_MEMBER_ID` comparisons in `RoleGrantService`; the three other comparisons **must not** be converted, because assignability, issuability and listedness are three questions that coincided while there was one non-assignable role (`V40` §2). Handoff §133. |

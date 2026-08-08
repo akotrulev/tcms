@@ -383,6 +383,21 @@ class ApiTokenEndpointTest extends IntegrationTestBase {
         }
 
         @Test
+        @DisplayName("Agent is NOT refused — non-assignable and issuable are different questions")
+        void theAgentCeilingIsIssuable() throws Exception {
+            // The asymmetry V40 turns on, asserted from the endpoint because it is invisible in the
+            // data: Agent and Company Member are both `assignable = false`, and exactly one of them
+            // may be carried by a token. If this check is ever "cleaned up" to read the flag —
+            // which is the tidy-looking edit, one line, in a method that already has two role
+            // checks — the role that exists ONLY to be carried by a token becomes unissuable, and
+            // nothing else in the suite changes colour.
+            MvcResult result = issue(ADMIN, body("Agent", Role.AGENT_ID, null,
+                    Instant.now().plus(30, ChronoUnit.DAYS)));
+
+            assertThat(statusOf(result)).isEqualTo(201);
+        }
+
+        @Test
         @DisplayName("an unknown role is a field error, not a 500")
         void anUnknownRoleIsRefused() throws Exception {
             MvcResult result = issue(ADMIN, body("CI", UUID.randomUUID(), null, null));

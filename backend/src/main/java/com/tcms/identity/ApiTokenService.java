@@ -251,6 +251,14 @@ public class ApiTokenService {
             errors.put("roleId", List.of("Choose the role this token carries. It is not your own "
                     + "role: a token holds one role and nothing else."));
         } else if (Role.COMPANY_MEMBER_ID.equals(request.roleId())) {
+            // DO NOT "CLEAN THIS UP" TO ASK Role.isAssignable(). V40 added that flag and set it
+            // false for two rows — this one and Agent — and Agent is the one role in the product
+            // that exists ONLY to be carried by a token. Reading the flag here makes an Agent token
+            // unissuable, which is the single thing the role was seeded for, and nothing else in
+            // the suite would look wrong: every other role would keep working.
+            //
+            // This check is about the membership BASELINE, not about assignability. They coincided
+            // while there was one non-assignable role. See V40 §2.
             errors.put("roleId", List.of("That is the membership baseline every member holds, not "
                     + "a role a token can carry."));
         } else {

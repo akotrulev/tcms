@@ -120,6 +120,12 @@ RLS would be permanently unreachable.
   even clone-and-edit**. A client needing something between two tiers gets the higher one.
 - **`Company Member` is a seventh row that is not one of the six**: exactly `company:read`, granted
   automatically on joining, filtered out of `GET /roles`, refused by `POST /role-assignments`.
+- **`Agent` is an eighth row that is not one of the six either** (`V40`): the ceiling an API token
+  carries for agent access — **Test Engineer minus `library:manage`, `case:delete`,
+  `evidence:delete` and `company:read`**, enumerated in the roles spec §A6a. Like `Company Member`
+  it is `assignable = false` and `POST /role-assignments` refuses it; **unlike** it, `GET /roles`
+  returns it and a token may carry it, because the token-issue form is the only place it is ever
+  chosen. An `Agent` token must carry an expiry.
 - **An API token never confers its own permissions.** It *caps* its owner's:
   `evaluate(ownerId, projectId) ∩ permissionsOf(token.roleId) ∩ [the token's project]` — intersection,
   never union, so a token can exceed neither its role nor its owner, and demoting a person shrinks

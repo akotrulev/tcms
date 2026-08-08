@@ -54,6 +54,9 @@ class SeedDataTest extends IntegrationTestBase {
     /** V15's non-assignable baseline — company:read for every member, at COMPANY scope. */
     private static final String COMPANY_MEMBER = "Company Member";
 
+    /** V40's non-assignable ceiling — carried by API tokens only, never held by a person. */
+    private static final String AGENT = "Agent";
+
     private static Connection connection;
 
     /**
@@ -111,18 +114,20 @@ class SeedDataTest extends IntegrationTestBase {
     }
 
     @Test
-    @DisplayName("exactly six assignable built-in roles, plus the non-assignable member baseline")
+    @DisplayName("exactly six assignable built-in roles, plus two that nobody is ever granted")
     void sixBuiltInRoles() throws SQLException {
         List<String> rows = queryStrings(
                 "SELECT name || ' / ' || scope FROM role WHERE built_in ORDER BY name");
 
         assertThat(rows)
                 .as("""
-                        No custom roles in v1 — the six assignable ones are the complete set (spec \
-                        A2), and Company Member is the seventh row V15 added: the company:read \
-                        baseline every member is granted on joining. It is deliberately NOT one of \
-                        the six — it is never offered, never granted by hand and never revoked, so \
-                        an addition to this list is a new tier and needs a spec decision.""")
+                        No custom roles in v1 — the six ASSIGNABLE ones are the complete set (spec \
+                        A2), and two further rows exist that nobody ever chooses for a person: \
+                        Company Member (V15), the company:read baseline granted on joining, and \
+                        Agent (V40), the ceiling an API token carries. An addition to this list is \
+                        a new tier and needs a spec decision — which is what this assertion is for, \
+                        and it is why it had to be edited deliberately rather than adjusted after \
+                        a red run.""")
                 .containsExactlyInAnyOrder(
                         INSTANCE_ADMIN + " / SYSTEM",
                         COMPANY_ADMIN + " / COMPANY",
@@ -130,10 +135,69 @@ class SeedDataTest extends IntegrationTestBase {
                         TEST_ENGINEER + " / PROJECT",
                         AUTOMATION_SERVICE + " / PROJECT",
                         VIEWER + " / PROJECT",
-                        COMPANY_MEMBER + " / COMPANY");
+                        COMPANY_MEMBER + " / COMPANY",
+                        AGENT + " / PROJECT");
         assertThat(queryStrings("SELECT name FROM role WHERE NOT built_in"))
                 .as("nothing may seed a non-built-in role while custom roles do not exist")
                 .isEmpty();
+    }
+
+    @Test
+    @DisplayName("exactly two roles are non-assignable, and neither is one of the six")
+    void nonAssignableRolesAreExactlyTheTwo() throws SQLException {
+        // The flag V40 added, asserted as data rather than trusted from the migration that wrote
+        // it. It is read by RoleGrantService in both directions, so a row that flipped to
+        // assignable would not fail anything — it would simply let an administrator grant it, which
+        // is the outcome with no error attached.
+        assertThat(queryStrings("SELECT name FROM role WHERE NOT assignable ORDER BY name"))
+                .as("""
+                        Company Member is a consequence of membership; Agent is carried by tokens \
+                        and nobody is ever an Agent. Any OTHER role appearing here has been made \
+                        ungrantable, and the six being grantable is what spec §A2 means by "the \
+                        complete set of assignable roles".""")
+                .containsExactly(AGENT, COMPANY_MEMBER);
+    }
+
+    @Test
+    @DisplayName("Agent is Test Engineer minus exactly three — derived, not enumerated")
+    void agentIsTestEngineerMinusThree() throws SQLException {
+        // DERIVED from the two grants rather than transcribed, because the point of the role is the
+        // DELTA: it is a ceiling defined as "the contributor role, minus the three things an API
+        // caller must not do". A fourth enumeration of 23 keys would be a fourth thing that can
+        // drift from the spec, and the drift that matters here is the one that happens LATER — a
+        // permission added to Test Engineer by a future migration lands in a credential's ceiling
+        // if this is a subset check, and shows up here as a failure if it is a delta check.
+        Set<String> agent = grantsOf(AGENT);
+        Set<String> engineer = grantsOf(TEST_ENGINEER);
+
+        Set<String> removed = new TreeSet<>(engineer);
+        removed.removeAll(agent);
+        assertThat(removed)
+                .as("""
+                        What Agent drops from Test Engineer. library:manage because roles spec §A3 \
+                        gates it by an impact modal rather than by permission and an API caller \
+                        never sees that modal; case:delete and evidence:delete because both are OWN \
+                        for Test Engineer and OWN follows api_token.owner_id — so the agent would \
+                        delete what the HUMAN authored. company:read because a token is not a \
+                        member (V40 §6).""")
+                .containsExactly("case:delete", "company:read", "evidence:delete", "library:manage");
+
+        Set<String> added = new TreeSet<>(agent);
+        added.removeAll(engineer);
+        assertThat(added)
+                .as("""
+                        Agent must be a strict SUBSET of Test Engineer. A permission the agent holds \
+                        and the contributor does not means the ceiling has stopped being a ceiling — \
+                        an agent could then do something the person driving it cannot, which is the \
+                        one property the whole design rests on.""")
+                .isEmpty();
+
+        assertThat(agent)
+                .as("the three an agent must never do, held by nobody below Test Lead anyway")
+                .doesNotContain("case:approve", "suite:approve", "plan:approve",
+                        "run:close", "result:amend", "doc:publish",
+                        "suite:delete", "plan:delete", "artifact:delete",
+                        "project:settings", "project:members", "integration:manage");
     }
 
     @Test
@@ -466,8 +530,11 @@ class SeedDataTest extends IntegrationTestBase {
                         Every grant of artifact:edit. Test Engineer must be PLAN_SCOPE; the three \
                         roles that own the project's shared documents must be ALL. A role appearing \
                         here that the spec's Artifacts table does not grant is the defect — the \
-                        spec is authoritative.""")
+                        spec is authoritative. Agent (V40) reuses Test Engineer's EXACT spelling: \
+                        a near-miss would trip noPermissionCarriesTwoDifferentRestrictiveQualifiers \
+                        instead, which is that check working.""")
                 .containsExactly(
+                        "Agent / artifact:edit = PLAN_SCOPE",
                         "Company Admin / artifact:edit = ALL",
                         "Instance Admin / artifact:edit = ALL",
                         "Test Engineer / artifact:edit = PLAN_SCOPE",
@@ -524,9 +591,16 @@ class SeedDataTest extends IntegrationTestBase {
                             + "check in the code is a real permission check (spec A3)", role)
                     .contains("company:read");
         }
-        assertThat(grantsOf(AUTOMATION_SERVICE))
-                .as("except the non-human role, which has no company surface at all")
-                .doesNotContain("company:read");
+        for (String role : List.of(AUTOMATION_SERVICE, AGENT)) {
+            assertThat(grantsOf(role))
+                    .as("""
+                            except the two token-carried roles (%s). A token is not a member: it has \
+                            no membership row and therefore no V15 baseline grant, and a PROJECT-scope \
+                            role's company:read is unreachable from evaluateCompanyWide anyway — which \
+                            is the whole reason V15 exists. Granting it here would look like a company \
+                            surface that no evaluation path can answer.""", role)
+                    .doesNotContain("company:read");
+        }
     }
 
     @Test

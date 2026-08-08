@@ -12,9 +12,11 @@ import java.util.UUID;
 /**
  * One of the six built-in roles, seeded by {@code V3__seed_permissions_and_roles.sql}
  * from the authoritative
- * {@code docs/specs/2026-07-30-tcms-roles-permissions-naming.md} — plus
- * {@link #COMPANY_MEMBER_ID}, the baseline V15 added, which is deliberately not one of the
- * six and never appears on the wire.
+ * {@code docs/specs/2026-07-30-tcms-roles-permissions-naming.md} — plus two rows that are
+ * deliberately <em>not</em> among them: {@link #COMPANY_MEMBER_ID}, the membership baseline V15
+ * added, and {@link #AGENT_ID}, the token-only ceiling V40 added. Both are
+ * {@link #isAssignable() non-assignable}, and there the resemblance stops — the baseline never
+ * appears on the wire, where Agent must.
  *
  * <p><strong>Instance-level and deliberately without {@code company_id}</strong>: the six
  * built-ins are the complete role set in v1 — no custom roles, not even clone-and-edit
@@ -74,6 +76,31 @@ public class Role {
     public static final UUID COMPANY_MEMBER_ID =
             UUID.fromString("10000000-0000-4000-8000-000000000007");
 
+    /**
+     * Agent — PROJECT scope, carried by API tokens only, seeded by {@code V40}.
+     *
+     * <p><strong>Also not one of the six</strong>, and non-assignable for {@link #COMPANY_MEMBER_ID}'s
+     * reason expressed the other way round: nobody is ever an Agent, so granting it to a person is
+     * meaningless rather than merely unhelpful. {@link RoleGrantService} refuses it in both
+     * directions — through {@link #isAssignable()}, not through a comparison with this constant.
+     *
+     * <p><strong>But it is issuable and it is listed</strong>, which is exactly where it parts
+     * company with the baseline: {@code GET /roles} returns it because the token-issue form is the
+     * only place it is ever chosen, and {@link ApiTokenService} accepts it. Three different
+     * questions — may it be granted, may a token carry it, is it listed — and
+     * {@code assignable} answers only the first. See {@code V40} §2 before wiring it into a
+     * fourth site.
+     *
+     * <p>It is the ceiling for an agent acting on behalf of the person who issued the token:
+     * Test Engineer minus {@code library:manage} (gated by an impact modal an API caller never
+     * sees), minus {@code case:delete} and {@code evidence:delete} (both {@code OWN}, and
+     * {@code OWN} follows the token's <em>owner</em>, so the agent would delete what the human
+     * authored). The intersection in {@link PermissionEvaluator} does the rest: a Viewer's agent
+     * token still resolves to Viewer's set.
+     */
+    public static final UUID AGENT_ID =
+            UUID.fromString("10000000-0000-4000-8000-000000000008");
+
     @Id
     @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
@@ -90,6 +117,19 @@ public class Role {
 
     @Column(name = "built_in", nullable = false)
     private boolean builtIn;
+
+    /**
+     * Whether {@code POST /role-assignments} may grant this role to a person or a team, and
+     * whether the matching {@code DELETE} may revoke such a grant. False for
+     * {@link #COMPANY_MEMBER_ID} and {@link #AGENT_ID}; true for the six.
+     *
+     * <p><strong>Not "hidden", and not "not issuable".</strong> It answers one of three questions
+     * that happened to have the same answer while there was only one non-assignable role — see
+     * {@link #AGENT_ID} and {@code V40} §2. {@link AdminDirectoryService}'s two filters and
+     * {@link ApiTokenService}'s issue check must stay baseline-specific.
+     */
+    @Column(name = "assignable", nullable = false)
+    private boolean assignable;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -116,6 +156,10 @@ public class Role {
 
     public boolean isBuiltIn() {
         return builtIn;
+    }
+
+    public boolean isAssignable() {
+        return assignable;
     }
 
     public Instant getCreatedAt() {

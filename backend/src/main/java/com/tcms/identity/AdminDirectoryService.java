@@ -339,8 +339,23 @@ public class AdminDirectoryService {
      * operator CLI.
      *
      * <p>It is also what keeps the response inside the contract: {@code openapi.yaml}'s
-     * {@code Role.name} is a closed six-value enum, so a seventh name on this wire would be a
+     * {@code Role.name} is a closed enum, so a name on this wire that is not in it would be a
      * divergence a generated client cannot parse.
+     *
+     * <h2>{@link Role#AGENT_ID} is NOT filtered out, and the filter must not become
+     * {@code WHERE assignable}</h2>
+     *
+     * <p>V40 gave {@code role} an {@code assignable} flag and set it false for two rows, which
+     * makes this predicate look like a constant that wants replacing. It does not. Both screens
+     * that consume this endpoint read the same list — the grant pickers <em>and</em> the
+     * token-issue form — and the token form is the only place Agent is ever chosen. Narrowing this
+     * to the assignable roles hides it there, so the role becomes unissuable through the product
+     * and the seed row is inert.
+     *
+     * <p>The assignment UI filters on {@code assignable} client-side instead, which is affordance
+     * rather than security: {@link RoleGrantService} is the enforcement and refuses the grant
+     * whatever any client offers. Precedent is one file over —
+     * {@code IssueTokenDialog} filters SYSTEM scope client-side for the same reason.
      */
     List<RoleView> roleCatalogue() {
         Map<UUID, List<String>> permissionsByRole = new HashMap<>();

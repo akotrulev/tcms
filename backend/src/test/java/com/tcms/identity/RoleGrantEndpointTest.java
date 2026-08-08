@@ -558,6 +558,23 @@ class RoleGrantEndpointTest extends IntegrationTestBase {
         }
 
         @Test
+        @DisplayName("nor can Agent — it is listed, and it is still not a role a person holds")
+        void theAgentCeilingIsNotGrantableEvenThoughItIsListed() throws Exception {
+            // The case the flag exists for, and the one a hardcoded COMPANY_MEMBER_ID comparison
+            // would have missed entirely. Agent (V40) IS returned by GET /roles — the token form
+            // needs it — so unlike the baseline a client can legitimately name it here. The
+            // refusal has to come from the row, and this is what asserts that it does.
+            //
+            // Same message as the baseline's, deliberately: this endpoint's only question is "may
+            // this person hold this role", and the honest answer is no. Where it CAN be chosen is
+            // the token-issue form, which says so.
+            MvcResult refused = post(ADMIN, WEST, userGrant(Role.AGENT_ID, NEWCOMER, ALPHA));
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOn(refused, "roleId")).containsExactly("Choose a role.");
+        }
+
+        @Test
         @DisplayName("nor revoked — that would take away a colleague's sight of the company")
         void theMembershipBaselineIsNotRevocable() throws Exception {
             UUID baseline = baselineGrantId(WEST, NEWCOMER);
@@ -888,19 +905,25 @@ class RoleGrantEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("GET /roles is the six built-ins — the membership baseline is not one of them")
+        @DisplayName("GET /roles is the six plus Agent — the membership baseline is neither")
         void theRoleCatalogueIsWholeAndHasNoWildcard() throws Exception {
             List<JsonNode> roles = fetch("/api/v1/roles", LEAD, WEST);
 
-            assertThat(roles).hasSize(6);
+            assertThat(roles).hasSize(7);
             assertThat(roles.stream().map(role -> role.get("name").asText()).toList())
                     .as("""
                             Company Member (V15) is granted by joining, never chosen — offering it \
                             here would put it in the grant picker and, through the assignment \
                             list, behind a Revoke that takes away a colleague's sight of the \
-                            company. It is also a seventh name for a `Role.name` the contract \
-                            declares as a closed six-value enum.""")
-                    .doesNotContain("Company Member");
+                            company.""")
+                    .doesNotContain("Company Member")
+                    .as("""
+                            Agent (V40) is the other non-assignable role and it IS listed, which is \
+                            the asymmetry the flag cannot carry: the token-issue form is the only \
+                            place it is ever chosen, so filtering GET /roles by `assignable` would \
+                            make the role unissuable through the product. The grant pickers filter \
+                            it client-side; RoleGrantService is the enforcement.""")
+                    .contains("Agent");
             JsonNode instanceAdmin = roles.stream()
                     .filter(role -> role.get("name").asText().equals("Instance Admin"))
                     .findFirst().orElseThrow();

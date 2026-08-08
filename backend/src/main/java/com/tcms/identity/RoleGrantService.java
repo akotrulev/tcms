@@ -57,14 +57,24 @@ import org.springframework.transaction.annotation.Transactional;
  * not be one until an instance-admin surface exists to hold it; the operator CLI is the only way
  * today.
  *
- * <h2>The membership baseline is refused in both directions</h2>
+ * <h2>Non-assignable roles are refused in both directions, and the flag is what decides</h2>
+ *
+ * <p>Two seeded rows are not roles anybody grants, and both enforcement points here ask
+ * {@link Role#isAssignable()} rather than comparing against a constant — because the check somebody
+ * forgets when a third one arrives is exactly the check that lets an administrator grant it.
  *
  * <p>{@link Role#COMPANY_MEMBER_ID} — the COMPANY-scope grant of {@code company:read} every member
- * receives on joining (V15, handoff §43) — cannot be granted here and cannot be revoked here. It is
- * a consequence of membership rather than a decision about a person: granting it is a no-op on a
- * row that already exists, and revoking it removes a colleague's sight of the company entirely,
- * with no repair short of the operator CLI. It is also absent from {@code GET /roles} and from
- * {@code GET /role-assignments}, so nothing legitimate names it.
+ * receives on joining (V15, handoff §43) — is a consequence of membership rather than a decision
+ * about a person: granting it is a no-op on a row that already exists, and revoking it removes a
+ * colleague's sight of the company entirely, with no repair short of the operator CLI.
+ * {@link Role#AGENT_ID} (V40) is the ceiling an API token carries; nobody is ever an Agent, so a
+ * grant of it to a person would confer a capability no evaluation path would ever read.
+ *
+ * <p><strong>Only this class may read the flag that way.</strong> The baseline is additionally
+ * absent from {@code GET /roles} and {@code GET /role-assignments}; Agent is present in the first
+ * and issuable to a token, because the token form is the only place it is ever chosen. Those are
+ * different questions with different answers — see {@code V40} §2 and
+ * {@link AdminDirectoryService#roleCatalogue()}.
  *
  * <h2>Re-granting is idempotent, and a duplicate is impossible rather than merely unlikely</h2>
  *
@@ -283,11 +293,17 @@ public class RoleGrantService {
         RoleAssignment grant = found.get();
         UUID projectId = grant.getProjectId();
 
-        if (Role.COMPANY_MEMBER_ID.equals(grant.getRoleId())) {
-            // The baseline every member holds (V15). It is never listed, so no screen can offer
-            // this — but an id typed into a request must not be able to take away a colleague's
-            // sight of the company, whose only repair is re-running the operator CLI. Removing it
-            // is what removing the MEMBERSHIP means, and that is a different endpoint.
+        // A grant of a non-assignable role (V40's flag: the V15 membership baseline, and the V40
+        // Agent ceiling). Neither is ever listed as an administrable grant, so no screen can offer
+        // this — but an id typed into a request must not be able to take away a colleague's sight
+        // of the company, whose only repair is re-running the operator CLI. Removing the baseline
+        // is what removing the MEMBERSHIP means, and that is a different endpoint.
+        //
+        // Absent role → refused, and the direction matters: role_id is a foreign key so this is
+        // unreachable, but "unknown role" resolving to "revocable" is the arm that would have to be
+        // wrong only once. Fail closed.
+        boolean assignable = roles.findById(grant.getRoleId()).map(Role::isAssignable).orElse(false);
+        if (!assignable) {
             return new Revoke.Forbidden();
         }
         if (projectId != null && projects.findScopedById(projectId).isEmpty()) {
@@ -353,10 +369,14 @@ public class RoleGrantService {
         Optional<Role> role = request.roleId() == null
                 ? Optional.empty()
                 : roles.findById(request.roleId());
-        if (role.isEmpty() || Role.COMPANY_MEMBER_ID.equals(request.roleId())) {
-            // The baseline is refused as an unknown role rather than with its own message. It is
-            // not offered by GET /roles, so no legitimate client can name it, and telling a caller
-            // that a role they cannot see exists is the disclosure this endpoint avoids elsewhere.
+        if (role.isEmpty() || !role.get().isAssignable()) {
+            // A non-assignable role is refused as an unknown one rather than with its own message
+            // (V40's flag: the V15 baseline, and Agent). For the baseline that is a disclosure
+            // choice — it is not offered by GET /roles, so no legitimate client can name it, and
+            // telling a caller that a role they cannot see exists is what this endpoint avoids
+            // elsewhere. For Agent, which IS listed, it is instead the honest answer to the only
+            // question this endpoint asks: it is not a role a person can be given. The token-issue
+            // form is where it is chosen, and it says so.
             errors.put("roleId", List.of("Choose a role."));
         } else {
             scopeError(role.get(), request.projectId()).ifPresent(
