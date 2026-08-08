@@ -27,3 +27,36 @@ export {
 } from './errors.js';
 
 export type { components, operations, paths } from './schema.js';
+
+/* ---- the command core: the rules that must not diverge between the CLI and MCP ---- */
+
+export {
+  KEY_PREFIXES,
+  classify,
+  isUuid,
+  parseDisplayKey,
+} from './core/identifiers.js';
+export type { DisplayKey, Identifier, KeyedEntity } from './core/identifiers.js';
+
+export { MAX_IDEMPOTENCY_KEY, newIntentKey, requireIntentKey } from './core/idempotency.js';
+
+export { ifMatchFor, isVersionConflict, versionOf } from './core/concurrency.js';
+export type { Concurrency, NoVersionReason } from './core/concurrency.js';
+
+export { describeReach, describeRefusal } from './core/refusal.js';
+export type { RefusalCopy, RefusedOperation } from './core/refusal.js';
+
+export {
+  DEFAULT_PAGE_SIZE,
+  MAX_PAGE_SIZE,
+  clampPageSize,
+  eachItem,
+  hasMore,
+} from './core/paging.js';
+export type { Page, PageMeta } from './core/paging.js';
+
+export { resolveId } from './core/resolve.js';
+export type { ResolveOptions } from './core/resolve.js';
+
+export { resolveProject } from './core/project.js';
+export type { ResolveProjectOptions, ResolvedProject } from './core/project.js';
