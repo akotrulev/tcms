@@ -2,7 +2,15 @@
 
 **Date:** 2026-08-07 · **Baseline commit:** `e43e1b3` (§121 phase 4)
 **Decisions:** `docs/plans/2026-07-30-tcms-high-level-plan.md` §8 **#46** and **#56**
-**Status:** neither is done. This document is the procedure both were owed.
+~~**Status:** neither is done. This document is the procedure both were owed.~~
+→ **UPDATED 2026-08-08. Step 1 is DONE and was already done when this line was written.** The
+`shanks` runner is registered and online with the `tcms-lab` label, and `tests.yml` has run the full
+backend suite on Linux twice and passed both times — `workflow_dispatch` **2026-08-06 21:44**
+(`783fab1`, 7m34s) and the nightly `schedule` **2026-08-08 02:59** (`c73d27e`, `BUILD SUCCESSFUL in
+6m16s`, `:test` executed). This document, `CLAUDE.md` and `docs/HANDOFF.md` all went on describing
+the lane as inert for two days: **the sixth instance of a blocker note outliving its blocker**, and
+the first where the thing said to be missing was already working. **Step 2, the key rotation, is
+still not done.**
 
 > **Both steps need a terminal you are sitting at.** `sudo` on `shanks` requires a password and
 > cannot be answered from a tool call, and the rotation touches a live instance's session keys. Every
@@ -54,10 +62,38 @@ Registration tokens expire in about an hour, which is why the token is minted in
 command rather than fetched first and pasted:
 
 ```bash
+# ⚠ THIS COMMAND DOES NOT WORK. Kept because it is the obvious form and somebody will write it
+# again. Running it on 2026-08-08 produced:
+#     Pseudo-terminal will not be allocated because stdin is not a terminal.
+#     sudo: A terminal is required to authenticate
 ssh -t shanks "sudo bash -s -- --token=$(gh api -X POST \
     repos/akotrulev/tcms/actions/runners/registration-token -q .token)" \
   < deploy/shanks/install-runner.sh
 ```
+
+**`-t` cannot allocate a TTY when stdin is a redirect**, and the pipe *is* the redirect — so `sudo`
+has nowhere to prompt. Forcing it with `-tt` is worse rather than better: with a pty, the terminal
+and stdin are one channel, so the script's own bytes are offered to the password prompt.
+
+The two cannot share stdin, so stop making them. Copy first, then run it as a file — the script is
+still self-contained and nothing else from the repo goes near the box:
+
+```bash
+# on the Mac
+scp deploy/shanks/install-runner.sh shanks:/tmp/install-runner.sh
+gh api -X POST repos/akotrulev/tcms/actions/runners/registration-token -q .token
+```
+
+```bash
+# in an ssh session on shanks, with the token pasted (it expires in about an hour)
+sudo bash /tmp/install-runner.sh --token=…
+```
+
+Re-running is safe (`--replace --unattended`) with one caveat worth knowing before it alarms
+somebody: if the runner is **already configured locally**, `config.sh` refuses with *"Cannot
+configure the runner because it is already configured"* and the script stops there. That is not a
+failure — check `gh api repos/akotrulev/tcms/actions/runners` before concluding anything, because
+the runner is very likely already online. It was.
 
 Three details in that line are load-bearing and none is decorative:
 

@@ -95,7 +95,10 @@ in a qualifier string, and the wrong one writes evidence under the reports root 
 evidence copy's test was the only test either adapter had, and the two files were in different
 packages so nothing put them side by side.
 
-**Gates, as of §129 phase 3** — both run locally, and only locally:
+**Gates, as of §129 phase 3.** ~~Both run locally, and only locally~~ → **there is a second observer
+now**: the nightly Linux lane on `shanks` runs the full `./gradlew build` at 01:17 UTC and has been
+green since 2026-08-06 (see the box below). The three below are still the ones a slice runs before
+it commits.
 
 | Gate | State |
 |---|---|
@@ -124,11 +127,19 @@ packages so nothing put them side by side.
 own machine is the only thing that runs the integration suite. See §58 for what a macOS-only gate
 structurally cannot observe.
 
-> **A nightly Linux lane is written but NOT LIVE (§113).** `.github/workflows/tests.yml` runs the
-> full `./gradlew build` on `[self-hosted, tcms-lab]` — the homelab box — which is a *differently
-> shaped* gate, not just a free one. **It is inert until that runner is registered**
-> (`deploy/shanks/install-runner.sh`), so the paragraph above still holds in full. Do not read the
-> file's existence as coverage.
+> ~~**A nightly Linux lane is written but NOT LIVE (§113).** … It is inert until that runner is
+> registered.~~ → **SUPERSEDED 2026-08-08: IT IS LIVE, AND HAS BEEN SINCE 2026-08-06.** The `shanks`
+> runner is registered and online with the `tcms-lab` label, and `.github/workflows/tests.yml` has
+> run the full `./gradlew build` on Linux **twice, green both times** — `workflow_dispatch`
+> 2026-08-06 21:44 (`783fab1`) and the nightly `schedule` 2026-08-08 02:59 (`c73d27e`,
+> `BUILD SUCCESSFUL in 6m16s`, `:test` executed). **This file, `CLAUDE.md` and two plan documents all
+> went on calling it inert for two days** — the sixth instance of a blocker note outliving its
+> blocker, and the first where the missing thing was already working. Check
+> `gh run list --workflow=tests.yml` before repeating any claim about it.
+>
+> The paragraph above still holds for the window that matters: the nightly observes the default
+> branch once a day at 01:17 UTC, so between a push and the next morning nothing downstream runs a
+> backend test. `gh workflow run tests.yml` is the on-demand form.
 
 **Schema.** Flyway head is **`V39__attachment_owner_types.sql`** (§126 phase 1, the round's only
 migration in its first six steps); **`V40` is the next free number**. `V39` adds **no table** — it
@@ -160,14 +171,16 @@ now sits in front of `fetch` and faults the real backend.
 > [§127](handoff/127-the-four-unrendered-block-types.md),
 > [§128](handoff/128-the-draft-buffer.md),
 > [§129](handoff/129-clone-case-plan-run.md) — step 8 in full: the draft buffer, then clone for all
-> three aggregates **and their three dialogs**, no migration in any of the five phases). **Steps 1
-> and 2 are still next and both need a terminal a person is sitting at** — `sudo` on shanks cannot
-> be answered from a tool call, and the rotation touches a live instance's session keys. ~~The next
-> thing an agent can do alone is §129 phase 3~~ → **done 2026-08-08**; the three clone endpoints
-> have a consumer in `src/` and are no longer the shape §124's `artifact:delete` shipped in. **The
-> next thing an agent can do alone is step 9: #52 the outbox**, the round's last step and its widest
-> blast radius. Items 1–2 below are steps 2 and 1;
-> they are kept here because they were open before the round. **Steps 1 and 2 have a written procedure —
+> three aggregates **and their three dialogs**, no migration in any of the five phases). ~~Steps 1
+> and 2 are still next and both need a terminal a person is sitting at~~ → **STEP 1 IS DONE**
+> (2026-08-06, discovered 2026-08-08 — the Linux lane is live and green; see the box above).
+> **Step 2, the key rotation, is still open and still needs a terminal**: it touches a live
+> instance's session keys. ~~The next thing an agent can do alone is §129 phase 3~~ → **done
+> 2026-08-08**; the three clone endpoints have a consumer in `src/` and are no longer the shape
+> §124's `artifact:delete` shipped in. **Step 9, #52 the outbox, is in progress** — the round's last
+> step and its widest blast radius, and the one whose own text names `AsyncCompanyContextTest` as
+> the suite a Linux gate sees differently, which it now has. Item 1 below is step 2; it is kept here
+> because it was open before the round. **Steps 1 and 2 have a written procedure —
 > [`docs/plans/2026-08-07-linux-gate-and-key-rotation.md`](plans/2026-08-07-linux-gate-and-key-rotation.md).**
 >
 > **The chosen block is "close the small gaps", NOT the verification drain.** Every item in the round
@@ -184,11 +197,14 @@ now sits in front of `fetch` and faults the real backend.
 3. ~~**Write §110's section file.**~~ → **DONE 2026-08-07** — [§110](handoff/110-the-live-pass-runs.md),
    round 3's step 3. Six product findings in ~60 driven rows, **none of them reachable by any gate**;
    six of the fourteen findings were about the observer rather than the product.
-4. **Register the shanks self-hosted runner (§113, decision #46) — this is step 1 of the order.**
-   `deploy/shanks/install-runner.sh`. `.github/workflows/tests.yml` has been written and inert since
-   §113, so the nightly `./gradlew build` on Linux does not run and **the 2014-test suite is observed
-   by exactly one macOS machine**. Doing this first is deliberate: every later step in the round
-   then lands on a differently-shaped gate rather than on the one §58 proved structurally blind.
+4. ~~**Register the shanks self-hosted runner (§113, decision #46) — this is step 1 of the order.**
+   … the nightly `./gradlew build` on Linux does not run and the suite is observed by exactly one
+   macOS machine.~~ → **DONE 2026-08-06, discovered 2026-08-08.** The runner is online, the nightly
+   has run and passed, and the "observed by exactly one macOS machine" sentence was false for two
+   days in four documents. See the box above and
+   [`docs/plans/2026-08-07-linux-gate-and-key-rotation.md`](plans/2026-08-07-linux-gate-and-key-rotation.md),
+   whose registration command is corrected there: `ssh -t … < script` cannot work, because `-t`
+   allocates no TTY when stdin is a redirect and `sudo` then has nowhere to prompt.
 
 ## Verification — deferred, batched, and still unrun
 

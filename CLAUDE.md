@@ -98,14 +98,20 @@ npm run gen:api      # regenerate src/api/schema.d.ts after ANY openapi.yaml cha
 
 > **CI runs no backend tests** (changed 2026-08-02, for push-feedback speed: ~327s → ~60s).
 > `.github/workflows/ci.yml` runs `./gradlew build -x test`, so `-Werror` and the Modulith wiring
-> are still checked and nothing else is. ~~There is no nightly lane either.~~ → **one is written
-> as of 2026-08-06 and is not yet live**: `.github/workflows/tests.yml` runs the full
-> `./gradlew build` nightly on `[self-hosted, tcms-lab]` — the homelab box `shanks`, which is a
-> *Linux* observer and therefore a differently-shaped gate, not merely a free one. **It is inert
-> until that runner is registered** (`deploy/shanks/install-runner.sh`), so until then the
-> sentence below still holds in full. **`./gradlew build` on your own machine is the only thing
-> that runs the 1000+ integration tests** — run it before you push, because nothing downstream
-> will.
+> are still checked and nothing else is. ~~There is no nightly lane either.~~ ~~→ one is written as
+> of 2026-08-06 and is **not yet live** … it is inert until that runner is registered~~ →
+> **superseded 2026-08-08: THE NIGHTLY LINUX LANE IS LIVE.** `.github/workflows/tests.yml` runs the
+> full `./gradlew build` at 01:17 UTC on `[self-hosted, tcms-lab]` — the homelab box `shanks`,
+> registered and online since **2026-08-06**, which is a *Linux* observer and therefore a
+> differently-shaped gate rather than merely a free one. It has run the suite twice and passed both
+> times. Every document in this repo went on calling it inert for two days after it started working;
+> if you are about to repeat that claim, check `gh run list --workflow=tests.yml` first.
+>
+> **This does not make your own `./gradlew build` optional.** The nightly observes the default
+> branch once a day, so between your push and 01:17 UTC nothing downstream runs a single backend
+> test — `ci.yml` is still `-x test`. Run it before you push; the Linux lane tells you the next
+> morning what your machine structurally cannot see, which is a second observer and not a
+> substitute. `gh workflow run tests.yml` is the on-demand form when you want it sooner.
 >
 > Know what your machine cannot see. On 2026-08-01 master was red for seven consecutive CI runs on
 > a defect that **cannot fail on macOS**: the app returns an in-memory `Instant` (nanoseconds) where
