@@ -30,11 +30,30 @@ async function connect(stub: Api): Promise<Client> {
   return client;
 }
 
+// `automationStatus: 'NONE'` and `stepFormat: 'STEPS'` were here too, and neither is a value
+// this API has — see `writes.test.ts`. A stub agrees with everything, so nothing noticed.
 const CASE_ROW = {
   id: 'c-1', key: 'TC-42', keySeq: 42, title: 'Login', suiteId: null, suiteName: null,
-  priority: 'HIGH', lifecycleStatus: 'APPROVED', automationStatus: 'NONE', stepFormat: 'STEPS',
+  priority: 'HIGH', lifecycleStatus: 'APPROVED', automationStatus: 'MANUAL',
+  stepFormat: 'STRUCTURED',
   owner: null, createdBy: null, features: [], tags: [], healthSignals: [],
   updatedAt: '2026-08-01T10:00:00Z',
+};
+
+/**
+ * The detail the edit arm reads before it writes.
+ *
+ * Separate from the row because it must carry `steps`: `caseInputFrom` projects them and does
+ * **not** default a missing array to `[]` — a server that omitted `steps` would otherwise have
+ * every step on the case deleted by the next edit, silently.
+ */
+const CASE_DETAIL = {
+  ...CASE_ROW,
+  description: null, objective: null, expectedOutcome: null, severity: null,
+  gherkinSource: null, automationKey: null, automationTags: [], notAutomatableReason: null,
+  estimatedDurationSec: null, classificationValueIds: [], tags: [], steps: [],
+  preconditions: [], postconditions: [], attachments: [], flake: null,
+  currentVersionNo: 1, lockVersion: 1,
 };
 
 describe('initialize', () => {
@@ -142,7 +161,7 @@ describe('tools/call', () => {
   it('names the permission of the ARM that ran, not the tool\'s first gate key', async () => {
     const stub = api(agentRoutes({
       '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 1, total: 1 } },
-      'GET /cases/c-1': { status: 200, body: { ...CASE_ROW, lockVersion: 1 } },
+      'GET /cases/c-1': { status: 200, body: CASE_DETAIL },
       'PATCH /cases/c-1': { status: 403, body: { title: 'Forbidden', status: 403, detail: 'You do not have permission to do this.' } },
     }));
     const client = await connect(stub);

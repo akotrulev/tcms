@@ -30,16 +30,101 @@ async function run(
   return withApi(stub, () => tool(name).run({ ...session, callId: 'mcp-7' }, input));
 }
 
+/*
+  `automationStatus: 'NONE'` and `stepFormat: 'STEPS'` — neither is a value this API has. The
+  fixture said both, and nothing noticed, because a stub answers 200 to whatever arrives. §143
+  sent a real `NONE` at a real server and got a 400 (dressed as a 401, which was the other half
+  of that slice). A fixture is a claim about the server and this one was false in three places.
+*/
 const CASE_ROW = {
   id: 'c-1', key: 'TC-42', keySeq: 42, title: 'Login', suiteId: 's-1', suiteName: 'Auth',
-  priority: 'HIGH', lifecycleStatus: 'DRAFT', automationStatus: 'NONE', stepFormat: 'STEPS',
+  priority: 'HIGH', lifecycleStatus: 'DRAFT', automationStatus: 'MANUAL', stepFormat: 'STRUCTURED',
   owner: null, createdBy: null, features: [], tags: [], healthSignals: [],
   updatedAt: '2026-08-01T10:00:00Z',
 };
-const CASE_DETAIL = { ...CASE_ROW, lockVersion: 4, steps: [] };
+/** A WHOLE detail — the edit arm reads this and sends it back, so its shape is the assertion. */
+const CASE_DETAIL = {
+  ...CASE_ROW,
+  description: 'The happy path.',
+  objective: null,
+  expectedOutcome: null,
+  severity: null,
+  gherkinSource: null,
+  automationKey: null,
+  automationTags: ['@smoke'],
+  ownerId: 'u-1',
+  notAutomatableReason: null,
+  estimatedDurationSec: null,
+  classificationValueIds: [],
+  tags: ['auth'],
+  steps: [
+    {
+      id: 'st-1', position: 1, keyword: null, action: 'Sign in',
+      testData: null, expectedResult: 'In.', sharedStepId: null,
+    },
+  ],
+  preconditions: [],
+  postconditions: [],
+  attachments: [],
+  flake: null,
+  currentVersionNo: 4,
+  lockVersion: 4,
+};
+/** `caseInputFrom(CASE_DETAIL)` — the unchanged round-trip, minus the two refused fields. */
+const CASE_ECHO = {
+  title: 'Login',
+  suiteId: 's-1',
+  description: 'The happy path.',
+  objective: null,
+  expectedOutcome: null,
+  stepFormat: 'STRUCTURED',
+  gherkinSource: null,
+  priority: 'HIGH',
+  automationStatus: 'MANUAL',
+  automationKey: null,
+  notAutomatableReason: null,
+  estimatedDurationSec: null,
+  classificationValueIds: [],
+  tags: ['auth'],
+  steps: [
+    {
+      id: 'st-1', keyword: null, action: 'Sign in',
+      testData: null, expectedResult: 'In.', sharedStepId: null,
+    },
+  ],
+};
+/** The four the accept demands unconditionally, plus the step a STRUCTURED case needs. */
+const PROPOSABLE = {
+  title: 'Sign out clears the session',
+  stepFormat: 'STRUCTURED',
+  priority: 'HIGH',
+  automationStatus: 'MANUAL',
+  steps: [{ action: 'Sign out', expectedResult: 'The session is gone.' }],
+};
 const SUITE_ROW = {
   id: 's-1', key: 'TS-7', name: 'Auth', description: null, caseCount: 2,
-  lifecycleStatus: 'DRAFT', tagRules: [], lockVersion: 2,
+  lifecycleStatus: 'DRAFT', tagRules: [], caseIds: [], conditions: [], lockVersion: 2,
+};
+const PLAN_ROW = {
+  id: 'tp-1', key: 'TP-1', name: 'Release 4.2', status: 'DRAFT',
+  milestoneName: 'GA', milestoneDate: '2026-09-01', caseCount: 3, passRate: null, coverage: null,
+  description: 'The regression pass before GA.',
+  // Reachable from no tool argument at all, which is what made them the sharpest half of the
+  // plan defect: EVERY edit this server made emptied both, and no caller could have avoided it.
+  scopeText: 'Checkout, payments, refunds.',
+  outOfScopeText: 'Anything behind the beta flag.',
+  entryCriteria: [], exitCriteria: [], configurations: [],
+  suiteIds: [], caseIds: [], tags: [], sections: [],
+  currentVersionNo: 2, lockVersion: 7,
+};
+/** `planInputFrom(PLAN_ROW)` — every scalar, and none of the lists. */
+const PLAN_ECHO = {
+  name: 'Release 4.2',
+  description: 'The regression pass before GA.',
+  milestoneName: 'GA',
+  milestoneDate: '2026-09-01',
+  scopeText: 'Checkout, payments, refunds.',
+  outOfScopeText: 'Anything behind the beta flag.',
 };
 const PAGE = {
   id: 'd-1', key: 'DOC-1', title: 'Spec', status: 'DRAFT', lockVersion: 5,
@@ -57,14 +142,14 @@ describe('tcms_write_case', () => {
 
     const answer = await run(stub, 'tcms_write_case', {
       action: 'propose',
-      testCase: { title: 'Sign out clears the session' },
+      testCase: PROPOSABLE,
     }) as Record<string, unknown>;
 
     const sent = stub.write('/ai-proposals');
     expect(sent.headers.get('Idempotency-Key')).toBe('mcp-7');
     // The bare case is wrapped for the caller: a model holds what it generated, and the API takes
     // an AiProposalInput around it.
-    expect(JSON.parse(sent.body ?? '{}')).toEqual({ testCase: { title: 'Sign out clears the session' } });
+    expect(JSON.parse(sent.body ?? '{}')).toEqual({ testCase: PROPOSABLE });
     expect(answer['proposalId']).toBe('ap-1');
     expect(String(answer['note'])).toContain('cannot accept it');
   });
@@ -74,8 +159,26 @@ describe('tcms_write_case', () => {
       'POST /ai-proposals': { status: 201, body: { id: 'ap-1', status: 'PENDING' } },
     }));
 
-    await run(stub, 'tcms_write_case', { action: 'propose', testCase: { title: 'x' } });
+    await run(stub, 'tcms_write_case', { action: 'propose', testCase: PROPOSABLE });
     expect(JSON.parse(stub.write('/ai-proposals').body ?? '{}')).not.toHaveProperty('verdict');
+  });
+
+  /*
+    Filing it WORKS — 201, PENDING — and the refusal arrives weeks later on a reviewer who cannot
+    edit the proposal to fix it and whose only remaining move is Reject. So the model is told
+    while it is still holding the thing. §143 drove exactly that path end to end.
+  */
+  it('refuses a proposal the accept could never take, and files nothing', async () => {
+    const stub = api(agentRoutes({
+      'POST /ai-proposals': { status: 201, body: { id: 'ap-1', status: 'PENDING' } },
+    }));
+
+    await expect(run(stub, 'tcms_write_case', {
+      action: 'propose',
+      testCase: { title: 'Sign out clears the session' },
+    })).rejects.toThrow(/stepFormat.*priority.*automationStatus/s);
+
+    expect(stub.sent.some((request) => request.method === 'POST')).toBe(false);
   });
 
   it('edits with an If-Match read for itself when no lockVersion was given', async () => {
@@ -90,33 +193,53 @@ describe('tcms_write_case', () => {
     const sent = stub.write('/cases/c-1');
     expect(sent.method).toBe('PATCH');
     expect(sent.headers.get('If-Match')).toBe('4');
-    // A delta: only what was named. `PATCH` reads an absent key as "leave it alone", which is
-    // what makes the self-read honest.
-    expect(JSON.parse(sent.body ?? '{}')).toEqual({ title: 'Login again' });
+    /*
+      ~~A delta: only what was named~~ → **the whole editable set with one field changed.** This
+      `PATCH` is partial by verb only: three required fields absent is a 400 about fields the
+      model never mentioned — one of which, `stepFormat`, this tool's schema gives it no way to
+      mention — and every nullable scalar absent is *cleared*. §143 drove it; this assertion
+      previously agreed with the client because the stub agrees with everything.
+    */
+    expect(JSON.parse(sent.body ?? '{}')).toEqual({ ...CASE_ECHO, title: 'Login again' });
+    // Served by the GET, REFUSED by the PATCH. A round-trip that echoed them would 400 every time.
+    expect(JSON.parse(sent.body ?? '{}')).not.toHaveProperty('ownerId');
+    expect(JSON.parse(sent.body ?? '{}')).not.toHaveProperty('automationTags');
+    // `severity` is null on this case and `TestCaseInput.severity` is not nullable, so "unset"
+    // has no spelling on the write and OMITTING it is what reproduces it.
+    expect(JSON.parse(sent.body ?? '{}')).not.toHaveProperty('severity');
   });
 
-  it('prefers a lockVersion the caller holds', async () => {
+  it('prefers a lockVersion the caller holds, and still reads the case for its body', async () => {
     const stub = api(agentRoutes({
       '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 1, total: 1 } },
+      'GET /cases/c-1': { status: 200, body: CASE_DETAIL },
       'PATCH /cases/c-1': { status: 200, body: CASE_DETAIL },
     }));
 
     await run(stub, 'tcms_write_case', { action: 'edit', case: 'TC-42', title: 'x', lockVersion: 2 });
 
     expect(stub.write('/cases/c-1').headers.get('If-Match')).toBe('2');
-    // And it did not read the case for a version it was given — the extra read is skipped.
+    /*
+      ~~It did not read the case at all~~ → **it must**, because the body is the whole editable
+      set and only the resource has it. The version is still the caller's, not the one this read
+      returned, and that is the safe direction: a stale `lockVersion` 409s and the base is never
+      used, while a current one describes exactly the state this read saw.
+    */
     expect(stub.sent.filter((request) => request.method === 'GET' && request.path.endsWith('/cases/c-1')))
-      .toHaveLength(0);
+      .toHaveLength(1);
   });
 
   it('keeps null and absent apart on the suite, because they are different requests', async () => {
     const stub = api(agentRoutes({
       '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 1, total: 1 } },
+      'GET /cases/c-1': { status: 200, body: CASE_DETAIL },
       'PATCH /cases/c-1': { status: 200, body: CASE_DETAIL },
     }));
 
     await run(stub, 'tcms_write_case', { action: 'edit', case: 'TC-42', suite: null, lockVersion: 1 });
-    expect(JSON.parse(stub.write('/cases/c-1').body ?? '{}')).toEqual({ suiteId: null });
+    // The explicit null survives the merge: the base files this case in `s-1`, and a merge that
+    // dropped nulls would put it straight back and report success.
+    expect(JSON.parse(stub.write('/cases/c-1').body ?? '{}')).toEqual({ ...CASE_ECHO, suiteId: null });
   });
 
   it('refuses an edit that would send nothing', async () => {
@@ -207,6 +330,27 @@ describe('tcms_write_suite', () => {
     expect(JSON.parse(sent.body ?? '{}')).toEqual({ name: 'Auth', caseIds: ['c-1'] });
   });
 
+  /*
+    The case arm's defect, one field wide: `SuiteInput` requires `name`, so editing only the tag
+    rules was a 400 about a field the model never named, and editing only the name emptied the
+    description. Invisible to a stub, which answers 200 to whatever arrives.
+  */
+  it('sends the whole suite with the change applied, not the named fields alone', async () => {
+    const stub = api(agentRoutes({
+      '/suites': { status: 200, body: [SUITE_ROW] },
+      'GET /suites/s-1': { status: 200, body: SUITE_ROW },
+      'PATCH /suites/s-1': { status: 200, body: SUITE_ROW },
+    }));
+
+    await run(stub, 'tcms_write_suite', { action: 'edit', suite: 'TS-7', tagRules: ['nightly'] });
+
+    const sent = stub.write('/suites/s-1');
+    expect(sent.headers.get('If-Match')).toBe('2');
+    expect(JSON.parse(sent.body ?? '{}')).toEqual({
+      name: 'Auth', description: null, caseIds: [], tagRules: ['nightly'],
+    });
+  });
+
   it('sends a status transition with neither header, because its precondition is the state', async () => {
     const stub = api(agentRoutes({
       '/suites': { status: 200, body: [SUITE_ROW] },
@@ -218,6 +362,28 @@ describe('tcms_write_suite', () => {
     const sent = stub.write('/status');
     expect(sent.headers.get('If-Match')).toBeNull();
     expect(sent.headers.get('Idempotency-Key')).toBeNull();
+  });
+});
+
+describe('tcms_write_plan', () => {
+  /*
+    This arm already threaded `name` through from its own read and was right to. What it did not
+    thread was every other scalar: `PlanEdit.validateUpdate` writes each one straight through and
+    resolves only the LISTS against what is stored, so an edit naming the milestone emptied the
+    description, and both prose fields were emptied by every edit ever made here.
+  */
+  it('sends every scalar back, and no list it was not given', async () => {
+    const stub = api(agentRoutes({
+      '/plans': { status: 200, body: [PLAN_ROW] },
+      'GET /plans/tp-1': { status: 200, body: PLAN_ROW },
+      'PATCH /plans/tp-1': { status: 200, body: PLAN_ROW },
+    }));
+
+    await run(stub, 'tcms_write_plan', { action: 'edit', plan: 'TP-1', milestoneName: 'GA2' });
+
+    const sent = stub.write('/plans/tp-1');
+    expect(sent.headers.get('If-Match')).toBe('7');
+    expect(JSON.parse(sent.body ?? '{}')).toEqual({ ...PLAN_ECHO, milestoneName: 'GA2' });
   });
 });
 

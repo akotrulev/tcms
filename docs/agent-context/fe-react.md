@@ -2,14 +2,35 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-08 (**§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
+**Last verified:** 2026-08-08 (**§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
 the one doc-block renderer and the editor's three new types; §126 phase 4 — the three attachment
 surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the flake panel and the
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `d4c5e03` (§138 phases 2+3) (trust the
+**Baseline commit:** `ab9aecd` (§143) (trust the
 body over the header and re-grep what a later commit could have moved).
+
+## §144 — `TestCaseInput` REQUIRES FOUR FIELDS, AND `schema.d.ts` WAS REGENERATED
+
+**No frontend code changed. One test fixture did, and it is worth knowing why.**
+
+`docs/specs/openapi.yaml` said `TestCaseInput.required: [title]` from M0 while the server required
+**`title`, `stepFormat`, `priority` and `automationStatus`** on create and edit alike. §144 fixed
+the contract and re-ran **both** `gen:api` runs. The only thing in this stack that objected was
+`src/features/proposals/ProposalPage.test.tsx` — its `PENDING` fixture carried `title` and
+`objective` and nothing else, so **the SPA's own test asserted the shape of a proposal that could
+only ever be Rejected**.
+
+- **The editors were already correct and that is the point.** `CaseEditorPage` submits every field
+  it renders on every save, which is why `PATCH …/cases/{id}` — whose body is the **whole editable
+  set**, not a delta — has never been wrong for this client. It took a second client (the CLI, the
+  MCP server) to find out, and both of those now do a read-modify-write via `@tcms/client`'s
+  `core/rewrite.ts`.
+- **If you write a `TestCaseInput` literal in a test, it needs the four.** `tsc` says so now.
+- **`A4-11`/`A4-12`** in the browser queue are the file → PENDING → **Accept** path completing,
+  which it never has: the accept 400ed on fields that are not on the proposal and cannot be edited
+  there. §138's screen was right; what waited behind it could not be accepted.
 
 ## §138 — A VERDICT MAY NEVER BE RENDERED WITHOUT ITS SOURCE
 

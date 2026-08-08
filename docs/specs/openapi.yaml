@@ -1320,6 +1320,28 @@ paths:
     patch:
       tags: [repository]
       summary: Update a test case
+      description: |
+        **`PATCH` by verb only: the body is the whole editable set, not a delta.** Jackson gives
+        absent and null the same Java value, so this endpoint cannot tell "leave `objective` alone"
+        from "clear it" and resolves both as *clear it* — sending `{"title": "x"}` renames the case
+        and empties every nullable scalar beside it, and omitting `stepFormat`, `priority` or
+        `automationStatus` is a `400` on fields the caller never mentioned. `CaseUpdateRequest`'s
+        header records the decision and what changing it would cost (`JsonNullable`, or a presence
+        map — a shape change on this contract).
+
+        The three **list** fields are the exception, and only because a list has an empty spelling
+        of its own: `tags`, `classificationValueIds`, `preconditions` and `postconditions` are left
+        alone when absent and cleared by `[]`.
+
+        The SPA satisfies this by construction — its editor submits every field it renders on every
+        save. A client that is not a form reads the case first and sends it back with its change
+        applied; `@tcms/client`'s `core/rewrite.ts` is that read-modify-write, shared so the CLI and
+        the MCP server cannot disagree about it. Sending a delta here is §143's second recorded
+        defect and it had never worked once.
+
+        `ownerId` and `automationTags` are on `TestCaseInput` and are **refused with a 400 when
+        present** — each needs a write path no slice has built. A round-trip must therefore drop
+        them rather than echo what the `GET` returned.
       parameters: [{ $ref: '#/components/parameters/IfMatch' }]
       requestBody:
         required: true
@@ -6508,7 +6530,32 @@ components:
 
     TestCaseInput:
       type: object
-      required: [title]
+      # ~~`required: [title]`~~ → **superseded 2026-08-08 (§144): the server requires four, and has
+      # since M0.** `CaseEdit.validate` answers a 400 keyed on `stepFormat`, `priority` and
+      # `automationStatus` when any of them is absent, on create *and* on edit, with its reasons
+      # written down — so the CONTRACT was the thing that was wrong, in the direction that
+      # generates broken clients. Both copies of the generated types made three mandatory fields
+      # optional, and `packages/mcp`'s `tcms_write_case` repeated the claim to a model.
+      #
+      # Its sharpest consequence, driven end to end in §143: `POST …/ai-proposals` stores its
+      # payload unvalidated by design and the create-path validation runs at ACCEPT, so a proposal
+      # filed against this schema's own required list was filed 201, sat PENDING, and answered the
+      # human reviewer's accept with a 400 on three fields that are not on the proposal and cannot
+      # be edited there. **Every proposal a model filed was dead on arrival**, and the accept
+      # description's word for that 400 — "drift" — described a payload that had never been valid.
+      #
+      # Four and not more. `steps` is required only when `stepFormat` is STRUCTURED,
+      # `gherkinSource` only when it is GHERKIN, `automationKey` only for AUTOMATED and
+      # `notAutomatableReason` only for NOT_AUTOMATABLE — conditional requirements this schema
+      # cannot state without a `oneOf` that would split the shape in four for four fields. They
+      # stay optional here and refused there, which is the honest arrangement rather than a
+      # complete one.
+      #
+      # **This does not make the PATCH partial** — it is not, and `CaseUpdateRequest`'s header
+      # declines to make it so (it needs `JsonNullable` or a presence map). An omitted nullable
+      # scalar is CLEARED, so an edit sends the whole editable set. `@tcms/client`'s
+      # `core/rewrite.ts` is what the two non-SPA clients use to obey that.
+      required: [title, stepFormat, priority, automationStatus]
       properties:
         title: { type: string }
         suiteId:

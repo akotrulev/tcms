@@ -25,11 +25,15 @@
  */
 import {
   TcmsClientError,
+  caseInputFrom,
   classify,
   createIntent,
   editIntent,
+  planInputFrom,
   requireExplicitVersion,
+  requireProposableCase,
   resolveId,
+  suiteInputFrom,
   type EditVersion,
   type components,
 } from '@tcms/client';
@@ -196,9 +200,14 @@ const caseEdit: Command = {
     const file = text(options['file']);
     const path = { projectId, caseId };
 
-    const body = file
-      ? objectFrom(file, 'a TestCaseInput')
-      : requireSomethingToDo(
+    let body: Record<string, unknown>;
+    let version: EditVersion;
+
+    if (file) {
+      body = objectFrom(file, 'a TestCaseInput');
+      version = await versionFor(context, { fromFile: true, operation: 'edit this case', read: notRead });
+    } else {
+      const delta = requireSomethingToDo(
         present({
           title: text(options['title']),
           description: nullableText(options['description']),
@@ -222,11 +231,23 @@ const caseEdit: Command = {
         'Name at least one field to change, or pass --file with a body.',
       );
 
-    const version = await versionFor(context, {
-      fromFile: file !== undefined,
-      operation: 'edit this case',
-      read: () => client.GET('/projects/{projectId}/cases/{caseId}', { params: { path }, tcms: request }),
-    });
+      /*
+        Read-modify-write, because this `PATCH` is not partial — see `core/rewrite.ts`. The delta
+        alone was a 400 naming `stepFormat`, `priority` and `automationStatus`, so
+        `tcms case edit TC-1 --title x` had never worked once (§143), and the fields it did not
+        name would have been cleared if it had.
+
+        The version comes from THIS read, not a second one: base and precondition from the same
+        instant is what makes the `If-Match` honest here.
+      */
+      const current = await client.GET('/projects/{projectId}/cases/{caseId}', {
+        params: { path }, tcms: request,
+      });
+      version = await versionFor(context, {
+        fromFile: false, operation: 'edit this case', read: async () => current,
+      });
+      body = { ...caseInputFrom(current), ...delta };
+    }
 
     const updated = await client.PATCH('/projects/{projectId}/cases/{caseId}', {
       params: { path },
@@ -286,6 +307,20 @@ const caseProposal: Command = {
       and detecting it costs one key: a body carrying `testCase` is already a proposal.
     */
     const proposal = 'testCase' in raw ? raw : { testCase: raw };
+
+    /*
+      Refused here rather than filed, because filing it would WORK: this endpoint stores the
+      payload unvalidated and the create rules run when a person accepts, so a missing field
+      becomes a 400 on a reviewer's screen against a proposal they cannot edit. §143 drove that
+      whole path. `core/proposal.ts` has the argument and the field list.
+    */
+    const submitted = proposal['testCase'];
+    requireProposableCase(
+      submitted && typeof submitted === 'object' && !Array.isArray(submitted)
+        ? submitted as Record<string, unknown>
+        : {},
+      'That case',
+    );
 
     const verdict = text(options['verdict']);
     const body = {
@@ -385,9 +420,14 @@ const suiteEdit: Command = {
     const file = text(options['file']);
     const path = { projectId, suiteId };
 
-    const body = file
-      ? objectFrom(file, 'a SuiteInput')
-      : requireSomethingToDo(
+    let body: Record<string, unknown>;
+    let version: EditVersion;
+
+    if (file) {
+      body = objectFrom(file, 'a SuiteInput');
+      version = await versionFor(context, { fromFile: true, operation: 'edit this suite', read: notRead });
+    } else {
+      const delta = requireSomethingToDo(
         present({
           name: text(options['name']),
           description: nullableText(options['description']),
@@ -400,11 +440,17 @@ const suiteEdit: Command = {
         'Name at least one field to change, or pass --file with a body.',
       );
 
-    const version = await versionFor(context, {
-      fromFile: file !== undefined,
-      operation: 'edit this suite',
-      read: () => client.GET('/projects/{projectId}/suites/{suiteId}', { params: { path }, tcms: request }),
-    });
+      // The case arm's problem, one field wide: `SuiteInput` requires `name`, so
+      // `--tag-rule smoke` alone was a 400 about a field nobody mentioned, and `--name X` alone
+      // emptied the description. `core/rewrite.ts` has the argument.
+      const current = await client.GET('/projects/{projectId}/suites/{suiteId}', {
+        params: { path }, tcms: request,
+      });
+      version = await versionFor(context, {
+        fromFile: false, operation: 'edit this suite', read: async () => current,
+      });
+      body = { ...suiteInputFrom(current), ...delta };
+    }
 
     const updated = await client.PATCH('/projects/{projectId}/suites/{suiteId}', {
       params: { path },
@@ -717,13 +763,17 @@ const planEdit: Command = {
       version = await versionFor(context, { fromFile: true, operation: 'edit this plan', read: notRead });
     } else {
       /*
-        `TestPlanUpdateInput` REQUIRES `name`, alone among the edit shapes on this surface — so a
-        partial edit is not expressible on the wire, and a command that sent only `--description`
-        would be a 400 about a field the user never mentioned. The read this command already
-        makes for its `lockVersion` carries the current name, so it is threaded through.
+        ~~`TestPlanUpdateInput` REQUIRES `name`, alone among the edit shapes on this surface~~ →
+        it is not alone: `SuiteInput` requires one too and `TestCaseInput` requires four. This arm
+        threaded `name` through from its own read and was right to; what it did not do was thread
+        the rest, so every `plan edit` silently emptied the plan's `description`, `milestoneName`,
+        `milestoneDate`, `scopeText` and `outOfScopeText` — the last two unreachable from any flag,
+        so no invocation could avoid it. `PlanEdit.validateUpdate` writes every scalar straight
+        through and resolves only the *lists* against what is stored. `core/rewrite.ts` now holds
+        that split, shared with the case and suite arms and with the MCP server.
 
-        That is safe for the flag-edit reason and only for it: the name comes from the *same*
-        read as the version, so the pair is consistent. A `--file` edit supplies both itself.
+        Safe for the reason the old note gave, unchanged: the base and the version come from the
+        *same* read, so the pair is consistent. A `--file` edit supplies both itself.
       */
       const current = await client.GET('/projects/{projectId}/plans/{planId}', {
         params: { path }, tcms: request,
@@ -731,18 +781,18 @@ const planEdit: Command = {
       version = await versionFor(context, {
         fromFile: false, operation: 'edit this plan', read: async () => current,
       });
-      body = requireSomethingToDo(
+      const delta = requireSomethingToDo(
         present({
+          name: text(options['name']),
           description: nullableText(options['description']),
           milestoneName: nullableText(options['milestone']),
           milestoneDate: nullableText(options['milestone-date']),
           suiteIds: await resolveMany(context, projectId, options['suite'], 'SUITE'),
           caseIds: await resolveMany(context, projectId, options['case'], 'CASE'),
-          ...(text(options['name']) === undefined ? {} : { name: text(options['name']) }),
         }),
         'Name at least one field to change, or pass --file with a body.',
       );
-      body['name'] = text(options['name']) ?? current.name;
+      body = { ...planInputFrom(current), ...delta };
     }
 
     const updated = await client.PATCH('/projects/{projectId}/plans/{planId}', {

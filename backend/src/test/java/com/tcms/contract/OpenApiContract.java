@@ -200,9 +200,14 @@ public final class OpenApiContract {
      * came to be missing from the record serving the whole thing. Reading either branch alone
      * yields a list that looks complete.
      *
+     * <p>Public, unlike most of this class: {@code CaseUpdateEndpointTest} compares the declared
+     * set against what the server actually refuses to work without, which is the one direction
+     * a contract test inside this package cannot check — §143 found the contract requiring one
+     * field where the server had required four since M0, and nothing here could have seen it.
+     *
      * @param ref a local {@code $ref}, e.g. {@code #/components/schemas/TestCase}
      */
-    Set<String> requiredOf(String ref) {
+    public Set<String> requiredOf(String ref) {
         Set<String> required = new java.util.LinkedHashSet<>();
         collectRequired(resolve(Map.of("$ref", ref)), required);
         return required;

@@ -85,7 +85,7 @@ statuses plus the control that a genuinely bad credential is still 401. Verified
 override (the three token assertions fail; both controls stay green) and passing with it, and
 re-verified against the rebuilt image.
 
-## F2 — `TestCaseInput` declares one required field and the server requires four · NOT FIXED
+## F2 — `TestCaseInput` declares one required field and the server requires four · **FIXED in §144**
 
 **Severity: high.** **Contract defect.** `docs/specs/openapi.yaml` §`TestCaseInput` says
 `required: [title]`. `CaseEdit.validate` requires **`title`, `stepFormat`, `priority` and
@@ -115,10 +115,23 @@ Driven end to end: a proposal filed through `tcms case propose` was accepted (20
 proposal and cannot be edited there**. The reviewer's only remaining action is Reject — for a case
 whose content is fine.
 
-**Fix not attempted here** because it is a contract change that must be regenerated into two
-`schema.d.ts` copies and then compiled against both stacks, and because it is coupled to F3.
+~~**Fix not attempted here**~~ → **fixed in §144.** `required` is now the four the server enforces,
+both `schema.d.ts` copies were regenerated, and `tcms_write_case`'s tool description names them
+(and the conditional four besides). Two things came out of the fix that were not visible from here:
 
-## F3 — `case edit` and `tcms_write_case` edit send deltas the server cannot accept · NOT FIXED
+- **A frontend fixture stopped compiling.** `ProposalPage.test.tsx`'s `PENDING` proposal carried
+  `title` and `objective` and no more, so the SPA's own test asserted the shape of a proposal that
+  could only ever be Rejected.
+- **The contract being right does not help a caller that does not read it**, and the file-time
+  endpoint still validates nothing. So both clients now refuse an unacceptable proposal at the
+  boundary (`@tcms/client`'s `core/proposal.ts`), where the author is still holding it — rather
+  than filing a 201 whose refusal lands on a reviewer weeks later.
+- **The check that would have caught this is now in the suite**:
+  `CaseUpdateEndpointTest.contractRequiredMatchesWhatTheServerEnforces` drops each editable field
+  from a payload the server accepts and asserts `required` names exactly what it then refuses. It
+  fails in both directions, and no test in this repo compared the two sides before.
+
+## F3 — `case edit` and `tcms_write_case` edit send deltas the server cannot accept · **FIXED in §144**
 
 **Severity: high.** **Client defect**, `packages/`. Follows from F2 and is the sharper half.
 
@@ -145,6 +158,21 @@ is truthful; it is the `--file` form that must keep requiring `--lock-version`. 
 PATCH genuinely partial is the alternative and `CaseUpdateRequest`'s header already declines it
 (it needs `JsonNullable` or a presence map — a shape change on the contract).
 
+**Done in §144, and the fix is wider than the finding.** `@tcms/client`'s `core/rewrite.ts` holds
+the three projections and both clients use them. Writing it turned up **two more instances of the
+same defect that this pass never drove**:
+
+- **`suite edit`** — `SuiteInput` requires `name`, so editing only the tag rules was a 400 about a
+  field nobody mentioned, and editing only the name **emptied the description**.
+- **`plan edit`** — this arm already threaded `name` through and was right to, but
+  `PlanEdit.validateUpdate` writes *every* scalar straight through. So an edit naming the milestone
+  emptied the description, and `scopeText`/`outOfScopeText` — reachable from **no flag and no tool
+  argument** — were emptied by every plan edit either client has ever made. Silent data loss on a
+  command that reported success, which is worse than F3's 400.
+
+`doc page` and `record result` were checked and deliberately left: `blocks` absent means *leave
+alone* server-side, and a result is a whole statement rather than an edit to one.
+
 ## F4 — A validation rejection reached the model with no fields · FIXED
 
 **Severity: medium.** **Client defect**, `packages/mcp`.
@@ -161,6 +189,26 @@ sentence followed by `stepFormat:`, `priority:` and `automationStatus:` — whic
 found from the model's side rather than the CLI's.
 
 ---
+
+---
+
+## What the next live pass must re-drive (§144)
+
+**None of this is run.** §144's changes are covered by 229 package tests, 1203 frontend tests and
+2308 backend tests, and every one of those drives a stub, a jsdom or a MockMvc — which is the
+observer class this pass exists to sit outside of. The fix for a defect found live is not verified
+by the gates that missed the defect.
+
+| # | Drive | Expected | Why a gate cannot say |
+|---|---|---|---|
+| LP-1 | `tcms case edit TC-n --title x` against a real instance | 200, and a re-read shows **only** the title changed — description, objective, steps, tags and classification all intact | The stub answers 200 to whatever arrives; only a real server round-trip shows what was stored |
+| LP-2 | `tcms case edit TC-n --unfile` on a filed case | 200, `suiteId` null, everything else unchanged | The explicit null has to survive the merge; a stub cannot tell a preserved suite from a re-filed one |
+| LP-3 | `tcms suite edit TS-n --tag-rule nightly` | 200 (was a 400 on `name`), description intact | Never driven — this pass edited suites only with `--name` |
+| LP-4 | `tcms plan edit TP-n --milestone GA2` on a plan with `scopeText` set | 200, and `scopeText`/`outOfScopeText` **still there** | The one silent-data-loss row. Needs a plan whose prose was written first — `provision-company` creates none, so the pass must author it |
+| LP-5 | MCP `tcms_write_case` edit arm, same as LP-1 | 200 and a clean re-read | The arm the pass drove and got F3 from |
+| LP-6 | `tcms case propose --file` with `{"title": "x"}` alone | Refused **client-side**, exit 1, naming `stepFormat`, `priority`, `automationStatus`; **no request made** | The new boundary. A gate proves the throw, not that nothing reached the server |
+| LP-7 | A complete proposal filed by the CLI, then **accepted in the SPA by a person** | 201 → PENDING → accept **200**, a real case created | The end-to-end path F2 broke. Crosses three surfaces and no runner spans them |
+| LP-8 | A concurrent edit: read a case in one shell, edit it in another, then run LP-1 in the first | **409**, not a silent overwrite | The `If-Match` argument in `core/rewrite.ts` is the whole reason the round-trip is honest; nothing tests it against a real version column |
 
 ## Notes, not defects
 

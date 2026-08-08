@@ -2,12 +2,12 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-08 (**§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-08 (**§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `26b42c8` (§142 phase 4) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `ab9aecd` (§143) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
 ---
@@ -39,11 +39,7 @@ Do not "tidy" that away; it is the whole slice.
   skip it; that is currently harmless only because nothing downstream of authentication reads them
   on `/error`.
 
-**Two known-open defects a backend reader will meet** (recorded in §143, not fixed):
-`TestCaseInput` declares `required: [title]` while `CaseEdit.validate` requires **`title`,
-`stepFormat`, `priority`, `automationStatus`** on create *and* edit — the **contract** is what is
-wrong — and `POST …/ai-proposals` stores its payload unvalidated, so **a proposal filed against the
-contract's own required list can never be accepted**.
+~~**Two known-open defects a backend reader will meet**~~ → **fixed in §144, below.**
 
 **§142 changed no Java.** It is the MCP plan's phase 10 — a Dockerfile in `packages/mcp`, an `mcp`
 service in `deploy/compose.prod.yaml` behind `profiles: [mcp]`, a `handle /mcp` block, and an
@@ -63,6 +59,37 @@ and the outbox's table, `CHECK` and partial index have all been in `V1` since M0
 **The nightly Linux gate is LIVE** (`tests.yml` on `[self-hosted, tcms-lab]`, 01:17 UTC, green since
 2026-08-06) — four documents described it as inert until 2026-08-08. `gh run list --workflow=tests.yml`
 before repeating any claim about it. `ci.yml` still runs **no** backend tests.
+
+---
+
+## §144 — `TestCaseInput.required` IS FOUR, AND THE FIRST TEST THAT READS THE CONTRACT AGAINST THE SERVER
+
+**`docs/specs/openapi.yaml` — `TestCaseInput.required` is now
+`[title, stepFormat, priority, automationStatus]`.** It said `[title]` from M0 while
+`CaseEdit.validate` refused four, on create *and* edit. **The server was right and the contract was
+wrong**, in the direction that generates broken clients through a generator: both copies of
+`schema.d.ts` typed three mandatory fields as optional.
+
+- **`CaseUpdateEndpointTest.contractRequiredMatchesWhatTheServerEnforces` is the check, and it is
+  the only test here that compares `openapi.yaml` to the server's BEHAVIOUR.** It drops each
+  editable field in turn from an accepted payload and asserts `required` names exactly what the
+  server then refuses — failing in both directions. `ContractConventionTest` reads the contract
+  against its own rules and would have approved either number. **If you change what
+  `CaseEdit.validate` requires, this test is what you update, and the contract is what you update
+  with it.**
+- **`OpenApiContract.requiredOf` is `public` for that one caller.** Its javadoc says why.
+- **Four and not eight, deliberately.** `steps` (STRUCTURED), `gherkinSource` (GHERKIN),
+  `automationKey` (AUTOMATED) and `notAutomatableReason` (NOT_AUTOMATABLE) are required *given a
+  value of another field*; the schema cannot say that without a `oneOf`. The test's
+  `CONDITIONALLY_REQUIRED` set names them and its javadoc records the trade.
+- **`PATCH …/cases/{id}` now has a description**, which it never had. It states what
+  `CaseUpdateRequest`'s header has always said: the body is the **whole editable set**, an omitted
+  nullable scalar is *cleared*, and `ownerId`/`automationTags` are **refused with a 400 when
+  present** while being served by the `GET` — so a round-trip must drop them.
+
+**No Java behaviour changed.** The only backend edits are the new test, the `public` modifier, and
+the contract. The clients are where the rest of §144 lives (`packages/client/src/core/rewrite.ts`,
+`core/proposal.ts`) — read `docs/handoff/144-*.md` before touching an edit arm.
 
 ---
 

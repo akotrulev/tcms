@@ -1795,7 +1795,30 @@ export interface paths {
         };
         options?: never;
         head?: never;
-        /** Update a test case */
+        /**
+         * Update a test case
+         * @description **`PATCH` by verb only: the body is the whole editable set, not a delta.** Jackson gives
+         *     absent and null the same Java value, so this endpoint cannot tell "leave `objective` alone"
+         *     from "clear it" and resolves both as *clear it* — sending `{"title": "x"}` renames the case
+         *     and empties every nullable scalar beside it, and omitting `stepFormat`, `priority` or
+         *     `automationStatus` is a `400` on fields the caller never mentioned. `CaseUpdateRequest`'s
+         *     header records the decision and what changing it would cost (`JsonNullable`, or a presence
+         *     map — a shape change on this contract).
+         *
+         *     The three **list** fields are the exception, and only because a list has an empty spelling
+         *     of its own: `tags`, `classificationValueIds`, `preconditions` and `postconditions` are left
+         *     alone when absent and cleared by `[]`.
+         *
+         *     The SPA satisfies this by construction — its editor submits every field it renders on every
+         *     save. A client that is not a form reads the case first and sends it back with its change
+         *     applied; `@tcms/client`'s `core/rewrite.ts` is that read-modify-write, shared so the CLI and
+         *     the MCP server cannot disagree about it. Sending a delta here is §143's second recorded
+         *     defect and it had never worked once.
+         *
+         *     `ownerId` and `automationTags` are on `TestCaseInput` and are **refused with a 400 when
+         *     present** — each needs a write path no slice has built. A round-trip must therefore drop
+         *     them rather than echo what the `GET` returned.
+         */
         patch: {
             parameters: {
                 query?: never;
@@ -7790,11 +7813,11 @@ export interface components {
             description?: string | null;
             objective?: string | null;
             expectedOutcome?: string | null;
-            stepFormat?: components["schemas"]["StepFormat"];
+            stepFormat: components["schemas"]["StepFormat"];
             gherkinSource?: string | null;
-            priority?: components["schemas"]["Priority"];
+            priority: components["schemas"]["Priority"];
             severity?: components["schemas"]["Priority"];
-            automationStatus?: components["schemas"]["AutomationStatus"];
+            automationStatus: components["schemas"]["AutomationStatus"];
             automationKey?: string | null;
             automationTags?: string[];
             notAutomatableReason?: string | null;

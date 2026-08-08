@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -794,6 +795,68 @@ class CaseUpdateEndpointTest extends IntegrationTestBase {
     @Nested
     @DisplayName("Validation — every rule the SPA enforces, enforced again because curl runs no Zod")
     class Validation {
+
+        /**
+         * Fields whose absence this check must not attribute to {@code required}.
+         *
+         * <p>Each is refused only <em>given a value of another field</em>, so the schema cannot
+         * state the obligation without a {@code oneOf} splitting the shape in four — {@code steps}
+         * for {@code STRUCTURED}, {@code gherkinSource} for {@code GHERKIN}, and the two
+         * automation fields for their two statuses. They are optional on the contract and refused
+         * on the server, and that is the honest arrangement rather than a complete one.
+         */
+        private static final Set<String> CONDITIONALLY_REQUIRED =
+                Set.of("steps", "gherkinSource", "automationKey", "notAutomatableReason");
+
+        /*
+          §143's second defect, as a computed check rather than a careful reading.
+
+          `TestCaseInput` declared `required: [title]` from M0 while `CaseEdit.validate` refused
+          four, and nothing could see it: `ContractConventionTest` reads the contract against
+          itself, every endpoint test sends a complete payload, and both generated copies of
+          `schema.d.ts` faithfully typed three mandatory fields as optional. Its sharpest
+          consequence was that every AI proposal was filed 201 and could never be accepted.
+
+          So the two sides are compared directly: drop each editable field in turn from a payload
+          the server accepts, and whatever it then refuses is what `required` has to say. This
+          fails in BOTH directions — a server rule the contract omits, and a contract claim the
+          server does not make.
+        */
+        @Test
+        @DisplayName("the contract's required set is exactly what the server refuses to work without")
+        void contractRequiredMatchesWhatTheServerEnforces() throws Exception {
+            var contract = com.tcms.contract.OpenApiContract.load();
+            Set<String> declared = contract.requiredOf("#/components/schemas/TestCaseInput");
+
+            Set<String> enforced = new java.util.LinkedHashSet<>();
+            for (String field : edit("Refund the whole payment").keySet()) {
+                if (CONDITIONALLY_REQUIRED.contains(field)) {
+                    continue;
+                }
+                Map<String, Object> without = edit("Refund the whole payment");
+                without.remove(field);
+
+                MvcResult result = patch(LEAD, ACME, ACME_BANKING, caseId("full"), without, null);
+                if (result.getResponse().getStatus() == 400
+                        && errorsOf(result).containsKey(field)) {
+                    enforced.add(field);
+                }
+            }
+
+            // A vacuity guard first: an empty `enforced` would make the assertion below pass by
+            // discovering nothing, which is how a check that stopped running looks from outside.
+            assertThat(enforced).as("the server must refuse SOMETHING, or this test proves nothing")
+                    .isNotEmpty();
+            assertThat(declared)
+                    .as("""
+                        `TestCaseInput.required` in openapi.yaml must name exactly the fields
+                        `CaseEdit.validate` refuses to work without. A field the server requires \
+                        and the contract omits generates clients that cannot write — both copies \
+                        of `schema.d.ts` type it as optional and `tcms_write_case` tells a model \
+                        it may skip it. A field the contract requires and the server does not \
+                        makes callers send a value nobody asked for.""")
+                    .containsExactlyInAnyOrderElementsOf(enforced);
+        }
 
         @Test
         @DisplayName("a blank title is refused, keyed on title")

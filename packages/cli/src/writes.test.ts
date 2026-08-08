@@ -18,14 +18,99 @@ import { COMMANDS } from './commands.js';
 import { EXIT } from './main.js';
 import { PROJECT, api, mainWith, recorder } from './test/harness.js';
 
+/*
+  A WHOLE case detail, not the four fields the assertions read.
+
+  It was the four fields, and that is §143's second defect surviving in its own test: the edit
+  arms send a delta, the stub answers 200 to whatever arrives, so a fixture missing everything
+  the server requires agreed with a client that sent nothing. The arms now read this and send it
+  back (`core/rewrite.ts`), which only proves anything if the fixture is shaped like the resource.
+*/
 const CASE = {
   id: 'c-9',
   key: 'TC-42',
+  keySeq: 42,
   title: 'Login works',
+  suiteId: 's-1',
+  suiteName: 'Smoke',
   lifecycleStatus: 'DRAFT',
   priority: 'HIGH',
-  tags: [],
+  severity: 'MEDIUM',
+  stepFormat: 'STRUCTURED',
+  automationStatus: 'MANUAL',
+  automationKey: null,
+  automationTags: ['@smoke'],
+  notAutomatableReason: null,
+  gherkinSource: null,
+  description: 'The happy path.',
+  objective: 'Prove a known user gets in.',
+  expectedOutcome: 'The dashboard renders.',
+  estimatedDurationSec: 90,
+  owner: null,
+  createdBy: null,
+  ownerId: 'u-1',
+  testType: null,
+  testLevel: null,
+  features: [],
+  classificationValueIds: ['cv-1'],
+  tags: ['smoke'],
+  healthSignals: [],
+  steps: [
+    {
+      id: 'st-1',
+      position: 1,
+      keyword: null,
+      action: 'Sign in',
+      testData: 'ops@acme.test',
+      expectedResult: 'The dashboard renders.',
+      sharedStepId: null,
+    },
+  ],
+  preconditions: [],
+  postconditions: [],
+  attachments: [],
+  flake: null,
+  currentVersionNo: 3,
+  updatedAt: '2026-08-08T09:00:00Z',
   lockVersion: 3,
+};
+
+/** The whole editable set as `caseInputFrom` projects it — what an unchanged round-trip sends. */
+const CASE_ECHO = {
+  title: 'Login works',
+  suiteId: 's-1',
+  description: 'The happy path.',
+  objective: 'Prove a known user gets in.',
+  expectedOutcome: 'The dashboard renders.',
+  stepFormat: 'STRUCTURED',
+  gherkinSource: null,
+  priority: 'HIGH',
+  severity: 'MEDIUM',
+  automationStatus: 'MANUAL',
+  automationKey: null,
+  notAutomatableReason: null,
+  estimatedDurationSec: 90,
+  classificationValueIds: ['cv-1'],
+  tags: ['smoke'],
+  steps: [
+    {
+      id: 'st-1',
+      keyword: null,
+      action: 'Sign in',
+      testData: 'ops@acme.test',
+      expectedResult: 'The dashboard renders.',
+      sharedStepId: null,
+    },
+  ],
+};
+
+/** The four the server requires unconditionally, plus the step a STRUCTURED case needs. */
+const PROPOSABLE = {
+  title: 'Login works',
+  stepFormat: 'STRUCTURED',
+  priority: 'HIGH',
+  automationStatus: 'MANUAL',
+  steps: [{ action: 'Sign in', expectedResult: 'The dashboard renders.' }],
 };
 
 const PROPOSAL = {
@@ -35,19 +120,28 @@ const PROPOSAL = {
   verdictSource: 'NONE',
   createdAt: '2026-08-08T10:00:00Z',
   filedByAgent: true,
-  testCase: { title: 'Login works' },
+  testCase: PROPOSABLE,
 };
 
 const SUITE = {
   id: 's-1',
   key: 'TS-7',
   name: 'Smoke',
+  description: 'What we check on every build.',
   caseCount: 4,
   lifecycleStatus: 'DRAFT',
-  tagRules: [],
-  caseIds: [],
+  tagRules: ['smoke'],
+  caseIds: ['c-9'],
   conditions: [],
   lockVersion: 2,
+};
+
+/** `suiteInputFrom(SUITE)` — the unchanged round-trip. */
+const SUITE_ECHO = {
+  name: 'Smoke',
+  description: 'What we check on every build.',
+  tagRules: ['smoke'],
+  caseIds: ['c-9'],
 };
 
 const PAGE = {
@@ -64,8 +158,35 @@ const PLAN = {
   key: 'TP-1',
   name: 'Release 4.2',
   status: 'DRAFT',
+  description: 'The regression pass before GA.',
+  milestoneName: 'GA',
+  milestoneDate: '2026-09-01',
+  // Reachable from no flag and no tool argument, which is what made them the sharpest half of
+  // the plan defect: every `plan edit` emptied both and nobody could have avoided it.
+  scopeText: 'Checkout, payments, refunds.',
+  outOfScopeText: 'Anything behind the beta flag.',
+  entryCriteria: [],
+  exitCriteria: [],
+  configurations: [],
+  suiteIds: [],
+  caseIds: [],
+  tags: [],
+  sections: [],
+  passRate: null,
+  coverage: null,
   caseCount: 12,
+  currentVersionNo: 2,
   lockVersion: 7,
+};
+
+/** `planInputFrom(PLAN)` — every scalar, and none of the lists. */
+const PLAN_ECHO = {
+  name: 'Release 4.2',
+  description: 'The regression pass before GA.',
+  milestoneName: 'GA',
+  milestoneDate: '2026-09-01',
+  scopeText: 'Checkout, payments, refunds.',
+  outOfScopeText: 'Anything behind the beta flag.',
 };
 
 const RUN = {
@@ -142,7 +263,18 @@ describe('case edit', () => {
     const sent = stub.write('/cases/c-9');
     expect(sent.method).toBe('PATCH');
     expect(sent.headers.get('If-Match')).toBe('3');
-    expect(JSON.parse(sent.body ?? '{}')).toEqual({ title: 'Login still works' });
+    /*
+      The WHOLE editable set with one field changed, not `{ title }`. This `PATCH` is partial by
+      verb only: `stepFormat`, `priority` and `automationStatus` absent is a 400 about fields the
+      user never mentioned, and every nullable scalar absent is *cleared*. §143 drove it against
+      a real server — `tcms case edit TC-1 --title x` had never worked once.
+    */
+    expect(JSON.parse(sent.body ?? '{}')).toEqual({ ...CASE_ECHO, title: 'Login still works' });
+    // `ownerId` and `automationTags` are served by the GET and REFUSED by the PATCH, so the
+    // round-trip has to drop them. Echoing them back is the one way this fix could be worse
+    // than the delta it replaces.
+    expect(JSON.parse(sent.body ?? '{}')).not.toHaveProperty('ownerId');
+    expect(JSON.parse(sent.body ?? '{}')).not.toHaveProperty('automationTags');
     expect(out.stdout).toContain('Lock version: 4');
   });
 
@@ -166,6 +298,7 @@ describe('case edit', () => {
     );
 
     expect(JSON.parse(stub.write('/cases/c-9').body ?? '{}')).toEqual({
+      ...CASE_ECHO,
       description: null,
       suiteId: 's-1',
       tags: ['smoke'],
@@ -178,7 +311,10 @@ describe('case edit', () => {
 
     await mainWith(['case', 'edit', 'TC-42', '--unfile'], out, stub.fetch);
 
-    expect(JSON.parse(stub.write('/cases/c-9').body ?? '{}')).toEqual({ suiteId: null });
+    // The null is the point and it survives the merge: the base carries `suiteId: 's-1'` and
+    // the delta lays an explicit null over it. A merge that dropped nulls would file the case
+    // back where it was and report success.
+    expect(JSON.parse(stub.write('/cases/c-9').body ?? '{}')).toEqual({ ...CASE_ECHO, suiteId: null });
   });
 
   it('exits 2 rather than sending an empty body that reports success', async () => {
@@ -240,7 +376,7 @@ describe('case edit', () => {
   it('refuses a --lock-version that is not a number, rather than falling back to a fresh read', async () => {
     const out = recorder();
     const stub = api(scaffolding());
-    const file = tempJson('case.json', { title: 'x' });
+    const file = tempJson('case.json', PROPOSABLE);
 
     expect(await mainWith(
       ['case', 'edit', 'TC-42', '--file', file, '--lock-version', 'latest'],
@@ -254,29 +390,27 @@ describe('case propose', () => {
   it('files a bare TestCaseInput by wrapping it, and carries an idempotency key', async () => {
     const out = recorder();
     const stub = api({ ...scaffolding(), 'POST /ai-proposals': { status: 201, body: PROPOSAL } });
-    const file = tempJson('case.json', { title: 'Login works', priority: 'HIGH' });
+    const file = tempJson('case.json', PROPOSABLE);
 
     expect(await mainWith(['case', 'propose', '--file', file], out, stub.fetch)).toBe(EXIT.ok);
 
     const sent = stub.write('/ai-proposals');
     expect(sent.headers.get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/);
-    expect(JSON.parse(sent.body ?? '{}')).toEqual({
-      testCase: { title: 'Login works', priority: 'HIGH' },
-    });
+    expect(JSON.parse(sent.body ?? '{}')).toEqual({ testCase: PROPOSABLE });
   });
 
   it('takes a body that is already a proposal without wrapping it twice', async () => {
     const out = recorder();
     const stub = api({ ...scaffolding(), 'POST /ai-proposals': { status: 201, body: PROPOSAL } });
     const file = tempJson('proposal.json', {
-      testCase: { title: 'Login works' },
+      testCase: PROPOSABLE,
       grounding: { steps: [] },
     });
 
     await mainWith(['case', 'propose', '--file', file], out, stub.fetch);
 
     expect(JSON.parse(stub.write('/ai-proposals').body ?? '{}')).toEqual({
-      testCase: { title: 'Login works' },
+      testCase: PROPOSABLE,
       grounding: { steps: [] },
     });
   });
@@ -284,7 +418,7 @@ describe('case propose', () => {
   it('sends no verdict when none was given — absent and UNVERIFIED are different claims', async () => {
     const out = recorder();
     const stub = api({ ...scaffolding(), 'POST /ai-proposals': { status: 201, body: PROPOSAL } });
-    const file = tempJson('case.json', { title: 'x' });
+    const file = tempJson('case.json', PROPOSABLE);
 
     await mainWith(['case', 'propose', '--file', file], out, stub.fetch);
 
@@ -294,7 +428,7 @@ describe('case propose', () => {
   it('reuses the key the caller supplied, so a scripted retry is the same intent', async () => {
     const out = recorder();
     const stub = api({ ...scaffolding(), 'POST /ai-proposals': { status: 200, body: PROPOSAL } });
-    const file = tempJson('case.json', { title: 'x' });
+    const file = tempJson('case.json', PROPOSABLE);
 
     await mainWith(['case', 'propose', '--file', file, '--idempotency-key', 'batch-7'], out, stub.fetch);
 
@@ -310,7 +444,7 @@ describe('case propose', () => {
         body: { ...PROPOSAL, verdict: 'GROUNDED', verdictSource: 'EXTERNAL' },
       },
     });
-    const file = tempJson('case.json', { title: 'x' });
+    const file = tempJson('case.json', PROPOSABLE);
 
     await mainWith(['case', 'propose', '--file', file, '--verdict', 'GROUNDED'], out, stub.fetch);
 
@@ -325,6 +459,22 @@ describe('case propose', () => {
 
     expect(await mainWith(['case', 'propose'], out, stub.fetch)).toBe(EXIT.usage);
     expect(out.stderr).toContain('--file');
+  });
+
+  /*
+    Filing it would WORK — 201, PENDING — and the refusal would land weeks later on a reviewer
+    who cannot edit the proposal to fix it and whose only move is Reject. So the author is told
+    while they are still holding the thing. §143 drove exactly that path end to end.
+  */
+  it('refuses a case the accept could never take, and makes no request', async () => {
+    const out = recorder();
+    const stub = api(scaffolding());
+    const file = tempJson('case.json', { title: 'Login works' });
+
+    expect(await mainWith(['case', 'propose', '--file', file], out, stub.fetch)).toBe(EXIT.failed);
+    expect(out.stderr).toContain('stepFormat');
+    expect(out.stderr).toContain('automationStatus');
+    expect(stub.sent.some((request) => request.method === 'POST')).toBe(false);
   });
 });
 
@@ -345,6 +495,22 @@ describe('suite writes', () => {
       tagRules: ['smoke'],
     });
     expect(out.stdout).toContain('TS-7');
+  });
+
+  /*
+    The case arm's defect, one field wide. `SuiteInput` requires `name`, so editing only the tag
+    rules was a 400 about a field nobody mentioned; and `description` absent is *cleared*, so a
+    rename emptied it. Both invisible to a stub, which answers 200 to whatever arrives.
+  */
+  it('sends the whole suite with the change applied, not the flags alone', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'PATCH /suites/s-1': { status: 200, body: SUITE } });
+
+    await mainWith(['suite', 'edit', 'TS-7', '--tag-rule', 'nightly'], out, stub.fetch);
+
+    const sent = stub.write('/suites/s-1');
+    expect(sent.headers.get('If-Match')).toBe('2');
+    expect(JSON.parse(sent.body ?? '{}')).toEqual({ ...SUITE_ECHO, tagRules: ['nightly'] });
   });
 
   it('sends no If-Match and no key on a status transition', async () => {
@@ -374,6 +540,21 @@ describe('suite writes', () => {
     expect(await mainWith(['suite', 'status', 'TS-7', '--status', 'APPROVED'], out, stub.fetch))
       .toBe(EXIT.failed);
     expect(stub.write('/suites/s-1/status').body).toContain('APPROVED');
+  });
+});
+
+describe('plan edit', () => {
+  it('sends no list it was not given, because absent leaves a list alone', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'PATCH /plans/tp-1': { status: 200, body: PLAN } });
+
+    await mainWith(['plan', 'edit', 'TP-1', '--name', 'Release 4.3'], out, stub.fetch);
+
+    const body = JSON.parse(stub.write('/plans/tp-1').body ?? '{}') as Record<string, unknown>;
+    expect(body['name']).toBe('Release 4.3');
+    for (const list of ['suiteIds', 'caseIds', 'tags', 'sections', 'entryCriteria', 'exitCriteria']) {
+      expect(body).not.toHaveProperty(list);
+    }
   });
 });
 
@@ -443,12 +624,13 @@ describe('doc writes', () => {
 
 describe('plan writes', () => {
   /*
-    `TestPlanUpdateInput` requires `name`, alone among the edit shapes on this surface. So a
-    `--description`-only edit is not expressible on the wire, and the command threads the current
-    name through from the same read that gave it the version — same read, so the pair is
-    consistent. Sending nothing would be a 400 about a field the user never mentioned.
+    ~~`TestPlanUpdateInput` requires `name`, alone among the edit shapes on this surface~~ → it is
+    not alone, and threading the name alone was not enough. `PlanEdit.validateUpdate` writes every
+    SCALAR straight through and resolves only the LISTS against what is stored, so this edit used
+    to empty the milestone and both prose fields while correctly preserving the name. The command
+    now sends every scalar back, from the same read that gave it the version.
   */
-  it('carries the plan’s current name through an edit that does not mention it', async () => {
+  it('carries every scalar through an edit that does not mention them', async () => {
     const out = recorder();
     const stub = api({ ...scaffolding(), 'PATCH /plans/tp-1': { status: 200, body: PLAN } });
 
@@ -460,8 +642,8 @@ describe('plan writes', () => {
 
     const sent = stub.write('/plans/tp-1');
     expect(JSON.parse(sent.body ?? '{}')).toEqual({
+      ...PLAN_ECHO,
       description: 'Regression for 4.2',
-      name: 'Release 4.2',
     });
     expect(sent.headers.get('If-Match')).toBe('7');
   });
@@ -649,7 +831,7 @@ const INVOCATIONS: Record<string, Invocation> = {
     routes: { 'PATCH /cases/c-9': { status: 200, body: CASE } },
   },
   'case propose': {
-    argv: () => ['case', 'propose', '--file', tempJson('case.json', { title: 'x' })],
+    argv: () => ['case', 'propose', '--file', tempJson('case.json', PROPOSABLE)],
     path: '/ai-proposals',
     routes: { 'POST /ai-proposals': { status: 201, body: PROPOSAL } },
   },

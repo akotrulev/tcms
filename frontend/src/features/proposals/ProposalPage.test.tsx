@@ -34,6 +34,13 @@ const PENDING: AiProposal = {
   testCase: {
     title: 'Refund a settled payment',
     objective: 'Prove a settled payment can be refunded in full',
+    // The four the accept demands. They were absent, and typechecked, because the contract said
+    // `required: [title]` while the server had required four since M0 — so this fixture asserted
+    // the shape of a proposal that could only ever be Rejected. §144 fixed the contract; this is
+    // the compile error that came out of it.
+    stepFormat: 'STRUCTURED',
+    priority: 'HIGH',
+    automationStatus: 'MANUAL',
     steps: [
       { action: 'Open the settled order', expectedResult: 'The order opens' },
       { action: 'Refund it in full', expectedResult: 'The payment shows as refunded' },

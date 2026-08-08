@@ -1645,8 +1645,20 @@ them the only way the product can: `POST /projects/{p}/ai-proposals` with an **`
                "unverified_claims": ["the refund window is 30 days"]}}
 
 # 3 — NAMES A SUITE ID THAT DOES NOT EXIST. This is the one that matters:
-{"testCase": {"title": "Refund after chargeback", "suiteId": "<a random uuid>"}}
+{"testCase": {"title": "Refund after chargeback", "stepFormat": "STRUCTURED",
+              "priority": "MEDIUM", "automationStatus": "MANUAL",
+              "steps": [{"action": "Open the order", "expectedResult": "It opens"}],
+              "suiteId": "<a random uuid>"}}
 ```
+
+> **§144 amended the third payload, and the amendment is the point.** It was
+> `{"title": …, "suiteId": …}` — which, when `A4-4` finally ran, would have produced a 400 naming
+> **four** fields, three of them nothing to do with the suite, and the row would have read as a
+> pass. The contract said `required: [title]` for a year while the server required four (§143's
+> F2), and this charter was written from the contract. It now carries the four, so `A4-4` observes
+> the *one* refusal it was written for. **File it with `curl`, not `tcms case propose`**: the CLI
+> and the MCP server refuse an unacceptable proposal client-side since §144, so the CLI cannot
+> produce this fixture and should not be able to.
 
 The third is filed happily and **cannot be accepted** — that asymmetry is the slice's central trade
 and `A4-4` is the row that observes it in a browser.
@@ -1656,7 +1668,7 @@ and `A4-4` is the row that observes it in a browser.
 | `A4-1` | **Generated cases** in the rail, with the queue empty (before filing anything) | The empty state names the **MCP server / `tcms` CLI and the `Agent` role** rather than apologising. This is the only place the product explains that generation exists at all, and most projects will never leave this state. |
 | `A4-2` | The queue with all three filed | Three rows. Every row shows the verdict **and, beside it in plain text, who claimed it** — *"Reported by the connecting agent"* / *"Nobody has checked this"*. **A row showing only a chip is the defect**; §6w.1a's whole argument is a claim rendered as a finding. Proposal 2 must not be green. |
 | `A4-3` | The same rows, looking at **Filed by** | The robot marker on all three (an `Agent` token filed them) **and the person's name beside it** — the token's owner. A row naming only a token, or only a robot, breaks §6j's *"Ana's agent, holding Ana's grants, did it"*. |
-| `A4-4` | Open proposal **3** and press **Accept** | A **400 rendered in full, in the panel** — the field name `suiteId` and its message — with **Reject still enabled beside it**. Not a toast, and not a disabled screen: this is the designed outcome for a payload stored before the project moved, and the reviewer's next move is Reject. |
+| `A4-4` | Open proposal **3** and press **Accept** | A **400 rendered in full, in the panel** — **`suiteId` and nothing else** (see the amendment above; a 400 also naming `stepFormat`, `priority` or `automationStatus` means the fixture was filed from the pre-§144 charter, not that the screen is wrong) — with **Reject still enabled beside it**. Not a toast, and not a disabled screen: this is the designed outcome for a payload stored before the project moved, and the reviewer's next move is Reject. |
 | `A4-5` | Reject proposal 3 with a note, then reload | Status `Rejected`, the note shown with who rejected it. The row is **still there** under the Rejected tab — §6w.6 keeps it so the rejection rate is answerable. Press Reject again from the URL: the **first note survives**. |
 | `A4-6` | Open proposal **2** and read the grounding panel | The JSON shown **as preformatted text**, verbatim, with the sentence saying TCMS did not produce it and does not check it. Nothing from that payload is rendered as markup or as a product-styled component. |
 | `A4-7` | Accept proposal 2 | Lands on the **new case**, which is `DRAFT`, has a real `TC-n` key, and is **owned by the accepting person** — not by the proposal's author and not by a robot. The case's history shows `case.created` like any other. |
@@ -1671,3 +1683,32 @@ and `A4-4` is the row that observes it in a browser.
   caller in a browser that the refusal applies to. It is driven from `curl` with the `Agent` token
   instead, and that is a **mutation-queue** row, not a browser one.
 - **`SUPERSEDED` and `TCMS_VERIFIED` have no rows** because neither value exists. See `V43`.
+
+---
+
+## §144 — the required set the contract had wrong, and the proposal that can now be accepted
+
+**Lane: the authoring lane, immediately after §138's rows** — it reuses that charter's proposals
+and needs nothing else. **Two rows, and one of them is the end of a path that has never once
+completed.**
+
+§143 drove `POST …/ai-proposals` → PENDING → Accept and got a 400 on three fields that are not on
+the proposal and cannot be edited there. That was not drift; the payload had never been valid,
+because `TestCaseInput` declared one required field and `CaseEdit.validate` enforced four. The
+contract is fixed. What no gate can show is a person completing the round trip: the SPA's own
+tests run in jsdom against a mocked query client, and the thing being verified is that a body a
+*different process* filed is acceptable to *this* server.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `A4-11` | File a **complete** proposal with the `Agent` token (§138's payload 1 shape), open **Generated cases**, and press **Accept** | **200 and a real case** — `DRAFT`, a `TC-n` key, owned by the accepting person. The panel shows no field errors. This is §143's F2 path, ending the way it was designed to. `A4-7` accepts a proposal *this pass* authored from the contract; this row's value is that the payload came from outside the browser. |
+| `A4-12` | On the accepted case, compare every field against what was filed — title, step format, priority, automation status, the steps, the suite | All present and correct. **The accept is a create, so a field the proposal carried and the create dropped is silent**: nothing is red, and the reviewer signed off on content the case does not have. |
+
+**No row for the client-side proposal refusal, deliberately.** `core/proposal.ts` refuses an
+unacceptable proposal in the CLI and the MCP server, neither of which is a browser. It is `LP-6` in
+`2026-08-08-packages-live-pass.md`.
+
+**No row for `case edit`, `suite edit` or `plan edit` either**, for the same reason: those are
+`packages/` commands, and their live rows are `LP-1` … `LP-5`. The SPA's own editors were not
+touched by §144 — they already submitted every field they render, which is exactly why the server
+was never wrong about this and why it took a second client to find out.

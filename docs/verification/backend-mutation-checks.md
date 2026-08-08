@@ -1409,3 +1409,32 @@ image's own probe and its own build. Everything expressed as a choice between tw
 configurations (which URL, which profile, which `needs` edge) is verified by reading, and stays
 verified only for as long as somebody keeps reading. The runbook section is where that reading is
 written down.
+
+---
+
+### §144 — the contract's required set, and the check that compares it to the server (`CR-1` … `CR-3`)
+
+**One test, and it is the first thing in this repo that compares `openapi.yaml` to the server's
+behaviour rather than to itself.** `TestCaseInput` said `required: [title]` from M0 while
+`CaseEdit.validate` refused four, and nothing could see it: `ContractConventionTest` reads the
+contract against itself, every endpoint test sends a complete payload, and both generated copies of
+`schema.d.ts` faithfully typed three mandatory fields as optional. §143 found it by sending a real
+request. `CaseUpdateEndpointTest.contractRequiredMatchesWhatTheServerEnforces` is what would have.
+
+> **NONE RUN.** `CR-1` is the row that matters: it is the original defect, restored.
+
+```bash
+cd backend
+./gradlew test --tests 'com.tcms.repository.CaseUpdateEndpointTest'
+```
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| CR-1 | `docs/specs/openapi.yaml` — `TestCaseInput.required` back to `[title]` | **The original defect, restored.** `contractRequiredMatchesWhatTheServerEnforces` fails naming `stepFormat`, `priority` and `automationStatus` as enforced-but-undeclared. Nothing else in the class moves — every other test sends a complete payload, which is precisely why none of them ever noticed. | ⬜ NOT RUN |
+| CR-2 | `TestCaseInput.required` gains `severity` (a plausible-looking addition — the SPA always sends one) | The other direction: a contract claim the server does not make. The same test fails, this time with `severity` declared and not enforced. A client would be made to send a value nobody asked for, and `TestCase.severity` is nullable precisely because not every team has an opinion. | ⬜ NOT RUN |
+| CR-3 | `CaseEdit.validate` drops the `priority == null` check | The server stops enforcing what the contract declares, so the same test fails from the *code* side. This is the row that proves the check is not merely reading the YAML twice. **Watch for over-reddening**: `Validation` has no priority-absent test of its own, so a single failure here means the new test is the only observer of that rule. | ⬜ NOT RUN |
+
+**No row for `core/rewrite.ts`.** It is TypeScript and this queue runs `./gradlew`; its computed
+check lives in `packages/client/src/core/core.test.ts`, which derives the projected field list from
+the contract so that a field added to `TestCaseInput` fails the build until somebody decides whether
+the round-trip carries it.

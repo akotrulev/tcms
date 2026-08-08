@@ -12,6 +12,8 @@ import { ifMatchFor, isVersionConflict, versionOf } from './concurrency.js';
 import { KEY_PREFIXES, classify, isUuid, parseDisplayKey } from './identifiers.js';
 import { MAX_IDEMPOTENCY_KEY, newIntentKey, requireIntentKey } from './idempotency.js';
 import { createIntent, editIntent, requireExplicitVersion } from './mutation.js';
+import { REQUIRED_CASE_FIELDS, requireProposableCase } from './proposal.js';
+import { caseInputFrom, planInputFrom, suiteInputFrom } from './rewrite.js';
 import { DEFAULT_PAGE_SIZE, clampPageSize, eachItem, hasMore } from './paging.js';
 import { resolveProject } from './project.js';
 import { describeReach, describeRefusal } from './refusal.js';
@@ -163,6 +165,171 @@ describe('mutation intents', () => {
   it('takes a version of zero, which is a real version and a falsy number', () => {
     expect(requireExplicitVersion(0, 'edit case from a file')).toEqual({ explicit: 0 });
     expect(() => requireExplicitVersion(1.5, 'edit case from a file')).toThrow(/whole number/);
+  });
+});
+
+/*
+  §143's second defect, and the §48 rule applied to it: the three projections are a list of
+  fields, so what has to be checked is the LIST, not each entry. A field added to `TestCaseInput`
+  next year is either carried by the round-trip or deliberately excluded, and until somebody says
+  which, this fails the build. Reading the projection carefully is what stopped being enough the
+  moment the contract and the server disagreed for a year.
+*/
+describe('read-modify-write', () => {
+  const spec = parse(
+    readFileSync(
+      resolvePath(dirname(fileURLToPath(import.meta.url)), '../../../../docs/specs/openapi.yaml'),
+      'utf8',
+    ),
+  ) as { components: { schemas: Record<string, { properties: Record<string, unknown> }> } };
+
+  const propertiesOf = (schema: string): string[] =>
+    Object.keys(spec.components.schemas[schema]?.properties ?? {});
+
+  const CASE = {
+    title: 'Login works',
+    suiteId: 's-1',
+    description: 'Prose.',
+    objective: null,
+    expectedOutcome: null,
+    stepFormat: 'STRUCTURED' as const,
+    gherkinSource: null,
+    priority: 'HIGH' as const,
+    severity: 'LOW' as const,
+    automationStatus: 'MANUAL' as const,
+    automationKey: null,
+    automationTags: ['@smoke'],
+    notAutomatableReason: null,
+    estimatedDurationSec: 90,
+    ownerId: 'u-1',
+    classificationValueIds: ['cv-1'],
+    tags: ['smoke'],
+    steps: [{
+      id: 'st-1', position: 1, keyword: null, action: 'Sign in',
+      testData: null, expectedResult: 'In.', sharedStepId: null,
+    }],
+  } as unknown as Parameters<typeof caseInputFrom>[0];
+
+  it('carries every field of TestCaseInput a round-trip may send, and no other', () => {
+    /*
+      Each exclusion is a decision with a consequence, so each is named rather than filtered by
+      shape. `ownerId` and `automationTags` are REFUSED by the PATCH with a 400 while being served
+      by the GET, so echoing them turns every round-trip into a rejection. The conditions are
+      lists, so absent leaves them alone, and the read serves a different schema from the write.
+      `changeComment` is this edit's own annotation and belongs to nobody's previous save.
+    */
+    const excluded = ['ownerId', 'automationTags', 'preconditions', 'postconditions', 'changeComment'];
+    const expected = propertiesOf('TestCaseInput').filter((field) => !excluded.includes(field));
+
+    expect(expected.length).toBeGreaterThan(10);
+    expect(Object.keys(caseInputFrom(CASE)).sort()).toEqual(expected.sort());
+  });
+
+  it('projects a step WITH its id, because an id-less step is a new step', () => {
+    // Dropping the ids on a round-trip deletes every step and recreates it, which looks like
+    // nothing happened and breaks every stepResult pinned to the old ones.
+    expect(caseInputFrom(CASE).steps?.[0]?.id).toBe('st-1');
+    // And not `position`: it is the array's order, and `TestStepInput` has no such field.
+    expect(caseInputFrom(CASE).steps?.[0]).not.toHaveProperty('position');
+  });
+
+  it('omits an unset severity rather than sending a null the input cannot type', () => {
+    // `TestCase.severity` is nullable and `TestCaseInput.severity` is not, so "unset" has no
+    // spelling on the write and an absent scalar is what the server reads as null.
+    const unset = { ...CASE, severity: null } as unknown as Parameters<typeof caseInputFrom>[0];
+    expect(caseInputFrom(unset)).not.toHaveProperty('severity');
+    expect(caseInputFrom(CASE).severity).toBe('LOW');
+  });
+
+  it('carries every field of SuiteInput', () => {
+    const suite = {
+      id: 's-1', key: 'TS-7', name: 'Smoke', description: null, caseCount: 0,
+      tagRules: ['smoke'], caseIds: ['c-1'], lifecycleStatus: 'DRAFT', conditions: [],
+      lockVersion: 2,
+    } as unknown as Parameters<typeof suiteInputFrom>[0];
+
+    expect(Object.keys(suiteInputFrom(suite)).sort()).toEqual(propertiesOf('SuiteInput').sort());
+  });
+
+  it('carries every SCALAR of TestPlanUpdateInput and none of its lists', () => {
+    /*
+      The split is the server's: `PlanEdit.validateUpdate` resolves an absent list against what is
+      stored and writes every scalar straight through. So the lists are genuinely partial here and
+      the scalars are genuinely not — and `scopeText`/`outOfScopeText`, which no flag and no tool
+      argument can reach, were emptied by EVERY plan edit either client ever made.
+    */
+    const lists = ['suiteIds', 'caseIds', 'tags', 'sections', 'entryCriteria', 'exitCriteria'];
+    const scalars = propertiesOf('TestPlanUpdateInput').filter((field) => !lists.includes(field));
+
+    const plan = {
+      id: 'tp-1', key: 'TP-1', name: 'Release 4.2', status: 'DRAFT',
+      milestoneName: 'GA', milestoneDate: '2026-09-01', caseCount: 0, passRate: null,
+      coverage: null, description: null, entryCriteria: [], exitCriteria: [],
+      configurations: [], suiteIds: [], caseIds: [], tags: [], sections: [],
+      scopeText: 'What we will test.', outOfScopeText: null,
+      currentVersionNo: 1, lockVersion: 7,
+    } as unknown as Parameters<typeof planInputFrom>[0];
+
+    expect(Object.keys(planInputFrom(plan)).sort()).toEqual(scalars.sort());
+    expect(planInputFrom(plan).scopeText).toBe('What we will test.');
+  });
+
+  it('agrees with the contract about which four fields are required', () => {
+    const required = (spec.components.schemas['TestCaseInput'] as unknown as { required: string[] })
+      .required;
+    expect([...REQUIRED_CASE_FIELDS].sort()).toEqual([...required].sort());
+  });
+});
+
+/*
+  The proposal check exists because the FILE-TIME endpoint validates nothing by design and the
+  create rules run at accept — so a proposal missing a required field is filed 201, sits PENDING,
+  and refuses the reviewer's accept on fields they cannot edit. §143 drove that whole path.
+*/
+describe('proposable cases', () => {
+  const complete = {
+    title: 'Login works',
+    stepFormat: 'STRUCTURED',
+    priority: 'HIGH',
+    automationStatus: 'MANUAL',
+    steps: [{ action: 'Sign in' }],
+  };
+
+  it('accepts a case the accept would take', () => {
+    expect(() => requireProposableCase(complete, 'That case')).not.toThrow();
+  });
+
+  it('names every missing field at once, never the first', () => {
+    // A model that fixes one field and refiles, three times, has left a person three proposals
+    // to reject.
+    let message = '';
+    try {
+      requireProposableCase({ title: 'Login works' }, 'That case');
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toContain('stepFormat');
+    expect(message).toContain('priority');
+    expect(message).toContain('automationStatus');
+  });
+
+  it('reads an empty steps array as no steps, the way the server does', () => {
+    expect(() => requireProposableCase({ ...complete, steps: [] }, 'That case'))
+      .toThrow(/steps/);
+  });
+
+  it('asks for the content each format and automation status actually needs', () => {
+    expect(() => requireProposableCase(
+      { ...complete, stepFormat: 'GHERKIN', steps: undefined }, 'That case',
+    )).toThrow(/gherkinSource/);
+
+    expect(() => requireProposableCase(
+      { ...complete, automationStatus: 'AUTOMATED' }, 'That case',
+    )).toThrow(/automationKey/);
+
+    expect(() => requireProposableCase(
+      { ...complete, automationStatus: 'NOT_AUTOMATABLE' }, 'That case',
+    )).toThrow(/notAutomatableReason/);
   });
 });
 

@@ -46,6 +46,10 @@ export type { Concurrency, NoVersionReason } from './core/concurrency.js';
 export { createIntent, editIntent, requireExplicitVersion } from './core/mutation.js';
 export type { CreateOptions, EditVersion, WriteKind } from './core/mutation.js';
 
+export { caseInputFrom, planInputFrom, suiteInputFrom } from './core/rewrite.js';
+
+export { REQUIRED_CASE_FIELDS, requireProposableCase } from './core/proposal.js';
+
 export { describeReach, describeRefusal } from './core/refusal.js';
 export type { RefusalCopy, RefusedOperation } from './core/refusal.js';
 

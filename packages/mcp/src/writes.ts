@@ -15,6 +15,14 @@
  * everywhere anyway and is strictly better when the model has one, because it also catches a
  * change between the read that informed the edit and the edit itself.
  *
+ * ~~"`PATCH` leaves the rest alone"~~ → **false of three of these endpoints, and §143 drove it.**
+ * The case, suite and plan `PATCH`es take the whole editable set: an omitted required field is a
+ * `400` about something the caller never named, and an omitted nullable scalar is *cleared*. Those
+ * three arms therefore read the resource and lay the model's change on top —
+ * `@tcms/client`'s `core/rewrite.ts`, shared with the CLI, and it carries the argument for why
+ * doing so does **not** reopen the `If-Match` hole above (the base and the version come from the
+ * same read). The sentence stays true of the rest of this file.
+ *
  * **`tcms_write_doc_page`'s `blocks` is the exception, and it is demanded rather than accepted.**
  * A block omitted from that array is *deleted*, so a caller sending blocks is necessarily echoing
  * back content it read earlier — the body's content came from a read, which is exactly §139's
@@ -41,10 +49,14 @@
  * surface spec's §3 table. They are recorded in §140's section file rather than quietly dropped.
  */
 import {
+  caseInputFrom,
   createIntent,
   editIntent,
+  planInputFrom,
   requireExplicitVersion,
+  requireProposableCase,
   resolveId,
+  suiteInputFrom,
   type EditVersion,
   type components,
 } from '@tcms/client';
@@ -144,9 +156,15 @@ const writeCase: ToolDefinition = {
       testCase: {
         type: 'object',
         description:
-          'The generated case, for `propose`. Same shape as a case create: title (required), '
-          + 'description, objective, expectedOutcome, priority, severity, steps, preconditions, '
-          + 'postconditions, tags, suiteId.',
+          'The generated case, for `propose`. FOUR fields are required and the accept refuses '
+          + 'without them: `title`, `stepFormat` (STRUCTURED or GHERKIN), `priority` '
+          + '(CRITICAL/HIGH/MEDIUM/LOW) and `automationStatus` '
+          + '(MANUAL/TO_BE_AUTOMATED/AUTOMATED/NOT_AUTOMATABLE). A STRUCTURED case also needs a '
+          + 'non-empty `steps`, and a GHERKIN one needs `gherkinSource`. Optional: description, '
+          + 'objective, expectedOutcome, severity, preconditions, postconditions, tags, suiteId. '
+          + 'A proposal is stored UNVALIDATED and checked when a person accepts it, so a missing '
+          + 'field is not refused here — it becomes a refusal on a screen you are not at, weeks '
+          + 'later, that the reviewer cannot fix without rewriting your case.',
       },
       verdict: {
         type: 'string',
@@ -155,13 +173,19 @@ const writeCase: ToolDefinition = {
           + 'it out if you did not check — absent and UNVERIFIED are different answers, and the '
           + 'difference is recorded.',
       },
+      // The `edit` arm's fields. Every one of them is optional here even though the server
+      // requires four, because the arm reads the case and sends what it already had for anything
+      // you do not name — see the run body.
       title: { type: 'string' },
       description: { type: ['string', 'null'] },
       objective: { type: ['string', 'null'] },
       expectedOutcome: { type: ['string', 'null'] },
-      priority: { type: 'string' },
-      severity: { type: 'string' },
-      automationStatus: { type: 'string' },
+      priority: { type: 'string', enum: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] },
+      severity: { type: ['string', 'null'], enum: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', null] },
+      automationStatus: {
+        type: 'string',
+        enum: ['MANUAL', 'TO_BE_AUTOMATED', 'AUTOMATED', 'NOT_AUTOMATABLE'],
+      },
       suite: idProperty('suite to file it in — null to unfile it', 'TS-7'),
       tags: {
         type: 'array',
@@ -184,12 +208,28 @@ const writeCase: ToolDefinition = {
       if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
         throw new InputError("'testCase' is required for propose, as an object.");
       }
+      const wrapped = ('testCase' in raw ? raw : { testCase: raw }) as Record<string, unknown>;
+
+      /*
+        Refused here rather than filed, because filing it WORKS: this endpoint stores the payload
+        unvalidated and the create rules run at accept, so a missing field is not your 400 — it
+        is a 400 on a reviewer's screen, weeks later, against a proposal they cannot edit, whose
+        only remaining move is Reject. §143 drove exactly that. `core/proposal.ts` argues it.
+      */
+      const submitted = wrapped['testCase'];
+      requireProposableCase(
+        submitted && typeof submitted === 'object' && !Array.isArray(submitted)
+          ? submitted as Record<string, unknown>
+          : {},
+        "'testCase'",
+      );
+
       const verdict = str(input, 'verdict');
 
       const filed = await session.client.POST('/projects/{projectId}/ai-proposals', {
         params: { path: { projectId } },
         body: {
-          ...('testCase' in raw ? raw : { testCase: raw }),
+          ...wrapped,
           // Deliberately not defaulted: absent and `UNVERIFIED` are different, and they differ
           // in `verdictSource` — nobody claimed anything, against a model claiming it had not
           // checked. Filling this in would turn every silence into a claim.
@@ -237,13 +277,13 @@ const writeCase: ToolDefinition = {
     if (action !== 'edit') throw new InputError(`Unknown action '${action}'.`);
 
     const suite = nullableStr(input, 'suite');
-    const body = present({
+    const delta = present({
       title: str(input, 'title'),
       description: nullableStr(input, 'description'),
       objective: nullableStr(input, 'objective'),
       expectedOutcome: nullableStr(input, 'expectedOutcome'),
       priority: str(input, 'priority'),
-      severity: str(input, 'severity'),
+      severity: nullableStr(input, 'severity'),
       automationStatus: str(input, 'automationStatus'),
       // Null and absent are different requests and JSON can say both: null unfiles the case,
       // absent leaves it where it is. The CLI needed two flags to express this; here it is the
@@ -256,16 +296,25 @@ const writeCase: ToolDefinition = {
       tags: strings(input, 'tags'),
     });
 
-    if (Object.keys(body).length === 0) {
+    if (Object.keys(delta).length === 0) {
       throw new InputError('Nothing to change. Name at least one field.');
     }
 
-    const version = await versionFor(input, () =>
-      session.client.GET('/projects/{projectId}/cases/{caseId}', { params: { path }, tcms: session.request }));
+    /*
+      Read-modify-write: this `PATCH` takes the whole editable set, so the delta alone was a 400
+      naming `stepFormat`, `priority` and `automationStatus` — fields the model never mentioned
+      and, for `stepFormat`, cannot mention through this schema at all. §143 found it against a
+      real server; the stubs answered 200 to whatever arrived. `core/rewrite.ts` has the shape
+      and the `If-Match` argument, and the version comes from THIS read.
+    */
+    const current = await session.client.GET('/projects/{projectId}/cases/{caseId}', {
+      params: { path }, tcms: session.request,
+    });
+    const version = await versionFor(input, async () => current);
 
     return session.client.PATCH('/projects/{projectId}/cases/{caseId}', {
       params: { path },
-      body: body as components['schemas']['TestCaseInput'],
+      body: { ...caseInputFrom(current), ...delta } as components['schemas']['TestCaseInput'],
       tcms: { ...session.request, ...editIntent(version, 'edit this case') },
     });
   },
@@ -338,22 +387,27 @@ const writeSuite: ToolDefinition = {
 
     if (action !== 'edit') throw new InputError(`Unknown action '${action}'.`);
 
-    const body = present({
+    const delta = present({
       name: str(input, 'name'),
       description: nullableStr(input, 'description'),
       tagRules: strings(input, 'tagRules'),
       caseIds: await resolveMany(session, projectId, strings(input, 'cases'), 'CASE'),
     });
-    if (Object.keys(body).length === 0) {
+    if (Object.keys(delta).length === 0) {
       throw new InputError('Nothing to change. Name at least one field.');
     }
 
-    const version = await versionFor(input, () =>
-      session.client.GET('/projects/{projectId}/suites/{suiteId}', { params: { path }, tcms: session.request }));
+    // The case arm's problem, one field wide: `SuiteInput` requires `name`, so editing only the
+    // tag rules was a 400 about a field nobody mentioned, and editing only the name emptied the
+    // description. `core/rewrite.ts`.
+    const current = await session.client.GET('/projects/{projectId}/suites/{suiteId}', {
+      params: { path }, tcms: session.request,
+    });
+    const version = await versionFor(input, async () => current);
 
     return session.client.PATCH('/projects/{projectId}/suites/{suiteId}', {
       params: { path },
-      body: body as components['schemas']['SuiteInput'],
+      body: { ...suiteInputFrom(current), ...delta } as components['schemas']['SuiteInput'],
       tcms: { ...session.request, ...editIntent(version, 'edit this suite') },
     });
   },
@@ -564,30 +618,32 @@ const writePlan: ToolDefinition = {
     if (action !== 'edit') throw new InputError(`Unknown action '${action}'.`);
 
     /*
-      `TestPlanUpdateInput` REQUIRES `name`, alone among the edit shapes on this surface, so a
-      partial edit is not expressible on the wire and an edit that sent only a description would
-      be a 400 about a field nobody mentioned. The read this arm makes for its version carries
-      the current name, so it is threaded through — safe precisely because the name and the
-      version come from the *same* read and are therefore consistent.
+      ~~`TestPlanUpdateInput` REQUIRES `name`, alone among the edit shapes on this surface~~ → it
+      is not alone, and threading the name alone was not enough: every scalar
+      `PlanEdit.validateUpdate` sees is written straight through, so an edit that named only the
+      milestone silently emptied the plan's description, and `scopeText`/`outOfScopeText` — which
+      no tool argument can reach — were emptied by *every* plan edit this server ever made.
+      `core/rewrite.ts` holds the scalar/list split. Safe for the old note's reason, unchanged:
+      the base and the version come from the same read.
     */
     const current = await session.client.GET('/projects/{projectId}/plans/{planId}', { params: { path }, tcms });
     const version = await versionFor(input, async () => current);
 
-    const body = present({
+    const delta = present({
+      name: str(input, 'name'),
       description: nullableStr(input, 'description'),
       milestoneName: nullableStr(input, 'milestoneName'),
       milestoneDate: nullableStr(input, 'milestoneDate'),
       suiteIds: await resolveMany(session, projectId, strings(input, 'suites'), 'SUITE'),
       caseIds: await resolveMany(session, projectId, strings(input, 'cases'), 'CASE'),
     });
-    if (Object.keys(body).length === 0 && str(input, 'name') === undefined) {
+    if (Object.keys(delta).length === 0) {
       throw new InputError('Nothing to change. Name at least one field.');
     }
-    body['name'] = str(input, 'name') ?? current.name;
 
     return session.client.PATCH('/projects/{projectId}/plans/{planId}', {
       params: { path },
-      body: body as components['schemas']['TestPlanUpdateInput'],
+      body: { ...planInputFrom(current), ...delta } as components['schemas']['TestPlanUpdateInput'],
       tcms: { ...tcms, ...editIntent(version, 'edit this plan') },
     });
   },
