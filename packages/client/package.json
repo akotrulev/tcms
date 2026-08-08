@@ -1,0 +1,37 @@
+{
+  "name": "@tcms/client",
+  "version": "0.1.0",
+  "description": "The typed TCMS API client and command core. The only thing in the CLI or the MCP server that makes an HTTP request.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.lib.json",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "lint": "oxlint src",
+    "gen:api": "npx --yes openapi-typescript@7 ../../docs/specs/openapi.yaml -o src/schema.ts"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.17.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.2",
+    "typescript": "~6.0.2",
+    "vitest": "^4.1.10",
+    "yaml": "^2.8.1"
+  }
+}

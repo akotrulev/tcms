@@ -1,0 +1,33 @@
+{
+  /*
+    The typecheck-everything config: source, tests and the vitest config, none of it emitted.
+    `tsconfig.lib.json` extends it and is the one that emits `dist/`. Two configs rather than
+    one because the tests must be checked (they are where the contract-derived checks live) and
+    must not ship — the same split `frontend/` makes, arrived at the same way.
+  */
+  "compilerOptions": {
+    "target": "es2023",
+    /*
+      No "DOM". This package runs on Node, and the DOM lib is what would let a browser-only
+      global compile here and fail at runtime in the CLI — `localStorage` being the exact one
+      `frontend/src/api/client.ts` reads, which is a large part of why that client is not this
+      one. `fetch`, `AbortSignal` and `Response` all come from @types/node.
+    */
+    "lib": ["ES2023"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node"],
+    "skipLibCheck": true,
+    "noEmit": true,
+
+    "strict": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true
+  },
+  "include": ["src", "vitest.config.ts"]
+}

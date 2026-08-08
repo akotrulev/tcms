@@ -35,6 +35,13 @@ build/
 node_modules/
 frontend/dist/
 
+# --- Node / packages (the TS client, the CLI, the MCP server) ---
+# `packages/*/src/schema.ts` is generated but IS committed, exactly as the SPA's
+# `schema.d.ts` is: a fresh clone must typecheck without a network round trip to
+# regenerate it, and `schemaFreshness.test.ts` is what keeps it current.
+packages/*/dist/
+packages/*/node_modules/.tmp/
+
 # --- Local environment ---
 # compose reads .env automatically. .env.example is committed and carries the shape;
 # the real file is not, so a personal port change or a rotated password never travels.

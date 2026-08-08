@@ -1,0 +1,23 @@
+{
+  "name": "tcms-packages",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Workspace root for the TypeScript packages that talk to the TCMS API. Deliberately NOT at the repository root: the root runs docker compose and nothing else (CLAUDE.md), and backend/ and frontend/ are independent stacks that must keep building on their own. This root has no build of its own either — it exists so @tcms/cli and the MCP server can resolve @tcms/client without a file: dependency or a publish step between every change.",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "workspaces": [
+    "*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test:run": "npm run test:run --workspaces --if-present",
+    "lint": "oxlint"
+  },
+  "devDependencies": {
+    "oxlint": "^1.71.0",
+    "typescript": "~6.0.2",
+    "vitest": "^4.1.10"
+  }
+}
