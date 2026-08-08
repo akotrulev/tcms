@@ -200,6 +200,38 @@ describe('refusal copy', () => {
     expect(copy.message).not.toContain('case:approve');
   });
 
+  /*
+    The 429 branch, and the reason it is a branch at all: a rate limit whose refusal does not say
+    when to retry produces the loop the limit exists to prevent. Before this existed a 429 fell
+    through to `default:` and read as an unexplained failure — and an unexplained failure is the
+    one a model retries.
+  */
+  it('turns a 429 into a wait, taken from Retry-After rather than from the prose', () => {
+    const copy = describeRefusal(
+      new TcmsApiError({
+        status: 429, detail: 'server prose', method: 'GET', path: '/', retryAfter: '10',
+      }),
+      operation,
+    );
+
+    expect(copy.namesPermission).toBe(false);
+    expect(copy.message).toContain('Wait 10 seconds');
+    // The half a timed-out write cannot be told: the refusal is written before routing, so there
+    // is no handler that half-ran and the same call may simply be repeated.
+    expect(copy.message).toContain('Nothing was changed');
+  });
+
+  it('does not invent a wait the server did not state', () => {
+    const copy = describeRefusal(
+      new TcmsApiError({ status: 429, detail: 'x', method: 'GET', path: '/' }),
+      operation,
+    );
+
+    // A number here would be obeyed, which makes an invented one worse than none.
+    expect(copy.message).not.toMatch(/Wait \d/);
+    expect(copy.message).toContain('Wait before trying again');
+  });
+
   it('does not assert a project exists when the permission answer was empty', () => {
     // `GET /me/permissions` answers [] identically for another company's project and for one
     // that does not exist, so "you hold nothing here" would assert that "here" is somewhere.

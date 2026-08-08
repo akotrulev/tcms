@@ -42,7 +42,7 @@
  * 403 branch still tells the user the actionable half ("this token's role does not hold
  * `case:approve`"), which is what they take to an administrator.
  */
-import { TcmsApiError } from '../errors.js';
+import { TcmsApiError, retryAfterMs } from '../errors.js';
 
 export interface RefusalCopy {
   /** One sentence, safe to print or to hand a model. */
@@ -103,6 +103,38 @@ export function describeRefusal(error: unknown, operation: RefusedOperation): Re
           + 'instance.',
         namesPermission: false,
       };
+
+    case 429: {
+      /*
+        The rate limit, and the branch whose ABSENCE was the defect. Until it existed a 429 fell
+        to `default:` and read as an unexplained failure — and what a model does with an
+        unexplained failure, halfway through surveying a project, is try again. That is the loop
+        the server-side limit exists to prevent, produced by the client one refusal later.
+
+        So the copy carries the two facts that decide what to do next, and neither of them is
+        obvious from the status alone:
+
+          - HOW LONG. Read from `Retry-After` rather than from the sentence, so this agrees with
+            the header even if the server's prose changes. Only stated when the server said it;
+            an invented number is worse than none, because it would be obeyed.
+          - THAT NOTHING HAPPENED. The refusal is written by a filter before routing, so unlike a
+            timeout there is no handler that half-ran. A timed-out write gets the opposite
+            instruction ("read the resource before trying again") and the two must not be
+            confused — this is the one failure that can be retried as-is.
+
+        `namesPermission` is false: nothing here is about what the caller may do.
+      */
+      const wait = retryAfterMs(error);
+      const when = wait === null
+        ? 'Wait before trying again.'
+        : `Wait ${Math.max(1, Math.ceil(wait / 1000))} seconds before trying again.`;
+      return {
+        message: `Rate limited: too many requests from this token. ${when} `
+          + 'Nothing was changed, so the same call can simply be repeated — but a tighter loop '
+          + 'will keep being refused, so slow down rather than retrying immediately.',
+        namesPermission: false,
+      };
+    }
 
     default:
       return { message: `Could not ${operation.what}: ${error.detail}`, namesPermission: false };
