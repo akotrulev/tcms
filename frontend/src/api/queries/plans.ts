@@ -2,7 +2,13 @@
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { useRef } from 'react';
 import { TIMEOUTS, api, newIntentKey, qs } from '../client';
-import type { PlanSectionInput, PlanStatistics, PlanStatus, TestPlan } from '../types';
+import type {
+  PlanSectionInput,
+  PlanStatistics,
+  PlanStatus,
+  TestPlan,
+  TestPlanCloneInput,
+} from '../types';
 import { base, keys } from './keys';
 
 export function usePlans(projectId: string): UseQueryResult<TestPlan[]> {
@@ -63,6 +69,34 @@ export function useCreatePlan(projectId: string) {
       api.post<TestPlan>(`${base(projectId)}/plans`, input, { idempotencyKey: intentKey.current }),
     // The dialog lands field errors on its inputs and anything else in a form-level banner, so
     // the global handler must stay out of it or the user is told twice.
+    meta: { handled: true },
+    onSuccess: (created) => {
+      client.setQueryData(keys.plan(projectId, created.id), created);
+      void client.invalidateQueries({ queryKey: keys.plans(projectId) });
+    },
+  });
+}
+
+/**
+ * Clones a plan (§129).
+ *
+ * `POST /plans/{planId}/clone` is **not** `POST /plans` with a source id, and the difference is why
+ * this hook exists beside `useCreatePlan` rather than being a second call site of it:
+ * `TestPlanInput` carries six fields on purpose — a plan is named before anybody has subdivided it —
+ * so a clone routed through the create would drop the sections, the tag arm, both prose fields and
+ * both criteria lists, and answer `201` with something that reads as a faithful copy.
+ *
+ * The cache work is the create's, because the answer is the same shape: a whole new plan, seeded
+ * under its own key, with the list invalidated so the clone is in it.
+ */
+export function useClonePlan(projectId: string, planId: string) {
+  const client = useQueryClient();
+  const intentKey = useRef(newIntentKey());
+  return useMutation({
+    mutationFn: (input: TestPlanCloneInput) =>
+      api.post<TestPlan>(`${base(projectId)}/plans/${planId}/clone`, input, {
+        idempotencyKey: intentKey.current,
+      }),
     meta: { handled: true },
     onSuccess: (created) => {
       client.setQueryData(keys.plan(projectId, created.id), created);

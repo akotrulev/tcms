@@ -202,7 +202,14 @@ reader recognises a row by, and it is the one thing the id does not tell them.
 |---|---|---|
 | 1 | Backend — clone case, including the attachment byte copy. Contract + `CaseCloneService` + `CaseCloneController` (or the existing `CaseController`) + tests. | `./gradlew build` |
 | 2 | Backend — clone plan and clone run, including the exit-criteria copy and the catalogue-derived gate check. | `./gradlew build` |
-| 3 | Frontend — the three clone dialogs, `Copy of <name>` prefilled, the "automation key is not copied" note, and the navigation to the new row. | `npm run build` + `lint` + `test:run` |
+| 3 | Frontend — the three clone dialogs, `Copy of <name>` prefilled, the "automation key is not copied" note, and the navigation to the new row. **DONE 2026-08-08.** | `npm run build` + `lint` + `test:run` |
+
+**Phase 3 landed with one correction to this table's own wording.** *"`Copy of <name>` prefilled"*
+is right for the **name** on all three dialogs and wrong for the run's **release and build**: those
+are overrides, absent means *keep the source's*, and there is no way to say *clear it* — so a
+prefilled field a user empties is a control whose most obvious use is silently discarded. They open
+empty with the source's value in the helper text. `lib/clone.ts`'s `copyOf` is the one suggestion
+helper, because the three limits differ and the ellipsis arithmetic is the part that goes wrong.
 
 Each phase commits after its gate. Both verification queues get their rows in the phase that
 creates them — nothing is driven (§65).

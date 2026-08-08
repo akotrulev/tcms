@@ -13,6 +13,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
+import ContentCopyIcon from '@mui/icons-material/ContentCopyOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import EditIcon from '@mui/icons-material/Edit';
 import HistoryIcon from '@mui/icons-material/History';
@@ -25,6 +26,7 @@ import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
+import { CaseCloneDialog } from './CaseCloneDialog';
 import { CaseDeleteDialog } from './CaseDeleteDialog';
 import { ReviewPanel } from '../review/ReviewPanel';
 import { CaseVersionPanel } from './CaseVersionPanel';
@@ -48,6 +50,7 @@ export function CaseDetailPage() {
   const testCase = useCase(projectId, caseId);
   const navigate = useNavigate();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [cloning, setCloning] = useState(false);
 
   return (
     <Box>
@@ -94,6 +97,25 @@ export function CaseDetailPage() {
                   >
                     Execution history
                   </Button>
+                  {/*
+                    §129. `case:create` and not `case:edit`: a clone creates a case and changes
+                    nothing about this one, which is the key the endpoint charges. Disabled rather
+                    than hidden (§31) — an Automation Service token holds `case:create` only in
+                    quarantine and a Viewer holds neither, and both should be able to see that the
+                    action exists.
+                  */}
+                  <PermissionGate projectId={projectId} permission="case:create">
+                    {({ allowed }) => (
+                      <Button
+                        startIcon={<ContentCopyIcon />}
+                        disabled={!allowed}
+                        onClick={() => setCloning(true)}
+                        data-testid="CaseDetail.CloneButton"
+                      >
+                        Clone
+                      </Button>
+                    )}
+                  </PermissionGate>
                   {/*
                     The denied branch renders a plain `<button>`, NOT a disabled link. MUI's
                     `disabled` on `component={RouterLink}` only adds `aria-disabled` and kills
@@ -168,6 +190,23 @@ export function CaseDetailPage() {
                   // `replace`, so Back does not return to a detail screen for a case that is gone
                   // and answer 404 at a URL the user reached by pressing Back.
                   navigate(`/projects/${projectId}/cases`, { replace: true });
+                }}
+              />
+            )}
+
+            {/* Mounted only while open, for the delete dialog's reason one block up. */}
+            {cloning && (
+              <CaseCloneDialog
+                open
+                projectId={projectId}
+                testCase={data}
+                onClose={() => setCloning(false)}
+                onCloned={(created) => {
+                  // Straight to the copy: the thing the user now wants to do is edit it, and a
+                  // toast on the source's screen leaves them to find a case whose key they have
+                  // not seen. NOT `replace` — unlike the delete above, the case behind is still
+                  // there, and Back to the original is a reasonable thing to want.
+                  navigate(`/projects/${projectId}/cases/${created.id}`);
                 }}
               />
             )}

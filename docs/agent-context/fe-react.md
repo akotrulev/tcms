@@ -2,24 +2,64 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-08 (**§128** — the case editor's autosave buffer; **§127 phases 2–3** —
+**Last verified:** 2026-08-08 (**§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
 the one doc-block renderer and the editor's three new types; §126 phase 4 — the three attachment
 surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the flake panel and the
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `99c0dea` (§128 phase 2) (trust the body over the header and re-grep what a
-later commit could have moved).
+**Baseline commit:** `deefabf` (§129 phase 2 — phase 3 is the commit that follows it) (trust the
+body over the header and re-grep what a later commit could have moved).
+
+## §129 PHASE 3 — THE THREE CLONE DIALOGS, AND THE FIELD THAT MUST NOT BE PREFILLED
+
+**ADDED SEVEN FILES** — `lib/clone.ts` + `lib/clone.test.ts`, `features/cases/CaseCloneDialog.tsx` +
+its test, `features/plans/PlanCloneDialog.tsx` + its test, `features/runs/RunCloneDialog.tsx` + its
+test — and touched `api/types.ts`, `api/queries/{cases,plans,runs,index}.ts`,
+`features/cases/CaseDetailPage.tsx`, `features/plans/PlanStatisticsPage.tsx`,
+`features/runs/RunDetailPage.tsx`. **No contract change** (`schema.d.ts` was regenerated in phases
+1–2). **Test count is 1172 across 90 files** — measured on a quiet run; 22 added, so the real
+pre-slice baseline was **1150** and the 1144 in the previous header was stale. **Eighth drift.**
+
+- **`lib/clone.ts`'s `copyOf(name, max)` is THE suggestion helper**, and the reason it is shared is
+  the arithmetic rather than the words: the ellipsis is a character, so truncating to exactly `max`
+  before appending it lands one over the limit the field mirrors. Three limits (case title 300,
+  plan and run 200), one function.
+- **⚠ A RUN CLONE'S RELEASE AND BUILD MUST NOT BE PREFILLED, AND THE NAME MUST.** Absent means
+  *keep the source's* and there is **no way to say "clear it"** — so a prefilled field a user
+  empties is a control whose most obvious use is silently discarded (`ui-rules` §3's worst form
+  defect), arrived at by copying the helpful behaviour from the field two rows above. They open
+  empty with the source's value in the helper text: *"Leave empty to keep 4.3.0."* The inconsistency
+  on one dialog is the correct answer.
+- **The gate is the create key, never the edit key** — `case:create` · `plan:create` ·
+  `run:create` — because a clone creates and changes nothing about the source. The plan's is
+  `plan:create` alone though it writes criteria that normally cost `plan:edit`; a **backend** test
+  derives that from the seeded catalogue, so do not re-state it here.
+- **`RunCloneDialog` reuses `RunCreateDialog`'s §6g shape verbatim**: a 409 is the only thing the
+  endpoint answers with that status, so the client holds no copy of the gating rule, and *Clone it
+  anyway* is disabled-not-hidden without `case:approve`. The override is **never** inherited from
+  the source run.
+- **`RunLifecycleActions` is `RunActions` now** and takes the whole `TestRunDetail` rather than a
+  status, because the dialog prefills from the source and counts its executions. Clone is offered on
+  a **closed** run too, unlike the lifecycle buttons beside it that swap by status.
+- **The automation note renders for an `AUTOMATED` source and no other.** Two tests hold the pair;
+  an unconditional note passes the first and fails the second.
+- **Each dialog navigates to the copy, and NOT with `replace`** — unlike `CaseDeleteDialog`'s, the
+  source still exists and Back to it is reasonable.
 
 **§128 ADDED THREE FILES** — `features/cases/useCaseAutosave.ts` + its test, and
 `features/cases/casePayload.test.ts` — and changed `api/queries/{cases,keys,index}.ts`,
 `api/types.ts`, `features/cases/caseSchema.ts`, `features/cases/CaseEditorPage.tsx` (+ its test).
 **Test count is 1144 across 86 files** — measured on a solo run, +39/+2 over §127's measured 1105/84.
 
-> **⚠ ONE FULL RUN IN FOUR WENT RED WITH 2 FAILURES AT §127 AND WAS NOT REPRODUCED.** It happened on
-> a loaded machine (that run's test time was 780s against 373s on a quiet one); the failing test
-> **names were not captured**. §128's full run was green at 359s. Recorded rather than dismissed: an
-> unidentified flake is a standing claim about this suite, not a fact about one afternoon.
+> **⚠ §127's RED RUN REPRODUCES, AND §129 PHASE 3 CAPTURED THE NAMES.** Three of five full runs went
+> red (1, 11 and 13 failures) and **every failure was a 30–46s TIMEOUT, never an assertion**, always
+> in the same five files: `CaseEditorPage`, `DocPageEditorPage`, `PlanCases`, `RunCreateDialog`,
+> `ReviewPanel`. All are `userEvent.type` tests typing sentences character by character — the cause
+> `vitest.config.ts` already names, whose fix (`paste`) is still not done. Each passes in isolation;
+> the green run took 114s against the reds' 204s and 373s. **This is a load-dependent timeout cliff
+> in a known set, not an unidentified flake** — and a third raise of `testTimeout` would be the
+> third fix of a symptom.
 
 ## §128 — THE AUTOSAVE BUFFER, AND THE GATE THAT HAS TO CLOSE FIRST
 
@@ -299,7 +339,7 @@ reading off a run rather than trusting.
 - **`npm run build` is THE gate** (`tsc -b` + vite build). **Do not trust `tsc --noEmit`** — it has
   reported 0 errors while the build failed with nine (working agreement). `#confirmed`
 - `npm run lint` — oxlint, must stay at **0 warnings**; it prints nothing when clean.
-- `npm run test:run` — Vitest + RTL. **1088/1088 across 83 files at §126 phase 4** (measured; the
+- `npm run test:run` — Vitest + RTL. **1172/1172 across 90 files at §129 phase 3** (measured on a quiet run; the pre-slice baseline it grew from was **1150**, not the 1144 the handoff carried — eighth drift). Earlier: **1088/1088 across 83 files at §126 phase 4** (measured; the
   measured baseline it grew from was **1055/79**, not the 1045 the previous header carried — sixth
   drift). Earlier: **954/954 across 70 files at §107** (976/72 at §106, before the two mock-rule test files went with the mock) (958/70 at §105) (the §102 line said **925/67** and the measured baseline was **928/67** — this figure is carried forward by hand and has drifted at least twice; read it off a run before trusting it). Earlier: 913/65 at §99 phase 3, 909 at §98, 895/64 at §97 phase 5, 849/60 at §100. **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
 - `npm run gen:api` — regenerate `src/api/schema.d.ts` after **any** `openapi.yaml` change. Runs

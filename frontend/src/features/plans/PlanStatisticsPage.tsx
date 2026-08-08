@@ -67,6 +67,7 @@ import {
   planStatusColors,
   planStatusLabels,
 } from '../../lib/labels';
+import { PlanCloneDialog } from './PlanCloneDialog';
 import { PlanDeleteDialog } from './PlanDeleteDialog';
 import { ScrollX } from '../../components/ScrollX';
 
@@ -622,6 +623,7 @@ function PlanLifecycleActions({ projectId, plan }: { projectId: string; plan: Te
   const setStatus = useSetPlanStatus(projectId, planId);
   const [error, setError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [cloning, setCloning] = useState(false);
   const navigate = useNavigate();
 
   /*
@@ -665,6 +667,25 @@ function PlanLifecycleActions({ projectId, plan }: { projectId: string; plan: Te
             )}
           </PermissionGate>
         ))}
+        {/*
+          §129. `plan:create`, which is what the endpoint charges even though the clone writes
+          criteria and prose that normally cost `plan:edit` — every role holding one holds the
+          other, and a backend test derives that from the seeded catalogue rather than restating it.
+          Disabled rather than hidden (§31).
+        */}
+        <PermissionGate projectId={projectId} permission="plan:create">
+          {({ allowed }) => (
+            <Button
+              size="small"
+              variant="outlined"
+              data-testid="PlanStats.CloneButton"
+              disabled={!allowed}
+              onClick={() => setCloning(true)}
+            >
+              Clone
+            </Button>
+          )}
+        </PermissionGate>
         <PermissionGate projectId={projectId} permission="plan:delete">
           {({ allowed }) => (
             <Button
@@ -684,6 +705,17 @@ function PlanLifecycleActions({ projectId, plan }: { projectId: string; plan: Te
         <Typography variant="caption" sx={{ color: 'var(--color-failed)' }} data-testid="PlanStats.StatusError">
           {error}
         </Typography>
+      )}
+      {cloning && (
+        <PlanCloneDialog
+          open
+          projectId={projectId}
+          plan={plan}
+          onClose={() => setCloning(false)}
+          // Onto the copy, which is the plan the user is now going to edit. Not `replace`: the
+          // source still exists and Back to it is reasonable, unlike after a delete.
+          onCloned={(created) => navigate(`/projects/${projectId}/plans/${created.id}`)}
+        />
       )}
       {/* Mounted only while confirming, so its reset-on-open effect starts from a clean state. */}
       {confirmingDelete && (

@@ -6,6 +6,7 @@ import type {
   Evidence,
   TestExecution,
   TestRun,
+  TestRunCloneInput,
   TestRunDetail,
   TestRunInput as TestRunInputShape,
 } from '../types';
@@ -72,6 +73,36 @@ export function useCreateRun(projectId: string) {
   return useMutation({
     mutationFn: (input: TestRunInput) =>
       api.post<TestRun>(`${base(projectId)}/runs`, input, { idempotencyKey: intentKey.current }),
+    meta: { handled: true },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ['projects', projectId, 'runs'] });
+      void client.invalidateQueries({ queryKey: ['projects', projectId, 'plans'] });
+    },
+  });
+}
+
+/**
+ * Clones a run (§129) — a second checklist over the **same, already-resolved** case set.
+ *
+ * The `Idempotency-Key` argument above applies here in full and then some: a fallen-through retry
+ * would materialise a second checklist over the same cases, and the tester's results would split
+ * across two runs each reporting a pass rate over a denominator nobody intended.
+ *
+ * Unlike `useCloneCase` this takes no long timeout — nothing is copied byte for byte, and a run's
+ * results, evidence and defect links are not reachable from a create at all.
+ *
+ * `overrideApprovalGate` is generated as `boolean | null` and optional, so no correction of the
+ * generator's `default` handling is needed here (see `TestRunInput` above for the case where it
+ * was): an ordinary clone simply omits it.
+ */
+export function useCloneRun(projectId: string, runId: string) {
+  const client = useQueryClient();
+  const intentKey = useRef(newIntentKey());
+  return useMutation({
+    mutationFn: (input: TestRunCloneInput) =>
+      api.post<TestRun>(`${base(projectId)}/runs/${runId}/clone`, input, {
+        idempotencyKey: intentKey.current,
+      }),
     meta: { handled: true },
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ['projects', projectId, 'runs'] });

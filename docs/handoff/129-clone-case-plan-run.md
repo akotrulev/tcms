@@ -153,19 +153,69 @@ appeared and the two copies stopped agreeing.
 
 ---
 
-## What is built, and what is not
+---
 
-**Phases 1 and 2 are backend only. The frontend (phase 3) is NOT BUILT** — there is no clone
-affordance on any screen, so all three endpoints currently have exactly one consumer each, and that
-consumer is `curl`. That is the same shape §124's `artifact:delete` shipped in and it is recorded
-here for the same reason: an endpoint with no screen is a feature nobody in the product can reach.
+## Phase 3 — the three dialogs, and the field that must not be prefilled
+
+~~**Phases 1 and 2 are backend only. The frontend (phase 3) is NOT BUILT.**~~ → **shipped
+2026-08-08.** All three endpoints have a consumer in `src/` now: `CaseCloneDialog`,
+`PlanCloneDialog` and `RunCloneDialog`, opened from a **Clone** button in each detail screen's
+header, each gated on the key the endpoint charges (`case:create` · `plan:create` · `run:create`)
+and **disabled rather than hidden** (§31). Every one navigates to the copy on success — the thing
+the user now wants to do is edit it, and a toast on the source's screen leaves them hunting for a
+key they have never seen.
+
+**`lib/clone.ts` is the whole shared layer**: `copyOf(name, max)`, the `Copy of …` suggestion the
+server refuses to invent. It is one function rather than three because the three limits differ (a
+case title is 300, a plan and a run 200) and because the arithmetic that goes wrong is the same in
+all three — the ellipsis is a character, so a truncation to exactly `max` before appending it lands
+one over the limit the field itself mirrors.
+
+**The finding is a field that must NOT be prefilled, and it inverts the dialog's own suggestion
+rule.** A run clone's Release and Build are *overrides*: absent means keep the source's, and there
+is **no way at all to say "clear it"**. So a prefilled field a user empties would be a control whose
+most obvious use is silently discarded — `ui-rules` §3's worst form defect, arrived at by copying
+the helpful behaviour from the field two rows above it. Left empty, with the source's value named in
+the helper text (*"Leave empty to keep 4.3.0"*), the control means exactly what the wire means. The
+name is prefilled and the overrides are not, on the same dialog, and that is the correct answer
+rather than an inconsistency.
+
+Three smaller decisions the phase made:
+
+- **The automation note renders only for an `AUTOMATED` source.** The status is silently forced down
+  to `TO_BE_AUTOMATED` because the key cannot be copied, so the note is what stops a user reading
+  that as a defect — and a note that is always there is one nobody reads on the day it matters.
+- **A run's clone is offered on a CLOSED run too**, unlike the lifecycle controls beside it that
+  swap by status. Re-running last cycle against the new build is the commonest reason anybody opens
+  a completed run at all, and the source's state says nothing about whether a copy is legal.
+- **Configuration and assignee are not on the run dialog**, recorded in its header rather than left
+  to be found: this SPA has **no configuration picker anywhere** (`RunCreateDialog` sends `null` and
+  takes the project default), and a run has no assignee to copy. Omitting both sends the contract's
+  own defaults — the source's configuration, an unassigned checklist.
+
+`RunCloneDialog` reuses `RunCreateDialog`'s §6g refusal shape exactly: a 409 is the **only** thing
+this endpoint answers with that status, so the client holds no copy of the gating rule, and the
+*Clone it anyway* affordance is disabled-not-hidden for a caller without `case:approve`.
+
+## What is built, and what is not
 
 | Gate | State |
 |---|---|
-| `cd backend && ./gradlew build` | phase 1: **2156 tests / 459 classes, 0 failures**; phase 2: see the handoff index |
-| `npm run gen:api` | run in both phases; the contract change is additive (three operations, three schemas) |
+| `cd backend && ./gradlew build` | phase 1: **2156 tests / 459 classes, 0 failures**; phase 2: **2182 / 467**. Phase 3 touches no Java. |
+| `cd frontend && npm run build` + `npm run lint` | clean, 0 errors, 0 warnings (phase 3) |
+| `npm run test:run` | **1172/1172 across 90 files** — measured on a quiet run. 22 tests in 4 new files, so the pre-slice figure was **1150** and the 1144 the handoff carried was stale again (**eighth drift**; derived here, not measured). |
+| `npm run gen:api` | run in phases 1 and 2; phase 3 changed no contract. |
 
-**Verification, per §65:** 18 mutation rows `CL-1`…`CL-18` (phase 1) and 12 more `CL-19`…`CL-30`
-(phase 2), **none run**. No browser rows in either phase, deliberately — neither ships a screen, and
-phase 3 is where those rows belong. Under the standing policy both phases are **built and
-unverified**.
+> **⚠ §127's unreproduced red run REPRODUCED, and this time the names were captured.** Three of five
+> full runs went red — 1, 11 and 13 failures — and **every failure was a 30–46 s timeout, never an
+> assertion**, in `CaseEditorPage`, `DocPageEditorPage`, `PlanCases`, `RunCreateDialog` and
+> `ReviewPanel`. All of them are `userEvent.type` tests typing sentences character by character,
+> which is the cause `vitest.config.ts` already names and whose fix (use `paste`) is still not done.
+> Every one passes in isolation, and the run that was green took **114 s** against the reds' 204 s
+> and 373 s. So the standing claim is now specific: **this suite has a load-dependent timeout cliff
+> in a known set of tests, not an unidentified flake.** Raising `testTimeout` a third time would be
+> the third fix of a symptom.
+
+**Verification, per §65:** 18 mutation rows `CL-1`…`CL-18` (phase 1), 12 more `CL-19`…`CL-30`
+(phase 2), and **10 browser rows in phase 3** (`M2-76`…`M2-80`, `M3-79`…`M3-81`, `M4-59`…`M4-61`),
+**none run**. Under the standing policy the whole slice is **built and unverified**.

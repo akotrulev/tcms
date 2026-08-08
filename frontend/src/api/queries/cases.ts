@@ -23,6 +23,7 @@ import type {
   Paged,
   TagUsage,
   TestCase,
+  TestCaseCloneInput,
   TestCaseSummary,
   VersionMarker,
 } from '../types';
@@ -235,6 +236,44 @@ export function useCreateCase(projectId: string) {
       client.setQueryData(keys.case(projectId, created.id), created);
       void client.invalidateQueries({ queryKey: ['projects', projectId, 'cases'] });
       void client.invalidateQueries({ queryKey: keys.suites(projectId) });
+    },
+  });
+}
+
+/**
+ * Clones a case (§129).
+ *
+ * **The same cache work as a create, because the server does the same work** — the response is a
+ * whole new `TestCase` with its own key, its own version 1 and its own row in the grid, so the case
+ * entry is seeded and the list, the tree (its per-suite counts moved) and the project header are
+ * invalidated exactly as `useCreateCase` does. A hook that only seeded the new case would leave the
+ * clone missing from the grid the user is about to be looking at.
+ *
+ * One `Idempotency-Key` per mounted dialog, for `useCreateCase`'s recorded reason: a key minted
+ * inside `mutationFn` is a fresh one per attempt, which makes the header look right and do nothing.
+ * It matters more here than on a create — the retried request duplicates every step, every
+ * classification value and every **byte-copied attachment**.
+ */
+export function useCloneCase(projectId: string, caseId: string) {
+  const client = useQueryClient();
+  const intentKey = useRef(newIntentKey());
+  return useMutation({
+    mutationFn: (input: TestCaseCloneInput) =>
+      api.post<TestCase>(`${base(projectId)}/cases/${caseId}/clone`, input, {
+        idempotencyKey: intentKey.current,
+        // The attachments are copied byte for byte inside the request, so this is not an
+        // interactive read's budget: a case with a handful of screenshots moves megabytes through
+        // one POST, and the interactive budget would time out a request the server then completes.
+        timeoutMs: TIMEOUTS.long,
+      }),
+    // The dialog lands `title` on its own field and everything else in a form-level banner, so the
+    // global handler must stay out of it or the user is told twice.
+    meta: { handled: true },
+    onSuccess: (created) => {
+      client.setQueryData(keys.case(projectId, created.id), created);
+      void client.invalidateQueries({ queryKey: ['projects', projectId, 'cases'] });
+      void client.invalidateQueries({ queryKey: keys.suites(projectId) });
+      void client.invalidateQueries({ queryKey: keys.project(projectId), exact: true });
     },
   });
 }

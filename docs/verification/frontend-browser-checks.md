@@ -1483,3 +1483,64 @@ offer, and a discard. **9 rows, none driven.**
 - **No row drives the buffer surviving a browser *crash* rather than a deliberate close.** They are
   the same code path from the server's side; the difference is only whether an unload handler runs,
   and this design deliberately has none.
+
+---
+
+## §129 — clone case, plan and run (M3 #59, decision round 3 step 8)
+
+Added 2026-08-08. Phases 1–2 shipped three endpoints whose only caller was `curl`; phase 3 gave each
+one a screen. **10 rows in three lanes, none driven.** The rows sit in the lane whose *state* they
+need — a case exists in `A1`, a plan in `A2`, a run in `A3` — and every one of them clones a fixture
+those lanes already author, so nothing new has to be created first.
+
+> **`M4-59` is the row no gate can reach, and it is the reason this section exists.** A cloned run
+> re-evaluates §6g's approval gate from scratch and **never inherits the override**, so a run that
+> was legal in March refuses in August unless somebody takes the override again, on the record. The
+> backend test pins the refusal; what it cannot show is whether a person who meets that 409 can find
+> their way forward from the sentence on screen.
+>
+> **`M2-79` is second.** The clone of an automated case is created as *To be automated* because the
+> automation key cannot be copied — a silent status change with a dialog note in front of it. The
+> note is asserted in a unit test; whether a reader connects it to the chip they then see on the new
+> case is only answerable live.
+
+### A1 — cloning a case
+
+| Row | Drive | Expect |
+|---|---|---|
+| `M2-76` | Open `TC-1` → **Clone**. Leave everything alone and press **Clone case** | Lands on a **new** case detail with a **new key** — not `TC-1`. Title reads `Copy of <the source's>`, lifecycle is **Draft** even if `TC-1` is approved, version is **v1**, and the steps, tags, classification and conditions are all there. The folder crumb is the source's. |
+| `M2-77` | Clone `TC-1` again, this time editing the title to `Full refund — EUR` and choosing a **different folder** in the dropdown | The copy lands in the chosen folder and the grid's per-suite counts move for **both** folders (the source's is unchanged, the target's is +1). Check the tree, not just the crumb: a clone that reports the right folder on the detail and the wrong count in the tree is the invalidation half being wrong. |
+| `M2-78` | On the case that has attachments (`M2-62`'s `wire-diagram.png`), clone it, then **download the file from the copy**, then **delete the file from the source** and download from the copy again | The file downloads **both times**. This is the byte copy, and the second download is the whole assertion — a reference-shared blob would 404 here with nothing having failed, which is exactly why §6v's "by reference" was refused. |
+| `M2-79` | Clone a case whose automation status is **Automated** (set one in the editor first, with a key) | The dialog shows the note about the key not being copied. On the copy: status **To be automated**, **no automation key**, and — after the health tick — no `Automation stopped reporting` signal chasing a key it never had. |
+| `M2-80` | As the **Viewer**, open a case | **Clone is present and disabled**, not missing (§31). Same for the Automation Service persona if one is signed in — `case:create` is quarantine-only there. |
+
+### A2 — cloning a plan
+
+| Row | Drive | Expect |
+|---|---|---|
+| `M3-79` | Open `TP-1` (the one with sections, tags, prose and criteria from `M3-5`/`M3-6`) → **Clone**, name it `Regression 4.4` | The copy carries **every section in order**, the tag arm, both prose fields and **both criteria lists**. This is the row that catches the tempting implementation: routing a clone through `POST /plans` drops all six and still answers 201. Compare the two Plan tabs side by side. |
+| `M3-80` | On the copy, open **Version history** | **One version, v1, describing the plan as it is** — not a v1 with no sections followed by a v2 a second later. A cloned plan born with a history saying somebody rewrote it is what create-then-edit would have shipped. |
+| `M3-81` | Clone an **approved** plan | The copy is **Draft**, and its runs list is empty — the source keeps its runs and its approval. |
+
+### A3 — cloning a run
+
+| Row | Drive | Expect |
+|---|---|---|
+| `M4-59` | With `A3`'s approval gate **switched on** and at least one unapproved case in the run, clone `TR-1` | A **409** in the dialog banner naming the unapproved cases, with **Clone it anyway** beneath it — enabled for the Lead, **disabled** for the Test Engineer rather than hidden. Press it as the Lead: the run is created and the audit log carries the override against **this** request, not the source's. |
+| `M4-60` | Clone a **completed** run, typing `4.3.1` in Release and leaving Build empty | The copy is **Not started**, every execution **Untested**, release `4.3.1`, build **the source's**. The empty field keeping the source's value is the behaviour the helper text promises, and the one a prefilled-then-cleared field would break. |
+| `M4-61` | Add a case to one of the suites the source run was scoped by, **then** clone the run | The copy has **the same number of executions as the source** — the new case is not picked up. A run stores no scope; the clone carries the resolved set. Stated on the dialog, and this row is what proves the sentence true rather than reassuring. |
+
+**Not driven, and stated rather than left to look like oversights:**
+
+- **No row changes a cloned run's configuration or assignee.** Neither field is on the dialog, and
+  that is recorded in `RunCloneDialog`'s header rather than left to be discovered: this SPA has no
+  configuration picker anywhere (`RunCreateDialog` sends `null` and takes the project default), and
+  a run has no assignee to copy because the column is on `test_execution`. Both are a slice with a
+  picker in it. Until then the contract's own defaults — the source's configuration, an unassigned
+  checklist — are what the product sends.
+- **No row drives a cross-project clone**, because the path makes it structurally impossible: the
+  destination is the source's project by construction. It needs classification revalidated against
+  the target's vocabularies (§6d) and is its own slice.
+- **No row retries a clone with the same `Idempotency-Key`.** Forcing it needs a fault injected
+  between the server's write and the client's read; `CL-3` and `CL-21` in the mutation queue own it,
+  where the key can be sent twice deliberately.

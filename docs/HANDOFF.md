@@ -2,7 +2,8 @@
 
 **Date:** 2026-08-08 · **Branch:** `master` · **Latest slice:** [§129 — clone case, plan and run,
 and the two rules that cannot both be true](handoff/129-clone-case-plan-run.md)
-(**two of three phases shipped** — decision round 3's step 8, #59; **the frontend is NOT built**)
+(**all three phases shipped** — decision round 3's step 8, #59; the three clone dialogs landed
+2026-08-08, so **round 3 has nothing left an agent can do alone except #52, the outbox**)
 
 This file is an **index**. Every section is its own file under [`docs/handoff/`](handoff/), numbered
 by its § number, and the slice log below is where the narrative lives — one row per slice, each row
@@ -91,21 +92,23 @@ in a qualifier string, and the wrong one writes evidence under the reports root 
 evidence copy's test was the only test either adapter had, and the two files were in different
 packages so nothing put them side by side.
 
-**Gates, as of §129 phase 2** — both run locally, and only locally:
+**Gates, as of §129 phase 3** — both run locally, and only locally:
 
 | Gate | State |
 |---|---|
-| `cd backend && ./gradlew build` | **BUILD SUCCESSFUL — 2182 tests across 467 result classes, 0 failures** (§129 phase 2; phase 1's baseline was 2156/459, §128 phase 1's 2130/453). |
-| `cd frontend && npm run build` | clean, 0 errors (§128 phase 2). **§129 regenerated `schema.d.ts` and changed no other frontend file**, so this has not been re-run. |
+| `cd backend && ./gradlew build` | **BUILD SUCCESSFUL — 2182 tests across 467 result classes, 0 failures** (§129 phase 2; phase 1's baseline was 2156/459, §128 phase 1's 2130/453). **Phase 3 touches no Java**, so this stands. |
+| `cd frontend && npm run build` | clean, 0 errors (§129 phase 3). |
 | `npm run lint` | 0 warnings |
-| `npm run test:run` | **1144/1144 across 86 files** (measured, solo run). §127's measured figure was 1105/84, so §128's delta is **+39/+2**. The seventh drift of this number was caught at §126 by measuring both sides; it stays right only by being **read off a run rather than copied**. |
+| `npm run test:run` | **1172/1172 across 90 files** (measured, quiet run). 22 tests in 4 files were added by §129 phase 3, so the pre-slice figure was **1150** and the 1144 above it was stale — the **eighth drift**, and derived rather than measured. Read it off a run. |
 
-> **⚠ ONE FULL FRONTEND RUN IN FOUR WENT RED WITH 2 FAILURES AND WAS NOT REPRODUCED (§127).** It
-> happened on a loaded machine — that run's test time was 780s against 373s on a quiet one — and
-> three subsequent full runs plus three targeted runs of the changed surface are green. **The
-> failing test names were not captured**, which is the limitation worth carrying: an unidentified
-> flake is a standing claim about this suite rather than a fact about one afternoon. A red run that
-> does not reproduce has a precedent now; capture the names before dismissing it.
+> **⚠ §127's UNREPRODUCED RED RUN NOW REPRODUCES, AND THE NAMES ARE CAPTURED (§129 phase 3).**
+> Three of five full runs went red — 1, 11 and 13 failures — and **every single failure was a
+> 30–46 s timeout, never an assertion**, always in the same set: `CaseEditorPage`,
+> `DocPageEditorPage`, `PlanCases`, `RunCreateDialog`, `ReviewPanel`. All are `userEvent.type` tests
+> typing sentences character by character — the cause `vitest.config.ts` already names, with a fix
+> (`paste`) that is still not done. Each passes in isolation; the green run took **114 s** against
+> the reds' 204 s and 373 s. So this is a **load-dependent timeout cliff in a known set of tests**,
+> not an unidentified flake, and a third raise of `testTimeout` would be the third fix of a symptom.
 
 **CI runs no backend tests** — `.github/workflows/ci.yml` has run `./gradlew build -x test` since
 §59, so `-Werror` and the Modulith wiring are checked and nothing else is. `./gradlew build` on your
@@ -148,12 +151,13 @@ now sits in front of `fetch` and faults the real backend.
 > [§127](handoff/127-the-four-unrendered-block-types.md),
 > [§128](handoff/128-the-draft-buffer.md),
 > [§129](handoff/129-clone-case-plan-run.md) — step 8 in full: the draft buffer, then clone for all
-> three aggregates, no migration in any of the four phases). **Steps 1 and 2 are still next and both
-> need a terminal a person is sitting at** — `sudo` on shanks cannot be answered from a tool call,
-> and the rotation touches a live instance's session keys. **The next thing an agent can do alone is
-> §129 phase 3, the frontend for the three clone endpoints** — they have no consumer in `src/`
-> today, which is the shape §124's `artifact:delete` shipped in. After that, step 9: **#52 the
-> outbox**, the round's last step and its widest blast radius. Items 1–2 below are steps 2 and 1;
+> three aggregates **and their three dialogs**, no migration in any of the five phases). **Steps 1
+> and 2 are still next and both need a terminal a person is sitting at** — `sudo` on shanks cannot
+> be answered from a tool call, and the rotation touches a live instance's session keys. ~~The next
+> thing an agent can do alone is §129 phase 3~~ → **done 2026-08-08**; the three clone endpoints
+> have a consumer in `src/` and are no longer the shape §124's `artifact:delete` shipped in. **The
+> next thing an agent can do alone is step 9: #52 the outbox**, the round's last step and its widest
+> blast radius. Items 1–2 below are steps 2 and 1;
 > they are kept here because they were open before the round. **Steps 1 and 2 have a written procedure —
 > [`docs/plans/2026-08-07-linux-gate-and-key-rotation.md`](plans/2026-08-07-linux-gate-and-key-rotation.md).**
 >

@@ -69,6 +69,15 @@ export type CaseFlake = S['CaseFlake'];
  * step. Restoring it into the form is safe; the refusal, if there is one, comes on Save.
  */
 export type CaseDraft = S['CaseDraft'];
+/**
+ * What a clone of a case is allowed to say (§129).
+ *
+ * Two fields, and the shortness is the design: **a clone is a create**, so everything else the new
+ * case gets is read off the source and run through the create path's own validation, its own key
+ * allocator and its own version writer. A wider input would be a second definition of a legal case
+ * beside `TestCaseInput`.
+ */
+export type TestCaseCloneInput = S['TestCaseCloneInput'];
 export type TestStep = S['TestStep'];
 export type Condition = S['Condition'];
 export type CaseConditionRef = S['CaseConditionRef'];
@@ -139,9 +148,22 @@ export type TestPlan = S['TestPlan'];
 export type PlanSection = S['PlanSection'];
 export type PlanSectionInput = S['PlanSectionInput'];
 export type TestPlanSummary = S['TestPlanSummary'];
+/** The name, and nothing else — a plan clone copies its source and takes no other instruction. */
+export type TestPlanCloneInput = S['TestPlanCloneInput'];
 export type TestRun = S['TestRun'];
 export type TestRunDetail = S['TestRunDetail'];
 export type TestRunInput = S['TestRunInput'];
+/**
+ * A run clone's four overridable fields plus §6g's override (§129).
+ *
+ * Wider than its two siblings for one reason: *"re-run this regression cycle against the new
+ * build"* is what a run clone is **for**, so a clone that could not change the build number would
+ * make the caller edit the run immediately afterwards. `assigneeId` does not fall back to the
+ * source — a run has no assignee, the column is on `test_execution` — and `overrideApprovalGate` is
+ * never inherited, because nothing stores it and a carried-forward override is a permanent
+ * exemption no screen shows.
+ */
+export type TestRunCloneInput = S['TestRunCloneInput'];
 /**
  * The run lifecycle. Read off `TestRun` rather than a named component because the contract
  * declares it inline — and named here so `lib/labels.ts` can `satisfies Record<RunStatus, string>`

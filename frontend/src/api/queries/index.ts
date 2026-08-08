@@ -61,6 +61,7 @@ export {
   useCaseHistory,
   useCaseVersions,
   useCases,
+  useCloneCase,
   useCreateCase,
   useCreatePlanCase,
   useProjectTags,
@@ -97,6 +98,7 @@ export {
   useUpdateProjectSettings,
 } from './reviews';
 export {
+  useClonePlan,
   useCreatePlan,
   useDeletePlan,
   usePlan,
@@ -112,6 +114,7 @@ export {
   STEP_DETAIL_LIMIT,
   executionQueryOptions,
   useAttachEvidence,
+  useCloneRun,
   useCreateRun,
   useDeleteEvidence,
   useExecution,

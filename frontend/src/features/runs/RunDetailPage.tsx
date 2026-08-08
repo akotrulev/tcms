@@ -12,7 +12,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useState } from 'react';
-import { Link as RouterLink, useParams } from 'react-router-dom';
+import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import type { RunStatus, TestRunDetail } from '../../api/types';
 import { useProject, useRun, useSetRunStatus } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
@@ -27,6 +27,7 @@ import { isRunClosed, runStatusColors, runStatusLabels, statusLabels } from '../
 import { ScrollX } from '../../components/ScrollX';
 import { CaseKeyLink, ExecuteCaseLink } from './ExecutionRowLinks';
 import { FailureSummary } from './FailureSummary';
+import { RunCloneDialog } from './RunCloneDialog';
 
 /** The row's static locator — never interpolated with an execution id (`test-ids` rule 6). */
 const RowTestId = 'RunDetail.Executions.Row';
@@ -54,9 +55,7 @@ export function RunDetailPage() {
           { label: 'Test runs', to: `/projects/${projectId}/runs` },
           { label: run.data?.key ?? 'Run' },
         ]}
-        actions={
-          run.data && <RunLifecycleActions projectId={projectId} runId={runId} status={run.data.status} />
-        }
+        actions={run.data && <RunActions projectId={projectId} run={run.data} />}
         meta={
           run.data && (
             <>
@@ -103,7 +102,9 @@ export function RunDetailPage() {
 
 /**
  * Complete, Abort, Reopen — the run's whole lifecycle, and the first affordance in the product for
- * a column that had no writer at all until §72.
+ * a column that had no writer at all until §72 — **plus Clone since §129**, which is why this took
+ * the whole run rather than its status: the clone dialog prefills from the source's name, release
+ * and build, and states how long the copied checklist is.
  *
  * <h3>Three decisions worth reading</h3>
  *
@@ -120,17 +121,13 @@ export function RunDetailPage() {
  * it instead" and "reopen it first" are answers about the button that was just pressed, and a
  * corner notification detaches them from it.
  */
-function RunLifecycleActions({
-  projectId,
-  runId,
-  status,
-}: {
-  projectId: string;
-  runId: string;
-  status: RunStatus;
-}) {
+function RunActions({ projectId, run }: { projectId: string; run: TestRunDetail }) {
+  const runId = run.id;
+  const status = run.status;
   const setStatus = useSetRunStatus(projectId, runId);
+  const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
+  const [cloning, setCloning] = useState(false);
   const closed = isRunClosed(status);
 
   const move = (target: RunStatus) => {
@@ -141,6 +138,26 @@ function RunLifecycleActions({
   return (
     <Stack sx={{ gap: 0.5, alignItems: 'flex-end' }}>
       <Stack direction="row" sx={{ gap: 1 }}>
+        {/*
+          §129 — `run:create`, the key the endpoint charges, which Automation Service holds: a CI
+          credential may already open a run and a clone of a run is a run. Offered on a CLOSED run
+          too, and deliberately: re-running last cycle against the new build is the commonest reason
+          anybody opens a completed run at all, and the lifecycle controls beside it swap while this
+          one does not because the source's state says nothing about whether a copy is legal.
+        */}
+        <PermissionGate projectId={projectId} permission="run:create">
+          {({ allowed }) => (
+            <Button
+              size="small"
+              variant="outlined"
+              data-testid="RunDetail.CloneButton"
+              disabled={!allowed}
+              onClick={() => setCloning(true)}
+            >
+              Clone run
+            </Button>
+          )}
+        </PermissionGate>
         <PermissionGate projectId={projectId} permission="run:close">
           {({ allowed }) =>
             closed ? (
@@ -197,6 +214,18 @@ function RunLifecycleActions({
         <Typography variant="caption" sx={{ color: 'var(--color-failed)' }} data-testid="RunDetail.StatusError">
           {error}
         </Typography>
+      )}
+      {cloning && (
+        <RunCloneDialog
+          open
+          projectId={projectId}
+          run={run}
+          // The size of the checklist the copy inherits, read off the source's own executions —
+          // the run carries no scope to count, which is the frozen-scope fact the dialog states.
+          caseCount={(run.executions ?? []).length}
+          onClose={() => setCloning(false)}
+          onCloned={(created) => navigate(`/projects/${projectId}/runs/${created.id}`)}
+        />
       )}
     </Stack>
   );
