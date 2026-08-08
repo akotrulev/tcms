@@ -59,6 +59,49 @@ const PAGE = {
   lockVersion: 5,
 };
 
+const PLAN = {
+  id: 'tp-1',
+  key: 'TP-1',
+  name: 'Release 4.2',
+  status: 'DRAFT',
+  caseCount: 12,
+  lockVersion: 7,
+};
+
+const RUN = {
+  id: 'tr-5',
+  key: 'TR-5',
+  name: 'Nightly',
+  status: 'IN_PROGRESS',
+  executions: [{ id: 'e-1', caseId: 'c-9', caseKey: 'TC-42', caseTitle: 'Login works' }],
+};
+
+const STATUSES = [
+  { id: 'st-1', name: 'Passed', kind: 'PASS', color: '#0a0', countsAsPass: true, isFinal: true },
+  { id: 'st-2', name: 'Failed', kind: 'FAIL', color: '#a00', countsAsPass: false, isFinal: true },
+];
+
+const EXECUTION = {
+  id: 'e-1',
+  caseId: 'c-9',
+  caseKey: 'TC-42',
+  caseTitle: 'Login works',
+  status: STATUSES[0],
+  lockVersion: 1,
+};
+
+const REVIEW = {
+  id: 'rv-1',
+  subjectType: 'CASE',
+  subjectId: 'c-9',
+  subjectVersionNo: 3,
+  state: 'IN_REVIEW',
+  createdAt: '2026-08-08T09:00:00Z',
+  assignees: [],
+  participations: [],
+  comments: [],
+};
+
 /** The reads every command makes on its way to a write: project resolution and key lookup. */
 function scaffolding(): Record<string, { status: number; body?: unknown }> {
   return {
@@ -72,6 +115,13 @@ function scaffolding(): Record<string, { status: number; body?: unknown }> {
     'GET /suites/s-1': { status: 200, body: SUITE },
     'GET /doc-pages': { status: 200, body: [PAGE] },
     'GET /doc-pages/d-1': { status: 200, body: PAGE },
+    'GET /plans': { status: 200, body: [PLAN] },
+    'GET /plans/tp-1': { status: 200, body: PLAN },
+    'GET /runs': { status: 200, body: [RUN] },
+    'GET /runs/tr-5': { status: 200, body: RUN },
+    'GET /executions/e-1': { status: 200, body: EXECUTION },
+    'GET /statuses': { status: 200, body: STATUSES },
+    'GET /reviews': { status: 200, body: [REVIEW] },
   };
 }
 
@@ -391,6 +441,139 @@ describe('doc writes', () => {
   });
 });
 
+describe('plan writes', () => {
+  /*
+    `TestPlanUpdateInput` requires `name`, alone among the edit shapes on this surface. So a
+    `--description`-only edit is not expressible on the wire, and the command threads the current
+    name through from the same read that gave it the version — same read, so the pair is
+    consistent. Sending nothing would be a 400 about a field the user never mentioned.
+  */
+  it('carries the plan’s current name through an edit that does not mention it', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'PATCH /plans/tp-1': { status: 200, body: PLAN } });
+
+    expect(await mainWith(
+      ['plan', 'edit', 'TP-1', '--description', 'Regression for 4.2'],
+      out,
+      stub.fetch,
+    )).toBe(EXIT.ok);
+
+    const sent = stub.write('/plans/tp-1');
+    expect(JSON.parse(sent.body ?? '{}')).toEqual({
+      description: 'Regression for 4.2',
+      name: 'Release 4.2',
+    });
+    expect(sent.headers.get('If-Match')).toBe('7');
+  });
+
+  it('resolves suite and case keys into the plan’s scope', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'POST /plans': { status: 201, body: PLAN } });
+
+    await mainWith(
+      ['plan', 'create', '--name', 'Release 4.2', '--suite', 'TS-7', '--case', 'TC-42'],
+      out,
+      stub.fetch,
+    );
+
+    expect(JSON.parse(stub.write('/plans').body ?? '{}')).toEqual({
+      name: 'Release 4.2',
+      suiteIds: ['s-1'],
+      caseIds: ['c-9'],
+    });
+  });
+});
+
+describe('result record', () => {
+  it('finds the execution by case key and the status by name', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'PATCH /executions/e-1': { status: 200, body: EXECUTION } });
+
+    expect(await mainWith(
+      ['result', 'record', 'TR-5', 'TC-42', '--status', 'passed'],
+      out,
+      stub.fetch,
+    )).toBe(EXIT.ok);
+
+    const sent = stub.write('/executions/e-1');
+    expect(JSON.parse(sent.body ?? '{}')).toEqual({ statusId: 'st-1' });
+    // The version comes from the execution's own detail, not from the run's list of summaries —
+    // `TestExecutionSummary` carries no lockVersion at all.
+    expect(sent.headers.get('If-Match')).toBe('1');
+  });
+
+  it('says what the project offers when the status name is not one of them', async () => {
+    const out = recorder();
+    const stub = api(scaffolding());
+
+    expect(await mainWith(
+      ['result', 'record', 'TR-5', 'TC-42', '--status', 'Green'],
+      out,
+      stub.fetch,
+    )).toBe(EXIT.usage);
+    expect(out.stderr).toContain('Passed, Failed');
+  });
+
+  it('refuses a case the run does not cover, rather than sending a guess', async () => {
+    const out = recorder();
+    const stub = api(scaffolding());
+
+    expect(await mainWith(
+      ['result', 'record', 'TR-5', 'TC-99', '--status', 'Passed'],
+      out,
+      stub.fetch,
+    )).toBe(EXIT.usage);
+    expect(out.stderr).toContain('is not in');
+  });
+});
+
+describe('review comment', () => {
+  it('reads the subject type off the key and joins the open review', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'POST /comments': { status: 201, body: REVIEW } });
+
+    expect(await mainWith(
+      ['review', 'comment', 'TC-42', '--body', 'Step 3 does not match the spec.'],
+      out,
+      stub.fetch,
+    )).toBe(EXIT.ok);
+
+    const asked = stub.urls.find((url) => url.includes('/reviews?')) ?? '';
+    expect(asked).toContain('subjectType=CASE');
+    expect(asked).toContain('subjectId=c-9');
+    expect(JSON.parse(stub.write('/comments').body ?? '{}')).toEqual({
+      body: 'Step 3 does not match the spec.',
+    });
+  });
+
+  /*
+    A review is history once it closes: the endpoint answers 409, and re-submitting opens a NEW
+    record rather than reopening the old one. So "the newest review" and "the one that can still
+    be commented on" are different questions, and answering the first would produce a refusal the
+    user cannot act on.
+  */
+  it('refuses a closed review here, rather than earning a 409 from the server', async () => {
+    const out = recorder();
+    const stub = api({
+      ...scaffolding(),
+      'GET /reviews': { status: 200, body: [{ ...REVIEW, state: 'APPROVED' }] },
+    });
+
+    expect(await mainWith(['review', 'comment', 'TC-42', '--body', 'x'], out, stub.fetch))
+      .toBe(EXIT.usage);
+    expect(out.stderr).toContain('has ended (APPROVED)');
+    expect(stub.sent.some((request) => request.method === 'POST')).toBe(false);
+  });
+
+  it('refuses a key that names something reviews are not kept for', async () => {
+    const out = recorder();
+    const stub = api(scaffolding());
+
+    expect(await mainWith(['review', 'comment', 'DOC-3', '--body', 'x'], out, stub.fetch))
+      .toBe(EXIT.usage);
+  });
+});
+
 /* ------------------------------------------------------- the computed check ---- */
 
 describe('header conformance', () => {
@@ -509,5 +692,40 @@ const INVOCATIONS: Record<string, Invocation> = {
     argv: () => ['doc', 'unlink', 'DOC-3', '--link', 'l-1'],
     path: '/links/l-1',
     routes: { 'DELETE /links/l-1': { status: 204 } },
+  },
+  'plan create': {
+    argv: () => ['plan', 'create', '--name', 'Release 4.2'],
+    path: '/plans',
+    routes: { 'POST /plans': { status: 201, body: PLAN } },
+  },
+  'plan edit': {
+    argv: () => ['plan', 'edit', 'TP-1', '--name', 'Release 4.3'],
+    path: '/plans/tp-1',
+    routes: { 'PATCH /plans/tp-1': { status: 200, body: PLAN } },
+  },
+  'plan status': {
+    argv: () => ['plan', 'status', 'TP-1', '--status', 'IN_REVIEW'],
+    path: '/plans/tp-1/status',
+    routes: { 'PUT /plans/tp-1/status': { status: 200, body: PLAN } },
+  },
+  'run create': {
+    argv: () => ['run', 'create', '--name', 'Nightly'],
+    path: '/runs',
+    routes: { 'POST /runs': { status: 201, body: RUN } },
+  },
+  'run status': {
+    argv: () => ['run', 'status', 'TR-5', '--status', 'COMPLETED'],
+    path: '/runs/tr-5/status',
+    routes: { 'PUT /runs/tr-5/status': { status: 200, body: RUN } },
+  },
+  'result record': {
+    argv: () => ['result', 'record', 'TR-5', 'TC-42', '--status', 'Passed'],
+    path: '/executions/e-1',
+    routes: { 'PATCH /executions/e-1': { status: 200, body: EXECUTION } },
+  },
+  'review comment': {
+    argv: () => ['review', 'comment', 'TC-42', '--body', 'Looks right.'],
+    path: '/comments',
+    routes: { 'POST /comments': { status: 201, body: REVIEW } },
   },
 };

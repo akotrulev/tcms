@@ -155,8 +155,24 @@ function usage(out: Output): void {
   out.line();
   out.line('Usage: tcms <noun> <verb> [options]');
   out.line();
+  // Reads and writes are listed apart, and it is not cosmetic: this list is the first thing a
+  // person or an agent sees, and "which of these changes the instance" is the question they are
+  // actually asking. The width is measured rather than guessed — `review comment` is 14
+  // characters and a hardcoded 14 left it touching its own summary.
+  const width = Math.max(...COMMANDS.map((command) => command.name.length)) + 2;
+
   out.line('Commands:');
-  for (const command of COMMANDS) out.line(`  ${command.name.padEnd(14)} ${command.summary}`);
+  for (const command of COMMANDS) {
+    if (command.write) continue;
+    out.line(`  ${command.name.padEnd(width)} ${command.summary}`);
+  }
+
+  out.line();
+  out.line('Commands that change something:');
+  for (const command of COMMANDS) {
+    if (!command.write) continue;
+    out.line(`  ${command.name.padEnd(width)} ${command.summary}`);
+  }
   out.line();
   out.line('Global options:');
   out.line('  --project KEY   the project to act in (needed when the token can see several)');

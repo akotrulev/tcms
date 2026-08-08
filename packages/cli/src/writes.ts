@@ -24,6 +24,8 @@
  * is structurally incapable of, rather than one it declines to offer.
  */
 import {
+  TcmsClientError,
+  classify,
   createIntent,
   editIntent,
   requireExplicitVersion,
@@ -100,6 +102,18 @@ async function versionFor(
   if (options.fromFile) return requireExplicitVersion(undefined, options.operation);
   return { fresh: await options.read() };
 }
+
+/**
+ * The `read` a `--file` edit passes, which is never called.
+ *
+ * Written as a function that throws rather than as an optional parameter: an optional `read`
+ * would let a *flag* edit omit it and fall through to some default, and the default that keeps
+ * the code running is the unsafe one. This way the type still demands a reader and the one path
+ * that legitimately has none says so out loud.
+ */
+const notRead = (): Promise<never> => {
+  throw new TcmsClientError('A whole-body edit reads nothing; it carries its own version.');
+};
 
 /**
  * Display keys to ids, for the fields that take a **complete set**.
@@ -625,6 +639,396 @@ const docUnlink: Command = {
   },
 };
 
+/* ------------------------------------------------------------------- plans ---- */
+
+const planCreate: Command = {
+  name: 'plan create',
+  summary: 'Create a test plan',
+  usage:
+    'tcms plan create --name N [--description D] [--milestone M] [--milestone-date YYYY-MM-DD]\n'
+    + '                 [--suite TS-n]... [--case TC-n]... [--idempotency-key K]',
+  options: {
+    name: { type: 'string' },
+    description: { type: 'string' },
+    milestone: { type: 'string' },
+    'milestone-date': { type: 'string' },
+    suite: { type: 'string', multiple: true },
+    case: { type: 'string', multiple: true },
+    'idempotency-key': { type: 'string' },
+  },
+  write: { kind: 'create', permission: 'plan:create' },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const projectId = await projectOf(context);
+
+    const created = await client.POST('/projects/{projectId}/plans', {
+      params: { path: { projectId } },
+      body: present({
+        name: requireOption(context, 'name'),
+        description: nullableText(options['description']),
+        milestoneName: nullableText(options['milestone']),
+        milestoneDate: nullableText(options['milestone-date']),
+        suiteIds: await resolveMany(context, projectId, options['suite'], 'SUITE'),
+        caseIds: await resolveMany(context, projectId, options['case'], 'CASE'),
+      }) as components['schemas']['TestPlanInput'],
+      tcms: { ...request, ...createIntent({ key: text(options['idempotency-key']) }) },
+    });
+
+    reportWrite(out, json, created, [
+      ['Created', `${show(created.key)} — ${show(created.name)}`],
+      ['Status', show(created.status)],
+      ['Cases', show(created.caseCount)],
+    ]);
+  },
+};
+
+const planEdit: Command = {
+  name: 'plan edit',
+  summary: 'Change a test plan',
+  usage:
+    'tcms plan edit TP-1 [--name N] [--description D] [--milestone M] [--suite TS-n]...\n'
+    + '                   [--case TC-n]... [--file BODY.json --lock-version N]',
+  options: {
+    name: { type: 'string' },
+    description: { type: 'string' },
+    milestone: { type: 'string' },
+    'milestone-date': { type: 'string' },
+    suite: { type: 'string', multiple: true },
+    case: { type: 'string', multiple: true },
+    file: { type: 'string' },
+    'lock-version': { type: 'string' },
+  },
+  write: { kind: 'edit', permission: 'plan:edit' },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const projectId = await projectOf(context);
+    const planId = await resolveId({
+      client, projectId, value: requireArg(context, 'plan'), entity: 'PLAN',
+    });
+
+    const file = text(options['file']);
+    const path = { projectId, planId };
+
+    let body: Record<string, unknown>;
+    let version: EditVersion;
+
+    if (file) {
+      body = objectFrom(file, 'a TestPlanUpdateInput');
+      version = await versionFor(context, { fromFile: true, operation: 'edit this plan', read: notRead });
+    } else {
+      /*
+        `TestPlanUpdateInput` REQUIRES `name`, alone among the edit shapes on this surface — so a
+        partial edit is not expressible on the wire, and a command that sent only `--description`
+        would be a 400 about a field the user never mentioned. The read this command already
+        makes for its `lockVersion` carries the current name, so it is threaded through.
+
+        That is safe for the flag-edit reason and only for it: the name comes from the *same*
+        read as the version, so the pair is consistent. A `--file` edit supplies both itself.
+      */
+      const current = await client.GET('/projects/{projectId}/plans/{planId}', {
+        params: { path }, tcms: request,
+      });
+      version = await versionFor(context, {
+        fromFile: false, operation: 'edit this plan', read: async () => current,
+      });
+      body = requireSomethingToDo(
+        present({
+          description: nullableText(options['description']),
+          milestoneName: nullableText(options['milestone']),
+          milestoneDate: nullableText(options['milestone-date']),
+          suiteIds: await resolveMany(context, projectId, options['suite'], 'SUITE'),
+          caseIds: await resolveMany(context, projectId, options['case'], 'CASE'),
+          ...(text(options['name']) === undefined ? {} : { name: text(options['name']) }),
+        }),
+        'Name at least one field to change, or pass --file with a body.',
+      );
+      body['name'] = text(options['name']) ?? current.name;
+    }
+
+    const updated = await client.PATCH('/projects/{projectId}/plans/{planId}', {
+      params: { path },
+      body: body as components['schemas']['TestPlanUpdateInput'],
+      tcms: { ...request, ...editIntent(version, 'edit this plan') },
+    });
+
+    reportWrite(out, json, updated, [
+      ['Updated', `${show(updated.key)} — ${show(updated.name)}`],
+      ['Status', show(updated.status)],
+      ['Lock version', show(updated.lockVersion)],
+    ]);
+  },
+};
+
+const planStatus: Command = {
+  name: 'plan status',
+  summary: 'Submit, approve or withdraw a test plan',
+  usage: 'tcms plan status TP-1 --status DRAFT|IN_REVIEW|APPROVED',
+  options: { status: { type: 'string' } },
+  write: { kind: 'state', permission: 'plan:edit' },
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const projectId = await projectOf(context);
+    const planId = await resolveId({
+      client, projectId, value: requireArg(context, 'plan'), entity: 'PLAN',
+    });
+
+    const updated = await client.PUT('/projects/{projectId}/plans/{planId}/status', {
+      params: { path: { projectId, planId } },
+      body: { status: requireStatus(context) as 'DRAFT' | 'IN_REVIEW' | 'APPROVED' },
+      tcms: request,
+    });
+
+    reportWrite(out, json, updated, [
+      ['Plan', `${show(updated.key)} — ${show(updated.name)}`],
+      ['Status', show(updated.status)],
+    ]);
+  },
+};
+
+/* -------------------------------------------------------------------- runs ---- */
+
+const runCreate: Command = {
+  name: 'run create',
+  summary: 'Create a test run',
+  usage:
+    'tcms run create --name N [--plan TP-n] [--suite TS-n]... [--case TC-n]... [--tag T]...\n'
+    + '                [--release V] [--build B] [--idempotency-key K]',
+  options: {
+    name: { type: 'string' },
+    plan: { type: 'string' },
+    suite: { type: 'string', multiple: true },
+    case: { type: 'string', multiple: true },
+    tag: { type: 'string', multiple: true },
+    release: { type: 'string' },
+    build: { type: 'string' },
+    'idempotency-key': { type: 'string' },
+  },
+  write: { kind: 'create', permission: 'run:create' },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const projectId = await projectOf(context);
+    const plan = text(options['plan']);
+
+    const created = await client.POST('/projects/{projectId}/runs', {
+      params: { path: { projectId } },
+      body: present({
+        name: requireOption(context, 'name'),
+        planId: plan === undefined
+          ? undefined
+          : await resolveId({ client, projectId, value: plan, entity: 'PLAN' }),
+        suiteIds: await resolveMany(context, projectId, options['suite'], 'SUITE'),
+        caseIds: await resolveMany(context, projectId, options['case'], 'CASE'),
+        // A run's tags point the opposite way from a case filter's — every live case carrying
+        // ANY of them, union not intersection. The contract says so on the field; naming it here
+        // would be a second statement of the same rule.
+        tags: tagsFrom(options['tag']),
+        releaseVersion: nullableText(options['release']),
+        buildNumber: nullableText(options['build']),
+      }) as components['schemas']['TestRunInput'],
+      tcms: { ...request, ...createIntent({ key: text(options['idempotency-key']) }) },
+    });
+
+    reportWrite(out, json, created, [
+      ['Created', `${show(created.key)} — ${show(created.name)}`],
+      ['Status', show(created.status)],
+      ['Plan', show(created.planKey)],
+    ]);
+  },
+};
+
+const runStatus: Command = {
+  name: 'run status',
+  summary: 'Complete, abort or reopen a run',
+  usage: 'tcms run status TR-1 --status COMPLETED|ABORTED|IN_PROGRESS|NOT_STARTED',
+  options: { status: { type: 'string' } },
+  // `run:close` is Lead and up and an Agent token does not hold it — the command exists because
+  // this CLI is a person's tool too. Same call as `suite status`, one noun over.
+  write: { kind: 'state', permission: 'run:close' },
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const projectId = await projectOf(context);
+    const runId = await resolveId({
+      client, projectId, value: requireArg(context, 'run'), entity: 'RUN',
+    });
+
+    const updated = await client.PUT('/projects/{projectId}/runs/{runId}/status', {
+      params: { path: { projectId, runId } },
+      body: { status: requireStatus(context) as components['schemas']['RunStatusInput']['status'] },
+      tcms: request,
+    });
+
+    reportWrite(out, json, updated, [
+      ['Run', `${show(updated.key)} — ${show(updated.name)}`],
+      ['Status', show(updated.status)],
+    ]);
+  },
+};
+
+const resultRecord: Command = {
+  name: 'result record',
+  summary: 'Record a verdict against one case in a run',
+  usage: 'tcms result record TR-1 TC-42 --status Passed [--comment TEXT]',
+  options: {
+    status: { type: 'string' },
+    comment: { type: 'string' },
+    'lock-version': { type: 'string' },
+  },
+  write: { kind: 'edit', permission: 'result:submit' },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const projectId = await projectOf(context);
+    const runId = await resolveId({
+      client, projectId, value: requireArg(context, 'run'), entity: 'RUN',
+    });
+
+    /*
+      An execution has **no display key** and never will (§6t) — it is identified by its UUID or
+      by (runId, caseId), and "nobody says TE-4038 out loud". So this command takes the pair a
+      person actually holds, `TR-1 TC-42`, and finds the execution in the run's own detail. That
+      is a read the caller would otherwise do by hand and paste a UUID out of.
+    */
+    const caseKey = requireArg(context, 'case', 1);
+    const detail = await client.GET('/projects/{projectId}/runs/{runId}', {
+      params: { path: { projectId, runId } }, tcms: request,
+    });
+
+    const execution = detail.executions.find(
+      (row) => row.caseKey === caseKey || row.caseId === caseKey,
+    );
+    if (!execution) {
+      throw new UsageError(
+        `${caseKey} is not in ${show(detail.key)}. A run covers the cases it was created with; `
+          + 'adding one is a change to the run, not a result.',
+      );
+    }
+
+    // The status is named, not typed as a UUID: `case_status` is per-project vocabulary and the
+    // ids are nobody's to remember. An unknown name is refused here rather than sent, because
+    // the server's answer would be a 400 on `statusId` naming an id the caller never chose.
+    const wanted = requireOption(context, 'status');
+    const statuses = await client.GET('/projects/{projectId}/statuses', {
+      params: { path: { projectId } }, tcms: request,
+    });
+    const status = statuses.find(
+      (row) => row.name.toLowerCase() === wanted.toLowerCase() || row.id === wanted,
+    );
+    if (!status) {
+      throw new UsageError(
+        `No status '${wanted}' in this project. It offers: `
+          + `${statuses.map((row) => row.name).join(', ')}.`,
+      );
+    }
+
+    const path = { projectId, runId, executionId: execution.id };
+    const version = await versionFor(context, {
+      fromFile: false,
+      operation: 'record this result',
+      // The run detail's execution rows are summaries and carry no `lockVersion` — only the
+      // execution's own detail does. So this is a second read, and it is the right one: the
+      // version must come from the resource being written, not from a list that mentions it.
+      read: () => client.GET('/projects/{projectId}/runs/{runId}/executions/{executionId}', {
+        params: { path }, tcms: request,
+      }),
+    });
+
+    const recorded = await client.PATCH('/projects/{projectId}/runs/{runId}/executions/{executionId}', {
+      params: { path },
+      body: present({
+        statusId: status.id,
+        comment: nullableText(options['comment']),
+      }) as components['schemas']['ExecutionResultInput'],
+      tcms: { ...request, ...editIntent(version, 'record this result') },
+    });
+
+    reportWrite(out, json, recorded, [
+      ['Recorded', `${show(recorded.caseKey)} — ${show(recorded.status?.name)}`],
+      ['Run', show(detail.key)],
+      ['Lock version', show(recorded.lockVersion)],
+    ]);
+  },
+};
+
+/* ----------------------------------------------------------------- reviews ---- */
+
+const reviewComment: Command = {
+  name: 'review comment',
+  summary: 'Write a remark on the open review of a case, suite or plan',
+  usage: 'tcms review comment TC-42 --body TEXT [--reply COMMENT_UUID]',
+  options: {
+    body: { type: 'string' },
+    reply: { type: 'string' },
+  },
+  // One key for all three subjects: §A3 has `case:comment` and deliberately no `suite:comment`
+  // or `plan:comment`. It is also why commenting and verdicts are two tools on the MCP side —
+  // a Viewer-owned agent token holds this and no `*:review` at all.
+  write: { kind: 'state', permission: 'case:comment' },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const projectId = await projectOf(context);
+
+    // The subject type is read off the key's own prefix rather than asked for: `TC-42` already
+    // says it is a case, and a `--subject` flag would let the two disagree.
+    const key = requireArg(context, 'case, suite or plan');
+    const identifier = classify(key);
+    // A bare UUID cannot say what it is, and the review list requires the type — so this is one
+    // of the few places on the surface where a display key is not merely a convenience.
+    const subject = identifier.kind === 'key' ? SUBJECTS[identifier.key.entity] : undefined;
+    if (!subject) {
+      throw new UsageError(
+        'Reviews are kept for cases, suites and plans, and the key is what says which. '
+          + 'Name one — TC-42, TS-7, TP-1.',
+      );
+    }
+
+    const subjectId = await resolveId({ client, projectId, value: key, entity: subject.entity });
+    const reviews = await client.GET('/projects/{projectId}/reviews', {
+      params: { query: { subjectType: subject.wire, subjectId }, path: { projectId } },
+      tcms: request,
+    });
+
+    /*
+      Newest first, and a comment goes on the open one. A review is **history** once it closes —
+      the endpoint answers 409 on a closed review, and re-submitting opens a NEW record rather
+      than reopening the old — so "the latest row" is not the same question as "the one that can
+      still be commented on", and picking the wrong one is a refusal the user cannot act on.
+    */
+    const open = reviews.find((review) => review.state === 'IN_REVIEW');
+    if (!open) {
+      throw new UsageError(
+        reviews.length === 0
+          ? `${key} has never been submitted for review, so there is no thread to join.`
+          : `${key}'s review has ended (${show(reviews[0]?.state)}). Submit it again to reopen a `
+            + 'conversation; the closed record stays as it is.',
+      );
+    }
+
+    const updated = await client.POST('/projects/{projectId}/reviews/{reviewId}/comments', {
+      params: { path: { projectId, reviewId: open.id } },
+      body: present({
+        body: requireOption(context, 'body'),
+        parentId: text(options['reply']),
+      }) as components['schemas']['ReviewCommentInput'],
+      tcms: request,
+    });
+
+    reportWrite(out, json, updated, [
+      ['Commented on', `${key} — review ${show(updated.id)}`],
+      ['State', show(updated.state)],
+      ['Comments', show(updated.comments.length)],
+    ]);
+  },
+};
+
+/** Display-key entity to the wire's `ReviewSubjectType`, for the three that have reviews. */
+const SUBJECTS: Partial<Record<
+  'CASE' | 'SUITE' | 'PLAN' | 'RUN' | 'DOC_PAGE',
+  { entity: 'CASE' | 'SUITE' | 'PLAN'; wire: components['schemas']['ReviewSubjectType'] }
+>> = {
+  CASE: { entity: 'CASE', wire: 'CASE' },
+  SUITE: { entity: 'SUITE', wire: 'SUITE' },
+  PLAN: { entity: 'PLAN', wire: 'PLAN' },
+};
+
 export const WRITES: readonly Command[] = [
   caseEdit,
   caseProposal,
@@ -635,4 +1039,11 @@ export const WRITES: readonly Command[] = [
   docEdit,
   docLink,
   docUnlink,
+  planCreate,
+  planEdit,
+  planStatus,
+  runCreate,
+  runStatus,
+  resultRecord,
+  reviewComment,
 ];
