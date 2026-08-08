@@ -1119,3 +1119,21 @@ Assertions live in `IngestionEndpointTest.Attribution` (2) and `AsyncCompanyCont
 | TA-4 | `TokenContext.clear()` drops the restore and just removes | The inline path — `CallerRunsPolicy`, a `SyncTaskExecutor` — strips a live request's token mid-flight, and the request continues **uncapped**: the one direction in which losing this context grants rather than narrows. Should redden `inlineExecutionRestoresTheCallersToken`. | ⬜ NOT RUN |
 | TA-5 | `AuditEvent.record` gains an `actorTokenId` parameter and one of the 42 call sites passes null | The design this slice refused, mutated at exactly the place it fails: the row reads correct and says a person did what a pipeline did. Reddens nothing unless the chosen call site is the ingestion one — **recorded as a known gap**, and the reason the parameter does not exist. | ⬜ NOT RUN |
 | TA-6 | `ApiTokenAuthenticationFilter` opens the token scope without try-with-resources | A servlet thread keeps the credential for the next request on it, which then writes audit rows under somebody else's token and is capped by it. Reddens nothing in the current suite — **known gap**; the assertion needs two sequential requests pinned to one thread. | ⬜ NOT RUN |
+
+### §132 phase 2 — `test_execution.executed_by_token` (`TA-7` … `TA-11`)
+
+The column was **not mapped at all** — the field did not exist on `TestExecution`, while three
+javadocs and the ingestion path's own comment named it as the home of a fact nothing recorded.
+`record` fills it from the ambient token; `ExecutionTokens` resolves the id to the token's name on
+the way out. Assertions live in `IngestionEndpointTest.Attribution` (2 more, 4 total).
+
+> **NONE RUN.** **`TA-9` first** — the only one whose failure puts a *person's name* on a machine's
+> claim, which is the thing this column exists to prevent.
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| TA-7 | `TestExecution.record` stops setting `executedByToken` | The pre-slice state, restored: an ingested verdict is attributable to nothing at all, since `executedBy` is deliberately null too. Should redden `theExecutionRecordsTheCredential` and `theHistoryNamesTheCredential`. | ⬜ NOT RUN |
+| TA-8 | `IngestionService.write` passes the token's **owner** as `executedBy` | The tempting fill for an empty column, and the one the surrounding comment already refuses: it attributes a machine's claim to a person who did not run the test. Should redden the `executedBy(...)).isNull()` assertions. | ⬜ NOT RUN |
+| TA-9 | `CaseHistoryPage.authorLine` goes back to branching on `entry.source` | **The defect this phase found.** The source is a property of the *run* and the actor a property of the *verdict*; Automation Service holds `result:submit`, so a credential posting into a MANUAL run renders as "by \<the owner's name\>". No backend test can see it — it is a frontend branch over two fields that are both correct. Reddens nothing; **a browser row**, `TA-B1`. | ⬜ NOT RUN |
+| TA-10 | `record` merges rather than overwrites — it leaves an existing `executedByToken` standing on an amendment | A person's amendment reads as a verdict a person and a credential made together, and the credential named is the one whose result was replaced. Reddens nothing today — **known gap**; the assertion is a token ingest followed by a human amend on the same execution. | ⬜ NOT RUN |
+| TA-11 | `ApiTokenRepository.findAllByIdIn` becomes `findAllById` | `EntityManager.find` does not apply the Hibernate `@Filter`, so the company predicate rests on RLS alone — one layer instead of two, on a name rendered into another company's screen if RLS is ever bypassed. Reddens nothing (RLS still holds); recorded because it is the exact trap `findScopedById`'s javadoc documents, one method away. | ⬜ NOT RUN |

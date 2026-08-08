@@ -275,6 +275,23 @@ function VersionRow({ marker, last }: { marker: VersionMarker; last: boolean }) 
   );
 }
 
+/**
+ * Who recorded this verdict — a credential's name, a person's, or neither.
+ *
+ * The verb still comes from the run's source, because "ingested" and "recorded" are genuinely
+ * different events; the *name* comes from whichever actor field is populated. `executedByToken` is
+ * the token's name (the server resolves the id), and it is null both for a person's verdict and for
+ * an ingestion posted with a session rather than a credential — the second is why 'CI' is still the
+ * fallback on an INGESTED row and not a bug.
+ */
+function authorLine(entry: ExecutionHistoryEntry): string {
+  const ingested = entry.source === 'INGESTED';
+  if (entry.executedByToken) {
+    return `${ingested ? 'ingested by' : 'recorded by'} ${entry.executedByToken}`;
+  }
+  return ingested ? 'ingested by CI' : `by ${entry.executedBy?.displayName ?? 'unknown'}`;
+}
+
 function ExecutionRow({
   entry,
   projectId,
@@ -345,10 +362,15 @@ function ExecutionRow({
           )}
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
             {/* A CI token and a person are different kinds of author, and knowing which one
-                recorded a result changes who you ask about it. */}
-            {entry.source === 'INGESTED'
-              ? `ingested by ${entry.executedByToken ?? 'CI'}`
-              : `by ${entry.executedBy?.displayName ?? 'unknown'}`}
+                recorded a result changes who you ask about it.
+
+                It branches on the ACTOR, not on the run's source — which is a correction. The
+                source is a property of the run and the actor is a property of this verdict, and
+                the two came apart the moment executed_by_token got a writer: Automation Service
+                holds result:submit, so a credential can post a single verdict into a MANUAL run,
+                and keying off the source rendered that as "by <the owner's name>" — a person's
+                name on a machine's claim, which is the one thing attribution must not do. */}
+            {authorLine(entry)}
           </Typography>
           {entry.durationMs !== null && entry.durationMs !== undefined && (
             <Typography variant="caption" sx={{ color: 'text.secondary' }}>

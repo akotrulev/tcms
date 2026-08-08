@@ -91,6 +91,26 @@ contract change** — all three columns are in `V1` and both wire fields were al
   authenticated by a real `api_token`** rather than a session for a user id. That absence is how
   three token columns sat unwritten through the two slices that shipped tokens.
 
+Phase 2 — `test_execution.executed_by_token`:
+
+- **The column was not mapped at all.** `TestExecution` had no field, while `RunSource`,
+  `TestExecutionSummaryView`, `CaseHistoryView` and `IngestionService` all referred to it in prose.
+  `record` fills it from the ambient token, so no call site spells it; **it is not exclusive with
+  `executedBy`** — ingestion nulls the person on purpose, but Automation Service holds
+  `result:submit`, so a credential posting one verdict fills both.
+- **`ExecutionTokens`** (new, `execution`) resolves the id to the token's **name**, batched, via
+  `ApiTokenRepository.findAllByIdIn` — a derived query and not `findAllById`, because
+  `EntityManager.find` does not apply the `@Filter`. The name is unique only among *live* tokens
+  (`V36`), so it is ambiguous across a rotation; recorded in the class, not designed away.
+- **`Map.of().get(null)` threw again — §38's trap, SEVENTH sighting, one slice after §121 phase 4
+  recorded the sixth.** `tokenNames` is `Map.of()` when no row on the page named a token, which is
+  the *ordinary* case, so every case history 500'd and eighteen tests about withdrawn runs, markers
+  and scope went red. A lookup keyed by a nullable column must guard the key.
+- **The SPA branched on the run's `source` to decide the author caption**, which is a property of
+  the run where the actor is a property of the verdict — so a credential posting into a MANUAL run
+  printed the owner's name. `authorLine` in `CaseHistoryPage.tsx` branches on the actor now. No
+  backend test can see it; browser row `A3-16`.
+
 ---
 
 ## §129 — A CLONE IS A CREATE, EXCEPT WHERE THE CREATE CONTRACT IS NARROWER THAN THE AGGREGATE

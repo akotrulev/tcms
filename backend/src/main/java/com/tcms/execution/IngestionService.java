@@ -436,11 +436,15 @@ public class IngestionService {
             execution.record(
                     vocabulary.get(result.outcome().kind()).id(),
                     // executedBy stays NULL. The verdict was not this person's — they hold the
-                    // token, they did not run the test — and test_execution.executed_by_token is
-                    // the column V1 added for exactly this, waiting on §116's credential. Filling
-                    // executedBy with the token's owner would attribute a machine's claim to a
-                    // person, which is the attribution TestExecution#record's own header refuses in
-                    // the amendment case.
+                    // token, they did not run the test. Filling it with the token's owner would
+                    // attribute a machine's claim to a person, which is the attribution
+                    // TestExecution#record's own header refuses in the amendment case.
+                    //
+                    // executed_by_token is the column V1 added for exactly this, and since §132 it
+                    // is filled — by `record` itself, from the ambient token, so this call passes
+                    // nothing. An ingestion posted with a session rather than a credential (the
+                    // operator CLI, a test harness) therefore records NEITHER actor, which is
+                    // honest: nothing about that request identifies who ran the suite.
                     null,
                     result.message(),
                     now);

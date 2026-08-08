@@ -1,5 +1,6 @@
 package com.tcms.identity;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -25,6 +26,18 @@ public interface ApiTokenRepository extends JpaRepository<ApiToken, UUID> {
      * token" must be one answer decided by both layers rather than by RLS alone.
      */
     Optional<ApiToken> findScopedById(UUID id);
+
+    /**
+     * The named tokens, for resolving an id on a row that recorded one — {@code CaseHistoryService}
+     * turning {@code test_execution.executed_by_token} into something legible.
+     *
+     * <p>A derived query rather than {@code findAllById} for {@link #findScopedById}'s reason:
+     * {@code findAllById} goes through {@code EntityManager.find}, which Hibernate does not apply
+     * {@code @Filter} to, so the company predicate would rest on RLS alone. Revoked tokens are
+     * included deliberately — a result posted by a credential that has since been withdrawn is
+     * exactly the row somebody is trying to explain.
+     */
+    List<ApiToken> findAllByIdIn(Collection<UUID> ids);
 
     /**
      * Whether this company already has a live token by this name.

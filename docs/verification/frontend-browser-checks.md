@@ -624,6 +624,16 @@ credential and then stops.
 | A3-13 | Delete the case the mapping points at (as `lead`), then re-read Test name mappings | The row is **still there**, its Case cell reading **"Deleted case"** with the tooltip. It still consumes the test name, so every build still resolves that test to a case that is gone — filtering it out would hide the only thing that can be removed to fix it. **Remove** it, and confirm the dialog says results already recorded stay where they are. | §119-10 |
 | A3-14 | `psql`: `SELECT count(*) FROM ingestion_job WHERE project_id = '<MOB>'`, then open `MOB` → CI ingestion | **0**, and the screen shows the empty state naming the endpoint and the API-token screen — the only place this product ever says how to start posting. A project's history must not show another project's jobs: the read is gated on `projectId` over RLS, and this is the browser-lane half of `IH-1`. | §119-11 |
 
+#### Token attribution — whose name is on the verdict (§132)
+
+*Two rows, same lane and same fixture: they read what `A3-6`'s post left behind. They are the only
+place in the file where the product says a **credential** did something.*
+
+| # | Drive | Expect | src |
+|---|---|---|---|
+| A3-15 | Open the case `A3-6` matched → **Execution history**, and read the caption under the ingested entry | **`ingested by Ingestion pass`** — the token's own name, the one typed into `/admin/tokens`, not `CI` and not a uuid. Before §132 the column had no writer and this read `ingested by CI` for every credential on the instance, so a reader could not tell which pipeline posted a result or whose credential to revoke. | §132-2 |
+| A3-16 | With the same credential, `curl` a **single result** into an existing **manual** run (`POST …/runs/{id}/executions/{execId}/result` — Automation Service holds `result:submit`), then open that case's history | The new entry reads **`recorded by Ingestion pass`**, not `by <the token owner's display name>`. **This is the row that catches the defect §132 phase 2 found**: the caption used to branch on the *run's* source, which is a property of the run, while the actor is a property of the verdict — so a credential posting into a manual run printed a **person's name on a machine's claim**. No backend test can see it; both fields are correct and the branch is in the SPA. | §132-3 |
+
 **One row this pass cannot drive.** A **capped** unmatched list (`Ingestion.Capped`, "Showing the
 first 50 of N") needs a report with more than 50 unmatched tests. Generating one is a `curl` with a
 scripted body rather than a browser action, and it is left out rather than faked: the alternative is

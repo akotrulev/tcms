@@ -729,6 +729,39 @@ class IngestionEndpointTest extends IntegrationTestBase {
         }
 
         @Test
+        @DisplayName("the verdict names the credential and NOT a person")
+        void theExecutionRecordsTheCredential() throws Exception {
+            CiToken ci = seedCiToken();
+
+            ingestAs(ci.secret(),
+                    junit(testCase("com.acme.RefundTest", "refundsInFull", null)), "ik-at-3");
+
+            // executed_by stays null: the owner holds the credential, they did not run the test.
+            // Before this slice BOTH were null, so an ingested verdict was attributable to nothing
+            // at all — indistinguishable from one whose actor had been lost.
+            assertThat(executedBy(keyedCase)).isNull();
+            assertThat(executedByToken(keyedCase)).isEqualTo(ci.tokenId());
+        }
+
+        @Test
+        @DisplayName("the case history renders the credential's NAME, which is what the SPA prints")
+        void theHistoryNamesTheCredential() throws Exception {
+            CiToken ci = seedCiToken();
+
+            ingestAs(ci.secret(),
+                    junit(testCase("com.acme.RefundTest", "refundsInFull", null)), "ik-at-4");
+
+            JsonNode entry = body(get(LEAD,
+                    "/projects/" + BANKING + "/cases/" + keyedCase + "/history"))
+                    .get("entries").get(0);
+
+            // The wire field is a String and the SPA renders it directly — a uuid here would read
+            // as "ingested by 8f3c1a…", which is the shape a name exists to avoid.
+            assertThat(entry.get("executedByToken").asText()).isEqualTo(ci.name());
+            assertThat(entry.get("executedBy").isNull()).isTrue();
+        }
+
+        @Test
         @DisplayName("the same ingestion over a SESSION leaves actor_token_id null")
         void aSessionWriteNamesNoCredential() throws Exception {
             // The negative half, and the one that fails if the column is ever filled from
@@ -740,6 +773,10 @@ class IngestionEndpointTest extends IntegrationTestBase {
             assertThat(posted.getResponse().getStatus()).isEqualTo(201);
             assertThat(auditActorUser()).isEqualTo(ROBOT);
             assertThat(auditActorToken()).isNull();
+            // And neither column on the verdict: a session ingestion identifies nobody who ran the
+            // suite, which is honest rather than a gap.
+            assertThat(executedBy(keyedCase)).isNull();
+            assertThat(executedByToken(keyedCase)).isNull();
         }
     }
 
@@ -747,15 +784,16 @@ class IngestionEndpointTest extends IntegrationTestBase {
     private CiToken seedCiToken() {
         ApiTokenSecrets.NewSecret secret = secrets.generate();
         UUID id = UUID.randomUUID();
+        String name = "ci " + id;
         inCompany(ACME, () -> tx.executeWithoutResult(status -> {
-            apiTokens.save(ApiToken.issue(id, ACME, "ci " + id, secret.prefix(),
+            apiTokens.save(ApiToken.issue(id, ACME, name, secret.prefix(),
                     ROBOT, Role.AUTOMATION_SERVICE_ID, BANKING, null, Instant.now()));
             apiTokenLookups.save(ApiTokenLookup.of(secret.hash(), id, ACME));
         }));
-        return new CiToken(id, secret.secret());
+        return new CiToken(id, name, secret.secret());
     }
 
-    private record CiToken(UUID tokenId, String secret) {
+    private record CiToken(UUID tokenId, String name, String secret) {
     }
 
     private MvcResult ingestAs(String bearer, String report, String idempotencyKey)
@@ -777,6 +815,14 @@ class IngestionEndpointTest extends IntegrationTestBase {
 
     private UUID auditActorToken() throws SQLException {
         return uuid("SELECT actor_token_id FROM audit_event WHERE action = 'ingestion.completed'");
+    }
+
+    private UUID executedBy(UUID caseId) throws SQLException {
+        return uuid("SELECT executed_by FROM test_execution WHERE case_id = '" + caseId + "'");
+    }
+
+    private UUID executedByToken(UUID caseId) throws SQLException {
+        return uuid("SELECT executed_by_token FROM test_execution WHERE case_id = '" + caseId + "'");
     }
 
     // =====================================================================

@@ -69,8 +69,10 @@ public class CaseHistoryService {
     private final TestPlanRepository plans;
     private final ResultStatuses statuses;
     private final ExecutionPeople people;
+    private final ExecutionTokens credentials;
     private final CaseFacts cases;
 
+    @SuppressWarnings("checkstyle:ParameterNumber")
     public CaseHistoryService(
             ProjectService projects,
             TestExecutionRepository executions,
@@ -78,6 +80,7 @@ public class CaseHistoryService {
             TestPlanRepository plans,
             ResultStatuses statuses,
             ExecutionPeople people,
+            ExecutionTokens credentials,
             CaseFacts cases) {
 
         this.projects = projects;
@@ -86,6 +89,7 @@ public class CaseHistoryService {
         this.plans = plans;
         this.statuses = statuses;
         this.people = people;
+        this.credentials = credentials;
         this.cases = cases;
     }
 
@@ -365,10 +369,10 @@ public class CaseHistoryService {
     /**
      * The timeline rows, newest first.
      *
-     * <p>Four bulk lookups for the whole timeline and none per row — the discipline
-     * {@link ExecutionViews} sets out: the people, the plan keys, the configuration names, the
-     * defect links and the evidence counts are each one query regardless of how many executions the
-     * case has.
+     * <p>Six bulk lookups for the whole timeline and none per row — the discipline
+     * {@link ExecutionViews} sets out: the people, the credentials, the plan keys, the configuration
+     * names, the defect links and the evidence counts are each one query regardless of how many
+     * executions the case has.
      */
     private List<EntryView> entries(
             UUID companyId,
@@ -381,11 +385,15 @@ public class CaseHistoryService {
         }
 
         Set<UUID> userIds = new HashSet<>();
+        Set<UUID> tokenIds = new HashSet<>();
         Set<UUID> planIds = new HashSet<>();
         List<UUID> executionIds = new ArrayList<>(rows.size());
         for (Row row : rows) {
             if (row.execution().getExecutedBy() != null) {
                 userIds.add(row.execution().getExecutedBy());
+            }
+            if (row.execution().getExecutedByToken() != null) {
+                tokenIds.add(row.execution().getExecutedByToken());
             }
             if (row.run().getPlanId() != null) {
                 planIds.add(row.run().getPlanId());
@@ -394,6 +402,7 @@ public class CaseHistoryService {
         }
 
         Map<UUID, UserRefView> resolved = people.resolve(companyId, userIds);
+        Map<UUID, String> tokenNames = credentials.resolve(tokenIds);
         Map<UUID, String> configurationNames = configurationNames(projectId);
         Map<UUID, String> planKeys = planKeys(planIds);
         Map<UUID, List<DefectLinkView>> defects = defectsByExecution(executionIds);
@@ -433,8 +442,17 @@ public class CaseHistoryService {
                     execution.getExecutedBy() == null
                             ? null
                             : resolved.get(execution.getExecutedBy()),
-                    // Null until M3 ingestion issues tokens — see EntryView#executedByToken.
-                    null,
+                    // A name, not an id — see ExecutionTokens. Null when the verdict was a
+                    // person's, and also when a credential's row has gone: nothing is invented.
+                    //
+                    // The null guard is not defensive: tokenNames is Map.of() when no row on this
+                    // page named a token, and Map.of().get(null) THROWS where HashMap.get(null)
+                    // returns null. §38's trap, seventh sighting, and it 500'd every case history
+                    // in the suite — reddening eighteen tests about withdrawn runs, markers and
+                    // scope, none of which are about tokens.
+                    execution.getExecutedByToken() == null
+                            ? null
+                            : tokenNames.get(execution.getExecutedByToken()),
                     run.getSource(),
                     execution.getExecutedAt(),
                     execution.getDurationMs(),

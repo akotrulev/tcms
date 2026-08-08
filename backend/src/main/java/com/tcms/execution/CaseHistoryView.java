@@ -58,10 +58,13 @@ public record CaseHistoryView(
      * @param runDeleted  the run was withdrawn and the entry survives it — §6p, "the entry marked
      *                    rather than vanishing". The client must not offer navigation into a
      *                    withdrawn run, which answers 404.
-     * @param executedByToken always null until M3 ingestion issues tokens. Declared because the
-     *                    contract does and because {@code source} can already say {@code INGESTED}:
-     *                    a run created by the operator CLI carries that source today, and a field
-     *                    that exists for it is better than one added when the first token appears.
+     * @param executedByToken the credential's <em>name</em>, not its id — {@code ExecutionTokens}
+     *                    resolves it, and the ambiguity in choosing a name is recorded there.
+     *                    ~~Always null until M3 ingestion issues tokens.~~ → <strong>superseded
+     *                    2026-08-08 (§132)</strong>: ingestion has issued them since §117, and the
+     *                    column this reads was not even mapped until §132. Still null for a
+     *                    person's verdict, and for an ingestion posted with a session rather than a
+     *                    credential.
      */
     public record EntryView(
             UUID executionId,

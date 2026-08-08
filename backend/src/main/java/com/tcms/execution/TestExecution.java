@@ -68,9 +68,27 @@ public class TestExecution {
     @Column(name = "assignee_id")
     private UUID assigneeId;
 
-    /** Null for an ingested result, where {@code executed_by_token} is set instead. */
+    /** Null for an ingested result, where {@link #executedByToken} is set instead. */
     @Column(name = "executed_by")
     private UUID executedBy;
+
+    /**
+     * The credential that recorded this verdict, when one did.
+     *
+     * <p>The column is {@code V1}'s and <strong>was not mapped at all</strong> until 2026-08-08 —
+     * so the sentence above pointed at a field that did not exist, and the ingestion path's own
+     * comment named it as the right home for a fact nothing was writing anywhere. Filled from
+     * {@link com.tcms.tenancy.TokenContext} in {@link #record}, so no call site spells it and
+     * neither can forget it.
+     *
+     * <p><strong>Not exclusive with {@link #executedBy}.</strong> Ingestion leaves the person null
+     * on purpose — the token's owner did not run the test — but Automation Service also holds
+     * {@code result:submit}, so a credential posting a single verdict through the ordinary endpoint
+     * fills both: the owner is the caller, and the token is how they called. Two columns answering
+     * two questions, rather than one column meaning different things.
+     */
+    @Column(name = "executed_by_token")
+    private UUID executedByToken;
 
     @Column(name = "executed_at")
     private Instant executedAt;
@@ -168,10 +186,17 @@ public class TestExecution {
      * author's name on a verdict someone else changed attributes a claim to a person who did not
      * make it, and the previous values are on the {@code audit_event} row where a correction
      * belongs.
+     *
+     * <p>{@link #executedByToken} moves with them and is <em>overwritten</em> rather than merged:
+     * an amendment by a person must not leave the credential that posted the original result
+     * standing beside the new author's name, which would read as a verdict two actors made
+     * together.
      */
     void record(UUID statusId, UUID actorUserId, String comment, Instant now) {
         this.statusId = statusId;
         this.executedBy = actorUserId;
+        var token = com.tcms.tenancy.TokenContext.currentOrNull();
+        this.executedByToken = token == null ? null : token.tokenId();
         this.executedAt = now;
         this.comment = comment;
         this.updatedAt = now;
@@ -212,6 +237,10 @@ public class TestExecution {
 
     UUID getExecutedBy() {
         return executedBy;
+    }
+
+    UUID getExecutedByToken() {
+        return executedByToken;
     }
 
     Instant getExecutedAt() {
