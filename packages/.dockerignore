@@ -1,0 +1,22 @@
+# Build context for mcp/Dockerfile, whose context is this workspace root (see its header).
+#
+# `node_modules` is the line that matters. Without it the context is the developer's INSTALLED
+# tree — hundreds of MB, and on Apple silicon it carries the darwin-arm64 native binaries of
+# oxlint, rolldown and lightningcss into a linux/amd64 build. The `npm ci` in the build stage
+# would then be layered on top of a tree it did not create, so the image's dependencies would
+# depend on the machine that ran the build.
+**/node_modules
+
+# The build stage emits these itself. Copying a local `dist/` in is exactly how §139's build-order
+# defect stayed hidden — it passed on a developer's machine because a previous run had left one
+# behind — so the image must never be able to see one.
+**/dist
+
+# Test scratch, editor state, and the caches vitest leaves inside each workspace member.
+**/.vite
+**/.vite-temp
+**/.tmp
+**/coverage
+**/.vscode
+**/.idea
+**/.DS_Store
