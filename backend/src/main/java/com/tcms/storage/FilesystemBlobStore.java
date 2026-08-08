@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Optional;
 
 /**
@@ -12,12 +13,17 @@ import java.util.Optional;
  *
  * <h2>Why this is a class the adapters hold and not the interface they implement</h2>
  *
- * <p>{@link AttachmentStore} and {@link ReportStore} are the same four methods, and until §125 they
+ * <p>{@link AttachmentStore} and {@link ReportStore} were the same four methods, and until §125 they
  * were the same four methods <em>written twice</em>, along with this body and its traversal check —
  * §58's E1, accepted while a module boundary made the type unreachable. Co-located in this package
  * the copy has no argument left, and this class is what the move actually removed: two adapters,
  * one implementation, one place a future S3 form is written rather than two (decision #55 defers
  * that adapter, and this is what makes it one piece of work).
+ *
+ * <p>They are <strong>no longer the same set</strong>: §129 added {@link #copy} for clone, and only
+ * {@code AttachmentStore} exposes it. That is the two-types decision below paying off in the
+ * direction nobody planned for — the ports were kept distinct so a wrong one would not compile, and
+ * the first thing that actually diverged was the method list.
  *
  * <p>The two <em>ports</em> deliberately survive as distinct types. The alternative — one
  * {@code BlobStore} bean type with a qualifier per root — makes "which store am I holding" a string,
@@ -93,6 +99,33 @@ final class FilesystemBlobStore {
 
     boolean exists(String key) {
         return Files.isRegularFile(resolve(key));
+    }
+
+    /**
+     * Copies one key's bytes to another, or reports that there was nothing to copy.
+     *
+     * <p>Both keys go through {@link #resolve}, so a traversal attempt is refused on the
+     * <em>destination</em> too — the half a reader checking "the source is one of ours" would miss.
+     *
+     * <p>{@code REPLACE_EXISTING} for {@link #put}'s reason: a retry must overwrite rather than fail
+     * on bytes its own first attempt left behind. {@code Files.copy} streams, so a 25 MB attachment
+     * never becomes a 25 MB array — which is the whole reason this is a method here rather than an
+     * {@code open}-then-{@code put} in {@code repository}.
+     */
+    boolean copy(String from, String to) {
+        Path source = resolve(from);
+        if (!Files.isRegularFile(source)) {
+            return false;
+        }
+        Path target = resolve(to);
+        try {
+            Files.createDirectories(target.getParent());
+            Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+            return true;
+        } catch (IOException failure) {
+            throw new UncheckedIOException(
+                    "Could not copy " + kind + " bytes from " + from + " to " + to, failure);
+        }
     }
 
     /**

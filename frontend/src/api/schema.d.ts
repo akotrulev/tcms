@@ -1907,6 +1907,141 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/cases/{caseId}/clone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                /**
+                 * @description UUID only. Display keys (TC-1) are deliberately NOT accepted here: they are
+                 *     sequential per company and therefore trivially guessable, so allowing one as a
+                 *     path identifier hands out an enumeration oracle (plan §6t). Resolve a key the
+                 *     user typed or pasted through the search endpoint, which returns not-found —
+                 *     never forbidden — for a key in a project the caller cannot reach.
+                 */
+                caseId: components["parameters"]["CaseId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Clone a test case
+         * @description Plan §6v, decision round 3 #59. Copies the case's authored content into a **new**
+         *     case in the same project.
+         *
+         *     **A clone is a create.** The server reads the source, builds the same input `POST
+         *     /cases` takes, and runs it through the same validation, the same key allocator and
+         *     the same version writer — so a clone can never be a second definition of a legal
+         *     case. Six of §6v's rules hold by construction because of it: a newly allocated
+         *     display key, a status that resets to `DRAFT`, its own version 1, no shared history,
+         *     and an `Idempotency-Key` that behaves exactly as it does on a create.
+         *
+         *     **Requires `case:create`**, the same key the create costs, and not `case:edit` —
+         *     nothing about the source changes.
+         *
+         *     What is copied: description, objective, expected outcome, step format, Gherkin
+         *     source, priority, severity, automation status, the not-automatable reason, the
+         *     duration estimate, every step, the classification, the condition references, the
+         *     tags, and the attached files.
+         *
+         *     What is deliberately **not**:
+         *
+         *     - **`automationKey`, and with it the `AUTOMATED` status.** The key is unique per
+         *       company (§6c), so copying it either violates the constraint or makes an ingested
+         *       CI result match two cases. Dropping it **forces the status down**: `AUTOMATED`
+         *       requires a key, so a clone of an automated case is created as
+         *       **`TO_BE_AUTOMATED`**, which is not a compromise but the accurate state — it is
+         *       intended to be automated and has no automation yet. Every other automation status
+         *       is copied unchanged. A client showing the clone should say so; the alternative
+         *       (relaxing the requirement) leaves a case reporting as automated that CI can never
+         *       match, for ever.
+         *     - **Version and execution history.** A clone is a new aggregate, not a version.
+         *     - **Review state.** A clone of an approved case is a draft (§6g): approval attaches
+         *       to content a named person read.
+         *     - **The owner.** The clone is authored by the caller.
+         *
+         *     Attachments are **byte-copied** under fresh storage keys, not shared by reference:
+         *     two rows over one key means deleting either one destroys the other's bytes with
+         *     nothing failing. A source file whose bytes are already missing is skipped rather
+         *     than cloned into a second unreadable row.
+         *
+         *     `title` is **required**. The server does not invent `Copy of …`: two rows a person
+         *     cannot tell apart in a list is the failure this endpoint would otherwise ship by
+         *     default, and the length limit would have to be decided by whoever wrote the prefix.
+         *     The SPA prefills the suggestion in its dialog, where a human can edit it before it
+         *     becomes a row.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: {
+                    /**
+                     * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
+                     *     already succeeded answers **200** with the case that intent created, instead of creating a
+                     *     second one — so pressing Save again after a timeout is safe.
+                     *
+                     *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
+                     *     it across retries. A key generated per attempt is the mistake that makes the header look
+                     *     right and do nothing.
+                     *
+                     *     Scoped to the project the request is addressed to, which is the scope the uniqueness
+                     *     constraint behind it uses. Optional: omitted, every call creates. At most 200 characters.
+                     */
+                    "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                    /**
+                     * @description UUID only. Display keys (TC-1) are deliberately NOT accepted here: they are
+                     *     sequential per company and therefore trivially guessable, so allowing one as a
+                     *     path identifier hands out an enumeration oracle (plan §6t). Resolve a key the
+                     *     user typed or pasted through the search endpoint, which returns not-found —
+                     *     never forbidden — for a key in a project the caller cannot reach.
+                     */
+                    caseId: components["parameters"]["CaseId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["TestCaseCloneInput"];
+                };
+            };
+            responses: {
+                /**
+                 * @description A replay — this `Idempotency-Key` already created a case, which is returned
+                 *     unchanged. Not `201`, and no `Location`: nothing was created by this request.
+                 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TestCase"];
+                    };
+                };
+                /** @description The new case */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TestCase"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/cases/{caseId}/attachments": {
         parameters: {
             query?: never;
@@ -7386,6 +7521,22 @@ export interface components {
              *     the form can land on.
              */
             reason?: string;
+        };
+        TestCaseCloneInput: {
+            /**
+             * @description The new case's title. **Required**, and validated by the same rule the create
+             *     path applies — see the operation for why the server does not default it to
+             *     `Copy of <title>`.
+             */
+            title: string;
+            /**
+             * Format: uuid
+             * @description Where the clone lands. Omitted or `null` means **the source's suite**, which is
+             *     what "clone this" means without further instruction. A suite in another project
+             *     is a `400`, not a cross-project clone: that needs the classification revalidated
+             *     against the target project's vocabularies (§6d) and is its own slice.
+             */
+            suiteId?: string | null;
         };
         CaseDraftInput: {
             /**

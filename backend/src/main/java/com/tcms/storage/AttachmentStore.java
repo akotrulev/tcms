@@ -23,7 +23,7 @@ import java.util.Optional;
  * property is the <em>deployment's</em> identity and the type is the <em>code's</em>, and only one of
  * them is free to change.
  *
- * <h2>Four methods over an opaque key, and nothing else</h2>
+ * <h2>~~Four~~ five methods over an opaque key, and nothing else</h2>
  *
  * <p>This interface has no notion of a company, a case, an execution or an attachment row.
  * Everything that decides <em>which</em> bytes a caller may reach is a database question, answered by
@@ -74,4 +74,36 @@ public interface AttachmentStore {
 
     /** Whether anything is stored under {@code key}. */
     boolean exists(String key);
+
+    /**
+     * Copies the bytes under {@code from} to {@code to}, replacing anything already there.
+     *
+     * <p><strong>The fifth method, added in §129 for clone, and it is on the port rather than in the
+     * caller on purpose.</strong> A caller can express this as {@link #open} then {@link #put} — and
+     * that spelling forces every byte of every file through the JVM heap for ever, on every adapter,
+     * because {@code put} takes a {@code byte[]}. The filesystem adapter does it with
+     * {@link java.nio.file.Files#copy}; an S3 adapter does it with a server-side {@code CopyObject}
+     * and moves nothing at all. Writing it in the caller would foreclose the one operation object
+     * storage makes cheap, in the one code path whose input size the product does not choose.
+     *
+     * <p><strong>{@link ReportStore} deliberately does not get this.</strong> The two ports are two
+     * types precisely so they can differ: nothing clones a generated report, and a method on a port
+     * with no caller is a shape the next reader has to work out the purpose of. Their bodies are
+     * still one class — {@code FilesystemBlobStore} carries the implementation and only this port
+     * exposes it.
+     *
+     * <p><strong>Why a reference copy is not an option, stated because plan §6v asks for one.</strong>
+     * §6v's clone table says attachments come across "by reference, not byte copy". Two
+     * {@code attachment} rows sharing one {@code storage_key} means deleting either one deletes the
+     * bytes the other names — {@link #delete} is keyed and holds no reference count, and no caller
+     * can acquire one without this interface learning what a row is (see the header). The other row
+     * then renders as a file that 404s, with nothing having failed. So the choice was a byte copy or
+     * nothing, and §6v's stated preference is the one option that is wrong here.
+     *
+     * @return {@code false} when {@code from} names nothing, so a caller can skip an already-orphaned
+     *         row rather than creating a second one. Not an exception: the write ordering this
+     *         package documents produces exactly that orphan on purpose, and a clone must not turn
+     *         one operator's missing file into two.
+     */
+    boolean copy(String from, String to);
 }

@@ -96,6 +96,57 @@ class FilesystemBlobStoreTest {
                 .hasMessageContaining("report");
     }
 
+    @Test
+    @DisplayName("copy duplicates the bytes and leaves the source alone — §129's clone")
+    void copiesBytes() throws IOException {
+        FilesystemBlobStore store = new FilesystemBlobStore(root.toString(), "evidence");
+        String from = UUID.randomUUID() + "/" + UUID.randomUUID();
+        String to = UUID.randomUUID() + "/" + UUID.randomUUID();
+        byte[] bytes = "the spec".getBytes(StandardCharsets.UTF_8);
+
+        store.put(from, bytes);
+        assertThat(store.copy(from, to)).isTrue();
+
+        try (StoredBlob copy = store.open(to).orElseThrow()) {
+            assertThat(copy.stream().readAllBytes()).isEqualTo(bytes);
+        }
+
+        // The whole reason a clone copies rather than shares a key: deleting either must not take
+        // the other's bytes. A reference copy is indistinguishable from this until somebody deletes.
+        store.delete(to);
+        assertThat(store.exists(from)).isTrue();
+    }
+
+    @Test
+    @DisplayName("copying a key that names nothing reports false rather than throwing")
+    void copyingAnAbsentKeyIsNotAnError() {
+        FilesystemBlobStore store = new FilesystemBlobStore(root.toString(), "evidence");
+        String to = UUID.randomUUID().toString();
+
+        // The orphan the rows-first ordering produces on purpose. The caller skips the row instead
+        // of creating a second one that also 404s, so this must be an answer and not an exception.
+        assertThat(store.copy(UUID.randomUUID().toString(), to)).isFalse();
+        assertThat(store.exists(to))
+                .as("and nothing was written at the destination on the way to saying no")
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("copy refuses a traversal on EITHER key — including the destination")
+    void copyGuardsBothEnds() {
+        FilesystemBlobStore store = new FilesystemBlobStore(root.toString(), "evidence");
+        String key = UUID.randomUUID().toString();
+        store.put(key, new byte[] {1});
+
+        assertThatThrownBy(() -> store.copy("../escaped", key))
+                .isInstanceOf(IllegalArgumentException.class);
+        // The half a reader checking only "is the source one of ours" would miss, and the dangerous
+        // one: this is the end that WRITES.
+        assertThatThrownBy(() -> store.copy(key, "../escaped"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("evidence");
+    }
+
     /**
      * The two adapters are four delegating methods each, and delegation is the kind of thing that is
      * right by inspection and wrong by omission. Driving both through their own port proves the
@@ -124,6 +175,13 @@ class FilesystemBlobStoreTest {
             assertThatThrownBy(() -> store.put("../escaped", new byte[] {1}))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("evidence");
+
+            // The fifth method, and the one only this port has — delegation proven on the adapter
+            // that actually exposes it.
+            String target = UUID.randomUUID().toString();
+            store.put(key, "bytes".getBytes(StandardCharsets.UTF_8));
+            assertThat(store.copy(key, target)).isTrue();
+            assertThat(store.exists(target)).isTrue();
         }
 
         @Test

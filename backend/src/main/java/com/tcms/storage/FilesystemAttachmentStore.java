@@ -52,4 +52,9 @@ class FilesystemAttachmentStore implements AttachmentStore {
     public boolean exists(String key) {
         return blobs.exists(key);
     }
+
+    @Override
+    public boolean copy(String from, String to) {
+        return blobs.copy(from, to);
+    }
 }

@@ -115,6 +115,41 @@ public class Attachment {
         return create(companyId, AttachmentOwner.CASE, caseId, storageKey, upload, userId, now);
     }
 
+    /**
+     * The same file on a <em>different</em> case — §129's clone, and the one factory that copies a
+     * row rather than describing an upload.
+     *
+     * <p><strong>The checksum is copied, not recomputed, and that is the whole reason this is not a
+     * {@code BlobUpload} round trip.</strong> Rebuilding an upload would mean reading the bytes into
+     * heap purely to hash them — every byte of every file, on a path whose input size the product
+     * does not choose — and it would hash <em>the bytes as they are now</em>. If the source blob has
+     * silently corrupted since it was stored, its recorded checksum already disagrees with it; a
+     * recomputed one on the copy would <em>agree</em>, so the clone would carry a fresh attestation
+     * that corrupt bytes are correct and the corruption would survive exactly one clone. Carrying
+     * the original forward keeps both rows saying the same true thing.
+     *
+     * <p>{@code createdBy} is the <strong>cloner</strong> and {@code createdAt} is now: this row is
+     * a new file on a new case, and attributing it to whoever uploaded the original would put a name
+     * against a file that person has never seen.
+     */
+    public static Attachment copyForCase(
+            Attachment source, UUID caseId, String storageKey, UUID userId, Instant now) {
+
+        Attachment attachment = new Attachment();
+        attachment.id = UUID.randomUUID();
+        attachment.companyId = source.companyId;
+        attachment.ownerType = AttachmentOwner.CASE.name();
+        attachment.ownerId = caseId;
+        attachment.storageKey = storageKey;
+        attachment.filename = source.filename;
+        attachment.contentType = source.contentType;
+        attachment.sizeBytes = source.sizeBytes;
+        attachment.checksum = source.checksum;
+        attachment.createdAt = now;
+        attachment.createdBy = userId;
+        return attachment;
+    }
+
     /** A file on a documentation page — {@code documentation.DocPageAttachmentService}'s. */
     public static Attachment forDocPage(
             UUID companyId, UUID pageId, String storageKey, BlobUpload upload, UUID userId,
@@ -133,8 +168,13 @@ public class Attachment {
     }
 
     /**
-     * The one place an {@code owner_type} string is written, and the five factories above are the
-     * one place each is <em>chosen</em>. No call site anywhere spells one — the property §125 said
+     * The one place an {@code owner_type} string is written for an upload, and the five factories
+     * above are the one place each is <em>chosen</em>. {@code copyForCase} spells {@code CASE} for
+     * itself for the same reason it does not route through here — it has a checksum already, and a
+     * shared body would have to take one as a parameter and would then be a factory that lets a
+     * caller assert any digest it likes about bytes it never read.
+     *
+     * <p>No call site anywhere spells an owner type — the property §125 said
      * made the module extraction mechanical, kept deliberately as the owner set triples.
      */
     private static Attachment create(

@@ -976,3 +976,43 @@ classes). **No migration** — every column has been there since M0.
 not apply to that path — RLS would still cover it, and using one layer where both are available is
 how a layered defence quietly becomes a single point. Nothing in the suite can see the difference,
 which is exactly why it is written down.
+
+---
+
+## §129 phase 1 — cloning a case (M3 #59, decision round 3 step 8's second half)
+
+Added 2026-08-08. `POST /projects/{p}/cases/{c}/clone`, `AttachmentStore.copy` as a fifth port
+method, and `Attachment.copyForCase`. Assertions live in `CaseCloneEndpointTest` (23 tests across
+five nested classes) and `FilesystemBlobStoreTest` (3 new). **No migration.**
+
+> **NONE RUN**, per §65. **`CL-1` and `CL-6` are the two worth running first**, and for opposite
+> reasons: `CL-1` is invisible to every other test in the class (a reference copy passes all of
+> them, and fails the first time somebody deletes), while `CL-6` is the rule the code found by
+> refusing to compile the plan.
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| CL-1 | `copyAttachments` reuses the source's `storageKey` instead of allocating a fresh one — the literal reading of §6v's "by reference, not byte copy" | **The mutation of this slice.** Two rows over one key; `AttachmentStore.delete` is keyed and holds no reference count, so removing either file destroys the other's bytes and the survivor renders as an attachment that 404s with nothing having failed. Should redden `Files.deletingTheClonesFileLeavesTheSourcesReadable` **and nothing else** — `theFilesAreCopied` still sees a row, a filename and a checksum. | ⬜ NOT RUN |
+| CL-2 | `copyAttachments` drops the `store.exists` guard and copies unconditionally | A source row whose bytes are already gone is cloned into a second row that also 404s — one operator incident becomes two, and the second is untraceable to the first. Should redden `Files.anOrphanedFileIsNotCloned`. | ⬜ NOT RUN |
+| CL-3 | `Attachment.copyForCase` recomputes the checksum from the copied bytes instead of carrying the source's | Silent corruption laundered: a source blob that has rotted disagrees with its recorded checksum, and the clone would carry a *fresh* attestation that the rotten bytes are correct. Reddens the checksum assertion in `Files.theFilesAreCopied` only when the bytes differ, so **on today's fixture it reddens nothing** — recorded as a decision to defend rather than a mutation with an expected red, because nothing in the suite corrupts a blob. | ⬜ NOT RUN |
+| CL-4 | `derive` passes `step.getId()` through instead of `null` | Every `step_result` recorded against the source's steps follows them onto a case nobody has run. Should redden `Copying.theStepsAreNewRows` — and note the request would *also* be refused by the create path's empty adoptable-id set, so the interesting variant is stripping the ids **and** widening that set. | ⬜ NOT RUN |
+| CL-5 | `derive` copies `source.getAutomationKey()` | Either a constraint violation on `test_case_automation_key_unique`, or — with uniqueness relaxed — an ingested result matching two cases (§117). Should redden `Stripping.theAutomationKeyIsNotCopiedAndTheStatusIs` on its first assertion. | ⬜ NOT RUN |
+| CL-6 | `clonedAutomationStatus` returns its argument unchanged | **The rule the plan did not have.** `CaseEdit.validate` refuses `AUTOMATED` with no key, so every clone of an automated case answers 400 — the two documented rules ("copy the status", "never copy the key") are jointly unsatisfiable and neither document says so. Should redden `Stripping.theAutomationKeyIsNotCopiedAndTheStatusIs` **and** every test whose fixture case is automated, which here is most of the class. | ⬜ NOT RUN |
+| CL-7 | `clonedAutomationStatus` maps *every* status to `TO_BE_AUTOMATED` | The over-correction, and it says something false: a `NOT_AUTOMATABLE` case carries a written reason it cannot be automated, and the clone would claim it is merely pending. Should redden `Stripping.theOtherStatusesSurvive`. | ⬜ NOT RUN |
+| CL-8 | `cloneCase` writes the rows itself instead of delegating to `CaseCreateService` | The design, inverted — a third definition of a legal case beside `CaseEdit` and the bulk reconstruction. Cannot be expressed as a one-line mutation, so it is recorded as **the shape to defend in review**: the observable symptoms are a clone that skips validation, one that is created `APPROVED`, and one with no version row. `Stripping.theCloneIsADraftEvenWhenTheSourceIsApproved` and `theCloneIsANewAggregate` are what would catch it. | ⬜ NOT RUN |
+| CL-9 | `cloneCase` gates on `case:edit` instead of leaving the gate to the create path | A Test Engineer who may edit but not create can manufacture cases; more importantly the refusal message would name the wrong key. Should redden `Gates.aViewerCannotClone` only if Viewer holds neither — it does not, so the honest variant is gating on `project:read`, which reddens it. | ⬜ NOT RUN |
+| CL-10 | `cloneCase` resolves the source with `cases.findById` instead of `readVisible` + `findLiveInProject` | `/projects/{granted}/cases/{ungranted}` clones a case from a project the caller was never given, through a project id they were — and the clone lands in the project they *can* read, so the content is exfiltrated in full. Should redden `Gates.theSecondPathSegmentIsGatedToo` and `anotherCompanysCaseIsInvisible`. | ⬜ NOT RUN |
+| CL-11 | The `Replayed` arm falls through to `copyAttachments` and `recordProvenance` | A retry attaches a second identical copy of every file to a case that already has them, and writes a second provenance row, under a 200. The create is idempotent; the file copy is not part of it. Should redden the attachment-count assertion in `Replay.aRetriedIntentClonesOnce`. | ⬜ NOT RUN |
+| CL-12 | `recordProvenance` is deleted, on the argument that `case.created` already records the creation | §6v's `clonedFrom` disappears and "where did this case come from" becomes unanswerable — the created row is identical to an ordinary create's. Should redden `Replay.theTrailSaysWhereItCameFrom`. | ⬜ NOT RUN |
+| CL-13 | `recordProvenance` records the source's **id** and not its **key** | The id is what the audit row's target column already carries; the key is what a reader recognises a case by and the one thing the id does not tell them. Should redden the first assertion of `theTrailSaysWhereItCameFrom`. | ⬜ NOT RUN |
+| CL-14 | `derive` passes `request.suiteId()` straight through, without the null fallback | A clone with no explicit destination lands in no suite (or fails validation), rather than beside the case it was copied from. Should redden `Copying.theSuiteDefaultsToTheSources`. | ⬜ NOT RUN |
+| CL-15 | `derive` sets `changeComment` to `"Cloned from " + key` | It is hashed, so the next ordinary save — which sends no comment — differs by the comment alone and writes a version whose diff is empty. Reddens nothing in this class; `CaseVersionEndpointTest` is where a second empty version would show. **Recorded as a decision to defend.** | ⬜ NOT RUN |
+| CL-16 | `AttachmentStore.copy` resolves only the source key and writes the destination unresolved | The traversal guard's *writing* end — the dangerous one. Should redden `FilesystemBlobStoreTest.copyGuardsBothEnds` on its second assertion. | ⬜ NOT RUN |
+| CL-17 | `FilesystemBlobStore.copy` throws instead of returning `false` for an absent source | Turns the orphan the write ordering deliberately produces into a 500 on the clone, so one unreadable file makes the whole case uncopyable. Should redden `copyingAnAbsentKeyIsNotAnError` and `Files.anOrphanedFileIsNotCloned`. | ⬜ NOT RUN |
+| CL-18 | `copy` is implemented in `CaseCloneService` as `open()` then `put()` rather than on the port | Correct today and wrong for ever after: every byte of every file through the JVM heap, and the one operation an S3 adapter makes free (`CopyObject`) is foreclosed. Reddens nothing — it is a **shape**, not a behaviour, which is why it is written down. | ⬜ NOT RUN |
+
+**Not a mutation, recorded as an observation:** `CaseConditionOptout` has no writer anywhere in
+`src/main`, so a clone has no opt-outs to copy and cannot be tested for copying them. When that
+table gets a writer, the rule is that a clone landing in the **source's** suite carries the opt-outs
+whose `suite_condition` belongs to that suite and one landing elsewhere carries none — one rule
+covering both cases, and it needs a row here the day the writer lands.

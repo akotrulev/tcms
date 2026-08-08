@@ -73,7 +73,9 @@ public class CaseController {
     private final CaseBulkService bulk;
     private final CaseQuarantineService quarantine;
     private final CaseDraftService drafts;
+    private final CaseCloneService clones;
 
+    @SuppressWarnings("checkstyle:ParameterNumber")
     public CaseController(
             CaseService search,
             CaseDetailService detail,
@@ -83,7 +85,8 @@ public class CaseController {
             CaseDeleteService deletion,
             CaseBulkService bulk,
             CaseQuarantineService quarantine,
-            CaseDraftService drafts) {
+            CaseDraftService drafts,
+            CaseCloneService clones) {
         this.search = search;
         this.detail = detail;
         this.history = history;
@@ -93,6 +96,7 @@ public class CaseController {
         this.bulk = bulk;
         this.quarantine = quarantine;
         this.drafts = drafts;
+        this.clones = clones;
     }
 
     /**
@@ -250,6 +254,55 @@ public class CaseController {
                     .body(created.view());
             // Not 201, and not a Location either: nothing was created by THIS request.
             case CaseCreateService.Outcome.Replayed replayed -> ResponseEntity.ok(replayed.view());
+        };
+    }
+
+    /**
+     * Clones a case — plan §6v, decision round 3 #59.
+     *
+     * <h2>The same three status codes the create above answers, for the same reasons</h2>
+     *
+     * <p>201 with a {@code Location} for a new case, 200 with no {@code Location} for a replay of an
+     * intent that already cloned, and a 400 whose field errors come from the create path untouched —
+     * because {@link CaseCloneService} <em>is</em> the create path with a derived body. A blank
+     * {@code title} therefore lands on the same input with the same sentence it would on New.
+     *
+     * <h2>Why this is a {@code POST} on the source and not a flag on the create</h2>
+     *
+     * <p>{@code POST /cases} with a {@code cloneOf} field would make the create's request schema
+     * carry a field that changes the meaning of every other field on it — send both a {@code title}
+     * and a {@code cloneOf} and it is ambiguous which of the source's fields survive. The source
+     * belongs in the path, where it is the thing being acted on.
+     *
+     * <h2>403 versus 404, one more time</h2>
+     *
+     * <p>An unreachable project and a case that is not in it are both a bodiless 404. The 403 is
+     * reached only after the caller has been shown the case they are cloning, and it means what it
+     * says: {@code case:create} is not held here. Viewer is the role it refuses.
+     */
+    @PostMapping("/{caseId}/clone")
+    public ResponseEntity<Object> cloneCase(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID caseId,
+            @RequestHeader(name = IDEMPOTENCY_KEY, required = false) String idempotencyKey,
+            @RequestBody CaseCloneRequest request) {
+
+        CaseCloneService.Outcome outcome = clones.cloneCase(
+                UUID.fromString(jwt.getSubject()), projectId, caseId, request,
+                trimToNull(idempotencyKey));
+
+        return switch (outcome) {
+            case CaseCloneService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
+            case CaseCloneService.Outcome.Forbidden ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiProblem.forbidden(
+                            "You do not have permission to create test cases in this project."));
+            case CaseCloneService.Outcome.Invalid invalid ->
+                    ResponseEntity.badRequest().body(ApiProblem.validation(invalid.errors()));
+            case CaseCloneService.Outcome.Created created -> ResponseEntity
+                    .created(location(projectId, created.view().id()))
+                    .body(created.view());
+            case CaseCloneService.Outcome.Replayed replayed -> ResponseEntity.ok(replayed.view());
         };
     }
 
