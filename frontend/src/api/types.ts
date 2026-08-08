@@ -235,6 +235,25 @@ export type IngestionStatus = S['IngestionStatus'];
 export type AutomationMapping = S['AutomationMapping'];
 export type AutomationMappingInput = S['AutomationMappingInput'];
 
+/**
+ * Generated cases waiting for a person (§138, plan §6w.6).
+ *
+ * **`AiProposalSummary` and `AiProposal` are two types on purpose**, `IngestionJobSummary`'s split
+ * for its reason: the queue's rows carry no payload and no grounding, because fifty rows would
+ * otherwise be fifty full test cases and fifty critic reports for a screen on which the reader is
+ * choosing which one to open.
+ *
+ * **`verdict` and `verdictSource` are two fields and every render must carry both.** The first is
+ * what the proposer *claimed*; the second is who checked, and it is never anything TCMS verified
+ * itself — §6w.1a. A chip showing "Grounded" with no provenance shows a claim as a finding, which
+ * is the inflation the split exists to prevent.
+ */
+export type AiProposalSummary = S['AiProposalSummary'];
+export type AiProposal = S['AiProposal'];
+export type ProposalStatus = S['ProposalStatus'];
+export type ProposalVerdict = S['ProposalVerdict'];
+export type VerdictSource = S['VerdictSource'];
+
 // history & reporting
 export type CaseHistorySummary = S['CaseHistorySummary'];
 export type ExecutionHistoryEntry = S['ExecutionHistoryEntry'];

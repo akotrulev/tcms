@@ -84,6 +84,17 @@ export const keys = {
    */
   ingestions: (p: string) => ['projects', p, 'ingestions'] as const,
   ingestion: (p: string, id: string) => ['projects', p, 'ingestions', id] as const,
+  /**
+   * The review queue (§138), keyed by the status it is showing.
+   *
+   * The status is IN the key for the reason every filter is: accepting a proposal invalidates the
+   * whole `['projects', p, 'ai-proposals']` subtree, and the pending list and the accepted list
+   * are two answers that must not be able to land in each other's cache entry — the row just
+   * decided is absent from one and present in the other, which is exactly the pair a shared key
+   * would let cross.
+   */
+  aiProposals: (p: string, status: string) => ['projects', p, 'ai-proposals', status] as const,
+  aiProposal: (p: string, id: string) => ['projects', p, 'ai-proposals', 'one', id] as const,
   automationMappings: (p: string) => ['projects', p, 'automation-mappings'] as const,
   docPages: (p: string) => ['projects', p, 'doc-pages'] as const,
   docPage: (p: string, id: string) => ['projects', p, 'doc-pages', id] as const,

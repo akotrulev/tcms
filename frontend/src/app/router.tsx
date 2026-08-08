@@ -76,6 +76,12 @@ const ReportsPage = lazy(() =>
 const IngestionsPage = lazy(() =>
   import('../features/ingestion/IngestionsPage').then((m) => ({ default: m.IngestionsPage })),
 );
+const ProposalsPage = lazy(() =>
+  import('../features/proposals/ProposalsPage').then((m) => ({ default: m.ProposalsPage })),
+);
+const ProposalPage = lazy(() =>
+  import('../features/proposals/ProposalPage').then((m) => ({ default: m.ProposalPage })),
+);
 const IngestionJobPage = lazy(() =>
   import('../features/ingestion/IngestionJobPage').then((m) => ({ default: m.IngestionJobPage })),
 );
@@ -444,6 +450,33 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <IngestionJobPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            Generated cases (§138). Under the project segment like every other content screen, and
+            the path says `generated-cases` where the API says `ai-proposals`: the URL is read by
+            people, and what is waiting there is a case somebody's agent wrote. `ai-proposal` is the
+            table's name and belongs in the contract, not in a breadcrumb.
+
+            Two routes rather than a dialog, for the ingestion pair's reason — the two endpoints
+            serve different shapes, so opening a proposal is a fetch, and its URL is something a
+            reviewer pastes to whoever owns the agent that filed it.
+          */}
+          <Route
+            path="/projects/:projectId/generated-cases"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <ProposalsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/projects/:projectId/generated-cases/:proposalId"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <ProposalPage />
               </Suspense>
             }
           />

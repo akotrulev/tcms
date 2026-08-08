@@ -2,16 +2,16 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-08 (**§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-08 (**§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `35223d3` (§135 handoff) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `d4c5e03` (§138 phases 2+3) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
-**SCHEMA HEAD IS `V42__suite_and_doc_page_creation_idempotency.sql`; `V43` is next free.** The policy
-count is **still 62**: `V42` adds two *columns* and two partial unique indexes to `suite` and
+**SCHEMA HEAD IS `V43__ai_proposal.sql`; `V44` is next free.** The policy count is **63** — `V43`
+adds `ai_proposal`, the first new policed table since `V38`. Before it, `V42` adds two *columns* and two partial unique indexes to `suite` and
 `doc_page`, both already company-owned and already forced. Before it, `V41` added no table and no
 column either (it flips one seeded `role` row), and `role` / `role_permission` are instance-level
 reference data on the ERD §0.1 exception list, so `V40` added no policy either. Before them,
@@ -24,6 +24,44 @@ and the outbox's table, `CHECK` and partial index have all been in `V1` since M0
 before repeating any claim about it. `ci.yml` still runs **no** backend tests.
 
 ---
+
+## §138 — A CREDENTIAL MAY NOT DECIDE, AND NO PERMISSION CAN SAY SO
+
+`V43`'s `ai_proposal` is where a generated case waits for a person (§6w.6). `AiProposalService`
+files and reads; **`AiProposalDecisionService` decides**, and accept goes through
+`CaseCreateService` — the accept path *is* the create path, so an accepted proposal is
+indistinguishable from a case authored any other way.
+
+- **READ THIS BEFORE TOUCHING EITHER DECISION'S GATE.** `case:create` alone is **not sufficient**:
+  the `Agent` role *holds* `case:create` (WIP plan §2.2 keeps it there because accept needs it), so
+  a permission-only gate lets an agent file a proposal and accept it in two calls. **No permission
+  can express the rule** — a token's set is its owner's set ∩ its role's, so every permission a
+  token holds is one its owner holds. The gate is `case:create` **and**
+  `TokenContext.currentOrNull() == null`, with its own `Outcome.CredentialRefused` and its own copy
+  (telling an agent it lacks a permission is *false* and sends its owner to widen a grant that
+  changes nothing). This is the **third** reader of `TokenContext` outside the permission bound, and
+  the one its header's expiry clause did not anticipate: reading it to **refuse**.
+- **THE CREDENTIAL CHECK RUNS BEFORE THE ROW LOOKUP.** Ordering, not style: after it, an agent
+  learns which proposal ids exist from 404-versus-403. `AP-10` is the row; nothing tests it.
+- **`verdict_source` IS DERIVED AND HAS NO REQUEST FIELD.** `AiProposal.file` computes it from
+  whether a verdict was claimed at all — `NONE` / `EXTERNAL` — and `V43`'s `CHECK` has no
+  `TCMS_VERIFIED`. Two barriers, because one field added "for symmetry" lets any MCP client mint
+  verified coverage (§6w.1a). `AP-1` is the row that keeps them honest.
+- **`suite_id` HAS NO FOREIGN KEY, DELIBERATELY.** It was written with one, failed its own test, and
+  was removed: an FK answers *"is this suite real"* at **file** time as a 500, and that is the
+  question **accept** exists to answer as field errors. The payload is stored **unvalidated** for
+  the same reason — validating twice, a week apart, gives two answers and only the accept-time one
+  creates a case. Do not "fix" either; `AP-4` and `AP-5` are the rows.
+- **TWO ENUM VALUES ARE ABSENT ON PURPOSE** (`V39`'s rule, #50): `verdict_source = TCMS_VERIFIED`
+  (no critic exists to write it) and `status = SUPERSEDED` (nothing displaces a proposal).
+- **`MAX_IDEMPOTENCY_KEY` IS DECLARED EIGHT TIMES NOW.** `AiProposalService` is the eighth and the
+  first whose caller has **no screen at all**; `IdempotencyKeyCapTest.EXPECTED_DECLARATIONS` is 8.
+  The generalisation was re-asked at the count the test exists to force and refused on `V17`'s
+  argument, which is about what the alternative must *store*, not about the count.
+- **Accept passes a synthetic key (`ai-proposal:<id>`) to `CaseCreateService`**, so two reviewers
+  accepting at once create one case. `AP-12`: nothing tests the race.
+- **`ProposalRejection.note` is required-and-nullable.** `ContractConventionTest` refused the schema
+  without a `required` array, and the fix is the better shape — one wire form instead of three.
 
 ## §136 — SIX CREATE ENDPOINTS CARRY `Idempotency-Key`, AND THE CAP IS COPIED SEVEN TIMES
 

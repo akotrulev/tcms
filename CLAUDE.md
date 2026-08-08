@@ -107,7 +107,7 @@ npm run dev          # http://localhost:5173 — proxies /api to localhost:8080
                      # sign in by redeeming the /accept-invitation link provision-company prints
 npm run build        # THE gate: tsc -b + vite build
 npm run lint         # oxlint, must stay at 0 warnings — a gate, not advisory
-npm run test:run     # Vitest + RTL, 954 tests — also a gate
+npm run test:run     # Vitest + RTL, 1203 tests — also a gate
 npm run gen:api      # regenerate src/api/schema.d.ts after ANY openapi.yaml change
                      # — AND packages/client's copy; the two are byte-identical and a test compares them
 ```
@@ -146,7 +146,7 @@ version floor, already pinned via `systemProperty("api.version", …)` in `build
 TypeScript 6 and the tool peer-requires 5.x. Do not "fix" this by downgrading TypeScript.
 
 ~~No frontend test runner is installed yet (Vitest + RTL is the not-yet-started Phase 4).~~ →
-**superseded.** Vitest + RTL are installed and green: 954 tests across 70 files, `npm run test:run`.
+**superseded.** Vitest + RTL are installed and green: 1203 tests across 92 files, `npm run test:run`.
 Config in `frontend/vitest.config.ts`, shared helpers in `src/test/`.
 
 ### Driving resilience behaviour (dev only, from the browser console)

@@ -17,6 +17,7 @@ import {
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import AssignmentIndOutlinedIcon from '@mui/icons-material/AssignmentIndOutlined';
 import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined';
+import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
@@ -184,6 +185,26 @@ function projectNav(projectId: string): { heading: string; items: NavItem[] }[] 
           label: 'CI ingestion',
           to: `${p}/ingestions`,
           icon: <CloudUploadOutlinedIcon fontSize="small" />,
+        },
+      ],
+    },
+    {
+      heading: 'Authoring',
+      items: [
+        /*
+          §138. Its own heading rather than under Repository, because what is here is NOT in the
+          repository — that is the entire point of the boundary — and a rail entry sitting beside
+          `Test cases` would suggest otherwise before anybody clicked it.
+
+          Ungated, like every item in this rail. The queue is readable by anyone who may read cases;
+          the two decisions cost `case:create` and are disabled with a reason on the proposal itself
+          (§31). Hiding the entry would teach a Viewer that this instance has no generation at all,
+          which is the same lie an empty list would tell.
+        */
+        {
+          label: 'Generated cases',
+          to: `${p}/generated-cases`,
+          icon: <AutoAwesomeOutlinedIcon fontSize="small" />,
         },
       ],
     },

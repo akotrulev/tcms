@@ -1623,3 +1623,51 @@ in the pass, say so and skip it; it is the only row here that cannot be reached 
 - **No row covers an existing grant still *working*.** A pre-`V41` grant keeps conferring its
   permissions, and seeing that means signing in as its holder and posting a result — the ingestion
   path, not an administration screen. Recorded as a gap rather than driven here.
+
+---
+
+## §138 — the review queue for generated cases (MCP plan phase 6, `V43`)
+
+**Lane:** the **authoring** lane, and it needs a fixture no other lane authors — **at least three
+proposals**, because every row here is about telling two of them apart. The pass's charter creates
+them the only way the product can: `POST /projects/{p}/ai-proposals` with an **`Agent` token**
+(§133's `A3-24` issues one), three times.
+
+```
+# 1 — nobody checked it, and no evidence
+{"testCase": {"title": "Refund a settled payment", "stepFormat": "STRUCTURED",
+              "priority": "MEDIUM", "automationStatus": "MANUAL", "suiteId": "<a live suite>",
+              "steps": [{"action": "Open the order", "expectedResult": "It opens"}]}}
+
+# 2 — the agent asserts its own work is grounded, with evidence
+{"testCase": {…as above, different title…}, "verdict": "GROUNDED",
+ "grounding": {"steps": [{"n": 1, "rejected": "invented an API"}],
+               "unverified_claims": ["the refund window is 30 days"]}}
+
+# 3 — NAMES A SUITE ID THAT DOES NOT EXIST. This is the one that matters:
+{"testCase": {"title": "Refund after chargeback", "suiteId": "<a random uuid>"}}
+```
+
+The third is filed happily and **cannot be accepted** — that asymmetry is the slice's central trade
+and `A4-4` is the row that observes it in a browser.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `A4-1` | **Generated cases** in the rail, with the queue empty (before filing anything) | The empty state names the **MCP server / `tcms` CLI and the `Agent` role** rather than apologising. This is the only place the product explains that generation exists at all, and most projects will never leave this state. |
+| `A4-2` | The queue with all three filed | Three rows. Every row shows the verdict **and, beside it in plain text, who claimed it** — *"Reported by the connecting agent"* / *"Nobody has checked this"*. **A row showing only a chip is the defect**; §6w.1a's whole argument is a claim rendered as a finding. Proposal 2 must not be green. |
+| `A4-3` | The same rows, looking at **Filed by** | The robot marker on all three (an `Agent` token filed them) **and the person's name beside it** — the token's owner. A row naming only a token, or only a robot, breaks §6j's *"Ana's agent, holding Ana's grants, did it"*. |
+| `A4-4` | Open proposal **3** and press **Accept** | A **400 rendered in full, in the panel** — the field name `suiteId` and its message — with **Reject still enabled beside it**. Not a toast, and not a disabled screen: this is the designed outcome for a payload stored before the project moved, and the reviewer's next move is Reject. |
+| `A4-5` | Reject proposal 3 with a note, then reload | Status `Rejected`, the note shown with who rejected it. The row is **still there** under the Rejected tab — §6w.6 keeps it so the rejection rate is answerable. Press Reject again from the URL: the **first note survives**. |
+| `A4-6` | Open proposal **2** and read the grounding panel | The JSON shown **as preformatted text**, verbatim, with the sentence saying TCMS did not produce it and does not check it. Nothing from that payload is rendered as markup or as a product-styled component. |
+| `A4-7` | Accept proposal 2 | Lands on the **new case**, which is `DRAFT`, has a real `TC-n` key, and is **owned by the accepting person** — not by the proposal's author and not by a robot. The case's history shows `case.created` like any other. |
+| `A4-8` | Go back to **Generated cases**, Accepted tab | Proposal 2 is there, naming the case with a working link. The **Waiting** tab is down to one row. Press Accept again from the accepted proposal's URL: it is gone from the screen — no decision panel on a decided proposal. |
+| `A4-9` | Sign in as a **Viewer** and open the queue and a proposal | Both readable. **Accept and Reject are disabled with a tooltip**, not hidden (§31). A Viewer who sees no buttons learns the product cannot do this. |
+| `A4-10` | Paste `?status=NONSENSE` onto the queue URL | The **Waiting** list, no error. A typo in a pasted link must not become a 400 the reader cannot see or fix. |
+
+**Not driven, and why:**
+
+- **The credential refusal (`AP-9`) has no browser row and cannot have one.** The rule is that an
+  API token may not accept or reject, and this SPA has no token-authenticated session — there is no
+  caller in a browser that the refusal applies to. It is driven from `curl` with the `Agent` token
+  instead, and that is a **mutation-queue** row, not a browser one.
+- **`SUPERSEDED` and `TCMS_VERIFIED` have no rows** because neither value exists. See `V43`.

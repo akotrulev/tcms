@@ -22,6 +22,8 @@ import type {
   LifecycleStatus,
   PlanStatus,
   Priority,
+  ProposalStatus,
+  ProposalVerdict,
   ReportFormat,
   ReportJobStatus,
   ReviewState,
@@ -30,6 +32,7 @@ import type {
   RunStatus,
   StatusKind,
   StepFormat,
+  VerdictSource,
   WorkItemStatus,
 } from '../api/types';
 
@@ -195,6 +198,64 @@ export const ingestionStatusLabels = {
   COMPLETED: 'Ingested',
   FAILED: 'Failed',
 } as const satisfies Record<IngestionStatus, string>;
+
+/**
+ * A proposal's three states (§138).
+ *
+ * Three, not §6w.6's four: `SUPERSEDED` has no writer and is deliberately absent from the
+ * contract's enum, so it is absent here too. If it ever arrives, this object stops compiling —
+ * which is the whole point of the `satisfies` on every map in this file.
+ */
+export const proposalStatusLabels = {
+  PENDING: 'Waiting for review',
+  ACCEPTED: 'Accepted',
+  REJECTED: 'Rejected',
+} as const satisfies Record<ProposalStatus, string>;
+
+/**
+ * What the proposer CLAIMED about grounding.
+ *
+ * `UNVERIFIED` is worded as an instruction rather than as a state, because it is one: §6w.6 asks
+ * for *"not independently checked — review against the spec"*, which is exactly what a reviewer
+ * needs to be told and exactly what a human-only workflow has always required. Labeling it
+ * "Unverified" alone would read as a defect in the proposal rather than as the reviewer's job.
+ */
+export const proposalVerdictLabels = {
+  GROUNDED: 'Grounded',
+  PARTIAL: 'Partly grounded',
+  HALLUCINATED: 'Contains invented content',
+  UNVERIFIED: 'Not independently checked',
+} as const satisfies Record<ProposalVerdict, string>;
+
+/**
+ * WHO checked — and this map is the reason the verdict is never rendered on its own.
+ *
+ * §6w.1a: an agent's claim is recorded, shown, attributed, and never counted as verified, because
+ * TCMS cannot see that agent's critic, its isolation or its prompt. So `EXTERNAL` is worded as a
+ * report of somebody else's statement — *"the connecting agent reports…"* — and not as a finding.
+ * There is no `TCMS_VERIFIED` in the contract yet, and when it arrives it will be the only value
+ * here that may be worded as a fact.
+ */
+export const verdictSourceLabels = {
+  NONE: 'Nobody has checked this',
+  EXTERNAL: 'Reported by the connecting agent',
+} as const satisfies Record<VerdictSource, string>;
+
+/**
+ * The verdict chip's colour, keyed on the verdict alone — and every one of them is a NEUTRAL or a
+ * warning tone. None is `--color-passed`.
+ *
+ * That is deliberate: green is what this product uses for a fact it verified, and a proposal's
+ * verdict is at best a claim by somebody else's critic. A grounded proposal rendered in the same
+ * green as a passing test would make the two look like the same kind of statement on a screen whose
+ * entire job is telling them apart.
+ */
+export const proposalVerdictColors = {
+  GROUNDED: 'var(--color-info)',
+  PARTIAL: 'var(--color-warning)',
+  HALLUCINATED: 'var(--color-failed)',
+  UNVERIFIED: 'var(--color-draft)',
+} as const satisfies Record<ProposalVerdict, string>;
 
 /** Beside the labels, so a status cannot be worded in one place and coloured in another. */
 export const runStatusColors = {

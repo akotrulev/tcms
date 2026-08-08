@@ -2,14 +2,47 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-08 (**§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
+**Last verified:** 2026-08-08 (**§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
 the one doc-block renderer and the editor's three new types; §126 phase 4 — the three attachment
 surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the flake panel and the
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `7747c07` (§137 phase 3) (trust the
+**Baseline commit:** `d4c5e03` (§138 phases 2+3) (trust the
 body over the header and re-grep what a later commit could have moved).
+
+## §138 — A VERDICT MAY NEVER BE RENDERED WITHOUT ITS SOURCE
+
+`src/features/proposals/` — the review queue (`ProposalsPage`) and the decision screen
+(`ProposalPage`), at **`/projects/:projectId/generated-cases`**. The route says
+`generated-cases` where the API says `ai-proposals`: URLs are read by people, and `ai_proposal` is
+the table's name.
+
+- **`VerdictChip` takes BOTH props and there is no way to render one without the other.** That is
+  the enforcement, not a convention: §6w.1a says an agent's claim is recorded, shown, attributed and
+  **never counted as verified**, and a chip reading "Grounded" beside no provenance is a claim
+  promoted to a finding on the one screen where people skim. The source is rendered as **text**, not
+  only as a tooltip — a tooltip is invisible to a skimmer, who is exactly the reader at risk.
+- **`proposalVerdictColors` HAS NO GREEN.** `--color-passed` is what this product uses for something
+  it verified; a proposal's verdict is somebody else's critic's opinion. Adding green here makes the
+  two look like the same kind of statement.
+- **A 400 FROM ACCEPT IS THE DESIGNED OUTCOME, NOT AN ERROR.** The payload was stored unvalidated,
+  so accept is where "is this a legal case" is finally asked, against the project as it is *now*.
+  Both mutations carry `meta: { handled: true }` and `ProposalPage` renders the field errors **in
+  full, in the panel, with Reject still enabled beside them** — the reviewer's next move. A toast
+  here would say "something went wrong" over a message that says exactly what is wrong.
+- **`testCase: null` is a real state**, not a failure: a payload stored before a field left the
+  contract. The proposal still renders and is still rejectable, which is the only decision left.
+- **The SPA cannot file a proposal, and that is the feature.** Filing is an agent's arm over MCP or
+  the CLI. There is also **no client-side gate for the credential refusal** — this app has no
+  token-authenticated session, so the caller the rule applies to cannot exist here.
+- **Test trap, and it cost a red run:** `findByTestId` resolves the moment a gated control exists,
+  and `PermissionGate` renders it **disabled** while `/me/permissions` is in flight — then swaps it
+  for a **different node** when the answer lands. A captured reference stays disabled for ever.
+  `ProposalPage.test.tsx`'s `enabled()` helper re-queries inside `waitFor`; copy it rather than
+  re-deriving it.
+- **An inline `?status=` in a query hook fails `contractOperations.test.ts`**, which reads the
+  literal path out of the source. Use `qs({ … })`.
 
 ## §137 — THERE IS A THIRD TYPESCRIPT STACK NOW, AND IT IS NOT THIS ONE
 

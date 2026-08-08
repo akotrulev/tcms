@@ -155,6 +155,12 @@ export {
   useIngestions,
 } from './ingestion';
 export {
+  useAcceptProposal,
+  useAiProposal,
+  useAiProposals,
+  useRejectProposal,
+} from './proposals';
+export {
   isJobFinished,
   TERMINAL_JOB_STATES,
   useDashboard,
