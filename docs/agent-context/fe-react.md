@@ -2,14 +2,41 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-08 (**§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
+**Last verified:** 2026-08-08 (**§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
 the one doc-block renderer and the editor's three new types; §126 phase 4 — the three attachment
 surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the flake panel and the
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `deefabf` (§129 phase 2 — phase 3 is the commit that follows it) (trust the
+**Baseline commit:** `f822d57` (§133 phase 2) (trust the
 body over the header and re-grep what a later commit could have moved).
+
+## §133 — FOUR SCREENS READ `GET /roles` AND ONLY THREE MAY FILTER ON `assignable`
+
+`Role` gained **`assignable`** and `Role.name`'s enum gained **`Agent`** (V40 — the ceiling an API
+token carries; nobody is ever an Agent). **Test count is 1177 across 90 files**, five added.
+
+- **⚠ THE FILTER IS NOT UNIFORM AND MUST NOT BE MADE SO.** `GrantRoleDialog.grantableRoles`,
+  `RoleReference` (both the Teams & roles and the Project access cards) and `ProjectAccessPage`'s
+  `isEmpty` predicate all drop `assignable === false`. **`IssueTokenDialog.issuableRoles` does
+  not**, and carries a comment refusing the copy: that form is the ONLY place in the product
+  `Agent` can be chosen, so adding the term makes the role unobtainable and changes nothing else on
+  any screen. `IssueTokenDialog.test.tsx` has the assertion that goes red.
+- **`assignable` is a second axis, not a restatement of `scope`.** `Agent` is PROJECT-scope, so
+  every existing scope filter passes it through. `RoleReference`'s own javadoc had already made the
+  argument — a reference card beside a Grant button that will refuse it is mis-teaching — about
+  *scope*, and this is the first role where the two disagree.
+- **`agentSelected` is keyed on `role.name === 'Agent'`**, not on an id: seeded ids are not
+  something the client holds, and this is affordance — `ApiTokenService` is what refuses a null
+  expiry, so being wrong costs a 400.
+- **The Expires pre-fill writes LOCAL wall clock and only into a BLANK field.** `datetime-local`
+  wants the browser's own clock (`toInstant` converts back on submit, so an ISO string here shows
+  a UTC time labelled as the user's), and overwriting a typed date on a re-pick replaces a decision
+  with a default. Both have a test.
+- **`optionNames` in the admin dialog tests LEAVES THE MUI MENU OPEN**, and an open menu makes the
+  rest of the document inert — so a `chooseFrom` after it fails with *"no accessible roles"* on an
+  element the dump plainly shows. `await userEvent.keyboard('{Escape}')` between them. This was the
+  slice's only red run.
 
 ## §129 PHASE 3 — THE THREE CLONE DIALOGS, AND THE FIELD THAT MUST NOT BE PREFILLED
 

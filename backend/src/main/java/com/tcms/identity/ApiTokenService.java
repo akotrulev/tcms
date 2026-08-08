@@ -232,6 +232,9 @@ public class ApiTokenService {
      * a company-bound credential carrying one would be a tier the model does not have — and for
      * {@link Role#COMPANY_MEMBER_ID}, which is a consequence of membership rather than a role
      * anybody chooses.
+     *
+     * <p>{@link Role#AGENT_ID} is accepted here and refused by {@link RoleGrantService} — see
+     * {@code V40} §2 — and it is the one role for which {@code expiresAt} is <em>required</em>.
      */
     private Optional<Map<String, List<String>>> validate(ApiTokenIssueRequest request, Instant now) {
         Map<String, List<String>> errors = new LinkedHashMap<>();
@@ -274,6 +277,24 @@ public class ApiTokenService {
         if (request.expiresAt() != null && !request.expiresAt().isAfter(now)) {
             errors.put("expiresAt", List.of("The expiry is in the past, so the token would be "
                     + "unusable the moment it was issued."));
+        } else if (request.expiresAt() == null && Role.AGENT_ID.equals(request.roleId())) {
+            // THE FIRST PER-ROLE RULE IN THIS PATH, and it inverts the default deliberately rather
+            // than by omission. An open-ended expiry is permitted for every other role for the
+            // reason ApiToken.issue records: a CI credential that dies mid-release is worse than
+            // one an operator revokes on purpose.
+            //
+            // An agent token is the opposite case. It sits on a developer's laptop, inside an MCP
+            // client's configuration or a shell profile, where the realistic end is that nobody
+            // ever revokes it because nobody remembers it exists — and an optional field is a field
+            // nobody fills in. So the credential with the widest write surface in the product is
+            // the one that must state when it stops working.
+            //
+            // Here and not in the form (§2.5): the tcms_ bearer authenticates against /api/*, so a
+            // rule a client enforces is a rule `curl` does not have. The form pre-fills a default
+            // so this is a nudge rather than an obstacle.
+            errors.put("expiresAt", List.of("An agent token has to expire. It lives on somebody's "
+                    + "machine rather than in a pipeline, so choose a date you would be willing to "
+                    + "let it stop working on."));
         }
 
         return errors.isEmpty() ? Optional.empty() : Optional.of(errors);

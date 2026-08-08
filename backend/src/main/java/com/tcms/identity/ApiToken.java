@@ -134,6 +134,11 @@ public class ApiToken {
      * @param companyId   taken from {@link com.tcms.tenancy.CompanyContext}, never from a request
      * @param expiresAt   null for a token that does not expire. Permitted, because a CI token that
      *                    silently stops working mid-release is worse than one an operator revokes.
+     *                    <strong>Not permitted for {@link Role#AGENT_ID}</strong>, where the
+     *                    opposite risk dominates and the entity cannot be the place that says so —
+     *                    see {@link ApiTokenService}'s validate. A per-role rule about what a
+     *                    request may contain is a request rule, and this factory takes what it is
+     *                    given.
      */
     public static ApiToken issue(
             UUID id,

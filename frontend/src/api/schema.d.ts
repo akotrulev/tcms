@@ -5795,6 +5795,11 @@ export interface paths {
          *     `expiresAt` may be omitted, and that is deliberate: a credential that dies mid-release
          *     without anybody deciding to withdraw it is an outage. The withdrawal that *is* a
          *     decision is `DELETE`.
+         *
+         *     **Except for `Agent`, where it is required** (`400` on `expiresAt`). An agent token
+         *     lives on somebody's machine rather than in a pipeline, so the failure the paragraph
+         *     above avoids is not the one that happens — the one that happens is that nobody revokes
+         *     it because nobody remembers it. This is the only per-role rule in this operation.
          */
         post: {
             parameters: {
@@ -9449,7 +9454,8 @@ export interface components {
             projectId: string | null;
             /**
              * Format: date-time
-             * @description Must be in the future when present. Null means it does not expire.
+             * @description Must be in the future when present. Null means it does not expire — **except for an
+             *     `Agent` token, where null is refused**: see the operation description.
              */
             expiresAt: string | null;
         };

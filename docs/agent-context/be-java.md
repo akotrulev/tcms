@@ -2,22 +2,82 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-08 (**§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-08 (**§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `e7326e3` (§131 phase 1) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `f822d57` (§133 phase 2) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
-**SCHEMA HEAD IS STILL `V39__attachment_owner_types.sql`; `V40` is next free.** The policy count is
-unchanged at **62**, and **neither §129 nor §131 carried a migration** — a clone reuses the version
-snapshot (which is why #59 dropped plan *templates*: they need a table), and the outbox's table,
-`CHECK` and partial index have all been in `V1` since M0.
+**SCHEMA HEAD IS `V40__agent_role_and_assignable.sql`; `V41` is next free.** The policy count is
+**still 62**: `role` and `role_permission` are instance-level reference data on the ERD §0.1
+exception list, so `V40` adds no policy. Before it, **neither §129 nor §131 carried a migration** —
+a clone reuses the version snapshot (which is why #59 dropped plan *templates*: they need a table),
+and the outbox's table, `CHECK` and partial index have all been in `V1` since M0.
 
 **The nightly Linux gate is LIVE** (`tests.yml` on `[self-hosted, tcms-lab]`, 01:17 UTC, green since
 2026-08-06) — four documents described it as inert until 2026-08-08. `gh run list --workflow=tests.yml`
 before repeating any claim about it. `ci.yml` still runs **no** backend tests.
+
+---
+
+## §133 — THERE ARE EIGHT ROLE ROWS, AND `assignable` ANSWERS ONE OF THREE QUESTIONS
+
+`V40` seeds **`Agent`** (`Role.AGENT_ID`, `…-000000000008`, PROJECT, `built_in`,
+`assignable = false`) — the ceiling an API token carries for agent access, **Test Engineer minus
+`library:manage`, `case:delete`, `evidence:delete` and `company:read`**, 23 keys. Enumerated once in
+roles spec **§A6a**; `CLAUDE.md` and `README.md` carry the delta sentence, not a fourth copy.
+**`PermissionEvaluator` is unchanged** — the token intersection that already caps a credential is
+the only narrowing point, which is why the ceiling is a role and not validation code.
+
+- **READ THIS BEFORE TOUCHING ANY ROLE CHECK. `role.assignable` is false for TWO rows and they
+  differ everywhere else.** `Company Member` is non-assignable AND non-issuable AND never listed;
+  **`Agent` is non-assignable BUT issuable and MUST be listed.** Five sites compare against a role
+  constant and **only two may read the flag**:
+
+  | Site | After `V40` |
+  |---|---|
+  | `RoleGrantService` grant + revoke | **read `isAssignable()`** |
+  | `AdminDirectoryService:352` (`GET /roles`) | **stays `COMPANY_MEMBER_ID`** — `WHERE assignable` hides `Agent` from the token form |
+  | `AdminDirectoryService:402` (`GET /role-assignments`) | stays — an `Agent` grant cannot exist |
+  | `ApiTokenService.validate` | **stays** — the flag here makes `Agent` unissuable, the one thing it exists for |
+
+  Each of the three has a javadoc/comment refusing the cleanup, and `V40` §2 is the long form.
+  `ApiTokenEndpointTest.theAgentCeilingIsIssuable` is the check that goes red.
+- **`revoke` loads the role to read the flag and `orElse(false)`s** — an unknown role is
+  unrevocable, not revocable. Unreachable behind the FK; recorded as mutation `AG-4`.
+- **`RoleView` gained `assignable`** (contract `required`), and `Role.name`'s closed enum gained
+  `Agent`. `Company Member` is still filtered server-side and is not in the enum.
+- **`SeedDataTest.agentIsTestEngineerMinusThree` derives the delta**, both directions — what Agent
+  drops, and that it adds nothing. A subset check would let a permission a future migration adds to
+  Test Engineer land silently in a credential's ceiling. Also new:
+  `nonAssignableRolesAreExactlyTheTwo`. `sixBuiltInRoles` now expects **eight** rows and
+  `theRoleCatalogueIsWholeAndHasNoWildcard` **seven**.
+- **`Agent`'s `artifact:edit` must reuse Test Engineer's exact `PLAN_SCOPE` spelling** (`V19`), or
+  `noPermissionCarriesTwoDifferentRestrictiveQualifiers` fails — which is that test working.
+  `case:edit` is **`ALL`**, deliberately: editing anyone's case is what the role is for, and
+  `case:delete` is dropped rather than `OWN`-qualified because `OWN` follows `api_token.owner_id`,
+  so the agent would delete what the *human* authored.
+- **No `company:read`, and it is not an oversight**: a token is not a member, so it has no `V15`
+  baseline grant, and a PROJECT-scope role's `company:read` is unreachable from
+  `evaluateCompanyWide` anyway. `automationServiceIsTheSmallestRole` still holds.
+- **Phase 3: `expiresAt` is REQUIRED for an `Agent` token and optional for every other role** —
+  the first per-role rule in `ApiTokenService.validate`. In the service, not the form: the bearer
+  works with `curl`. The form pre-fills 90 days in **local wall clock** (`datetime-local`) and
+  **only into a blank field**.
+- **Frontend: three of four `useRoles()` consumers filter `assignable`, and the fourth must not.**
+  `GrantRoleDialog`, `RoleReference` (both screens) and `ProjectAccessPage`'s `isEmpty` do;
+  **`IssueTokenDialog` does not** and carries a comment saying so. `RoleReference`'s own javadoc
+  had already made the argument — about *scope* — and `Agent` is the first role where the two axes
+  disagree.
+- **NO RED RUN in any of the three phases**, which is unusual enough to state. The one failure was
+  a test of my own: `optionNames` leaves the MUI menu open, so a second `chooseFrom` in the same
+  test finds no accessible combobox. `{Escape}` between them.
+- **Deliberately not done: `Automation Service` is still assignable to a person**, although `V3`'s
+  description has said *"attached to API tokens, never people"* since M0 — §100's rule, eighth
+  sighting. Flipping it is a behaviour change for an existing role with a live-data question
+  (existing grants) and belongs in its own slice.
 
 ---
 

@@ -1155,3 +1155,26 @@ on the policed row — and only when the recorded value is stale by more than
 | TA-13 | The bump moves to `ApiTokenAuthenticationFilter`, in its own transaction | Two transactions per authenticated request instead of one, and the second begins **outside** the company scope — so it writes under RLS with no GUC and updates zero rows, silently. The column stays empty and every test still passes. **This is the shape §116's red run had**; reddens nothing here, so it is a **known gap** and a design to defend in review. | ⬜ NOT RUN |
 | TA-14 | `accept` is called before the `isUsable` filter | "Last used" becomes "last presented": a revoked credential somebody is still trying gets a live date, and the administrator deciding what to revoke reads a date on the one they already did. Should redden `arefusedRequestRecordsNothing`. | ⬜ NOT RUN |
 | TA-15 | `ApiToken` gains `@Version` for this write | Two concurrent requests on one CI token — the ordinary case, not the race — start 409ing an unattended pipeline over a lost timestamp bump. Reddens nothing (the suite is sequential); recorded because "add optimistic locking" is the reflex and the class header already argues the opposite for `revoke`. | ⬜ NOT RUN |
+
+### §133 — the `Agent` role, `role.assignable` and the agent-token expiry (`AG-1` … `AG-9`)
+
+`V40` seeds an eighth `role` row and a flag that replaces two of five hardcoded
+`COMPANY_MEMBER_ID` comparisons. **The failure mode this whole slice guards is a tidy-up**: three
+of the five sites must stay baseline-specific, and every one of them looks like it wants the flag.
+Assertions live in `SeedDataTest` (3 new), `RoleGrantEndpointTest` (1 new), `ApiTokenEndpointTest`
+(2 new) and three frontend tests.
+
+> **NONE RUN.** **`AG-1` first** — it is the one whose failure makes the role unobtainable through
+> the product while every other screen keeps working.
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| AG-1 | `ApiTokenService.validate`'s `COMPANY_MEMBER_ID` check becomes `!role.isAssignable()` | The one-line "cleanup" the code comments refuse in three places. An `Agent` token becomes unissuable — the single thing the role exists for — and nothing else changes: every other role still issues, every grant still refuses. Should redden `theAgentCeilingIsIssuable`. | ⬜ NOT RUN |
+| AG-2 | `AdminDirectoryService.roleCatalogue`'s filter becomes `WHERE assignable` | Same outcome by the other route: `Agent` vanishes from `GET /roles`, so the token form cannot offer it. Should redden `theRoleCatalogueIsWholeAndHasNoWildcard` and the SPA's `offers Agent, which every grant picker hides`. | ⬜ NOT RUN |
+| AG-3 | `RoleGrantService.grant` goes back to comparing `COMPANY_MEMBER_ID` | The state before the flag: an administrator can grant `Agent` to a person, conferring a capability set no evaluation path reads. Should redden `theAgentCeilingIsNotGrantableEvenThoughItIsListed`. | ⬜ NOT RUN |
+| AG-4 | `RoleGrantService.revoke`'s `orElse(false)` becomes `orElse(true)` | The fail-open arm of the same check. Unreachable today (`role_id` is a foreign key), so it reddens nothing — recorded because "an unknown role is revocable" is the arm that only has to be wrong once, and a future soft-deleted role row is what would reach it. **Known gap.** | ⬜ NOT RUN |
+| AG-5 | `V40` grants `Agent` `library:manage` | The permission roles spec §A3 gates by an *impact modal*, handed to a caller that never sees one: editing a shared condition propagates to every referencing case with no confirmation anywhere. Should redden `agentIsTestEngineerMinusThree`. | ⬜ NOT RUN |
+| AG-6 | `V40` grants `Agent` `case:delete` (`OWN`, copying Test Engineer) | `OWN` resolves against `created_by` while the token's owner is `api_token.owner_id`, so the agent deletes cases **the human authored** — the reason the key is withheld rather than qualified. Should redden `agentIsTestEngineerMinusThree`. | ⬜ NOT RUN |
+| AG-7 | `V40` spells `Agent`'s `artifact:edit` qualifier as `ALL` | An agent rewrites the project-scope strategy document every plan inherits read-only (§6n). Should redden `testEngineerHoldsArtifactEditOnlyAtPlanScope`; a *different* misspelling (a new qualifier value) should instead redden `noPermissionCarriesTwoDifferentRestrictiveQualifiers`. Run both variants. | ⬜ NOT RUN |
+| AG-8 | `ApiTokenService.validate` drops the `Agent` expiry rule | Every agent token issued from `curl` is open-ended, and the form's pre-fill is the only thing standing — which is exactly the boundary §2.5 says a client cannot hold. Should redden `anAgentTokenMustExpire`. | ⬜ NOT RUN |
+| AG-9 | The intersection is asserted end-to-end: issue an `Agent` token owned by a **Viewer**, then `POST` a case with it | **Not a mutation — a missing test.** The whole design rests on `evaluate(ownerId) ∩ permissionsOf(Agent)`, and nothing drives it for an `Agent` token; §132 already recorded that `IngestionEndpointTest.Attribution` is the only place in the suite a write is authenticated by a real `api_token` at all. Expect a 403. **Known gap, and the highest-value row here.** | ⬜ NOT RUN |

@@ -398,6 +398,19 @@ class ApiTokenEndpointTest extends IntegrationTestBase {
         }
 
         @Test
+        @DisplayName("an Agent token with no expiry is refused — the one role that must have one")
+        void anAgentTokenMustExpire() throws Exception {
+            // The inversion, asserted in both directions in one class: the test above issues an
+            // Agent token WITH an expiry and gets a 201, and an Automation Service token with none
+            // is a 201 two tests up. The rule is per-role and lives in the service, not the form —
+            // the bearer works with curl, so a client-side rule is not a rule.
+            MvcResult result = issue(ADMIN, body("Agent", Role.AGENT_ID, null, null));
+
+            assertThat(statusOf(result)).isEqualTo(400);
+            assertThat(errorsOf(result).has("expiresAt")).isTrue();
+        }
+
+        @Test
         @DisplayName("an unknown role is a field error, not a 500")
         void anUnknownRoleIsRefused() throws Exception {
             MvcResult result = issue(ADMIN, body("CI", UUID.randomUUID(), null, null));

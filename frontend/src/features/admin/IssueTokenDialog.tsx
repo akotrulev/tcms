@@ -113,6 +113,33 @@ export function IssueTokenDialog({ open, onClose }: { open: boolean; onClose: ()
     [roles.data],
   );
   const selectedRole = issuableRoles.find((role) => role.id === roleId);
+  const agentSelected = selectedRole?.name === 'Agent';
+
+  /*
+    The default the server's rule needs to be a nudge rather than an obstacle. `expiresAt` is
+    required for an Agent token — it lives on somebody's machine, where the realistic end is that
+    nobody ever revokes it — and a required date field with no default is a form that stops the
+    person filling it in. Ninety days is a release cycle or two: long enough not to interrupt work,
+    short enough that a forgotten credential dies.
+
+    Keyed on the role NAME rather than an id, because ids are seeded data the client does not hold
+    and this is affordance: `ApiTokenService` is what refuses a null expiry, so being wrong here
+    costs a 400 rather than a credential that never expires.
+
+    It only ever FILLS a blank field. Overwriting a date somebody typed — on a re-pick, or when
+    they switch away and back — would silently replace a decision with a default.
+  */
+  useEffect(() => {
+    if (!agentSelected || expiresAt) return;
+    const ninetyDays = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+    // `datetime-local` wants the browser's own wall clock, which is what `toInstant` converts back
+    // out of on submit; an ISO string here would show the user a UTC time labelled as theirs.
+    const pad = (value: number) => String(value).padStart(2, '0');
+    setExpiresAt(
+      `${ninetyDays.getFullYear()}-${pad(ninetyDays.getMonth() + 1)}-${pad(ninetyDays.getDate())}` +
+        `T${pad(ninetyDays.getHours())}:${pad(ninetyDays.getMinutes())}`,
+    );
+  }, [agentSelected, expiresAt]);
 
   useEffect(() => {
     if (open && !issued) setFieldErrors({});
@@ -280,15 +307,18 @@ export function IssueTokenDialog({ open, onClose }: { open: boolean; onClose: ()
               value={expiresAt}
               onChange={(event) => setExpiresAt(event.target.value)}
               error={!!fieldErrors.expiresAt}
+              required={agentSelected}
               helperText={
                 fieldErrors.expiresAt ??
-                /*
-                  Empty is the default and the copy says so rather than leaving a blank field
-                  reading as one somebody forgot. §116 made expiry optional deliberately: a
-                  credential that dies mid-release without anybody deciding to withdraw it is an
-                  outage, and the withdrawal that IS a decision is Revoke.
-                */
-                'Optional. Leave it empty and the token lasts until it is revoked.'
+                (agentSelected
+                  ? 'Required for an agent token, and pre-filled with 90 days. It lives on a machine somebody uses rather than in a pipeline, so it has to have an end.'
+                  : /*
+                      Empty is the default and the copy says so rather than leaving a blank field
+                      reading as one somebody forgot. §116 made expiry optional deliberately: a
+                      credential that dies mid-release without anybody deciding to withdraw it is
+                      an outage, and the withdrawal that IS a decision is Revoke.
+                    */
+                    'Optional. Leave it empty and the token lasts until it is revoked.')
               }
               slotProps={{
                 inputLabel: { shrink: true },

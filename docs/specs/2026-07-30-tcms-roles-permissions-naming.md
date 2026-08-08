@@ -362,6 +362,7 @@ so a Viewer's agent token resolves to Viewer's set with no branching anywhere, a
 | Project assignment | **Viewer** on that project; Test Engineer and above are explicit grants |
 | Company Admin's project visibility | **Every project in their company**, present and future, no per-project grant needed |
 | Instance Admin's visibility | Everything, every company; access into client content audited in the client's own trail |
+| An API token's expiry | **Optional for every role except `Agent`, where it is required** and the form pre-fills 90 days. Open-ended is the default because a CI credential that dies mid-release without anybody deciding to withdraw it is an outage, and the withdrawal that *is* a decision is Revoke. An agent token inverts that: it lives on somebody's machine rather than in a pipeline, so the realistic end is that nobody revokes it because nobody remembers it — and an optional field is a field nobody fills in. Enforced in `ApiTokenService`, not in the form: the bearer authenticates against `/api/*`, so a rule a client holds is a rule `curl` does not. |
 
 **Nothing is open.** All roles, permissions and naming decisions are settled as of 2026-07-30.
 

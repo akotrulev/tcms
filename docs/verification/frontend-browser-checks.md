@@ -1555,3 +1555,36 @@ those lanes already author, so nothing new has to be created first.
 - **No row retries a clone with the same `Idempotency-Key`.** Forcing it needs a fault injected
   between the server's write and the client's read; `CL-3` and `CL-21` in the mutation queue own it,
   where the key can be sent twice deliberately.
+
+---
+
+## §133 — the `Agent` role, and the axis a role picker cannot read off scope (M3, MCP plan §2)
+
+**Lane:** the administration lane, with a Company Admin — the same state `§118`'s token rows need,
+plus **Teams & roles** and a project's **Access** screen. No fixture is authored for this: `V40`
+seeds the role into every company, so the state is any provisioned company.
+
+The product change a person can see is small and entirely about **where `Agent` appears**. It is on
+`GET /roles` like the six, and it must be offered in exactly one of the four places that read that
+endpoint — which is the thing no gate can check, because all four render a list the server sent.
+
+### A1 — where `Agent` is offered and where it must not be
+
+| Row | Drive | Expect |
+|---|---|---|
+| `A3-18` | **Administration → Teams & roles**, read the "What each role can do" reference | **Six cards. No `Agent`.** It is a ceiling a credential carries, so a reference card beside a Grant button teaches that somebody can be given it. `Company Member` is absent too, and always has been — server-side. |
+| `A3-19` | Open **Grant a role** from that screen, at company scope and again with a project chosen | `Agent` in **neither** list. It is PROJECT-scope, so the scope filter alone would pass it through at the project scope — this row is what separates the two axes. |
+| `A3-20` | A project's **Access** screen → "What each role can do here" | Four project roles, **no `Agent`**, and the panel does not read as empty or short. |
+| `A3-21` | **Administration → API tokens → Issue a token**, open the Role select | `Agent` **is** offered, between Automation Service and the rest, with its description. This is the only place in the product it can be chosen, and the three rows above are what make that true rather than accidental. |
+| `A3-22` | Choose `Agent` and watch the **Expires** field | It fills itself with a date ~90 days out in **local** wall-clock, the label gains its required marker, and the helper text changes to say why. Type a different date first, then re-pick `Agent`: **the typed date survives.** |
+| `A3-23` | Clear the Expires field with `Agent` chosen and submit | A **400** landing on the Expires field, not in the banner: *"An agent token has to expire…"*. The rule is the server's — the pre-fill is a nudge — and this row is what proves the two agree. |
+| `A3-24` | Issue the `Agent` token, then read the token list | One row, role **Agent**, the expiry rendered, **Last used** reading `Never used` (§132's column). Revoke it. |
+
+**Not driven, and why:**
+
+- **No row exercises what an `Agent` token can and cannot do.** There is no client for it in this
+  product — that is the CLI and MCP server, blocked on the MCP plan's §8 — and driving it means
+  `curl`, not a browser. `AG-9` in the mutation queue owns the intersection end-to-end, and it is
+  the highest-value unrun row in this slice.
+- **No row grants `Agent` to a person.** The point of `A3-19` is that no screen offers it; forcing
+  the request needs a hand-built `POST`, which is `AG-3`.

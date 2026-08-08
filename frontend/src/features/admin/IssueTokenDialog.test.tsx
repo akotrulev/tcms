@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '../../api/client'
@@ -202,6 +202,33 @@ describe('IssueTokenDialog', () => {
       This assertion is what fails if somebody tidies the three filters into one.
     */
     expect(await optionNames('Admin.TokenIssue.Role')).toContain('Agent')
+  })
+
+  it('pre-fills an expiry when Agent is chosen, because the server requires one', async () => {
+    renderDialog()
+
+    const expires = screen.getByTestId('Admin.TokenIssue.Expires') as HTMLInputElement
+    expect(expires.value).toBe('')
+
+    await chooseFrom('Admin.TokenIssue.Role', 'Agent')
+
+    // `datetime-local`, so the browser's own wall clock — an ISO string here would show the user a
+    // UTC time labelled as theirs, which is the defect `toInstant` exists to prevent on the way
+    // out.
+    expect(expires.value).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)
+    expect(new Date(expires.value).getTime()).toBeGreaterThan(Date.now())
+  })
+
+  it('never overwrites an expiry the user typed', async () => {
+    renderDialog()
+
+    const expires = screen.getByTestId('Admin.TokenIssue.Expires')
+    fireEvent.change(expires, { target: { value: '2027-01-01T09:00' } })
+    await chooseFrom('Admin.TokenIssue.Role', 'Agent')
+
+    // The default fills a blank field and nothing else. Replacing a date somebody chose — on a
+    // re-pick, or on switching away and back — swaps a decision for a default with no signal.
+    expect((expires as HTMLInputElement).value).toBe('2027-01-01T09:00')
   })
 
   it('sends a null expiry when the field is left empty', async () => {
