@@ -384,7 +384,19 @@ never holds a model key and never calls a provider.**
 
 ---
 
-## 6. Tool / command surface **[OPEN]**
+## 6. Tool / command surface **[SETTLED 2026-08-08]**
+
+> **Settled by [`docs/specs/2026-08-08-mcp-tool-and-command-surface.md`](../specs/2026-08-08-mcp-tool-and-command-surface.md)**
+> — 21 MCP tools over 88 paths, ~45 CLI commands, one shared client and command core. The rule that
+> decides the count is *a tool never spans two permissions on its write path*, because `tools/list`
+> is permission-filtered. **Read that spec's §0 before §6.1 below**: the documentation-module read
+> this section was blocked on produced five reversals to §6w, including `list_criteria` dropped
+> outright (there is no `acceptance_criterion` table, and this product resolved ERD question #18 by
+> deciding a requirement *is* a doc block).
+>
+> §6.1's audit stands and is now a **prerequisite** rather than a reminder: `Idempotency-Key` on
+> `POST …/suites` and `POST …/doc-pages` gates two of the twenty-one tools. §6.2 is adopted
+> unchanged.
 
 Roughly 80–90 REST paths are in scope. **Do not mirror them.** Anthropic's guidance: a few
 workflow-shaped tools, namespaced, high-signal fields, UUIDs resolved to display keys, pagination and
@@ -498,9 +510,13 @@ before or beside this.
 Four were closed on 2026-08-08 and are recorded in place: §1.3 (writes), §2.6a (expiry), §2.7
 (history UI), §2.4 (Automation Service). What remains:
 
-1. **§6 — the command and tool list itself.** The only genuinely blocking one. Needs the
-   documentation module read first: §6w specified `list_criteria` and `get_doc_page` against a module
-   that did not exist when it was written, and slice-10 work has been building it since.
+1. ~~**§6 — the command and tool list itself.** The only genuinely blocking one. Needs the
+   documentation module read first…~~ → **CLOSED 2026-08-08**,
+   [`docs/specs/2026-08-08-mcp-tool-and-command-surface.md`](../specs/2026-08-08-mcp-tool-and-command-surface.md).
+   The documentation-module read was the whole content of it: `list_criteria` had no table and never
+   will, because the requirement model this product chose is the doc block. **Question 2 below is
+   settled at the tool layer as a side effect** — the create/edit arm boundary *is* the new-vs-edit
+   line — leaving only its bulk-generation semantics open.
 2. **Where the "new vs edit" line falls** (§1.3). A proposal that rewrites a case is an edit; a
    create is a proposal. Bulk generation against an existing suite is the case that decides it.
    **Candidate rule:** anything that names an existing case id and threads `If-Match` is an edit;
