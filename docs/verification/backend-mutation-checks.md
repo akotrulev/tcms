@@ -1050,3 +1050,34 @@ migration.**
 because it is a create — no line in `RunCloneService` mentions gating. `Gating.theGateIsReEvaluated`
 pins the consequence (a run legal last month is refused once its project turns gating on), and it is
 the clearest evidence that "a clone is a create" buys correctness rather than merely brevity.
+
+---
+
+## §131 — the outbox (round 3 #52, `OB-1` … `OB-14`)
+
+Added 2026-08-08. The transactional outbox: `V1`'s table gets its first code in M0+8 months, plus
+the first `CompanyScopedEvent` implementation in production and the first cross-module event
+delivery. Assertions live in `OutboxDispatchTest` (13) and `OutboxPropertiesTest` (6). **No
+migration** — every column, `CHECK` and index this uses has been there since `V1`.
+
+> **NONE RUN**, per §65. **`OB-1`, `OB-4` and `OB-9` are the three to run first.** The first is the
+> pattern itself — remove it and every test still passes for a while. The second is the one that
+> silently stops the retry ladder recording anything. The third turns an undelivered event into a
+> delivered-looking one, which is this repository's oldest failure shape.
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| OB-1 | `Outbox.record` / `recordCoalesced` drop the `isActualTransactionActive` guard | **The mutation of this slice.** The row still saves, delivery still works, and the atomicity the whole pattern exists for is gone with no symptom — a producer that rolls back leaves a notice for work that never happened. Should redden `recordOutsideATransactionIsRefused` and nothing else, which is the finding: only the refusal observes it. | ⬜ NOT RUN |
+| OB-2 | `OutboxEntry.pending` leaves `nextAttemptAt` null (as `V1` allows) | `findDueIds` has no `IS NULL` arm, so a fresh event is **never due** and nothing is ever delivered. Should redden most of `OutboxDispatchTest`. The interesting half is why the column is filled rather than the query widened: `outbox_pending_idx` is a partial index on exactly this predicate. | ⬜ NOT RUN |
+| OB-3 | `claim` bumps `nextAttemptAt` but not `attempts` | A row that kills the process is retried for ever — the ceiling is never reached because the counter only moves on a path the crash never reaches. Should redden `theCeilingStopsAtFailed`. | ⬜ NOT RUN |
+| OB-4 | `OutboxLedger`'s methods are moved onto `OutboxDispatcher` (self-invoked, one transaction) | Two defects in one, and both are invisible on the happy path: a self-invoked `@Transactional` is not intercepted at all (§116's defect), and a handler's failure marks the surrounding transaction rollback-only, so the attempt count and error message are discarded and the row retries for ever having recorded nothing. Should redden `aFailingHandlerSchedulesARetry`. | ⬜ NOT RUN |
+| OB-5 | `retryAt` sets `FAILED` instead of leaving `PENDING` | The status looks more honest and makes the row invisible to `outbox_pending_idx`, which is `WHERE status = 'PENDING'` — so retries fall off the only index the schema has for them. Should redden `aFailingHandlerSchedulesARetry`. | ⬜ NOT RUN |
+| OB-6 | `failed` uses `>` instead of `>=` against `maxAttempts` | One extra attempt, for ever, off by one. Should redden `theCeilingStopsAtFailed` on the status assertion. | ⬜ NOT RUN |
+| OB-7 | `stopped` leaves `nextAttemptAt` set | A terminal row stays on the due index and is re-read every tick for the life of the deployment, matching nothing. Reddens the `getNextAttemptAt()).isNull()` assertions in two tests. | ⬜ NOT RUN |
+| OB-8 | `claim` drops the `nextAttemptAt.isAfter(now)` filter | The lease stops meaning anything: a claimed row is re-claimed by the next tick regardless, so a slow handler is delivered once per tick until it finishes. Should redden `aClaimedRowIsLeased`. | ⬜ NOT RUN |
+| OB-9 | An unclaimed event type is marked `SENT` instead of `DEAD` | **A claim with no evidence behind it, rendering identically to a delivered one** — the shape §47, §53, §72 and §81 each paid for. A deployment with the consuming module disabled would report every event delivered. Should redden `anUnclaimedEventTypeIsDead`. | ⬜ NOT RUN |
+| OB-10 | `dispatchDue` runs only the first handler claiming a type | One module is told and the other is not, for ever, with nothing failing — the fan-out is what two modules that may not call each other have instead of a call. Should redden `allClaimingHandlersReceiveTheEvent`. | ⬜ NOT RUN |
+| OB-11 | `hasUnclaimed` drops the `attempts = 0` predicate | Coalescing folds a new notice into one a handler has **already read the database for**, so the newest results are not projected until the next scheduled tick — the staleness the event exists to remove, restored silently. Should redden `coalescedEventsDoNotFoldIntoAClaimedRow`. | ⬜ NOT RUN |
+| OB-12 | `recordCoalesced` gains an `aggregateId` / payload parameter and the producer passes the current run | The tempting convenience. A coalesced event stands for every change since the last delivery, so the payload is a fact about one of them presented as the reason for all of them — and a handler that reads it scopes its recompute to one run. Reddens the `getAggregateId()).isNull()` assertion only; the rest is a design that has to be defended in review. | ⬜ NOT RUN |
+| OB-13 | `dispatchDue` drops the company check on the claimed message | Unreachable through RLS today, which is exactly why it is asserted: it is the assumption every handler's writes rest on. Reddens nothing in the current suite — **recorded as a known gap**, since constructing a crossed row requires bypassing RLS as the superuser. | ⬜ NOT RUN |
+| OB-14 | `OutboxProperties` drops the lease-vs-interval check | Ships a configuration in which every delivery slower than one tick is delivered twice, discovered under load and only under load. Should redden `leaseShorterThanIntervalIsRefused`. | ⬜ NOT RUN |

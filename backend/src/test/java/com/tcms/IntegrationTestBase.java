@@ -138,6 +138,15 @@ public abstract class IntegrationTestBase {
         // ExecutionFactRefreshTest drives the service directly.
         registry.add("tcms.reporting.enabled", () -> false);
 
+        // Off for the third time, and this one is the widest: the outbox dispatcher is a WRITE on
+        // a timer that then hands rows to HANDLERS, so what it moves is not its own table but
+        // whatever the consuming modules do — execution facts, case health, anything a later slice
+        // registers. A tick landing partway through a suite run would apply another test class's
+        // events under this one's fixtures, and the failure would surface in the module that
+        // handled them rather than here. OutboxDispatchTest drives the dispatcher directly, which
+        // is how a scheduled job's logic should be tested anyway.
+        registry.add("tcms.outbox.enabled", () -> false);
+
         // Evidence bytes land in a directory, not in Postgres — the one piece of product state
         // Testcontainers does not throw away for us. The production default is /var/lib/tcms,
         // which is not writable on a developer's machine, so the suite gets its own path under

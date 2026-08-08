@@ -210,6 +210,38 @@ tcms:
     # at 2 a flip and a recovery still is. ReportingProperties refuses to start below 1.
     flake-minimum-transitions: ${TCMS_FLAKE_MINIMUM_TRANSITIONS:4}
 
+  outbox:
+    # The transactional outbox (decision round 3 #52). V1 has carried the table since M0 and
+    # CompanyScopedEvent has asserted since M0 that a failed handler lands in it; this is the
+    # code behind both claims.
+
+    # How often the company loop runs — the floor on how late a delivery can be. NOT tuned down
+    # to make delivery feel instant: an outbox is what makes a delivery certain, and a deployment
+    # that needs a shorter tail than this is usually asking for something else.
+    interval: ${TCMS_OUTBOX_INTERVAL:PT1M}
+
+    # How many of ONE company's due events are taken per tick. A bound, not a target: it is what
+    # stops a company that generated fifty thousand events overnight from holding the loop while
+    # every other company waits.
+    batch-size: ${TCMS_OUTBOX_BATCH_SIZE:100}
+
+    # How long a claimed delivery may run before the row becomes due again. This is the price of
+    # a crash — a process that dies mid-delivery costs one lease, not a lost event — and it is
+    # also the window in which a very slow handler is delivered twice, which is why handlers are
+    # required to be idempotent. OutboxProperties REFUSES a lease shorter than the interval,
+    # because that combination double-delivers everything slower than one tick.
+    lease: ${TCMS_OUTBOX_LEASE:PT5M}
+
+    # How many times delivery is STARTED before the row stops being retried. Counted at the
+    # claim rather than at the failure, so a payload that kills the process still exhausts
+    # instead of being retried for ever.
+    max-attempts: ${TCMS_OUTBOX_MAX_ATTEMPTS:8}
+
+    # The wait after each failed attempt; the last entry repeats. Try again almost immediately —
+    # most failures are a lock timeout or a service that was restarting — then back right off, so
+    # a genuinely broken handler is not hammered for the six hours before somebody notices.
+    backoff: PT1M,PT5M,PT15M,PT1H,PT6H
+
   # spring.mail.host is deliberately NOT defaulted. Boot only auto-configures a
   # JavaMailSender when it is set, and MailConfiguration turns its absence into a loud
   # warning rather than a startup failure — an install with no relay still works, it just
