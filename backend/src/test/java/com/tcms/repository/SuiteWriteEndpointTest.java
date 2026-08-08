@@ -561,6 +561,149 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         }
     }
 
+    // =====================================================================
+    // Idempotency-Key (V42)
+    //
+    // The header this endpoint REFUSED until V42, and the refusal was argued rather than
+    // forgotten — "a duplicate folder is visible in the tree the moment the create returns".
+    // §98 deleted that tree and §135 added a caller with no screen at all, so what is asserted
+    // here is the retry a person cannot see and therefore cannot correct.
+    // =====================================================================
+
+    @Nested
+    @DisplayName("Idempotency — a retry must not create a second suite")
+    class Idempotency {
+
+        @Test
+        @DisplayName("a repeated key answers 200 with the SAME suite, and creates nothing")
+        void aRetryReplaysTheOriginal() throws Exception {
+            int before = liveSuiteIds(ACME, ACME_BANKING).size();
+            String key = "intent-" + UUID.randomUUID();
+
+            MvcResult first = post(LEAD, ACME, ACME_BANKING, suiteInput("Once"), key);
+            MvcResult retry = post(LEAD, ACME, ACME_BANKING, suiteInput("Once"), key);
+
+            assertThat(first.getResponse().getStatus()).isEqualTo(201);
+            // 200 and not 201: a client can tell "I made this" from "I already had this", and a
+            // well-behaved retry is not counted as a second creation in anybody's logs.
+            assertThat(retry.getResponse().getStatus()).isEqualTo(200);
+            assertThat(body(retry).get("id").asText()).isEqualTo(body(first).get("id").asText());
+
+            // Exactly one row was added — the assertion that the second call wrote nothing at all.
+            assertThat(liveSuiteIds(ACME, ACME_BANKING)).hasSize(before + 1);
+        }
+
+        @Test
+        @DisplayName("a replay carries no Location — nothing was created by that request")
+        void aReplayCarriesNoLocation() throws Exception {
+            String key = "intent-" + UUID.randomUUID();
+            post(LEAD, ACME, ACME_BANKING, suiteInput("Located"), key);
+
+            MvcResult retry = post(LEAD, ACME, ACME_BANKING, suiteInput("Located"), key);
+
+            // A client that followed a Location on a replay would read it as having made something.
+            assertThat(retry.getResponse().getHeader(HttpHeaders.LOCATION)).isNull();
+        }
+
+        @Test
+        @DisplayName("the counter does not move on a replay, so the next real create is TS-5")
+        void aReplayBurnsNoKey() throws Exception {
+            String key = "intent-" + UUID.randomUUID();
+
+            assertThat(keyOf(post(LEAD, ACME, ACME_BANKING, suiteInput("Fourth"), key)))
+                    .isEqualTo("TS-4");
+            post(LEAD, ACME, ACME_BANKING, suiteInput("Fourth"), key);
+
+            assertThat(keyOf(post(LEAD, ACME, ACME_BANKING, suiteInput("Fifth"))))
+                    .isEqualTo("TS-5");
+        }
+
+        @Test
+        @DisplayName("a retry whose payload has drifted still returns the original, not a 400")
+        void aRetryIgnoresADriftedPayload() throws Exception {
+            // The key is checked BEFORE validation for exactly this: the client is asking "did my
+            // intent land", and a 400 would send it to fix fields on a suite that already exists.
+            String key = "intent-" + UUID.randomUUID();
+            post(LEAD, ACME, ACME_BANKING, suiteInput("Original"), key);
+
+            MvcResult retry = post(LEAD, ACME, ACME_BANKING, suiteInput("   "), key);
+
+            assertThat(retry.getResponse().getStatus()).isEqualTo(200);
+            assertThat(body(retry).get("name").asText()).isEqualTo("Original");
+        }
+
+        @Test
+        @DisplayName("two different keys with identical bodies create two suites")
+        void differentKeysCreateDifferentSuites() throws Exception {
+            // The key identifies the intent, not the content: two people may legitimately name two
+            // collections the same thing, and deduplicating on the body would refuse the second.
+            int before = liveSuiteIds(ACME, ACME_BANKING).size();
+
+            post(LEAD, ACME, ACME_BANKING, suiteInput("Same name"), "intent-a");
+            post(LEAD, ACME, ACME_BANKING, suiteInput("Same name"), "intent-b");
+
+            assertThat(liveSuiteIds(ACME, ACME_BANKING)).hasSize(before + 2);
+        }
+
+        @Test
+        @DisplayName("no key at all creates every time — the header stays optional")
+        void withoutAKeyEveryCallCreates() throws Exception {
+            int before = liveSuiteIds(ACME, ACME_BANKING).size();
+
+            post(LEAD, ACME, ACME_BANKING, suiteInput("One"));
+            post(LEAD, ACME, ACME_BANKING, suiteInput("One"));
+
+            assertThat(liveSuiteIds(ACME, ACME_BANKING)).hasSize(before + 2);
+        }
+
+        @Test
+        @DisplayName("a blank key is treated as absent, not as a key everyone shares")
+        void aBlankKeyIsAbsent() throws Exception {
+            // Stored as-is, a blank key becomes ONE key that every misconfigured client replays
+            // against, and the project accepts exactly one suite from all of them, forever. The
+            // same blank value has to be sent twice — two different blanks would not collide even
+            // without the trim, which is how the case endpoint's first version of this test passed
+            // against a mutation that removed it.
+            int before = liveSuiteIds(ACME, ACME_BANKING).size();
+
+            post(LEAD, ACME, ACME_BANKING, suiteInput("One"), "   ");
+            post(LEAD, ACME, ACME_BANKING, suiteInput("Two"), "   ");
+            post(LEAD, ACME, ACME_BANKING, suiteInput("Three"), "");
+            post(LEAD, ACME, ACME_BANKING, suiteInput("Four"), "");
+
+            assertThat(liveSuiteIds(ACME, ACME_BANKING)).hasSize(before + 4);
+        }
+
+        @Test
+        @DisplayName("the same key in a DIFFERENT project creates a suite — the scope is the index's")
+        void keysAreScopedToTheProject() throws Exception {
+            // The unique index is (company_id, project_id, key) and the lookup names the same
+            // three. A company-wide constraint under a per-project lookup would pass the check and
+            // violate the index — a validated request that 500s on insert.
+            String key = "intent-shared";
+
+            MvcResult inBanking = post(LEAD, ACME, ACME_BANKING, suiteInput("Banking"), key);
+            MvcResult inMobile = post(LEAD, ACME, ACME_MOBILE, suiteInput("Mobile"), key);
+
+            assertThat(inBanking.getResponse().getStatus()).isEqualTo(201);
+            assertThat(inMobile.getResponse().getStatus()).isEqualTo(201);
+            assertThat(body(inMobile).get("id").asText())
+                    .isNotEqualTo(body(inBanking).get("id").asText());
+        }
+
+        @Test
+        @DisplayName("an absurdly long key is refused rather than stored")
+        void anOverlongKeyIsRefused() throws Exception {
+            int before = liveSuiteIds(ACME, ACME_BANKING).size();
+            MvcResult result =
+                    post(LEAD, ACME, ACME_BANKING, suiteInput("Long key"), "k".repeat(201));
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(body(result).get("errors").has("Idempotency-Key")).isTrue();
+            assertThat(liveSuiteIds(ACME, ACME_BANKING)).hasSize(before);
+        }
+    }
+
 
     // =====================================================================
     // Membership — the two arms a suite owns (§96)
@@ -1166,13 +1309,23 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
 
     private MvcResult post(UUID userId, UUID companyId, UUID projectId, String payload)
             throws Exception {
-        return mvc.perform(MockMvcRequestBuilders
-                        .post("/api/v1/projects/" + projectId + "/suites")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, companyId))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .accept(MediaType.APPLICATION_JSON)
-                        .content(payload))
-                .andReturn();
+        return post(userId, companyId, projectId, payload, null);
+    }
+
+    private MvcResult post(
+            UUID userId, UUID companyId, UUID projectId, String payload, String idempotencyKey)
+            throws Exception {
+
+        var request = MockMvcRequestBuilders
+                .post("/api/v1/projects/" + projectId + "/suites")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, companyId))
+                .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.APPLICATION_JSON)
+                .content(payload);
+        if (idempotencyKey != null) {
+            request = request.header("Idempotency-Key", idempotencyKey);
+        }
+        return mvc.perform(request).andReturn();
     }
 
     private MvcResult patch(

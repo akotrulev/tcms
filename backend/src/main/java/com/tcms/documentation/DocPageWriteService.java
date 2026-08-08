@@ -60,6 +60,13 @@ public class DocPageWriteService {
 
     private static final String AUDIT_TARGET = "doc_page";
 
+    /**
+     * The longest {@code Idempotency-Key} this endpoint will store — {@code CaseCreateService}'s
+     * cap, and the sixth copy of this constant. {@code IdempotencyKeyCapTest} is what keeps the
+     * copies honest; {@code SuiteWriteService}'s field carries the reason there is no shared symbol.
+     */
+    private static final int MAX_IDEMPOTENCY_KEY = 200;
+
     private final ProjectService projects;
     private final DocPageRepository pages;
     private final DocBlockRepository blocks;
@@ -130,6 +137,16 @@ public class DocPageWriteService {
         record Created(DocPageView view) implements Outcome {
         }
 
+        /**
+         * A retry of a create that already succeeded. 200 rather than 201, so a client can tell "I
+         * made this" from "I already had this" — {@code CaseCreateService.Outcome.Replayed}'s
+         * terms. Distinct from {@link Updated} on purpose: they carry the same view and mean
+         * opposite things, and collapsing them would make "nothing changed" indistinguishable from
+         * "your edit landed" in every log that records the outcome name.
+         */
+        record Replayed(DocPageView view) implements Outcome {
+        }
+
         /** An edited or re-statused page. 200. */
         record Updated(DocPageView view) implements Outcome {
         }
@@ -142,15 +159,26 @@ public class DocPageWriteService {
     /**
      * Creates a page.
      *
-     * <p>No {@code Idempotency-Key}, for {@code SuiteWriteService#create}'s reason: a duplicate page
-     * is visible in the tree the moment the create returns, next to its twin, and is removed by the
-     * delete this same slice ships. The header earns its column where a duplicate is expensive to
-     * spot among hundreds of rows.
+     * <p>~~No {@code Idempotency-Key}, for {@code SuiteWriteService#create}'s reason: a duplicate
+     * page is visible in the tree the moment the create returns, next to its twin, and is removed
+     * by the delete this same slice ships. The header earns its column where a duplicate is
+     * expensive to spot among hundreds of rows.~~ → <strong>superseded by {@code V42}</strong>.
+     *
+     * <p>It was the weakest of the copies of that argument, and this is the module where it fails
+     * hardest. A page is a <em>link target</em>: {@code doc_link} points at
+     * {@code (page_id, block_id)}, and ERD resolved question #18 makes a block this product's whole
+     * model of a requirement. So a duplicate page is two sets of block ids, traceability split
+     * across both, and a delete of the loser that destroys its links rather than merging them —
+     * the one duplicate in this family a person cannot clean up by pressing delete. {@code V42}'s
+     * header carries the rest.
+     *
+     * @param idempotencyKey the request's {@code Idempotency-Key} header, or null when absent
      */
     @Transactional
-    public Outcome create(UUID userId, UUID projectId, DocPageInput input) {
+    public Outcome create(
+            UUID userId, UUID projectId, DocPageInput input, String idempotencyKey) {
         return gated(projects.writeGranted(userId, projectId, EDIT_DOC,
-                project -> applyCreate(userId, project, input, null)));
+                project -> applyCreate(userId, project, input, null, idempotencyKey)));
     }
 
     /**
@@ -167,7 +195,10 @@ public class DocPageWriteService {
      * ask first.
      */
     Outcome writeSubjectPage(UUID userId, Project project, DocSubject subject, DocPageInput input) {
-        return applyCreate(userId, project, input, subject);
+        // No idempotency key, and not because one was forgotten: this path is an internal call with
+        // no header to carry, and uq_doc_page_subject already permits exactly one live page per
+        // subject — a stronger constraint than the one V42 adds. See V42's header.
+        return applyCreate(userId, project, input, subject, null);
     }
 
     /**
@@ -215,7 +246,34 @@ public class DocPageWriteService {
     }
 
     private Outcome applyCreate(
-            UUID userId, Project project, DocPageInput input, DocSubject subject) {
+            UUID userId,
+            Project project,
+            DocPageInput input,
+            DocSubject subject,
+            String idempotencyKey) {
+
+        // FIRST, before validating anything — CaseCreateService's ordering and its reason: a retry
+        // of a create that succeeded must answer with the page it made even if the payload has
+        // since drifted, because the client is asking "did my intent land" and a 400 would send it
+        // to fix fields on a page that exists.
+        if (idempotencyKey != null) {
+            if (idempotencyKey.length() > MAX_IDEMPOTENCY_KEY) {
+                return new Outcome.Invalid(Map.of("Idempotency-Key",
+                        List.of("Send a key of at most " + MAX_IDEMPOTENCY_KEY + " characters.")));
+            }
+            Optional<DocPage> already =
+                    pages.findByIdempotencyKey(project.getId(), idempotencyKey);
+            if (already.isPresent()) {
+                DocPage page = already.get();
+                // Two-arg, unlike the GET: a replay answers with what the create answered, and the
+                // create could not carry links because nothing could link to a block created a
+                // statement earlier. Serving links here would make a replay richer than the
+                // response it is replaying.
+                return new Outcome.Replayed(
+                        DocPageView.of(page, blocks.findForPage(page.getId())));
+            }
+        }
+
         List<DocPage> live = pages.findLiveForProject(project.getId());
 
         Set<UUID> liveIds = new HashSet<>();
@@ -255,6 +313,7 @@ public class DocPageWriteService {
                 valid.title(),
                 subject,
                 userId,
+                idempotencyKey,
                 now);
 
         // Flushed before the blocks so the page exists for doc_block.page_id to reference, and so a

@@ -93,20 +93,35 @@ public class SuiteController {
      *
      * <p>403 is {@code suite:manage}, which Viewer does not hold. It is reached only after the read
      * gate passed, so nothing is disclosed that loading the tree did not already disclose.
+     *
+     * <p>{@code Idempotency-Key} arrives with {@code V42}, the column that honours it, and never
+     * before — §54's rule, stated when {@code POST /work-items} was shipped without the header on
+     * purpose: a declared header with no column behind it makes every artifact agree with the
+     * caller while the server ignores it, so a client believes its retries are deduplicated when
+     * each one creates another row. The header identifies one <em>intent</em>, not one attempt; a
+     * replay answers 200 with the suite that intent made.
      */
     @PostMapping
     public ResponseEntity<Object> create(
             @AuthenticationPrincipal Jwt jwt,
             @PathVariable UUID projectId,
+            @RequestHeader(name = CaseController.IDEMPOTENCY_KEY, required = false)
+            String idempotencyKey,
             @RequestBody SuiteWriteRequest request) {
 
-        SuiteWriteService.Outcome outcome =
-                writes.create(UUID.fromString(jwt.getSubject()), projectId, request);
+        SuiteWriteService.Outcome outcome = writes.create(
+                UUID.fromString(jwt.getSubject()),
+                projectId,
+                request,
+                CaseController.trimToNull(idempotencyKey));
 
         return switch (outcome) {
             case SuiteWriteService.Outcome.Created created -> ResponseEntity
                     .created(location(projectId, created.view().id()))
                     .body(created.view());
+            // 200, and no Location: the resource was not created by this request, and a client that
+            // followed a Location on a replay would read it as having made something.
+            case SuiteWriteService.Outcome.Replayed replayed -> ResponseEntity.ok(replayed.view());
             default -> problem(outcome, "create suites in this project");
         };
     }
@@ -250,11 +265,13 @@ public class SuiteController {
             case SuiteWriteService.Outcome.NotEmpty notEmpty ->
                     ResponseEntity.status(HttpStatus.CONFLICT).body(ApiProblem.conflict(
                             "Suite is not empty", describe(notEmpty)));
-            // The three success shapes. Reached only if a call site above routes one here — each
+            // The four success shapes. Reached only if a call site above routes one here — each
             // handles its own success and delegates the rest — so these arms exist to satisfy
             // exhaustiveness, not as a fallback that quietly renders a created suite as an error.
             case SuiteWriteService.Outcome.Created ignored ->
                     throw new IllegalStateException("A created suite was mapped as a problem");
+            case SuiteWriteService.Outcome.Replayed ignored ->
+                    throw new IllegalStateException("A replayed suite was mapped as a problem");
             case SuiteWriteService.Outcome.Updated ignored ->
                     throw new IllegalStateException("An updated suite was mapped as a problem");
             case SuiteWriteService.Outcome.Deleted ignored ->

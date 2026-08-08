@@ -149,6 +149,16 @@ public class DocPage {
     @Column(name = "subject_id")
     private UUID subjectId;
 
+    /**
+     * The {@code Idempotency-Key} the creating request carried, or null (migration {@code V42}).
+     *
+     * <p>{@code updatable = false} for {@code Suite}'s reason: it describes the request that made
+     * the row, not the row's current state. Null on every page created on a plan's behalf — that
+     * path carries no header and is deduplicated by {@code uq_doc_page_subject} instead.
+     */
+    @Column(name = "created_idempotency_key", updatable = false)
+    private String createdIdempotencyKey;
+
     /** On the wire, because the SPA sends it back as {@code If-Match} (plan §6j). */
     @Version
     @Column(name = "lock_version", nullable = false)
@@ -172,6 +182,9 @@ public class DocPage {
      *                   afterwards, through {@link #linkTo}. The parameter stays because the column
      *                   pair is nullable as a unit and a page created already documenting something
      *                   is a legitimate shape for the next subject type to want.
+     * @param idempotencyKey the creating request's {@code Idempotency-Key}, or null when it sent
+     *                   none — always null when {@code subject} is non-null, because that path is
+     *                   an internal call with no header and a stronger constraint of its own
      */
     static DocPage create(
             UUID projectId,
@@ -183,6 +196,7 @@ public class DocPage {
             String title,
             DocSubject subject,
             UUID creatorId,
+            String idempotencyKey,
             Instant now) {
 
         DocPage created = new DocPage();
@@ -203,6 +217,7 @@ public class DocPage {
         created.currentVersionNo = 1;
         created.createdAt = now;
         created.createdBy = creatorId;
+        created.createdIdempotencyKey = idempotencyKey;
         created.title = title;
         created.updatedAt = now;
         created.updatedBy = creatorId;

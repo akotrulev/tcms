@@ -2,18 +2,20 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-08 (**§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-08 (**§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `bf0f6d6` (§134 phase 1) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `35223d3` (§135 handoff) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
-**SCHEMA HEAD IS `V41__automation_service_not_assignable.sql`; `V42` is next free.** The policy count
-is **still 62**: `V41` adds no table and no column (it flips one seeded `role` row), and `role` /
-`role_permission` are instance-level reference data on the ERD §0.1 exception list, so `V40` added
-no policy either. Before them, **neither §129 nor §131 carried a migration** —
+**SCHEMA HEAD IS `V42__suite_and_doc_page_creation_idempotency.sql`; `V43` is next free.** The policy
+count is **still 62**: `V42` adds two *columns* and two partial unique indexes to `suite` and
+`doc_page`, both already company-owned and already forced. Before it, `V41` added no table and no
+column either (it flips one seeded `role` row), and `role` / `role_permission` are instance-level
+reference data on the ERD §0.1 exception list, so `V40` added no policy either. Before them,
+**neither §129 nor §131 carried a migration** —
 a clone reuses the version snapshot (which is why #59 dropped plan *templates*: they need a table),
 and the outbox's table, `CHECK` and partial index have all been in `V1` since M0.
 
@@ -22,6 +24,39 @@ and the outbox's table, `CHECK` and partial index have all been in `V1` since M0
 before repeating any claim about it. `ci.yml` still runs **no** backend tests.
 
 ---
+
+## §136 — SIX CREATE ENDPOINTS CARRY `Idempotency-Key`, AND THE CAP IS COPIED SEVEN TIMES
+
+`V42` adds `created_idempotency_key` to **`suite` and `doc_page`** — the fourth migration in the
+`V11`/`V14`/`V17` family, now six columns over six tables. Both services gained the replay lookup,
+both controllers the header and a **200 arm with no `Location`**.
+
+- **THIS REVERSED A RECORDED DECISION, NOT AN OMISSION.** `SuiteWriteService#create` and
+  `DocPageWriteService#create` both *argued* against the header since §29 — "a duplicate folder is
+  visible in the tree the moment the create returns". Both javadocs are struck through in place.
+  The premise expired twice over: the sentence reasons from a person at a screen, and **§98 deleted
+  the tree it names**. Do not "restore" it.
+- **THE GENERALISATION IS REFUSED FOR THE FOURTH TIME** on `V17`'s argument, which does not weaken
+  with the count: a general `idempotent_request` table must store the **rendered response**, and a
+  stored response goes stale the moment the row it describes is edited. The column form re-renders
+  through the same assembler the `GET` uses.
+- **`MAX_IDEMPOTENCY_KEY = 200` IS DECLARED IN SEVEN SERVICES ACROSS FOUR MODULES** —
+  `CaseCreateService`, `SuiteWriteService`, `RunCreateService`, `PlanCreateService`,
+  `IngestionEdit`, `DocPageWriteService`, `BoardService`. **Do not extract it to `tenancy`**: that
+  is the only module all four may import, and an HTTP header's cap is not a tenancy concept (§125's
+  bar, which refused `shared` as a grab bag). The invariant is a **computed check** instead —
+  **`config/IdempotencyKeyCapTest`**, no Spring context, which also asserts that `openapi.yaml`'s
+  `maxLength: 200` equals the code's cap. An eighth create endpoint must bump
+  `EXPECTED_DECLARATIONS`, and that edit is the prompt to re-ask the question.
+- **`DocPageWriteService#writeSubjectPage` PASSES `null` DELIBERATELY.** It is an internal call with
+  no header, already deduplicated by `uq_doc_page_subject` — a stronger constraint. Comment in
+  place; a null that looks like an omission gets "fixed".
+- **`CaseController.trimToNull` IS PACKAGE-PRIVATE NOW** so `SuiteController` shares it;
+  `DocPageController` has its own copy because it is in another module. Blank ≠ a key everyone
+  shares, and mutation `IK-3` is the row for it.
+- **`documentation/package-info.java`'s `doc_link` claim is CORRECTED** — it said "has no writer",
+  stale since §93, in the file an agent reads first to orient in the module. What is still absent is
+  `coverage`, for §81's reason.
 
 ## §134 — `assignable` DRIVES **ONE** SITE, AND REVOKE IS NOT IT
 

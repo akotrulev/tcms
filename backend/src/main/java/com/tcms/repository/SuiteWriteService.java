@@ -75,6 +75,19 @@ public class SuiteWriteService {
 
     private static final String AUDIT_TARGET = "suite";
 
+    /**
+     * The longest {@code Idempotency-Key} this endpoint will store — {@code CaseCreateService}'s
+     * cap, and the <strong>seventh copy of this constant</strong> in the codebase.
+     *
+     * <p>The copies are deliberate and {@code IdempotencyKeyCapTest} is what keeps them honest. The
+     * only module all seven writers may import is {@code tenancy}, and an HTTP header's length cap
+     * is not a tenancy concept — §125 set the bar for what may go into a foundation module and
+     * refused {@code shared} as a grab bag on exactly these grounds. So the invariant is enforced
+     * by a computed check rather than by a shared symbol, per the working agreement's rule that a
+     * catalogue-wide invariant needs a check and not a careful reading.
+     */
+    private static final int MAX_IDEMPOTENCY_KEY = 200;
+
     private final ProjectService projects;
     private final SuiteRepository suites;
     private final SuiteService tree;
@@ -144,6 +157,14 @@ public class SuiteWriteService {
         record Created(SuiteView view) implements Outcome {
         }
 
+        /**
+         * A retry of a create that already succeeded. 200 rather than 201, so a client can tell "I
+         * made this" from "I already had this" — and so a well-behaved retry is not reported as a
+         * second creation in anybody's logs. {@code CaseCreateService.Outcome.Replayed}'s terms.
+         */
+        record Replayed(SuiteView view) implements Outcome {
+        }
+
         /** A renamed suite. 200. */
         record Updated(SuiteView view) implements Outcome {
         }
@@ -156,22 +177,51 @@ public class SuiteWriteService {
     /**
      * Creates a suite.
      *
-     * <p>No {@code Idempotency-Key}, unlike case creation, and the difference is not an omission. A
-     * duplicate case is expensive to spot — the grid shows two rows with different keys and identical
-     * titles among hundreds. A duplicate folder is visible in the tree the moment the create returns,
-     * next to its twin, and is removed by the delete this same slice ships. The header is worth its
-     * column on {@code test_case} and would be ceremony here.
+     * <p>~~No {@code Idempotency-Key}, unlike case creation, and the difference is not an omission.
+     * A duplicate case is expensive to spot — the grid shows two rows with different keys and
+     * identical titles among hundreds. A duplicate folder is visible in the tree the moment the
+     * create returns, next to its twin, and is removed by the delete this same slice ships. The
+     * header is worth its column on {@code test_case} and would be ceremony here.~~ →
+     * <strong>superseded by {@code V42}</strong>, whose header is the long form.
+     *
+     * <p>The old reason was not wrong; its <em>premise</em> stopped being universal. It reasons
+     * entirely from a person looking at a screen — "visible", "next to its twin" — and §135's tool
+     * surface adds a caller with no screen, for whom a timeout followed by a retry has no
+     * correction loop at all. §98 removed the tree it names, besides: a duplicate in a flat list of
+     * two hundred collections is not visible the moment anything returns.
+     *
+     * @param idempotencyKey the request's {@code Idempotency-Key} header, or null when absent
      */
     @Transactional
-    public Outcome create(UUID userId, UUID projectId, SuiteWriteRequest request) {
+    public Outcome create(
+            UUID userId, UUID projectId, SuiteWriteRequest request, String idempotencyKey) {
         UUID companyId = CompanyContext.require();
 
         return gated(projects.writeGranted(userId, projectId, MANAGE_SUITE,
-                project -> applyCreate(companyId, userId, project, request)));
+                project -> applyCreate(companyId, userId, project, request, idempotencyKey)));
     }
 
     private Outcome applyCreate(
-            UUID companyId, UUID userId, Project project, SuiteWriteRequest request) {
+            UUID companyId,
+            UUID userId,
+            Project project,
+            SuiteWriteRequest request,
+            String idempotencyKey) {
+
+        // FIRST, before validating anything — CaseCreateService's ordering and its reason: a retry
+        // of a create that succeeded must answer with the suite it made even if the payload has
+        // since drifted, because the client is asking "did my intent land" and a 400 would send it
+        // to fix fields on a suite that exists.
+        if (idempotencyKey != null) {
+            if (idempotencyKey.length() > MAX_IDEMPOTENCY_KEY) {
+                return new Outcome.Invalid(Map.of("Idempotency-Key",
+                        List.of("Send a key of at most " + MAX_IDEMPOTENCY_KEY + " characters.")));
+            }
+            Optional<Suite> already = suites.findByIdempotencyKey(project.getId(), idempotencyKey);
+            if (already.isPresent()) {
+                return new Outcome.Replayed(view(companyId, project.getId(), already.get()));
+            }
+        }
 
         // The project's live suites are no longer read here: they existed only to resolve and
         // validate the parent (§98). A create now touches no other suite at all.
@@ -193,6 +243,7 @@ public class SuiteWriteService {
                 allocated.seqAt(0),
                 edit,
                 userId,
+                idempotencyKey,
                 now);
 
         // Flushed before the version row so the suite exists for suite_version.suite_id to

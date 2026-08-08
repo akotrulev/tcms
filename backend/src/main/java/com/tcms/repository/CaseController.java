@@ -656,8 +656,12 @@ public class CaseController {
      * <p>{@code Idempotency-Key: } (empty) would otherwise be stored as {@code ''} and become a key
      * every other empty-header request in the project replays against — one case, permanently, for
      * every caller that sends the header wrong.
+     *
+     * <p>Package-private since {@code V42} so {@link SuiteController} uses this one rather than a
+     * second copy: two spellings of "blank means absent" are one edit away from disagreeing, and
+     * the one that diverges is whichever was changed second.
      */
-    private static String trimToNull(String header) {
+    static String trimToNull(String header) {
         if (header == null) {
             return null;
         }

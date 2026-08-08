@@ -1196,3 +1196,23 @@ SPA's `IssueTokenDialog.test.tsx`.
 | AS-3 | `AdminDirectoryService.listRoleAssignments` filters non-assignable roles' grants | The other half of the same defect, arrived at from the "tidy it up" direction: the stranded grant becomes invisible instead of unrevokable, so nobody can even see what to clean up, and the permissions keep resolving. Should redden `anAutomationServiceGrantIsStillListed`. | ⬜ NOT RUN |
 | AS-4 | `AdminDirectoryService.roleCatalogue` becomes `WHERE assignable` | `AG-2` with a second victim: `Automation Service` leaves `GET /roles` as well as `Agent`, so **no CI credential can be issued through the product**. Should redden `theRoleCatalogueIsWholeAndHasNoWildcard` and the SPA's `offers BOTH roles every grant picker hides`. | ⬜ NOT RUN |
 | AS-5 | `V41` also `DELETE`s existing person-held `Automation Service` grants | The option refused on 2026-08-08: a migration removing access on a live instance, with no actor and therefore no audit row `RoleGrantService` would have written. Reddens nothing — the fixtures create their grants after migration — which is the finding. **Known gap: the suite cannot observe a migration that deletes production data.** | ⬜ NOT RUN |
+
+### §136 — `Idempotency-Key` on suite and doc-page creates (`IK-1` … `IK-7`)
+
+`V42` adds two columns and two partial unique indexes; the services gain the replay lookup the
+other four creates have had since `V11`/`V14`/`V17`. Assertions live in
+`SuiteWriteEndpointTest.Idempotency` (9 new), `DocPageEndpointTest.Idempotency` (9 new) and
+`IdempotencyKeyCapTest` (3 new, no Spring context).
+
+> **NONE RUN.** **`IK-3` first** — it is the one whose failure is silent on both sides of the wire:
+> the endpoint keeps answering 201 and the client keeps believing it deduplicated.
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| IK-1 | `V42`'s unique indexes are made non-unique | The lookup still finds the first row, so every single-threaded test stays green — the constraint exists for the **race** between two retries of one intent, which the suite does not run. Reddens nothing. **Known gap: no test in this repo drives two concurrent creates carrying one key**, on any of the six tables. The same gap has existed since `V11`. | ⬜ NOT RUN |
+| IK-2 | The replay lookup moves **after** `SuiteEdit.validate` / `PageContent.validateCreate` | A retry whose payload drifted gets a 400 naming fields on a resource that already exists, sending the client to fix a suite it cannot see. Should redden `aRetryIgnoresADriftedPayload` in both classes. | ⬜ NOT RUN |
+| IK-3 | `trimToNull` is dropped from either controller (header passed through raw) | `Idempotency-Key: ` (empty) is stored as `''` and becomes one key every misconfigured client in the project replays against — the project accepts exactly one suite, or one page, from all of them, forever. Should redden `aBlankKeyIsAbsent` in both classes. | ⬜ NOT RUN |
+| IK-4 | `findByIdempotencyKey` drops its `projectId` predicate | A key reused across two projects of one company passes the lookup and then violates the index: a validated request that 500s on insert. Should redden `keysAreScopedToTheProject` (suite). **The doc-page class has no second granted project**, so its own scope test only crosses *companies* — a narrower observation, recorded rather than papered over. | ⬜ NOT RUN |
+| IK-5 | The controller answers `201` + `Location` on a replay | A client following the `Location` reads the replay as having created something, which is what the 200 exists to tell it apart from. Should redden `aReplayCarriesNoLocation` and the status assertion in `aRetryReplaysTheOriginal`, both classes. | ⬜ NOT RUN |
+| IK-6 | `MAX_IDEMPOTENCY_KEY` is changed to 500 in **one** of the seven services | The drift the copies invite: one key format works against part of the API and 400s against the rest. Should redden `IdempotencyKeyCapTest.everyCapAgrees` and `theContractAgreesWithTheCode`. **This is the row that justifies not extracting a shared constant** — if it does not redden, the argument in `SuiteWriteService`'s field comment is wrong and the symbol should be extracted. | ⬜ NOT RUN |
+| IK-7 | `DocPageWriteService.writeSubjectPage` passes a key instead of null | A plan-document create starts consuming keys from a header it never receives — harmless today (the parameter is null at the only call site) but it would make `uq_doc_page_subject` and this index two answers to one question. Reddens nothing. **Known gap**, recorded because the null is a decision and not an omission. | ⬜ NOT RUN |

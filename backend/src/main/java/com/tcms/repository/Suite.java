@@ -106,6 +106,16 @@ public class Suite {
     private Instant deletedAt;
 
     /**
+     * The {@code Idempotency-Key} the creating request carried, or null (migration {@code V42}).
+     *
+     * <p>{@code updatable = false} because it describes the request that made the row and not the
+     * row's current state — an edit that rewrote it would let a later intent claim an earlier one's
+     * key, which is the one thing the unique index exists to prevent.
+     */
+    @Column(name = "created_idempotency_key", updatable = false)
+    private String createdIdempotencyKey;
+
+    /**
      * Optimistic-locking token, and part of the contract: the SPA sends it back on a rename so a
      * concurrent edit is a 409 rather than a silent overwrite (plan §6j). Exposed for that reason
      * alone, which is why it survives the general rule that internals stay off the wire.
@@ -127,6 +137,10 @@ public class Suite {
      * "ui e2e" slug alike) and can be empty — went with the column in {@code V33}. It is worth
      * knowing about only because {@code execution_fact.suite_path} still holds paths written under
      * that rule, and they are frozen history that must keep rendering.
+     *
+     * @param idempotencyKey the creating request's {@code Idempotency-Key}, or null when it sent
+     *                       none — which today is every SPA create, the header being for callers
+     *                       that retry without a person watching (§135)
      */
     static Suite create(
             UUID projectId,
@@ -134,6 +148,7 @@ public class Suite {
             long keySeq,
             SuiteEdit edit,
             UUID creatorId,
+            String idempotencyKey,
             Instant now) {
 
         Suite created = new Suite();
@@ -150,6 +165,7 @@ public class Suite {
         created.position = 0;
         created.createdAt = now;
         created.createdBy = creatorId;
+        created.createdIdempotencyKey = idempotencyKey;
         created.applyEdit(edit, creatorId, now);
         return created;
     }

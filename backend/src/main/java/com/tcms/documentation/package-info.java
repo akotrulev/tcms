@@ -77,14 +77,28 @@
  *
  * <h2>What is deliberately not built</h2>
  *
- * <p><strong>{@code doc_link} has no writer</strong>, so no block has a {@code coverage} marker and
- * no case has a {@code relatedDocuments} entry. The field is <em>absent</em> from responses rather
- * than serialized as a zeroed marker, which is the call
+ * <p>~~<strong>{@code doc_link} has no writer</strong>, so no block has a {@code coverage} marker
+ * and no case has a {@code relatedDocuments} entry. The field is <em>absent</em> from responses
+ * rather than serialized as a zeroed marker, which is the call
  * {@link com.tcms.repository.TestCaseDetailView} already made for the other end of the same edge:
  * a marker reading "0 cases, not tested" states that nothing verifies this block, when the true
  * statement is that nothing has been asked. The linking slice lights up both ends at once, and this
  * module already refuses to break a link it cannot yet create — the invariant is enforced from the
- * day the blocks exist rather than retrofitted onto data that grew without it.
+ * day the blocks exist rather than retrofitted onto data that grew without it.~~ →
+ * <strong>superseded by §93, corrected here in §136.</strong>
+ *
+ * <p>{@code BlockLinkService} is the writer, {@code POST …/blocks/{blockId}/links} is the endpoint,
+ * and every block serves its {@code links}. The paragraph above was stale for over forty sections
+ * while {@code DocBlockView}'s own header recorded the supersession correctly — and this is the
+ * file an agent reads <em>first</em> to orient in the module, so it was the one place the stale
+ * claim did the most damage. §135 found it; the shape is §110's, where four documents went on
+ * calling the Linux gate inert for two days after it started working: a supersession written
+ * somewhere true and not everywhere the claim appears.
+ *
+ * <p>What is still absent is {@code coverage}, for a different reason stated on the field itself:
+ * this module can see <em>which</em> cases claim a statement but not how they are <strong>doing</strong>,
+ * and that join is §81's rule putting it in {@code work}. The zeroed-marker argument above still
+ * holds for it.
  *
  * <p>Also not built: {@code doc_page_version} is written but never read (no diff view), page moves
  * (reparenting rewrites descendant paths, exactly as it does for a suite), spaces as a concept on

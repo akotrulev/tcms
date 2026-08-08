@@ -1185,6 +1185,138 @@ class DocPageEndpointTest extends IntegrationTestBase {
     }
 
     // =====================================================================
+    // Idempotency-Key (V42)
+    //
+    // The header this endpoint refused until V42, on a reason copied from the suite endpoint that
+    // was weakest here: a page is a LINK TARGET, so a duplicate splits traceability across two
+    // sets of block ids and deleting the loser destroys its links rather than merging them.
+    // =====================================================================
+
+    @Nested
+    @DisplayName("Idempotency — a retry must not create a second page")
+    class Idempotency {
+
+        @Test
+        @DisplayName("a repeated key answers 200 with the SAME page, and creates nothing")
+        void aRetryReplaysTheOriginal() throws Exception {
+            String key = "intent-" + UUID.randomUUID();
+
+            MvcResult first = create(LEAD, ACME_BANKING, page("Once", null), key);
+            MvcResult retry = create(LEAD, ACME_BANKING, page("Once", null), key);
+
+            assertThat(first.getResponse().getStatus()).isEqualTo(201);
+            assertThat(retry.getResponse().getStatus()).isEqualTo(200);
+            assertThat(idOf(retry)).isEqualTo(idOf(first));
+            assertThat(livePageCount(ACME, ACME_BANKING)).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("a replay serves the page's blocks, so it matches what the create answered")
+        void aReplayCarriesTheBlocks() throws Exception {
+            // The replay renders from the live row rather than from a stored response — the whole
+            // reason the column form was chosen over a general idempotent-request table (V17).
+            String key = "intent-" + UUID.randomUUID();
+            String payload = pageWithBlocks("Spec",
+                    block(null, "paragraph", null, "The statement"));
+
+            create(LEAD, ACME_BANKING, payload, key);
+            MvcResult retry = create(LEAD, ACME_BANKING, payload, key);
+
+            assertThat(retry.getResponse().getStatus()).isEqualTo(200);
+            assertThat(blocksOf(retry)).hasSize(1);
+            assertThat(blocksOf(retry).get(0).get("text").asText()).isEqualTo("The statement");
+        }
+
+        @Test
+        @DisplayName("a replay carries no Location — nothing was created by that request")
+        void aReplayCarriesNoLocation() throws Exception {
+            String key = "intent-" + UUID.randomUUID();
+            create(LEAD, ACME_BANKING, page("Located", null), key);
+
+            MvcResult retry = create(LEAD, ACME_BANKING, page("Located", null), key);
+
+            assertThat(retry.getResponse().getHeader(HttpHeaders.LOCATION)).isNull();
+        }
+
+        @Test
+        @DisplayName("the counter does not move on a replay, so the next real create is DOC-2")
+        void aReplayBurnsNoKey() throws Exception {
+            String key = "intent-" + UUID.randomUUID();
+
+            assertThat(body(create(LEAD, ACME_BANKING, page("First", null), key))
+                    .get("key").asText()).isEqualTo("DOC-1");
+            create(LEAD, ACME_BANKING, page("First", null), key);
+
+            assertThat(body(create(LEAD, ACME_BANKING, page("Second", null)))
+                    .get("key").asText()).isEqualTo("DOC-2");
+        }
+
+        @Test
+        @DisplayName("a retry whose payload has drifted still returns the original, not a 400")
+        void aRetryIgnoresADriftedPayload() throws Exception {
+            // The key is checked BEFORE validation: the client is asking "did my intent land", and
+            // a 400 would send it to fix fields on a page that already exists.
+            String key = "intent-" + UUID.randomUUID();
+            create(LEAD, ACME_BANKING, page("Original", null), key);
+
+            MvcResult retry = create(LEAD, ACME_BANKING, page("   ", null), key);
+
+            assertThat(retry.getResponse().getStatus()).isEqualTo(200);
+            assertThat(body(retry).get("title").asText()).isEqualTo("Original");
+        }
+
+        @Test
+        @DisplayName("no key at all creates every time — the header stays optional")
+        void withoutAKeyEveryCallCreates() throws Exception {
+            create(LEAD, ACME_BANKING, page("One", null));
+            create(LEAD, ACME_BANKING, page("One", null));
+
+            assertThat(livePageCount(ACME, ACME_BANKING)).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("a blank key is treated as absent, not as a key everyone shares")
+        void aBlankKeyIsAbsent() throws Exception {
+            // Stored as-is, a blank key becomes ONE key every misconfigured client replays against,
+            // and the project accepts exactly one page from all of them, forever. The SAME blank
+            // value has to be sent twice: two different blanks would not collide even without the
+            // trim.
+            create(LEAD, ACME_BANKING, page("One", null), "   ");
+            create(LEAD, ACME_BANKING, page("Two", null), "   ");
+            create(LEAD, ACME_BANKING, page("Three", null), "");
+            create(LEAD, ACME_BANKING, page("Four", null), "");
+
+            assertThat(livePageCount(ACME, ACME_BANKING)).isEqualTo(4);
+        }
+
+        @Test
+        @DisplayName("the same key in another COMPANY's project creates a page")
+        void keysDoNotCrossCompanies() throws Exception {
+            // The index leads with company_id and the lookup runs under RLS, so Umbra's key cannot
+            // resolve to Acme's page even when the string is identical.
+            String key = "intent-shared";
+
+            MvcResult acme = create(LEAD, ACME_BANKING, page("Acme's", null), key);
+            MvcResult umbra = create(OUTSIDER, UMBRA_BANKING, page("Umbra's", null), key);
+
+            assertThat(acme.getResponse().getStatus()).isEqualTo(201);
+            assertThat(umbra.getResponse().getStatus()).isEqualTo(201);
+            assertThat(idOf(umbra)).isNotEqualTo(idOf(acme));
+        }
+
+        @Test
+        @DisplayName("an absurdly long key is refused rather than stored")
+        void anOverlongKeyIsRefused() throws Exception {
+            MvcResult result =
+                    create(LEAD, ACME_BANKING, page("Long key", null), "k".repeat(201));
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(body(result).get("errors").has("Idempotency-Key")).isTrue();
+            assertThat(livePageCount(ACME, ACME_BANKING)).isZero();
+        }
+    }
+
+    // =====================================================================
     // Isolation
     // =====================================================================
 
@@ -1245,13 +1377,22 @@ class DocPageEndpointTest extends IntegrationTestBase {
     }
 
     private MvcResult create(UUID userId, UUID projectId, String payload) throws Exception {
-        return mvc.perform(MockMvcRequestBuilders
-                        .post("/api/v1/projects/" + projectId + "/doc-pages")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, companyOf(userId)))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .accept(MediaType.APPLICATION_JSON)
-                        .content(payload))
-                .andReturn();
+        return create(userId, projectId, payload, null);
+    }
+
+    private MvcResult create(
+            UUID userId, UUID projectId, String payload, String idempotencyKey) throws Exception {
+
+        var request = MockMvcRequestBuilders
+                .post("/api/v1/projects/" + projectId + "/doc-pages")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, companyOf(userId)))
+                .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.APPLICATION_JSON)
+                .content(payload);
+        if (idempotencyKey != null) {
+            request = request.header("Idempotency-Key", idempotencyKey);
+        }
+        return mvc.perform(request).andReturn();
     }
 
     private MvcResult edit(UUID userId, UUID projectId, UUID pageId, String payload, Long ifMatch)
@@ -1368,6 +1509,13 @@ class DocPageEndpointTest extends IntegrationTestBase {
     // =====================================================================
     // helpers — reading the database
     // =====================================================================
+
+    private long livePageCount(UUID companyId, UUID projectId) throws SQLException {
+        return scalarLong(companyId,
+                "SELECT COUNT(*) FROM doc_page WHERE project_id = CAST(? AS uuid) "
+                        + "AND deleted_at IS NULL",
+                projectId.toString());
+    }
 
     private long spaceCount(UUID companyId, UUID projectId) throws SQLException {
         return scalarLong(companyId,

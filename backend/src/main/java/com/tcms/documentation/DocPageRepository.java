@@ -93,4 +93,23 @@ public interface DocPageRepository extends JpaRepository<DocPage, UUID> {
             @Param("projectId") UUID projectId,
             @Param("subjectType") DocSubjectType subjectType,
             @Param("subjectId") UUID subjectId);
+
+    /**
+     * The page a previous request with this {@code Idempotency-Key} already created, if any.
+     *
+     * <p>Scoped to the project because {@code doc_page_created_idempotency_key_idx} is, and
+     * unfiltered by {@code deletedAt} because a retry whose page has since been deleted is still a
+     * retry — {@code SuiteRepository#findByIdempotencyKey} states both at length and the reasons
+     * are the same ones.
+     *
+     * <p>It cannot match a page created on a plan's behalf: that path passes no key, which is why
+     * {@code uq_doc_page_subject} rather than this index is what dedupes it.
+     */
+    @Query("""
+            SELECT p FROM DocPage p
+             WHERE p.projectId = :projectId
+               AND p.createdIdempotencyKey = :idempotencyKey
+            """)
+    Optional<DocPage> findByIdempotencyKey(
+            @Param("projectId") UUID projectId, @Param("idempotencyKey") String idempotencyKey);
 }

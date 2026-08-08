@@ -1125,11 +1125,32 @@ export interface paths {
          *
          *     `lifecycleStatus` is always `DRAFT`, for the reason a created case is: a status an ordinary
          *     create could set is an approval its author granted themselves (§6g).
+         *
+         *     ~~No `Idempotency-Key`: a duplicate folder is visible in the tree the moment the create
+         *     returns, next to its twin.~~ → **superseded (§136, `V42`): the header is accepted here.**
+         *     The old reason argued entirely from a person looking at a screen, and §98 removed the tree
+         *     it named while §135's tool surface added a caller that has no screen and no way to notice a
+         *     twin. A replay answers **200** with the suite the original intent created.
          */
         post: {
             parameters: {
                 query?: never;
-                header?: never;
+                header?: {
+                    /**
+                     * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
+                     *     already succeeded answers **200** with the resource that intent created, instead of creating
+                     *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
+                     *     §136; the parameter has been shared by six other creates since `V14`.)
+                     *
+                     *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
+                     *     it across retries. A key generated per attempt is the mistake that makes the header look
+                     *     right and do nothing.
+                     *
+                     *     Scoped to the project the request is addressed to, which is the scope the uniqueness
+                     *     constraint behind it uses. Optional: omitted, every call creates. At most 200 characters.
+                     */
+                    "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                };
                 path: {
                     projectId: components["parameters"]["ProjectId"];
                 };
@@ -1141,6 +1162,19 @@ export interface paths {
                 };
             };
             responses: {
+                /**
+                 * @description A replay — this `Idempotency-Key` already created a suite, which is returned unchanged.
+                 *     No `Location`: this request created nothing, and a client following one would read it
+                 *     as having made something.
+                 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Suite"];
+                    };
+                };
                 /** @description Created — key is server-allocated (TS-n, per company) */
                 201: {
                     headers: {
@@ -1550,8 +1584,9 @@ export interface paths {
                 header?: {
                     /**
                      * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
-                     *     already succeeded answers **200** with the case that intent created, instead of creating a
-                     *     second one — so pressing Save again after a timeout is safe.
+                     *     already succeeded answers **200** with the resource that intent created, instead of creating
+                     *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
+                     *     §136; the parameter has been shared by six other creates since `V14`.)
                      *
                      *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
                      *     it across retries. A key generated per attempt is the mistake that makes the header look
@@ -1979,8 +2014,9 @@ export interface paths {
                 header?: {
                     /**
                      * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
-                     *     already succeeded answers **200** with the case that intent created, instead of creating a
-                     *     second one — so pressing Save again after a timeout is safe.
+                     *     already succeeded answers **200** with the resource that intent created, instead of creating
+                     *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
+                     *     §136; the parameter has been shared by six other creates since `V14`.)
                      *
                      *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
                      *     it across retries. A key generated per attempt is the mistake that makes the header look
@@ -3049,8 +3085,9 @@ export interface paths {
                 header?: {
                     /**
                      * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
-                     *     already succeeded answers **200** with the case that intent created, instead of creating a
-                     *     second one — so pressing Save again after a timeout is safe.
+                     *     already succeeded answers **200** with the resource that intent created, instead of creating
+                     *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
+                     *     §136; the parameter has been shared by six other creates since `V14`.)
                      *
                      *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
                      *     it across retries. A key generated per attempt is the mistake that makes the header look
@@ -3249,8 +3286,9 @@ export interface paths {
                 header?: {
                     /**
                      * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
-                     *     already succeeded answers **200** with the case that intent created, instead of creating a
-                     *     second one — so pressing Save again after a timeout is safe.
+                     *     already succeeded answers **200** with the resource that intent created, instead of creating
+                     *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
+                     *     §136; the parameter has been shared by six other creates since `V14`.)
                      *
                      *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
                      *     it across retries. A key generated per attempt is the mistake that makes the header look
@@ -3517,8 +3555,9 @@ export interface paths {
                 header?: {
                     /**
                      * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
-                     *     already succeeded answers **200** with the case that intent created, instead of creating a
-                     *     second one — so pressing Save again after a timeout is safe.
+                     *     already succeeded answers **200** with the resource that intent created, instead of creating
+                     *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
+                     *     §136; the parameter has been shared by six other creates since `V14`.)
                      *
                      *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
                      *     it across retries. A key generated per attempt is the mistake that makes the header look
@@ -3668,8 +3707,9 @@ export interface paths {
                 header?: {
                     /**
                      * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
-                     *     already succeeded answers **200** with the case that intent created, instead of creating a
-                     *     second one — so pressing Save again after a timeout is safe.
+                     *     already succeeded answers **200** with the resource that intent created, instead of creating
+                     *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
+                     *     §136; the parameter has been shared by six other creates since `V14`.)
                      *
                      *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
                      *     it across retries. A key generated per attempt is the mistake that makes the header look
@@ -4067,11 +4107,33 @@ export interface paths {
          *
          *     Blocks may be sent with the page or left for a later `PATCH`. **Block ids are
          *     server-generated here and never derived from the text** — see `DocBlockInput`.
+         *
+         *     ~~No `Idempotency-Key`, for the suite endpoint's reason.~~ → **superseded (§136, `V42`): the
+         *     header is accepted here, and it matters more here than anywhere else it is offered.** A page
+         *     is a *link target* — `doc_link` points at `(pageId, blockId)`, and a `doc_block` is this
+         *     product's whole model of a requirement (ERD resolved question #18) — so a duplicate page
+         *     splits traceability across two sets of block ids, and deleting the loser destroys its links
+         *     rather than merging them. A replay answers **200** with the page the original intent created.
          */
         post: {
             parameters: {
                 query?: never;
-                header?: never;
+                header?: {
+                    /**
+                     * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
+                     *     already succeeded answers **200** with the resource that intent created, instead of creating
+                     *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
+                     *     §136; the parameter has been shared by six other creates since `V14`.)
+                     *
+                     *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
+                     *     it across retries. A key generated per attempt is the mistake that makes the header look
+                     *     right and do nothing.
+                     *
+                     *     Scoped to the project the request is addressed to, which is the scope the uniqueness
+                     *     constraint behind it uses. Optional: omitted, every call creates. At most 200 characters.
+                     */
+                    "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                };
                 path: {
                     projectId: components["parameters"]["ProjectId"];
                 };
@@ -4083,6 +4145,18 @@ export interface paths {
                 };
             };
             responses: {
+                /**
+                 * @description A replay — this `Idempotency-Key` already created a page, which is returned with its
+                 *     blocks. No `Location`: this request created nothing.
+                 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DocPage"];
+                    };
+                };
                 /** @description Created — key is server-allocated (DOC-n, per company) */
                 201: {
                     headers: {
@@ -6506,8 +6580,9 @@ export interface paths {
                 header?: {
                     /**
                      * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
-                     *     already succeeded answers **200** with the case that intent created, instead of creating a
-                     *     second one — so pressing Save again after a timeout is safe.
+                     *     already succeeded answers **200** with the resource that intent created, instead of creating
+                     *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
+                     *     §136; the parameter has been shared by six other creates since `V14`.)
                      *
                      *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
                      *     it across retries. A key generated per attempt is the mistake that makes the header look
@@ -9874,8 +9949,9 @@ export interface components {
         IfMatch: string;
         /**
          * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
-         *     already succeeded answers **200** with the case that intent created, instead of creating a
-         *     second one — so pressing Save again after a timeout is safe.
+         *     already succeeded answers **200** with the resource that intent created, instead of creating
+         *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
+         *     §136; the parameter has been shared by six other creates since `V14`.)
          *
          *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
          *     it across retries. A key generated per attempt is the mistake that makes the header look

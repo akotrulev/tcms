@@ -54,6 +54,15 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/projects/{projectId}/doc-pages")
 public class DocPageController {
 
+    /**
+     * The header carrying one <em>user intent</em> to create, so a retry is not a second page.
+     *
+     * <p>Spelled here rather than imported: {@code CaseController} declares the same constant and
+     * lives in another module, which may not be imported from this one. Not on {@code HttpHeaders}
+     * either — it is an IETF draft header, not an RFC 9110 one.
+     */
+    static final String IDEMPOTENCY_KEY = "Idempotency-Key";
+
     private final DocPageService pages;
     private final BlockLinkService blockLinks;
     private final DocPageWriteService writes;
@@ -102,20 +111,31 @@ public class DocPageController {
      * never rewrites a path.
      *
      * <p>Always {@code DRAFT}. Publishing is {@link #status} and a different permission.
+     *
+     * <p>{@code Idempotency-Key} arrives with {@code V42}, the column that honours it, and never
+     * before — §54's rule. The header identifies one <em>intent</em>, not one attempt; a replay
+     * answers 200 with the page that intent made. It matters more here than anywhere else the
+     * header is offered, because a duplicate page splits traceability across two sets of block ids
+     * — see {@link DocPageWriteService#create}.
      */
     @PostMapping
     public ResponseEntity<Object> create(
             @AuthenticationPrincipal Jwt jwt,
             @PathVariable UUID projectId,
+            @RequestHeader(name = IDEMPOTENCY_KEY, required = false) String idempotencyKey,
             @RequestBody DocPageInput input) {
 
-        DocPageWriteService.Outcome outcome =
-                writes.create(UUID.fromString(jwt.getSubject()), projectId, input);
+        DocPageWriteService.Outcome outcome = writes.create(
+                UUID.fromString(jwt.getSubject()), projectId, input, trimToNull(idempotencyKey));
 
         return switch (outcome) {
             case DocPageWriteService.Outcome.Created created -> ResponseEntity
                     .created(location(projectId, created.view().id()))
                     .body(created.view());
+            // 200, and no Location: the resource was not created by this request, and a client that
+            // followed a Location on a replay would read it as having made something.
+            case DocPageWriteService.Outcome.Replayed replayed ->
+                    ResponseEntity.ok(replayed.view());
             default -> problem(outcome, "create documentation pages in this project");
         };
     }
@@ -296,11 +316,13 @@ public class DocPageController {
                     ResponseEntity.status(HttpStatus.CONFLICT).body(staleProblem());
             case DocPageWriteService.Outcome.WouldBreak refused ->
                     ResponseEntity.status(HttpStatus.CONFLICT).body(wouldBreakProblem(refused));
-            // The three success shapes. Reached only if a call site above routes one here — each
+            // The four success shapes. Reached only if a call site above routes one here — each
             // handles its own success and delegates the rest — so these arms exist to satisfy
             // exhaustiveness, not as a fallback that quietly renders a created page as an error.
             case DocPageWriteService.Outcome.Created ignored ->
                     throw new IllegalStateException("A created page was mapped as a problem");
+            case DocPageWriteService.Outcome.Replayed ignored ->
+                    throw new IllegalStateException("A replayed page was mapped as a problem");
             case DocPageWriteService.Outcome.Updated ignored ->
                     throw new IllegalStateException("An updated page was mapped as a problem");
             case DocPageWriteService.Outcome.Deleted ignored ->
@@ -383,6 +405,22 @@ public class DocPageController {
      */
     private static URI location(UUID projectId, UUID pageId) {
         return URI.create("/api/v1/projects/" + projectId + "/doc-pages/" + pageId);
+    }
+
+    /**
+     * Blank is the same as absent for {@code Idempotency-Key}.
+     *
+     * <p>{@code Idempotency-Key: } (empty) would otherwise be stored as {@code ''} and become a key
+     * every other empty-header request in the project replays against — one page, permanently, for
+     * every caller that sends the header wrong. {@code CaseController.trimToNull} is the same
+     * method; it is copied rather than shared for {@link #IDEMPOTENCY_KEY}'s reason.
+     */
+    private static String trimToNull(String header) {
+        if (header == null) {
+            return null;
+        }
+        String trimmed = header.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     /** Reads {@code If-Match}, tolerating the quoted form — {@code CaseController} explains both. */

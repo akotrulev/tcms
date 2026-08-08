@@ -154,6 +154,28 @@ public interface SuiteRepository extends JpaRepository<Suite, UUID> {
             """)
     long countLiveCasesFiledIn(@Param("suiteId") UUID suiteId);
 
+    /**
+     * The suite a previous request with this {@code Idempotency-Key} already created, if any.
+     *
+     * <p>Scoped to the project because {@code suite_created_idempotency_key_idx} is — company
+     * through RLS and the Hibernate filter, the other two named here. A lookup wider or narrower
+     * than the constraint enforcing it is a check that passes and an insert that fails, so a
+     * request that validated comes back as a 500 (V11's header, from the other direction).
+     *
+     * <p><strong>No {@code deletedAt IS NULL}, and that is the point.</strong> A retry whose
+     * original suite has since been deleted is still a retry: creating a second one would resurrect
+     * something somebody deliberately removed, and the index would refuse it anyway. What to answer
+     * for a replay pointing at a deleted row is the caller's decision; this method's job is to say
+     * the key was used.
+     */
+    @Query("""
+            SELECT s FROM Suite s
+             WHERE s.projectId = :projectId
+               AND s.createdIdempotencyKey = :idempotencyKey
+            """)
+    Optional<Suite> findByIdempotencyKey(
+            @Param("projectId") UUID projectId, @Param("idempotencyKey") String idempotencyKey);
+
     /** A {@code (suiteId, caseCount)} row from {@link #countLiveCasesBySuite}. */
     interface SuiteCaseCount {
 
