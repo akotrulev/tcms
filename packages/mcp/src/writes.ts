@@ -1,3 +1,1028 @@
+/**
+ * The write tools — ten of the twenty-one, *edits direct and creates as proposals*.
+ *
+ * Three rules hold across all of them and none of them is implemented here: a **create** carries
+ * `Idempotency-Key`, an **edit** carries `If-Match`, and a **state** transition carries neither
+ * because its precondition is the state rather than a version the client read. They live in
+ * `@tcms/client`'s `core/mutation.ts` so this surface and the CLI cannot disagree about them, and
+ * `conformance.test.ts` asserts each arm sends what its declaration implies.
+ *
+ * ## Where the version comes from, and the one place it must be demanded
+ *
+ * §139's rule: **a self-read `If-Match` is only honest when the request is not a delta.** Almost
+ * everything here is a delta — the tool takes named fields, `PATCH` leaves the rest alone, so a
+ * version read immediately before the write is a truthful precondition. `lockVersion` is accepted
+ * everywhere anyway and is strictly better when the model has one, because it also catches a
+ * change between the read that informed the edit and the edit itself.
+ *
+ * **`tcms_write_doc_page`'s `blocks` is the exception, and it is demanded rather than accepted.**
+ * A block omitted from that array is *deleted*, so a caller sending blocks is necessarily echoing
+ * back content it read earlier — the body's content came from a read, which is exactly §139's
+ * whole-body case. A fresh version there would assert a state that body was never based on, the
+ * server would accept it, and the concurrent author's paragraphs would be gone.
+ *
+ * ## Two arms the surface spec lists as buildable are not, and neither is a shortfall here
+ *
+ * **Evidence.** `tcms_record_result` was specified as `run:execute` + `result:submit` +
+ * `evidence:attach`. `POST …/evidence` accepts **`multipart/form-data` only** — it takes a file —
+ * and MCP tool arguments are JSON. A model has no bytes to send. So the tool ships the two arms
+ * it can and declares the two permissions it uses; declaring the third would hide the tool from a
+ * caller who can record results and cannot attach evidence, which is the failure §2's rule exists
+ * to prevent, arriving through a permission the tool never exercises.
+ *
+ * **Assigning a reviewer.** `POST …/reviews/{id}/assignees` needs a `userId` or a `teamId`, and
+ * this surface has no way to obtain either: §3.3 excludes everything under `/users` and `/teams`
+ * because they are `COMPANY`-scope, and `V40` §6 withholds `company:read` from `Agent`
+ * deliberately — *a token is not a member*. A tool taking a UUID nobody on this surface can look
+ * up is a tool that can only be called with a UUID pasted in by a human, which is the CLI's job.
+ * So `tcms_review_verdict` records verdicts and resolves threads, and does not assign.
+ *
+ * Both are consequences of decisions taken elsewhere and are listed as **Buildable** in the
+ * surface spec's §3 table. They are recorded in §140's section file rather than quietly dropped.
+ */
+import {
+  createIntent,
+  editIntent,
+  requireExplicitVersion,
+  resolveId,
+  type EditVersion,
+  type components,
+} from '@tcms/client';
+
+import {
+  InputError,
+  bool,
+  idProperty,
+  nullableStr,
+  num,
+  present,
+  requireStr,
+  str,
+  strings,
+} from './input.js';
+import type { Session } from './session.js';
 import type { ToolDefinition } from './tool.js';
 
-export const WRITE_TOOLS: readonly ToolDefinition[] = [];
+/* ----------------------------------------------------------------- helpers ---- */
+
+/**
+ * The version an edit sends.
+ *
+ * `lockVersion` when the caller has one — the model almost always does, because it read the
+ * resource to compose the edit — and a fresh self-read otherwise, which is honest for a delta.
+ * See the module header for the one arm that may not take this route.
+ */
+async function versionFor(
+  input: Record<string, unknown>,
+  read: () => Promise<unknown>,
+): Promise<EditVersion> {
+  const explicit = num(input, 'lockVersion');
+  if (explicit === undefined) return { fresh: await read() };
+  if (!Number.isInteger(explicit) || explicit < 0) {
+    throw new InputError(`'lockVersion' takes a whole number; ${String(explicit)} is not one.`);
+  }
+  return { explicit };
+}
+
+/** Display keys to ids, for the fields that take a complete set. Sequential — see the CLI's. */
+async function resolveMany(
+  session: Session,
+  projectId: string,
+  values: readonly string[] | undefined,
+  entity: 'CASE' | 'SUITE',
+): Promise<string[] | undefined> {
+  if (values === undefined) return undefined;
+  const ids: string[] = [];
+  for (const value of values) {
+    ids.push(await resolveId({ client: session.client, projectId, value, entity }));
+  }
+  return ids;
+}
+
+const LOCK_VERSION_PROPERTY = {
+  type: 'integer',
+  description:
+    'The lockVersion from the read this edit is based on. Pass what tcms_open_case / '
+    + 'tcms_list_suites / tcms_open_doc_page returned: it is what stops this overwriting a '
+    + 'colleague who saved while you were composing.',
+} as const;
+
+const ACTION = (values: readonly string[], description: string) => ({
+  type: 'string',
+  enum: [...values],
+  description,
+});
+
+/* ------------------------------------------------------------------- cases ---- */
+
+const writeCase: ToolDefinition = {
+  name: 'tcms_write_case',
+  title: 'Propose a new test case, or change an existing one',
+  description:
+    'Three actions. `propose` files a GENERATED case for a person to accept — it does not create '
+    + 'a test case, and nothing on this surface can: a credential cannot accept its own proposal. '
+    + '`edit` changes an existing case directly. `submit` puts one into review. Use `edit` when '
+    + 'you are correcting a case that exists and `propose` when you are adding coverage; the line '
+    + 'is whether a display key would have to be allocated.',
+  // Two keys merged, and §134 is what makes it safe: `case:create` without `case:edit` exists in
+  // exactly one role, `Automation Service`, which is non-assignable since V41 and never carries
+  // this surface. Had the two token roles been collapsed, this merge would list a create-only
+  // caller a tool whose edit arm 403s.
+  gate: { mode: 'all', permissions: ['case:create', 'case:edit'] },
+  arms: [
+    { action: 'propose', kind: 'create', permission: 'case:create' },
+    { action: 'edit', kind: 'edit', permission: 'case:edit' },
+    { action: 'submit', kind: 'state', permission: 'case:edit' },
+  ],
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['action'],
+    properties: {
+      action: ACTION(['propose', 'edit', 'submit'], 'What to do.'),
+      case: idProperty('case to edit or submit — required for those, refused for propose', 'TC-42'),
+      testCase: {
+        type: 'object',
+        description:
+          'The generated case, for `propose`. Same shape as a case create: title (required), '
+          + 'description, objective, expectedOutcome, priority, severity, steps, preconditions, '
+          + 'postconditions, tags, suiteId.',
+      },
+      verdict: {
+        type: 'string',
+        description:
+          'For `propose`: your own claim about whether you checked this against the spec. Leave '
+          + 'it out if you did not check — absent and UNVERIFIED are different answers, and the '
+          + 'difference is recorded.',
+      },
+      title: { type: 'string' },
+      description: { type: ['string', 'null'] },
+      objective: { type: ['string', 'null'] },
+      expectedOutcome: { type: ['string', 'null'] },
+      priority: { type: 'string' },
+      severity: { type: 'string' },
+      automationStatus: { type: 'string' },
+      suite: idProperty('suite to file it in — null to unfile it', 'TS-7'),
+      tags: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'The COMPLETE tag set, not an addition. Omit to leave the tags alone.',
+      },
+      lockVersion: LOCK_VERSION_PROPERTY,
+    },
+  },
+  run: async (session, input) => {
+    const projectId = session.projectId();
+    const action = requireStr(input, 'action');
+
+    if (action === 'propose') {
+      /*
+        Two shapes accepted, because two callers exist: a model holds the case it generated, and
+        the API takes an `AiProposalInput` wrapping it. Detecting the wrapper costs one key.
+      */
+      const raw = input['testCase'];
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        throw new InputError("'testCase' is required for propose, as an object.");
+      }
+      const verdict = str(input, 'verdict');
+
+      const filed = await session.client.POST('/projects/{projectId}/ai-proposals', {
+        params: { path: { projectId } },
+        body: {
+          ...('testCase' in raw ? raw : { testCase: raw }),
+          // Deliberately not defaulted: absent and `UNVERIFIED` are different, and they differ
+          // in `verdictSource` — nobody claimed anything, against a model claiming it had not
+          // checked. Filling this in would turn every silence into a claim.
+          ...(verdict === undefined ? {} : { verdict }),
+        } as components['schemas']['AiProposalInput'],
+        tcms: { ...session.request, ...createIntent({ key: session.callId }) },
+      });
+
+      return {
+        proposalId: filed.id,
+        status: filed.status,
+        verdict: filed.verdict,
+        verdictSource: filed.verdictSource,
+        // Printed together, always: a verdict without its source reads as a finding.
+        note: 'Filed for review. It is not a test case, and this credential cannot accept it — '
+          + 'the accept gate is "case:create AND no API token", so a person must.',
+      };
+    }
+
+    const caseId = await resolveId({
+      client: session.client, projectId, value: requireStr(input, 'case'), entity: 'CASE',
+    });
+    const path = { projectId, caseId };
+
+    if (action === 'submit') {
+      /*
+        Submitting is `POST …/cases/bulk` with `SUBMIT_FOR_REVIEW`, which the server aliases to
+        `SET_STATUS` at the parse boundary — there is no per-case status endpoint and
+        `TestCaseInput` carries no `lifecycleStatus`, deliberately (a status an ordinary create
+        could set is an approval its author granted themselves).
+
+        §3.3 excludes *wrapping bulk* as a tool because its gate is decided by its payload. This
+        is not that: the action is fixed at `SUBMIT_FOR_REVIEW`, whose gate is `case:edit`
+        unconditionally, so nothing about the permission depends on what the caller sent. The
+        approve moves stay unreachable, which is right — `Agent` holds no `*:approve`.
+      */
+      const result = await session.client.POST('/projects/{projectId}/cases/bulk', {
+        params: { path: { projectId } },
+        body: { action: 'SUBMIT_FOR_REVIEW', caseIds: [caseId], dryRun: false },
+        tcms: session.request,
+      });
+      return result;
+    }
+
+    if (action !== 'edit') throw new InputError(`Unknown action '${action}'.`);
+
+    const suite = nullableStr(input, 'suite');
+    const body = present({
+      title: str(input, 'title'),
+      description: nullableStr(input, 'description'),
+      objective: nullableStr(input, 'objective'),
+      expectedOutcome: nullableStr(input, 'expectedOutcome'),
+      priority: str(input, 'priority'),
+      severity: str(input, 'severity'),
+      automationStatus: str(input, 'automationStatus'),
+      // Null and absent are different requests and JSON can say both: null unfiles the case,
+      // absent leaves it where it is. The CLI needed two flags to express this; here it is the
+      // shape the caller already sent.
+      suiteId: suite === null
+        ? null
+        : suite === undefined
+          ? undefined
+          : await resolveId({ client: session.client, projectId, value: suite, entity: 'SUITE' }),
+      tags: strings(input, 'tags'),
+    });
+
+    if (Object.keys(body).length === 0) {
+      throw new InputError('Nothing to change. Name at least one field.');
+    }
+
+    const version = await versionFor(input, () =>
+      session.client.GET('/projects/{projectId}/cases/{caseId}', { params: { path }, tcms: session.request }));
+
+    return session.client.PATCH('/projects/{projectId}/cases/{caseId}', {
+      params: { path },
+      body: body as components['schemas']['TestCaseInput'],
+      tcms: { ...session.request, ...editIntent(version, 'edit this case') },
+    });
+  },
+};
+
+/* ------------------------------------------------------------------ suites ---- */
+
+const writeSuite: ToolDefinition = {
+  name: 'tcms_write_suite',
+  title: 'Create a suite, change one, or move it through review',
+  description:
+    'A suite is a FLAT named collection, not a folder. Its members are three arms together: cases '
+    + 'filed in it, cases added explicitly (`cases`), and cases matched by its tag rules. Both '
+    + 'lists are COMPLETE SETS — sending `cases` replaces the membership rather than adding to '
+    + 'it. `status` moves it to DRAFT or IN_REVIEW; APPROVED and DEPRECATED need suite:approve, '
+    + 'which this credential does not hold.',
+  gate: { mode: 'all', permissions: ['suite:manage'] },
+  arms: [
+    { action: 'create', kind: 'create', permission: 'suite:manage' },
+    { action: 'edit', kind: 'edit', permission: 'suite:manage' },
+    { action: 'status', kind: 'state', permission: 'suite:manage' },
+  ],
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['action'],
+    properties: {
+      action: ACTION(['create', 'edit', 'status'], 'What to do.'),
+      suite: idProperty('suite — required for edit and status', 'TS-7'),
+      name: { type: 'string' },
+      description: { type: ['string', 'null'] },
+      tagRules: { type: 'array', items: { type: 'string' }, description: 'COMPLETE set of tag rules.' },
+      cases: { type: 'array', items: { type: 'string' }, description: 'COMPLETE set of member case keys.' },
+      status: { type: 'string', description: 'For `status`: DRAFT or IN_REVIEW.' },
+      lockVersion: LOCK_VERSION_PROPERTY,
+    },
+  },
+  run: async (session, input) => {
+    const projectId = session.projectId();
+    const action = requireStr(input, 'action');
+
+    if (action === 'create') {
+      return session.client.POST('/projects/{projectId}/suites', {
+        params: { path: { projectId } },
+        body: present({
+          name: requireStr(input, 'name'),
+          description: nullableStr(input, 'description'),
+          tagRules: strings(input, 'tagRules'),
+          caseIds: await resolveMany(session, projectId, strings(input, 'cases'), 'CASE'),
+        }) as components['schemas']['SuiteInput'],
+        tcms: { ...session.request, ...createIntent({ key: session.callId }) },
+      });
+    }
+
+    const suiteId = await resolveId({
+      client: session.client, projectId, value: requireStr(input, 'suite'), entity: 'SUITE',
+    });
+    const path = { projectId, suiteId };
+
+    if (action === 'status') {
+      return session.client.PUT('/projects/{projectId}/suites/{suiteId}/status', {
+        params: { path },
+        body: { status: requireStr(input, 'status') as components['schemas']['LifecycleStatus'] },
+        // No `If-Match` and no key: the request names an absolute target state rather than a
+        // delta against something the client read, and setting the status a suite already has
+        // writes nothing. The contract says so on this endpoint.
+        tcms: session.request,
+      });
+    }
+
+    if (action !== 'edit') throw new InputError(`Unknown action '${action}'.`);
+
+    const body = present({
+      name: str(input, 'name'),
+      description: nullableStr(input, 'description'),
+      tagRules: strings(input, 'tagRules'),
+      caseIds: await resolveMany(session, projectId, strings(input, 'cases'), 'CASE'),
+    });
+    if (Object.keys(body).length === 0) {
+      throw new InputError('Nothing to change. Name at least one field.');
+    }
+
+    const version = await versionFor(input, () =>
+      session.client.GET('/projects/{projectId}/suites/{suiteId}', { params: { path }, tcms: session.request }));
+
+    return session.client.PATCH('/projects/{projectId}/suites/{suiteId}', {
+      params: { path },
+      body: body as components['schemas']['SuiteInput'],
+      tcms: { ...session.request, ...editIntent(version, 'edit this suite') },
+    });
+  },
+};
+
+/* --------------------------------------------------------------------- docs ---- */
+
+const writeDocPage: ToolDefinition = {
+  name: 'tcms_write_doc_page',
+  title: 'Write documentation, and link cases to it',
+  description:
+    'Four actions on one gate: create a page, edit one, link a case or suite to a block, and '
+    + 'unlink. **A block omitted from `blocks` is DELETED** — the array is the whole page in '
+    + 'order — so read the page first and send back everything you are keeping, together with the '
+    + 'lockVersion that read returned. Linking is how a case is tied to a requirement: this '
+    + 'product has no separate criterion record, so the block IS the requirement.',
+  gate: { mode: 'all', permissions: ['doc:edit'] },
+  arms: [
+    { action: 'create', kind: 'create', permission: 'doc:edit' },
+    { action: 'edit', kind: 'edit', permission: 'doc:edit' },
+    // A link is a create by shape, and the contract offers no `Idempotency-Key` here and needs
+    // none: linking the same source to the same block twice writes nothing and answers 200 with
+    // the existing link, which is the property a key would have bought.
+    { action: 'link', kind: 'state', permission: 'doc:edit' },
+    { action: 'unlink', kind: 'delete', permission: 'doc:edit' },
+  ],
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['action'],
+    properties: {
+      action: ACTION(['create', 'edit', 'link', 'unlink'], 'What to do.'),
+      page: idProperty('documentation page — required for everything but create', 'DOC-1'),
+      title: { type: 'string' },
+      parent: idProperty('parent page, for create', 'DOC-1'),
+      blocks: {
+        type: 'array',
+        items: { type: 'object' },
+        description:
+          'The WHOLE page in order. A block you omit is deleted. Requires lockVersion.',
+      },
+      block: { type: 'string', description: 'For `link`: the block id from tcms_open_doc_page.' },
+      case: idProperty('case to link', 'TC-42'),
+      suite: idProperty('suite to link', 'TS-7'),
+      relationship: { type: 'string', description: 'Default VERIFIES.' },
+      link: { type: 'string', description: 'For `unlink`: the link id.' },
+      lockVersion: LOCK_VERSION_PROPERTY,
+    },
+  },
+  run: async (session, input) => {
+    const projectId = session.projectId();
+    const action = requireStr(input, 'action');
+    const tcms = session.request;
+
+    if (action === 'create') {
+      const parent = str(input, 'parent');
+      return session.client.POST('/projects/{projectId}/doc-pages', {
+        params: { path: { projectId } },
+        body: present({
+          title: requireStr(input, 'title'),
+          parentId: parent === undefined
+            ? undefined
+            : await resolveId({ client: session.client, projectId, value: parent, entity: 'DOC_PAGE' }),
+          blocks: input['blocks'],
+        }) as components['schemas']['DocPageInput'],
+        tcms: { ...tcms, ...createIntent({ key: session.callId }) },
+      });
+    }
+
+    const pageId = await resolveId({
+      client: session.client, projectId, value: requireStr(input, 'page'), entity: 'DOC_PAGE',
+    });
+    const path = { projectId, pageId };
+
+    if (action === 'link') {
+      const caseKey = str(input, 'case');
+      const suiteKey = str(input, 'suite');
+      if ((caseKey === undefined) === (suiteKey === undefined)) {
+        throw new InputError("Name exactly one of 'case' or 'suite'.");
+      }
+
+      return session.client.POST('/projects/{projectId}/doc-pages/{pageId}/blocks/{blockId}/links', {
+        params: { path: { projectId, pageId, blockId: requireStr(input, 'block') } },
+        body: {
+          ...(caseKey === undefined
+            ? {
+              sourceType: 'SUITE' as const,
+              sourceId: await resolveId({ client: session.client, projectId, value: suiteKey ?? '', entity: 'SUITE' }),
+            }
+            : {
+              sourceType: 'TEST_CASE' as const,
+              sourceId: await resolveId({ client: session.client, projectId, value: caseKey, entity: 'CASE' }),
+            }),
+          // Sent explicitly rather than omitted: the generated type makes it required, because
+          // `openapi-typescript` reads a schema default as "the server always has one" — true of
+          // the stored row and not of the request. This asks for what an omission would have got.
+          relationship: (str(input, 'relationship') ?? 'VERIFIES') as
+            components['schemas']['BlockLinkInput']['relationship'],
+        },
+        tcms,
+      });
+    }
+
+    if (action === 'unlink') {
+      const linkId = requireStr(input, 'link');
+      await session.client.DELETE('/projects/{projectId}/doc-pages/{pageId}/links/{linkId}', {
+        params: { path: { projectId, pageId, linkId } },
+        tcms,
+      });
+      // A 204 has no body, and `undefined` is not something a caller can read.
+      return { removed: linkId };
+    }
+
+    if (action !== 'edit') throw new InputError(`Unknown action '${action}'.`);
+
+    const blocks = input['blocks'];
+    const body = present({ title: str(input, 'title'), blocks });
+    if (Object.keys(body).length === 0) {
+      throw new InputError("Nothing to change. Pass 'title', or 'blocks' with the page body.");
+    }
+
+    /*
+      **The one arm that demands a version rather than reading one.** A `blocks` array is the
+      whole page and its content came from an earlier read — the caller is echoing back the
+      paragraphs it is keeping — so a fresh version would assert a state that body was never
+      based on, the server would accept it, and whoever saved in between would lose their words.
+      §139's rule, applied to the one place on this surface where it bites. A title-only edit is
+      a delta and takes the ordinary route.
+    */
+    const version = blocks === undefined
+      ? await versionFor(input, () =>
+        session.client.GET('/projects/{projectId}/doc-pages/{pageId}', { params: { path }, tcms }))
+      : requireExplicitVersion(num(input, 'lockVersion'), 'Replacing a page\'s blocks', 'lockVersion');
+
+    return session.client.PATCH('/projects/{projectId}/doc-pages/{pageId}', {
+      params: { path },
+      body: body as components['schemas']['DocPageInput'],
+      tcms: { ...tcms, ...editIntent(version, 'edit this page') },
+    });
+  },
+};
+
+/* -------------------------------------------------------------------- plans ---- */
+
+const writePlan: ToolDefinition = {
+  name: 'tcms_write_plan',
+  title: 'Create a test plan, change one, or move it through review',
+  description:
+    'A plan is a named selection of suites and cases against a milestone. `suites` and `cases` '
+    + 'are COMPLETE SETS. `status` moves it to DRAFT or IN_REVIEW; APPROVED needs plan:approve, '
+    + 'which this credential does not hold.',
+  gate: { mode: 'all', permissions: ['plan:create', 'plan:edit'] },
+  arms: [
+    { action: 'create', kind: 'create', permission: 'plan:create' },
+    { action: 'edit', kind: 'edit', permission: 'plan:edit' },
+    { action: 'status', kind: 'state', permission: 'plan:edit' },
+  ],
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['action'],
+    properties: {
+      action: ACTION(['create', 'edit', 'status'], 'What to do.'),
+      plan: idProperty('plan — required for edit and status', 'TP-1'),
+      name: { type: 'string' },
+      description: { type: ['string', 'null'] },
+      milestoneName: { type: ['string', 'null'] },
+      milestoneDate: { type: ['string', 'null'], description: 'YYYY-MM-DD.' },
+      suites: { type: 'array', items: { type: 'string' }, description: 'COMPLETE set of suite keys.' },
+      cases: { type: 'array', items: { type: 'string' }, description: 'COMPLETE set of case keys.' },
+      status: { type: 'string', description: 'For `status`: DRAFT or IN_REVIEW.' },
+      lockVersion: LOCK_VERSION_PROPERTY,
+    },
+  },
+  run: async (session, input) => {
+    const projectId = session.projectId();
+    const action = requireStr(input, 'action');
+    const tcms = session.request;
+
+    if (action === 'create') {
+      return session.client.POST('/projects/{projectId}/plans', {
+        params: { path: { projectId } },
+        body: present({
+          name: requireStr(input, 'name'),
+          description: nullableStr(input, 'description'),
+          milestoneName: nullableStr(input, 'milestoneName'),
+          milestoneDate: nullableStr(input, 'milestoneDate'),
+          suiteIds: await resolveMany(session, projectId, strings(input, 'suites'), 'SUITE'),
+          caseIds: await resolveMany(session, projectId, strings(input, 'cases'), 'CASE'),
+        }) as components['schemas']['TestPlanInput'],
+        tcms: { ...tcms, ...createIntent({ key: session.callId }) },
+      });
+    }
+
+    const planId = await resolveId({
+      client: session.client, projectId, value: requireStr(input, 'plan'), entity: 'PLAN',
+    });
+    const path = { projectId, planId };
+
+    if (action === 'status') {
+      return session.client.PUT('/projects/{projectId}/plans/{planId}/status', {
+        params: { path },
+        body: { status: requireStr(input, 'status') as 'DRAFT' | 'IN_REVIEW' | 'APPROVED' },
+        tcms,
+      });
+    }
+
+    if (action !== 'edit') throw new InputError(`Unknown action '${action}'.`);
+
+    /*
+      `TestPlanUpdateInput` REQUIRES `name`, alone among the edit shapes on this surface, so a
+      partial edit is not expressible on the wire and an edit that sent only a description would
+      be a 400 about a field nobody mentioned. The read this arm makes for its version carries
+      the current name, so it is threaded through — safe precisely because the name and the
+      version come from the *same* read and are therefore consistent.
+    */
+    const current = await session.client.GET('/projects/{projectId}/plans/{planId}', { params: { path }, tcms });
+    const version = await versionFor(input, async () => current);
+
+    const body = present({
+      description: nullableStr(input, 'description'),
+      milestoneName: nullableStr(input, 'milestoneName'),
+      milestoneDate: nullableStr(input, 'milestoneDate'),
+      suiteIds: await resolveMany(session, projectId, strings(input, 'suites'), 'SUITE'),
+      caseIds: await resolveMany(session, projectId, strings(input, 'cases'), 'CASE'),
+    });
+    if (Object.keys(body).length === 0 && str(input, 'name') === undefined) {
+      throw new InputError('Nothing to change. Name at least one field.');
+    }
+    body['name'] = str(input, 'name') ?? current.name;
+
+    return session.client.PATCH('/projects/{projectId}/plans/{planId}', {
+      params: { path },
+      body: body as components['schemas']['TestPlanUpdateInput'],
+      tcms: { ...tcms, ...editIntent(version, 'edit this plan') },
+    });
+  },
+};
+
+/* --------------------------------------------------------------------- runs ---- */
+
+const writeRun: ToolDefinition = {
+  name: 'tcms_write_run',
+  title: 'Create a test run, or clone one',
+  description:
+    'A run is a fixed selection of cases to execute. `tags` on a run point the opposite way from a '
+    + 'case filter: every live case carrying ANY of them, union not intersection. Cloning takes '
+    + "the original's selection under a new name, which is how a re-test of the same scope is "
+    + 'made. Closing a run needs run:close, which this credential does not hold.',
+  gate: { mode: 'all', permissions: ['run:create'] },
+  arms: [
+    { action: 'create', kind: 'create', permission: 'run:create' },
+    { action: 'clone', kind: 'create', permission: 'run:create' },
+  ],
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['action', 'name'],
+    properties: {
+      action: ACTION(['create', 'clone'], 'What to do.'),
+      name: { type: 'string', description: 'The new run\'s name. Required for both actions.' },
+      run: idProperty('run to clone', 'TR-1'),
+      plan: idProperty('plan to run', 'TP-1'),
+      suites: { type: 'array', items: { type: 'string' } },
+      cases: { type: 'array', items: { type: 'string' } },
+      tags: { type: 'array', items: { type: 'string' }, description: 'Cases carrying ANY of these.' },
+      releaseVersion: { type: ['string', 'null'] },
+      buildNumber: { type: ['string', 'null'] },
+    },
+  },
+  run: async (session, input) => {
+    const projectId = session.projectId();
+    const action = requireStr(input, 'action');
+    const tcms = session.request;
+
+    if (action === 'clone') {
+      const runId = await resolveId({
+        client: session.client, projectId, value: requireStr(input, 'run'), entity: 'RUN',
+      });
+      return session.client.POST('/projects/{projectId}/runs/{runId}/clone', {
+        params: { path: { projectId, runId } },
+        body: present({
+          name: requireStr(input, 'name'),
+          releaseVersion: nullableStr(input, 'releaseVersion'),
+          buildNumber: nullableStr(input, 'buildNumber'),
+        }) as components['schemas']['TestRunCloneInput'],
+        tcms: { ...tcms, ...createIntent({ key: session.callId }) },
+      });
+    }
+
+    if (action !== 'create') throw new InputError(`Unknown action '${action}'.`);
+
+    const plan = str(input, 'plan');
+    return session.client.POST('/projects/{projectId}/runs', {
+      params: { path: { projectId } },
+      body: present({
+        name: requireStr(input, 'name'),
+        planId: plan === undefined
+          ? undefined
+          : await resolveId({ client: session.client, projectId, value: plan, entity: 'PLAN' }),
+        suiteIds: await resolveMany(session, projectId, strings(input, 'suites'), 'SUITE'),
+        caseIds: await resolveMany(session, projectId, strings(input, 'cases'), 'CASE'),
+        tags: strings(input, 'tags'),
+        releaseVersion: nullableStr(input, 'releaseVersion'),
+        buildNumber: nullableStr(input, 'buildNumber'),
+      }) as components['schemas']['TestRunInput'],
+      tcms: { ...tcms, ...createIntent({ key: session.callId }) },
+    });
+  },
+};
+
+const recordResult: ToolDefinition = {
+  name: 'tcms_record_result',
+  title: 'Record a verdict against one case in a run',
+  description:
+    'Name the run and the case — an execution has no display key and never will. The status is a '
+    + "per-project name from tcms_orient's executionStatuses, not a UUID. **Attaching evidence is "
+    + 'not available here**: evidence is a file upload and there is no way to send bytes through '
+    + 'a tool call. Amending a recorded result needs result:amend, which this credential does not '
+    + 'hold.',
+  // Two keys, not the three §3 lists — the `evidence:attach` arm cannot exist on this transport.
+  // See the module header: declaring a permission the tool never exercises would hide it from a
+  // caller who can record results and cannot attach evidence.
+  gate: { mode: 'all', permissions: ['run:execute', 'result:submit'] },
+  arms: [{ action: 'record', kind: 'edit', permission: 'result:submit' }],
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['run', 'case', 'status'],
+    properties: {
+      run: idProperty('run', 'TR-1'),
+      case: idProperty('case whose execution to record', 'TC-42'),
+      status: { type: 'string', description: 'A status NAME from tcms_orient, e.g. "Passed".' },
+      comment: { type: ['string', 'null'] },
+      lockVersion: LOCK_VERSION_PROPERTY,
+    },
+  },
+  run: async (session, input) => {
+    const projectId = session.projectId();
+    const tcms = session.request;
+    const runId = await resolveId({
+      client: session.client, projectId, value: requireStr(input, 'run'), entity: 'RUN',
+    });
+
+    const caseKey = requireStr(input, 'case');
+    const detail = await session.client.GET('/projects/{projectId}/runs/{runId}', {
+      params: { path: { projectId, runId } }, tcms,
+    });
+    const execution = detail.executions.find(
+      (row) => row.caseKey === caseKey || row.caseId === caseKey,
+    );
+    if (!execution) {
+      throw new InputError(
+        `${caseKey} is not in ${detail.key}. A run covers the cases it was created with; adding `
+          + 'one is a change to the run, not a result.',
+      );
+    }
+
+    // The status is named, not typed as a UUID: `case_status` is per-project vocabulary and the
+    // ids are nobody's to remember. An unknown name is refused here rather than sent, because
+    // the server's answer would be a 400 on a `statusId` the caller never chose.
+    const wanted = requireStr(input, 'status');
+    const statuses = await session.client.GET('/projects/{projectId}/statuses', {
+      params: { path: { projectId } }, tcms,
+    });
+    const status = statuses.find(
+      (row) => row.name.toLowerCase() === wanted.toLowerCase() || row.id === wanted,
+    );
+    if (!status) {
+      throw new InputError(
+        `No status '${wanted}' in this project. It offers: `
+          + `${statuses.map((row) => row.name).join(', ')}.`,
+      );
+    }
+
+    const path = { projectId, runId, executionId: execution.id };
+    const version = await versionFor(input, () =>
+      // The run detail's execution rows are summaries and carry no `lockVersion` — only the
+      // execution's own detail does, and the version must come from the resource being written.
+      session.client.GET('/projects/{projectId}/runs/{runId}/executions/{executionId}', {
+        params: { path }, tcms,
+      }));
+
+    return session.client.PATCH('/projects/{projectId}/runs/{runId}/executions/{executionId}', {
+      params: { path },
+      body: present({
+        statusId: status.id,
+        comment: nullableStr(input, 'comment'),
+      }) as components['schemas']['ExecutionResultInput'],
+      tcms: { ...tcms, ...editIntent(version, 'record this result') },
+    });
+  },
+};
+
+/* ------------------------------------------------------------------ reviews ---- */
+
+/** Display-key entity to the wire's `ReviewSubjectType`, for the three that have reviews. */
+const SUBJECTS = {
+  'TC': { entity: 'CASE', wire: 'CASE', permission: 'case:review' },
+  'TS': { entity: 'SUITE', wire: 'SUITE', permission: 'suite:review' },
+  'TP': { entity: 'PLAN', wire: 'PLAN', permission: 'plan:review' },
+} as const satisfies Record<string, {
+  entity: 'CASE' | 'SUITE' | 'PLAN';
+  wire: components['schemas']['ReviewSubjectType'];
+  permission: string;
+}>;
+
+/**
+ * The open review of a subject named by its display key.
+ *
+ * Shared by both review tools, and the "open" is load-bearing: a review is **history** once it
+ * closes — the endpoint answers 409 on a closed one, and re-submitting opens a NEW record rather
+ * than reopening the old — so "the latest row" and "the one that can still be written to" are
+ * different questions, and picking the wrong one is a refusal the caller cannot act on.
+ */
+async function openReview(session: Session, key: string): Promise<{ id: string; subject: string }> {
+  const projectId = session.projectId();
+  const prefix = key.slice(0, 2).toUpperCase() as keyof typeof SUBJECTS;
+  const subject = SUBJECTS[prefix];
+  if (!subject) {
+    throw new InputError(
+      'Reviews are kept for cases, suites and plans, and the display key is what says which. '
+        + 'Name one — TC-42, TS-7, TP-1. A bare UUID cannot say what it is.',
+    );
+  }
+
+  const subjectId = await resolveId({ client: session.client, projectId, value: key, entity: subject.entity });
+  const reviews = await session.client.GET('/projects/{projectId}/reviews', {
+    params: { path: { projectId }, query: { subjectType: subject.wire, subjectId } },
+    tcms: session.request,
+  });
+
+  const open = reviews.find((review) => review.state === 'IN_REVIEW');
+  if (!open) {
+    throw new InputError(
+      reviews.length === 0
+        ? `${key} has never been submitted for review, so there is no thread to join.`
+        : `${key}'s review has ended (${String(reviews[0]?.state)}). Submitting it again opens a `
+          + 'new conversation; the closed record stays as it is.',
+    );
+  }
+
+  return { id: open.id, subject: subject.permission };
+}
+
+const reviewComment: ToolDefinition = {
+  name: 'tcms_review_comment',
+  title: 'Comment on the open review of a case, suite or plan',
+  description:
+    'Writes a remark on the review thread of whatever the display key names. One permission '
+    + 'covers all three subjects. **Resolving a thread is not commenting** — that is a statement '
+    + "about the review's progress and costs the subject's review permission, so it lives in "
+    + 'tcms_review_verdict.',
+  gate: { mode: 'all', permissions: ['case:comment'] },
+  arms: [{ action: 'comment', kind: 'state', permission: 'case:comment' }],
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['subject', 'body'],
+    properties: {
+      subject: idProperty('case, suite or plan under review — by display key', 'TC-42'),
+      body: { type: 'string' },
+      replyTo: { type: 'string', description: 'A comment id, to reply in-thread.' },
+    },
+  },
+  run: async (session, input) => {
+    const review = await openReview(session, requireStr(input, 'subject'));
+    return session.client.POST('/projects/{projectId}/reviews/{reviewId}/comments', {
+      params: { path: { projectId: session.projectId(), reviewId: review.id } },
+      body: present({
+        body: requireStr(input, 'body'),
+        parentId: str(input, 'replyTo'),
+      }) as components['schemas']['ReviewCommentInput'],
+      tcms: session.request,
+    });
+  },
+};
+
+const reviewVerdict: ToolDefinition = {
+  name: 'tcms_review_verdict',
+  title: 'Record a peer verdict, or resolve a thread',
+  description:
+    'A verdict is LGTM or changes-requested on an open review; resolving marks a comment thread '
+    + 'dealt with. Both cost the review permission for the subject, which is why they are here '
+    + 'and commenting is not. This does NOT approve anything — approval is a separate permission '
+    + 'this credential does not hold, and author-cannot-approve-own-work is on by default.',
+  /*
+    The one tool listed on an `any` gate, and §2 explains why it is not merged with commenting:
+    the effective set is an intersection, so a **Viewer**-owned agent token comes out holding
+    `case:comment` and no `*:review` at all. A merged tool would be hidden from a caller who can
+    legitimately comment.
+  */
+  gate: { mode: 'any', permissions: ['case:review', 'suite:review', 'plan:review'] },
+  arms: [
+    { action: 'verdict', kind: 'state', permission: 'case:review' },
+    { action: 'resolve', kind: 'state', permission: 'case:review' },
+  ],
+  narrow: (held) => {
+    const subjects = Object.values(SUBJECTS)
+      .filter((subject) => held.has(subject.permission))
+      .map((subject) => subject.entity.toLowerCase());
+    return `This credential may do this for: ${subjects.join(', ')}. Other subjects will be refused.`;
+  },
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['action', 'subject'],
+    properties: {
+      action: ACTION(['verdict', 'resolve'], 'What to do.'),
+      subject: idProperty('case, suite or plan under review — by display key', 'TC-42'),
+      verdict: { type: 'string', description: 'For `verdict`: APPROVED or CHANGES_REQUESTED.' },
+      comment: { type: 'string' },
+      commentId: { type: 'string', description: 'For `resolve`: the thread to mark.' },
+      resolved: { type: 'boolean', description: 'For `resolve`: false re-opens it. Default true.' },
+    },
+  },
+  run: async (session, input) => {
+    const projectId = session.projectId();
+    const action = requireStr(input, 'action');
+    const review = await openReview(session, requireStr(input, 'subject'));
+
+    if (action === 'verdict') {
+      return session.client.POST('/projects/{projectId}/reviews/{reviewId}/participations', {
+        params: { path: { projectId, reviewId: review.id } },
+        body: present({
+          verdict: requireStr(input, 'verdict'),
+          comment: str(input, 'comment'),
+        }) as components['schemas']['ReviewParticipationInput'],
+        tcms: session.request,
+      });
+    }
+
+    if (action !== 'resolve') throw new InputError(`Unknown action '${action}'.`);
+
+    return session.client.PUT('/projects/{projectId}/reviews/{reviewId}/comments/{commentId}/resolution', {
+      params: {
+        path: { projectId, reviewId: review.id, commentId: requireStr(input, 'commentId') },
+      },
+      body: { resolved: bool(input, 'resolved') ?? true },
+      tcms: session.request,
+    });
+  },
+};
+
+/* ---------------------------------------------------------------- work items ---- */
+
+const writeWorkItem: ToolDefinition = {
+  name: 'tcms_write_work_item',
+  title: 'Put a task on the board, or move a card',
+  description:
+    'Real tasks only. The board also shows DERIVED cards — outstanding executions, review '
+    + 'requests, case-health repairs, quarantined cases — which are computed on every read from '
+    + 'their source and cannot be created or moved here; fix the source instead. Use this to '
+    + 'record follow-up work a person should pick up.',
+  gate: { mode: 'all', permissions: ['workitem:manage', 'defect:create'] },
+  arms: [
+    { action: 'create', kind: 'create', permission: 'workitem:manage' },
+    { action: 'move', kind: 'state', permission: 'workitem:manage' },
+  ],
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['action'],
+    properties: {
+      action: ACTION(['create', 'move'], 'What to do.'),
+      title: { type: 'string' },
+      description: { type: 'string' },
+      priority: { type: 'string' },
+      dueDate: { type: 'string', description: 'YYYY-MM-DD.' },
+      workItemId: { type: 'string', description: 'For `move`: the card id.' },
+      status: { type: 'string', description: 'For `move`: the column to move it to.' },
+    },
+  },
+  run: async (session, input) => {
+    const action = requireStr(input, 'action');
+
+    if (action === 'move') {
+      return session.client.PATCH('/work-items/{workItemId}', {
+        params: { path: { workItemId: requireStr(input, 'workItemId') } },
+        body: { status: requireStr(input, 'status') as components['schemas']['WorkItemStatus'] },
+        tcms: session.request,
+      });
+    }
+
+    if (action !== 'create') throw new InputError(`Unknown action '${action}'.`);
+
+    return session.client.POST('/work-items', {
+      body: present({
+        // The one body on this surface that carries a `projectId`, and §4.1 is untouched by it:
+        // the rule is that the parameter does not exist in any *tool schema*. It comes from the
+        // session here exactly as it does for every path parameter.
+        projectId: session.projectId(),
+        title: requireStr(input, 'title'),
+        description: str(input, 'description'),
+        priority: str(input, 'priority'),
+        dueDate: str(input, 'dueDate'),
+      }) as components['schemas']['WorkItemInput'],
+      tcms: { ...session.request, ...createIntent({ key: session.callId }) },
+    });
+  },
+};
+
+/* ------------------------------------------------------------------ reports ---- */
+
+const report: ToolDefinition = {
+  name: 'tcms_report',
+  title: 'Generate a report, and poll it',
+  description:
+    'Generation is asynchronous by contract: `generate` returns a job, `poll` says where it got '
+    + "to. A report's own parameters are validated inside the worker, so a bad one surfaces as a "
+    + 'FAILED job carrying the sentence rather than as an error on the request. The finished '
+    + 'artifact is a file with a download URL — this returns the URL; fetching it needs the same '
+    + 'credential and is not something a tool call can hand you.',
+  gate: { mode: 'all', permissions: ['report:view', 'report:export'] },
+  arms: [
+    // A generation allocates a job row, so it is a create and carries a key: an agent that
+    // retries a lost 202 must not queue the work twice.
+    { action: 'generate', kind: 'create', permission: 'report:export' },
+  ],
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['action'],
+    properties: {
+      action: ACTION(['generate', 'poll'], 'What to do.'),
+      type: { type: 'string', description: 'The report type. Omit when naming a saved definition.' },
+      // The enum is stated rather than left open, because a format this deployment cannot render
+      // is a 400 the model would have to discover by being refused.
+      format: { type: 'string', enum: ['PDF', 'MD', 'HTML'], description: 'For `generate`: the output format.' },
+      definitionId: { type: 'string', description: 'Regenerate a saved report.' },
+      parameters: { type: 'object', description: 'The report\'s own parameters.' },
+      jobId: { type: 'string', description: 'For `poll`.' },
+    },
+  },
+  run: async (session, input) => {
+    const projectId = session.projectId();
+    const action = requireStr(input, 'action');
+
+    if (action === 'poll') {
+      return session.client.GET('/projects/{projectId}/reports/jobs/{jobId}', {
+        params: { path: { projectId, jobId: requireStr(input, 'jobId') } },
+        tcms: session.request,
+      });
+    }
+
+    if (action !== 'generate') throw new InputError(`Unknown action '${action}'.`);
+
+    return session.client.POST('/projects/{projectId}/reports/generate', {
+      params: { path: { projectId } },
+      body: present({
+        format: requireStr(input, 'format'),
+        type: str(input, 'type'),
+        definitionId: str(input, 'definitionId'),
+        parameters: input['parameters'],
+      }) as { format: 'PDF' | 'MD' | 'HTML' },
+      tcms: { ...session.request, ...createIntent({ key: session.callId }) },
+    });
+  },
+};
+
+export const WRITE_TOOLS: readonly ToolDefinition[] = [
+  writeCase,
+  writeSuite,
+  writeDocPage,
+  writePlan,
+  writeRun,
+  recordResult,
+  reviewComment,
+  reviewVerdict,
+  writeWorkItem,
+  report,
+];

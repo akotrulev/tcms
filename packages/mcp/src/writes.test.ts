@@ -1,0 +1,380 @@
+/**
+ * The write tools, and the two properties that must hold over the whole registry.
+ *
+ * `header conformance` is the surface spec's §8.3 — *assert every create arm sends a key and every
+ * edit arm sends `If-Match`, over the tool registry rather than per tool*. It is the same check
+ * the CLI runs over its command registry, deliberately: the two surfaces share a command core
+ * precisely so that a rule proved on one holds on the other, and two conformance tests that
+ * disagreed about what a create is would be the thing that lets them drift.
+ */
+import { describe, expect, it } from 'vitest';
+
+import { armFor } from './server.js';
+import { TOOLS } from './tools.js';
+import { WRITE_TOOLS } from './writes.js';
+import type { ToolDefinition } from './tool.js';
+import { agentRoutes, api, sessionWith, withApi, type Api } from './test/harness.js';
+
+function tool(name: string): ToolDefinition {
+  const found = WRITE_TOOLS.find((candidate) => candidate.name === name);
+  if (!found) throw new Error(`No write tool ${name}`);
+  return found;
+}
+
+async function run(
+  stub: Api,
+  name: string,
+  input: Record<string, unknown>,
+): Promise<unknown> {
+  const session = await sessionWith(stub);
+  return withApi(stub, () => tool(name).run({ ...session, callId: 'mcp-7' }, input));
+}
+
+const CASE_ROW = {
+  id: 'c-1', key: 'TC-42', keySeq: 42, title: 'Login', suiteId: 's-1', suiteName: 'Auth',
+  priority: 'HIGH', lifecycleStatus: 'DRAFT', automationStatus: 'NONE', stepFormat: 'STEPS',
+  owner: null, createdBy: null, features: [], tags: [], healthSignals: [],
+  updatedAt: '2026-08-01T10:00:00Z',
+};
+const CASE_DETAIL = { ...CASE_ROW, lockVersion: 4, steps: [] };
+const SUITE_ROW = {
+  id: 's-1', key: 'TS-7', name: 'Auth', description: null, caseCount: 2,
+  lifecycleStatus: 'DRAFT', tagRules: [], lockVersion: 2,
+};
+const PAGE = {
+  id: 'd-1', key: 'DOC-1', title: 'Spec', status: 'DRAFT', lockVersion: 5,
+  blocks: [{ id: 'b-1', blockType: 'PARAGRAPH', text: 'The user signs in.' }],
+};
+
+describe('tcms_write_case', () => {
+  it('files a proposal rather than creating a case, and carries an idempotency key', async () => {
+    const stub = api(agentRoutes({
+      'POST /ai-proposals': {
+        status: 201,
+        body: { id: 'ap-1', status: 'PENDING', verdict: 'UNVERIFIED', verdictSource: null },
+      },
+    }));
+
+    const answer = await run(stub, 'tcms_write_case', {
+      action: 'propose',
+      testCase: { title: 'Sign out clears the session' },
+    }) as Record<string, unknown>;
+
+    const sent = stub.write('/ai-proposals');
+    expect(sent.headers.get('Idempotency-Key')).toBe('mcp-7');
+    // The bare case is wrapped for the caller: a model holds what it generated, and the API takes
+    // an AiProposalInput around it.
+    expect(JSON.parse(sent.body ?? '{}')).toEqual({ testCase: { title: 'Sign out clears the session' } });
+    expect(answer['proposalId']).toBe('ap-1');
+    expect(String(answer['note'])).toContain('cannot accept it');
+  });
+
+  it('does not default the verdict, because silence and UNVERIFIED are different claims', async () => {
+    const stub = api(agentRoutes({
+      'POST /ai-proposals': { status: 201, body: { id: 'ap-1', status: 'PENDING' } },
+    }));
+
+    await run(stub, 'tcms_write_case', { action: 'propose', testCase: { title: 'x' } });
+    expect(JSON.parse(stub.write('/ai-proposals').body ?? '{}')).not.toHaveProperty('verdict');
+  });
+
+  it('edits with an If-Match read for itself when no lockVersion was given', async () => {
+    const stub = api(agentRoutes({
+      '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 1, total: 1 } },
+      'GET /cases/c-1': { status: 200, body: CASE_DETAIL },
+      'PATCH /cases/c-1': { status: 200, body: { ...CASE_DETAIL, lockVersion: 5 } },
+    }));
+
+    await run(stub, 'tcms_write_case', { action: 'edit', case: 'TC-42', title: 'Login again' });
+
+    const sent = stub.write('/cases/c-1');
+    expect(sent.method).toBe('PATCH');
+    expect(sent.headers.get('If-Match')).toBe('4');
+    // A delta: only what was named. `PATCH` reads an absent key as "leave it alone", which is
+    // what makes the self-read honest.
+    expect(JSON.parse(sent.body ?? '{}')).toEqual({ title: 'Login again' });
+  });
+
+  it('prefers a lockVersion the caller holds', async () => {
+    const stub = api(agentRoutes({
+      '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 1, total: 1 } },
+      'PATCH /cases/c-1': { status: 200, body: CASE_DETAIL },
+    }));
+
+    await run(stub, 'tcms_write_case', { action: 'edit', case: 'TC-42', title: 'x', lockVersion: 2 });
+
+    expect(stub.write('/cases/c-1').headers.get('If-Match')).toBe('2');
+    // And it did not read the case for a version it was given — the extra read is skipped.
+    expect(stub.sent.filter((request) => request.method === 'GET' && request.path.endsWith('/cases/c-1')))
+      .toHaveLength(0);
+  });
+
+  it('keeps null and absent apart on the suite, because they are different requests', async () => {
+    const stub = api(agentRoutes({
+      '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 1, total: 1 } },
+      'PATCH /cases/c-1': { status: 200, body: CASE_DETAIL },
+    }));
+
+    await run(stub, 'tcms_write_case', { action: 'edit', case: 'TC-42', suite: null, lockVersion: 1 });
+    expect(JSON.parse(stub.write('/cases/c-1').body ?? '{}')).toEqual({ suiteId: null });
+  });
+
+  it('refuses an edit that would send nothing', async () => {
+    const stub = api(agentRoutes({
+      '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 1, total: 1 } },
+    }));
+
+    // A `PATCH` with an empty body is accepted by the contract and changes nothing while
+    // answering 200 — so a call whose fields were all misspelled would report success.
+    await expect(run(stub, 'tcms_write_case', { action: 'edit', case: 'TC-42' }))
+      .rejects.toThrow(/Nothing to change/);
+  });
+
+  it('submits for review through the one bulk action whose gate does not depend on its payload', async () => {
+    const stub = api(agentRoutes({
+      '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 1, total: 1 } },
+      'POST /cases/bulk': { status: 200, body: { changed: 1 } },
+    }));
+
+    await run(stub, 'tcms_write_case', { action: 'submit', case: 'TC-42' });
+
+    expect(JSON.parse(stub.write('/cases/bulk').body ?? '{}'))
+      .toEqual({ action: 'SUBMIT_FOR_REVIEW', caseIds: ['c-1'], dryRun: false });
+  });
+});
+
+describe('tcms_write_doc_page', () => {
+  it('demands the caller\'s own lockVersion when replacing blocks', async () => {
+    const stub = api(agentRoutes({ '/doc-pages': { status: 200, body: [PAGE] } }));
+
+    /*
+      The one place §139's rule bites on this surface: a `blocks` array is the whole page and a
+      block omitted from it is deleted, so its content necessarily came from an earlier read. A
+      fresh version would assert a state that body was never based on.
+    */
+    await expect(run(stub, 'tcms_write_doc_page', {
+      action: 'edit', page: 'DOC-1', blocks: [{ blockType: 'PARAGRAPH', text: 'Rewritten.' }],
+    })).rejects.toThrow(/lockVersion of the read that body came from/);
+  });
+
+  it('reads its own version for a title-only edit, which is a delta', async () => {
+    const stub = api(agentRoutes({
+      '/doc-pages': { status: 200, body: [PAGE] },
+      'GET /doc-pages/d-1': { status: 200, body: PAGE },
+      'PATCH /doc-pages/d-1': { status: 200, body: { ...PAGE, title: 'Renamed' } },
+    }));
+
+    await run(stub, 'tcms_write_doc_page', { action: 'edit', page: 'DOC-1', title: 'Renamed' });
+
+    const sent = stub.write('/doc-pages/d-1');
+    expect(sent.headers.get('If-Match')).toBe('5');
+    // `blocks` must not appear: sending the key at all would empty somebody's specification.
+    expect(JSON.parse(sent.body ?? '{}')).toEqual({ title: 'Renamed' });
+  });
+
+  it('links a case to a block with the contract\'s default relationship stated', async () => {
+    const stub = api(agentRoutes({
+      '/doc-pages': { status: 200, body: [PAGE] },
+      '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 1, total: 1 } },
+      'POST /links': { status: 201, body: { id: 'l-1', sourceType: 'TEST_CASE', sourceKey: 'TC-42', relationship: 'VERIFIES' } },
+    }));
+
+    await run(stub, 'tcms_write_doc_page', { action: 'link', page: 'DOC-1', block: 'b-1', case: 'TC-42' });
+
+    expect(JSON.parse(stub.write('/links').body ?? '{}'))
+      .toEqual({ sourceType: 'TEST_CASE', sourceId: 'c-1', relationship: 'VERIFIES' });
+  });
+
+  it('refuses a link that names both a case and a suite, or neither', async () => {
+    const stub = api(agentRoutes({ '/doc-pages': { status: 200, body: [PAGE] } }));
+
+    await expect(run(stub, 'tcms_write_doc_page', { action: 'link', page: 'DOC-1', block: 'b-1' }))
+      .rejects.toThrow(/exactly one/);
+  });
+});
+
+describe('tcms_write_suite', () => {
+  it('creates with a key, and sends the membership as the complete set it is', async () => {
+    const stub = api(agentRoutes({
+      '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 1, total: 1 } },
+      'POST /suites': { status: 201, body: SUITE_ROW },
+    }));
+
+    await run(stub, 'tcms_write_suite', { action: 'create', name: 'Auth', cases: ['TC-42'] });
+
+    const sent = stub.write('/suites');
+    expect(sent.headers.get('Idempotency-Key')).toBe('mcp-7');
+    expect(JSON.parse(sent.body ?? '{}')).toEqual({ name: 'Auth', caseIds: ['c-1'] });
+  });
+
+  it('sends a status transition with neither header, because its precondition is the state', async () => {
+    const stub = api(agentRoutes({
+      '/suites': { status: 200, body: [SUITE_ROW] },
+      'PUT /status': { status: 200, body: { ...SUITE_ROW, lifecycleStatus: 'IN_REVIEW' } },
+    }));
+
+    await run(stub, 'tcms_write_suite', { action: 'status', suite: 'TS-7', status: 'IN_REVIEW' });
+
+    const sent = stub.write('/status');
+    expect(sent.headers.get('If-Match')).toBeNull();
+    expect(sent.headers.get('Idempotency-Key')).toBeNull();
+  });
+});
+
+describe('tcms_record_result', () => {
+  it('finds the execution from the run and the case, and names the status by name', async () => {
+    const stub = api(agentRoutes({
+      '/runs': { status: 200, body: [{ id: 'r-1', key: 'TR-1', name: 'Regression', status: 'IN_PROGRESS' }] },
+      'GET /runs/r-1': {
+        status: 200,
+        body: { id: 'r-1', key: 'TR-1', name: 'Regression', executions: [{ id: 'e-1', caseId: 'c-1', caseKey: 'TC-42' }] },
+      },
+      '/statuses': { status: 200, body: [{ id: 'st-1', name: 'Passed', kind: 'PASSED', color: '#0a0', countsAsPass: true, isFinal: true }] },
+      'GET /executions/e-1': { status: 200, body: { id: 'e-1', caseKey: 'TC-42', lockVersion: 3 } },
+      'PATCH /executions/e-1': { status: 200, body: { id: 'e-1', caseKey: 'TC-42', lockVersion: 4, status: { name: 'Passed' } } },
+    }));
+
+    await run(stub, 'tcms_record_result', { run: 'TR-1', case: 'TC-42', status: 'passed' });
+
+    const sent = stub.write('/executions/e-1');
+    // The version comes from the execution's own detail, not from the run's summary rows — a
+    // list that mentions a resource is not the resource.
+    expect(sent.headers.get('If-Match')).toBe('3');
+    expect(JSON.parse(sent.body ?? '{}')).toEqual({ statusId: 'st-1' });
+  });
+
+  it('refuses a status this project does not have, and lists the ones it does', async () => {
+    const stub = api(agentRoutes({
+      '/runs': { status: 200, body: [{ id: 'r-1', key: 'TR-1', name: 'R', status: 'IN_PROGRESS' }] },
+      'GET /runs/r-1': { status: 200, body: { id: 'r-1', key: 'TR-1', name: 'R', executions: [{ id: 'e-1', caseId: 'c-1', caseKey: 'TC-42' }] } },
+      '/statuses': { status: 200, body: [{ id: 'st-1', name: 'Passed', kind: 'PASSED', color: '#0a0', countsAsPass: true, isFinal: true }] },
+    }));
+
+    await expect(run(stub, 'tcms_record_result', { run: 'TR-1', case: 'TC-42', status: 'Green' }))
+      .rejects.toThrow(/It offers: Passed/);
+  });
+
+  it('does not declare evidence:attach, because it cannot attach evidence', () => {
+    // The endpoint is multipart/form-data only and a tool call carries JSON. Declaring the
+    // permission would hide the tool from a caller who can record results and cannot attach.
+    expect(tool('tcms_record_result').gate.permissions).toEqual(['run:execute', 'result:submit']);
+  });
+});
+
+describe('tcms_review_verdict', () => {
+  it('acts on the OPEN review, not the newest one', async () => {
+    const stub = api(agentRoutes({
+      '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 1, total: 1 } },
+      'GET /reviews': {
+        status: 200,
+        body: [
+          { id: 'rv-2', state: 'APPROVED', comments: [] },
+          { id: 'rv-1', state: 'IN_REVIEW', comments: [] },
+        ],
+      },
+      'POST /participations': { status: 201, body: { id: 'rv-1', state: 'IN_REVIEW' } },
+    }));
+
+    await run(stub, 'tcms_review_verdict', { action: 'verdict', subject: 'TC-42', verdict: 'APPROVED' });
+
+    // A review is history once it closes — the endpoint answers 409 on a closed one — so "the
+    // latest row" and "the one that can still be written to" are different questions.
+    expect(stub.write('/participations').path).toContain('/reviews/rv-1/');
+  });
+
+  it('says which subjects this credential may act on, rather than being hidden', () => {
+    const verdict = tool('tcms_review_verdict');
+    expect(verdict.gate.mode).toBe('any');
+    expect(verdict.narrow?.(new Set(['case:review']))).toContain('case');
+    expect(verdict.narrow?.(new Set(['case:review']))).not.toContain('plan');
+  });
+
+  it('explains that a closed review cannot be joined', async () => {
+    const stub = api(agentRoutes({
+      '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 1, total: 1 } },
+      'GET /reviews': { status: 200, body: [{ id: 'rv-2', state: 'APPROVED', comments: [] }] },
+    }));
+
+    await expect(run(stub, 'tcms_review_comment', { subject: 'TC-42', body: 'hi' }))
+      .rejects.toThrow(/review has ended/);
+  });
+});
+
+describe('header conformance — surface spec §8.3', () => {
+  /*
+    Derived from the registry, so a tool added later is checked without anybody remembering to
+    add it here. It fails on a tool it does not recognise rather than skipping it: a conformance
+    check that silently ignores what it cannot classify is a check that stops working the first
+    time somebody adds a shape it did not anticipate.
+  */
+  const HEADERS: Record<string, { idempotency: boolean; ifMatch: boolean }> = {
+    create: { idempotency: true, ifMatch: false },
+    edit: { idempotency: false, ifMatch: true },
+    state: { idempotency: false, ifMatch: false },
+    delete: { idempotency: false, ifMatch: false },
+  };
+
+  it('classifies every arm of every write tool', () => {
+    for (const candidate of WRITE_TOOLS) {
+      expect(candidate.arms, `${candidate.name} declares no arms`).toBeDefined();
+      for (const arm of candidate.arms ?? []) {
+        expect(HEADERS[arm.kind], `${candidate.name}.${arm.action}`).toBeDefined();
+        expect(arm.permission).toMatch(/^[a-z]+:[a-z]+$/);
+      }
+    }
+  });
+
+  it('declares every arm\'s permission inside the tool\'s own gate', () => {
+    for (const candidate of WRITE_TOOLS) {
+      for (const arm of candidate.arms ?? []) {
+        // Otherwise the list would show a caller a tool one of whose arms 403s — the failure
+        // §2's rule exists to prevent, arriving through the declaration rather than the merge.
+        expect(candidate.gate.permissions, `${candidate.name}.${arm.action}`)
+          .toContain(arm.permission);
+      }
+    }
+  });
+
+  it('routes an action to its own arm, so a refusal names the permission that was refused', () => {
+    const writeCase = tool('tcms_write_case');
+    expect(armFor(writeCase, { action: 'propose' })?.permission).toBe('case:create');
+    expect(armFor(writeCase, { action: 'edit' })?.permission).toBe('case:edit');
+    // An unrecognised action selects no arm, and the dispatcher falls back to the tool's gate
+    // rather than guessing — the server is about to refuse it anyway.
+    expect(armFor(writeCase, { action: 'invented' })).toBeUndefined();
+  });
+});
+
+describe('the surface as a whole — surface spec §2 and §4.1', () => {
+  it('is 21 tools', () => {
+    // The count is an OUTCOME of "a tool never spans two permissions on its write path", not a
+    // target. It is asserted so that a merge or a split has to be a decision somebody records.
+    expect(TOOLS).toHaveLength(21);
+  });
+
+  it('names every tool in the tcms_ namespace', () => {
+    for (const candidate of TOOLS) expect(candidate.name).toMatch(/^tcms_[a-z_]+$/);
+  });
+
+  it('takes no project or company argument anywhere', () => {
+    for (const candidate of TOOLS) {
+      const properties = Object.keys(candidate.inputSchema.properties);
+      expect(properties, candidate.name).not.toContain('projectId');
+      expect(properties, candidate.name).not.toContain('companyId');
+    }
+  });
+
+  it('keeps every description inside the host\'s 2KB ceiling', () => {
+    for (const candidate of TOOLS) {
+      // Truncation is silent and takes the last sentence, which is where the caveats are.
+      expect(new TextEncoder().encode(candidate.description).length, candidate.name)
+        .toBeLessThanOrEqual(2000);
+    }
+  });
+
+  it('gives every tool a schema that refuses what it does not declare', () => {
+    for (const candidate of TOOLS) {
+      expect(candidate.inputSchema.additionalProperties, candidate.name).toBe(false);
+    }
+  });
+});

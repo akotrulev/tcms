@@ -128,6 +128,18 @@ export interface Session {
   projectId: () => string;
   /** Re-probes and returns the fresh reach, after replacing {@link Session.reach}. */
   refresh: () => Promise<Reach>;
+  /**
+   * The `Idempotency-Key` a create arm sends, derived from the tool-call id — surface spec §4.2.
+   *
+   * **It deduplicates a transport retry and not a model retry**, and the difference is worth
+   * stating because the header's whole purpose is the second one. A host re-delivering the same
+   * JSON-RPC request carries the same id, so the create is recognised as a replay. A model that
+   * decides to *call the tool again* issues a new id, and the server sees a new intent — which is
+   * correct, because a second call after a visible failure may genuinely be a second intent, and
+   * the client cannot tell. What it buys is the case that actually bites an agent: a write whose
+   * response was lost, retried by the machinery rather than by the model.
+   */
+  callId?: string | undefined;
   /** Set by `server.ts`. Called when a refresh changed which tools are listed. */
   onListChanged?: (() => void) | undefined;
 }

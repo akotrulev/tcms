@@ -86,7 +86,13 @@ export function buildServer(session: Session, tools: readonly ToolDefinition[] =
 
     try {
       const value = await tool.run(
-        { ...session, request: { ...session.request, signal: extra.signal } },
+        {
+          ...session,
+          request: { ...session.request, signal: extra.signal },
+          // §4.2: the MCP adapter derives the idempotency key from the tool-call id. See
+          // `Session.callId` for exactly which retry that covers and which it does not.
+          callId: `mcp-${String(extra.requestId)}`,
+        },
         input,
       );
       // The refresh a handler may have performed lands on the shared object, so the notification
