@@ -29,10 +29,18 @@ export interface Api {
 export function api(routes: Record<string, Answer>): Api {
   const live = { ...routes };
   const sent: SentRequest[] = [];
+  /*
+    Captured before this stub is installed, so a request to somewhere that is **not** TCMS still
+    goes out for real. `http.test.ts` needs it: that test drives a listening HTTP server in this
+    same process while the server's own calls to TCMS are stubbed, and a stub that answered 500
+    to everything would break the test's own client rather than the code under test.
+  */
+  const passthrough = globalThis.fetch;
 
   const fetch: typeof globalThis.fetch = async (input, init) => {
     const request = input instanceof Request ? input : new Request(input, init);
     const url = new URL(request.url);
+    if (url.origin !== new URL(BASE_URL).origin) return passthrough(input, init);
     sent.push({
       path: url.pathname,
       search: url.search,
