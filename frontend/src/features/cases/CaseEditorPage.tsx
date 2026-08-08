@@ -45,12 +45,12 @@ import { Controller, useFieldArray, useForm, type Control } from 'react-hook-for
 import { useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import { CaseSchema, fromCasePayload, isBlankStep, toCasePayload, type CaseInput } from './caseSchema';
+import { CaseDraftStatus } from './CaseDraftStatus';
 import { ClassificationPicker } from './ClassificationPicker';
 import { ConditionEditDialog } from './ConditionEditDialog';
 import { ConditionsPanel } from './ConditionsPanel';
 import { SharedStepPicker } from './SharedStepPicker';
 import { resolveStepMove } from './stepReorder';
-import { useCaseAutosave } from './useCaseAutosave';
 import {
   useCase,
   useCaseDraft,
@@ -67,7 +67,7 @@ import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
-import { formatAge, formatTimeOfDay } from '../../lib/format';
+import { formatAge } from '../../lib/format';
 import { automationLabels, priorityLabels, stepFormatLabels } from '../../lib/labels';
 import { selectTestId } from '../../lib/muiTestIds';
 import type { CaseConditionRef, Condition, StepSuggestion, TestCase } from '../../api/types';
@@ -547,15 +547,14 @@ function CaseEditorForm({
     isDirty &&
     !isSubmitting;
 
-  const values = watch();
-  const autosave = useCaseAutosave({
-    enabled: autosaveEnabled,
-    // The SAME mapping the submit uses — see `toCasePayload`. A second copy here is how a field
-    // wired into Save and forgotten in the buffer comes back empty from a restore.
-    payload: toCasePayload(values),
-    save: (content) =>
-      saveDraft.mutateAsync({ lockVersion: existing?.lockVersion ?? 0, content }),
-  });
+  /*
+    The autosave's whole-form subscription lives in `CaseDraftStatus`, NOT here — `const values =
+    watch()` on this component re-rendered the entire editor on every keystroke (21 renders for 20
+    characters, ~215 ms each), which is what pushed this screen's tests past vitest's per-test
+    budget on CI. That file's header has the measurements.
+  */
+  const saveDraftContent = (content: Record<string, unknown>) =>
+    saveDraft.mutateAsync({ lockVersion: existing?.lockVersion ?? 0, content });
 
   /**
    * Puts the buffered draft back into the form.
@@ -741,36 +740,15 @@ function CaseEditorForm({
         </Alert>
       )}
 
-      {/*
-        What the buffer is doing, and the ONLY place a failed autosave is reported.
-
-        The mutation is `meta.handled` so nothing else announces it: a toast fired by a timer,
-        mid-sentence, once per interval, about something the author did not ask for and cannot act
-        on, is worse than the silence it replaces. `role="status"` and `aria-live="polite"` so a
-        screen reader is told when the work became safe without being interrupted while typing.
-      */}
-      <Box
-        role="status"
-        aria-live="polite"
-        sx={{ mb: 2, minHeight: 20 }}
-        data-testid={`${TestIdPrefix}.DraftStatus`}
-      >
-        {autosave.status === 'failed' ? (
-          <Typography variant="caption" color="error">
-            Could not save a backup of your changes. Your work is still here — use Save changes to
-            keep it.
-          </Typography>
-        ) : autosave.status === 'saving' ? (
-          <Typography variant="caption" color="text.secondary">
-            Saving a backup…
-          </Typography>
-        ) : autosave.status === 'saved' ? (
-          <Typography variant="caption" color="text.secondary">
-            Backup saved {formatTimeOfDay(autosave.savedAt)}. This is not the case itself — use Save
-            changes to publish your edit.
-          </Typography>
-        ) : null}
-      </Box>
+      {/* What the buffer is doing. Its own component so the subscription it needs does not
+          re-render the editor — see `CaseDraftStatus`. */}
+      <CaseDraftStatus
+        control={control}
+        getValues={getValues}
+        enabled={autosaveEnabled}
+        save={saveDraftContent}
+        testId={`${TestIdPrefix}.DraftStatus`}
+      />
 
       {errors.root && (
         <Alert severity="error" role="alert" sx={{ mb: 2 }} data-testid={`${TestIdPrefix}.Error`}>
