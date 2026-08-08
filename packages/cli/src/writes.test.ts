@@ -38,6 +38,27 @@ const PROPOSAL = {
   testCase: { title: 'Login works' },
 };
 
+const SUITE = {
+  id: 's-1',
+  key: 'TS-7',
+  name: 'Smoke',
+  caseCount: 4,
+  lifecycleStatus: 'DRAFT',
+  tagRules: [],
+  caseIds: [],
+  conditions: [],
+  lockVersion: 2,
+};
+
+const PAGE = {
+  id: 'd-1',
+  key: 'DOC-3',
+  title: 'Payments spec',
+  status: 'DRAFT',
+  blocks: [{ id: 'b-1', blockType: 'paragraph', text: 'Refunds settle in 3 days.' }],
+  lockVersion: 5,
+};
+
 /** The reads every command makes on its way to a write: project resolution and key lookup. */
 function scaffolding(): Record<string, { status: number; body?: unknown }> {
   return {
@@ -47,6 +68,10 @@ function scaffolding(): Record<string, { status: number; body?: unknown }> {
       body: { page: 0, size: 1, total: 1, facets: [], items: [CASE] },
     },
     'GET /cases/c-9': { status: 200, body: CASE },
+    'GET /suites': { status: 200, body: [SUITE] },
+    'GET /suites/s-1': { status: 200, body: SUITE },
+    'GET /doc-pages': { status: 200, body: [PAGE] },
+    'GET /doc-pages/d-1': { status: 200, body: PAGE },
   };
 }
 
@@ -253,6 +278,119 @@ describe('case propose', () => {
   });
 });
 
+describe('suite writes', () => {
+  it('resolves case keys to ids before sending the membership', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'POST /suites': { status: 201, body: SUITE } });
+
+    expect(await mainWith(
+      ['suite', 'create', '--name', 'Smoke', '--case', 'TC-42', '--tag-rule', 'smoke'],
+      out,
+      stub.fetch,
+    )).toBe(EXIT.ok);
+
+    expect(JSON.parse(stub.write('/suites').body ?? '{}')).toEqual({
+      name: 'Smoke',
+      caseIds: ['c-9'],
+      tagRules: ['smoke'],
+    });
+    expect(out.stdout).toContain('TS-7');
+  });
+
+  it('sends no If-Match and no key on a status transition', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'PUT /suites/s-1/status': { status: 200, body: SUITE } });
+
+    await mainWith(['suite', 'status', 'TS-7', '--status', 'IN_REVIEW'], out, stub.fetch);
+
+    const sent = stub.write('/suites/s-1/status');
+    // The contract's own reason: the request names an absolute target state rather than a delta
+    // against something the client read, so there is no lost update for a precondition to guard.
+    expect(sent.headers.get('If-Match')).toBeNull();
+    expect(sent.headers.get('Idempotency-Key')).toBeNull();
+    expect(JSON.parse(sent.body ?? '{}')).toEqual({ status: 'IN_REVIEW' });
+  });
+
+  it('does not filter the ladder client-side — the server owns which move is legal', async () => {
+    const out = recorder();
+    const stub = api({
+      ...scaffolding(),
+      'PUT /suites/s-1/status': { status: 403, body: { detail: 'You do not have permission to do this.', status: 403 } },
+    });
+
+    // APPROVED costs `suite:approve`, which an Agent token does not hold. The command sends it
+    // anyway: a client-side ladder would be a second copy of §6g's, and the person running this
+    // CLI may hold a Test Lead token.
+    expect(await mainWith(['suite', 'status', 'TS-7', '--status', 'APPROVED'], out, stub.fetch))
+      .toBe(EXIT.failed);
+    expect(stub.write('/suites/s-1/status').body).toContain('APPROVED');
+  });
+});
+
+describe('doc writes', () => {
+  /*
+    The one command in this slice where forgetting the contract's rule destroys content rather
+    than failing: `blocks` is the whole page in order, and a block OMITTED is DELETED. A retitle
+    must therefore send no `blocks` key at all.
+  */
+  it('retitles without sending blocks, which would empty the page', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'PATCH /doc-pages/d-1': { status: 200, body: PAGE } });
+
+    await mainWith(['doc', 'edit', 'DOC-3', '--title', 'Payments spec v2'], out, stub.fetch);
+
+    const body = JSON.parse(stub.write('/doc-pages/d-1').body ?? '{}') as Record<string, unknown>;
+    expect(body).toEqual({ title: 'Payments spec v2' });
+    expect(body).not.toHaveProperty('blocks');
+  });
+
+  it('links a case to a block by key, and defaults the relationship the contract defaults', async () => {
+    const out = recorder();
+    const stub = api({
+      ...scaffolding(),
+      'POST /blocks/b-1/links': {
+        status: 201,
+        body: { id: 'l-1', sourceType: 'TEST_CASE', sourceKey: 'TC-42', relationship: 'VERIFIES' },
+      },
+    });
+
+    expect(await mainWith(
+      ['doc', 'link', 'DOC-3', '--block', 'b-1', '--case', 'TC-42'],
+      out,
+      stub.fetch,
+    )).toBe(EXIT.ok);
+
+    expect(JSON.parse(stub.write('/blocks/b-1/links').body ?? '{}')).toEqual({
+      sourceType: 'TEST_CASE',
+      sourceId: 'c-9',
+      relationship: 'VERIFIES',
+    });
+  });
+
+  it('refuses a link that names both a case and a suite, or neither', async () => {
+    const both = recorder();
+    const stub = api(scaffolding());
+    expect(await mainWith(
+      ['doc', 'link', 'DOC-3', '--block', 'b-1', '--case', 'TC-42', '--suite', 'TS-7'],
+      both,
+      stub.fetch,
+    )).toBe(EXIT.usage);
+
+    const neither = recorder();
+    expect(await mainWith(['doc', 'link', 'DOC-3', '--block', 'b-1'], neither, stub.fetch))
+      .toBe(EXIT.usage);
+  });
+
+  it('prints something a jq pipeline can read for a 204', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'DELETE /links/l-1': { status: 204 } });
+
+    expect(await mainWith(['doc', 'unlink', 'DOC-3', '--link', 'l-1', '--json'], out, stub.fetch))
+      .toBe(EXIT.ok);
+    expect(JSON.parse(out.stdout)).toEqual({ deleted: 'l-1' });
+  });
+});
+
 /* ------------------------------------------------------- the computed check ---- */
 
 describe('header conformance', () => {
@@ -331,5 +469,45 @@ const INVOCATIONS: Record<string, Invocation> = {
     argv: () => ['case', 'propose', '--file', tempJson('case.json', { title: 'x' })],
     path: '/ai-proposals',
     routes: { 'POST /ai-proposals': { status: 201, body: PROPOSAL } },
+  },
+  'suite create': {
+    argv: () => ['suite', 'create', '--name', 'Smoke'],
+    path: '/suites',
+    routes: { 'POST /suites': { status: 201, body: SUITE } },
+  },
+  'suite edit': {
+    argv: () => ['suite', 'edit', 'TS-7', '--name', 'Smoke again'],
+    path: '/suites/s-1',
+    routes: { 'PATCH /suites/s-1': { status: 200, body: SUITE } },
+  },
+  'suite status': {
+    argv: () => ['suite', 'status', 'TS-7', '--status', 'IN_REVIEW'],
+    path: '/suites/s-1/status',
+    routes: { 'PUT /suites/s-1/status': { status: 200, body: SUITE } },
+  },
+  'doc create': {
+    argv: () => ['doc', 'create', '--title', 'Payments spec'],
+    path: '/doc-pages',
+    routes: { 'POST /doc-pages': { status: 201, body: PAGE } },
+  },
+  'doc edit': {
+    argv: () => ['doc', 'edit', 'DOC-3', '--title', 'Payments spec v2'],
+    path: '/doc-pages/d-1',
+    routes: { 'PATCH /doc-pages/d-1': { status: 200, body: PAGE } },
+  },
+  'doc link': {
+    argv: () => ['doc', 'link', 'DOC-3', '--block', 'b-1', '--case', 'TC-42'],
+    path: '/blocks/b-1/links',
+    routes: {
+      'POST /blocks/b-1/links': {
+        status: 201,
+        body: { id: 'l-1', sourceType: 'TEST_CASE', sourceKey: 'TC-42', relationship: 'VERIFIES' },
+      },
+    },
+  },
+  'doc unlink': {
+    argv: () => ['doc', 'unlink', 'DOC-3', '--link', 'l-1'],
+    path: '/links/l-1',
+    routes: { 'DELETE /links/l-1': { status: 204 } },
   },
 };

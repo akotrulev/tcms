@@ -41,6 +41,7 @@ import {
   requireOption,
   requireSomethingToDo,
   strictNumber,
+  UsageError,
   all,
   type Command,
   type CommandContext,
@@ -98,6 +99,43 @@ async function versionFor(
   if (explicit !== undefined) return { explicit };
   if (options.fromFile) return requireExplicitVersion(undefined, options.operation);
   return { fresh: await options.read() };
+}
+
+/**
+ * Display keys to ids, for the fields that take a **complete set**.
+ *
+ * Sequential rather than concurrent, and deliberately: `resolveId` for a suite, a plan, a run or
+ * a page fetches the project's whole list (there is no `q` on those four — `core/resolve.ts`
+ * records it), so firing ten in parallel is ten copies of the same list. The cases are the one
+ * kind with a server-side lookup and they are cheap either way.
+ */
+async function resolveMany(
+  context: CommandContext,
+  projectId: string,
+  values: string | boolean | (string | boolean)[] | undefined,
+  entity: 'CASE' | 'SUITE',
+): Promise<string[] | undefined> {
+  const keys = all(values).filter((key) => key !== '');
+  if (all(values).length === 0) return undefined;
+
+  const ids: string[] = [];
+  for (const value of keys) {
+    ids.push(await resolveId({ client: context.client, projectId, value, entity }));
+  }
+  return ids;
+}
+
+/**
+ * The target state of a status transition.
+ *
+ * **Not validated against a list here.** Which moves are legal is a property of the artifact's
+ * current state, which the server holds; a client-side ladder would be a second copy of §6g's,
+ * and each status endpoint's own description refuses exactly that for exactly this reason —
+ * "reviving a deprecated suite is spelled DRAFT, not APPROVED" is the kind of rule that does not
+ * survive being written down twice.
+ */
+function requireStatus(context: CommandContext): string {
+  return requireOption(context, 'status');
 }
 
 /** What a write prints when it worked: the key, and the fact that something happened. */
@@ -267,7 +305,334 @@ const caseProposal: Command = {
   },
 };
 
+/* ------------------------------------------------------------------ suites ---- */
+
+const suiteCreate: Command = {
+  name: 'suite create',
+  summary: 'Create a suite',
+  usage:
+    'tcms suite create --name N [--description D] [--tag-rule R]... [--case TC-n]...\n'
+    + '                  [--idempotency-key K]',
+  options: {
+    name: { type: 'string' },
+    description: { type: 'string' },
+    'tag-rule': { type: 'string', multiple: true },
+    case: { type: 'string', multiple: true },
+    'idempotency-key': { type: 'string' },
+  },
+  write: { kind: 'create', permission: 'suite:manage' },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const projectId = await projectOf(context);
+
+    const created = await client.POST('/projects/{projectId}/suites', {
+      params: { path: { projectId } },
+      body: present({
+        name: requireOption(context, 'name'),
+        description: nullableText(options['description']),
+        tagRules: tagsFrom(options['tag-rule']),
+        caseIds: await resolveMany(context, projectId, options['case'], 'CASE'),
+      }) as components['schemas']['SuiteInput'],
+      tcms: { ...request, ...createIntent({ key: text(options['idempotency-key']) }) },
+    });
+
+    reportWrite(out, json, created, [
+      // The key is server-allocated per company (§6t), so it is the first thing a caller learns
+      // and the only handle every later command takes.
+      ['Created', `${show(created.key)} — ${show(created.name)}`],
+      ['Status', show(created.lifecycleStatus)],
+      ['Lock version', show(created.lockVersion)],
+    ]);
+  },
+};
+
+const suiteEdit: Command = {
+  name: 'suite edit',
+  summary: 'Rename a suite, or change what it collects',
+  usage:
+    'tcms suite edit TS-7 [--name N] [--description D] [--tag-rule R]... [--case TC-n]...\n'
+    + '                    [--file BODY.json --lock-version N]',
+  options: {
+    name: { type: 'string' },
+    description: { type: 'string' },
+    'tag-rule': { type: 'string', multiple: true },
+    case: { type: 'string', multiple: true },
+    file: { type: 'string' },
+    'lock-version': { type: 'string' },
+  },
+  write: { kind: 'edit', permission: 'suite:manage' },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const projectId = await projectOf(context);
+    const suiteId = await resolveId({
+      client, projectId, value: requireArg(context, 'suite'), entity: 'SUITE',
+    });
+
+    const file = text(options['file']);
+    const path = { projectId, suiteId };
+
+    const body = file
+      ? objectFrom(file, 'a SuiteInput')
+      : requireSomethingToDo(
+        present({
+          name: text(options['name']),
+          description: nullableText(options['description']),
+          // Both are complete sets, per the contract, and both matter more here than on a case:
+          // a suite's membership IS these lists, so reading a partial list as a merge would make
+          // "collect these three" mean "add these three" and never let anything be removed.
+          tagRules: tagsFrom(options['tag-rule']),
+          caseIds: await resolveMany(context, projectId, options['case'], 'CASE'),
+        }),
+        'Name at least one field to change, or pass --file with a body.',
+      );
+
+    const version = await versionFor(context, {
+      fromFile: file !== undefined,
+      operation: 'edit this suite',
+      read: () => client.GET('/projects/{projectId}/suites/{suiteId}', { params: { path }, tcms: request }),
+    });
+
+    const updated = await client.PATCH('/projects/{projectId}/suites/{suiteId}', {
+      params: { path },
+      body: body as components['schemas']['SuiteInput'],
+      tcms: { ...request, ...editIntent(version, 'edit this suite') },
+    });
+
+    reportWrite(out, json, updated, [
+      ['Updated', `${show(updated.key)} — ${show(updated.name)}`],
+      ['Cases', show(updated.caseCount)],
+      ['Lock version', show(updated.lockVersion)],
+    ]);
+  },
+};
+
+const suiteStatus: Command = {
+  name: 'suite status',
+  summary: 'Submit, approve, withdraw, deprecate or revive a suite',
+  usage: 'tcms suite status TS-7 --status DRAFT|IN_REVIEW|APPROVED|DEPRECATED',
+  options: { status: { type: 'string' } },
+  // `suite:manage` carries the forward moves an Agent can reach; APPROVED and DEPRECATED cost
+  // `suite:approve`, which the server checks per edge. The declaration names the lower key
+  // because it is what the command needs to be *listed*, and the refusal for the rest is the
+  // server's to make — §6g's ladder is not copied here. See the note beside `LADDER`.
+  write: { kind: 'state', permission: 'suite:manage' },
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const projectId = await projectOf(context);
+    const suiteId = await resolveId({
+      client, projectId, value: requireArg(context, 'suite'), entity: 'SUITE',
+    });
+
+    const updated = await client.PUT('/projects/{projectId}/suites/{suiteId}/status', {
+      params: { path: { projectId, suiteId } },
+      body: { status: requireStatus(context) as components['schemas']['LifecycleStatus'] },
+      // No `If-Match` and no key, and the contract says why on this endpoint in as many words:
+      // the request names an absolute target state rather than a delta against something the
+      // client read, so there is no lost update to protect — and setting the status a suite
+      // already has writes nothing.
+      tcms: request,
+    });
+
+    reportWrite(out, json, updated, [
+      ['Suite', `${show(updated.key)} — ${show(updated.name)}`],
+      ['Status', show(updated.lifecycleStatus)],
+    ]);
+  },
+};
+
+/* -------------------------------------------------------------------- docs ---- */
+
+const docCreate: Command = {
+  name: 'doc create',
+  summary: 'Create a documentation page',
+  usage: 'tcms doc create --title T [--parent DOC-n] [--file BLOCKS.json] [--idempotency-key K]',
+  options: {
+    title: { type: 'string' },
+    parent: { type: 'string' },
+    file: { type: 'string' },
+    'idempotency-key': { type: 'string' },
+  },
+  write: { kind: 'create', permission: 'doc:edit' },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const projectId = await projectOf(context);
+    const parent = text(options['parent']);
+    const file = text(options['file']);
+
+    /*
+      A page is a title plus an ordered list of blocks, and blocks are not expressible as flags —
+      a heading's level, a list's depth and a table's rows are three different shapes. So `--file`
+      here carries a whole `DocPageInput` (or just its `blocks` array), and `--title` overrides
+      whatever title it names.
+    */
+    const fromFile = file ? objectFrom(file, 'a DocPageInput') : {};
+    const title = text(options['title']) ?? (typeof fromFile['title'] === 'string' ? fromFile['title'] : undefined);
+    if (title === undefined) throw new UsageError('--title is required, or name one in --file.');
+
+    const created = await client.POST('/projects/{projectId}/doc-pages', {
+      params: { path: { projectId } },
+      body: present({
+        ...fromFile,
+        title,
+        parentId: parent === undefined
+          ? undefined
+          : await resolveId({ client, projectId, value: parent, entity: 'DOC_PAGE' }),
+      }) as components['schemas']['DocPageInput'],
+      tcms: { ...request, ...createIntent({ key: text(options['idempotency-key']) }) },
+    });
+
+    reportWrite(out, json, created, [
+      ['Created', `${show(created.key)} — ${show(created.title)}`],
+      ['Status', show(created.status)],
+      ['Blocks', show(created.blocks.length)],
+      ['Lock version', show(created.lockVersion)],
+    ]);
+  },
+};
+
+const docEdit: Command = {
+  name: 'doc edit',
+  summary: 'Retitle a page, or replace its blocks',
+  usage: 'tcms doc edit DOC-1 [--title T] [--file BODY.json --lock-version N]',
+  options: {
+    title: { type: 'string' },
+    file: { type: 'string' },
+    'lock-version': { type: 'string' },
+  },
+  write: { kind: 'edit', permission: 'doc:edit' },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const projectId = await projectOf(context);
+    const pageId = await resolveId({
+      client, projectId, value: requireArg(context, 'page'), entity: 'DOC_PAGE',
+    });
+
+    const file = text(options['file']);
+    const path = { projectId, pageId };
+
+    /*
+      `blocks` is the whole page, in order, and a block OMITTED is DELETED — so a `--title`-only
+      edit must not send the key at all. `present()` drops it, which is the difference between a
+      retitle and emptying somebody's specification. The contract states the rule and this is the
+      one command where forgetting it destroys content rather than failing.
+    */
+    const body = file
+      ? objectFrom(file, 'a DocPageInput')
+      : requireSomethingToDo(
+        present({ title: text(options['title']) }),
+        'Pass --title, or --file with the page body.',
+      );
+
+    const version = await versionFor(context, {
+      fromFile: file !== undefined,
+      operation: 'edit this page',
+      read: () => client.GET('/projects/{projectId}/doc-pages/{pageId}', { params: { path }, tcms: request }),
+    });
+
+    const updated = await client.PATCH('/projects/{projectId}/doc-pages/{pageId}', {
+      params: { path },
+      body: body as components['schemas']['DocPageInput'],
+      tcms: { ...request, ...editIntent(version, 'edit this page') },
+    });
+
+    reportWrite(out, json, updated, [
+      ['Updated', `${show(updated.key)} — ${show(updated.title)}`],
+      ['Blocks', show(updated.blocks.length)],
+      ['Lock version', show(updated.lockVersion)],
+    ]);
+  },
+};
+
+const docLink: Command = {
+  name: 'doc link',
+  summary: 'Record that a case or suite verifies a block',
+  usage: 'tcms doc link DOC-1 --block UUID --case TC-42 [--relationship VERIFIES]',
+  options: {
+    block: { type: 'string' },
+    case: { type: 'string' },
+    suite: { type: 'string' },
+    relationship: { type: 'string' },
+  },
+  // A create by shape — it allocates a `doc_link` — but the contract offers no `Idempotency-Key`
+  // here and needs none: linking the same source to the same block twice writes nothing and
+  // answers 200 with the existing link, which is the property a key would have bought.
+  write: { kind: 'state', permission: 'doc:edit' },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const projectId = await projectOf(context);
+    const pageId = await resolveId({
+      client, projectId, value: requireArg(context, 'page'), entity: 'DOC_PAGE',
+    });
+
+    const caseKey = text(options['case']);
+    const suiteKey = text(options['suite']);
+    if ((caseKey === undefined) === (suiteKey === undefined)) {
+      throw new UsageError('Name exactly one of --case or --suite.');
+    }
+
+    const link = await client.POST('/projects/{projectId}/doc-pages/{pageId}/blocks/{blockId}/links', {
+      params: { path: { projectId, pageId, blockId: requireOption(context, 'block') } },
+      body: {
+        ...(caseKey === undefined
+          ? {
+            sourceType: 'SUITE' as const,
+            sourceId: await resolveId({ client, projectId, value: suiteKey ?? '', entity: 'SUITE' }),
+          }
+          : {
+            sourceType: 'TEST_CASE' as const,
+            sourceId: await resolveId({ client, projectId, value: caseKey, entity: 'CASE' }),
+          }),
+        // Sent explicitly rather than omitted, because the generated type makes it required —
+        // `openapi-typescript` reads a schema default as "the server will always have one",
+        // which is true of the stored row and not of the request. The value is the contract's
+        // own default, so this asks for what an omission would have got.
+        relationship: (text(options['relationship']) ?? 'VERIFIES') as
+          components['schemas']['BlockLinkInput']['relationship'],
+      },
+      tcms: request,
+    });
+
+    reportWrite(out, json, link, [
+      ['Linked', show(link.id)],
+      ['Source', `${show(link.sourceType)} ${show(link.sourceKey)}`],
+      ['Relationship', show(link.relationship)],
+    ]);
+  },
+};
+
+const docUnlink: Command = {
+  name: 'doc unlink',
+  summary: 'Withdraw a link from a block',
+  usage: 'tcms doc unlink DOC-1 --link UUID',
+  options: { link: { type: 'string' } },
+  write: { kind: 'delete', permission: 'doc:edit' },
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const projectId = await projectOf(context);
+    const pageId = await resolveId({
+      client, projectId, value: requireArg(context, 'page'), entity: 'DOC_PAGE',
+    });
+    const linkId = requireOption(context, 'link');
+
+    await client.DELETE('/projects/{projectId}/doc-pages/{pageId}/links/{linkId}', {
+      params: { path: { projectId, pageId, linkId } },
+      tcms: request,
+    });
+
+    // A 204 has no body, so there is nothing verbatim to print under `--json`. Saying so as an
+    // object beats printing `undefined`, which a `jq` pipeline cannot read.
+    reportWrite(out, json, { deleted: linkId }, [['Removed', linkId]]);
+  },
+};
+
 export const WRITES: readonly Command[] = [
   caseEdit,
   caseProposal,
+  suiteCreate,
+  suiteEdit,
+  suiteStatus,
+  docCreate,
+  docEdit,
+  docLink,
+  docUnlink,
 ];
