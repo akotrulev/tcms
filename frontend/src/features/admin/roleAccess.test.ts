@@ -26,6 +26,7 @@ const role = (scope: Role['scope'], name: string): Role => ({
   name: name as Role['name'],
   scope,
   builtIn: true,
+  assignable: true,
   description: '',
   permissions: [],
 })

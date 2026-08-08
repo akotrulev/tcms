@@ -28,7 +28,18 @@ export function RoleReference({
   testId: string;
   scope?: RoleScope;
 }) {
-  const shown = scope ? roles.filter((role) => role.scope === scope) : roles;
+  /*
+    Non-assignable roles are dropped on BOTH screens, and the argument is the one written above
+    about scope, one axis over: this is the reference card sitting beside a Grant button, so a role
+    that cannot be granted to anybody teaches the reader that it can.
+
+    Agent (V40) is the case. It is PROJECT-scope, so the `scope` filter alone keeps it — and it is
+    a ceiling an API token carries, refused by `POST /role-assignments` for every subject. Where it
+    belongs is the token-issue form, which is why `GET /roles` returns it and why this component
+    cannot be the place that decides.
+  */
+  const grantable = roles.filter((role) => role.assignable);
+  const shown = scope ? grantable.filter((role) => role.scope === scope) : grantable;
 
   return (
     <Stack sx={{ gap: 2 }}>

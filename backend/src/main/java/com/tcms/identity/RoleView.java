@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * The contract's {@code Role} — one of the six built-ins, with its permissions expanded.
+ * The contract's {@code Role} — a built-in, with its permissions expanded.
  *
  * <h2>Why the permissions are on the wire at all</h2>
  *
@@ -21,12 +21,21 @@ import java.util.UUID;
  * {@code POST /role-assignments} and at which scope: {@link RoleScope#PROJECT} needs a
  * {@code projectId}, {@link RoleScope#COMPANY} needs the absence of one, and
  * {@link RoleScope#SYSTEM} is not grantable there at all — see {@link RoleGrantService}.
+ *
+ * <h2>{@link #assignable} is a second, independent axis, and V40 is where they parted</h2>
+ *
+ * <p>{@link #scope} answers <em>at which target</em> a role may be granted; {@code assignable}
+ * answers whether it may be granted to a person <em>at all</em>. They agreed while every listed
+ * role was grantable somewhere. {@link Role#AGENT_ID} is PROJECT-scope and grantable nowhere: it is
+ * carried by an API token, so it must appear in the token-issue form and must not appear in a grant
+ * picker. A client filtering only on scope offers it beside a Grant button the server refuses.
  */
 public record RoleView(
         UUID id,
         String name,
         RoleScope scope,
         boolean builtIn,
+        boolean assignable,
         String description,
         List<String> permissions) {
 }

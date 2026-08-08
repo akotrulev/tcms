@@ -32,6 +32,7 @@ const roles = [
     name: 'Instance Admin',
     scope: 'SYSTEM',
     builtIn: true,
+    assignable: true,
     description: 'The operator.',
     permissions: [],
   },
@@ -40,6 +41,7 @@ const roles = [
     name: 'Company Admin',
     scope: 'COMPANY',
     builtIn: true,
+    assignable: true,
     description: 'Everything in this company.',
     permissions: [],
   },
@@ -48,7 +50,19 @@ const roles = [
     name: 'Viewer',
     scope: 'PROJECT',
     builtIn: true,
+    assignable: true,
     description: 'Read-only.',
+    permissions: [],
+  },
+  {
+    id: 'role-agent',
+    name: 'Agent',
+    scope: 'PROJECT',
+    builtIn: true,
+    // PROJECT-scope, so every scope test in this file passes it through. The server refuses every
+    // grant of it regardless of subject — see the test below.
+    assignable: false,
+    description: 'Carried by an agent.',
     permissions: [],
   },
 ]
@@ -158,6 +172,27 @@ describe('GrantRoleDialog', () => {
     // it. And with a project pinned, Company Admin must not be offered — the server refuses it.
     expect(screen.getByTestId('Admin.Grant.Scope')).toBeDisabled()
     expect(await optionNames('Admin.Grant.Role')).toEqual(['Viewer'])
+  })
+
+  it('never offers a non-assignable role, at either scope — the axis scope does not cover', async () => {
+    mockReads({ company: ['company:members'], project: ['project:members'] })
+    renderDialog()
+    await screen.findByTestId('Admin.Grant')
+
+    /*
+      Agent (V40) is PROJECT-scope, so it survives both branches of the scope filter and is on
+      `GET /roles` because the token-issue form needs it there. Nobody is ever an Agent: the server
+      refuses the grant for every subject, so offering it here is a control whose only outcome is a
+      400 on a select the user was invited to use.
+    */
+    expect(await optionNames('Admin.Grant.Role')).not.toContain('Agent')
+
+    // `optionNames` leaves the menu open, and an open MUI menu makes the rest of the document
+    // inert — so the second scope cannot be chosen until this one is dismissed.
+    await userEvent.keyboard('{Escape}')
+
+    await chooseFrom('Admin.Grant.Scope', 'Acme Online Banking')
+    expect(await optionNames('Admin.Grant.Role')).not.toContain('Agent')
   })
 
   it('offers only PROJECT-scope roles once a project is chosen, and never the SYSTEM one', async () => {

@@ -31,6 +31,7 @@ const ROLES = [
     name: 'Instance Admin',
     scope: 'SYSTEM',
     builtIn: true,
+    assignable: true,
     description: 'The whole instance.',
     permissions: [],
   },
@@ -39,6 +40,7 @@ const ROLES = [
     name: 'Company Admin',
     scope: 'COMPANY',
     builtIn: true,
+    assignable: true,
     description: 'Everything in this company.',
     permissions: [],
   },
@@ -47,7 +49,18 @@ const ROLES = [
     name: 'Automation Service',
     scope: 'PROJECT',
     builtIn: true,
+    assignable: true,
     description: 'Posts results. Cannot edit a case.',
+    permissions: [],
+  },
+  {
+    id: 'role-agent',
+    name: 'Agent',
+    scope: 'PROJECT',
+    builtIn: true,
+    // The one role on this list that no grant picker may show and this form must.
+    assignable: false,
+    description: 'Carried by an agent. Cannot approve, delete or publish.',
     permissions: [],
   },
 ]
@@ -174,8 +187,21 @@ describe('IssueTokenDialog', () => {
     // project is a ceiling on where it works, not a statement about the role's scope, and
     // `GrantRoleDialog`'s filter would have hidden it.
     const names = await optionNames('Admin.TokenIssue.Role')
-    expect(names).toEqual(['Company Admin', 'Automation Service'])
+    expect(names).toEqual(['Company Admin', 'Automation Service', 'Agent'])
     expect(names).not.toContain('Instance Admin')
+  })
+
+  it('offers Agent, which every grant picker hides — the one form where it is chosen', async () => {
+    renderDialog()
+
+    /*
+      `assignable: false` and offered anyway. Agent (V40) is a ceiling an API token carries and
+      nobody is ever an Agent, so `GrantRoleDialog` and `RoleReference` both drop it — and copying
+      that filter into this dialog, which reads the same endpoint and looks like it wants the same
+      predicate, would make the role unobtainable through the product with nothing else changing.
+      This assertion is what fails if somebody tidies the three filters into one.
+    */
+    expect(await optionNames('Admin.TokenIssue.Role')).toContain('Agent')
   })
 
   it('sends a null expiry when the field is left empty', async () => {

@@ -370,6 +370,7 @@ public class AdminDirectoryService {
                         role.getName(),
                         role.getScope(),
                         role.isBuiltIn(),
+                        role.isAssignable(),
                         role.getDescription(),
                         List.copyOf(permissionsByRole.getOrDefault(role.getId(), List.of()))))
                 .toList();

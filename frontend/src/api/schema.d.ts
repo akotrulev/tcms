@@ -9519,22 +9519,44 @@ export interface components {
             lead: boolean;
         };
         /**
-         * @description One of exactly six built-in roles. There are no custom roles in v1 — not even
-         *     clone-and-edit (plan §6b) — so `builtIn` is always true and there is no create
-         *     or update endpoint. Enforcement is permission-based throughout: nothing in the
-         *     code checks a role NAME, which is what keeps adding a role designer additive.
+         * @description A built-in role. There are no custom roles in v1 — not even clone-and-edit
+         *     (plan §6b) — so `builtIn` is always true and there is no create or update
+         *     endpoint. Enforcement is permission-based throughout: nothing in the code
+         *     checks a role NAME, which is what keeps adding a role designer additive.
          *
          *     A COMPANY-scope grant covers every project in that company, present and future.
          *     That is what makes Company Admin work, and why nothing else is granted there.
+         *
+         *     **Seven names, not six, and only six of them are assignable.** `Agent` (roles
+         *     spec §A6a) is carried by API tokens and never held by a person: it is listed
+         *     here because the token-issue form is the only place it is ever chosen, and it
+         *     is refused by `POST /role-assignments`. Filter this list by `assignable` when
+         *     rendering a grant picker — see that field. The eighth seeded row, the
+         *     `Company Member` membership baseline, is filtered out server-side and never
+         *     appears here at all.
          */
         Role: {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
-            name: "Instance Admin" | "Company Admin" | "Test Lead" | "Test Engineer" | "Automation Service" | "Viewer";
+            name: "Instance Admin" | "Company Admin" | "Test Lead" | "Test Engineer" | "Automation Service" | "Viewer" | "Agent";
             /** @enum {string} */
             scope: "SYSTEM" | "COMPANY" | "PROJECT";
             builtIn: boolean;
+            /**
+             * @description Whether `POST /role-assignments` may grant this role to a person or a team.
+             *     False only for `Agent`, which a token carries and nobody holds.
+             *
+             *     It answers **one** question, and three that used to have the same answer have
+             *     come apart: may a person hold it (this field), may a token carry it (`Agent`:
+             *     yes), is it listed (`Agent`: yes, which is why you are reading this). A client
+             *     that hides a role because it is non-assignable must do so in the grant pickers
+             *     only — hiding it in the token form makes it unobtainable.
+             *
+             *     Client-side filtering here is **affordance, not security**: the server refuses
+             *     the grant regardless.
+             */
+            assignable: boolean;
             description: string;
             /**
              * @description Permission keys, `resource:action`. The authoritative catalogue and the

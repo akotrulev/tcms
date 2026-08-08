@@ -267,7 +267,15 @@ export function ProjectAccessPage() {
             <DataRegion
               testId="ProjectAccess.Roles.List"
               state={{ ...roles, refetch: () => void roles.refetch() }}
-              isEmpty={(rows) => rows.filter((role) => role.scope === 'PROJECT').length === 0}
+              /*
+                The predicate has to describe the set RoleReference actually renders, or the region
+                reports "loaded" over nothing. It filters non-assignable roles as well as scope
+                since V40 — Agent is PROJECT-scope and is never rendered here — so counting on
+                scope alone would call this panel non-empty on the strength of a card it drops.
+              */
+              isEmpty={(rows) =>
+                rows.filter((role) => role.scope === 'PROJECT' && role.assignable).length === 0
+              }
             >
               {(rows) => (
                 <RoleReference roles={rows} testId="ProjectAccess.Roles" scope="PROJECT" />

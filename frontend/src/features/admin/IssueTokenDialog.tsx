@@ -99,8 +99,16 @@ export function IssueTokenDialog({ open, onClose }: { open: boolean; onClose: ()
   const [issued, setIssued] = useState<IssuedApiToken | null>(null);
 
   const issuableRoles = useMemo(
-    // Every role the API accepts, and only those. See the header on why this is not the grant
-    // dialog's scope-dependent filter.
+    /*
+      Every role the API accepts, and only those. See the header on why this is not the grant
+      dialog's scope-dependent filter.
+
+      DO NOT ADD `role.assignable` HERE. It is the filter the grant dialog and RoleReference both
+      apply, and copying it into this one is the change that looks like consistency: Agent (V40) is
+      `assignable = false` precisely because nobody is ever an Agent, and this form is the ONLY
+      place in the product where it can be chosen. Adding the term makes the role unobtainable and
+      nothing else on any screen changes.
+    */
     () => (roles.data ?? []).filter((role) => role.scope !== 'SYSTEM'),
     [roles.data],
   );

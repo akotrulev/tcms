@@ -107,8 +107,19 @@ export function GrantRoleDialog({
   */
   const grantableRoles = useMemo(
     () =>
-      (roles.data ?? []).filter((role) =>
-        projectId ? role.scope === 'PROJECT' : role.scope !== 'SYSTEM',
+      (roles.data ?? []).filter(
+        (role) =>
+          /*
+            `assignable` is a SECOND axis and it is not implied by the scope test below. Agent
+            (V40) is PROJECT-scope, so the `projectId` branch would offer it — and the server
+            refuses every grant of it, because it is a ceiling an API token carries and nobody is
+            ever an Agent. It is on this list at all only because the token-issue form reads the
+            same endpoint and is the one place it IS chosen.
+
+            Affordance, not security: RoleGrantService refuses it whatever this filter does.
+          */
+          role.assignable &&
+          (projectId ? role.scope === 'PROJECT' : role.scope !== 'SYSTEM'),
       ),
     [roles.data, projectId],
   );
