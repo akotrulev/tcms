@@ -9,6 +9,8 @@ import com.tcms.project.ProjectService;
 import com.tcms.project.StatusKind;
 import com.tcms.tenancy.AuditEvent;
 import com.tcms.tenancy.AuditEventRepository;
+import com.tcms.tenancy.Outbox;
+import com.tcms.tenancy.OutboxEvents;
 import com.tcms.tenancy.CompanyContext;
 import java.time.Clock;
 import java.time.Instant;
@@ -123,6 +125,17 @@ public class IngestionService {
     private final TransactionTemplate transactions;
 
     /** {@code ExecutionService}'s clock, for its reason — a timestamptz round-trips at micros. */
+    /**
+     * The transactional outbox (round 3 #52, phase 2). The <em>same</em> notice
+     * {@code ExecutionService} records, deliberately: what moved is this company's results, and
+     * nothing downstream cares whether a person typed them or a CI job posted them.
+     *
+     * <p>This is the path where the coalescing matters most. One ingestion can write a thousand
+     * executions in one transaction, and an event per result would be a thousand rows standing for
+     * one fact.
+     */
+    private final Outbox outbox;
+
     private final Clock clock;
 
     @SuppressWarnings("checkstyle:ParameterNumber")
@@ -139,6 +152,7 @@ public class IngestionService {
             ObjectMapper json,
             UnmatchedTests unmatchedTests,
             TransactionTemplate transactions,
+            Outbox outbox,
             Clock clock) {
 
         this.projects = projects;
@@ -153,6 +167,7 @@ public class IngestionService {
         this.json = json;
         this.unmatchedTests = unmatchedTests;
         this.transactions = transactions;
+        this.outbox = outbox;
         this.clock = clock;
     }
 
@@ -438,6 +453,13 @@ public class IngestionService {
         // run would otherwise read "not started" for ever while carrying a full set of verdicts.
         if (!recorded.isEmpty() && run.begin(null, now)) {
             runs.saveAndFlush(run);
+        }
+        if (!recorded.isEmpty()) {
+            // Guarded on `recorded`, not on the parse: a report whose every test was unmatched
+            // changes no execution row, so there is nothing downstream to recompute and an event
+            // would ask two modules to re-derive an unchanged world. §117's whole point is that an
+            // unmatched test creates nothing.
+            outbox.recordCoalesced(OutboxEvents.RESULTS_CHANGED);
         }
         return recorded;
     }

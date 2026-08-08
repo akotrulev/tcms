@@ -26,9 +26,13 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZonedDateTime;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.TreeMap;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.event.EventListener;
+import org.springframework.stereotype.Component;
 
 /**
  * The architecture rules Spring Modulith cannot express, in ArchUnit.
@@ -209,6 +213,51 @@ class ArchitectureRulesTest {
                         module it is a cycle through the module everything else depends on""");
 
         rule.check(PRODUCTION);
+    }
+
+    @Test
+    @DisplayName("no two Spring beans share a simple name — the collision no test can see")
+    void springStereotypesHaveDistinctSimpleNames() {
+        // §131 shipped `reporting.ResultsChangedHandler` and `repository.ResultsChangedHandler`,
+        // one name in two packages, both @Component. Spring's default bean name is the simple
+        // class name, so the two collide and the CONTEXT DOES NOT START —
+        // ConflictingBeanDefinitionException, and every @SpringBootTest with it.
+        //
+        // THE REASON THIS IS A TEST AND NOT A REVIEW NOTE: both of those beans carry
+        // @ConditionalOnProperty, and IntegrationTestBase turns BOTH properties off. Conditions
+        // are evaluated during scanning, so neither bean was ever registered and the collision
+        // could not occur anywhere in the suite. It would have occurred exactly once — on the
+        // first boot of a real deployment, where both modules are enabled. A green suite said
+        // nothing about it and structurally could not.
+        //
+        // Reads the classes rather than a running context, deliberately: a context-based check
+        // would inherit exactly the conditional-evaluation blindness that hid the defect.
+        //
+        // @Service, @Repository and @Controller are meta-annotated with @Component and ArchUnit
+        // resolves meta-annotations, so one predicate covers every stereotype. Spring Data
+        // repository INTERFACES are named by a different generator, and are excluded by
+        // isInterface() rather than by a list that would need maintaining.
+        Map<String, String> byName = new LinkedHashMap<>();
+        Map<String, String> collisions = new TreeMap<>();
+
+        for (JavaClass type : PRODUCTION) {
+            if (type.isInterface() || !type.isMetaAnnotatedWith(Component.class)) {
+                continue;
+            }
+            String existing = byName.put(type.getSimpleName(), type.getName());
+            if (existing != null) {
+                collisions.put(type.getSimpleName(), existing + " and " + type.getName());
+            }
+        }
+
+        assertThat(collisions)
+                .as("two Spring stereotypes with one simple class name resolve to the same default "
+                        + "bean name, and the context fails to start with "
+                        + "ConflictingBeanDefinitionException. Rename one — and note that if either "
+                        + "carries @ConditionalOnProperty, no integration test here will reproduce "
+                        + "it, because a condition that is off during scanning never registers the "
+                        + "bean at all")
+                .isEmpty();
     }
 
     @Test

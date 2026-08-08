@@ -2,17 +2,68 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-08 (**§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-08 (**§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `48b97bf` (§129 phase 1) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `e7326e3` (§131 phase 1) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
 **SCHEMA HEAD IS STILL `V39__attachment_owner_types.sql`; `V40` is next free.** The policy count is
-unchanged at **62**, and **§129 carried no migration in either phase** — a clone reuses the version
-snapshot, which is why #59 dropped plan *templates* (they need a table).
+unchanged at **62**, and **neither §129 nor §131 carried a migration** — a clone reuses the version
+snapshot (which is why #59 dropped plan *templates*: they need a table), and the outbox's table,
+`CHECK` and partial index have all been in `V1` since M0.
+
+**The nightly Linux gate is LIVE** (`tests.yml` on `[self-hosted, tcms-lab]`, 01:17 UTC, green since
+2026-08-06) — four documents described it as inert until 2026-08-08. `gh run list --workflow=tests.yml`
+before repeating any claim about it. `ci.yml` still runs **no** backend tests.
+
+---
+
+## §131 — THE OUTBOX IS ALSO THE ONLY CROSS-MODULE SHAPE CHANNEL
+
+Round 3's step 9 (#52), two phases, **no migration** — `V1` has carried every column, `CHECK` and
+index since M0. New package content in `tenancy`: `OutboxEntry` · `OutboxStatus` · `OutboxMessage`
+(the **first `CompanyScopedEvent` implementation in `src/main`**) · `OutboxHandler` ·
+`OutboxRepository` · `Outbox` (writer) · `OutboxLedger` (row-state transitions) · `OutboxDispatcher`
+· `OutboxScheduler` · `OutboxProperties` · `OutboxEvents`.
+
+- **A typed cross-module Spring event is unbuildable here.** `ArchitectureRulesTest`'s foundation
+  rule reads `getDirectDependenciesFromSelf` and has **no exemption for an event type**, so
+  `reporting` cannot import a class from `execution`. `event_type TEXT` + `payload JSONB` is
+  therefore the mechanism and not a storage detail. Before proposing "just publish a Spring event",
+  check that rule.
+- **`Outbox.record` / `recordCoalesced` throw unless a transaction is active**, and
+  `OutboxDispatcher.dispatchDue` throws if one *is*. Both guard defects with no symptom.
+- **Three transactions per event; the handler runs in none of them.** `OutboxLedger` is a separate
+  bean because a handler's exception marks the surrounding transaction rollback-only (the failure
+  record would be discarded) and because a self-invoked `@Transactional` is not intercepted at all.
+- **`PENDING` is the retry status**, forced by `outbox_pending_idx` being partial on it. `FAILED` =
+  ceiling reached, replayable; `DEAD` = no handler / unreadable payload. **Unclaimed type ⇒ DEAD,
+  never SENT.**
+- **The lease, not a lock, is the concurrency mechanism**: `claim` bumps `attempts` and pushes
+  `next_attempt_at`. Delivery is **at least once** and every handler must be idempotent.
+- **Several handlers may claim one event type** (fan-out); they share one row, so one failure
+  retries all. Ordering between them is undefined — co-dependent effects go in one handler
+  (`reporting`'s does refresh-then-rollups for §101).
+- **`recordCoalesced` takes no aggregate and no payload**, and folds only into a row with
+  `attempts = 0`. Use it for *state moved*; use `record` for *a thing happened*.
+- Phase 2: `execution.ExecutionService.record` and `IngestionService` produce
+  `OutboxEvents.RESULTS_CHANGED`; `reporting.FactRefreshOnResultsChanged` and
+  `repository.HealthRecomputeOnResultsChanged` consume it (**named apart on purpose: two
+  `@Component`s with one simple name collide on the default bean name and fail every
+  `@SpringBootTest`**), each under its own module's existing
+  `enabled` property. The schedulers **stay** — they are the rebuild path.
+- `tcms.outbox.*` in `application.yml`; `IntegrationTestBase` sets `tcms.outbox.enabled=false` for
+  the suite's third scheduled writer. Fixture prefix **`0b`**, slugs `obx-`.
+- **`ArchitectureRulesTest.springStereotypesHaveDistinctSimpleNames`** is new and is the check for a
+  defect class the suite cannot otherwise see: two `@Component`s with one simple name share a
+  default bean name and the context refuses to start — but if either carries
+  `@ConditionalOnProperty` and the suite disables it, **no integration test registers the bean and
+  nothing reproduces it until a real boot**. Reads bytecode, not a context, for that reason.
+- **The invitation email cannot use the outbox**: only a token digest is stored, so the payload
+  would be a live credential at rest and a retry could not reconstruct it.
 
 ---
 

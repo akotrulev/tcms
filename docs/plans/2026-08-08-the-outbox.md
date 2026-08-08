@@ -1,6 +1,18 @@
 # The outbox — decision round 3's step 9 (#52)
 
-**Date:** 2026-08-08 · **Status:** PROPOSED, awaiting approval · **Round-3 step:** 9 of 9, the last
+**Date:** 2026-08-08 · **Status:** **DONE — both phases shipped 2026-08-08**, see
+[§131](../handoff/131-the-outbox.md) · **Round-3 step:** 9 of 9, the last
+
+> **Four things the build changed about this document, recorded here rather than quietly.**
+> **(1) Several handlers may claim one event type.** §3 called for one, on the reasoning that a
+> duplicate is a code error worth failing at startup; that is right about code and wrong about the
+> product, since the event moves both `reporting`'s fact log and `repository`'s health signals and
+> neither module may call the other. **(2) `recordCoalesced` was not in this plan at all**, and
+> without it a tester's fifty verdicts are fifty whole-company recomputes — both consumers take no
+> arguments by design. **(3) No `SKIP LOCKED`**, which §3 called for: the claim's lock spans one
+> `UPDATE`, so skipping buys nothing; the *lease* is what covers a slow delivery. **(4) The two
+> handlers had to be renamed apart** — see §131's second finding, which is the more interesting of
+> the two.
 **Sequenced after #46** by [decision round 3](2026-07-30-tcms-high-level-plan.md#8) — *"widest blast
 radius of the round, and by then it lands on a Linux gate that has been green for eight steps, so a
 reddening is attributable."*

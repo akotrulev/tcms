@@ -66,10 +66,13 @@ class ExecutionSource {
      * <h2>Idempotent recompute, not an event handler — and that is the slice's load-bearing choice</h2>
      *
      * <p>§6e and the ERD both describe {@code execution_fact} as "event-updated", and that is the
-     * right steady state and the wrong thing to build <em>first</em>. The product has
-     * <strong>zero</strong> {@code CompanyScopedEvent} implementations, no outbox consumer
-     * ({@code outbox} is a {@code V1} table with no code) and {@code @Async} handlers whose failures
-     * have, in {@code CompanyScopedEvent}'s own words, "nowhere to report". An event-only fact log
+     * right steady state and the wrong thing to build <em>first</em>. When this was written the
+     * product had <strong>zero</strong> {@code CompanyScopedEvent} implementations, no outbox
+     * consumer ({@code outbox} was a {@code V1} table with no code) and {@code @Async} handlers
+     * whose failures had, in {@code CompanyScopedEvent}'s own words, "nowhere to report".
+     * <strong>All three are now false — round 3 #52 built the outbox and
+     * {@code reporting.FactRefreshOnResultsChanged} is a consumer of it</strong> — and the paragraph
+     * stands as written because the argument was never about the absence: an event-only fact log
      * therefore has <strong>no rebuild path</strong>: a handler that throws, a restart mid-dispatch,
      * or a result recorded before the handler was deployed each produce a log that is permanently
      * and silently short — and every report computed from it is then wrong in a way that renders
@@ -81,7 +84,9 @@ class ExecutionSource {
      * <p>A statement keyed on the primary key <em>is</em> the rebuild path. Landing
      * {@code ResultRecorded} later adds a handler that calls the same service and changes nothing
      * here — which is verbatim the argument {@code CaseHealthRecomputeService} already makes for
-     * itself.
+     * itself, and which is what happened: {@code execution.results_changed} arrived in round 3 #52,
+     * the handler is four lines, this class is untouched, and {@code ExecutionFactScheduler} still
+     * runs. The event buys latency; the schedule remains the floor.
      *
      * <h2>The {@code ON CONFLICT} set-list names seven columns, and the fifteen it omits are the point</h2>
      *

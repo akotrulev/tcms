@@ -19,13 +19,14 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>§6p describes both as "updated incrementally as results land". That is the right steady state
  * and the wrong thing to build first, for verbatim the reason {@link ExecutionFactRefreshService}
- * gives: the product has zero {@code CompanyScopedEvent} implementations, no outbox consumer, and
- * {@code @Async} handler failures have, in {@code CompanyScopedEvent}'s own words, "nowhere to
- * report". An event-only rollup therefore has <strong>no rebuild path</strong> — a handler that
+ * gives — and which no longer turns on the absence it cited. When this was written the product had
+ * zero {@code CompanyScopedEvent} implementations and no outbox consumer; round 3 #52 built both,
+ * and {@link FactRefreshOnResultsChanged} calls this service. An event-only rollup would still have <strong>no rebuild path</strong> — a handler that
  * throws, a restart mid-dispatch, or a result recorded before the handler was deployed each leave a
  * rollup that is permanently and silently short, and a short rollup renders identically to a correct
  * one. A statement keyed on the primary key <em>is</em> the rebuild path. Landing
- * {@code ResultRecorded} later adds a handler that calls this service and changes nothing here.
+ * {@code ResultRecorded} later adds a handler that calls this service and changes nothing here —
+ * which is exactly what it did.
  *
  * <h2>A sibling of {@link ExecutionFactRefreshService} rather than a fifth statement inside it</h2>
  *

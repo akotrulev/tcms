@@ -7,6 +7,8 @@ import com.tcms.project.ProjectService;
 import com.tcms.tenancy.AuditEvent;
 import com.tcms.tenancy.AuditEventRepository;
 import com.tcms.tenancy.CompanyContext;
+import com.tcms.tenancy.Outbox;
+import com.tcms.tenancy.OutboxEvents;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -102,6 +104,19 @@ public class ExecutionService {
     private final AuditEventRepository auditEvents;
 
     /**
+     * The transactional outbox — how the rest of the product learns that this company's results
+     * moved (round 3 #52, phase 2).
+     *
+     * <p>Recorded <strong>inside this transaction</strong>, which is the whole of the pattern: the
+     * verdict and the notice of it commit together, so there is no window in which a result was
+     * written and nothing downstream was ever told. Neither consumer is reachable from here —
+     * {@code reporting}'s fact log and {@code repository}'s health signals are both modules this
+     * one may not import (plan §3) — and that is not a limitation being worked around. It is why
+     * the notice is a row rather than a call.
+     */
+    private final Outbox outbox;
+
+    /**
      * The application clock, not {@code Instant.now()} — it is truncated to the resolution
      * of a {@code timestamptz} (see {@code TcmsApplication#clock()}), and a result whose
      * {@code executedAt} is stamped at nanosecond precision comes back from a re-read as a
@@ -121,6 +136,7 @@ public class ExecutionService {
             EvidenceRepository evidenceRows,
             CaseFacts cases,
             AuditEventRepository auditEvents,
+            Outbox outbox,
             Clock clock) {
 
         this.projects = projects;
@@ -134,6 +150,7 @@ public class ExecutionService {
         this.evidenceRows = evidenceRows;
         this.cases = cases;
         this.auditEvents = auditEvents;
+        this.outbox = outbox;
         this.clock = clock;
     }
 
@@ -343,6 +360,13 @@ public class ExecutionService {
                                 vocabulary.get(request.statusId()).name())
                         + "}",
                 now));
+
+        // The fact log and the health signals both derive from this row and neither module can be
+        // called from here. COALESCED, not one event per verdict: both handlers are whole-company
+        // recomputes that take no arguments by design, and a tester working through a run records
+        // fifty results in a few minutes — fifty identical full projections would be the cost of
+        // saying one thing fifty times. See Outbox#recordCoalesced.
+        outbox.recordCoalesced(OutboxEvents.RESULTS_CHANGED);
 
         // Re-read through the same renderer the GET uses, so the response to a write is the response
         // to the read that follows it — the property §34 names about ProjectService#viewOfCreated.

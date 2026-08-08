@@ -1081,3 +1081,23 @@ migration** — every column, `CHECK` and index this uses has been there since `
 | OB-12 | `recordCoalesced` gains an `aggregateId` / payload parameter and the producer passes the current run | The tempting convenience. A coalesced event stands for every change since the last delivery, so the payload is a fact about one of them presented as the reason for all of them — and a handler that reads it scopes its recompute to one run. Reddens the `getAggregateId()).isNull()` assertion only; the rest is a design that has to be defended in review. | ⬜ NOT RUN |
 | OB-13 | `dispatchDue` drops the company check on the claimed message | Unreachable through RLS today, which is exactly why it is asserted: it is the assumption every handler's writes rest on. Reddens nothing in the current suite — **recorded as a known gap**, since constructing a crossed row requires bypassing RLS as the superuser. | ⬜ NOT RUN |
 | OB-14 | `OutboxProperties` drops the lease-vs-interval check | Ships a configuration in which every delivery slower than one tick is delivered twice, discovered under load and only under load. Should redden `leaseShorterThanIntervalIsRefused`. | ⬜ NOT RUN |
+
+### §131 phase 2 — the producer and the two consumers (`OB-15` … `OB-20`)
+
+The first cross-module event delivery in the product. `execution` records
+`execution.results_changed` (from both the by-hand verdict and the CI ingest); `reporting` and
+`repository` each claim it. Assertions live in `ExecutionEndpointTest.ResultsChangedEvent` (1) plus
+phase 1's thirteen.
+
+> **NONE RUN.** **`OB-15` first** — it is the one whose failure is a number on a screen being
+> quietly out of date, which no test in this repository would notice.
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| OB-15 | `ExecutionService.apply` drops the `outbox.recordCoalesced` call | The plan page's headline and the board go back to being up to fifteen and sixty minutes stale after a result is recorded — **correct eventually, wrong exactly when somebody is looking**. Should redden `ResultsChangedEvent.recordingRaisesOneCoalescedEvent`. | ⬜ NOT RUN |
+| OB-16 | `IngestionService` records the event unconditionally instead of on `!recorded.isEmpty()` | A report whose every test was unmatched changes no execution row, so two modules re-derive an unchanged world on every CI push against a project whose mappings are not set up. Reddens nothing today — **recorded as a known gap**, and the assertion to add is an ingest with no matches. | ⬜ NOT RUN |
+| OB-17 | `reporting.FactRefreshOnResultsChanged` calls `rollups.refresh()` before `refresh.refresh()` | §101's ordering, inverted: the plan headline reads `plan_snapshot` and the trend reads `execution_fact`, so the page disagrees with itself by one interval with nothing on screen to say so. Reddens nothing in the current suite — **known gap**, and the assertion belongs beside §101's own. | ⬜ NOT RUN |
+| OB-18 | The two handlers' effects are merged into one bean in either module | Cannot compile — that is the check. `reporting` and `repository` may not import each other (plan §3), so the fan-out is not a stylistic choice. Recorded because the merge is the tidier-looking shape and the reason it is impossible is one file away. | ⬜ NOT RUN |
+| OB-19 | Either handler's `@ConditionalOnProperty` is removed | `tcms.reporting.enabled=false` stops meaning "the fact log does not move" and starts meaning "it does not move *on a timer*" — the module is off and its tables keep changing. Reddens nothing; **known gap**, and the assertion is a context with the property off and an event that goes DEAD. | ⬜ NOT RUN |
+| OB-21 | Either handler is renamed back so both are `ResultsChangedHandler` | **The defect this slice shipped and caught.** Two `@Component`s with one simple name share a default bean name; the context fails to start with `ConflictingBeanDefinitionException` — but **not in this suite**, because both carry `@ConditionalOnProperty` and `IntegrationTestBase` disables both, so neither bean is ever registered. Should redden `ArchitectureRulesTest.springStereotypesHaveDistinctSimpleNames` **and nothing else** — which is the entire point of that check reading bytecode rather than a context. | ⬜ NOT RUN |
+| OB-20 | `OutboxEvents.RESULTS_CHANGED` is replaced by string literals at the three call sites | The reason the constant is in a foundation module at all. One typo and the producer writes an event nobody claims — a DEAD row in production, found by an operator rather than by the build. Reddens nothing (the literals would agree on the day of the mutation), so it is **a decision to defend in review** rather than a check. | ⬜ NOT RUN |

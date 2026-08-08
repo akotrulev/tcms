@@ -17,6 +17,9 @@ import com.tcms.project.ProjectRepository;
 import com.tcms.tenancy.Company;
 import com.tcms.tenancy.CompanyContext;
 import com.tcms.tenancy.CompanyRepository;
+import com.tcms.tenancy.OutboxEvents;
+import com.tcms.tenancy.OutboxRepository;
+import com.tcms.tenancy.OutboxStatus;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -168,6 +171,9 @@ class ExecutionEndpointTest extends IntegrationTestBase {
 
     @Autowired
     private TransactionTemplate tx;
+
+    @Autowired
+    private OutboxRepository outboxEntries;
 
     /** Authored through {@code POST /cases}, so its v1 snapshot is the real one. */
     private UUID caseA;
@@ -562,6 +568,57 @@ class ExecutionEndpointTest extends IntegrationTestBase {
     // =====================================================================
     // The write — recording a result
     // =====================================================================
+
+    @Nested
+    @DisplayName("The event a result raises (round 3 #52) — one notice, however many verdicts")
+    class ResultsChangedEvent {
+
+        @Test
+        @DisplayName("recording a verdict writes one coalesced outbox event, and a second does not add another")
+        void recordingRaisesOneCoalescedEvent() throws Exception {
+            // THE wiring assertion for #52 phase 2. The fact log and the health signals both derive
+            // from an execution row and neither module may be called from `execution`, so this row
+            // is the only thing that tells them — and it is written in the SAME transaction as the
+            // verdict, so a result that rolled back cannot leave one behind.
+            clearOutbox();
+
+            patch(ENGINEER, ACME, RUN, EXEC_A, resultPayload(passedStatus(), null), "0");
+
+            var afterFirst = outboxRows();
+            assertThat(afterFirst).hasSize(1);
+            var event = afterFirst.get(0);
+            assertThat(event.getEventType()).isEqualTo(OutboxEvents.RESULTS_CHANGED);
+            assertThat(event.getStatus()).isEqualTo(OutboxStatus.PENDING);
+            assertThat(event.getAttempts()).isZero();
+            assertThat(event.getAggregateId())
+                    .as("a coalesced event stands for every change since the last delivery, so it "
+                            + "must not name one of them — a handler reading a runId would scope a "
+                            + "whole-company recompute to one run")
+                    .isNull();
+
+            // A tester works through a run: fifty verdicts, and both handlers are whole-company
+            // recomputes that take no arguments. Fifty rows would be the cost of saying one thing
+            // fifty times.
+            patch(LEAD, ACME, RUN, EXEC_B, resultPayload(failedStatus(), "amended"), null);
+
+            assertThat(outboxRows())
+                    .as("still one — two notices that this company's results moved are one notice")
+                    .hasSize(1);
+        }
+
+        private java.util.List<com.tcms.tenancy.OutboxEntry> outboxRows() {
+            try (var ignored = CompanyContext.open(ACME)) {
+                return tx.execute(status -> outboxEntries.findAll());
+            }
+        }
+
+        private void clearOutbox() {
+            try (var ignored = CompanyContext.open(ACME)) {
+                tx.executeWithoutResult(status ->
+                        outboxEntries.deleteAll(outboxEntries.findAll()));
+            }
+        }
+    }
 
     @Nested
     @DisplayName("Recording a result — three permissions, and the lock that makes them safe")
