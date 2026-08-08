@@ -1,0 +1,31 @@
+{
+  "name": "@tcms/mcp",
+  "version": "0.1.0",
+  "description": "The TCMS MCP server. A thin adapter over @tcms/client that exposes the test repository to an MCP host as workflow-shaped tools, filtered by what the caller's credential can actually reach.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "bin": {
+    "tcms-mcp": "./dist/main.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.lib.json",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "lint": "oxlint src"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@tcms/client": "0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.2",
+    "typescript": "~6.0.2",
+    "vitest": "^4.1.10"
+  }
+}

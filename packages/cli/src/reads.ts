@@ -54,10 +54,26 @@ const whoami: Command = {
 
     if (permissions.permissions.length > 0) {
       out.line();
-      // Sorted, and printed as keys rather than grouped by role — this client cannot name a
-      // role, and `core/refusal.ts` records why: the role→permission catalogue is behind
-      // `company:read`, which an agent token deliberately does not hold.
-      out.line([...permissions.permissions].sort().join('  '));
+      /*
+        Sorted, and printed as keys rather than grouped by role — this client cannot name a
+        role, and `core/refusal.ts` records why: the role→permission catalogue is behind
+        `company:read`, which an agent token deliberately does not hold.
+
+        **`.sort().join()` on the array itself printed `[object Object]` for every key**, which
+        is what §137 shipped and §140 found while building the MCP server's capability summary
+        against the same endpoint. `permissions` has carried `{key, qualifier}` pairs since §65,
+        not bare keys, and the default `sort` compares their string forms — so the output was
+        the same word repeated once per permission and the command still exited 0. The qualifier
+        is printed too, and that is the point rather than a repair: `case:edit` and
+        `case:edit (OWN)` are different answers to "may I change this", and this command exists
+        to answer exactly that.
+      */
+      out.line(
+        [...permissions.permissions]
+          .sort((left, right) => left.key.localeCompare(right.key))
+          .map((held) => (held.qualifier === 'ALL' ? held.key : `${held.key} (${held.qualifier})`))
+          .join('  '),
+      );
     }
   },
 };

@@ -72,6 +72,39 @@ describe('failures', () => {
   });
 });
 
+describe('whoami', () => {
+  /*
+    §137 shipped this command with **no test at all**, and it printed `[object Object]` once per
+    permission — `GET /me/permissions` has answered `{key, qualifier}` pairs since §65, not bare
+    keys, and `[...permissions].sort().join('  ')` stringifies each object. The command exited 0.
+    §140 found it while building the MCP server's capability summary against the same endpoint.
+  */
+  it('prints permission keys, with the qualifier when it narrows them', async () => {
+    const out = recorder();
+    const stub = api({
+      '/me': { status: 200, body: { id: 'u-1', email: 'ana@acme.test', displayName: 'Ana', isSystemAdmin: false, status: 'ACTIVE' } },
+      '/projects': { status: 200, body: [PROJECT] },
+      '/me/permissions': {
+        status: 200,
+        body: {
+          projectId: null,
+          permissions: [
+            { key: 'case:read', qualifier: 'ALL' },
+            { key: 'case:delete', qualifier: 'OWN' },
+          ],
+        },
+      },
+    });
+
+    expect(await mainWith(['whoami'], out, stub.fetch)).toBe(EXIT.ok);
+    expect(out.stdout).not.toContain('[object Object]');
+    expect(out.stdout).toContain('case:read');
+    // The qualifier is the difference between "may I change this" and "may I change this one",
+    // which is the question the command exists to answer.
+    expect(out.stdout).toContain('case:delete (OWN)');
+  });
+});
+
 describe('reads', () => {
   it('lists projects', async () => {
     const out = recorder();
