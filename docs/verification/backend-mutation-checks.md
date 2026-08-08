@@ -1339,3 +1339,33 @@ stubbed `fetch`. One live setup closes all three — `docker compose up`, `provi
 `Agent` token, `TCMS_URL`/`TCMS_TOKEN`, then the CLI's commands and an MCP host pointed at
 `tcms-mcp --http`. It is neither a browser lane nor a mutation, so neither queue owns it; it is
 named in the handoff as its own outstanding item.
+
+### §141 — rate limiting (`RL-1` … `RL-8`)
+
+**A mixed batch, and the first one that is.** `RL-1`…`RL-6` are backend rows and run the ordinary
+way (`cd backend && ./gradlew test --tests '<scope>'`); `RL-7`…`RL-8` mutate `packages/` and run as
+`cd packages && npm run test:run --workspaces`, on `TS-*`'s terms. Assertions live in
+`backend/src/test/java/com/tcms/auth/TokenRateLimiterTest.java` (13 across four groups),
+`RateLimitTest.java` (4), `ArchitectureRulesTest.java` (the new clock rule) and
+`packages/client/src/core/core.test.ts`'s `refusal copy` (2 new).
+
+> **NONE RUN.** **`RL-1` first** — it is the row that pins the slice's finding, and its failure mode
+> is a refused caller that obeys the header exactly and is refused again, which is the loop the whole
+> slice exists to interrupt. **`RL-3` second**, because its failure is a limit that silently does
+> not apply.
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| RL-1 | `TokenRateLimiter.Bucket` goes back to a fractional `available` accumulator (`available += elapsed × rate`, clamped at `capacity`) | The floating-point defect this slice found by writing the test first: ten increments of `0.1` sum to `0.9999999999999999`, so a caller that waited exactly one second is refused again. Should redden `fractions of a permit accumulate rather than being lost per request`. **The row that pins why the state is a timestamp and not a count** — and note that a *counting* implementation is what almost everybody writes. | ⬜ NOT RUN |
+| RL-2 | `Decision.refusedFor` drops the floor and returns `Duration.ofSeconds(wait.toSeconds())` (truncating instead of rounding up) | Two failures in one line: a sub-second wait becomes `Retry-After: 0`, which is an instruction to retry immediately, and a 1.5 s wait becomes 1 s, so a compliant client is refused again through no fault of its own. Should redden `the wait is rounded UP, so a client that obeys it is not refused again` and `and is never zero, whatever the arithmetic says`. | ⬜ NOT RUN |
+| RL-3 | `RateLimitFilter` keys on the authenticated JWT subject (`jwt.getSubject()`) instead of `TokenContext.currentOrNull()` | Two changes at once, and both are wrong quietly: a person in the SPA starts being counted (a 429 the SPA has no copy for and no test anywhere expects), and every token issued by one owner shares one bucket, so a person's second CI job is refused by their first. Should redden `a session is never counted, however fast the person clicks` and `a second token is untouched — the bucket is per credential, not per company`. | ⬜ NOT RUN |
+| RL-4 | `SecurityConfiguration` moves `rateLimitFilter` to `.addFilterAfter(…, CompanyContextFilter.class)` | The refusal now happens *after* the company is open, so every refused request has established tenancy context for a request that will not be served. Reddens **nothing** — the 429 still has the right status, header and body. **Known gap, and the honest answer is that this ordering is an efficiency and a hygiene property rather than a behavioural one**; what would make it observable is an assertion about `CompanyContext` during a refusal, which is a test about a `ThreadLocal` from outside a filter. Recorded rather than faked. | ⬜ NOT RUN |
+| RL-5 | `RateLimitProperties`' compact constructor drops the `burst > requestsPerMinute` check | The configuration that reads as generous and is not: the bucket empties in one batch that takes longer than a minute to earn back, so the first caller of the minute meets a different API from the second. Should redden `a burst larger than one minute of refill is refused at bind time`. | ⬜ NOT RUN |
+| RL-6 | `TokenRateLimiter.nowMillis()` goes back to `clock.millis()` | **The slice's second finding, restored.** `TcmsApplication.clock()` is `Clock.tick(…, ofNanos(1000))` and `TickClock.millis()` divides by `tickNanos / 1_000_000` — zero — so this is an `ArithmeticException` on the request path, not an imprecise reading. Should redden all four of `RateLimitTest` **and** `nothing calls Clock.millis() — on this application's clock bean it throws`. **The ArchUnit rule is what makes the next caller find it at build time instead of in production.** | ⬜ NOT RUN |
+| RL-7 | `packages/client`'s `describeRefusal` loses its `429` branch, falling back to `default:` | The client half of the finding: the model receives `Could not …: <server prose>` with no structural signal, and an unexplained failure is the one it retries — the loop, produced by the client one refusal later. Should redden `turns a 429 into a wait, taken from Retry-After rather than from the prose` and `does not invent a wait the server did not state`. | ⬜ NOT RUN |
+| RL-8 | The `429` branch's fallback becomes `Wait 60 seconds` when `retryAfterMs` is null | An invented number is worse than none precisely because it *will* be obeyed — a caller sleeps a minute the server never asked for, or (with a smaller literal) hammers a limit it was told nothing about. Should redden `does not invent a wait the server did not state`. | ⬜ NOT RUN |
+
+**Still three packages wide, and now four surfaces.** `RL-7`/`RL-8` join `MS-*`, `CW-*` and `TS-*`
+in being observed only by a stubbed `fetch` — and `RL-1`…`RL-6` are the first rows in this queue
+whose behaviour a live pass would exercise *by accident*, since any looping client meets them. The
+same one setup closes all of it.

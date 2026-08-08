@@ -2,12 +2,12 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-08 (**§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-08 (**§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `d4c5e03` (§138 phases 2+3) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `37c3104` (§141 phase 2) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
 **SCHEMA HEAD IS `V43__ai_proposal.sql`; `V44` is next free.** The policy count is **63** — `V43`
@@ -22,6 +22,47 @@ and the outbox's table, `CHECK` and partial index have all been in `V1` since M0
 **The nightly Linux gate is LIVE** (`tests.yml` on `[self-hosted, tcms-lab]`, 01:17 UTC, green since
 2026-08-06) — four documents described it as inert until 2026-08-08. `gh run list --workflow=tests.yml`
 before repeating any claim about it. `ci.yml` still runs **no** backend tests.
+
+---
+
+## §141 — THE RATE LIMIT, AND A CLOCK METHOD THAT THROWS
+
+`com.tcms.auth` gained a fourth filter. `RateLimitFilter` → `TokenRateLimiter` → `RateLimitProperties`
+(`tcms.rate-limit.*` in `application.yml`), the MCP plan's phase 9.
+
+- **`clock.millis()` IS A LANDMINE ON THIS PROJECT'S `Clock` BEAN — DO NOT CALL IT.** Not
+  "imprecise": `ArithmeticException: / by zero`, on every call. `TcmsApplication.clock()` is
+  `Clock.tick(systemUTC(), ofNanos(1000))` (§58) and the JDK's `TickClock.millis()` divides by
+  `tickNanos / 1_000_000`, which is **zero** for a sub-millisecond tick. Use
+  `clock.instant().toEpochMilli()`. `ArchitectureRulesTest.nothingCallsClockMillis` fails the build
+  on it now; before §141 nothing in the codebase had ever called it, so the method was uncallable
+  and unobserved for eighty slices.
+- **ONLY AN API TOKEN IS COUNTED, AND THE KEY IS `api_token.id`.** Sessions are deliberately not
+  limited (a person cannot produce the shape, and the SPA has no 429 copy); unauthenticated requests
+  cannot be (no key the caller does not control — that is the ingress's job). Keyed per token rather
+  than per company so one agent's loop cannot refuse a colleague's CI job. The key is read from
+  `TokenContext` — **the fourth reader, and the first inside the purpose its header names**.
+- **FILTER ORDER IS FOUR RUNGS NOW**: `apiToken → bearer → pv → rateLimit → companyContext`. The
+  limit sits after `pv` (a deactivated owner's token is 401'd, not counted) and before the company
+  filter (a refusal opens no company and starts no transaction). Anything added here goes in that
+  list in `SecurityConfiguration`, whose comment names the reason for each rung.
+- **THE BUCKET IS A TIMESTAMP (GCRA), NOT A COUNT — DO NOT "SIMPLIFY" IT BACK.** The obvious
+  fractional accumulator is a floating-point one: ten increments of `0.1` sum to
+  `0.9999999999999999`, so a caller that obeys `Retry-After` exactly is refused again, which is the
+  loop the limit exists to prevent. `TokenRateLimiterTest.fractionsAccumulate` is the row.
+- **`Retry-After` IS ROUNDED UP AND NEVER ZERO**, and the same number is repeated in the problem
+  `detail` — `@tcms/cli` prints `detail` verbatim and `packages/client`'s `describeRefusal` reads
+  the **header**. The two must not disagree.
+- **A 429 FROM THIS FILTER CHANGED NOTHING**, because it is decided before dispatch. That is what
+  lets the client tell a model to repeat the call, which is the opposite of a timed-out write's copy.
+- **THE ERROR ENVELOPE IS COPIED A THIRD TIME**, in `RateLimitFilter.refuse` — forced, because a
+  filter's response never reaches Spring MVC's exception handling and `auth` may not import
+  `repository`. `ApiProblem`'s header still names the `shared`-module extraction as the follow-up.
+- **429 IS DOCUMENTED AT DOCUMENT LEVEL, NOT PER OPERATION** — `components.responses.TooManyRequests`
+  is referenced by nothing on purpose, because the response is written before routing. Do not
+  "fix" that by enumerating it on 88 operations.
+- **A WRITE SUB-LIMIT WAS DESIGNED AND REFUSED**: result submission is one `POST` per test, so a
+  ceiling tuned against proposal-spam refuses the product's fastest legitimate writer.
 
 ---
 

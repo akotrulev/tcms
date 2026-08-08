@@ -1,7 +1,11 @@
 # Rate limiting — the MCP plan's phase 9
 
 **Date:** 2026-08-08 · **Slice:** §141 · **Stacks:** `backend/` and `packages/` — **no migration**,
-one **document-level** contract change, **no frontend code**.
+one **document-level** contract change, **no frontend code**. **SHIPPED** — see
+[`docs/handoff/141-rate-limiting.md`](../handoff/141-rate-limiting.md) for what it found beyond this
+plan: `clock.millis()` throws on this application's clock bean, and the counting bucket this
+document assumed had to become a GCRA timestamp because a fractional accumulator refuses a caller
+that obeys `Retry-After` exactly.
 
 Phase 9 of [`2026-08-08-mcp-server-wip-plan.md`](2026-08-08-mcp-server-wip-plan.md): *"rate limiting
 becomes required (an agent looping `search_cases` is real load on the box running Postgres)"* — §4,

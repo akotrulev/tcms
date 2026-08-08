@@ -535,7 +535,15 @@ but visible* affordance — the agent knows what it cannot do without holding a 
    `teamId` this surface cannot look up, because §3.3 excludes `/users` and `/teams` and `V40` §6
    withholds `company:read` from `Agent`. That is the second time that withholding has removed
    something the spec asked for.
-9. **Rate limiting**, REST side.
+9. ~~**Rate limiting**, REST side.~~ → **DONE 2026-08-08, §141**, a token bucket per `api_token`
+   in `backend/auth` plus the 429 refusal copy in `packages/client`. §4's answer built as written:
+   *per token, generous*. **The finding: a refusal that does not say when to retry produces the
+   loop the limit exists to prevent** — the caller is a model, so the limit and its copy are one
+   slice. **The second: `clock.millis()` throws on this application's clock bean** (§58's
+   `Clock.tick(…, ofNanos(1000))` makes `TickClock.millis()` divide by zero), uncallable and
+   uncalled since §58; an ArchUnit rule bans it now. A tighter **write** sub-limit was designed and
+   refused, because the fastest legitimate writer here is result submission. The contract change is
+   **document-level** — a 429 is written before routing, so no operation returns it.
 10. **Deploy** — image, compose, Caddy route, runbook.
 
 Slices 1/2/3b of §6w (criteria, coverage, method rules) are independent backend work and can run
