@@ -490,12 +490,22 @@ but visible* affordance — the agent knows what it cannot do without holding a 
    §A2-style wording `Company Member` got.
 3. **Token issue** — `expiresAt` required with a default for `Agent` (§2.6a). Small, and it belongs
    with the role rather than after it.
-4. **Shared TS client** from `openapi.yaml`.
-5. **CLI**, read commands first.
+4. ~~**Shared TS client** from `openapi.yaml`.~~ → **DONE 2026-08-08, §137**, `packages/client`.
+   `openapi-fetch` over `openapi-typescript`'s output, so the path and method are type parameters
+   and an undeclared path is a compile error. It ships with the **command core** of the surface
+   spec's §4 (display keys, idempotency, `If-Match`, refusal copy, budgets, project resolution).
+5. ~~**CLI**, read commands first.~~ → **DONE 2026-08-08, §137**, `packages/cli` — nine read
+   commands, no dependency but the client. **Landed in the same slice as phase 4 deliberately**: a
+   generated client with no caller is the writerless shape §116/§117/§121/§132 each found, and
+   §121's was deleted rather than used. **Nothing has run against a live instance** — every test
+   drives a stubbed `fetch`.
 6. **`ai_proposal` + the review surface** (§1.3) — the accept path goes through the existing create
    path, so this is backend work that must precede any generation tool.
-7. **CLI writes** — edits direct, creates as proposals. Preceded by §6.1's contract additions:
-   `Idempotency-Key` on `POST …/suites` and `POST …/doc-pages`.
+7. **CLI writes** — edits direct, creates as proposals. ~~Preceded by §6.1's contract additions:
+   `Idempotency-Key` on `POST …/suites` and `POST …/doc-pages`.~~ → **those landed in §136 (`V42`)**,
+   and the core's write machinery (`Idempotency-Key`, `If-Match`, the concurrency types) is built
+   and tested in §137 with nothing calling it yet. **The edit arm is buildable now**; only the
+   create arm waits on phase 6.
 8. **MCP server** over the same client, carrying §6.2's capability summary and `whoami`.
 9. **Rate limiting**, REST side.
 10. **Deploy** — image, compose, Caddy route, runbook.
@@ -531,6 +541,15 @@ Four were closed on 2026-08-08 and are recorded in place: §1.3 (writes), §2.6a
    table), a third term in `PermissionEvaluator`, and a picker in the token-issue screen rendering
    the ceiling rather than the 55-key catalogue. Qualifiers keep coming from `role_id`, which is why
    the role stays even after the picker exists.
+
+**§4.5's refusal copy cannot name a role, and that is settled by measurement rather than open
+(§137).** The role→permission catalogue is on `GET /roles` alone, `AdminDirectoryService.listRoles`
+gates it on `company:read`, and `V40` §6 withholds `company:read` from `Agent` deliberately — so an
+agent token gets `[]`, indistinguishable from an empty catalogue. `packages/client/src/core/refusal.ts`
+names the permission and not the role, which is strictly less than §4.5 permits and therefore the
+safe direction. Widening `GET /roles`, or adding a permission→roles read outside `company:read`, is
+a real option and a contract decision; it is recorded there with the two alternatives that were
+refused (baking or generating the catalogue into a package versioned independently of the instance).
 
 **Not a question — a second dead column. [verified 2026-08-08]** `api_token.lastUsedAt` has a field
 and a getter on `ApiToken` and nothing sets it, the same shape as `actor_token_id` (§2.7) and the

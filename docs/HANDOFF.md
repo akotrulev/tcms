@@ -1,20 +1,34 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-08 · **Branch:** `master` · **Latest slice:** [§136 — the header two endpoints had
+**Date:** 2026-08-08 · **Branch:** `master` · **Latest slice:** [§137 — the shared TS client, and
+the deadline a `Request` constructor throws away](handoff/137-the-shared-ts-client-and-the-cli.md)
+— three phases, **no migration, no contract change, and the first slice that adds a STACK rather
+than a feature.** The MCP plan's phases 4 **and** 5: `packages/` — `@tcms/client` (typed over
+`openapi.yaml`) and `@tcms/cli` (nine read commands) — with its own npm workspace root, so the
+repository root still runs only `docker compose`. **Phase 4 was not allowed to ship alone**: a
+generated client with no caller is the shape this project has found five times (§116, §117, §121,
+§132), and §121's version was *deleted* rather than used. **Two silent defects, both in the
+transport, both found by a test written beside the code**: openapi-fetch calls `fetch(Request)`
+with no init at all, so the first draft sent every request as a bodiless GET; and a signal read
+back off a `Request` does not reliably fire — measured, `new Request(url, { signal }).signal` never
+aborts — so a deadline handed to a copy-constructed Request is discarded and the request hangs,
+which is the failure the budget exists to prevent arriving through the budget. **The finding beside
+the feature: surface spec §4.5 asks for something this credential cannot obtain** — naming the role
+that holds a missing permission needs `GET /roles`, which is gated on `company:read`, which `V40`
+withholds from `Agent` on purpose. So the copy says strictly less than the spec permits, which is
+the safe direction. **NO COMMAND HAS BEEN RUN AGAINST A REAL TCMS**; every test drives a stubbed
+`fetch`, and a stub that agrees with the contract is the same shape of observer as the mock layer
+§107 deleted.
+
+Before it: [§136 — the header two endpoints had
 refused in writing, and the premise that expired](handoff/136-idempotency-on-suites-and-doc-pages.md)
 — one phase, **one migration (`V42`) and one contract change**. `Idempotency-Key` on
 `POST …/suites` and `POST …/doc-pages`, the first of §135's two prerequisites, unblocking two of the
 twenty-one MCP tools. **It is a reversal of a recorded decision, not the filling of a hole**: both
 services argued against the header since §29, and the argument was correct when written —
-**its premise expired**. It reasons entirely from a person looking at a screen, and §98 deleted the
-tree its own sentence names. **The endpoint where the copied argument was weakest is the one where a
-duplicate costs most**: a doc page is a *link target*, so two copies split traceability across two
-sets of block ids and deleting the loser destroys its links. `V11`'s standing invitation to
-generalise is declined a fourth time on `V17`'s reason, which does not weaken with the count.
-The finding beside the feature: **`MAX_IDEMPOTENCY_KEY = 200` is declared in seven services across
-four modules** and nothing had ever compared them — the shared constant is refused (§125's bar on
-`tenancy`) and replaced by a computed check that also pins the contract's `maxLength` to the code's
-cap.
+**its premise expired**. The finding beside the feature: **`MAX_IDEMPOTENCY_KEY = 200` is declared
+in seven services across four modules** and nothing had ever compared them — replaced by a computed
+check that also pins the contract's `maxLength` to the code's cap.
 
 Before it: [§135 — the tool surface, and the
 requirement model that was never a criteria list](handoff/135-the-tool-and-command-surface.md) —
@@ -150,6 +164,20 @@ this context to grant rather than to bound"*) and this slice met it: reading the
 it for the first time. The red run was **`Map.of().get(null)` — §38's trap, seventh sighting, one
 slice after §121 recorded the sixth** — and it 500'd every case history while reddening eighteen
 tests about withdrawn runs, markers and scope, none of them about tokens.
+
+**Gates, as of §137.** **There are THREE stacks now** — §137 added `packages/`, whose gates are
+`cd packages && npm run build/lint/test:run --workspaces`. §137 changed no Java and no frontend
+source, so the backend and frontend rows below were **not re-run** and carry §136's figures.
+
+| Gate | State |
+|---|---|
+| `cd packages && npm run build --workspaces` | clean — `@tcms/client` and `@tcms/cli` (§137) |
+| `cd packages && npm run lint --workspaces` | 0 warnings (§137) |
+| `cd packages && npm run test:run --workspaces` | **82 passed** — 68 in the client across 4 files, 14 in the CLI (§137) |
+
+**`ci.yml` has a third job** (`packages`), and unlike the backend job **it runs its tests** — ~0.5s
+of pure Node, no container, so `-x test`'s trade does not apply. It is deliberately not in the
+`lab` deploy's `needs`: these packages are published, not deployed.
 
 **Gates, as of §133 phase 3.** ~~Both run locally, and only locally~~ → **there is a second observer
 now**: the nightly Linux lane on `shanks` runs the full `./gradlew build` at 01:17 UTC and has been
@@ -290,12 +318,24 @@ now sits in front of `fetch` and faults the real backend.
 > reverses is that the argument's premise (a person watching a tree) expired in two independent
 > ways.
 >
-> **So the next slice is the MCP plan's phase 4 — the shared TS client generated from
-> `openapi.yaml`** — with **twenty of the twenty-one tools** now buildable against the contract.
-> Phases 1–3 are done (§132, §133, §134) and the surface is designed (§135). The one tool still
-> gated is `tcms_write_case`'s create arm, which waits on phase 6's `ai_proposal` and is deliberately
-> **absent from the schema** until then rather than present-and-refusing. Another re-derivation is
-> the standing alternative.
+> ~~**So the next slice is the MCP plan's phase 4 — the shared TS client generated from
+> `openapi.yaml`**…~~ → **DONE 2026-08-08, [§137](handoff/137-the-shared-ts-client-and-the-cli.md)**,
+> **phases 4 AND 5 together** — phase 4 was not allowed to ship alone, because a generated client
+> with no caller is the writerless shape §116, §117, §121 and §132 each found, and §121's was
+> *deleted* rather than used. `packages/` is a third stack.
+>
+> **So the next slice is the MCP plan's phase 6 — `ai_proposal` and its review surface.** It is
+> backend work that must precede any generation tool, and it gates the *create* arm of
+> `tcms_write_case`; the edit arm is buildable today against a core that is already built and
+> tested. Phases 1–5 are done (§132, §133, §134, §137) and the surface is designed (§135). Another
+> re-derivation is the standing alternative.
+>
+> **One thing §137 left open has no queue to hold it**: no `@tcms/cli` command has been run against
+> a real TCMS. Every test drives a stubbed `fetch`, and a stub that agrees with the contract is the
+> same shape of observer as the mock layer §107 deleted. It is neither a browser lane nor a
+> mutation, so §65's two queues do not own it — it needs one live pass (`docker compose up`,
+> `provision-company`, issue a token, run the nine read commands) and a person at a terminal only
+> because it needs a provisioned company.
 >
 > **The chosen block is "close the small gaps", NOT the verification drain.** Every item in the round
 > adds rows to both queues. §65 stands, and so does what it costs: everything below §65 remains

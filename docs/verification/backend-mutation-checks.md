@@ -1216,3 +1216,35 @@ other four creates have had since `V11`/`V14`/`V17`. Assertions live in
 | IK-5 | The controller answers `201` + `Location` on a replay | A client following the `Location` reads the replay as having created something, which is what the 200 exists to tell it apart from. Should redden `aReplayCarriesNoLocation` and the status assertion in `aRetryReplaysTheOriginal`, both classes. | ⬜ NOT RUN |
 | IK-6 | `MAX_IDEMPOTENCY_KEY` is changed to 500 in **one** of the seven services | The drift the copies invite: one key format works against part of the API and 400s against the rest. Should redden `IdempotencyKeyCapTest.everyCapAgrees` and `theContractAgreesWithTheCode`. **This is the row that justifies not extracting a shared constant** — if it does not redden, the argument in `SuiteWriteService`'s field comment is wrong and the symbol should be extracted. | ⬜ NOT RUN |
 | IK-7 | `DocPageWriteService.writeSubjectPage` passes a key instead of null | A plan-document create starts consuming keys from a header it never receives — harmless today (the parameter is null at the only call site) but it would make `uq_doc_page_subject` and this index two answers to one question. Reddens nothing. **Known gap**, recorded because the null is a decision and not an omission. | ⬜ NOT RUN |
+
+### §137 — the TypeScript client and the CLI (`TS-1` … `TS-9`)
+
+**A new stack, and the queue's first rows that are not `./gradlew`.** These mutate
+`packages/client` and `packages/cli` and are verified with `cd packages && npm run test:run
+--workspaces` — the scope column names the file, since the suite is ~0.5s whole and there is no
+container to boot. Assertions live in `http.test.ts` (21), `client.test.ts` (10),
+`schemaFreshness.test.ts` (4), `core/core.test.ts` (33) and `cli/src/main.test.ts` (14).
+
+> **NONE RUN.** **`TS-4` first** — it is the only row whose failure is a security finding rather
+> than a defect, and `TS-2` second, because its failure mode is a *silent* data loss on somebody
+> else's edit.
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| TS-1 | `http.ts` sends the outgoing request as `new Request(request, { headers, signal: deadline })` instead of a URL and an init | The shape the first draft had. The deadline fires and the copy's signal never does, so every request hangs until the peer gives up — the failure the budget exists to prevent, arriving through the budget. Should redden `becomes a TcmsTimeoutError that says the write may have landed`. **The row that pins the finding**; if it does not redden, the workaround is unnecessary and the comment in `http.ts` is wrong. | ⬜ NOT RUN |
+| TS-2 | `concurrency.ts`'s `versionOf` returns `{ none: 'state-preconditioned' }` instead of throwing when the resource carries no `lockVersion` | Every edit whose read lacked a version silently becomes last-write-wins, overwriting a colleague's concurrent change with no error anywhere — the single worst thing this surface can do. Should redden `refuses to write when the read carried no version`. | ⬜ NOT RUN |
+| TS-3 | `http.ts` drops the `if (perRequest.ifMatch !== undefined)` guard for a truthiness check | `lockVersion: 0` — a resource nobody has edited yet — stops sending `If-Match` while every other version keeps working, so the defect is invisible on any fixture that has been saved once. Should redden `sends If-Match for lockVersion 0, which a truthiness check would drop`. | ⬜ NOT RUN |
+| TS-4 | `refusal.ts`'s 404 branch returns the 403 branch's message | The enumeration oracle §6t exists to prevent: a caller in another company learns that a row exists from a message naming the permission they lack. Should redden `says nothing about permissions or roles on a 404` and the CLI's `says nothing about permissions on a 404`. **Failure here is a security finding, not a defect.** | ⬜ NOT RUN |
+| TS-5 | `identifiers.ts` adds `SU` to `KEY_PATTERN`, as the surface spec's §4.4 example implies | `TS-7` and `SU-7` both parse; the second resolves nothing and reports "not found" for a key the user believed in. Should redden `parses the five seeded prefixes and nothing else`. | ⬜ NOT RUN |
+| TS-6 | `identifiers.ts`'s `classify` drops the `expected` mismatch check | `tcms case show TS-7` looks up a suite key in the case index and reports "no such case" — a typo with a plausible-looking answer. Should redden `refuses a key of the wrong kind rather than looking it up` and the CLI's `refuses a key of the wrong kind without making a request`. | ⬜ NOT RUN |
+| TS-7 | `paging.ts`'s `eachItem` drops the `result.items.length === 0` exit | A server answering an empty page while claiming a larger total spins forever against an instance the client cannot fix. Should redden `stops on an empty page even when total claims more`. | ⬜ NOT RUN |
+| TS-8 | `main.ts` returns `EXIT.failed` for a `UsageError` | A mistyped flag and a refused request become indistinguishable to a script, so a pipeline retries the one that will never succeed. Should redden `exits 2 when a show command is given no argument` and `exits 2 for a bad --timeout, not 1`. | ⬜ NOT RUN |
+| TS-9 | Two concurrent invocations of a write carrying one `Idempotency-Key` | **Not a mutation — a missing test**, and the same gap `IK-1` records on the backend side, now with a client that can actually produce the race. Nothing in either stack drives two concurrent creates under one key. **Known gap.** | ⬜ NOT RUN |
+
+**Not in this queue, deliberately:** the CLI's read commands against a live instance. That is
+neither a mutation nor a browser lane, and the WIP plan's §9 puts rows here for *the agent-token
+path and every write arm* — which is phase 7, not this slice. What it means in the meantime is
+stated plainly in the handoff: **no command in `@tcms/cli` has been run against a real TCMS.**
+Every test above drives a stubbed `fetch`, so the contract is enforced by the types and the
+behaviour by the stubs, and the one thing neither can observe is the server disagreeing with its
+own `openapi.yaml`.

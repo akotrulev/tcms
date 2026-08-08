@@ -47,7 +47,9 @@ pipelines; continuing without them produces inconsistent output.
 
 ## Commands
 
-The two stacks are independent. Gradle lives in `backend/`, npm in `frontend/`. **Neither stack
+~~The two stacks are independent.~~ **There are THREE since §137.** Gradle lives in `backend/`, npm
+in `frontend/`, and npm again in `packages/` — `@tcms/client` (the typed API client and command
+core) and `@tcms/cli`, under their own workspace root at `packages/package.json`. **No stack
 builds from the repo root** — the only thing the root runs is `docker compose`, which orchestrates
 the *system* and is therefore the one thing that legitimately spans both.
 
@@ -74,6 +76,19 @@ Point it elsewhere with `VITE_API_PROXY_TARGET`. **After changing `.env.local`, 
 renders blank with an empty console.
 
 ```bash
+# The TS client and the CLI (§137) — pure Node, no Docker, no backend needed
+cd packages
+npm install                       # one workspace root; `npm ci` in CI
+npm run build --workspaces        # THE gate: tsc over source+tests, then emit. Topological:
+                                  # @tcms/cli typechecks against @tcms/client's dist/
+npm run lint --workspaces         # oxlint, 0 warnings
+npm run test:run --workspaces     # 82 tests, ~0.5s — CI runs these, unlike the backend's
+cd client && npm run gen:api      # THE SECOND COPY of schema.d.ts. Regenerate BOTH after any
+                                  # openapi.yaml change; schemaFreshness.test.ts fails otherwise.
+node cli/dist/main.js help        # TCMS_URL + TCMS_TOKEN drive it
+```
+
+```bash
 # Backend — REQUIRES Docker; every test boots a real Postgres 17 via Testcontainers
 cd backend
 ./gradlew build                                  # THE gate: compile with -Werror + all tests
@@ -94,6 +109,7 @@ npm run build        # THE gate: tsc -b + vite build
 npm run lint         # oxlint, must stay at 0 warnings — a gate, not advisory
 npm run test:run     # Vitest + RTL, 954 tests — also a gate
 npm run gen:api      # regenerate src/api/schema.d.ts after ANY openapi.yaml change
+                     # — AND packages/client's copy; the two are byte-identical and a test compares them
 ```
 
 > **CI runs no backend tests** (changed 2026-08-02, for push-feedback speed: ~327s → ~60s).

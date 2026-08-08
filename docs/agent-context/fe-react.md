@@ -2,14 +2,42 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-08 (**§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
+**Last verified:** 2026-08-08 (**§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
 the one doc-block renderer and the editor's three new types; §126 phase 4 — the three attachment
 surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the flake panel and the
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `f822d57` (§133 phase 2) (trust the
+**Baseline commit:** `7747c07` (§137 phase 3) (trust the
 body over the header and re-grep what a later commit could have moved).
+
+## §137 — THERE IS A THIRD TYPESCRIPT STACK NOW, AND IT IS NOT THIS ONE
+
+`packages/` holds **`@tcms/client`** (the typed API client + command core) and **`@tcms/cli`**, with
+its own npm workspace root at `packages/package.json`. **`frontend/` did not change and must not
+start importing it.** Read this section before "sharing" anything between the two.
+
+- **The two clients are near-copies on purpose, and the copy is not drift.** `frontend/src/api/client.ts`
+  is a *browser* client: `localStorage` through `safeStorage`, the `import.meta.env.DEV` fault seam,
+  budgets chosen for a person watching a region spin (3s typeahead). None of that compiles or means
+  anything in a CLI process, and `packages/client/tsconfig.json` omits the `DOM` lib deliberately so
+  a browser global cannot slip in. What the two share is the **wire format**, which `openapi.yaml`
+  owns and both read.
+- **`schema.d.ts` now has a twin, and a test compares them byte-for-byte.**
+  `packages/client/src/schema.ts` is generated from the same contract by the same
+  `openapi-typescript@7`, so the two files are identical. `packages/client/src/schemaFreshness.test.ts`
+  fails when they are not — which is the only thing anywhere that catches **one stack regenerating
+  after an `openapi.yaml` change and the other not.** So `npm run gen:api` is now TWO commands, one
+  per stack, and forgetting either reddens `packages`.
+- **CI gained a third job** (`packages` in `ci.yml`): build + lint + test across both workspaces.
+  Unlike the backend job it **does** run its tests — ~0.5s of pure Node, no container. It is not in
+  the `lab` deploy's `needs`: these packages are published, not deployed.
+- **`openapi-fetch` types the paths, so the SPA's two contract checks have no counterpart there.**
+  `contractOperations.test.ts` and `contractParameters.test.ts` (~450 lines of AST walking) exist
+  because a hand-built template literal can name a path the contract does not declare. In
+  `packages/` the path and method are type parameters, so that class of defect is a compile error.
+  **This is not an argument for rewriting the SPA's client** — it fetches through TanStack Query
+  with per-endpoint budgets and a fault seam, and the checks cover call sites that already exist.
 
 ## §133 — FOUR SCREENS READ `GET /roles` AND ONLY THREE MAY FILTER ON `assignable`
 
@@ -371,6 +399,10 @@ reading off a run rather than trusting.
   drift). Earlier: **954/954 across 70 files at §107** (976/72 at §106, before the two mock-rule test files went with the mock) (958/70 at §105) (the §102 line said **925/67** and the measured baseline was **928/67** — this figure is carried forward by hand and has drifted at least twice; read it off a run before trusting it). Earlier: 913/65 at §99 phase 3, 909 at §98, 895/64 at §97 phase 5, 849/60 at §100. **`testTimeout` is 30s since §67 — the second raise for one cause.** The suite has a load-dependent cliff: adding five tests anywhere pushed `DocPageEditorPage`'s two `userEvent.type` tests over the old 20s budget, in a file that slice never touched, always as *Test timed out* and never an assertion. The real fix (those tests type sentences character-by-character; `paste` asserts the same thing) is named in `vitest.config.ts` and not done. `#confirmed`
 - `npm run gen:api` — regenerate `src/api/schema.d.ts` after **any** `openapi.yaml` change. Runs
   through `npx` on purpose (the scaffold pins TS 6, the tool peer-requires 5.x); do not "fix" it.
+  **Since §137 there is a SECOND copy to regenerate**: `cd packages/client && npm run gen:api`.
+  The two outputs are byte-identical and `packages/client/src/schemaFreshness.test.ts` fails when
+  they are not, so a half-done regeneration is caught — but only by the `packages` CI job, not by
+  anything in `frontend/`.
 - **There is no mode switch.** `VITE_API_MODE` is gone with the mock (§107); `/api` always proxies to
   `VITE_API_PROXY_TARGET` (default `localhost:8080`).
   **After changing `.env.local`, kill vite and `rm -rf node_modules/.vite`** — an in-place restart
