@@ -114,6 +114,33 @@ tcms:
     # administrator deciding whether a credential is still in use. PT0S makes it per-request.
     last-used-resolution: PT1H
 
+  rate-limit:
+    # What one API token may ask for (MCP plan phase 9; the AI plan's open question 6 —
+    # "per token, generous"). Sessions are not counted and unauthenticated requests cannot be:
+    # see RateLimitFilter for both reasons.
+    #
+    # THE COUNTER IS IN MEMORY, IN ONE PROCESS. TCMS is one deployable, so today these numbers
+    # are exact — a second replica multiplies every one of them by the replica count. Putting
+    # the counter in Postgres instead would mean a write per request on the hot path against the
+    # database this limit exists to protect.
+    enabled: ${TCMS_RATE_LIMIT_ENABLED:true}
+
+    # The sustained rate, per token. 10 requests a second is far above anything a working agent
+    # or CI job does and far below what a loop does, which is the whole design target: this
+    # bounds an accident, it is not a quota anybody is meant to plan against.
+    requests-per-minute: ${TCMS_RATE_LIMIT_RPM:600}
+
+    # How many may be spent at once. An agent's first act is a batch of list calls to learn the
+    # project's shape (the surface spec's §6.2 summary is built from several), and refusing that
+    # would make the first thing every session does fail. Must not exceed the per-minute rate —
+    # RateLimitProperties refuses that configuration at startup and says why.
+    burst: ${TCMS_RATE_LIMIT_BURST:120}
+
+    # The cap on tracked buckets. Bounded already by live api_token rows, because an unknown
+    # credential never authenticates and so never gets a bucket; this keeps that from being an
+    # assumption the map silently depends on.
+    max-tracked-tokens: ${TCMS_RATE_LIMIT_MAX_TOKENS:10000}
+
   storage:
     evidence:
       # Where evidence bytes land — the filesystem adapter behind the storage port (open

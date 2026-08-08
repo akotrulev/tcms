@@ -74,6 +74,7 @@ public class SecurityConfiguration {
             HttpSecurity http,
             ApiTokenAuthenticationFilter apiTokenFilter,
             PermissionVersionFilter permissionVersionFilter,
+            RateLimitFilter rateLimitFilter,
             CompanyContextFilter companyContextFilter) throws Exception {
         return http
                 .authorizeHttpRequests(requests -> requests
@@ -94,14 +95,18 @@ public class SecurityConfiguration {
                 // would make the browser render its own credential dialog over it.
                 .exceptionHandling(handling -> handling
                         .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
-                // Order is load-bearing, and there are now three rungs. The API-token filter runs
+                // Order is load-bearing, and there are now four rungs. The API-token filter runs
                 // BEFORE the bearer filter, so a CI credential is resolved and the request is
                 // already authenticated by the time the session machinery looks at it; pv next,
                 // so a token that predates a revocation is rejected before its company is ever
-                // opened; the company last, because it reads the principal the other two settled.
+                // opened; the rate limit after pv, so a deactivated owner's token is 401'd rather
+                // than counted, and before the company, so a refused request opens no company and
+                // starts no transaction; the company last, because it reads the principal the
+                // others settled.
                 .addFilterBefore(apiTokenFilter, BearerTokenAuthenticationFilter.class)
                 .addFilterAfter(permissionVersionFilter, BasicAuthenticationFilter.class)
-                .addFilterAfter(companyContextFilter, PermissionVersionFilter.class)
+                .addFilterAfter(rateLimitFilter, PermissionVersionFilter.class)
+                .addFilterAfter(companyContextFilter, RateLimitFilter.class)
                 .build();
     }
 

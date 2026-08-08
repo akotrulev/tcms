@@ -10398,6 +10398,39 @@ export interface components {
                 "application/json": components["schemas"]["Problem"];
             };
         };
+        /**
+         * @description The API-token rate limit. **Referenced by no operation, deliberately** — every other
+         *     response here is declared per operation because it is a property of that operation, and
+         *     this one is not: it is written by a servlet filter BEFORE routing, so the API refuses
+         *     before it has decided which operation the caller meant. Enumerating it on all ~88
+         *     operations would assert an operation-level property that does not exist, and would leave
+         *     the 89th silently undocumented. It is described once, here and in the Conventions section
+         *     of `info.description`, which is where a client author looks for something that can happen
+         *     to any call.
+         *
+         *     **Only a request authenticated by an API token can receive it.** A session is never
+         *     counted (the failure being bounded is an agent in a loop, which a person cannot produce),
+         *     and an unauthenticated request cannot be — there is no key to count against that the
+         *     caller does not control.
+         *
+         *     `Retry-After` carries whole seconds, is never zero, and is rounded up so that a client
+         *     obeying it exactly is not refused again. `Problem.detail` repeats the same number in
+         *     prose, because the CLI prints `detail` verbatim and an MCP host hands it to a model.
+         *
+         *     **Nothing was changed.** The refusal is decided before dispatch, so unlike a timeout
+         *     there is no handler that half-ran: the call may be retried as-is once the wait has
+         *     elapsed.
+         */
+        TooManyRequests: {
+            headers: {
+                /** @description Whole seconds to wait before retrying. Always present, always ≥ 1. */
+                "Retry-After": number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Problem"];
+            };
+        };
     };
     parameters: {
         ProjectId: string;

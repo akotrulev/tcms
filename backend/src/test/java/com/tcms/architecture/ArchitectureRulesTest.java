@@ -20,6 +20,7 @@ import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.lang.ConditionEvents;
 import com.tngtech.archunit.lang.SimpleConditionEvent;
 import com.tngtech.archunit.lang.syntax.ArchRuleDefinition;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -353,6 +354,34 @@ class ArchitectureRulesTest {
                         Inject Clock and call clock.instant(); the Clock-taking now(clock) overloads \
                         are fine. This is unobservable on macOS and CI no longer runs the suite, so \
                         the rule is the only thing watching""");
+
+        rule.check(PRODUCTION);
+    }
+
+    @Test
+    @DisplayName("nothing calls Clock.millis() — on this application's clock bean it throws")
+    void nothingCallsClockMillis() {
+        // Not a precision rule like the one above. `clock.millis()` THROWS here, on every call,
+        // with ArithmeticException: / by zero.
+        //
+        // TcmsApplication#clock() is Clock.tick(systemUTC(), Duration.ofNanos(1000)) — §58's
+        // microsecond truncation. The JDK's Clock.TickClock.millis() computes
+        // floorMod(millis, tickNanos / 1_000_000), and a sub-millisecond tick makes that divisor
+        // zero. So the truncation that fixed the CI defect left a method on a bean every module
+        // injects that cannot be called at all.
+        //
+        // It was unreachable until §141: nothing in this codebase had ever asked the injected
+        // clock for milliseconds, so the first caller found it as three red integration tests and
+        // would have found it in production as a 500 on every request past a rate limit. Instant
+        // and toEpochMilli are unaffected and are the way to get the same number.
+        ArchRule rule = noClasses()
+                .that().resideInAPackage(ROOT_PACKAGE + "..")
+                .should().callMethod(Clock.class, "millis")
+                .because("""
+                        the Clock bean is Clock.tick(..., ofNanos(1000)) and TickClock.millis() \
+                        divides by tickNanos / 1_000_000, which is zero for a sub-millisecond tick \
+                        — so this is not an imprecise reading, it is an ArithmeticException on the \
+                        request path. Call clock.instant().toEpochMilli()""");
 
         rule.check(PRODUCTION);
     }
