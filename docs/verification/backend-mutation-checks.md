@@ -1369,3 +1369,43 @@ way (`cd backend && ./gradlew test --tests '<scope>'`); `RL-7`…`RL-8` mutate `
 in being observed only by a stubbed `fetch` — and `RL-1`…`RL-6` are the first rows in this queue
 whose behaviour a live pass would exercise *by accident*, since any looping client meets them. The
 same one setup closes all of it.
+
+### §142 — deploying the MCP server (`DP-1` … `DP-8`)
+
+**A different kind of batch, and it needs saying plainly: this slice added NO tests, because
+nothing it changed is code a test runner can load.** A Dockerfile, a compose service, a Caddy block
+and two workflows are verified by building, running and asking — which is what was done (§142's
+section file lists every command and its answer) — but a *repeat* of that verification is a person
+at a terminal, not `./gradlew test`.
+
+So each row below names its **observer**: the thing that would catch the mutation without anybody
+looking. Where the answer is *none*, the row says so and gives the command that substitutes for it.
+That is the honest shape; a row claiming a test that does not exist would be worse than no row.
+
+Run these from a checkout with Docker available. Several need the image built first:
+
+```bash
+cd packages && docker build -f mcp/Dockerfile -t tcms-mcp:dev .
+```
+
+> **NONE RUN.** **`DP-1` first** — it is the slice's finding, its failure mode is a container that
+> starts, reports itself up and answers nothing, and it is the one mutation a reviewer is most
+> likely to make on purpose (the Dockerfile's `0.0.0.0` reads like a widening).
+
+| # | Mutation | Expected | Observer | Result |
+|---|---|---|---|---|
+| DP-1 | `packages/mcp/Dockerfile`'s `CMD` drops `--host 0.0.0.0`, falling back to `BIND_DEFAULT` | The slice's finding. The container starts, logs `listening on 127.0.0.1:8081/mcp`, and every request through the published port is refused — because docker-proxy dials the container's *network* address. `docker run -p 127.0.0.1:18081:8081` then `curl` → connection reset, and the container goes `unhealthy` after ~40 s. | **The HEALTHCHECK** — and therefore the deploy job's mcp wait, which fails the release. This is the row that pays for the probe existing. | ⬜ NOT RUN |
+| DP-2 | The `HEALTHCHECK` asserts `r.statusCode===200` instead of `405` | The probe can never pass: nothing on this surface answers 200 without a credential. Container reports `unhealthy` forever with a server that is working. **The inverse mutation is the interesting one** — see `DP-3`. | The healthcheck itself, immediately. | ⬜ NOT RUN |
+| DP-3 | `CMD`'s `--path` becomes `/mcp2` while the Caddy block stays `/mcp` | The mismatch the 405 assertion exists for. The container is `unhealthy` (its probe still asks for `/mcp`), and from outside, `/mcp` falls through to the SPA catch-all and answers **200 with `text/html`** — so a host reports a parse error against a server that is fine. | **The HEALTHCHECK catches the container half.** Nothing catches the Caddy half: the box's `/etc/caddy/Caddyfile` is not synced by any pipeline (shanks plan §14). Manual: `curl -sI https://…/mcp` and read the content-type. | ⬜ NOT RUN |
+| DP-4 | `packages/mcp/Dockerfile` drops the stray-`node_modules` check, and `mcp/package.json` pins an `openapi-fetch` that conflicts with the client's | npm stops hoisting, puts a private copy under `mcp/node_modules`, and the runtime stage — which copies the root tree alone — ships an image that fails at `import`. | **The check itself**, at build time, with the paths to add to the COPY list. Without it the failure is `ERR_MODULE_NOT_FOUND` at container start. | ⬜ NOT RUN |
+| DP-5 | The runtime stage's `ENTRYPOINT` drops tini (`CMD` alone, node as PID 1) | Measured at 10.2 s versus 0.3 s: `docker stop` waits out the full stop timeout and SIGKILLs a process holding live SSE sessions, on every release. Presents as a slow deploy. | **None.** Nothing fails; the deploy is just ten seconds longer each time. Manual: `time docker stop <container>`. | ⬜ NOT RUN |
+| DP-6 | `deploy/compose.prod.yaml`'s `TCMS_URL` becomes `${TCMS_BASE_URL}` (the public origin) | Every tool call leaves the box, crosses Funnel — the public internet — and comes back. It *works*, which is the problem: correct answers, a TLS handshake and a public round trip per call, and a second dependency on Funnel for a request that never needed to leave the host. | **None.** Nothing is red and nothing is slow enough to notice at one call. Manual: `docker compose exec mcp node -e "console.log(process.env.TCMS_URL)"`. | ⬜ NOT RUN |
+| DP-7 | `deploy/compose.prod.yaml` drops `profiles: [mcp]` | The CX23 — 4 GB, running Postgres, Caddy and the JVM — starts a second runtime it has no Caddy route for, on the next deploy, with nobody deciding to. | **None, and it would look like success**: the container starts and is healthy; only `free -h` on the box shows it. `docker compose --env-file <no COMPOSE_PROFILES> config --services` printing `mcp` is the cheap check. | ⬜ NOT RUN |
+| DP-8 | `.github/workflows/ci.yml`'s `lab` job drops `packages` from `needs` (the pre-§142 state) | A red `packages` job — a type error in `@tcms/mcp`, say — no longer stops the deploy, so the box gets an image built from code whose gate is failing. This is the *reason* §142 changed that edge, restored. | **None from a lint.** `actionlint` is happy either way; the edge is a judgement about what is deployed. Manual: break a type in `packages/mcp/src/tools.ts`, push, and confirm `lab` is skipped rather than green. | ⬜ NOT RUN |
+
+**Four of the eight have no observer at all** (`DP-5`…`DP-8`), which is a fair summary of what a
+deployment slice is: the parts with an observer are the parts that run *inside* something — the
+image's own probe and its own build. Everything expressed as a choice between two working
+configurations (which URL, which profile, which `needs` edge) is verified by reading, and stays
+verified only for as long as somebody keeps reading. The runbook section is where that reading is
+written down.

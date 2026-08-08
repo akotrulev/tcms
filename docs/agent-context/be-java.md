@@ -2,13 +2,19 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-08 (**§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-08 (**§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `37c3104` (§141 phase 2) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `d1c88e9` (§142 phase 3) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
+
+**§142 changed no Java.** It is the MCP plan's phase 10 — a Dockerfile in `packages/mcp`, an `mcp`
+service in `deploy/compose.prod.yaml` behind `profiles: [mcp]`, a `handle /mcp` block, and an
+`mcp-image` job. **The one thing that matters to a backend reader**: `ci.yml`'s `lab` deploy now
+`needs` the `packages` job, because a package is deployed for the first time — so a red
+`packages` job stops the *backend* image reaching the box too, which is new and intended.
 
 **SCHEMA HEAD IS `V43__ai_proposal.sql`; `V44` is next free.** The policy count is **63** — `V43`
 adds `ai_proposal`, the first new policed table since `V38`. Before it, `V42` adds two *columns* and two partial unique indexes to `suite` and

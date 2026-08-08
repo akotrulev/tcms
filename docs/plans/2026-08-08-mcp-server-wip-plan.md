@@ -544,7 +544,24 @@ but visible* affordance — the agent knows what it cannot do without holding a 
    uncalled since §58; an ArchUnit rule bans it now. A tighter **write** sub-limit was designed and
    refused, because the fastest legitimate writer here is result submission. The contract change is
    **document-level** — a 429 is written before routing, so no operation returns it.
-10. **Deploy** — image, compose, Caddy route, runbook.
+10. ~~**Deploy** — image, compose, Caddy route, runbook.~~ → **DONE 2026-08-08, §142**, and **this
+    plan has no phases left.** §4 built as written: `packages/mcp/Dockerfile` (node:22-alpine, tini,
+    non-root, `--http --host 0.0.0.0 --port 8081`), an `mcp` service in `deploy/compose.prod.yaml`
+    behind `profiles: [mcp]`, one `handle /mcp` block, an `mcp-image` job on the same version tag as
+    the backend, and shanks-plan §14 as the runbook. **It ships nothing to any box** — the profile
+    means turning it on is one line in a root-owned env file, which is what §4's own note about
+    Funnel making every unauthenticated endpoint internet-facing should cost. **The finding: 127.0.0.1
+    is the safe default and inside a container it is an outage** — a published port is served by
+    docker-proxy dialling the container's *network* address, so the container starts, reports itself
+    up and answers nothing; the restriction moves to the publication address. **The second:
+    `ci.yml`'s recorded reason for keeping `packages` out of the deploy's `needs`** (*"published to a
+    registry, not deployed to the box"*) **was made false by this commit** — a permission note
+    outliving what permitted it. **The third: the profile is not an off switch once it is on**, since
+    compose exempts profile-disabled services from `--remove-orphans`. **Not done, and named rather
+    than implied:** nothing bounds an *unauthenticated* client — §141's limiter is keyed per
+    `api_token`, so a caller cycling distinct invalid bearers gets a fresh bucket each time. Options
+    recorded in shanks §14; `tailscale funnel reset` is the cheapest and is right unless a hosted
+    agent must reach the endpoint.
 
 Slices 1/2/3b of §6w (criteria, coverage, method rules) are independent backend work and can run
 before or beside this.
