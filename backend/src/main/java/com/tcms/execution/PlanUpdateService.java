@@ -246,40 +246,7 @@ public class PlanUpdateService {
             scopeItems.deleteForPlan(plan.getId());
             scopeItems.flush();
 
-            List<PlanScopeItem> items = new ArrayList<>();
-
-            // The unsectioned group: section null, ordinal 0. Not an ordering claim — within a
-            // group the scope is a set, and PlanScope sorts what it hashes.
-            for (UUID suiteId : edit.scope().suiteIds()) {
-                items.add(PlanScopeItem.ofSuite(plan.getId(), suiteId, null, 0));
-            }
-            for (UUID caseId : edit.scope().caseIds()) {
-                items.add(PlanScopeItem.ofCase(plan.getId(), caseId, null, 0));
-            }
-            for (String tag : edit.scope().tags()) {
-                items.add(PlanScopeItem.ofTag(plan.getId(), tag, null, 0));
-            }
-
-            for (PlanScope.Section section : edit.scope().sections()) {
-                int ordinal = section.position();
-                for (UUID suiteId : section.suiteIds()) {
-                    items.add(PlanScopeItem.ofSuite(plan.getId(), suiteId, section.name(), ordinal));
-                }
-                for (UUID caseId : section.caseIds()) {
-                    items.add(PlanScopeItem.ofCase(plan.getId(), caseId, section.name(), ordinal));
-                }
-                for (String tag : section.tags()) {
-                    items.add(PlanScopeItem.ofTag(plan.getId(), tag, section.name(), ordinal));
-                }
-                // A section with no references gets a row that names it and targets nothing — the
-                // one shape ck_plan_scope_target admits with no target, and the only way an empty
-                // section survives a reload. Written ONLY when it is genuinely empty: a filled
-                // section is named by its own member rows, and adding a placeholder beside them
-                // would put a row in the table that expands to nothing and reads as a mistake.
-                if (section.isEmpty()) {
-                    items.add(PlanScopeItem.ofSection(plan.getId(), section.name(), ordinal));
-                }
-            }
+            List<PlanScopeItem> items = PlanScopeItem.rowsOf(plan.getId(), edit.scope());
             scopeItems.saveAll(items);
         }
 

@@ -1016,3 +1016,37 @@ five nested classes) and `FilesystemBlobStoreTest` (3 new). **No migration.**
 table gets a writer, the rule is that a clone landing in the **source's** suite carries the opt-outs
 whose `suite_condition` belongs to that suite and one landing elsewhere carries none — one rule
 covering both cases, and it needs a row here the day the writer lands.
+
+---
+
+## §129 phase 2 — cloning a plan and a run (M3 #59)
+
+Added 2026-08-08. `POST …/plans/{planId}/clone` and `POST …/runs/{runId}/clone`, plus two
+extractions the clone forced: `PlanScopeItem.rowsOf` (the scope→rows mapping, which existed twice)
+and `PlanCreateService.write` (the create's orchestration, so the clone does not become a second
+one). Assertions live in `PlanCloneEndpointTest` (12) and `RunCloneEndpointTest` (14). **No
+migration.**
+
+> **NONE RUN**, per §65. **`CL-19` and `CL-25` are the two to run first.** The first is the whole
+> reason `PlanCloneService` exists rather than being four lines of delegation; the second is the
+> one defect here that would be indistinguishable from a feature.
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| CL-19 | `PlanCloneService` is replaced by a delegation to `PlanCreateService.create` with a derived `PlanWriteRequest` | **The mutation of this phase.** `TestPlanInput` carries six fields where a plan has twelve, so the clone drops the tag arm, every §97 section, both prose fields and both criteria lists — and answers 201 with a plan that reads as a faithful copy. Should redden `Copying.theWholePlanComesAcross` and nothing else, which is the point: the plan is created, named and scoped, and every other assertion passes. | ⬜ NOT RUN |
+| CL-20 | The clone does create-then-edit instead of `PlanCreateService.write` | The cheap way to keep the sections. Every cloned plan is born at **version 2**, with a v1 that described a plan with no sections and no criteria — a history saying somebody rewrote it a second after it was made. Should redden `Copying.theCloneHasExactlyOneVersion`. | ⬜ NOT RUN |
+| CL-21 | `PlanScopeItem.rowsOf` drops the tag loops (unsectioned and per-section) | The extraction's reason, inverted: this is what `PlanCreateService` did before §129, and it was *correct there* only because the create request had no tag arm. Should redden `Copying.theWholePlanComesAcross` on the tags assertion and leave `PlanUpdateEndpointTest`'s tag tests red too — the point being that one mapping now fails in both places rather than one. | ⬜ NOT RUN |
+| CL-22 | `rowsOf` drops the `section.isEmpty()` placeholder row | An empty section is a heading somebody typed and it silently disappears on clone (and on every edit). Should redden the "Not started" assertion in `theWholePlanComesAcross`. | ⬜ NOT RUN |
+| CL-23 | `PlanCloneService.derive` puts the source's criteria in the `PlanUpdateRequest` instead of passing the JSON to `write` | The plausible tidy-up. The clone then goes through `validateCriteria`, so a plan whose metric was retired since it was written becomes **permanently uncloneable** with a 400 about a field the caller never sent. Reddens nothing today — every seeded metric is still valid — so it is recorded as **a decision to defend**, and `Copying.theCriteriaAreCopiedVerbatim` is the assertion that documents it. | ⬜ NOT RUN |
+| CL-24 | `PlanCloneService` gates on `project:read` instead of `plan:create` | A Viewer manufactures plans. Should redden `Gate.aViewerCannotClone`. The related check is `Gate.everyPlanCreatorAlsoHoldsPlanEdit`, which is **derived from the seeded catalogue** rather than restating `V3` — delete a role's `plan:edit` and it goes red without anybody editing this file. | ⬜ NOT RUN |
+| CL-25 | `RunCloneService.derive` reads `overrideApprovalGate` from the source instead of the request (needs a column or an audit read to express — that is the finding) | **A documented 2am exception becomes a standing exemption**, invisible on every screen and unexplained in every audit row. Today it is *unexpressible*: nothing stores the flag. Should redden `Gating.theSourcesOverrideIsNotInherited`, which exists to keep it unexpressible. | ⬜ NOT RUN |
+| CL-26 | `RunCloneService.derive` passes the source's suite/tag arms as well as the resolved case ids | The clone silently widens to cases authored since the source ran — a template's behaviour under a clone's name (§6v). Should redden `Copying.theScopeIsTheResolvedSetAndNotTheArms`. | ⬜ NOT RUN |
+| CL-27 | `derive` picks an assignee from the source's first execution when the request omits one | Inventing a fact: a checklist can name two hundred different people and a run has no assignee column. Should redden `Copying.anOmittedAssigneeMeansUnassigned`. | ⬜ NOT RUN |
+| CL-28 | `RunCloneService` gates on `run:execute` (§124's key) instead of `run:create` | Looks stricter and is wrong: Automation Service may open a run, and a clone of a run is a run — a CI job could no longer repeat its own nightly. Should redden `Gate.theRobotMayClone`. | ⬜ NOT RUN |
+| CL-29 | The `Replayed` arm of either clone falls through to `recordProvenance` | A second provenance row claiming a clone that did not happen. Reddens nothing in the current suite (both tests assert the row exists, not that there is one of it) — **recorded as a known gap**, and the assertion to add is a count. | ⬜ NOT RUN |
+| CL-30 | `PlanCloneService` resolves the source with `plans.findById` rather than `findLiveInProject` | `/projects/{granted}/plans/{other project's}` copies a plan out of a project the caller may not read, into one they can. Should redden `Gate.theSecondPathSegmentIsGatedToo`. | ⬜ NOT RUN |
+
+**Not a mutation, recorded as an observation:** the run clone re-evaluates §6g's approval gate purely
+because it is a create — no line in `RunCloneService` mentions gating. `Gating.theGateIsReEvaluated`
+pins the consequence (a run legal last month is refused once its project turns gating on), and it is
+the clearest evidence that "a clone is a create" buys correctness rather than merely brevity.

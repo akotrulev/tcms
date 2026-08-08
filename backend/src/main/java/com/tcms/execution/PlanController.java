@@ -51,6 +51,7 @@ public class PlanController {
     private final PlanStatisticsService statistics;
     private final PlanStatusService lifecycle;
     private final PlanDeleteService deletes;
+    private final PlanCloneService clones;
 
     public PlanController(
             PlanService plans,
@@ -58,8 +59,10 @@ public class PlanController {
             PlanUpdateService updates,
             PlanStatisticsService statistics,
             PlanStatusService lifecycle,
-            PlanDeleteService deletes) {
+            PlanDeleteService deletes,
+            PlanCloneService clones) {
 
+        this.clones = clones;
         this.plans = plans;
         this.creates = creates;
         this.updates = updates;
@@ -157,6 +160,46 @@ public class PlanController {
             case PlanCreateService.Outcome.Forbidden ignored ->
                     ResponseEntity.status(HttpStatus.FORBIDDEN).body(forbiddenProblem());
             case PlanCreateService.Outcome.Invalid invalid ->
+                    ResponseEntity.badRequest().body(validationProblem(invalid.errors()));
+        };
+    }
+
+    /**
+     * Clones a plan — plan §6v, decision round 3 #59.
+     *
+     * <p>Unlike its two siblings this is <strong>not</strong> the create endpoint with a derived
+     * body, and {@link PlanCloneService}'s header says why: {@code TestPlanInput} cannot express a
+     * section, a tag arm, either prose field or either criteria list, so a clone routed through it
+     * would drop most of what a plan detail consists of and report success. The clone shares the
+     * create's <em>orchestration</em> instead, so the key, the {@code DRAFT} status and version 1
+     * still have exactly one implementation.
+     *
+     * <p>The statuses are therefore the create's: 201 with a {@code Location}, 200 for a replay with
+     * none, 400 carrying {@link PlanEdit}'s own field errors, and 404 for an unreachable project or
+     * a plan that is not in it.
+     */
+    @PostMapping("/{planId}/clone")
+    public ResponseEntity<Object> clonePlan(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID planId,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestBody PlanCloneRequest request) {
+
+        PlanCloneService.Outcome outcome = clones.clonePlan(
+                UUID.fromString(jwt.getSubject()), projectId, planId, request, idempotencyKey);
+
+        return switch (outcome) {
+            case PlanCloneService.Outcome.Created created -> ResponseEntity
+                    .created(URI.create("/api/v1/projects/" + projectId + "/plans/"
+                            + created.view().id()))
+                    .body(created.view());
+            case PlanCloneService.Outcome.Replayed replayed ->
+                    ResponseEntity.ok(replayed.view());
+            case PlanCloneService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
+            case PlanCloneService.Outcome.Forbidden ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(forbiddenProblem());
+            case PlanCloneService.Outcome.Invalid invalid ->
                     ResponseEntity.badRequest().body(validationProblem(invalid.errors()));
         };
     }

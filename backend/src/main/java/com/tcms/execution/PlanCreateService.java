@@ -146,15 +146,9 @@ public class PlanCreateService {
         // succeeded must answer with the plan it made even if the payload has since drifted: the
         // client is asking "did my intent land", and a 400 would send it to fix fields on a plan
         // that already exists.
-        if (idempotencyKey != null) {
-            if (idempotencyKey.length() > MAX_IDEMPOTENCY_KEY) {
-                return new Outcome.Invalid(Map.of("Idempotency-Key",
-                        List.of("Send a key of at most " + MAX_IDEMPOTENCY_KEY + " characters.")));
-            }
-            Optional<TestPlan> already = plans.findByIdempotencyKey(project.getId(), idempotencyKey);
-            if (already.isPresent()) {
-                return new Outcome.Replayed(views.viewOf(already.get()));
-            }
+        Outcome replay = replayOf(project.getId(), idempotencyKey);
+        if (replay != null) {
+            return replay;
         }
 
         List<UUID> requestedSuites = PlanEdit.distinct(request.suiteIds());
@@ -169,6 +163,56 @@ public class PlanCreateService {
         }
         PlanEdit edit = ((PlanEdit.Outcome.Valid) validated).edit();
 
+        // Both criteria null: PlanWriteRequest carries none, for the reason its header gives.
+        return write(userId, project, edit, null, null, idempotencyKey);
+    }
+
+    /**
+     * The replay arm, shared with {@link PlanCloneService}.
+     *
+     * <p>Package-private and returning null for "no replay" rather than an {@code Optional<Outcome>}
+     * so the two callers read the same at their call site. It is here rather than in the clone
+     * because the constraint it consults, {@code created_idempotency_key}, is this service's — a
+     * second copy in another class is a second answer to "has this intent already landed".
+     */
+    Outcome replayOf(UUID projectId, String idempotencyKey) {
+        if (idempotencyKey == null) {
+            return null;
+        }
+        if (idempotencyKey.length() > MAX_IDEMPOTENCY_KEY) {
+            return new Outcome.Invalid(Map.of("Idempotency-Key",
+                    List.of("Send a key of at most " + MAX_IDEMPOTENCY_KEY + " characters.")));
+        }
+        return plans.findByIdempotencyKey(projectId, idempotencyKey)
+                .<Outcome>map(already -> new Outcome.Replayed(views.viewOf(already)))
+                .orElse(null);
+    }
+
+    /**
+     * Everything a create does once the edit is valid — <strong>the one orchestration, and §129 is
+     * why it has a name.</strong>
+     *
+     * <p>{@link PlanCloneService} cannot go through {@link #create}, because {@code PlanWriteRequest}
+     * is a deliberately narrow slice of what a plan is (no sections, no tag arm, no criteria, no
+     * scope prose) and a clone that lost those would silently drop most of what §97 says a plan
+     * detail consists of. The alternative to this method is the clone writing the row itself, which
+     * is a second place that allocates a display key, decides a starting status and writes a
+     * version 1 — three things that must not have two implementations.
+     *
+     * <p>So the seam is the <em>edit</em>, which is already the validated type, plus the two
+     * serialized criteria columns a clone copies verbatim. What a caller may not supply is anything
+     * this method decides: the key, the status, the version number and the creator.
+     *
+     * @param entryCriteriaJson the source's column, verbatim, or null for an ordinary create
+     */
+    Outcome write(
+            UUID userId,
+            Project project,
+            PlanEdit edit,
+            String entryCriteriaJson,
+            String exitCriteriaJson,
+            String idempotencyKey) {
+
         DisplayKeys.Allocation allocated = displayKeys.allocate(DisplayKeys.EntityType.PLAN, 1);
 
         Instant now = clock.instant();
@@ -177,6 +221,8 @@ public class PlanCreateService {
                 allocated.keyAt(0),
                 allocated.seqAt(0),
                 edit,
+                entryCriteriaJson,
+                exitCriteriaJson,
                 userId,
                 idempotencyKey,
                 now);
@@ -186,17 +232,11 @@ public class PlanCreateService {
         // on top of it.
         plans.saveAndFlush(created);
 
-        // Unsectioned, and only ever unsectioned: TestPlanInput carries no sections and no tags, for
-        // the reason it carries no criteria — a plan is named before anybody has subdivided it, and
-        // the sub-feature breakdown is authored on the plan's own screen. So both arms pass a null
-        // section and ordinal 0, which is what every plan written before §97 holds.
-        List<PlanScopeItem> items = new ArrayList<>();
-        for (UUID suiteId : edit.scope().suiteIds()) {
-            items.add(PlanScopeItem.ofSuite(created.getId(), suiteId, null, 0));
-        }
-        for (UUID caseId : edit.scope().caseIds()) {
-            items.add(PlanScopeItem.ofCase(created.getId(), caseId, null, 0));
-        }
+        // THE WHOLE scope, through the one write-direction mapping — see PlanScopeItem#rowsOf.
+        // It used to be two loops here, correct only because PlanWriteRequest cannot express a tag
+        // arm or a section; §129's clone reaches this method with a scope that can, and the two
+        // spellings would have dropped them silently.
+        List<PlanScopeItem> items = PlanScopeItem.rowsOf(created.getId(), edit.scope());
         scopeItems.saveAll(items);
 
         // v1, in the same transaction as the row it describes — §29's rule, and SuiteVersions makes

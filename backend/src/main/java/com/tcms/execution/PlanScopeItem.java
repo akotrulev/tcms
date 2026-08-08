@@ -6,6 +6,8 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import org.hibernate.annotations.Filter;
 
@@ -102,6 +104,60 @@ public class PlanScopeItem {
 
     /** JPA only. */
     protected PlanScopeItem() {
+    }
+
+    /**
+     * A whole {@link PlanScope} as rows — <strong>the one write-direction mapping, extracted in
+     * §129 because there were two and they disagreed.</strong>
+     *
+     * <p>{@link PlanScope#ofItems} is the read direction. This is its inverse, and until the clone
+     * needed it the inverse existed <em>twice</em>: {@code PlanUpdateService} materialised all five
+     * arms (three unsectioned, three per section, and the empty-section placeholder), while
+     * {@code PlanCreateService} materialised two — which was correct only because
+     * {@code PlanWriteRequest} cannot express the other three. A caller reaching the create path
+     * with a full scope would have had its tags and its sections dropped, silently, with the plan
+     * saving and reading back as though they had never been submitted. That is
+     * {@code repository.BlockContent.of}'s finding (§127) one aggregate over, and the fix is the
+     * same: one mapping, so an arm cannot be forgotten in half the places.
+     *
+     * <p>Ordering follows the sections' own {@code position}, and the unsectioned group is written
+     * first with ordinal 0 — not an ordering claim, since within a group the scope is a set and
+     * {@link PlanScope} sorts what it hashes.
+     */
+    static List<PlanScopeItem> rowsOf(UUID planId, PlanScope scope) {
+        List<PlanScopeItem> items = new ArrayList<>();
+
+        for (UUID suiteId : scope.suiteIds()) {
+            items.add(ofSuite(planId, suiteId, null, 0));
+        }
+        for (UUID caseId : scope.caseIds()) {
+            items.add(ofCase(planId, caseId, null, 0));
+        }
+        for (String tag : scope.tags()) {
+            items.add(ofTag(planId, tag, null, 0));
+        }
+
+        for (PlanScope.Section section : scope.sections()) {
+            int ordinal = section.position();
+            for (UUID suiteId : section.suiteIds()) {
+                items.add(ofSuite(planId, suiteId, section.name(), ordinal));
+            }
+            for (UUID caseId : section.caseIds()) {
+                items.add(ofCase(planId, caseId, section.name(), ordinal));
+            }
+            for (String tag : section.tags()) {
+                items.add(ofTag(planId, tag, section.name(), ordinal));
+            }
+            // A section with no references gets a row that names it and targets nothing — the one
+            // shape ck_plan_scope_target admits with no target, and the only way an empty section
+            // survives a reload. Written ONLY when it is genuinely empty: a filled section is named
+            // by its own member rows, and a placeholder beside them expands to nothing and reads as
+            // a mistake.
+            if (section.isEmpty()) {
+                items.add(ofSection(planId, section.name(), ordinal));
+            }
+        }
+        return items;
     }
 
     /** A suite item — the folder and, at read time, everything beneath it. */

@@ -42,17 +42,58 @@ public class RunController {
     private final ExecutionService executions;
     private final RunCreateService creates;
     private final RunStatusService lifecycle;
+    private final RunCloneService clones;
 
     public RunController(
             RunService runs,
             ExecutionService executions,
             RunCreateService creates,
-            RunStatusService lifecycle) {
+            RunStatusService lifecycle,
+            RunCloneService clones) {
 
         this.runs = runs;
         this.executions = executions;
         this.creates = creates;
         this.lifecycle = lifecycle;
+        this.clones = clones;
+    }
+
+    /**
+     * Clones a run — plan §6v, decision round 3 #59, and the highest-value of the three clones.
+     *
+     * <p>Every status this operation answers is the create's, because {@link RunCloneService} is the
+     * create with a derived body: 201 with a {@code Location}, 200 for a replay, 400 with the
+     * create's own field errors, and — the one worth reading twice — <strong>409 when §6g's approval
+     * gate refuses the cases</strong>. A clone of a run that was started under a documented override
+     * is refused unless the caller overrides again, because the override is a statement about a
+     * request and no column carries it forward.
+     */
+    @PostMapping("/{runId}/clone")
+    public ResponseEntity<Object> cloneRun(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID runId,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestBody RunCloneRequest request) {
+
+        RunCloneService.Outcome outcome = clones.cloneRun(
+                UUID.fromString(jwt.getSubject()), projectId, runId, request, idempotencyKey);
+
+        return switch (outcome) {
+            case RunCloneService.Outcome.Created created -> ResponseEntity
+                    .created(URI.create("/api/v1/projects/" + projectId + "/runs/"
+                            + created.view().id()))
+                    .body(created.view());
+            case RunCloneService.Outcome.Replayed replayed -> ResponseEntity.ok(replayed.view());
+            case RunCloneService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
+            case RunCloneService.Outcome.Forbidden ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(createForbiddenProblem());
+            case RunCloneService.Outcome.Invalid invalid ->
+                    ResponseEntity.badRequest().body(validationProblem(invalid.errors()));
+            case RunCloneService.Outcome.Refused refused ->
+                    ResponseEntity.status(HttpStatus.CONFLICT)
+                            .body(gatedProblem(refused.message()));
+        };
     }
 
     /**

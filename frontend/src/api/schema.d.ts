@@ -3199,6 +3199,109 @@ export interface paths {
         patch: operations["updatePlan"];
         trace?: never;
     };
+    "/projects/{projectId}/plans/{planId}/clone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                planId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Clone a test plan
+         * @description Plan §6v, decision round 3 #59. Copies the plan into a **new** plan in the same
+         *     project, ready to be renamed for the next release.
+         *
+         *     Copied: the description, the milestone, the **whole** scope — the unsectioned
+         *     suites, cases and tags, and every §97 section with its members and its order,
+         *     including a section that is deliberately empty — both scope prose fields, and both
+         *     criteria lists.
+         *
+         *     Not copied: the runs, the executions and the results (a plan's scope is what it
+         *     covers, not what happened); the status, which resets to `DRAFT` (§6g — approval
+         *     attaches to content a named person read); and the key, which is allocated fresh.
+         *     The new plan gets its own **version 1** describing itself, not a copy of the
+         *     source's history.
+         *
+         *     **This is not `POST /plans` with a source id, and the difference is the point.**
+         *     `TestPlanInput` carries six fields on purpose — a plan is named before anybody has
+         *     subdivided it — so a clone routed through it would drop the sections, the tag arm,
+         *     both prose fields and both criteria lists, and report `201`. This operation shares
+         *     the create's key allocation, starting status and version writer, and supplies the
+         *     rest.
+         *
+         *     **Requires `plan:create`.** The criteria and prose it writes normally cost
+         *     `plan:edit`, and every role holding `plan:create` also holds `plan:edit`, so no
+         *     caller gains anything they could not do in a second request. A test derived from the
+         *     seeded catalogue pins that, so a future role separating the two fails the build.
+         *
+         *     `name` is **required**; the server invents no `Copy of …`. Criteria are copied as
+         *     stored rather than re-validated: a metric retired since the plan was written would
+         *     otherwise make that plan permanently uncloneable.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: {
+                    /**
+                     * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
+                     *     already succeeded answers **200** with the case that intent created, instead of creating a
+                     *     second one — so pressing Save again after a timeout is safe.
+                     *
+                     *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
+                     *     it across retries. A key generated per attempt is the mistake that makes the header look
+                     *     right and do nothing.
+                     *
+                     *     Scoped to the project the request is addressed to, which is the scope the uniqueness
+                     *     constraint behind it uses. Optional: omitted, every call creates. At most 200 characters.
+                     */
+                    "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                    planId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["TestPlanCloneInput"];
+                };
+            };
+            responses: {
+                /** @description A replay — this `Idempotency-Key` already created a plan. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TestPlan"];
+                    };
+                };
+                /** @description The new plan */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TestPlan"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/plans/{planId}/status": {
         parameters: {
             query?: never;
@@ -3506,6 +3609,124 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/runs/{runId}/clone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Clone a test run
+         * @description Plan §6v, decision round 3 #59 — **the highest-value of the three clones**: re-running
+         *     a regression cycle against a new build is the most repeated action in the product.
+         *
+         *     A new run over **the same cases**, with every execution untested. The plan
+         *     reference, the configuration, the release version and the build number are copied
+         *     and any of the last three can be overridden — a clone that could not change the
+         *     build number would make the caller edit the run immediately afterwards.
+         *
+         *     Nothing else comes across, and that is structural rather than a list somebody
+         *     maintains: the server builds the same input `POST /runs` takes, and **no result, no
+         *     evidence, no defect link and no timestamp is reachable from it.**
+         *
+         *     Two consequences worth reading twice:
+         *
+         *     - **The scope is the resolved case set, frozen.** `test_run` stores no scope — §99's
+         *       three arms are resolved once into executions — so cloning a suite-scoped run does
+         *       **not** pick up the cases added since. That is §6v's own clone-versus-template
+         *       distinction, decided here by the schema rather than by the design.
+         *     - **§6g's approval gate is re-evaluated, and an override is never inherited.** The
+         *       override is a statement about a request and nothing stores it, so a clone of a run
+         *       that was started under a documented override answers **409** unless the cases are
+         *       approved now or `overrideApprovalGate` is sent again — on the record, by this
+         *       caller.
+         *
+         *     The assignee does **not** fall back to the source. A run has no assignee: the column
+         *     is on `test_execution`, one per case, so there is nothing to copy and picking one
+         *     would be inventing a fact. Omitted means an unassigned checklist; supplied assigns
+         *     the whole one, exactly as on a create.
+         *
+         *     **Requires `run:create`**, which Automation Service holds — a CI credential may
+         *     already open a run, and a clone of a run is a run. Recording verdicts still costs
+         *     `run:execute` (§124); cloning records nothing.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: {
+                    /**
+                     * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
+                     *     already succeeded answers **200** with the case that intent created, instead of creating a
+                     *     second one — so pressing Save again after a timeout is safe.
+                     *
+                     *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
+                     *     it across retries. A key generated per attempt is the mistake that makes the header look
+                     *     right and do nothing.
+                     *
+                     *     Scoped to the project the request is addressed to, which is the scope the uniqueness
+                     *     constraint behind it uses. Optional: omitted, every call creates. At most 200 characters.
+                     */
+                    "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                    runId: components["parameters"]["RunId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["TestRunCloneInput"];
+                };
+            };
+            responses: {
+                /** @description A replay — this `Idempotency-Key` already created a run, and no second checklist was materialised. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TestRun"];
+                    };
+                };
+                /** @description The new run */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TestRun"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                /**
+                 * @description §6g's approval gate refuses the cases this run would cover. Not a `400`: every id
+                 *     is live and the permission is held — it is the project's own policy that refuses.
+                 */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -8123,6 +8344,42 @@ export interface components {
             /** Format: date-time */
             completedAt: string | null;
             counts: components["schemas"]["ResultCounts"];
+        };
+        TestPlanCloneInput: {
+            /**
+             * @description The new plan's name. **Required** — see the operation for why the server does not
+             *     default it to `Copy of <name>`.
+             */
+            name: string;
+        };
+        TestRunCloneInput: {
+            /** @description The new run's name. **Required**, and not defaulted server-side. */
+            name: string;
+            /**
+             * Format: uuid
+             * @description Overrides the source's configuration. Omitted keeps it.
+             */
+            configurationId?: string | null;
+            /**
+             * @description Overrides the source's release version — the field this operation mostly exists
+             *     for. Omitted keeps the source's, which is rarely what a re-run wants.
+             */
+            releaseVersion?: string | null;
+            /** @description Overrides the source's build number. Omitted keeps it. */
+            buildNumber?: string | null;
+            /**
+             * Format: uuid
+             * @description Assigns the whole new checklist. **There is no fallback to the source**: a run has
+             *     no assignee — the column is on `test_execution`, one per case — so omitting this
+             *     produces an unassigned checklist rather than a copy of somebody's.
+             */
+            assigneeId?: string | null;
+            /**
+             * @description §6g's documented lead override, for **this** request. It is never inherited from
+             *     the source run: nothing stores it there, and a clone that carried it forward
+             *     would turn a documented one-off into a permanent exemption.
+             */
+            overrideApprovalGate?: boolean | null;
         };
         TestRunInput: {
             name: string;

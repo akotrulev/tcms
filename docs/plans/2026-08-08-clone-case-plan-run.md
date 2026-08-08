@@ -102,19 +102,37 @@ with a 25 MB attachment moves 25 MB through the request.
 
 Body `PlanCloneInput { name (required) }`.
 
-Copied: `description`, `milestoneName`, `milestoneDate`, and the scope — `suiteIds` + `caseIds`
-from `plan_scope_item`.
+**→ Corrected in the build (2026-08-08): "a clone is a create" DOES NOT HOLD for the plan, and this
+section originally assumed it did.** `PlanWriteRequest` carries six fields where `PlanUpdateRequest`
+carries twelve — deliberately, on the ground that *a plan is named before anybody has subdivided
+it*. So a clone routed through `POST /plans` drops **six** things: the tag arm, every §97 section,
+both scope-prose fields and both criteria lists, which between them are most of what §97 says a plan
+detail consists of. It would answer 201 and read as a faithful copy.
 
-**Exit criteria are copied, and they are the one thing that does not go through the create path.**
-`PlanWriteRequest` has no criteria field on purpose (criteria belong to `plan:edit`, a different
-permission and a different slice), so the clone writes them through `PlanCriteria` inside the same
-transaction. The gate stays `plan:create` alone, and a test derived from the **seeded catalogue**
-asserts that every role holding `plan:create` also holds `plan:edit` — so the shortcut is pinned by
-a computed check rather than by a sentence, and a future role that separates them fails the build
-instead of silently gaining an edit it was not granted.
+Create-then-edit is the cheap fix and is also wrong: version 1 would describe a plan with no
+sections and no criteria, and version 2 would arrive a second later — a cloned plan born with a
+history saying somebody rewrote it. §6v rule 3 asks for *its own* version 1.
 
-Not copied: runs, executions, results (nothing on `PlanWriteRequest` can name them); status (DRAFT
-by construction); the key.
+So the clone shares the create's **orchestration** instead: `PlanCreateService.write` takes a
+validated `PlanEdit` rather than a request, and the clone supplies one built through
+`PlanEdit.validateUpdate` (the only validator that can see a section). One key allocator, one
+starting status, one version-1 writer.
+
+Copied: `description`, `milestoneName`, `milestoneDate`, the whole scope including sections and
+tags, both prose fields, and both criteria lists — the last **as stored JSON, not re-validated**,
+because re-validating makes a plan permanently uncloneable the day a metric is retired.
+
+The gate stays `plan:create` alone, and a test derived from the **seeded catalogue** asserts that
+every role holding `plan:create` also holds `plan:edit` — a computed check rather than a sentence,
+so a future role that separates them fails the build instead of silently gaining an edit.
+
+**Second finding: the scope→rows mapping existed twice.** `PlanUpdateService` materialised all five
+arms; `PlanCreateService` materialised two, correct only because the create request could not
+express the other three. The clone reaches that code with a scope that can, so the two spellings
+would have dropped tags and sections silently. `PlanScopeItem.rowsOf` is now the one mapping —
+§127's `BlockContent.of` finding, one aggregate over.
+
+Not copied: runs, executions, results; status (DRAFT by construction); the key.
 
 ### Run — `POST /projects/{projectId}/runs/{runId}/clone`
 
@@ -123,19 +141,26 @@ the four overridable fields, because *"re-run this regression cycle against the 
 highest-value of the three (§6v placement) and a clone that could not change the build number would
 make the caller edit the run immediately afterwards.
 
-Copied when not overridden: `planId`, `configurationId`, `assigneeId`, `releaseVersion`,
-`buildNumber`, and the scope — `caseIds`/`suiteIds`/`tags` **as the source stored them**.
+Copied when not overridden: `planId`, `configurationId`, `releaseVersion`, `buildNumber`, and the
+scope.
+
+**→ Two corrections the code forced.** `assigneeId` does **not** fall back: a run has no assignee —
+the column is on `test_execution`, one per case — so there is nothing to copy and choosing one out
+of a heterogeneous checklist would invent a fact. §6v's "copies … assignees" describes a column that
+does not exist. And the scope is **the resolved case set**, not the arms: `test_run` stores no
+scope at all, so the declaration is unavailable to copy.
 
 Not copied: every result, every step outcome, every piece of evidence, every defect link,
 `startedAt`/`closedAt`, `status` (a cloned run is OPEN with everything Untested), `source` (a clone
 is `MANUAL` even when the source was `INGESTED` — a person pressed the button), and
 `overrideApprovalGate` (strip 4).
 
-**The scope arms are copied as the source *declared* them, not as they *resolved*.** A run scoped by
-suite or by tag re-resolves at creation, so a clone picks up the cases added since — which is the
-same distinction §6v draws between a template's query and a clone's frozen list, and it lands here
-because `test_run`'s scope really is stored as the declaration. Stated because it is the one place
-a reader will expect the frozen behaviour and get the live one.
+~~**The scope arms are copied as the source *declared* them**~~ → **wrong, and the schema decides
+it**: `test_run` has no scope columns and no scope table. §99's three arms are resolved once, at
+creation, into `test_execution` rows, and the declaration is discarded. So a clone can only carry
+what was materialised, and **cloning a suite-scoped run does not pick up the cases added since** —
+§6v's own clone-versus-template distinction, for once decided by the schema rather than by the
+design. Stated because a reader will expect the other behaviour.
 
 ---
 

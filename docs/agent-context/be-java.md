@@ -2,19 +2,56 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-08 (**§128** — the case draft buffer; **§127 phase 1** — the table and
-image block payloads; **§126 phases 1–4** — attachment owners; **§125** — the `storage` module
-extraction; **§124** — the `BEST` removal and the two unwired permission keys; §122's
-grant-instance-admin, §121's four phases, §120's automation drift, §119's ingestion history, §117's
-CI ingestion, §116's API tokens before it)
-**Baseline commit:** `99c0dea` (§128 phase 2) (per `CLAUDE.md`, trust the body over the header and
+**Last verified:** 2026-08-08 (**§129 phases 1–2** — clone case / plan / run; **§128** — the case
+draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
+attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
+two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
+drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
+**Baseline commit:** `48b97bf` (§129 phase 1) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
 **SCHEMA HEAD IS STILL `V39__attachment_owner_types.sql`; `V40` is next free.** The policy count is
-unchanged at **62**, and **§128 carried no migration either** — `test_case_draft` and its RLS policy
-have both existed since `V1`; the slice gave the table its first writer. Test count **2130 across
-453 result classes** (§127 phase 1's baseline was 2104/447 — this slice added 26 tests and 6
-classes).
+unchanged at **62**, and **§129 carried no migration in either phase** — a clone reuses the version
+snapshot, which is why #59 dropped plan *templates* (they need a table).
+
+---
+
+## §129 — A CLONE IS A CREATE, EXCEPT WHERE THE CREATE CONTRACT IS NARROWER THAN THE AGGREGATE
+
+Decision round 3's step 8, second half (#59). Three endpoints, all `POST …/{id}/clone`.
+
+- **The shape: read the source, build the request the create endpoint already takes, delegate.** It
+  holds for the **case** and the **run** and gives six of §6v's rules for free (new display key,
+  DRAFT/OPEN status, own version 1, no shared history, no execution history, idempotency). It does
+  **not** hold for the **plan**: `PlanWriteRequest` has six fields where `PlanUpdateRequest` has
+  twelve, so a delegated clone drops the tag arm, every §97 section, both prose fields and both
+  criteria lists — and answers 201.
+- **`PlanCreateService.write` is the shared orchestration** (validated `PlanEdit` + the two criteria
+  JSON columns, instead of a request). Create-then-edit was refused: it gives every cloned plan a
+  v1 describing a plan that never existed and a v2 one second later.
+- **THE RED RUN WAS THE AUTOMATION STATUS.** §6v's "copy the status" and "never copy the key" are
+  jointly unsatisfiable — `CaseEdit.validate` refuses `AUTOMATED` with no key. `AUTOMATED` becomes
+  `TO_BE_AUTOMATED`; everything else copies. Relaxing the validator instead leaves a case reporting
+  as automated that §117's matcher can never match.
+- **`AttachmentStore.copy` is a fifth port method**, and `ReportStore` deliberately does not get it
+  — the two ports are two types precisely so they can differ, and this is the first divergence.
+  §6v's "attachments by reference" is **unimplementable**: the store holds no reference count, so
+  two rows over one key means either delete destroys the other's bytes.
+  `Attachment.copyForCase` **carries** the source checksum rather than recomputing it, so a corrupt
+  blob cannot launder itself through a clone.
+- **`PlanScopeItem.rowsOf` is the one scope→rows mapping.** It existed twice — five arms in
+  `PlanUpdateService`, two in `PlanCreateService` — correct only while the create request could not
+  express the other three. §127's `BlockContent.of` finding, one aggregate over.
+- **A run stores no scope and no assignee.** §99's three arms are resolved once into
+  `test_execution`; the declaration is discarded. So a cloned run carries the **resolved** case set
+  (a suite-scoped clone does *not* pick up cases added since) and is **unassigned** unless the
+  request says otherwise.
+- **§6g's approval gate is re-evaluated on a cloned run and the override is never inherited** —
+  nothing stores it, which is what keeps that unexpressible rather than merely unwritten.
+- **Provenance is a SECOND audit row** (`case.cloned` / `plan.cloned` / `run.cloned`) beside the
+  created one, naming both display keys.
+- Fixture prefixes **`1a`** (`CaseCloneEndpointTest`), **`2a`** (`PlanCloneEndpointTest`), **`3a`**
+  (`RunCloneEndpointTest`); slugs `clone-`, `pcl-`, `rcl-`.
 
 ---
 

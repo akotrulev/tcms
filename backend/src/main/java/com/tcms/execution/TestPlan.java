@@ -185,6 +185,8 @@ public class TestPlan {
             String key,
             long keySeq,
             PlanEdit edit,
+            String entryCriteriaJson,
+            String exitCriteriaJson,
             UUID creatorId,
             String idempotencyKey,
             java.time.Instant now) {
@@ -200,12 +202,24 @@ public class TestPlan {
         created.status = PlanStatus.DRAFT;
         created.milestoneName = edit.milestoneName();
         created.milestoneDate = edit.milestoneDate();
-        // Both null, not "[]": a plan that has not reached the point of declaring criteria has not
-        // declared an empty set of them, and PlanCriteria renders null as [] for the wire anyway.
-        // Writing "[]" here would make "nobody has decided" and "there are deliberately none"
-        // indistinguishable in the column that a later plan:edit slice has to tell apart.
-        created.entryCriteria = null;
-        created.exitCriteria = null;
+        // ~~Both null~~ → PASSED IN since §129, and the distinction they encode is unchanged: a
+        // plan that has not reached the point of declaring criteria has not declared an empty set of
+        // them, and PlanCriteria renders null as [] for the wire anyway. Writing "[]" here would
+        // make "nobody has decided" and "there are deliberately none" indistinguishable in the
+        // column plan:edit has to tell apart.
+        //
+        // What changed is WHERE the null comes from. It was hard-coded here, which made the entity
+        // hold a policy that belongs to the validator — and the clone is what proved it: a clone
+        // carries the source's criteria, so a create that could not accept any was a create no
+        // clone could route through, and the alternative was a second orchestration writing the
+        // same row a different way. PlanEdit#validateCreate still produces null for both, so the
+        // ordinary create path is byte-for-byte what it was.
+        created.entryCriteria = entryCriteriaJson;
+        created.exitCriteria = exitCriteriaJson;
+        // Null on every ordinary create for the same reason — validateCreate does not populate
+        // them, because a plan is named before anybody has written down what is out of scope.
+        created.scopeText = edit.scopeText();
+        created.outOfScopeText = edit.outOfScopeText();
         created.currentVersionNo = 1;
         created.createdAt = now;
         created.createdBy = creatorId;
