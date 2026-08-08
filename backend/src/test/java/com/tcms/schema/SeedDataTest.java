@@ -114,15 +114,17 @@ class SeedDataTest extends IntegrationTestBase {
     }
 
     @Test
-    @DisplayName("exactly six assignable built-in roles, plus two that nobody is ever granted")
+    @DisplayName("exactly six built-in roles, plus two rows that are not among them")
     void sixBuiltInRoles() throws SQLException {
         List<String> rows = queryStrings(
                 "SELECT name || ' / ' || scope FROM role WHERE built_in ORDER BY name");
 
         assertThat(rows)
                 .as("""
-                        No custom roles in v1 — the six ASSIGNABLE ones are the complete set (spec \
-                        A2), and two further rows exist that nobody ever chooses for a person: \
+                        No custom roles in v1 — these six are the complete role set (spec A2; \
+                        five of them are assignable to a person since V41 made Automation \
+                        Service a credential-only ceiling), and two further rows exist that \
+                        nobody ever chooses for a person: \
                         Company Member (V15), the company:read baseline granted on joining, and \
                         Agent (V40), the ceiling an API token carries. An addition to this list is \
                         a new tier and needs a spec decision — which is what this assertion is for, \
@@ -143,19 +145,34 @@ class SeedDataTest extends IntegrationTestBase {
     }
 
     @Test
-    @DisplayName("exactly two roles are non-assignable, and neither is one of the six")
-    void nonAssignableRolesAreExactlyTheTwo() throws SQLException {
+    @DisplayName("exactly three roles are non-assignable, and one of them IS one of the six")
+    void nonAssignableRolesAreExactlyTheThree() throws SQLException {
         // The flag V40 added, asserted as data rather than trusted from the migration that wrote
-        // it. It is read by RoleGrantService in both directions, so a row that flipped to
-        // assignable would not fail anything — it would simply let an administrator grant it, which
-        // is the outcome with no error attached.
+        // it. It is read by RoleGrantService's grant path, so a row that flipped to assignable
+        // would not fail anything — it would simply let an administrator grant it, which is the
+        // outcome with no error attached.
         assertThat(queryStrings("SELECT name FROM role WHERE NOT assignable ORDER BY name"))
                 .as("""
-                        Company Member is a consequence of membership; Agent is carried by tokens \
-                        and nobody is ever an Agent. Any OTHER role appearing here has been made \
-                        ungrantable, and the six being grantable is what spec §A2 means by "the \
-                        complete set of assignable roles".""")
-                .containsExactly(AGENT, COMPANY_MEMBER);
+                        Company Member is a consequence of membership; Agent and Automation \
+                        Service are capability ceilings a CREDENTIAL carries, and nobody is ever \
+                        either of them. Automation Service (V41) is the one that is also one of \
+                        the six, which is why spec §A2 no longer says "the six are the complete \
+                        set of assignable roles" — five of them are. Any OTHER role appearing \
+                        here has been made ungrantable by a migration that did not say so.""")
+                .containsExactly(AGENT, AUTOMATION_SERVICE, COMPANY_MEMBER);
+    }
+
+    @Test
+    @DisplayName("the five a person may hold are the five, and Instance Admin is among them")
+    void theAssignableRolesAreTheFive() throws SQLException {
+        // The other direction, and it is not the complement restated: Instance Admin is
+        // assignable = true and is STILL refused by POST /role-assignments, for a scope-shaped
+        // reason (SYSTEM grants live in instance_role_assignment, ERD §0.1). Conflating the two
+        // would put "choose a role" on a refusal whose real message names where those grants live,
+        // so this assertion pins that Instance Admin is NOT quietly swept in with the ceilings.
+        assertThat(queryStrings("SELECT name FROM role WHERE assignable ORDER BY name"))
+                .containsExactly(
+                        COMPANY_ADMIN, INSTANCE_ADMIN, TEST_ENGINEER, TEST_LEAD, VIEWER);
     }
 
     @Test

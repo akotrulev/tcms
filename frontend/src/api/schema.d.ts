@@ -9533,13 +9533,15 @@ export interface components {
          *     A COMPANY-scope grant covers every project in that company, present and future.
          *     That is what makes Company Admin work, and why nothing else is granted there.
          *
-         *     **Seven names, not six, and only six of them are assignable.** `Agent` (roles
-         *     spec §A6a) is carried by API tokens and never held by a person: it is listed
-         *     here because the token-issue form is the only place it is ever chosen, and it
-         *     is refused by `POST /role-assignments`. Filter this list by `assignable` when
-         *     rendering a grant picker — see that field. The eighth seeded row, the
-         *     `Company Member` membership baseline, is filtered out server-side and never
-         *     appears here at all.
+         *     **Seven names, and only five of them may be granted to a person.** Two are
+         *     capability ceilings a *credential* carries: `Agent` (roles spec §A6a), and
+         *     `Automation Service` (§A6), which has been documented as "attached to API
+         *     tokens, never people" since M0 and was made non-assignable by `V41`. Both are
+         *     listed here because the token-issue form is the only place either is ever
+         *     chosen, and both are refused by `POST /role-assignments`. Filter this list by
+         *     `assignable` when rendering a grant picker — see that field. The eighth seeded
+         *     row, the `Company Member` membership baseline, is filtered out server-side and
+         *     never appears here at all.
          */
         Role: {
             /** Format: uuid */
@@ -9551,13 +9553,18 @@ export interface components {
             builtIn: boolean;
             /**
              * @description Whether `POST /role-assignments` may grant this role to a person or a team.
-             *     False only for `Agent`, which a token carries and nobody holds.
+             *     False for `Agent` and, since `V41`, for `Automation Service` — both carried by
+             *     a token, neither held by anybody.
              *
-             *     It answers **one** question, and three that used to have the same answer have
-             *     come apart: may a person hold it (this field), may a token carry it (`Agent`:
-             *     yes), is it listed (`Agent`: yes, which is why you are reading this). A client
+             *     It answers **one** question, and four that used to have the same answer have
+             *     come apart: may a person hold it (this field), may a token carry it (both:
+             *     yes), is it listed (both: yes, which is why you are reading this), and may an
+             *     existing grant be revoked (**yes** — a grant made before the role became
+             *     non-assignable is exactly what an administrator must be able to clean up, so
+             *     those rows stay on `GET /role-assignments` and `DELETE` accepts them). A client
              *     that hides a role because it is non-assignable must do so in the grant pickers
-             *     only — hiding it in the token form makes it unobtainable.
+             *     only — hiding it in the token form makes it unobtainable, and hiding it in the
+             *     assignment list hides a Revoke somebody needs.
              *
              *     Client-side filtering here is **affordance, not security**: the server refuses
              *     the grant regardless.

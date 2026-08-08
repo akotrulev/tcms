@@ -49,7 +49,11 @@ const ROLES = [
     name: 'Automation Service',
     scope: 'PROJECT',
     builtIn: true,
-    assignable: true,
+    // False since V41 — the CI ceiling stopped being grantable to a person, and this fixture said
+    // `true` for as long as the server did. It is the SECOND role no grant picker may show and
+    // this form must, which is what turns the assertion below from a statement about Agent into a
+    // statement about the rule.
+    assignable: false,
     description: 'Posts results. Cannot edit a case.',
     permissions: [],
   },
@@ -58,7 +62,6 @@ const ROLES = [
     name: 'Agent',
     scope: 'PROJECT',
     builtIn: true,
-    // The one role on this list that no grant picker may show and this form must.
     assignable: false,
     description: 'Carried by an agent. Cannot approve, delete or publish.',
     permissions: [],
@@ -191,17 +194,23 @@ describe('IssueTokenDialog', () => {
     expect(names).not.toContain('Instance Admin')
   })
 
-  it('offers Agent, which every grant picker hides — the one form where it is chosen', async () => {
+  it('offers BOTH roles every grant picker hides — the one form where either is chosen', async () => {
     renderDialog()
 
     /*
-      `assignable: false` and offered anyway. Agent (V40) is a ceiling an API token carries and
-      nobody is ever an Agent, so `GrantRoleDialog` and `RoleReference` both drop it — and copying
-      that filter into this dialog, which reads the same endpoint and looks like it wants the same
-      predicate, would make the role unobtainable through the product with nothing else changing.
-      This assertion is what fails if somebody tidies the three filters into one.
+      `assignable: false` on both, and offered anyway. Agent (V40) and Automation Service (V41) are
+      ceilings an API token carries and nobody is ever either of them, so `GrantRoleDialog` and
+      `RoleReference` drop them — and copying that filter into this dialog, which reads the same
+      endpoint and looks like it wants the same predicate, would make both roles unobtainable
+      through the product with nothing else changing. This assertion is what fails if somebody
+      tidies the three filters into one.
+
+      Automation Service is the one that makes the cost concrete: it is a CI credential, so the
+      tidy-up would break issuing the token that ingests every result in the product.
     */
-    expect(await optionNames('Admin.TokenIssue.Role')).toContain('Agent')
+    expect(await optionNames('Admin.TokenIssue.Role')).toEqual(
+      expect.arrayContaining(['Agent', 'Automation Service']),
+    )
   })
 
   it('pre-fills an expiry when Agent is chosen, because the server requires one', async () => {

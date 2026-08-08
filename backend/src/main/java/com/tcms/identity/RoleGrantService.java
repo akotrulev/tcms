@@ -57,23 +57,29 @@ import org.springframework.transaction.annotation.Transactional;
  * not be one until an instance-admin surface exists to hold it; the operator CLI is the only way
  * today.
  *
- * <h2>Non-assignable roles are refused in both directions, and the flag is what decides</h2>
+ * <h2>Granting and revoking are two questions, and only the first one reads the flag</h2>
  *
- * <p>Two seeded rows are not roles anybody grants, and both enforcement points here ask
- * {@link Role#isAssignable()} rather than comparing against a constant — because the check somebody
- * forgets when a third one arrives is exactly the check that lets an administrator grant it.
+ * <p>Three seeded rows are not roles anybody grants: {@link Role#COMPANY_MEMBER_ID} (V15), the
+ * COMPANY-scope grant of {@code company:read} every member receives on joining;
+ * {@link Role#AGENT_ID} (V40), the ceiling an API token carries for an AI agent; and
+ * {@link Role#AUTOMATION_SERVICE_ID} (V41), the ceiling a CI credential carries — which
+ * {@code V3} has described as "attached to API tokens, never people" since M0 while this endpoint
+ * accepted it. <strong>The grant path asks {@link Role#isAssignable()}</strong> rather than
+ * comparing against constants, because the check somebody forgets when a fourth one arrives is
+ * exactly the check that lets an administrator grant it.
  *
- * <p>{@link Role#COMPANY_MEMBER_ID} — the COMPANY-scope grant of {@code company:read} every member
- * receives on joining (V15, handoff §43) — is a consequence of membership rather than a decision
- * about a person: granting it is a no-op on a row that already exists, and revoking it removes a
- * colleague's sight of the company entirely, with no repair short of the operator CLI.
- * {@link Role#AGENT_ID} (V40) is the ceiling an API token carries; nobody is ever an Agent, so a
- * grant of it to a person would confer a capability no evaluation path would ever read.
+ * <p><strong>The revoke path does not, and {@code V41} is where the two parted.</strong> Refusing a
+ * revoke is not "this role is not granted to people" — it is "removing this grant does damage this
+ * endpoint cannot repair", and exactly one row qualifies: taking the baseline away leaves a
+ * colleague seeing an empty company, with no repair short of the operator CLI. For the other two the
+ * answer is the opposite. A grant made before {@code V41}, or one written by hand, is precisely what
+ * an administrator must be able to clean up — and both roles stay on {@code GET /role-assignments},
+ * so the row is on the screen with a Revoke button. See {@code V41} §1.
  *
- * <p><strong>Only this class may read the flag that way.</strong> The baseline is additionally
- * absent from {@code GET /roles} and {@code GET /role-assignments}; Agent is present in the first
- * and issuable to a token, because the token form is the only place it is ever chosen. Those are
- * different questions with different answers — see {@code V40} §2 and
+ * <p><strong>Only this class may read the flag at all.</strong> The baseline is additionally absent
+ * from {@code GET /roles} and {@code GET /role-assignments}; the two ceilings are present in the
+ * first and issuable to a token, because the token form is the only place either is chosen. Those
+ * are different questions with different answers — see {@code V40} §2 and
  * {@link AdminDirectoryService#roleCatalogue()}.
  *
  * <h2>Re-granting is idempotent, and a duplicate is impossible rather than merely unlikely</h2>
@@ -293,17 +299,25 @@ public class RoleGrantService {
         RoleAssignment grant = found.get();
         UUID projectId = grant.getProjectId();
 
-        // A grant of a non-assignable role (V40's flag: the V15 membership baseline, and the V40
-        // Agent ceiling). Neither is ever listed as an administrable grant, so no screen can offer
-        // this — but an id typed into a request must not be able to take away a colleague's sight
-        // of the company, whose only repair is re-running the operator CLI. Removing the baseline
-        // is what removing the MEMBERSHIP means, and that is a different endpoint.
+        // THE MEMBERSHIP BASELINE, AND ONLY IT. This check reads the constant on purpose and V41 is
+        // where it stopped reading `assignable` — see that migration's §1. The flag answers "may
+        // POST create this grant"; refusing a REVOKE is about a consequence of removal, and exactly
+        // one row has one: taking the V15 baseline away removes a colleague's sight of the company
+        // and its only repair is re-running the operator CLI. Removing the baseline is what removing
+        // the MEMBERSHIP means, and that is a different endpoint.
+        //
+        // DO NOT "restore" this to Role::isAssignable. Three rows are non-assignable now and the
+        // other two are the opposite case: an Automation Service grant made before V41, or an Agent
+        // grant somebody wrote by hand, is exactly what an administrator must be able to clean up —
+        // and AdminDirectoryService keeps listing both, so the row sits on the screen with a Revoke
+        // button. Reading the flag here makes that button 403 forever, which is §31's
+        // disable-don't-hide defect arrived at from the server side, with nothing failing.
         //
         // Absent role → refused, and the direction matters: role_id is a foreign key so this is
         // unreachable, but "unknown role" resolving to "revocable" is the arm that would have to be
         // wrong only once. Fail closed.
-        boolean assignable = roles.findById(grant.getRoleId()).map(Role::isAssignable).orElse(false);
-        if (!assignable) {
+        Optional<Role> role = roles.findById(grant.getRoleId());
+        if (role.isEmpty() || Role.COMPANY_MEMBER_ID.equals(role.get().getId())) {
             return new Revoke.Forbidden();
         }
         if (projectId != null && projects.findScopedById(projectId).isEmpty()) {

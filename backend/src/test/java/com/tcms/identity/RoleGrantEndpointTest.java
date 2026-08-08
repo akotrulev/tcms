@@ -575,6 +575,53 @@ class RoleGrantEndpointTest extends IntegrationTestBase {
         }
 
         @Test
+        @DisplayName("nor Automation Service — V3 said 'never people' and V41 is what enforces it")
+        void automationServiceIsNotGrantableToAPerson() throws Exception {
+            // The second row to use V40's flag, and the one that makes "the six" and "the
+            // assignable set" different lists (spec §A2). It is one of the six, it is listed, it is
+            // issuable — and since V41 a person may not hold it, which is what V3's description
+            // has claimed since M0 while this endpoint accepted the grant.
+            MvcResult refused =
+                    post(ADMIN, WEST, userGrant(Role.AUTOMATION_SERVICE_ID, NEWCOMER, ALPHA));
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOn(refused, "roleId")).containsExactly("Choose a role.");
+        }
+
+        @Test
+        @DisplayName("but a grant made BEFORE V41 is still revocable — the axes are not the same")
+        void anAutomationServiceGrantMadeBeforeTheRuleIsStillRevocable() throws Exception {
+            // THE POINT OF THE SLICE. V40 had grant and revoke reading one flag, which was right
+            // while the only non-assignable role was one whose removal breaks a colleague's access.
+            // Read that way here, this row could never be deleted — and AdminDirectoryService keeps
+            // listing it (below), so it would sit on the screen behind a Revoke button that 403s
+            // forever. The migration deletes nothing, so this state is real on any instance that
+            // granted the role before today.
+            UUID legacy = UUID.fromString("7a005000-0000-4000-8000-00000000000f");
+            inCompany(WEST, () -> tx.executeWithoutResult(status -> grantOnProject(
+                    legacy, WEST, Role.AUTOMATION_SERVICE_ID, NEWCOMER, ALPHA, Instant.now())));
+
+            assertThat(revoke(ADMIN, WEST, legacy)).isEqualTo(204);
+            assertThat(inCompanyRead(WEST, () -> roleAssignments.findById(legacy)))
+                    .as("and the row is gone — an administrator can clean up what V41 stopped")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("and it is listed, which is what makes that Revoke reachable")
+        void anAutomationServiceGrantIsStillListed() throws Exception {
+            UUID legacy = UUID.fromString("7a005000-0000-4000-8000-00000000000e");
+            inCompany(WEST, () -> tx.executeWithoutResult(status -> grantOnProject(
+                    legacy, WEST, Role.AUTOMATION_SERVICE_ID, NEWCOMER, ALPHA, Instant.now())));
+
+            // The mirror of theMembershipBaselineIsNotListed, and the opposite answer for the
+            // opposite reason: the baseline is hidden because no screen may offer that Revoke,
+            // this one is shown because a screen MUST.
+            assertThat(assignmentIds(fetch("/api/v1/role-assignments", ADMIN, WEST)))
+                    .contains(legacy);
+        }
+
+        @Test
         @DisplayName("nor revoked — that would take away a colleague's sight of the company")
         void theMembershipBaselineIsNotRevocable() throws Exception {
             UUID baseline = baselineGrantId(WEST, NEWCOMER);

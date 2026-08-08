@@ -18,6 +18,11 @@ import java.util.UUID;
  * {@link #isAssignable() non-assignable}, and there the resemblance stops — the baseline never
  * appears on the wire, where Agent must.
  *
+ * <p><strong>Non-assignable is not the same list as "not one of the six".</strong> Since {@code V41}
+ * {@link #AUTOMATION_SERVICE_ID} — which <em>is</em> one of the six — is non-assignable too, so the
+ * flag now separates the two token-carried ceilings and the membership baseline from the five roles
+ * an administrator may give a person.
+ *
  * <p><strong>Instance-level and deliberately without {@code company_id}</strong>: the six
  * built-ins are the complete role set in v1 — no custom roles, not even clone-and-edit
  * (plan §6b). It is on the ERD §0.1 exception list.
@@ -52,7 +57,20 @@ public class Role {
     public static final UUID TEST_ENGINEER_ID =
             UUID.fromString("10000000-0000-4000-8000-000000000004");
 
-    /** Automation Service — PROJECT scope. Non-human; attached to API tokens only. */
+    /**
+     * Automation Service — PROJECT scope. Non-human; attached to API tokens only.
+     *
+     * <p><strong>One of the six, and non-assignable since {@code V41}.</strong> {@code V3} has
+     * said "never people" since M0, and until {@code V41} nothing enforced it: the role was offered
+     * by every grant picker and accepted by {@code POST /role-assignments}. It is the second row to
+     * use {@link #isAssignable()}, so "the six" and "the assignable set" are no longer the same
+     * list — five of the six may be granted to a person (roles spec §A2).
+     *
+     * <p>Everything else about it is unchanged and deliberately so: the five capabilities plus
+     * {@code project:read} ({@code V16}), still the smallest role in the product, still issuable to
+     * a token and still listed. A leaked CI credential that cannot edit or delete a real case is
+     * the entire value of the role, and that is independent of who may hold it.
+     */
     public static final UUID AUTOMATION_SERVICE_ID =
             UUID.fromString("10000000-0000-4000-8000-000000000005");
 
@@ -119,14 +137,23 @@ public class Role {
     private boolean builtIn;
 
     /**
-     * Whether {@code POST /role-assignments} may grant this role to a person or a team, and
-     * whether the matching {@code DELETE} may revoke such a grant. False for
-     * {@link #COMPANY_MEMBER_ID} and {@link #AGENT_ID}; true for the six.
+     * Whether {@code POST /role-assignments} may grant this role to a person or a team. False for
+     * {@link #COMPANY_MEMBER_ID}, {@link #AGENT_ID} and — since {@code V41} —
+     * {@link #AUTOMATION_SERVICE_ID}.
      *
-     * <p><strong>Not "hidden", and not "not issuable".</strong> It answers one of three questions
-     * that happened to have the same answer while there was only one non-assignable role — see
-     * {@link #AGENT_ID} and {@code V40} §2. {@link AdminDirectoryService}'s two filters and
-     * {@link ApiTokenService}'s issue check must stay baseline-specific.
+     * <p><strong>It answers one question of four, and {@code V41} is where the fourth left.</strong>
+     * It is not "hidden": both ceilings are returned by {@code GET /roles}, because the token-issue
+     * form is the only place either is chosen. It is not "not issuable": both are issuable, which is
+     * what they exist for. And it is <strong>not "not revocable"</strong> — that sentence used to be
+     * here and was wrong the moment a second row wanted a different answer. {@link RoleGrantService}
+     * refuses a revoke only for the baseline, whose removal takes away a colleague's sight of the
+     * company; an Automation Service grant made before {@code V41} must stay revocable or it can
+     * never be cleaned up.
+     *
+     * <p>The questions coincided while there was one non-assignable role — see {@link #AGENT_ID},
+     * {@code V40} §2 and {@code V41} §1. {@link AdminDirectoryService}'s two filters,
+     * {@link ApiTokenService}'s issue check and {@code RoleGrantService.revoke} stay
+     * baseline-specific.
      */
     @Column(name = "assignable", nullable = false)
     private boolean assignable;
