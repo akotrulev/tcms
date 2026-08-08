@@ -79,10 +79,13 @@ renders blank with an empty console.
 # The TS client and the CLI (§137) — pure Node, no Docker, no backend needed
 cd packages
 npm install                       # one workspace root; `npm ci` in CI
-npm run build --workspaces        # THE gate: tsc over source+tests, then emit. Topological:
-                                  # @tcms/cli typechecks against @tcms/client's dist/
+npm run build                     # THE gate: tsc over source+tests, then emit. NOT
+                                  # `--workspaces` — that runs them ALPHABETICALLY, so cli goes
+                                  # first and typechecks against a client that has not been
+                                  # emitted. It passed locally only on a leftover dist/ and CI's
+                                  # packages job had never once been green (§139).
 npm run lint --workspaces         # oxlint, 0 warnings
-npm run test:run --workspaces     # 82 tests, ~0.5s — CI runs these, unlike the backend's
+npm run test:run --workspaces     # 106 tests, ~0.7s — CI runs these, unlike the backend's
 cd client && npm run gen:api      # THE SECOND COPY of schema.d.ts. Regenerate BOTH after any
                                   # openapi.yaml change; schemaFreshness.test.ts fails otherwise.
 node cli/dist/main.js help        # TCMS_URL + TCMS_TOKEN drive it

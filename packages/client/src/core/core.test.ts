@@ -11,6 +11,7 @@ import { stubFetch } from '../test/stubFetch.js';
 import { ifMatchFor, isVersionConflict, versionOf } from './concurrency.js';
 import { KEY_PREFIXES, classify, isUuid, parseDisplayKey } from './identifiers.js';
 import { MAX_IDEMPOTENCY_KEY, newIntentKey, requireIntentKey } from './idempotency.js';
+import { createIntent, editIntent, requireExplicitVersion } from './mutation.js';
 import { DEFAULT_PAGE_SIZE, clampPageSize, eachItem, hasMore } from './paging.js';
 import { resolveProject } from './project.js';
 import { describeReach, describeRefusal } from './refusal.js';
@@ -129,6 +130,39 @@ describe('concurrency', () => {
     expect(isVersionConflict(new TcmsApiError({
       status: 403, detail: 'x', method: 'PATCH', path: '/',
     }))).toBe(false);
+  });
+});
+
+describe('mutation intents', () => {
+  it('generates a key per create and validates one the caller supplied', () => {
+    expect(createIntent().idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
+    expect(createIntent({ key: '  batch-7  ' }).idempotencyKey).toBe('batch-7');
+    expect(() => createIntent({ key: 'x'.repeat(MAX_IDEMPOTENCY_KEY + 1) })).toThrow(/at most/);
+  });
+
+  it('sends If-Match from an explicit version and from a fresh read alike', () => {
+    expect(editIntent({ explicit: 3 }, 'rename suite').ifMatch).toBe('3');
+    expect(editIntent({ fresh: { lockVersion: 3 } }, 'rename suite').ifMatch).toBe('3');
+  });
+
+  it('refuses an edit whose fresh read carried no version', () => {
+    expect(() => editIntent({ fresh: { id: 'x' } }, 'rename suite')).toThrow(/last-write-wins/);
+  });
+
+  /*
+    The slice's finding, asserted rather than commented. A whole-body edit's precondition is the
+    version of the read its body came from, and reading a fresh one here would send an If-Match
+    that matches a state the body was never based on — last-write-wins arriving through the
+    header that prevents it. So the refusal is the behaviour, not a missing convenience.
+  */
+  it('refuses a whole-body edit that names no version, and says why', () => {
+    expect(() => requireExplicitVersion(undefined, 'edit case from a file'))
+      .toThrow(/silently overwrites whoever saved in between/);
+  });
+
+  it('takes a version of zero, which is a real version and a falsy number', () => {
+    expect(requireExplicitVersion(0, 'edit case from a file')).toEqual({ explicit: 0 });
+    expect(() => requireExplicitVersion(1.5, 'edit case from a file')).toThrow(/whole number/);
   });
 });
 

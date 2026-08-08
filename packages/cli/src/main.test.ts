@@ -1,58 +1,12 @@
 /**
- * The CLI is tested through `main()` with a fake output sink and a fake `fetch`, rather than by
- * spawning a process. That keeps the assertions on the two things a caller of a CLI actually
- * depends on — **what it printed and what it exited with** — while still exercising the real
- * argument parsing, the real command dispatch and the real client underneath.
+ * `main()` against a fake sink and a fake `fetch` — see `test/harness.ts` for why that is the
+ * seam. This file covers dispatch, argument handling and the reads; the writes are next door in
+ * `writes.test.ts`.
  */
 import { describe, expect, it } from 'vitest';
 
 import { EXIT, main } from './main.js';
-import type { Output } from './output.js';
-
-interface Recorder extends Output {
-  readonly stdout: string;
-  readonly stderr: string;
-}
-
-function recorder(): Recorder {
-  const out: string[] = [];
-  const err: string[] = [];
-  return {
-    line: (text = '') => out.push(text),
-    json: (value) => out.push(JSON.stringify(value, null, 2)),
-    error: (text) => err.push(text),
-    get stdout() { return out.join('\n'); },
-    get stderr() { return err.join('\n'); },
-  };
-}
-
-type Answer = { status: number; body?: unknown };
-
-/** A `fetch` that answers by path suffix, so a test states only the calls it cares about. */
-function api(routes: Record<string, Answer>): { fetch: typeof globalThis.fetch; urls: string[] } {
-  const urls: string[] = [];
-  const fetch: typeof globalThis.fetch = async (input, init) => {
-    const request = input instanceof Request ? input : new Request(input, init);
-    const url = new URL(request.url);
-    urls.push(`${url.pathname}${url.search}`);
-
-    const match = Object.entries(routes).find(([path]) => url.pathname.endsWith(path));
-    if (!match) return new Response(JSON.stringify({ detail: `no stub for ${url.pathname}` }), {
-      status: 500, headers: { 'content-type': 'application/json' },
-    });
-
-    const [, answer] = match;
-    return new Response(answer.status === 204 ? null : JSON.stringify(answer.body ?? {}), {
-      status: answer.status,
-      headers: { 'content-type': 'application/json' },
-    });
-  };
-  return { fetch, urls };
-}
-
-const env = { TCMS_URL: 'https://tcms.example.com', TCMS_TOKEN: 'tcms_abc' };
-
-const PROJECT = { id: 'p-1', key: 'OLB', name: 'Online Banking', archived: false, caseCount: 3, myRole: 'Test Engineer' };
+import { PROJECT, api, env, mainWith, recorder } from './test/harness.js';
 
 describe('argument handling', () => {
   it('prints usage and exits 2 when given nothing', async () => {
@@ -118,28 +72,6 @@ describe('failures', () => {
   });
 });
 
-/**
- * Runs `main` against an injected `fetch`.
- *
- * The injection point is deliberately the environment rather than a parameter on `main`: the
- * production entry point takes only `argv`, and a test-only parameter threaded through it is a
- * seam that exists in the shipped binary. `connect()` reads the environment, so a test overrides
- * what a user would override.
- */
-async function mainWith(
-  argv: readonly string[],
-  out: Recorder,
-  fetch: typeof globalThis.fetch,
-): Promise<number> {
-  const original = globalThis.fetch;
-  globalThis.fetch = fetch;
-  try {
-    return await main(argv, out, env);
-  } finally {
-    globalThis.fetch = original;
-  }
-}
-
 describe('reads', () => {
   it('lists projects', async () => {
     const out = recorder();
@@ -198,6 +130,32 @@ describe('reads', () => {
     // The lock version is printed because every edit needs it — omitting If-Match is
     // last-write-wins, which is the worst thing this surface can do silently.
     expect(out.stdout).toContain('Lock version: 3');
+  });
+
+  /*
+    §139's regression, and it was live from §137 until then: an option a command had not declared
+    was parsed as `true` and its value pushed into the positionals, so every string filter on
+    every read command was dropped. `case list --q login` answered the whole project's cases,
+    with a 200, a full table and no diagnostic anywhere.
+  */
+  it('sends the filter values, rather than parsing them as booleans', async () => {
+    const out = recorder();
+    const stub = api({
+      '/projects': { status: 200, body: [PROJECT] },
+      '/cases': { status: 200, body: { page: 0, size: 25, total: 0, facets: [], items: [] } },
+    });
+
+    expect(await mainWith(
+      ['case', 'list', '--q', 'login', '--tag', 'smoke', '--tag', 'slow', '--size', '5'],
+      out,
+      stub.fetch,
+    )).toBe(EXIT.ok);
+
+    const asked = stub.urls.find((url) => url.includes('/cases')) ?? '';
+    expect(asked).toContain('q=login');
+    expect(asked).toContain('tag=smoke');
+    expect(asked).toContain('tag=slow');
+    expect(asked).toContain('size=5');
   });
 
   it('refuses a key of the wrong kind without making a request', async () => {

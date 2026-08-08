@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "Workspace root for the TypeScript packages that talk to the TCMS API. Deliberately NOT at the repository root: the root runs docker compose and nothing else (CLAUDE.md), and backend/ and frontend/ are independent stacks that must keep building on their own. This root has no build of its own either — it exists so @tcms/cli and the MCP server can resolve @tcms/client without a file: dependency or a publish step between every change.",
+  "description": "Workspace root for the TypeScript packages that talk to the TCMS API. Deliberately NOT at the repository root: the root runs docker compose and nothing else (CLAUDE.md), and backend/ and frontend/ are independent stacks that must keep building on their own. This root has no build of its own either — it exists so @tcms/cli and the MCP server can resolve @tcms/client without a file: dependency or a publish step between every change. THE BUILD SCRIPT NAMES ITS ORDER: `--workspaces` runs them ALPHABETICALLY, so `cli` went before `client` and typechecked against the previous build's dist/ — a client change was invisible to its only consumer until the command was run twice. Use `npm run build` here, not `npm run build --workspaces`.",
   "engines": {
     "node": ">=22.12.0"
   },
@@ -11,7 +11,7 @@
     "*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build -w @tcms/client && npm run build -w @tcms/cli",
     "test:run": "npm run test:run --workspaces --if-present",
     "lint": "oxlint"
   },

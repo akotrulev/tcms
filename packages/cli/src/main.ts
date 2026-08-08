@@ -53,12 +53,17 @@ export async function main(
   try {
     parsed = parseArgs({
       args: [...found.rest],
-      // `strict: false` so a command's own flags (`--suite`, `--tag`) parse without every one
-      // being declared here. The cost is that a misspelled flag is accepted and ignored rather
-      // than refused — which is why `allowPositionals` stays on and each command validates the
-      // arguments it actually needs, rather than trusting the parser to have caught anything.
-      options: GLOBAL_OPTIONS,
-      strict: false,
+      /*
+        The command's own flags are merged in, and the parser runs **strict**. Both halves are
+        §139 corrections of a defect §137 shipped: `strict: false` was chosen so a command's
+        flags would parse "without every one being declared here", and that is not what it does
+        — an *undeclared* option gets the value `true` and its argument becomes a positional, so
+        `case list --suite TS-7` filtered by nothing and said so nowhere. Declaring them makes
+        the parse right; strict mode then makes a misspelling a usage error rather than a
+        boolean nobody reads.
+      */
+      options: { ...GLOBAL_OPTIONS, ...found.command.options },
+      strict: true,
       allowPositionals: true,
     });
   } catch (error) {

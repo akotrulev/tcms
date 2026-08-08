@@ -43,6 +43,9 @@ export { MAX_IDEMPOTENCY_KEY, newIntentKey, requireIntentKey } from './core/idem
 export { ifMatchFor, isVersionConflict, versionOf } from './core/concurrency.js';
 export type { Concurrency, NoVersionReason } from './core/concurrency.js';
 
+export { createIntent, editIntent, requireExplicitVersion } from './core/mutation.js';
+export type { CreateOptions, EditVersion, WriteKind } from './core/mutation.js';
+
 export { describeReach, describeRefusal } from './core/refusal.js';
 export type { RefusalCopy, RefusedOperation } from './core/refusal.js';
 
