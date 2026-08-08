@@ -1,7 +1,9 @@
 # CLI writes — the MCP plan's phase 7
 
 **Date:** 2026-08-08 · **Slice:** §139 · **Stack:** `packages/` only — no migration, no contract
-change, no backend or frontend code.
+change, no backend or frontend code. **SHIPPED** — see
+[`docs/handoff/139-cli-writes.md`](../handoff/139-cli-writes.md) for what it found beyond this plan:
+two defects §137 shipped, one of which meant CI's `packages` job had never once been green.
 
 Phase 7 of [`2026-08-08-mcp-server-wip-plan.md`](2026-08-08-mcp-server-wip-plan.md): *CLI writes —
 edits direct, creates as proposals* (§1.3, `[SETTLED]`). Both arms are buildable: §136 added

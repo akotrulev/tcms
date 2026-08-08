@@ -1274,3 +1274,37 @@ assertions live in that class's five nested groups.
 | AP-12 | The synthetic `Idempotency-Key` passed to the create path is replaced with `null` | Two reviewers accepting at the same moment create **two cases from one proposal**. Reddens nothing single-threaded — `accepting twice answers with the case` passes on the status check alone — so this is the same race gap as `IK-1`, one level up. **Known gap.** | ⬜ NOT RUN |
 | AP-13 | `rejectOne` overwrites the note when the proposal is already `REJECTED` | A second click erases the reason the decision was actually made for, which is the one thing keeping the row was for. Should redden `rejecting twice keeps the FIRST note`. | ⬜ NOT RUN |
 | AP-14 | The accept path stops writing `ai_proposal.accepted`, relying on `case.created` alone | The audit trail records that a case was created and never that it came from a model — so "which cases did an agent propose" is unanswerable a month later, and `verdict_source` is nowhere in the log. Should redden `both decisions are audited, and the accept records the provenance`. | ⬜ NOT RUN |
+
+### §139 — the CLI's write arms (`CW-1` … `CW-12`)
+
+**The second batch of rows that are not `./gradlew`**, on `TS-*`'s terms: mutate `packages/`, run
+`cd packages && npm run test:run --workspaces`, and name the file in the scope column since the
+whole suite is under a second. Assertions live in `cli/src/writes.test.ts` (48 across five groups)
+and `client/src/core/core.test.ts`'s `mutation intents` (5).
+
+> **NONE RUN.** **`CW-1` first** — it is the row that pins this slice's whole finding, and its
+> failure mode is a *silent* loss of somebody else's work. `CW-5` second, for the same reason one
+> noun over.
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| CW-1 | `writes.ts`'s `versionFor` drops the `fromFile` branch and always reads a fresh version | The finding, defeated. A `--file` edit built from a read at version 3 sends `If-Match: 5`, the server accepts, and whoever saved at 4 loses their words — last-write-wins arriving **through** the header that prevents it, with a green build and a 200. Should redden `refuses a --file edit that names no --lock-version` and `refuses a whole-body edit that names no version, and says why`. **If it does not redden, the rule is a comment and not a behaviour.** | ⬜ NOT RUN |
+| CW-2 | `context.ts`'s `strictNumber` returns `undefined` for an unparseable value instead of throwing | `--lock-version latest` falls through to a *fresh read* — the typo silently selects the unsafe path, which is `CW-1` reached by accident rather than by design. Should redden `refuses a --lock-version that is not a number, rather than falling back to a fresh read`. | ⬜ NOT RUN |
+| CW-3 | `main.ts` restores `strict: false` and stops merging `command.options` | §137's live defect, restored. Every string flag on every command parses as `true` and its argument becomes a positional, so `case list --q login` answers the unfiltered list and `case edit --title x` sends `{}`. Should redden `sends the filter values, rather than parsing them as booleans`, `exits 2 rather than sending an empty body`, and most of `writes.test.ts`. **The row that pins a defect that shipped and was invisible for two slices.** | ⬜ NOT RUN |
+| CW-4 | `context.ts`'s `requireSomethingToDo` returns the body instead of throwing | A `PATCH` of `{}` is legal by the contract, so a command whose flags were all wrong answers 200 and reports a save. Should redden `exits 2 rather than sending an empty body that reports success`. | ⬜ NOT RUN |
+| CW-5 | `docEdit` sends `blocks: page.blocks` alongside the title, "so the page round-trips" | The contract's rule is that `blocks` is the whole page and an **omitted block is deleted** — the helpful round-trip is one stale read away from replacing somebody's specification with an older copy of it. Should redden `retitles without sending blocks, which would empty the page`. **The one mutation in this queue that destroys authored content rather than a field.** | ⬜ NOT RUN |
+| CW-6 | `present()` keeps `undefined` values instead of dropping them | Every unnamed field is sent as `null`, so `case edit --title x` clears the description, the objective, the owner and the automation key. `PATCH`'s absent-versus-null split is the whole protection and this removes it. Should redden most of `case edit` and `suite writes`. | ⬜ NOT RUN |
+| CW-7 | `nullableText` maps `''` to `undefined` rather than `null` | The clearing form stops clearing: `--description ''` becomes "leave it alone", silently, and a user who cannot empty a field has no other spelling to reach for. Should redden `leaves unnamed fields alone, clears an empty one, and files by suite key`. | ⬜ NOT RUN |
+| CW-8 | `caseProposal` defaults `verdict` to `UNVERIFIED` when none was given | Absent and `UNVERIFIED` are different claims — nobody asserted anything, against an agent asserting it had not checked — and they differ in `verdictSource`, which §6w.1a is built on. Every silent proposal becomes a claim. Should redden `sends no verdict when none was given`. | ⬜ NOT RUN |
+| CW-9 | `suiteStatus` filters the target state against a client-side ladder | A second copy of §6g's ladder, in a client versioned independently of the instance it points at — so a Test Lead's token is refused a move the server would have allowed, by the tool rather than by the rule. Should redden `does not filter the ladder client-side`. | ⬜ NOT RUN |
+| CW-10 | `planEdit` stops threading the plan's current name through a name-less edit | `TestPlanUpdateInput` requires `name`, so `--description`-only becomes a 400 about a field the user never mentioned. Should redden `carries the plan's current name through an edit that does not mention it`. | ⬜ NOT RUN |
+| CW-11 | `resultRecord` takes the `lockVersion` off the run detail's execution summary instead of the execution's own detail | `TestExecutionSummary` carries no `lockVersion` at all, so this is `versionOf` throwing — a loud failure, which is the right one. Should redden `finds the execution by case key and the status by name`. **Predicted to redden; the row exists because the summary/detail split is easy to miss and the cheap read is the wrong one.** | ⬜ NOT RUN |
+| CW-12 | `reviewComment` picks `reviews[0]` instead of the first `IN_REVIEW` one | A comment aimed at a closed review earns a 409 the user cannot act on — and re-submitting opens a *new* record, so the row it aimed at will never accept one. Should redden `refuses a closed review here, rather than earning a 409 from the server`. | ⬜ NOT RUN |
+
+**The gap §137 recorded is now wider and is still the most important thing in this section:**
+**no `@tcms/cli` command has been run against a real TCMS**, and there are sixteen write commands
+in that state. Every row above mutates code observed only by a stubbed `fetch`. The live pass this
+needs is one setup — `docker compose up`, `provision-company`, issue an `Agent` token, `TCMS_URL`
+and `TCMS_TOKEN` — after which every read command from §137 and every write command here is one
+invocation. It is not a browser lane and not a mutation, so neither queue owns it; it is named in
+the handoff as its own outstanding item.

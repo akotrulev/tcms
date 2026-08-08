@@ -506,12 +506,18 @@ but visible* affordance — the agent knows what it cannot do without holding a 
    permission distinguishes a person from their agent. The gate is `case:create` **and** no
    `TokenContext`. Two of §6w.6's columns were not built (`job_id`, `criterion_id`) and two enum
    values are absent for want of a writer (`TCMS_VERIFIED`, `SUPERSEDED`).
-7. **CLI writes** — edits direct, creates as proposals. **Both arms are buildable now**: phase 6
-   shipped, so the create arm's `POST …/ai-proposals` exists. ~~Preceded by §6.1's contract additions:
-   `Idempotency-Key` on `POST …/suites` and `POST …/doc-pages`.~~ → **those landed in §136 (`V42`)**,
-   and the core's write machinery (`Idempotency-Key`, `If-Match`, the concurrency types) is built
-   and tested in §137 with nothing calling it yet. ~~**The edit arm is buildable now**; only the
-   create arm waits on phase 6.~~ → **phase 6 landed 2026-08-08 (§138).**
+7. ~~**CLI writes** — edits direct, creates as proposals.~~ → **DONE 2026-08-08, §139**, sixteen
+   commands, no migration and no contract change. **The finding: a self-read `If-Match` is only
+   honest when the request is not a delta** — a flag edit's intent *is* its flags, so a fresh
+   version is a truthful precondition; a `--file` edit's body came from an earlier read, so a fresh
+   version asserts a state that body was never based on and the concurrent author's words are lost
+   through the header that prevents exactly that. `--file` requires `--lock-version`.
+   `case create` is absent (creates are proposals) and **`case accept` cannot exist**: §138's gate
+   is `case:create` *and no `TokenContext`*, and every CLI request carries a token. §8.3's
+   conformance check is computed over the command registry and fails on a command it does not
+   recognise. It also found **two defects §137 shipped**: `parseArgs({ strict: false })` dropped
+   every string flag on every command, and `npm run build --workspaces` ordered the packages
+   alphabetically, so **CI's `packages` job had never once been green**.
 8. **MCP server** over the same client, carrying §6.2's capability summary and `whoami`.
 9. **Rate limiting**, REST side.
 10. **Deploy** — image, compose, Caddy route, runbook.
