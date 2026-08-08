@@ -18,14 +18,15 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * One cap on {@code Idempotency-Key}, declared in seven places — checked rather than shared.
+ * One cap on {@code Idempotency-Key}, declared in eight places — checked rather than shared.
  *
  * <h2>Why there is no shared constant</h2>
  *
  * <p>Seven services accept the header and each caps its length itself:
  * {@code CaseCreateService}, {@code SuiteWriteService} ({@code repository}),
  * {@code RunCreateService}, {@code PlanCreateService}, {@code IngestionEdit} ({@code execution}),
- * {@code DocPageWriteService} ({@code documentation}) and {@code BoardService} ({@code work}).
+ * {@code DocPageWriteService} ({@code documentation}), {@code BoardService} ({@code work}) and — since
+ * §138 — {@code AiProposalService} ({@code repository}).
  * They live in four Modulith modules, and <strong>the only module all four may import is
  * {@code tenancy}</strong> — which everything depends on and which depends on nothing.
  *
@@ -47,18 +48,25 @@ import org.junit.jupiter.api.Test;
  * text, exactly as {@link ConfigConventionTest}'s are. A check that is cheap is a check that
  * survives.
  */
-@DisplayName("Idempotency-Key — one cap, seven declarations, no drift")
+@DisplayName("Idempotency-Key — one cap, eight declarations, no drift")
 class IdempotencyKeyCapTest {
 
-    /** The cap every declaration must agree on. Changing it means changing all seven. */
+    /** The cap every declaration must agree on. Changing it means changing all eight. */
     private static final int EXPECTED_CAP = 200;
 
     /**
      * How many services declare it. A new create endpoint that accepts the header raises this, and
-     * having to edit the number is the point: it is the moment to ask whether the eighth copy is
+     * having to edit the number is the point: it is the moment to ask whether the next copy is
      * still the right trade against the shared symbol this test exists instead of.
+     *
+     * <p><strong>Asked and answered at the eighth (§138, {@code AiProposalService}).</strong> The
+     * trade is unchanged, because what decides it is not the count but what the alternative must
+     * store: a general {@code idempotent_request} table has to keep the <em>rendered response</em>,
+     * and a stored response goes stale the moment the row it describes is edited ({@code V17}, and
+     * {@code V42}'s header restating it at the sixth). What is new at the eighth is the caller —
+     * the first of them has no screen at all, so nobody notices the duplicate it prevents.
      */
-    private static final int EXPECTED_DECLARATIONS = 7;
+    private static final int EXPECTED_DECLARATIONS = 8;
 
     private static final Pattern DECLARATION = Pattern.compile(
             "\\bstatic final int MAX_IDEMPOTENCY_KEY\\s*=\\s*(\\d+)\\s*;");
@@ -78,7 +86,7 @@ class IdempotencyKeyCapTest {
     }
 
     @Test
-    @DisplayName("the declarations are exactly the seven services known to accept the header")
+    @DisplayName("the declarations are exactly the eight services known to accept the header")
     void theCountIsPinned() {
         assertThat(declarations())
                 .as("a create endpoint that accepts Idempotency-Key without capping it indexes "

@@ -99,10 +99,10 @@ CREATE TABLE ai_proposal (
     company_id              UUID NOT NULL REFERENCES company(id),
     project_id              UUID NOT NULL REFERENCES project(id) ON DELETE CASCADE,
 
-    -- Where the accepted case would be filed. Nullable: a proposal that names no
-    -- suite is still reviewable, and ON DELETE SET NULL rather than CASCADE
-    -- because deleting a collection must not destroy the proposals aimed at it.
-    suite_id                UUID REFERENCES suite(id) ON DELETE SET NULL,
+    -- Where the proposer SAYS the accepted case should be filed. A claim, and
+    -- deliberately NOT a foreign key — see the column comment; this is the one
+    -- place the "stored unvalidated" decision meets the schema.
+    suite_id                UUID,
 
     -- The proposed case in the CaseUpdateRequest shape — the same payload the
     -- create endpoint takes, so accept can hand it to CaseCreateService without
@@ -165,6 +165,16 @@ COMMENT ON TABLE ai_proposal IS
     'other way (same validation, same TC-n allocation, same v1 version, same audit row), and the '
     'accepting person is its author. No lock_version: a proposal is authored once and decided once, '
     'so there is no form two screens can contend over.';
+
+COMMENT ON COLUMN ai_proposal.suite_id IS
+    'Where the proposer says the case should be filed — a copy of payload->>''suiteId'', so the '
+    'queue can group without parsing a document per row. NOT A FOREIGN KEY, and that is the whole '
+    'design of this endpoint meeting the schema: a proposal is stored UNVALIDATED, because whether '
+    'it is a legal case is a question about the project''s suites at ACCEPT time, which may be a '
+    'week later. A FK would answer that question here as well, in the database, as a 500 rather '
+    'than a field error — so an agent inventing a suite id would lose its whole batch instead of '
+    'landing a proposal a reviewer can look at and reject. Accept resolves it through CaseEdit like '
+    'every other create, and a dangling id becomes a field error on the suite picker.';
 
 COMMENT ON COLUMN ai_proposal.payload IS
     'The proposed case in the CaseUpdateRequest field shape (§6m) — the same body POST /cases '

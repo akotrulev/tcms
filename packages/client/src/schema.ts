@@ -2574,6 +2574,369 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/ai-proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The review queue — generated cases awaiting a decision
+         * @description Proposals in one status, newest first, defaulting to `PENDING` (plan §6w.6).
+         *
+         *     The default is a status rather than "all": a queue is a list of things waiting, and a first
+         *     page mixing in every decided proposal from the project's history is a list nobody can work
+         *     from. A client measuring the rejection rate asks for the status it wants.
+         *
+         *     Rows carry **both** `verdict` and `verdictSource`. A client that renders the first without
+         *     the second shows a claim as a finding, which is the inflation §6w.1a exists to prevent one
+         *     layer up.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    page?: components["parameters"]["Page"];
+                    size?: components["parameters"]["Size"];
+                    status?: components["schemas"]["ProposalStatus"];
+                };
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description A page of the queue */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PageMeta"] & {
+                            items: components["schemas"]["AiProposalSummary"][];
+                        };
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        put?: never;
+        /**
+         * File a generated test case as a proposal
+         * @description **The one arm a generation agent calls.** §6w.6: *nothing generated writes to `test_case`
+         *     without a human accepting it*, so this endpoint files a case for review and creates nothing.
+         *
+         *     The proposed case travels as a `TestCaseInput` — the same body `POST /cases` takes — because
+         *     accepting a proposal hands exactly this body to the create path. A second shape would be a
+         *     second answer to *what is a case*, and the one that diverges is whichever was edited second.
+         *
+         *     **The payload is stored unvalidated**, deliberately. Whether it is a legal case is a
+         *     question about the project's suites and vocabularies *at accept time*, which may be a week
+         *     later, and answering it twice gives two answers. This endpoint refuses only what it can
+         *     judge without the project's state: a missing case, a blank title, a payload over the
+         *     ceiling. A proposal that cannot be accepted is therefore possible, and the reviewer finds
+         *     out with the field errors in hand — a legible failure, against an agent's whole batch being
+         *     thrown away because one suite was renamed.
+         *
+         *     **There is no `verdictSource` field and there must never be one.** It is derived from
+         *     whether `verdict` was sent: absent gives `NONE`, present gives `EXTERNAL`. An asserted
+         *     verdict is recorded, shown and attributed, and never counted as verified (§6w.1a).
+         *
+         *     Gated on `case:create`, which is the key the `Agent` role carries for this.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: {
+                    /**
+                     * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
+                     *     already succeeded answers **200** with the resource that intent created, instead of creating
+                     *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
+                     *     §136; the parameter has been shared by six other creates since `V14`.)
+                     *
+                     *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
+                     *     it across retries. A key generated per attempt is the mistake that makes the header look
+                     *     right and do nothing.
+                     *
+                     *     Scoped to the project the request is addressed to, which is the scope the uniqueness
+                     *     constraint behind it uses. Optional: omitted, every call creates. At most 200 characters.
+                     */
+                    "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AiProposalInput"];
+                };
+            };
+            responses: {
+                /**
+                 * @description **A replay.** The `Idempotency-Key` had already filed this proposal, so nothing was
+                 *     filed by this request — which is why it is not a 201 and carries no `Location`. This
+                 *     matters more here than on the other create endpoints: the caller is a program deciding
+                 *     whether to retry the rest of a batch, and a duplicate is paid for by the reviewer.
+                 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AiProposal"];
+                    };
+                };
+                /** @description Filed, and waiting for a person */
+                201: {
+                    headers: {
+                        /** @description The proposal's own URL. */
+                        Location?: string;
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AiProposal"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/ai-proposals/{proposalId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                proposalId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * One proposal, with its payload and its grounding evidence
+         * @description The reviewer's screen. Carries the proposed case as a `TestCaseInput` rather than as a
+         *     `TestCase`: there is no case, so there is no key, no owner, no lifecycle status and no
+         *     version, and serving the stored input is the honest shape — as well as the one the editor
+         *     already renders.
+         *
+         *     `grounding` is free-form and is **displayed, never interpreted**. It is evidence produced by
+         *     somebody else's critic, so a schema here would refuse the parts this product has not thought
+         *     of.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                    proposalId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The proposal */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AiProposal"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/ai-proposals/{proposalId}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                proposalId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept a proposal — the case is created through the ordinary create path
+         * @description §6w.6: the accepted case is created by **the same path `POST /cases` uses**, so it is
+         *     indistinguishable from a case authored any other way — same validation, same `TC-n`
+         *     allocation, version 1 written with it, same audit row. It enters at `DRAFT` and travels the
+         *     review workflow like any other case; **there is no path from a model to `Approved`.**
+         *
+         *     **The author of the case is the accepting person.** §6j's attribution guarantee is untouched.
+         *
+         *     **A credential cannot accept.** The gate is `case:create` *and* the caller not being an API
+         *     token — 403 with a body that says so. This is not expressible as a permission: a token's
+         *     effective set is its owner's set intersected with its role's, so every permission a token
+         *     holds is one its owner holds, and `case:create` is in the `Agent` grant precisely because
+         *     this path needs it. Without the second half, an agent could file a proposal and accept it in
+         *     two calls.
+         *
+         *     **400 is reachable and is the interesting one.** The payload was stored unvalidated, so a
+         *     suite that has since been deleted, a retired shared step, or a vocabulary value that no
+         *     longer exists lands here as ordinary field errors on `TestCaseInput`'s own field names — the
+         *     reviewer sees exactly what an author would see, and can reject instead.
+         *
+         *     Accepting an already-accepted proposal answers **200 with the case**, not a conflict: the
+         *     state asked for is the state it is in. Accepting a rejected one is a 409.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                    proposalId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /**
+                 * @description Already accepted. The case is returned again and **nothing was created by this
+                 *     request**, which is why there is no `Location`.
+                 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TestCase"];
+                    };
+                };
+                /** @description Accepted — and this is the case it became */
+                201: {
+                    headers: {
+                        /** @description The created case's own URL. */
+                        Location?: string;
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TestCase"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                /**
+                 * @description This proposal was rejected, or was accepted into a case that has since been deleted.
+                 *     Either way the decision has been made and cannot be made again.
+                 */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/ai-proposals/{proposalId}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                proposalId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject a proposal — recorded, not deleted
+         * @description §6w.6: *"a generation profile whose proposals are rejected 80% of the time is a measurable
+         *     fact, and the alternative — proposals that vanish when dismissed — makes that unknowable."*
+         *     So the row stays, with who decided and when.
+         *
+         *     The `note` is **optional**, unlike a quarantine's reason: a quarantine is live debt somebody
+         *     must eventually clear and cannot without knowing why, while a rejected proposal is finished
+         *     and the note improves a signal rather than unblocking a person.
+         *
+         *     Rejecting an already-rejected proposal succeeds and **keeps the first note** — a second
+         *     click must not erase the reason the decision was made for. Rejecting an accepted one is a
+         *     409.
+         *
+         *     Gated exactly as accept is, credential refusal included: a token that could clear the queue
+         *     could hide its own bad proposals.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                    proposalId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ProposalRejection"];
+                };
+            };
+            responses: {
+                /** @description Rejected, and the proposal as it now stands */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AiProposal"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                /** @description This proposal was already accepted. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/conditions": {
         parameters: {
             query?: never;
@@ -7553,6 +7916,130 @@ export interface components {
              *     the project's twenty-first wording of a step it already has.
              */
             useCount: number;
+        };
+        /**
+         * @description `SUPERSEDED` is in §6w.6's sketch and is deliberately **not** here: nothing in this product
+         *     displaces a proposal, so it is a status no code can set and a filter option that always
+         *     returns nothing. It arrives with the generation job that can produce a second proposal for
+         *     one subject.
+         * @enum {string}
+         */
+        ProposalStatus: "PENDING" | "ACCEPTED" | "REJECTED";
+        /**
+         * @description What the proposer **claims** about grounding. What that claim is worth is `VerdictSource`'s
+         *     question, and the two are separate on purpose.
+         *
+         *     `UNVERIFIED` is a first-class verdict and the honest default, not an error state (§6w.6): it
+         *     is what every proposal carries where there is no critic, and what one falls back to when a
+         *     critic times out. Render it as *"not independently checked — review against the spec"*.
+         * @enum {string}
+         */
+        ProposalVerdict: "GROUNDED" | "PARTIAL" | "HALLUCINATED" | "UNVERIFIED";
+        /**
+         * @description Who checked (§6w.1a). `NONE` — nobody but the reviewer will. `EXTERNAL` — a connecting agent
+         *     asserted it, which is recorded, shown, attributed, and **never counted as verified**,
+         *     because TCMS cannot see that agent's critic, its isolation or its prompt.
+         *
+         *     **Derived by the server**, never sent: there is no request field, and the database's `CHECK`
+         *     does not permit a third value. `TCMS_VERIFIED` — TCMS ran the isolated critic itself — is
+         *     absent until something exists to write it.
+         * @enum {string}
+         */
+        VerdictSource: "NONE" | "EXTERNAL";
+        AiProposalInput: {
+            /**
+             * @description The proposed case, in the shape `POST /cases` takes — because accepting hands exactly
+             *     this to the create path.
+             */
+            testCase: components["schemas"]["TestCaseInput"];
+            /**
+             * @description Optional. **Absent is not the same as `UNVERIFIED`**: both store the verdict
+             *     `UNVERIFIED`, and they differ in `verdictSource` — nobody claimed anything, against an
+             *     agent claiming it had not checked. The reviewer sees a different sentence for each.
+             */
+            verdict?: components["schemas"]["ProposalVerdict"];
+            /**
+             * @description Per-step findings, including rejections and unverified claims. Free-form on purpose, and
+             *     displayed rather than interpreted — never as HTML.
+             */
+            grounding?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        ProposalRejection: {
+            /**
+             * @description Why, in the reviewer's words. **Optional in substance, required as a key** — send null
+             *     when there is no reason. Kept: the first note survives a second rejection of the same
+             *     proposal, so a stray second click cannot erase it.
+             */
+            note: string | null;
+        };
+        AiProposalSummary: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            /** Format: uuid */
+            suiteId?: string | null;
+            verdict: components["schemas"]["ProposalVerdict"];
+            verdictSource: components["schemas"]["VerdictSource"];
+            status: components["schemas"]["ProposalStatus"];
+            /** Format: date-time */
+            createdAt: string;
+            /** @description The person answerable — a token's **owner** on an agent-filed proposal. */
+            createdBy?: components["schemas"]["UserRef"] | null;
+            /**
+             * @description Whether a credential filed this, rather than *which* one. The token's name would be
+             *     richer and this module may not fetch it; a raw token id was refused on §100's rule. What
+             *     changes a reviewer's reading is "Ana's agent filed this" against "Ana typed this", and
+             *     which of Ana's tokens it was belongs to the audit trail, which records it.
+             */
+            filedByAgent: boolean;
+            /**
+             * @description Read off the stored payload rather than stored beside it — a count that can disagree
+             *     with the thing it counts is a second fact. A payload that cannot be parsed counts zero,
+             *     because that row is exactly the one a reviewer needs to open and reject.
+             */
+            stepCount: number;
+        };
+        AiProposal: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            projectId: string;
+            /** Format: uuid */
+            suiteId?: string | null;
+            title: string;
+            /**
+             * @description The proposed case as it was filed. **Nullable, and null means unreadable** — a payload
+             *     stored before a field left `TestCaseInput`. The proposal still renders and can still be
+             *     rejected, which is a decidable state; an error page is not.
+             */
+            testCase?: components["schemas"]["TestCaseInput"] | null;
+            verdict: components["schemas"]["ProposalVerdict"];
+            verdictSource: components["schemas"]["VerdictSource"];
+            grounding?: {
+                [key: string]: unknown;
+            } | null;
+            status: components["schemas"]["ProposalStatus"];
+            /** Format: date-time */
+            createdAt: string;
+            createdBy?: components["schemas"]["UserRef"] | null;
+            filedByAgent: boolean;
+            /** Format: date-time */
+            decidedAt?: string | null;
+            decidedBy?: components["schemas"]["UserRef"] | null;
+            decisionNote?: string | null;
+            /**
+             * @description The case this became, present only when `status` is `ACCEPTED` — and null if that case
+             *     has since been deleted. The proposal stays accepted: deleting the case is a second
+             *     decision, not an undo of the first.
+             */
+            acceptedCase?: {
+                /** Format: uuid */
+                id: string;
+                /** @description The display key, because that is what a person recognises a case by. */
+                key: string;
+            } | null;
         };
         Condition: {
             /** Format: uuid */
