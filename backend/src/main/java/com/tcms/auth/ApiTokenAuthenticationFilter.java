@@ -57,6 +57,26 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * refusal path rather than two: a status written here would be a second place the API's
  * unauthenticated response shape is decided, and it would be the place that gets forgotten when
  * that shape changes.
+ *
+ * <h2>It must run on the ERROR dispatch too, and not running there turned every 4xx into a 401</h2>
+ *
+ * <p>{@link OncePerRequestFilter#shouldNotFilterErrorDispatch()} returns {@code true} by default, so
+ * this filter skipped the container's ERROR dispatch. That dispatch is a second trip through the
+ * chain for the same request, and {@code /error} is behind {@code .anyRequest().authenticated()}
+ * like everything else — so with nothing re-establishing the token's authentication, the entry
+ * point above **overwrote the real status with 401**. Anything Spring answers via
+ * {@code response.sendError} went through it: an unreadable body, an unknown enum value, a wrong
+ * {@code Content-Type}, a wrong method, an unmapped path. A session was unaffected, because the
+ * resource server's own bearer filter re-authenticates there.
+ *
+ * <p>So an API token — the CLI, a CI job, the MCP server — was told <em>"the credential was not
+ * accepted; it may be revoked, expired, or for another instance"</em> whenever it sent a field the
+ * server could not parse. That is the one diagnosis whose remedy (issue a new token) cannot work,
+ * and for the MCP surface the caller acting on it is a model. It is the mirror of §141's finding
+ * one layer down: there the refusal did not say when to retry, here it says the wrong thing
+ * entirely. Found by the first live pass of {@code packages/} — every test drives MockMvc, which
+ * performs no ERROR dispatch, so 2302 of them agreed with each other about a status the container
+ * never produced.
  */
 @Component
 // Non-web CLI runs have no request to filter. Same condition as SecurityConfiguration.
@@ -83,6 +103,15 @@ public class ApiTokenAuthenticationFilter extends OncePerRequestFilter {
     public ApiTokenAuthenticationFilter(ApiTokenAuthenticationService authentication, Clock clock) {
         this.authentication = authentication;
         this.clock = clock;
+    }
+
+    /**
+     * Run on the ERROR dispatch as well — see the header. The cost is one extra digest lookup on a
+     * request that has already failed; the alternative was answering 401 to every parse error.
+     */
+    @Override
+    protected boolean shouldNotFilterErrorDispatch() {
+        return false;
     }
 
     @Override

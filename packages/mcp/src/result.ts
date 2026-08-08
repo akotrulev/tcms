@@ -15,7 +15,7 @@
  * to put a string in an envelope. A handler that composed its own sentence would be a second
  * implementation of the rule whose failure is a security finding.
  */
-import { TcmsTimeoutError, describeRefusal, isAbort } from '@tcms/client';
+import { TcmsApiError, TcmsTimeoutError, describeRefusal, isAbort } from '@tcms/client';
 
 export interface ToolResult {
   content: { type: 'text'; text: string }[];
@@ -86,5 +86,29 @@ export function failed(error: unknown, attempt: Attempt): ToolResult {
   }
 
   const copy = describeRefusal(error, { what: attempt.what, permission: attempt.permission });
-  return { content: [{ type: 'text', text: copy.message }], isError: true };
+  return { content: [{ type: 'text', text: copy.message + fieldDetail(error) }], isError: true };
+}
+
+/**
+ * The per-field messages a validation rejection carries, appended to the sentence above.
+ *
+ * **Without this a model is told "Check the highlighted fields." and nothing else** — the API's
+ * `detail` for a 400 is copy written for a form, and the fields it refers to are in the `errors`
+ * map that only `@tcms/cli` was reading. The model cannot see a screen, so the one caller that
+ * literally cannot act on that sentence was the only one receiving it alone; its next move is to
+ * resend the same body, which is the loop §141 spent a slice closing one status over.
+ *
+ * Found by the first live pass: `tcms_write_case` with an edit that omitted three required fields
+ * answered with the form's sentence and no field names.
+ *
+ * Keys are spelled as on the input schema, so they name the tool's own argument — which is what
+ * makes this actionable rather than merely longer.
+ */
+function fieldDetail(error: unknown): string {
+  if (!(error instanceof TcmsApiError) || !error.fieldErrors) return '';
+
+  const lines = Object.entries(error.fieldErrors)
+    .map(([field, messages]) => `  ${field}: ${messages.join(' ')}`);
+
+  return lines.length === 0 ? '' : `\n${lines.join('\n')}`;
 }

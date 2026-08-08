@@ -2,13 +2,48 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-08 (**§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-08 (**§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `d1c88e9` (§142 phase 3) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `26b42c8` (§142 phase 4) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
+
+---
+
+## §143 — THE ERROR DISPATCH, AND WHY MOCKMVC CANNOT SEE IT
+
+**`ApiTokenAuthenticationFilter` now overrides `shouldNotFilterErrorDispatch()` to return `false`.**
+Do not "tidy" that away; it is the whole slice.
+
+- **`OncePerRequestFilter` skips the container's ERROR dispatch by default**, and that dispatch is a
+  second trip through the entire chain against `/error`, which is behind
+  `.anyRequest().authenticated()` like everything else. With the token unauthenticated there,
+  `HttpStatusEntryPoint(UNAUTHORIZED)` **overwrote a status that had already been decided** — so an
+  unreadable body, malformed JSON, a wrong `Content-Type`, a wrong method and an unmapped path were
+  all **401 for an API token** and correct for a session (the resource server's own bearer filter
+  re-authenticates there). Anything answered via `response.sendError` went through it.
+- **This is a live-pass finding, not a test finding, and it could not have been either.** *Every*
+  endpoint test in this suite drives **MockMvc, which performs no ERROR dispatch** — it records the
+  status the resolver set and stops. 2302 tests agreed with each other about a status the deployed
+  server does not produce. §58's shape with a different observer, and the nightly Linux lane does
+  not help: it runs the same MockMvc.
+- **`ErrorDispatchStatusTest` is the only test in the suite on a real servlet container**
+  (`@SpringBootTest(webEnvironment = RANDOM_PORT)` + `TestRestTemplate`, fixture prefix `e4`). Its
+  assertions **cannot be written with MockMvc** — converting it would leave five green tests
+  asserting nothing. It also pins the branch a careless fix breaks: an unknown `tcms_` secret is
+  still 401.
+- **If you add a filter to `SecurityConfiguration`'s chain, decide about the ERROR dispatch
+  explicitly.** `PermissionVersionFilter`, `RateLimitFilter` and `CompanyContextFilter` all still
+  skip it; that is currently harmless only because nothing downstream of authentication reads them
+  on `/error`.
+
+**Two known-open defects a backend reader will meet** (recorded in §143, not fixed):
+`TestCaseInput` declares `required: [title]` while `CaseEdit.validate` requires **`title`,
+`stepFormat`, `priority`, `automationStatus`** on create *and* edit — the **contract** is what is
+wrong — and `POST …/ai-proposals` stores its payload unvalidated, so **a proposal filed against the
+contract's own required list can never be accepted**.
 
 **§142 changed no Java.** It is the MCP plan's phase 10 — a Dockerfile in `packages/mcp`, an `mcp`
 service in `deploy/compose.prod.yaml` behind `profiles: [mcp]`, a `handle /mcp` block, and an

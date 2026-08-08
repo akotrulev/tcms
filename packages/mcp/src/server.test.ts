@@ -11,7 +11,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { describe, expect, it } from 'vitest';
 
-import { TcmsTimeoutError } from '@tcms/client';
+import { TcmsApiError, TcmsTimeoutError } from '@tcms/client';
 
 import { failed } from './result.js';
 import { buildServer } from './server.js';
@@ -192,6 +192,41 @@ describe('refusal copy — surface spec §8.4', () => {
     // check a resource it never wrote to.
     const read = failed(timeout, { what: 'read this case', permission: 'case:read', write: false });
     expect(read.content[0]?.text).not.toContain('may or may not');
+  });
+
+  it('names the fields a validation rejection refused, because the model cannot see a screen', () => {
+    /*
+      The live pass's finding. `detail` on a 400 is "Check the highlighted fields." — copy written
+      for a form — and the fields themselves are in `errors`, which only the CLI was reading. A
+      model given the sentence alone has been told to look at something it does not have, and its
+      next move is to resend the same body.
+    */
+    const rejected = new TcmsApiError({
+      status: 400,
+      detail: 'Check the highlighted fields.',
+      method: 'PATCH',
+      path: '/cases/c-1',
+      fieldErrors: {
+        stepFormat: ['Choose a step format.'],
+        automationStatus: ['Choose an automation status.'],
+      },
+    });
+
+    const text = failed(rejected, { what: 'edit this case', permission: 'case:edit', write: true })
+      .content[0]?.text ?? '';
+
+    expect(text).toContain('stepFormat: Choose a step format.');
+    expect(text).toContain('automationStatus: Choose an automation status.');
+  });
+
+  it('appends nothing when the refusal carries no field errors', () => {
+    // A 403 has no `errors` map, and a trailing blank line would read as a truncated answer.
+    const refused = new TcmsApiError({
+      status: 403, detail: 'no', method: 'POST', path: '/cases',
+    });
+
+    expect(failed(refused, { what: 'x', permission: 'case:edit', write: true }).content[0]?.text)
+      .not.toContain('\n');
   });
 
   it('does not report a cancellation as a failure', () => {
