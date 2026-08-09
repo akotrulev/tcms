@@ -102,7 +102,16 @@ public class AuditEvent {
     @Column(name = "changes", updatable = false)
     private String changes;
 
-    /** Set when this event is one of many from a single bulk operation. */
+    /**
+     * Set when this event is one of many from a single bulk operation.
+     *
+     * <p>~~Set~~ — <strong>it never is.</strong> The field, its mapping and its getter are the only
+     * three mentions of it in {@code src/main} and {@code src/test} alike (§154,
+     * {@code ArchitectureRulesTest.READERLESS_BY_DECISION}), so the sentence above describes a
+     * condition the database has never been in. Kept because it is {@code V1}'s and because the
+     * thing that would read it does not exist: the audit trail has no screen, which §152 recorded
+     * from the other side when {@code AuditEventRepository}'s only reader turned out to be a test.
+     */
     @Column(name = "bulk_operation_id", updatable = false)
     private UUID bulkOperationId;
 

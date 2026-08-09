@@ -72,7 +72,17 @@ public class DocBlock {
     @Column(name = "content", nullable = false)
     private BlockContent content;
 
-    /** Human-readable URL convenience only — never a link target. Nothing sets it yet. */
+    /**
+     * Human-readable URL convenience only — never a link target. Nothing sets it yet.
+     *
+     * <p><strong>Nothing reads it either</strong>, which §154 measured rather than assumed: no
+     * caller, no query, no derived method name, in main or test. It is named in
+     * {@code ArchitectureRulesTest.READERLESS_BY_DECISION} and kept — the column is {@code V1}'s,
+     * and the class header above argues it as the trap the schema names beside {@link #id}. Give it
+     * a writer and a reader in one commit, or drop it in a migration; do not give it only one, and
+     * do not remove its entry in the rule without doing one of those, because the rule fails on the
+     * entry's disappearance too.
+     */
     @Column(name = "anchor_slug")
     private String anchorSlug;
 

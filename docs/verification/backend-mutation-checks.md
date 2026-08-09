@@ -1594,3 +1594,32 @@ cd backend
 
 > **No browser-queue row.** One method was deleted (uncalled), one test moved to the method it was
 > always about, and four javadocs were corrected. No request, response or screen differs.
+
+---
+
+## §154 — the columns nothing reads
+
+`ArchitectureRulesTest.everyMappedColumnHasAReader` asks the third question in §152's and §153's
+family, at the column: *which mapped column does nothing read back*. It is the only rule in that
+file that reads **source text** rather than bytecode, because a column's reader is usually a query
+and a query is a string — over bytecode alone the population is 212 of 635 fields, which was
+measured before the rule was written. It pins an exact population (`READERLESS_BY_DECISION`,
+thirteen members) like §153's, so it fails in **both** directions.
+
+```bash
+cd backend
+./gradlew test --tests 'com.tcms.architecture.ArchitectureRulesTest'
+```
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| RL-1 | Delete one entry from `READERLESS_BY_DECISION` — e.g. `IngestionJob.rawStorageKey` — leaving the column as it is | The rule fails naming it as an **unexpected** member. The column is still readerless; only the argument for keeping it went away. | ✅ **RUN 2026-08-09** — red naming `IngestionJob.rawStorageKey`, nothing else moved |
+| RL-2 | Give a pinned column a reader without removing its entry — add `List<SuiteCase> findByAddedBy(UUID)` to `SuiteCaseRepository` | The rule fails on the **missing** element `SuiteCase.addedBy`. This is the direction an ignore list cannot express: an argument for a readerless column cannot outlive the column being read. | ✅ **RUN 2026-08-09** — red on the missing element; reverted after |
+| RL-3 | Restore the corpus to `src/main` only, dropping `src/test` | The rule reports columns whose only reader is a test's `SELECT` — `AuditEvent.actorTokenId` is the instance, which §132 spent a whole slice giving a writer and which `IngestionEndpointTest` selects to assert token attribution. **This bounds §152's widening**: a test that reads a column to check what a write left behind is that column's reader. | ⬜ NOT RUN |
+| RL-4 | Stop excluding `ArchitectureRulesTest.java` from its own corpus (`OWN_FILE`) | **Five of the thirteen members vanish and the rule goes green while the defect stands.** Every key is the string `"Entity.field"`, so each argument for keeping a column is itself a literal naming that column. This is the rule's own most dangerous failure mode and the reason the measured population went 7 → 13. | ⬜ NOT RUN |
+| RL-5 | Stop stripping comments from the corpus | Nineteen columns read as live because some javadoc mentions them, and the population collapses to 7. In a repository whose comments carry the reasoning, prose standing in for code is §152's exact finding — the rule must not accept it as a reader. | ⬜ NOT RUN |
+| RL-6 | Stop dropping `INSERT` statements from the corpus | Seven columns read as live off the fixture rows that *create* them. An insert's column list is a write; a fixture inserting `added_by` is not a reader of `added_by`. | ⬜ NOT RUN |
+| RL-7 | Add `@Version` to `TestRun.lockVersion` (the recorded next-slice candidate, **not done here**) | Two concurrent updates to one run answer 409 through `RunController.onWriteRace`, which already exists and has never been reachable. Today the column is `NOT NULL DEFAULT 0`, mapped as a plain column, never incremented and never read — while `RunController` itself cites ERD §5 that "a run is worked by several testers at once by design". `work_item.lock_version` is the same shape. **This row is the check for a slice that has not been written.** | ⬜ NOT RUN |
+
+> **No browser-queue row.** No production behaviour changed: one test rule was added and thirteen
+> javadocs were corrected at the fields they describe. No request, response or screen differs.

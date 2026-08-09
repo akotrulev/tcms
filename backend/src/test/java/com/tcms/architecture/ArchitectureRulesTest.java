@@ -12,6 +12,9 @@ import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.Dependency;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
+import com.tngtech.archunit.core.domain.JavaCodeUnit;
+import com.tngtech.archunit.core.domain.JavaField;
+import com.tngtech.archunit.core.domain.JavaFieldAccess;
 import com.tngtech.archunit.core.domain.JavaMethod;
 import com.tngtech.archunit.core.domain.JavaModifier;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
@@ -21,6 +24,12 @@ import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.lang.ConditionEvents;
 import com.tngtech.archunit.lang.SimpleConditionEvent;
 import com.tngtech.archunit.lang.syntax.ArchRuleDefinition;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.JoinColumn;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -35,7 +44,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.event.EventListener;
@@ -47,12 +59,12 @@ import org.springframework.stereotype.Controller;
  *
  * <p>{@code ModuleStructureTest} covers what Modulith owns — declared dependencies and
  * cycles. Everything else this project wrote down in prose and had no mechanism for lands
- * here. It started as the four structural properties below and is now thirteen rules — the
+ * here. It started as the four structural properties below and is now fourteen rules — the
  * later ones are not about dependency edges at all but about <em>tallies this repository was
  * keeping by hand</em> (§147's duplicate record shapes, §152's callerless repository methods,
- * §153's unexercised bean methods), each one a question somebody had been answering with a
- * grep once per slice. The count in this sentence has been wrong before; the rules below are
- * the list.
+ * §153's unexercised bean methods, §154's readerless columns), each one a question somebody
+ * had been answering with a grep once per slice. The count in this sentence has been wrong
+ * before; the rules below are the list.
  *
  * <p>The four it began with:
  *
@@ -77,8 +89,12 @@ import org.springframework.stereotype.Controller;
  *       tempting repair is to make the context inheritable, which is the leak.</li>
  * </ol>
  *
- * <p>Like {@code ModuleStructureTest}, this runs on bytecode alone — no container, no
- * Spring context.
+ * <p>Like {@code ModuleStructureTest}, this needs no container and no Spring context.
+ * ~~It runs on bytecode alone.~~ <strong>Thirteen of the fourteen do</strong>;
+ * {@link #everyMappedColumnHasAReader} also reads the production <em>source text</em>, and
+ * the reason is at the rule: a column's reader is usually a query, and a query is a string.
+ * Do not "tidy" it back onto bytecode — over bytecode alone that rule reports 212 fields of
+ * 635 and is unshippable, which was measured before it was written.
  *
  * <h2>Two class sets, deliberately</h2>
  *
@@ -111,6 +127,47 @@ class ArchitectureRulesTest {
     private static final Set<String> PRODUCTION_NAMES = PRODUCTION.stream()
             .map(JavaClass::getName)
             .collect(Collectors.toCollection(TreeSet::new));
+
+    /**
+     * The production sources — the corpus {@link #everyMappedColumnHasAReader} needs and the only
+     * thing in this file that is not bytecode. Relative, because Gradle runs a test with the
+     * project directory as its working directory; the rule asserts the corpus is non-empty rather
+     * than trusting that.
+     */
+    private static final List<Path> SOURCE_ROOTS =
+            List.of(Path.of("src", "main", "java"), Path.of("src", "test", "java"));
+
+    /** Where an entity's own file is, so the rule does not count a field's declaration as its reader. */
+    private static final Path MAIN_SOURCE = SOURCE_ROOTS.get(0);
+
+    /**
+     * This file, excluded from its own corpus.
+     *
+     * <p>Not housekeeping — without it the rule cannot fail. Every key in
+     * {@link #READERLESS_BY_DECISION} is the string {@code "Entity.field"}, so each argument for
+     * keeping a column was itself a string literal naming that column, and the corpus read the
+     * argument as the reader. Five of the seven members made themselves disappear. It is the same
+     * shape §152 found in a javadoc and §153 found in a prefix match: the prose about a seam
+     * standing in for the seam, this time inside the check written to stop that happening.
+     */
+    private static final String OWN_FILE = "ArchitectureRulesTest.java";
+
+    /** A mapping declares a column, it does not read one — stripped before the corpus is searched. */
+    private static final Pattern MAPPING_ANNOTATION = Pattern.compile(
+            "@(?:Column|JoinColumn|Table|SecondaryTable|OrderColumn|MapKeyColumn)\\s*\\([^)]*\\)");
+
+    /** Prose is not a reader. Three separate slices' comments named a column nothing ever selects. */
+    private static final Pattern COMMENT = Pattern.compile("/\\*.*?\\*/|//[^\\n]*", Pattern.DOTALL);
+
+    /** An INSERT names the columns it WRITES — a fixture's column list is not a read. */
+    private static final Pattern INSERT = Pattern.compile("insert\\s+into", Pattern.CASE_INSENSITIVE);
+
+    /** Text blocks first: a native query in this codebase is a text block more often than not. */
+    private static final Pattern STRING_LITERAL = Pattern.compile(
+            "\"\"\"(.*?)\"\"\"|\"((?:[^\"\\\\\\n]|\\\\.)*)\"", Pattern.DOTALL);
+
+    /** Any declared name followed by a parameter list — Spring Data derives the query from it. */
+    private static final Pattern METHOD_NAME = Pattern.compile("\\b(\\w+)\\s*\\(");
 
     @Test
     @DisplayName("fixture precondition: the two class sets are actually different")
@@ -531,6 +588,303 @@ class ArchitectureRulesTest {
             }
         }
         return false;
+    }
+
+    /**
+     * The mapped columns nothing reads — the population, pinned rather than emptied.
+     *
+     * <p>{@link #UNEXERCISED_BY_DECISION}'s object, at the column rather than at the method, and
+     * with the same both-directions property: a new readerless column fails the build, and so does
+     * giving one of these a reader without deleting its entry. The argument for each is written at
+     * the field itself; what is here is the one-line reason and the shape it is an instance of.
+     *
+     * <p>Thirteen, and they are two different defects. <strong>Written and readerless</strong> —
+     * {@code locale}, {@code timezone}, {@code spaceId}, {@code rawStorageKey}, {@code addedAt},
+     * {@code addedBy}, {@code invitedAt}, {@code invitedBy}, {@code incomplete} — is §151's shape
+     * and the expensive one: a write per row recording something no screen, report or query has
+     * ever asked for, free to be wrong for as long as nobody looks, which is exactly how
+     * {@code release_sort_key} sorted a release below its own release candidate from M0 to §151
+     * with 2389 tests green. <strong>Writerless as well</strong> — {@code anchorSlug},
+     * {@code scheduleCron}, {@code sharedWithTeamId}, {@code bulkOperationId} — is §116's cheaper
+     * one: a column nobody fills is a column nobody is misled by, and its whole cost is that four
+     * javadocs describe a state the database has never been in.
+     *
+     * <p>{@code CaseHealth.incomplete} is the entry to copy. Its argument was already at the field
+     * before this rule existed, in the form the rule asks for: what it is, why it is mapped, and
+     * why it stops there.
+     */
+    private static final Map<String, String> READERLESS_BY_DECISION = Map.ofEntries(
+            Map.entry("CaseHealth.incomplete",
+                    "mapped so ddl-auto: validate has the whole row in view, and deliberately "
+                            + "absent from HealthSignal — the contract's enum has no such member "
+                            + "and inventing one puts a value on the wire the SPA cannot label. "
+                            + "The argument was at the field before this rule existed and is the "
+                            + "shape the other twelve are held to"),
+            Map.entry("AppUser.locale",
+                    "V1 NOT NULL, set to the constant \"en\" by AppUser.invite and never read. A "
+                            + "stored preference with no writer but the default and no reader at "
+                            + "all is not a preference; giving it either half alone makes it "
+                            + "worse, because a value a person can set and nothing honours is a "
+                            + "broken promise rather than a gap"),
+            Map.entry("AppUser.timezone",
+                    "locale's shape, constant \"UTC\", and the more pointed of the two: AppUser's "
+                            + "own @Version javadoc reasons about what happens \"when someone "
+                            + "edited their own timezone\", which is an act this product cannot "
+                            + "perform. Timestamps render in the browser's zone and this column "
+                            + "has never been consulted"),
+            Map.entry("DocPage.spaceId",
+                    "V1 NOT NULL, written by DocPage.create on every page, read by nothing. "
+                            + "DocSpace's own header states the other half — the space \"is not on "
+                            + "the wire and has no endpoint\" — so the foreign key is maintained "
+                            + "for a grouping no caller can ask for"),
+            Map.entry("IngestionJob.rawStorageKey",
+                    "the blob key of the raw CI file §117 stores, with a package-private getter "
+                            + "nothing calls: THE UPLOAD CANNOT BE RETRIEVED. The bytes are "
+                            + "written, the key that would find them again is written, and no "
+                            + "endpoint, service or test reads either. Closing it is a storage "
+                            + "read path and an operation, not a wiring fix"),
+            Map.entry("SuiteCase.addedAt",
+                    "§98 made a suite flat — filed, added and tagged — and this is the added "
+                            + "arm's own provenance, stamped by SuiteCase.of on every membership "
+                            + "and never read back. \"When was this case put in this suite\" is "
+                            + "answerable from the row and has never been asked"),
+            Map.entry("SuiteCase.addedBy",
+                    "addedAt's pair and the worse half, for CompanyMembership.invitedBy's reason: "
+                            + "this one is not a clock stamp but a caller-supplied actor id, "
+                            + "carried from the endpoint to the database on every add so that "
+                            + "nothing can read who did it"),
+            Map.entry("CompanyMembership.invitedAt",
+                    "stamped by invite() and again by reinvite(), read by nothing. UserView is "
+                            + "the contract's User and carries neither this nor invitedBy, so the "
+                            + "reader it wants is an administrative column on the members screen "
+                            + "and therefore a contract change rather than a wiring fix"),
+            Map.entry("CompanyMembership.invitedBy",
+                    "invitedAt's pair and the worse half, SuiteCase.addedBy's shape exactly: two "
+                            + "call sites carry a real actor id to the database for a fact "
+                            + "nothing has ever read back"),
+            Map.entry("DocBlock.anchorSlug",
+                    "writerless AND readerless. V1's human-readable URL convenience, and the "
+                            + "class header already names it as the trap the schema names beside "
+                            + "the id: a link targets (page_id, block_id), never an anchor "
+                            + "derived from content. Give it a writer and a reader in one commit "
+                            + "or drop it in a migration — not one of the two"),
+            Map.entry("ReportDefinition.scheduleCron",
+                    "writerless AND readerless. Scheduled reports are on the high-level plan's §8 "
+                            + "blocked list — they need a notification channel that does not "
+                            + "exist — and ReportDefinition.create takes no parameter for it on "
+                            + "purpose, with the reason written at the factory"),
+            Map.entry("ReportDefinition.sharedWithTeamId",
+                    "writerless AND readerless, scheduleCron's shape and the same factory's "
+                            + "decision: sharing a saved report with a team is not built"),
+            Map.entry("AuditEvent.bulkOperationId",
+                    "writerless AND readerless — the field, its mapping and its getter are the "
+                            + "only three mentions of it in main and test alike, so its javadoc's "
+                            + "\"set when this event is one of many\" describes a state that has "
+                            + "never occurred. The audit trail has no screen, which §152 recorded "
+                            + "from the other side when AuditEventRepository's only reader turned "
+                            + "out to be a test"));
+
+    @Test
+    @DisplayName("every mapped column has a reader — the readerless tally, computed")
+    void everyMappedColumnHasAReader() {
+        // §152 asked which repository methods have no caller and §153 which bean methods only a
+        // test calls. This is the third question in that family and the one the repository has
+        // answered by hand the longest: which COLUMN does nothing read. §116, §117 and §132 each
+        // found the writerless form of it one instance at a time, and §151 found the readerless
+        // form — release_sort_key, on three tables, with three indexes and no ORDER BY anywhere,
+        // wrong since M0 and undetectable because nothing looked. Every one of those was a grep
+        // somebody happened to run because the slice was already about that table.
+        //
+        // THE READER IS OFTEN NOT JAVA, WHICH IS WHY THIS RULE READS SOURCE TEXT. It is the only
+        // rule here that does, and the reason is that bytecode is the wrong observer for the
+        // question: a column is read by JPQL in a @Query string, by native SQL in a text block
+        // inside a service, and by a Spring Data method NAME from which the query is derived — and
+        // none of the three is a field access. Measured, not assumed: over bytecode alone the
+        // population is 212 of 635 fields, which is not a rule, it is a shrug. With the three SQL
+        // spellings counted it is seven. §108's ConfigConventionTest is the precedent for a check
+        // that reads the text rather than a resolved value, and it is the same lesson — every other
+        // check here observes what the compiler produced, and the defect was in what somebody wrote.
+        //
+        // FOUR THINGS COUNT AS A READER, and each of the four was added because leaving it out
+        // reported a column something really reads. A whole-word occurrence of the COLUMN name in
+        // any file but the entity's own; the FIELD name inside a string literal; the capitalised
+        // field name in any name a repository declares; or a Java read. Src/main AND src/test, for
+        // §152's reason — a test that SELECTs a column to assert what a write left behind is that
+        // column's reader, and it is the only one three of these columns have. AuditEvent's
+        // actorTokenId is the instance: §132 spent a slice giving it a writer, no product code
+        // reads it, and IngestionEndpointTest's "SELECT actor_token_id FROM audit_event" does.
+        //
+        // TWO THINGS ARE STRIPPED FIRST, and both were measured. A mapping annotation is not a
+        // read — without stripping it, every entity declaring its own created_at marks every other
+        // entity's created_at as read, and the population collapses from 26 to 7 for no reason. A
+        // COMMENT is not a read either, and this one is uncomfortable: nineteen columns read as
+        // live only because some javadoc somewhere mentioned them, which in a repository whose
+        // comments carry the reasoning is exactly the trap §152 named — the prose about a seam
+        // outliving the seam. An INSERT's column list is a write and is dropped with the same
+        // argument; a fixture that inserts a row is not a reader of what it inserted.
+        //
+        // AND THIS FILE IS EXCLUDED FROM ITS OWN CORPUS, which is not housekeeping: see OWN_FILE.
+        // Every key in READERLESS_BY_DECISION is the string "Entity.field", so each argument for
+        // keeping a column was a string literal naming that column, and the corpus read the
+        // argument as the reader. Five of the thirteen members deleted themselves. §152 found a
+        // javadoc standing in for the seam it described and §153 found a prefix match hiding the
+        // method it was meant to report; this is the third, inside the check written to end the
+        // first two, and it is the reason the population went 7 → 13 after the last fix.
+        //
+        // The remainder still over-counts and it does so ON PURPOSE, one way. A native query
+        // naming ANOTHER table's lock_version marks this one read, because the corpus is text and
+        // has no idea which table a statement is about. A rule that reports a field something
+        // really reads earns an ignore-list entry and is then ignored; a rule that misses one
+        // stays trustworthy and finds it the next time the corpus tightens. What that costs is
+        // named where it is paid: everyLockVersionColumnIsAVersion does not exist yet, and
+        // test_run.lock_version and work_item.lock_version are two columns this rule cannot see —
+        // §154 verified both by hand as mapped without @Version, so a run edited by two testers at
+        // once is last-write-wins on an aggregate whose ERD §5 says that is the ordinary case.
+        //
+        // THE FIRST DRAFT'S CORPUS WAS WRONG IN EXACTLY §152'S WAY. It matched repository method
+        // names against findBy*/countBy*/existsBy*, so ReportJob.requestedAt was reported as
+        // readerless while findFirstByStatusOrderByRequestedAtAsc reads it — the whole scheduler
+        // reads it. A hand-written pattern standing in for a population, inside the check written
+        // to replace hand-written patterns. It matches every declared method name now.
+        //
+        // No exemption for @Id, @Version or company_id, and that is a result rather than a choice:
+        // all three were carved out of an earlier draft and all three turned out to be matched by
+        // the corpus anyway — an id by findById's derived name, lock_version by the queries that
+        // name it, company_id by the RLS predicate and the Hibernate filter condition. A special
+        // case that the general rule already covers is a special case that will one day be wrong.
+        Map<Path, String> columnText = new LinkedHashMap<>();
+        Map<Path, String> literalText = new LinkedHashMap<>();
+        StringBuilder repositoryMethodNames = new StringBuilder();
+        for (Path root : SOURCE_ROOTS) {
+            try (Stream<Path> sources = Files.walk(root)) {
+                for (Path file : sources.filter(p -> p.toString().endsWith(".java"))
+                        .filter(p -> !p.getFileName().toString().equals(OWN_FILE))
+                        .toList()) {
+                    String reading = withoutWrites(
+                            COMMENT.matcher(Files.readString(file)).replaceAll(" "));
+                    columnText.put(file, MAPPING_ANNOTATION.matcher(reading).replaceAll(" "));
+                    literalText.put(file, literalsOf(reading));
+                    if (file.getFileName().toString().endsWith("Repository.java")) {
+                        METHOD_NAME.matcher(reading).results()
+                                .forEach(m -> repositoryMethodNames.append(' ').append(m.group(1)));
+                    }
+                }
+            } catch (IOException unreadable) {
+                throw new AssertionError("the sources are this rule's corpus", unreadable);
+            }
+        }
+        String methodNames = repositoryMethodNames.toString();
+
+        assertThat(columnText)
+                .as("the source corpus is empty or tiny, so every column below would read as "
+                        + "unread — the working directory or the source layout has moved")
+                .hasSizeGreaterThan(600);
+
+        Map<String, String> readerless = new TreeMap<>();
+        int examined = 0;
+
+        for (JavaClass type : PRODUCTION_AND_TESTS) {
+            if (!PRODUCTION_NAMES.contains(type.getName()) || !type.isAnnotatedWith(Entity.class)) {
+                continue;
+            }
+            Path own = MAIN_SOURCE.resolve(type.getName().replace('.', '/') + ".java");
+            for (JavaField field : type.getFields()) {
+                if (field.getModifiers().contains(JavaModifier.STATIC)) {
+                    continue;
+                }
+                examined++;
+                String column = columnOf(field);
+                String name = field.getName();
+                String capitalised = Character.toUpperCase(name.charAt(0)) + name.substring(1);
+                boolean read = isReadInJava(field)
+                        || methodNames.contains(capitalised)
+                        || namedIn(columnText, own, column)
+                        || namedIn(literalText, own, name);
+                if (!read) {
+                    readerless.put(type.getSimpleName() + "." + name, column);
+                }
+            }
+        }
+
+        assertThat(examined)
+                .as("no entity field was examined, so this rule passes vacuously — the @Entity "
+                        + "predicate or the import has moved")
+                .isGreaterThan(500);
+
+        assertThat(readerless.keySet())
+                .as("""
+                        a column is written on every row and no code, no query and no derived \
+                        method name ever reads it back. That is not waste, it is an unverified \
+                        value: §151's release_sort_key sorted a release below its own release \
+                        candidate from M0 to §151 because nothing looked at it, and nothing \
+                        looking is exactly what makes a wrong value survive. Give it a reader, \
+                        delete the column in a migration, or add it to READERLESS_BY_DECISION \
+                        with the argument written at the field — and if a query DOES read it, the \
+                        corpus above is what is wrong, not this list""")
+                .containsExactlyInAnyOrderElementsOf(READERLESS_BY_DECISION.keySet());
+    }
+
+    /** Whether this field's column is spelled anywhere in {@code corpus} but its own file. */
+    private static boolean namedIn(Map<Path, String> corpus, Path own, String token) {
+        if (token.isEmpty()) {
+            return false;
+        }
+        Pattern word = Pattern.compile("\\b" + Pattern.quote(token) + "\\b");
+        return corpus.entrySet().stream()
+                .anyMatch(entry -> !entry.getKey().equals(own) && word.matcher(entry.getValue()).find());
+    }
+
+    /**
+     * Whether Java reads this field's value.
+     *
+     * <p>A read from outside the declaring entity counts outright. A read from inside it counts
+     * only when the reading method itself has a caller — otherwise {@code getFoo()} reading
+     * {@code foo} would make every field on every entity look live, which is the answer this whole
+     * rule exists not to give.
+     */
+    private static boolean isReadInJava(JavaField field) {
+        for (JavaFieldAccess access : field.getAccessesToSelf()) {
+            if (access.getAccessType() != JavaFieldAccess.AccessType.GET) {
+                continue;
+            }
+            JavaCodeUnit origin = access.getOrigin();
+            if (!origin.getOwner().equals(field.getOwner()) || !origin.getAccessesToSelf().isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The column a field maps to, or its name when the mapping leaves it to the naming strategy. */
+    private static String columnOf(JavaField field) {
+        if (field.isAnnotatedWith(Column.class)) {
+            return field.getAnnotationOfType(Column.class).name();
+        }
+        if (field.isAnnotatedWith(JoinColumn.class)) {
+            return field.getAnnotationOfType(JoinColumn.class).name();
+        }
+        return field.getName();
+    }
+
+    /**
+     * The same source with every {@code INSERT} statement blanked out.
+     *
+     * <p>Applied before <em>both</em> corpora rather than only to the literal one, which is the
+     * bug the first version had: an insert's column list is a write whichever corpus reads it, and
+     * leaving it in the column corpus marked seven columns live off the fixture rows that create
+     * them. A row inserted naming {@code added_by} is not a reader of {@code added_by}.
+     */
+    private static String withoutWrites(String code) {
+        return STRING_LITERAL.matcher(code).replaceAll(match -> INSERT.matcher(match.group()).find()
+                ? " "
+                : Matcher.quoteReplacement(match.group()));
+    }
+
+    /** Every string literal left in a compilation unit — where JPQL and native SQL live. */
+    private static String literalsOf(String reading) {
+        return STRING_LITERAL.matcher(reading).results()
+                .map(m -> m.group(1) != null ? m.group(1) : m.group(2))
+                .collect(Collectors.joining(" "));
     }
 
     /** A record's components as {@code name:type} pairs — a set, so a reordered copy still matches. */

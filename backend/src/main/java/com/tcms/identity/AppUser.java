@@ -72,9 +72,28 @@ public class AppUser {
     @Column(name = "status", nullable = false)
     private UserStatus status;
 
+    /**
+     * {@code V1 NOT NULL} — and <strong>written only as the constant {@code "en"} and read by
+     * nothing</strong> (§154, {@code ArchitectureRulesTest.READERLESS_BY_DECISION}).
+     *
+     * <p>{@link #invite} is the only writer and it hard-codes the value; {@link #getLocale} has no
+     * caller anywhere in {@code src/main} or {@code src/test}. Kept as a decision rather than
+     * dropped, because the two halves must arrive together: a preference a person can set and
+     * nothing honours is a broken promise, and a preference something honours that nobody can set
+     * is a hidden default. Give it a writer and a reader in one slice or leave it alone.
+     */
     @Column(name = "locale", nullable = false)
     private String locale;
 
+    /**
+     * {@link #locale}'s shape, constant {@code "UTC"}, and the more pointed of the two.
+     *
+     * <p>The {@code @Version} javadoc below reasons about what happens "when someone edited their
+     * own timezone" — <strong>an act this product cannot perform</strong>, since there is no writer
+     * but {@link #invite}'s constant and no reader at all (§154). Every timestamp renders in the
+     * browser's zone. The comment is left standing because the argument it makes about
+     * {@code tokenVersion} is correct and independent of whether that particular edit exists.
+     */
     @Column(name = "timezone", nullable = false)
     private String timezone;
 

@@ -38,6 +38,16 @@ public class DocPage {
     @Column(name = "company_id", nullable = false, updatable = false)
     private UUID companyId;
 
+    /**
+     * The space this page belongs to — {@code V1 NOT NULL}, written by {@link #create} on every
+     * page, and <strong>read by nothing</strong> (§154,
+     * {@code ArchitectureRulesTest.READERLESS_BY_DECISION}).
+     *
+     * <p>{@link DocSpace}'s own header states the other half: the space "is not on the wire and has
+     * no endpoint". So the foreign key is maintained, indexed and enforced for a grouping no caller
+     * can ask about. Kept because the column is {@code V1}'s and the constraint is real — dropping
+     * it is a migration and a decision about whether spaces exist at all.
+     */
     @Column(name = "space_id", nullable = false, updatable = false)
     private UUID spaceId;
 

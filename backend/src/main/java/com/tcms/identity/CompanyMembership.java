@@ -57,9 +57,21 @@ public class CompanyMembership {
     @Column(name = "status", nullable = false)
     private MembershipStatus status;
 
+    /**
+     * Who invited this person — <strong>written from a real actor id and read by nothing</strong>
+     * (§154, {@code ArchitectureRulesTest.READERLESS_BY_DECISION}).
+     *
+     * <p>The worse half of the pair with {@link #invitedAt}, because this one is not a clock
+     * stamp: {@link #invite} and {@link #reinvite} both take it as an argument, so two call sites
+     * carry an actor's id all the way to the database for a fact nothing has ever read back. It is
+     * kept rather than dropped because {@code UserView} is the contract's {@code User} and carries
+     * neither field — the reader this wants is an administrative column on the members screen, and
+     * that is a contract change.
+     */
     @Column(name = "invited_by")
     private UUID invitedBy;
 
+    /** When, for {@link #invitedBy}'s reasons — written by two call sites, read by none (§154). */
     @Column(name = "invited_at", nullable = false)
     private Instant invitedAt;
 

@@ -82,6 +82,16 @@ public class ReportArtifact {
     @Column(name = "generated_by", updatable = false)
     private UUID generatedBy;
 
+    /**
+     * When this artifact was produced. Stamped by {@link #of} on every generate; no <em>product</em>
+     * code reads it back, and {@code ReportArtifactRepository} declares no method at all.
+     *
+     * <p>It is not in {@code ArchitectureRulesTest.READERLESS_BY_DECISION}, and the reason is worth
+     * knowing before adding it there: a test selects the column to assert what a generate left
+     * behind, which counts as a reader under §152's rule that a seam whose consumer is a test is a
+     * seam with a consumer. The reader this actually wants is an artifact list, which is a contract
+     * change rather than a wiring fix.
+     */
     @Column(name = "generated_at", nullable = false, updatable = false)
     private Instant generatedAt;
 

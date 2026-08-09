@@ -85,6 +85,16 @@ public class IngestionJob {
     @Column(name = "raw_payload")
     private String rawPayload;
 
+    /**
+     * Where the raw uploaded file was put — and <strong>nothing reads it</strong> (§154,
+     * {@code ArchitectureRulesTest.READERLESS_BY_DECISION}).
+     *
+     * <p>The consequence is worth stating plainly, because the field name does not: <strong>the
+     * upload cannot be retrieved.</strong> §117 stores the bytes and stores the key that would find
+     * them again, and {@link #getRawStorageKey} — package-private — has no caller in {@code src/main}
+     * or {@code src/test}. Giving it one is a storage read path and an operation on the contract,
+     * not a wiring fix, which is why this is recorded rather than closed here.
+     */
     @Column(name = "raw_storage_key")
     private String rawStorageKey;
 

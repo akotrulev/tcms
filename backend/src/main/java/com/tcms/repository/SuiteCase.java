@@ -47,10 +47,26 @@ public class SuiteCase {
     @Column(name = "case_id", nullable = false, updatable = false)
     private UUID caseId;
 
+    /**
+     * When this case was put in this suite — stamped by {@link #of} on every membership and
+     * <strong>read by nothing</strong> (§154,
+     * {@code ArchitectureRulesTest.READERLESS_BY_DECISION}).
+     *
+     * <p>§98 made a suite flat: its members are three arms, filed ∪ added ∪ tagged, and this row is
+     * the <em>added</em> arm. Its own provenance is written on every add and has never been asked
+     * for — "when did this case join this suite" is answerable from the row and no screen, report
+     * or query poses it.
+     */
     @Column(name = "added_at", nullable = false, updatable = false)
     private Instant addedAt;
 
-    /** Nullable like every other actor column since §66 — offboarding does not un-add a case. */
+    /**
+     * Nullable like every other actor column since §66 — offboarding does not un-add a case.
+     *
+     * <p>{@link #addedAt}'s pair and the worse half of it (§154): this one is not a clock stamp but
+     * a <em>caller-supplied actor id</em>, carried from the endpoint through the service to the
+     * database on every add, so that nothing can read who did it.
+     */
     @Column(name = "added_by", updatable = false)
     private UUID addedBy;
 

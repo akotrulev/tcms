@@ -106,6 +106,11 @@ public class CaseHealth {
      * {@code case_health.incomplete} — mapped so {@code ddl-auto: validate} has the whole row in
      * view, and deliberately absent from {@link HealthSignal}: the contract's enum has no such
      * member, and inventing one would put a value on the wire the SPA cannot label.
+     *
+     * <p>§154 made this the reference entry in
+     * {@code ArchitectureRulesTest.READERLESS_BY_DECISION}, because the comment above was already
+     * in the shape that rule asks of the other twelve: what the column is, why it is mapped
+     * anyway, and why it stops there.
      */
     @Column(name = "incomplete", nullable = false)
     private boolean incomplete;

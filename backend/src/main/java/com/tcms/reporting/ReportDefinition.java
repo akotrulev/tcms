@@ -70,13 +70,26 @@ public class ReportDefinition {
     @Column(name = "parameters", nullable = false)
     private String parameters;
 
-    /** Null ⇒ run on demand only. See the class header for what a non-null value implies. */
+    /**
+     * Null ⇒ run on demand only. See the class header for what a non-null value implies.
+     *
+     * <p><strong>Always null, and read by nothing</strong> (§154,
+     * {@code ArchitectureRulesTest.READERLESS_BY_DECISION}). {@link #create} takes no parameter for
+     * it on purpose — the reason is at the factory — and scheduled reports are on the high-level
+     * plan's §8 blocked list, needing a notification channel this instance does not have. The
+     * column is {@code V1}'s and stays; what it must not acquire is a writer without the scheduler
+     * that reads it.
+     */
     @Column(name = "schedule_cron")
     private String scheduleCron;
 
     @Column(name = "owner_id")
     private UUID ownerId;
 
+    /**
+     * {@link #scheduleCron}'s shape and the same factory's decision: sharing a saved report with a
+     * team is not built, so this is written by nothing and read by nothing (§154).
+     */
     @Column(name = "shared_with_team_id")
     private UUID sharedWithTeamId;
 

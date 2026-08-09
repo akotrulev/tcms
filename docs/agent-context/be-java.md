@@ -2,13 +2,47 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-09 (**§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-09 (**§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `6d8c65e` (§152) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `c3665c2` (§153) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
+
+---
+
+## §154 — A MAPPED COLUMN WITH NO READER FAILS THE BUILD NOW
+
+`ArchitectureRulesTest.everyMappedColumnHasAReader` is the third question in §152/§153's family,
+asked at the column: which mapped column does nothing read back. The tally §116/§117/§132/§151 each
+kept by hand. **The population is 13** and it is pinned in `READERLESS_BY_DECISION`, both
+directions, like §153's.
+
+- **IT IS THE ONLY RULE IN THAT FILE THAT READS SOURCE TEXT, AND THAT IS LOAD-BEARING.** A column's
+  reader is usually a query and a query is a string — JPQL in `@Query`, native SQL in a text block,
+  or a Spring Data method *name*. Over bytecode alone the population is **212 of 635 fields**,
+  measured. Do not "tidy" it back onto bytecode. `ConfigConventionTest` (§108) is the precedent.
+- **Corpus = `src/main/java` + `src/test/java`**, minus three things, each measured: mapping
+  annotations (else every entity's `created_at` marks every other one live), **comments** (nineteen
+  columns read as live off a javadoc alone), and **`INSERT` statements** (seven read as live off the
+  fixtures that create them). A reader is the column name as a whole word in another file, the field
+  name in a string literal, the capitalised field name in any repository-declared name, or a Java read.
+- **`OWN_FILE` EXCLUDES `ArchitectureRulesTest.java` FROM ITS OWN CORPUS AND THE RULE CANNOT FAIL
+  WITHOUT IT.** Every key is the string `"Entity.field"`, so each *argument* for keeping a column is
+  a literal naming it. Five of thirteen deleted themselves; the count went 7 → 13 when this landed.
+  Third slice running: §152's javadoc, §153's prefix match, now this.
+- **No exemption for `@Id`, `@Version` or `company_id`** — all three were carved out of a draft and
+  all three are matched by the corpus anyway (`findById`'s derived name, the queries naming
+  `lock_version`, the RLS predicate and filter condition).
+- **What it cannot see, named:** the corpus has no idea which table a statement is about.
+  **`test_run.lock_version` and `work_item.lock_version` are mapped WITHOUT `@Version`** — 19 other
+  entities carry it on the identically-named column, `V1` says the column is for optimistic locking,
+  `RunController` cites ERD §5 that a run is worked by several testers at once, and
+  `RunController.onWriteRace` exists and has never been reachable. **Recorded as the next slice**
+  (`RL-7`), not taken: it is a behaviour change on a concurrently-edited aggregate.
+- **Near misses recorded at the field, not pinned:** `ReportArtifact.generatedAt` and
+  `AuditEvent.actorTokenId` are read only by a test's `SELECT`, which counts (§152's widening).
 
 ---
 
