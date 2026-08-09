@@ -1681,3 +1681,31 @@ cd backend
 > the dashboard's health panel sentence, which is `HP-1` in the browser queue — and the reason it
 > is a browser row rather than a mutation row is that the defect was in what the sentence *claims*,
 > which no assertion about the response body can observe.
+
+---
+
+### §157 — the stale-approval derivation (`SA-1` … `SA-6`)
+
+The first of §156's five writerless signals to get a computation, so these rows are unlike the
+`RL-*`/`WL-*` blocks above them: those mutate a **rule** and predict which entries a tally loses,
+these mutate a **statement** and predict which cases change their answer. The population under test
+is one `INSERT … ON CONFLICT` in `repository/ApprovalFacts.java`.
+
+```bash
+cd backend
+./gradlew test --tests 'com.tcms.repository.CaseHealthRecomputeTest'   # every row here
+```
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| `SA-1` | Drop `AND r.state = 'APPROVED'` from the lateral | A refused review reads as an aged sign-off. Should redden `a REJECTED review at an old version is not a stale approval` **and nothing else.** | ✅ **RUN 2026-08-09** — red on exactly that one test; reverted |
+| `SA-2` | `max(r.subject_version_no)` → `min(...)`, or an `ORDER BY r.approved_at DESC LIMIT 1` | A case approved at v1, edited, and approved again at v3 reports stale while sitting on v3. Should redden `the HIGHEST approved version decides, not the latest sign-off`. The `ORDER BY` spelling is the one worth measuring, because it is the reading somebody will propose as more natural. | ⬜ NOT RUN |
+| `SA-3` | Move `c.lifecycle_status = 'APPROVED'` out of the `SELECT` expression and into the `WHERE` | The statement becomes a filter, so a row already flagged stale and then demoted keeps the flag for ever. Should redden `a stale flag left behind by an earlier tick is cleared, not merely not set` and `a case sent back to DRAFT is not stale, even with the old approval on record`. **The expensive direction**: it is a signal with no route back, which is `HealthSignal`'s no-button-for-lying rule failing from the other side. | ⬜ NOT RUN |
+| `SA-4` | Drop `c.lifecycle_status = 'APPROVED'` entirely | Every case whose review history is behind its current version reports stale regardless of whether it claims to be approved. Should redden `a case sent back to DRAFT is not stale, even with the old approval on record`. | ⬜ NOT RUN |
+| `SA-5` | Replace the version comparison with the timestamp one — `c.updated_at > approved.at` | Predicted **zero** reds, and that is the deliverable: this fixture cannot tell the two apart, because the case that separates them is a save whose content hash is unchanged (no new version, `updated_at` moved). Writing the row is what records that the argument at the method is unasserted. A red here would mean the fixture is stricter than it reads. | ⬜ NOT RUN |
+| `SA-6` | Add `stale_approval` to `ExecutionFacts.recomputeAutomationDrift`'s `ON CONFLICT` update list | The last statement in the tick blanks the third one's work. Should redden `APPROVED at a version the case has since moved past is STALE_APPROVAL` — and it is the concrete instance of the hazard `signals this job does not compute survive a recompute` has guarded against hypothetically since §53. | ⬜ NOT RUN |
+
+> **One browser-queue row block, `SA-B1`…`SA-B3`**, in lane 4 beside `HP-1`…`HP-3`. Unlike §156's,
+> these need a fixture the pass must author — a project with §6g review switched **on** for cases,
+> a case taken to `APPROVED`, and an edit after it — because the signal cannot exist without a
+> review row and `ReviewService.moved` opens none for a project with the default settings.

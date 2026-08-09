@@ -361,9 +361,15 @@ class BoardFacts {
      * so two of the nine signals ({@code never_executed}, {@code long_unexecuted}) are now real, and
      * this generator produces real cards.
      *
-     * <p>The other seven columns are read anyway rather than being left out. They are false in every
-     * row today, so including them costs nothing and means the board gains stale-approval and
-     * spec-changed cards on the day those computations land, with no change here.
+     * <p>The other seven columns are read anyway rather than being left out. <del>They are false in
+     * every row today, so including them costs nothing and means the board gains stale-approval and
+     * spec-changed cards on the day those computations land, with no change here.</del>
+     *
+     * <p><strong>§157 was that day for the first of them, and the prediction held exactly.</strong>
+     * {@code repository.ApprovalFacts} derives {@code stale_approval}, so this generator produces
+     * stale-approval cards now — with no change in this file, which is what the paragraph above was
+     * betting on. Five of the nine are real; {@code outdated_spec_changed}, {@code condition_drift},
+     * {@code unlinked} and {@code orphaned} are still waiting on the same bet.
      *
      * <p>{@code incomplete} is deliberately not among them, matching {@code HealthSignal}: it exists
      * in the schema, has no counterpart in the contract's enum, and putting it on a card would be

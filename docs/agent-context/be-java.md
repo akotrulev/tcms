@@ -2,15 +2,43 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-09 (**§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-09 (**§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `0233240` (§155) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `be7ef48` (§156) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
 ---
+
+## §157 — `STALE_APPROVAL` HAS A DERIVATION; FOUR HEALTH SIGNALS ARE LEFT WITHOUT ONE
+
+`repository/ApprovalFacts.java` is the new seam and the first exit from
+`ArchitectureRulesTest.WRITERLESS_BY_DECISION` **by writing the column** rather than by deleting it.
+Population there is **thirteen**, not fourteen.
+
+- **`repository` may name `project`'s tables directly** — `project` is a foundation module, so this
+  is a permitted edge and `ApprovalFacts` is a *convention* (one file, no second entity over
+  `review`), not a boundary like `ExecutionFacts`. Do not describe the two as the same kind.
+- **The predicate is a VERSION comparison** — `max(review.subject_version_no) WHERE state =
+  'APPROVED'` against `test_case.current_version_no` — because that is what `ReviewPanel`'s stale
+  banner has used since §76. The timestamp spelling (`updated_at > approved_at`) is shorter, looks
+  equivalent, and disagrees with the banner: a no-op save moves `updated_at` and writes no version.
+- **`lifecycle_status = 'APPROVED'` is a TERM, not a `WHERE` filter.** As a filter the statement
+  skips the row and a demoted case keeps a stale flag for ever. Same for any future signal here.
+- **No review settings predicate.** `ReviewService.moved` opens no review for a project with §6g
+  off, so those projects are honestly zero; a predicate would erase the signal for a project that
+  switches review off with approvals outstanding.
+- **A review row needs `SUBMIT_FOR_REVIEW` first.** Going `DRAFT → APPROVED` writes **no** review —
+  `moved` closes an open one and opens none — and `authorMayApproveOwnWork` defaults to false, so
+  approving needs a second account. Any fixture for this signal has to do all three.
+- **`CaseHealthRecomputeService` is no longer "execution-driven"** — three statements, one
+  transaction, one `computed_at`. The `ON CONFLICT` column-ownership rule now matters in-module:
+  each statement names only its own columns.
+- **Tests must stop borrowing `stale_approval` as the empty column.** `CaseHealthRecomputeTest`'s
+  clobber test uses `unlinked` now. The remaining borrowable ones are `outdated_spec_changed`,
+  `condition_drift`, `unlinked`, `orphaned` — and each disappears when it gets a writer.
 
 ## §156 — A MAPPED COLUMN WITH NO WRITER FAILS THE BUILD NOW, AND FIVE HEALTH SIGNALS ARE THE COST
 
@@ -39,8 +67,9 @@ slices, four single instances, no question.
 - **`Project.archive(now)` HAS NO CALLER and `ProjectView.archived` is `required` on the wire** —
   false in every deployment. Do not delete the mutator to "clean up": that leaves `isArchived` a
   constant with the contract still promising the field. What is missing is an operation.
-- **`case_health` STOPPED BEING EMPTY AT §53 AND FIVE SIGNALS DID NOT.** `outdated_spec_changed`,
-  `stale_approval`, `condition_drift`, `unlinked`, `orphaned` have no computation;
+- **`case_health` STOPPED BEING EMPTY AT §53 AND FIVE SIGNALS DID NOT** (**four** since §157 —
+  `stale_approval` is derived now, see the section above). `outdated_spec_changed`,
+  ~~`stale_approval`~~, `condition_drift`, `unlinked`, `orphaned` have no computation;
   `CaseHealthScheduler` is `matchIfMissing = true` on an hourly delay, so **`computed_at` is
   non-null within two minutes of any deployment** and the dashboard's "not computed yet" branch —
   which five files still described as universal — is the rare one. The SPA's panel now says **"No

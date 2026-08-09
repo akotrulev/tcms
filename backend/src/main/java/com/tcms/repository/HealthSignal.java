@@ -27,8 +27,9 @@ package com.tcms.repository;
  * <p>~~<strong>Nothing populates it yet</strong>, because neither module exists.~~ →
  * <strong>superseded, and the prediction held: each computation landed with no change here except
  * its own constant.</strong> {@code NEVER_EXECUTED} and {@code LONG_UNEXECUTED} got a writer in §53
- * ({@code ExecutionFacts}), {@code FAILING_REPEATEDLY} in {@code reporting.ExecutionSource}, and
- * {@code STALE_AUTOMATION} + {@code UNDECLARED_AUTOMATION} in M3 slice 5 — <strong>five of the ten
+ * ({@code ExecutionFacts}), {@code FAILING_REPEATEDLY} in {@code reporting.ExecutionSource},
+ * {@code STALE_AUTOMATION} + {@code UNDECLARED_AUTOMATION} in M3 slice 5, and
+ * {@link #STALE_APPROVAL} in §157 ({@code ApprovalFacts}) — <strong><del>five</del> six of the ten
  * are real</strong>. <del>The other five still report an honest zero</del> → <strong>and §156 is
  * where "honest" stopped being the right word.</strong> A zero is honest on an <em>absent</em> row,
  * which is what this sentence was written against; the recompute that made the five real also
@@ -36,6 +37,10 @@ package com.tcms.repository;
  * five report a zero indistinguishable from a check that ran and passed. The dashboard drew exactly
  * that conclusion until §156 narrowed its copy. See {@code CaseHealth}'s header for the full
  * account and for why nullable columns are not the fix.
+ *
+ * <p><strong>Four, since §157.</strong> {@link #STALE_APPROVAL} is derived from {@code review} and
+ * the case's current version number, and the derivation cost one class — which is the shape the
+ * remaining four are expected to have, one module at a time, rather than a schema change.
  *
  * <h2>{@code incomplete} is on the table and not in this enum</h2>
  *
@@ -72,6 +77,17 @@ public enum HealthSignal {
     // aggregate per constant and reads the results back BY POSITION. Sorting for display is
     // severity()'s job and happens where the tiles are built.
     OUTDATED_SPEC_CHANGED("outdatedSpecChanged", Severity.ERROR, "Outdated — spec changed"),
+    /**
+     * §6g's edit-after-approval marker, and since §157 the one signal here derived from neither an
+     * execution nor a document — {@code ApprovalFacts} reads {@code review}, which
+     * {@code repository} may depend on directly.
+     *
+     * <p><strong>WARNING and not ERROR</strong>, unchanged from M0 and worth stating now that it
+     * can actually fire: nothing is broken. The case says what its author last saved, and the only
+     * thing out of date is who has read it. {@code EditAfterApproval}'s default is {@code RETAIN}
+     * precisely because "forcing full re-approval on a typo fix is how review processes get
+     * abandoned" — a signal that shouted would be arguing with the setting it reports on.
+     */
     STALE_APPROVAL("staleApproval", Severity.WARNING, "Stale approval"),
     CONDITION_DRIFT("conditionDrift", Severity.ERROR, "Condition drift"),
     STALE_AUTOMATION("staleAutomation", Severity.ERROR, "Stale automation"),

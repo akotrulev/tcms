@@ -214,6 +214,11 @@ public class DashboardService {
      * for. That is why the SPA's second sentence says a signal was not raised rather than that
      * nothing needs attention, and why the real fix is a derivation per remaining signal rather
      * than anything on this method.
+     *
+     * <p><strong>Four of the ten, since §157</strong> — {@code ApprovalFacts} derives
+     * {@code STALE_APPROVAL}, which is the first of §156's five to be taken and the first tile on
+     * this panel that can appear because somebody edited a case rather than because somebody ran
+     * one. Nothing on this method changed for it, which is the property the panel was built for.
      */
     private static List<TileView> health(Map<HealthSignal, Long> counts) {
         List<TileView> tiles = new ArrayList<>();

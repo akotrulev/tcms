@@ -854,11 +854,15 @@ class ArchitectureRulesTest {
      * The columns nothing writes, with the one-line reason each stays mapped. The argument itself
      * lives at the field, like {@link #READERLESS_BY_DECISION}'s.
      *
-     * <p>Fourteen, and six of them are already in {@link #READERLESS_BY_DECISION} — the four §154
+     * <p><del>Fourteen</del> <strong>thirteen since §157</strong>, which gave
+     * {@code CaseHealth.staleApproval} a derivation rather than an argument — the first member this
+     * rule has lost to a writer rather than to a deletion, and the shape the remaining four
+     * {@code CaseHealth} entries are expected to leave by. Six of the thirteen are already in
+     * {@link #READERLESS_BY_DECISION} — the four §154
      * called "writerless as well" plus {@code CaseHealth.incomplete} and
      * {@code IngestionJob.rawStorageKey}, whose classification §154 got wrong in this exact
      * direction. That overlap is the point of running both rules rather than one: a column can be
-     * dead at either end, and only the pair says <em>which</em>. The eight this rule sees alone are
+     * dead at either end, and only the pair says <em>which</em>. The seven this rule sees alone are
      * the ones §154 structurally could not, because a column with a reader is invisible to a rule
      * about readers — and read-but-never-written is the worse half, since something downstream is
      * drawing a conclusion from a value nothing produces.
@@ -900,10 +904,10 @@ class ArchitectureRulesTest {
                             + "corrected retry replay the failure. A report that cannot be parsed "
                             + "leaves no row at all"),
             Map.entry("CaseHealth.outdatedSpecChanged",
-                    "one of the five HealthSignal members no recompute writes — argued once at "
+                    "one of the four HealthSignal members no recompute writes (five until §157) — "
+                            + "argued once at "
                             + "CaseHealth's header, which is where the state that makes them "
                             + "misleading is described"),
-            Map.entry("CaseHealth.staleApproval", "outdatedSpecChanged's case exactly"),
             Map.entry("CaseHealth.conditionDrift", "outdatedSpecChanged's case exactly"),
             Map.entry("CaseHealth.orphaned", "outdatedSpecChanged's case exactly"),
             Map.entry("CaseHealth.unlinked",
@@ -923,15 +927,18 @@ class ArchitectureRulesTest {
         // question. §116's phrasing — "three V1 tables had never had a writer" — is this rule at
         // table granularity, answered by a person who happened to be looking.
         //
-        // THE TWO RULES ARE NOT REDUNDANT AND THE OVERLAP PROVES IT. Six of these fourteen are in
+        // THE TWO RULES ARE NOT REDUNDANT AND THE OVERLAP PROVES IT. Six of these thirteen are in
         // READERLESS_BY_DECISION too, which is the harmless half: a column nobody fills and nobody
-        // consults costs a javadoc describing a state the database has never been in. The EIGHT
+        // consults costs a javadoc describing a state the database has never been in. The SEVEN
         // this rule sees alone are the expensive half, and they are invisible to §154 by
         // construction — a column with a reader passes that rule no matter what fills it. Something
         // downstream is drawing a conclusion from a value nothing produces: ProjectView.archived is
         // required by the contract and false in every deployment there has ever been, and five
         // HealthSignal members are rendered as chips and counted in facets while no recompute
-        // writes them.
+        // writes them — FOUR since §157, which took stale_approval out of this map by giving it
+        // the derivation the argument was standing in for. That is the intended exit from this
+        // list and the first one taken: an entry here is a decision to leave a column empty, not a
+        // permit to keep it that way.
         //
         // IT ALSO CORRECTED §154 RATHER THAN ONLY EXTENDING IT. That rule's javadoc sorted its
         // thirteen into "written and readerless" and "writerless as well" BY HAND, one slice after
@@ -958,7 +965,8 @@ class ArchitectureRulesTest {
         // a file's literals and searches the join, which is right for a word-boundary read; here a
         // statement runs to the next semicolon, and a fixture's "UPDATE key_sequence SET
         // next_value = 1" — no terminator — then swallowed every later literal in its file. Two of
-        // the fourteen were invisible, one of them case_health.unlinked, marked live by an
+        // the fourteen (as the population then stood) were invisible, one of them
+        // case_health.unlinked, marked live by an
         // @DisplayName. writesInLiterals is the bound. Note which way each rule's over-match cuts:
         // §154's costs a missed finding it will catch next time the corpus tightens, and this one's
         // costs a finding that never appears at all.

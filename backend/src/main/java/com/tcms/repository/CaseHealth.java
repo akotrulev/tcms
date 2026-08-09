@@ -19,8 +19,9 @@ import org.hibernate.annotations.Filter;
  * — "which cases in this project have a stale approval" is a partial index away in this shape and a
  * join plus a filter in the other, and {@code V1} already ships four such indexes.
  *
- * <h2><del>Nothing writes this yet, and the endpoint is correct anyway</del> → FIVE OF THE TEN
- * SIGNALS ARE WRITTEN NOW, AND THAT IS WHAT MAKES THE OTHER FIVE MISLEADING</h2>
+ * <h2><del>Nothing writes this yet, and the endpoint is correct anyway</del> → <del>FIVE</del> SIX OF
+ * THE TEN SIGNALS ARE WRITTEN NOW, AND THAT IS WHAT MAKES THE OTHER <del>FIVE</del> FOUR
+ * MISLEADING</h2>
  *
  * <p><del>The signals are computed from executions and documentation links, and neither module
  * exists. So the table is empty, every case reports no signals, and every health facet counts zero.
@@ -35,9 +36,11 @@ import org.hibernate.annotations.Filter;
  *
  * <p><strong>What changed is what a {@code false} means.</strong> On an absent row, every signal
  * reads "not computed", which is honest. On a row that exists,
- * {@link #outdatedSpecChanged}, {@link #staleApproval}, {@link #conditionDrift}, {@link #unlinked}
- * and {@link #orphaned} are {@code NOT NULL} columns holding their default, and the read path
- * cannot tell that from a computation that ran and found nothing wrong. The chip list omits them,
+ * {@link #outdatedSpecChanged}, <del>{@link #staleApproval}</del>, {@link #conditionDrift},
+ * {@link #unlinked} and {@link #orphaned} are {@code NOT NULL} columns holding their default, and
+ * the read path cannot tell that from a computation that ran and found nothing wrong.
+ * <strong>§157 closed the first of them</strong> — {@code ApprovalFacts} derives
+ * {@link #staleApproval} now, so four are left and this paragraph is four-fifths as true as it was. The chip list omits them,
  * the facet counts them zero, and {@code computedAt} — the column mapped precisely so
  * "nothing is wrong" and "nobody has looked" render as different sentences — now says
  * <em>looked</em> for the whole row. The distinction it was added for survives per row and has been
@@ -100,7 +103,16 @@ public class CaseHealth {
     @Column(name = "outdated_spec_changed", nullable = false)
     private boolean outdatedSpecChanged;
 
-    /** No writer (§156) — outdatedSpecChanged's case; the cause is an approval outliving an edit. */
+    /**
+     * <del>No writer (§156)</del> → <strong>§157 gave it one</strong>, the first of the five to get
+     * a derivation: {@code ApprovalFacts} compares the highest {@code APPROVED}
+     * {@code review.subject_version_no} against {@code test_case.current_version_no}, which is the
+     * comparison {@code ReviewPanel} has drawn its stale banner from since §76.
+     *
+     * <p><strong>A zero here is now a check that ran</strong>, unlike the four below and above it —
+     * which is the distinction the class header says the read path cannot draw, drawn for one
+     * column at a time.
+     */
     @Column(name = "stale_approval", nullable = false)
     private boolean staleApproval;
 
@@ -164,9 +176,16 @@ public class CaseHealth {
      * When this row was last derived.
      *
      * <p>Mapped for the dashboard, which reports the newest of these across a project so that "no
-     * signal is raised" and "no signal has been computed" render as different sentences. Nothing
-     * writes it yet, so the aggregate over an empty table is null — which is exactly the state the
-     * dashboard needs to be able to distinguish.
+     * signal is raised" and "no signal has been computed" render as different sentences.
+     * <del>Nothing writes it yet, so the aggregate over an empty table is null — which is exactly
+     * the state the dashboard needs to be able to distinguish.</del>
+     *
+     * <p><strong>That sentence was written in §47 and was false from §53 onward; §156 corrected the
+     * class header and left this one standing, which is the same slice-shape it was about.</strong>
+     * Every writer of this table stamps this column in the same statement, and the recompute is
+     * scheduled by default — so the null branch is the one no running deployment is in, and what
+     * the dashboard actually needs to distinguish is per-signal rather than per-row. See the class
+     * header.
      */
     @Column(name = "computed_at", nullable = false)
     private Instant computedAt;

@@ -1780,3 +1780,42 @@ unlinked, condition-drifted, stale-approved or spec-outdated goes on reporting c
 way to drive it, because there is no computation to produce the signal — that is the finding, not a
 gap in the pass. Closing it is five derivations, each owned by the module that can see its cause,
 and the honest sentence is what this slice shipped in the meantime.
+
+## §157 — the stale-approval signal, on the three screens that were already waiting for it
+
+**Lane: 4 — the scheduler-tick lane**, immediately after `HP-1`…`HP-3`. Same tick, different
+premise: §156's rows drive a project with **no** raised signal, these drive one where a signal that
+had never been computable now fires.
+
+**The fixture is this block's real cost and the pass must author it**, because nothing else in the
+queue produces a review row and **three separate settings/permission facts have to line up**:
+
+1. In project settings → review, switch **§6g review on for cases** — it is off by default, and
+   `ReviewService.moved` opens no review at all for a project that has not turned it on.
+2. Select the case in the grid and **submit it for review** (`SET_STATUS` → `IN_REVIEW`). This is
+   what opens the review row and stamps `subject_version_no` at the case's current version. Going
+   straight to `APPROVED` from `DRAFT` writes **no review row** — `moved` closes an open review and
+   opens none — so a fixture that skips this step produces a case the signal cannot see.
+3. **Approve as a different account from the one that submitted it**, because
+   `authorMayApproveOwnWork` defaults to false and `refusesEach` will refuse the bulk approval
+   otherwise. Either use a second Test Lead session or turn that setting on for the project, and
+   say in the result which one was done — they are not the same fixture.
+
+Then open the case and save an edit that changes content, so the version advances past the one the
+review names. Leave `Edit after approval` on its default (`RETAIN`); the `RE_REVIEW` arm sends the
+case back to `DRAFT` on that edit, which is the state `SA-B3` drives deliberately and at the end.
+Then wait for a tick.
+
+The three screens below need no change to have been made to them, which is why they are worth
+driving: the facet, the chip and the board card were all written generic over `HealthSignal` and
+have counted this signal as zero since M0.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `SA-B1` | Project dashboard, "Needs attention" panel, after the tick | A **"Stale approval"** tile with a count of 1, at WARNING severity, sorted below any ERROR tile. Clicking it opens the case grid filtered to `healthSignal=STALE_APPROVAL` and the edited case is in it. This is the first tile on that panel that can appear because somebody *edited* a case rather than ran one. |
+| `SA-B2` | Open the case itself | The health chip reads **"Approved before its last edit"** (`lib/labels.ts`, not the server's label) with the hover copy from `StatusChip.tsx`, **and** the review panel's own stale banner is showing — *"This case has changed since it was submitted — the review covers v1, and you are looking at v2."* The two must agree: they are one claim drawn from one comparison, and a screen where the banner shows and the chip does not is the disagreement `ApprovalFacts` was written to avoid. |
+| `SA-B3` | Set the case's status back to `DRAFT`, wait a tick, reload both screens | Tile gone, chip gone, banner still there. The banner is about the review record and does not care about the ladder; the signal is about a claim the case is no longer making. **If the tile survives, the status term has become a filter** — `SA-4`/`SA-3` in the mutation queue are the same defect seen from the server side. |
+
+**What no row here can check:** that a project which has never turned review on reports an honest
+zero rather than a missing feature. It renders identically to a project with nothing stale, and the
+only way to tell them apart is to read `review` — which is `SA-5`'s territory, not a browser lane's.
