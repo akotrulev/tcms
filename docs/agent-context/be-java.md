@@ -2,15 +2,39 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-08 (**§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-09 (**§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `ab9aecd` (§143) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `b1ad572` (§144) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
 ---
+
+## §145 — EVERY DECLARED OPERATION MUST HAVE A HANDLER, AND ONE DID NOT
+
+**`ContractParameterBindingTest.everyDeclaredOperationHasAHandler` is new and has NO ignore list.**
+Adding one is the thing it exists to prevent.
+
+- **The contract and the server now agree operation for operation** — 127 operations, 92 paths, zero
+  unserved and zero undocumented. If you add a path to `openapi.yaml` before implementing it, the
+  build fails. That is deliberate: implement it, or leave it out of the contract until a consumer
+  exists. Both copies of `schema.d.ts` generate from that file, so a declared-and-unserved operation
+  ships as a compiling, typechecking call that 405s at runtime in every client.
+- **`GET /projects/{projectId}/suites/{suiteId}` was that operation, from M0 until now.**
+  `SuiteController.detail` + `SuiteService.findOne` serve it. The SPA never called it (the collection
+  carries the whole `SuiteView`), so the only consumers were the CLI's `suite edit` read-modify-write
+  and two MCP arms — all three answering 405 in production with every gate green.
+- **The sibling test skips unmapped operations and that is now the *reason* the new one exists.**
+  `everyDeclaredQueryParameterIsBound` returns early on a null handler, on a javadoc note about MSW
+  serving the SPA ahead of the API. **§107 deleted the mock layer**; the note outlived it. The
+  javadoc records the supersession — do not re-tidy it into a rule.
+- **`findOne` renders and picks rather than assembling its own view**, for `viewOf`'s reason: a
+  second definition of a suite's wire shape diverges later, on one field, between the list and the
+  detail. `SuiteEndpointTest.Detail.detailAgreesWithTheList` compares the two documents.
+- 404 covers no-such-suite, soft-deleted, a sibling project's suite and a project you may not see.
+  **No 403 arm**, and the contract declares none.
 
 ## §143 — THE ERROR DISPATCH, AND WHY MOCKMVC CANNOT SEE IT
 

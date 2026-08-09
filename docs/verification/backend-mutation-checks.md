@@ -1438,3 +1438,31 @@ cd backend
 check lives in `packages/client/src/core/core.test.ts`, which derives the projected field list from
 the contract so that a field added to `TestCaseInput` fails the build until somebody decides whether
 the round-trip carries it.
+
+---
+
+### §145 — the operation nobody served, and the skip that hid it (`SD-1` … `SD-4`)
+
+**The check existed and declined to look.** `ContractParameterBindingTest` has walked the live
+`RequestMappingHandlerMapping` against `openapi.yaml` since §49 — and treated "no handler at all" as
+*not yet built*, because MSW served the SPA ahead of the API. §107 deleted the mock layer on
+2026-08-06 and the skip stayed, covering `GET /projects/{projectId}/suites/{suiteId}`: declared since
+M0, generated into both copies of `schema.d.ts`, called by three clients, answered by nothing.
+`everyDeclaredOperationHasAHandler` is the check that says so, and it has **no ignore list** on
+purpose.
+
+> **`SD-1` IS RUN** — it is how the new check was accepted, and a check whose failure nobody has seen
+> is a check nobody has tested. The other three are not run.
+
+```bash
+cd backend
+./gradlew test --tests 'com.tcms.contract.ContractParameterBindingTest' \
+               --tests 'com.tcms.repository.SuiteEndpointTest'
+```
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| SD-1 | Remove `@GetMapping("/{suiteId}")` from `SuiteController.detail` (leaving the method) | **The original defect, restored.** `everyDeclaredOperationHasAHandler` fails naming `GET /projects/{projectId}/suites/{suiteId}`; `everyDeclaredQueryParameterIsBound` beside it stays **green**, which is the point — that test skips exactly this case and is why the defect shipped. | ✅ **RUN 2026-08-09** — failed as stated, sibling green |
+| SD-2 | Add a plausible unimplemented operation to `openapi.yaml` (e.g. `delete` on `/projects/{projectId}/suites/{suiteId}/status`) | The check fails naming it. This is the row that proves it guards the contract *generally* rather than having been fitted to one known gap — and it is the shape a contract-first slice produces on purpose, so the failure message must be the one that tells an author to implement or delete rather than to add an exemption. | ⬜ NOT RUN |
+| SD-3 | `SuiteService.findOne` drops the `projectId` gate and looks the suite up by id alone | `Detail.aSiblingProjectsSuiteIsNotReachableThroughThisProject` fails. **Nothing else does** — the row is in the caller's own company and satisfies the FK, so every cross-company assertion in the class still passes. Same shape as the tree's own persona-3 row, one endpoint over. | ⬜ NOT RUN |
+| SD-4 | `SuiteService.findOne` assembles its own `SuiteView` instead of calling `render` | `Detail.detailAgreesWithTheList` fails on whichever field the copy gets wrong — and if the copy happens to be complete today it passes, which is the *reason* the assertion compares the two documents rather than listing fields: the second definition is only wrong later. | ⬜ NOT RUN |

@@ -80,6 +80,29 @@ public class SuiteController {
     }
 
     /**
+     * One suite, by id.
+     *
+     * <p>404 covers both "no such suite" and "not a project you may see" — see
+     * {@link SuiteService#findOne}. There is no 403 arm and the contract declares none: the gate is
+     * the project read gate the list above passes, and a caller who may list the suites may open one.
+     *
+     * <p><strong>Declared since M0, implemented here.</strong> The SPA builds every suite screen from
+     * the list, so nothing consumed it until the CLI and the MCP server did — and both got a 405
+     * that no test could see, because a contract operation with no handler was the one thing
+     * {@code ContractParameterBindingTest} skipped. It does not skip it any more.
+     */
+    @GetMapping("/{suiteId}")
+    public ResponseEntity<SuiteView> detail(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID suiteId) {
+
+        return suites.findOne(UUID.fromString(jwt.getSubject()), projectId, suiteId)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /**
      * Creates a suite — <strong>the write that makes a provisioned company usable.</strong>
      *
      * <p>Before it, a project seeded by {@code provision-company} had no folders and could therefore

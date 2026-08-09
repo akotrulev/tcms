@@ -99,6 +99,9 @@ class SuiteEndpointTest extends IntegrationTestBase {
     private static final UUID CHECKOUT = UUID.fromString("5a004000-0000-4000-8000-000000000004");
     /** Soft-deleted. Its cases are already gone from the case list; the folder must be too. */
     private static final UUID RETIRED = UUID.fromString("5a004000-0000-4000-8000-000000000005");
+    /** The sibling project's identically named suite — only {@code project_id} separates it. */
+    private static final UUID MOBILE_PAYMENTS =
+            UUID.fromString("5a004000-0000-4000-8000-000000000011");
 
     private static final UUID LIVE_CONDITION = UUID.fromString("5a005000-0000-4000-8000-00000000000a");
     private static final UUID RETIRED_CONDITION =
@@ -634,9 +637,99 @@ class SuiteEndpointTest extends IntegrationTestBase {
         }
     }
 
+    /**
+     * {@code GET /projects/{projectId}/suites/{suiteId}} — declared since M0, served since §145.
+     *
+     * <p>The defect it closes was not a wrong answer but <strong>no answer</strong>: the contract
+     * declared the operation, both copies of {@code schema.d.ts} generated it, three clients called
+     * it, and Spring answered 405 because nothing was mapped. The SPA builds every suite screen from
+     * the list, so the one consumer that could have noticed never called it.
+     *
+     * <p>The detail must answer with the same body the list serves for that suite — that is the
+     * whole reason it renders and picks rather than assembling its own view — so the first test here
+     * compares the two rather than restating field expectations a third time.
+     */
+    @Nested
+    @DisplayName("One suite by id — the operation the contract declared and nothing served")
+    class Detail {
+
+        @Test
+        @DisplayName("the detail is byte-for-byte the row the list serves")
+        void detailAgreesWithTheList() throws Exception {
+            JsonNode fromList = byName(treeAs(LEAD, ACME, ACME_BANKING), "Refunds");
+
+            assertThat(json.readTree(detailBodyOf(LEAD, ACME, ACME_BANKING, REFUNDS)))
+                    .as("a second definition of a suite's wire shape is the defect viewOf exists "
+                            + "to prevent — the detail and the list must not be able to disagree")
+                    .isEqualTo(fromList);
+        }
+
+        @Test
+        @DisplayName("a suite in a sibling project is 404, though the caller may see this one")
+        void aSiblingProjectsSuiteIsNotReachableThroughThisProject() throws Exception {
+            // ACME_MOBILE's suite is in the SAME company, so the company filter and the FK both
+            // admit it. Only the project predicate separates them, and a detail endpoint that
+            // looked the suite up by id alone would serve it under a project the caller reads.
+            assertThat(detailStatusOf(ADMIN, ACME, ACME_BANKING, MOBILE_PAYMENTS)).isEqualTo(404);
+            assertThat(detailStatusOf(ADMIN, ACME, ACME_MOBILE, MOBILE_PAYMENTS))
+                    .as("the row really is reachable through its own project — otherwise the "
+                            + "assertion above passes for the wrong reason")
+                    .isEqualTo(200);
+        }
+
+        @Test
+        @DisplayName("a member with no grant gets 404, exactly as on the list")
+        void membershipConveysNoSuite() throws Exception {
+            assertThat(detailStatusOf(NO_GRANT, ACME, ACME_BANKING, REFUNDS)).isEqualTo(404);
+        }
+
+        @Test
+        @DisplayName("no such suite, another client's suite, and a soft-deleted one all answer alike")
+        void theFourCasesAnswerIdentically() throws Exception {
+            assertThat(List.of(
+                    detailStatusOf(LEAD, ACME, ACME_BANKING, UUID.randomUUID()),
+                    detailStatusOf(LEAD, ACME, ACME_BANKING, RETIRED),
+                    detailStatusOf(LEAD, ACME, UMBRA_BANKING, REFUNDS)))
+                    .as("told apart, the id becomes a probe for what exists elsewhere (§6t)")
+                    .containsExactly(404, 404, 404);
+
+            assertThat(detailBodyOf(LEAD, ACME, ACME_BANKING, UUID.randomUUID()))
+                    .as("a 404 that explains itself is still an oracle")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("an anonymous caller is refused")
+        void anonymousIsRejected() throws Exception {
+            assertThat(mvc.perform(MockMvcRequestBuilders
+                            .get("/api/v1/projects/" + ACME_BANKING + "/suites/" + REFUNDS))
+                    .andReturn().getResponse().getStatus())
+                    .isEqualTo(401);
+        }
+    }
+
     // =====================================================================
     // helpers — HTTP
     // =====================================================================
+
+    private String detailBodyOf(UUID userId, UUID companyId, UUID projectId, UUID suiteId)
+            throws Exception {
+
+        return mvc.perform(MockMvcRequestBuilders
+                        .get("/api/v1/projects/" + projectId + "/suites/" + suiteId)
+                        .header("Authorization", "Bearer " + tokenFor(userId, companyId))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andReturn().getResponse().getContentAsString();
+    }
+
+    private int detailStatusOf(UUID userId, UUID companyId, UUID projectId, UUID suiteId)
+            throws Exception {
+
+        return mvc.perform(MockMvcRequestBuilders
+                        .get("/api/v1/projects/" + projectId + "/suites/" + suiteId)
+                        .header("Authorization", "Bearer " + tokenFor(userId, companyId)))
+                .andReturn().getResponse().getStatus();
+    }
 
     private String tokenFor(UUID userId, UUID companyId) {
         return tx.execute(status -> tokens.issue(userId, companyId, 1, false).token());
@@ -859,13 +952,12 @@ class SuiteEndpointTest extends IntegrationTestBase {
      * display key so only {@code company_id} does.
      */
     private void seedSiblingAndForeignTrees() throws SQLException {
-        UUID mobilePayments = UUID.fromString("5a004000-0000-4000-8000-000000000011");
         UUID umbraPayments = UUID.fromString("5a004000-0000-4000-8000-000000000021");
 
         try (Connection connection = appConnection(ACME)) {
-            suite(connection, mobilePayments, ACME, ACME_MOBILE, null, "TS-6", 6,
+            suite(connection, MOBILE_PAYMENTS, ACME, ACME_MOBILE, null, "TS-6", 6,
                     "Payments", "Payments", "APPROVED", 0, false);
-            cases(connection, ACME, ACME_MOBILE, mobilePayments, "acme-mob", 4, 0);
+            cases(connection, ACME, ACME_MOBILE, MOBILE_PAYMENTS, "acme-mob", 4, 0);
         }
         try (Connection connection = appConnection(UMBRA)) {
             // TS-1 again: display keys are numbered per COMPANY, so the collision is the product

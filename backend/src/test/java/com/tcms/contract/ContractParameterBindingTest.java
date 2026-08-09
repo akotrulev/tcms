@@ -44,10 +44,27 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
  * parameter arrives some other way, and a hand-maintained list of endpoints would go stale
  * exactly when a new one is added — which is the moment this check exists for.
  *
- * <p>Consequently it only judges operations that are <strong>implemented</strong>. An endpoint
+ * <p>~~Consequently it only judges operations that are <strong>implemented</strong>. An endpoint
  * still served by MSW has no handler to compare against, so it is skipped rather than reported:
  * the check must not turn "not built yet" into a build failure, or the next unbuilt endpoint's
- * author will add it to an ignore list and the real finding will arrive inside one.
+ * author will add it to an ignore list and the real finding will arrive inside one.~~
+ * → <strong>superseded 2026-08-09 (§145): the premise was deleted with the mock layer.</strong>
+ *
+ * <p>The skip was correct while an unimplemented endpoint was a normal state — the SPA was built
+ * against MSW ahead of the API, so "no handler" meant "not yet" and failing the build on it would
+ * have been noise. <strong>§107 deleted {@code src/mocks/} on 2026-08-06, and with it the only
+ * reason a declared operation could legitimately have no handler.</strong> The skip stayed, and it
+ * was covering one: {@code GET /projects/&#123;projectId&#125;/suites/&#123;suiteId&#125;} had been in
+ * the contract since M0, in both copies of {@code schema.d.ts}, and mapped by nothing. The SPA never
+ * called it; §140 and §144 then wrote <em>three</em> consumers against it — the MCP
+ * {@code tcms_list_suites} "open one" arm and the read half of both clients' {@code suite edit} —
+ * and every one of them answered <strong>405 in production</strong> while 2308 tests, oxlint and two
+ * green CI lanes said nothing. Found by driving a real server (§145's live pass, row {@code LP-3}).
+ *
+ * <p>So the skip is now a <em>finding</em>: {@link #everyDeclaredOperationHasAHandler} fails on a
+ * declared operation nothing serves. That is the ninth time in this repo a note recording why
+ * something was permitted outlived the thing that permitted it, and the first where the note was
+ * inside the check that would otherwise have reported the defect.
  */
 @DisplayName("Contract bindings — every declared query parameter reaches a handler")
 class ContractParameterBindingTest extends IntegrationTestBase {
@@ -121,6 +138,53 @@ class ContractParameterBindingTest extends IntegrationTestBase {
 
                         Operations ignoring a declared parameter:""")
                 .isEmpty();
+    }
+
+    @Test
+    @DisplayName("every operation the contract declares is served by a handler")
+    void everyDeclaredOperationHasAHandler() {
+        OpenApiContract contract = OpenApiContract.load();
+        List<String> unserved = new ArrayList<>();
+        int compared = 0;
+
+        for (OpenApiContract.Operation operation : contract.operations()) {
+            compared++;
+            if (!isMapped(operation)) {
+                unserved.add(operation.describe());
+            }
+        }
+
+        assertThat(compared)
+                .as("the contract parsed to no operations at all — the loader has stopped finding it")
+                .isGreaterThan(100);
+
+        assertThat(unserved)
+                .as("""
+                        These operations are declared in openapi.yaml and NO handler serves them.
+
+                        Both copies of schema.d.ts generate them, so every client types the call, \
+                        compiles it and ships it; Spring answers 405 (or 404) at runtime. Nothing \
+                        upstream can see that: a stubbed fetch answers whatever the contract says, \
+                        MockMvc is never asked, and the SPA is not necessarily a consumer.
+
+                        Two honest repairs, and picking between them is the point:
+                          * implement it — the contract already says what it must answer; or
+                          * delete it from openapi.yaml, and re-add it contract-first when a \
+                        consumer exists.
+
+                        There is deliberately no ignore list. An operation that is 'not built yet' \
+                        is exactly the finding: this check used to skip it, on the grounds that MSW \
+                        served the SPA ahead of the API, and that premise was deleted with the mock \
+                        layer in §107 while the skip remained — hiding a 405 that three clients \
+                        shipped against.
+
+                        Declared and unserved:""")
+                .isEmpty();
+    }
+
+    /** Whether any mapping answers this operation's path and method. */
+    private boolean isMapped(OpenApiContract.Operation operation) {
+        return boundParametersOf(operation) != null;
     }
 
     /**

@@ -90,6 +90,37 @@ public class SuiteService {
     }
 
     /**
+     * One suite, or empty when the caller may not see the project <em>or</em> the suite is not in
+     * it — both 404, per this controller's "404, never 403" rule.
+     *
+     * <p>Collapsing the two is deliberate here in a way it is not on {@link #findTree}: an id that
+     * answers differently for "no such suite" and "not your suite" is the oracle that rule exists to
+     * close, and unlike the empty-tree case there is no legitimate state a client has to tell apart.
+     *
+     * <p>It renders the project's suites and picks one out, which is {@link #viewOf}'s shape and
+     * {@link #viewOf}'s reason: the alternative is a second definition of a suite's wire shape, and
+     * the field that diverges shows one value on the list and another on the detail beside it. The
+     * cost is bounded by the number of folders in one project.
+     *
+     * <p><strong>This is the operation the contract has declared since M0 and nothing implemented.</strong>
+     * The SPA never needed it — it builds every screen from the list — so the gap survived until
+     * §140 and §144 wrote three consumers against it: the MCP {@code tcms_list_suites} "open one"
+     * arm, and the read half of the read-modify-write behind both clients' {@code suite edit}. All
+     * three answered 405 in production while every gate was green. See
+     * {@code ContractParameterBindingTest.everyDeclaredOperationHasAHandler}, which is now the check
+     * that says so.
+     */
+    @Transactional(readOnly = true)
+    public Optional<SuiteView> findOne(UUID userId, UUID projectId, UUID suiteId) {
+        UUID companyId = CompanyContext.require();
+
+        return projects.readVisible(userId, projectId, project -> render(companyId, project.getId()))
+                .flatMap(rendered -> rendered.stream()
+                        .filter(suite -> suite.id().equals(suiteId))
+                        .findFirst());
+    }
+
+    /**
      * The rendered tree for a project whose gate the caller has <strong>already</strong> passed.
      *
      * <p>Package-private and ungated, which is the one thing to be careful about here: it takes a

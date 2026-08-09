@@ -194,10 +194,17 @@ found from the model's side rather than the CLI's.
 
 ## What the next live pass must re-drive (§144)
 
-**None of this is run.** §144's changes are covered by 229 package tests, 1203 frontend tests and
-2308 backend tests, and every one of those drives a stub, a jsdom or a MockMvc — which is the
-observer class this pass exists to sit outside of. The fix for a defect found live is not verified
-by the gates that missed the defect.
+> ~~**None of this is run.**~~ → **RUN 2026-08-09 (§145).** All eight rows were driven against a
+> real instance; seven passed and **`LP-3` failed**, on a cause wider than the row — `GET
+> …/suites/{suiteId}` is declared in the contract and mapped by nothing, so three consumers were
+> answering 405. `LP-7` is a **partial** pass: the accept was driven as the person's session rather
+> than in the SPA, so `A4-11`/`A4-12` stay open. Evidence and the fix:
+> [`2026-08-09-packages-live-pass-round-2.md`](2026-08-09-packages-live-pass-round-2.md).
+
+**None of this was run when it was written.** §144's changes are covered by 229 package tests, 1203
+frontend tests and 2308 backend tests, and every one of those drives a stub, a jsdom or a MockMvc —
+which is the observer class this pass exists to sit outside of. The fix for a defect found live is
+not verified by the gates that missed the defect.
 
 | # | Drive | Expected | Why a gate cannot say |
 |---|---|---|---|
