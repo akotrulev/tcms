@@ -1819,3 +1819,36 @@ have counted this signal as zero since M0.
 **What no row here can check:** that a project which has never turned review on reports an honest
 zero rather than a missing feature. It renders identically to a project with nothing stale, and the
 only way to tell them apart is to read `review` — which is `SA-5`'s territory, not a browser lane's.
+
+## §158 — the condition-drift signal, and the tooltip that described the wrong comparison
+
+**Lane: 4 — the scheduler-tick lane**, immediately after `SA-B1`…`SA-B3`. Third block on one tick,
+and the **cheapest fixture of the three**, which is worth stating because the previous two set the
+expectation that a health signal costs a settings change and a second account. This one does not:
+no review settings, no approval, no second session. Everything it needs is one author with
+`library:manage` and `case:edit`.
+
+**The fixture:**
+
+1. Project → **Conditions** (the §6f library), create an entry — title *"Log in as standard user"*,
+   two steps.
+2. Open a case, attach that entry as a **precondition**, and **save**. The save is the load-bearing
+   step and the one to get wrong: attaching is authored content on `CaseEdit`, so the save is what
+   writes the `test_case_version` whose snapshot this signal compares against. A case that was
+   never saved after attaching has no snapshot naming the entry and can never drift.
+3. Go back to the library and **edit the entry's body** — change one step. Do not touch the case.
+4. Wait for a tick.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `CD-B1` | Project dashboard, "Needs attention" panel, after the tick | A **"Shared condition changed"** tile with a count of 1, at **ERROR** severity — so sorted *above* the WARNING tiles, unlike `SA-B1`'s. Clicking it opens the case grid filtered to `healthSignal=CONDITION_DRIFT` with the case in it. This is the first tile on that panel that appears because somebody edited **something that is not the case** — the drive for it never opens the case at all, which is the whole point of §6f's reference-while-live design and the reason the signal has to exist. |
+| `CD-B2` | Open the case | The health chip reads **"Shared condition changed"**, and its tooltip — corrected in this slice — says *"…has changed since the case was last **saved**."* It said *"last reviewed"* until §158, which describes a comparison the server does not make; a project with review switched off raises this signal exactly as readily. **If the tooltip still says "reviewed", the built asset is stale**, not the copy. |
+| `CD-B3` | Edit the library entry back to exactly what it said before, wait a tick, reload both screens | Tile gone, chip gone. **This is the row worth driving even if the other two are skipped.** The comparison is content, so reverting the cause reverts the signal; the spelling somebody will propose instead (`condition.updated_at > version.created_at`) leaves the flag standing for ever after this drive, with nothing on any screen able to clear it. `CD-6` in the mutation queue is the same question asked of the tests, and it records that the tests **cannot** currently answer it — this row is the only place the property is observable. |
+
+**What no row here can check:** the *inherited* arm. A condition attached at suite level and then
+edited drifts every case beneath the suite by the same mechanism, and the fixture above cannot tell
+that apart from the own-attachment case on screen — both render one chip on one case. Distinguishing
+them needs two cases under one suite and is a fixture the pass may add if `CD-B1` is cheap enough
+when it gets there. The gap `ConditionDrift`'s header names — a suite-level **attach or detach**,
+which writes no case version and is therefore *not* reported — is not drivable here at all, because
+its expected outcome is that nothing happens.

@@ -904,11 +904,10 @@ class ArchitectureRulesTest {
                             + "corrected retry replay the failure. A report that cannot be parsed "
                             + "leaves no row at all"),
             Map.entry("CaseHealth.outdatedSpecChanged",
-                    "one of the four HealthSignal members no recompute writes (five until §157) — "
-                            + "argued once at "
+                    "one of the three HealthSignal members no recompute writes (five until §157, "
+                            + "four until §158) — argued once at "
                             + "CaseHealth's header, which is where the state that makes them "
                             + "misleading is described"),
-            Map.entry("CaseHealth.conditionDrift", "outdatedSpecChanged's case exactly"),
             Map.entry("CaseHealth.orphaned", "outdatedSpecChanged's case exactly"),
             Map.entry("CaseHealth.unlinked",
                     "outdatedSpecChanged's case, and the member the first draft of this rule "
@@ -927,18 +926,19 @@ class ArchitectureRulesTest {
         // question. §116's phrasing — "three V1 tables had never had a writer" — is this rule at
         // table granularity, answered by a person who happened to be looking.
         //
-        // THE TWO RULES ARE NOT REDUNDANT AND THE OVERLAP PROVES IT. Six of these thirteen are in
+        // THE TWO RULES ARE NOT REDUNDANT AND THE OVERLAP PROVES IT. Six of these twelve are in
         // READERLESS_BY_DECISION too, which is the harmless half: a column nobody fills and nobody
-        // consults costs a javadoc describing a state the database has never been in. The SEVEN
+        // consults costs a javadoc describing a state the database has never been in. The SIX
         // this rule sees alone are the expensive half, and they are invisible to §154 by
         // construction — a column with a reader passes that rule no matter what fills it. Something
         // downstream is drawing a conclusion from a value nothing produces: ProjectView.archived is
         // required by the contract and false in every deployment there has ever been, and five
         // HealthSignal members are rendered as chips and counted in facets while no recompute
         // writes them — FOUR since §157, which took stale_approval out of this map by giving it
-        // the derivation the argument was standing in for. That is the intended exit from this
-        // list and the first one taken: an entry here is a decision to leave a column empty, not a
-        // permit to keep it that way.
+        // the derivation the argument was standing in for, and THREE since §158, which did the
+        // same for condition_drift. That is the intended exit from this list, it has now been
+        // taken twice, and both times the rule's population fell by one without the rule changing:
+        // an entry here is a decision to leave a column empty, not a permit to keep it that way.
         //
         // IT ALSO CORRECTED §154 RATHER THAN ONLY EXTENDING IT. That rule's javadoc sorted its
         // thirteen into "written and readerless" and "writerless as well" BY HAND, one slice after

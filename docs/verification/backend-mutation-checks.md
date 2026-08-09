@@ -1709,3 +1709,39 @@ cd backend
 > these need a fixture the pass must author — a project with §6g review switched **on** for cases,
 > a case taken to `APPROVED`, and an edit after it — because the signal cannot exist without a
 > review row and `ReviewService.moved` opens none for a project with the default settings.
+
+---
+
+### §158 — the condition-drift derivation (`CD-1` … `CD-7`)
+
+The second of §156's five to get a computation, and the same kind of block as `SA-*`: these mutate a
+**statement** and predict which cases change their answer. The population under test is one
+`INSERT … ON CONFLICT` in `repository/ConditionDrift.java`.
+
+```bash
+cd backend
+./gradlew test --tests 'com.tcms.repository.CaseHealthRecomputeTest'   # every row here
+```
+
+> **Three of these were run during the slice, which the policy at the top of this file says should
+> be none.** Recorded as run rather than quietly re-listed as pending: §157 did the same for one row
+> and the honest count across the two slices is four. They were run because each measures a
+> *decision the statement had to take* — join type, ordering, and which fields are content — and a
+> statement whose competing spelling is never measured is a paragraph of prose, which is §152's
+> lesson. The other four are queued.
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| `CD-1` | `LEFT JOIN condition lib` → `JOIN condition lib` | A soft-deleted entry stops being comparable, so the case that lost a step outright reports clean. Should redden `a soft-deleted entry is drift, and it is the case an inner join would miss` **and nothing else.** | ✅ **RUN 2026-08-09** — red on exactly that one test; reverted |
+| `CD-2` | `ORDER BY v.version_no DESC` → `ASC` | The oldest snapshot decides, so a case brought up to date still reports drift. Should redden `the NEWEST snapshot decides, not any snapshot` **and nothing else.** | ✅ **RUN 2026-08-09** — red on exactly that one test; reverted |
+| `CD-3` | Drop the `lib.title IS DISTINCT FROM …` term | A rename with unchanged steps reads clean. Should redden `a rename with the same steps is drift too` **and nothing else.** | ✅ **RUN 2026-08-09** — red on exactly that one test; reverted |
+| `CD-4` | Drop the `postconditions` half of the `||` | Only the PRE arm is compared. Should redden `the postcondition arm counts, not only the preconditions`. Worth measuring rather than assuming, because the two arms are concatenated in one expression and an edit that "simplifies" it drops the second silently. | ⬜ NOT RUN |
+| `CD-5` | `coalesce(drift.drifted, false)` → `drift.drifted` | `bool_or` over zero rows is NULL and the column is `NOT NULL`, so this is not a wrong answer but an **aborted transaction**, taking the other three statements' work with it. Should redden `a snapshot with no conditions raises nothing rather than failing`, `a case with no version at all has nothing to have drifted from`, and — because the whole tick rolls back — most of the class. **The row exists to measure how far the blast radius reaches**, since the failure mode is a job that stops rather than one that lies. | ⬜ NOT RUN |
+| `CD-6` | Replace the content comparison with the timestamp one — `lib.updated_at > newest.created_at` | Predicted **some** reds (`an entry still saying what the snapshot recorded raises nothing`, since every fixture condition is written after its case's version row) but **not** the one that matters: nothing here expresses "edited and changed straight back", which is the state where the timestamp spelling can never heal. **The deliverable is the gap**, and closing it is a fixture that writes a version, bumps `condition.updated_at`, and restores the body. | ⬜ NOT RUN |
+| `CD-7` | Add `condition_drift` to `ApprovalFacts.recomputeStaleApproval`'s `ON CONFLICT` update list | The third statement in the tick blanks the fourth's — or rather, being third, is blanked *by* it, so the mutation that shows the hazard is the one on the **later** statement. Should redden `an entry edited since the snapshot drifts the case that references it`. `SA-6`'s row for the other pair; the column-ownership rule now binds four statements and the number of ways to break it grows with it. | ⬜ NOT RUN |
+
+> **One browser-queue row block, `CD-B1`…`CD-B3`**, in lane 4 beside `HP-1`…`HP-3` and
+> `SA-B1`…`SA-B3`. Its fixture is the **cheapest of the three blocks** and worth saying so: no
+> review settings, no second account, no approval — attach a library condition to a case, save the
+> case so a version is written, then edit the condition from the library screen. Everything this
+> signal needs is one author with `library:manage`.

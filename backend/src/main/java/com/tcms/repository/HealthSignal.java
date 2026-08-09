@@ -28,8 +28,9 @@ package com.tcms.repository;
  * <strong>superseded, and the prediction held: each computation landed with no change here except
  * its own constant.</strong> {@code NEVER_EXECUTED} and {@code LONG_UNEXECUTED} got a writer in §53
  * ({@code ExecutionFacts}), {@code FAILING_REPEATEDLY} in {@code reporting.ExecutionSource},
- * {@code STALE_AUTOMATION} + {@code UNDECLARED_AUTOMATION} in M3 slice 5, and
- * {@link #STALE_APPROVAL} in §157 ({@code ApprovalFacts}) — <strong><del>five</del> six of the ten
+ * {@code STALE_AUTOMATION} + {@code UNDECLARED_AUTOMATION} in M3 slice 5,
+ * {@link #STALE_APPROVAL} in §157 ({@code ApprovalFacts}) and {@link #CONDITION_DRIFT} in §158
+ * ({@code ConditionDrift}) — <strong><del>five</del><del>six</del> seven of the ten
  * are real</strong>. <del>The other five still report an honest zero</del> → <strong>and §156 is
  * where "honest" stopped being the right word.</strong> A zero is honest on an <em>absent</em> row,
  * which is what this sentence was written against; the recompute that made the five real also
@@ -38,9 +39,14 @@ package com.tcms.repository;
  * that conclusion until §156 narrowed its copy. See {@code CaseHealth}'s header for the full
  * account and for why nullable columns are not the fix.
  *
- * <p><strong>Four, since §157.</strong> {@link #STALE_APPROVAL} is derived from {@code review} and
- * the case's current version number, and the derivation cost one class — which is the shape the
- * remaining four are expected to have, one module at a time, rather than a schema change.
+ * <p><strong><del>Four, since §157</del> Three, since §158.</strong> {@link #STALE_APPROVAL} is
+ * derived from {@code review} and the case's current version number, {@link #CONDITION_DRIFT} from
+ * the newest version's snapshot against the live library, and each derivation cost one class —
+ * which is the shape the remaining three are expected to have, one module at a time, rather than a
+ * schema change. Two of the three ({@link #UNLINKED}, {@link #OUTDATED_SPEC_CHANGED}) need
+ * {@code documentation}, which this module may not depend on, so those two are a seam and not
+ * merely a statement; {@link #ORPHANED} needs a decision about what "left the project" means
+ * before it needs any code.
  *
  * <h2>{@code incomplete} is on the table and not in this enum</h2>
  *
@@ -89,6 +95,17 @@ public enum HealthSignal {
      * abandoned" — a signal that shouted would be arguing with the setting it reports on.
      */
     STALE_APPROVAL("staleApproval", Severity.WARNING, "Stale approval"),
+    /**
+     * §6f's reference-while-live, copy-once-versioned split, observed from the side where the two
+     * disagree — {@code ConditionDrift} since §158.
+     *
+     * <p><strong>ERROR and not WARNING</strong>, which is the opposite call from
+     * {@link #STALE_APPROVAL} and worth stating beside it now that both fire. A stale approval
+     * means the case is right and somebody has not read it. This one means the case a tester is
+     * being handed today is not the case anybody recorded: the steps changed under it, or —
+     * loudest — a referenced entry was deleted and the live case quietly renders one instruction
+     * fewer than the snapshot says it should. Nothing about that self-corrects by being read.
+     */
     CONDITION_DRIFT("conditionDrift", Severity.ERROR, "Condition drift"),
     STALE_AUTOMATION("staleAutomation", Severity.ERROR, "Stale automation"),
     NEVER_EXECUTED("neverExecuted", Severity.WARNING, "Never executed"),

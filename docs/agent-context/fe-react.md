@@ -2,13 +2,13 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-09 (**§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
+**Last verified:** 2026-08-09 (**§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
 the one doc-block renderer and the editor's three new types; §126 phase 4 — the three attachment
 surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the flake panel and the
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `fce9739` (§148) (trust the
+**Baseline commit:** `2af89be` (§157) (trust the
 body over the header and re-grep what a later commit could have moved).
 
 ## §149 — AN `errors` VALUE IS THE SERVER'S SENTENCE; NEVER COMPOSE WORDS AROUND IT
@@ -570,6 +570,15 @@ directly above the switcher) and the wordmark links there too.
   `Record<HealthSignal, string>`, so a new member is a **compile error until labelled** and there is
   nothing else to wire: the dashboard tile, the case grid's facet and `HealthChip` all iterate the
   enum. Do not plan a signal slice as though it needs a page.
+  **BUT THE TOOLTIP IS A CLAIM ABOUT THE SERVER'S COMPARISON AND NOTHING TYPECHECKS IT (§158).**
+  `healthHelp[CONDITION_DRIFT]` said the condition had changed *"since the case was last
+  **reviewed**"* from M0 until §158 gave the signal a derivation — which compares the case's newest
+  **version snapshot** against the live library and never consults review at all. The record being
+  exhaustive guarantees a *string* exists, not that it is true; a signal nothing computes has a
+  tooltip nobody can falsify. **When a backend slice gives a signal its first writer, re-read that
+  signal's `healthHelp` line in the same commit.** Two remain unverifiable on the same terms:
+  `outdated_spec_changed` and `orphaned` have no writer, so their sentences describe comparisons no
+  code makes.
   **THE DRIFT PAIR MUST NOT LOOK ALIKE, AND THAT IS THE WHOLE FRONTEND DECISION.**
   `STALE_AUTOMATION` is in `SEVERE_SIGNALS` and `UNDECLARED_AUTOMATION` is deliberately **not**.
   They are mirrors and read as a matched set, so matching their appearance is the *tidy* change —

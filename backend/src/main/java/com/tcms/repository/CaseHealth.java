@@ -36,21 +36,24 @@ import org.hibernate.annotations.Filter;
  *
  * <p><strong>What changed is what a {@code false} means.</strong> On an absent row, every signal
  * reads "not computed", which is honest. On a row that exists,
- * {@link #outdatedSpecChanged}, <del>{@link #staleApproval}</del>, {@link #conditionDrift},
+ * {@link #outdatedSpecChanged}, <del>{@link #staleApproval}</del>, <del>{@link #conditionDrift}</del>,
  * {@link #unlinked} and {@link #orphaned} are {@code NOT NULL} columns holding their default, and
  * the read path cannot tell that from a computation that ran and found nothing wrong.
  * <strong>§157 closed the first of them</strong> — {@code ApprovalFacts} derives
- * {@link #staleApproval} now, so four are left and this paragraph is four-fifths as true as it was. The chip list omits them,
+ * {@link #staleApproval} now — <strong>and §158 the second</strong>, {@code ConditionDrift} for
+ * {@link #conditionDrift}, so three are left and this paragraph is three-fifths as true as it was.
+ * The chip list omits them,
  * the facet counts them zero, and {@code computedAt} — the column mapped precisely so
  * "nothing is wrong" and "nobody has looked" render as different sentences — now says
  * <em>looked</em> for the whole row. The distinction it was added for survives per row and has been
- * lost per signal. {@code ArchitectureRulesTest.everyMappedColumnHasAWriter} is what names the five;
- * closing it is five derivations, not a schema change, and each needs the module that owns its
- * cause.
+ * lost per signal. {@code ArchitectureRulesTest.everyMappedColumnHasAWriter} is what names the
+ * remainder; closing it is three derivations, not a schema change, and each needs the module that
+ * owns its cause — or, for {@link #orphaned}, a decision about what "left the project" means before
+ * any module can be asked.
  *
  * <p>Which is also why there is no factory here and no mutator anywhere: a signal that a human can
  * set is a signal that can be set to false while its cause is still true, and the self-healing
- * property is the entire reason these are derived. It is also why the five are not "fixed" by
+ * property is the entire reason these are derived. It is also why the remainder are not "fixed" by
  * making them nullable — a three-valued signal moves the problem onto every reader.
  *
  * <h2>Two schema properties worth stating, because both look like mistakes</h2>
@@ -72,10 +75,10 @@ import org.hibernate.annotations.Filter;
  * freshness.
  *
  * <p><strong>And the sentence above with "no writer for this table" in it is the one §156
- * falsified</strong> — there are three writers now, so {@code computed_at} is non-null wherever a
- * recompute has run, the dashboard stops saying "not computed yet", and the five signals nothing
- * derives are covered by that answer without being part of it. Which is the section above, and the
- * reason it is above this one.
+ * falsified</strong> — there are four writers now (§158 added the fourth), so {@code computed_at}
+ * is non-null wherever a recompute has run, the dashboard stops saying "not computed yet", and the
+ * signals nothing derives are covered by that answer without being part of it. Which is the section
+ * above, and the reason it is above this one.
  */
 @Entity
 @Table(name = "case_health")
@@ -95,7 +98,9 @@ public class CaseHealth {
 
     /**
      * <strong>No writer</strong> (§156, {@code ArchitectureRulesTest.WRITERLESS_BY_DECISION}), like
-     * the four below it. Its cause is a document change under a linked specification, which is
+     * {@link #unlinked} and {@link #orphaned} below it — <del>four</del> two, after §157 and §158
+     * each took one out of that map by deriving it. Its cause is a document change under a linked
+     * specification, which is
      * {@code documentation}'s to see and {@code repository}'s to record — so it is an event and a
      * derivation, not a column to fill in here. See the class header for why {@code false} on an
      * existing row is now a claim rather than a silence.
@@ -109,14 +114,23 @@ public class CaseHealth {
      * {@code review.subject_version_no} against {@code test_case.current_version_no}, which is the
      * comparison {@code ReviewPanel} has drawn its stale banner from since §76.
      *
-     * <p><strong>A zero here is now a check that ran</strong>, unlike the four below and above it —
-     * which is the distinction the class header says the read path cannot draw, drawn for one
-     * column at a time.
+     * <p><strong>A zero here is now a check that ran</strong>, unlike {@link #outdatedSpecChanged},
+     * {@link #unlinked} and {@link #orphaned} — which is the distinction the class header says the
+     * read path cannot draw, drawn for one column at a time.
      */
     @Column(name = "stale_approval", nullable = false)
     private boolean staleApproval;
 
-    /** No writer (§156) — outdatedSpecChanged's case; the cause is a condition the case no longer matches. */
+    /**
+     * <del>No writer (§156)</del> → <strong>§158 gave it one</strong>, the second of the five and
+     * the first whose cause is entirely inside this module: {@code ConditionDrift} compares the
+     * conditions recorded in the newest {@code test_case_version.snapshot} against the live
+     * {@code condition} rows they name — <em>content</em>, not {@code updated_at}, because a
+     * timestamp comparison can never go false and this is an ERROR-severity signal.
+     *
+     * <p><strong>A zero here is a check that ran</strong>, as on {@link #staleApproval}. Three of
+     * the ten are still the other thing.
+     */
     @Column(name = "condition_drift", nullable = false)
     private boolean conditionDrift;
 
@@ -166,7 +180,7 @@ public class CaseHealth {
      * {@code ArchitectureRulesTest.READERLESS_BY_DECISION}, because the comment above was already
      * in the shape that rule asks of the other twelve: what the column is, why it is mapped
      * anyway, and why it stops there. §156 put it in {@code WRITERLESS_BY_DECISION} as well, which
-     * is the harmless overlap: unlike the five signals above it, nothing reads this one either, so
+     * is the harmless overlap: unlike the signals above it, nothing reads this one either, so
      * there is no reader to be misled by the default it holds.
      */
     @Column(name = "incomplete", nullable = false)

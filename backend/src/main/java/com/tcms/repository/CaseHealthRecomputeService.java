@@ -11,15 +11,17 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Re-derives the health signals this module can see for the company currently in context — two
  * since §53, <strong>four since M3 slice 5</strong>, which added §6c's automation-drift pair now
- * that ingestion exists to make "no ingested result in N days" mean something, and
- * <strong>five since §157</strong>, which added §6g's stale approval.
+ * that ingestion exists to make "no ingested result in N days" mean something, <strong>five since
+ * §157</strong>, which added §6g's stale approval, and <strong>six since §158</strong>, which added
+ * §6f's condition drift.
  *
  * <p>The word "execution-driven" was in this sentence until §157 and is gone rather than qualified:
  * {@code STALE_APPROVAL} is derived from {@code review} and {@code test_case.current_version_no}
  * and has nothing to do with running anything. What the signals here have in common is that
  * <em>this module can see their cause</em> — through {@code ExecutionFacts} for the four that live
- * behind a forbidden module edge, and through {@code ApprovalFacts} for the one that lives behind a
- * permitted one.
+ * behind a forbidden module edge, through {@code ApprovalFacts} for the one that lives behind a
+ * permitted one, and through {@code ConditionDrift} for the one whose cause is in this module
+ * outright.
  *
  * <h2>Why this exists at all, and what it stops the dashboard from claiming</h2>
  *
@@ -40,15 +42,19 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p><strong>§157 took approvals off that list</strong> — the first of §156's five to get a
  * derivation, and the cheapest of the five, because {@code review} belongs to {@code project} and
- * {@code project} is a module this one may simply depend on. Four are left: documentation links
- * ({@code UNLINKED} and {@code OUTDATED_SPEC_CHANGED}), {@code CONDITION_DRIFT}, and the owner
- * check behind {@code ORPHANED}.
+ * {@code project} is a module this one may simply depend on. <strong>§158 took condition drift off
+ * it too</strong>, and that one crossed no module boundary at all: {@code test_case_version} and
+ * {@code condition} are both this module's. <strong>Three are left</strong>, and each needs a
+ * module this one may not depend on or a decision nobody has taken — documentation links
+ * ({@code UNLINKED} and {@code OUTDATED_SPEC_CHANGED}) and the owner check behind
+ * {@code ORPHANED}.
  *
  * <p><strong>§156: the word "honest" was load-bearing and this service is what took it away.</strong>
  * A zero is honest while the row is absent — the dashboard's whole three-state design rests on
  * that. The first run of this job writes a row and a {@code computed_at} for every live case, so
- * from then on the five signals nobody derives report a zero the read path cannot tell from a check
- * that passed. Nothing here is wrong; the consequence just belongs written down at the thing that
+ * from then on the signals nobody derives report a zero the read path cannot tell from a check
+ * that passed — five when §156 wrote that sentence, three now, and none of the three is any less
+ * misleading for the count having come down. Nothing here is wrong; the consequence just belongs written down at the thing that
  * causes it. {@code CaseHealth}'s header has the account.
  *
  * <h2>Why a scheduled recompute and not an event handler</h2>
@@ -74,16 +80,19 @@ public class CaseHealthRecomputeService {
 
     private final ExecutionFacts executionFacts;
     private final ApprovalFacts approvalFacts;
+    private final ConditionDrift conditionDrift;
     private final CaseHealthProperties thresholds;
     private final Clock clock;
 
     CaseHealthRecomputeService(
             ExecutionFacts executionFacts,
             ApprovalFacts approvalFacts,
+            ConditionDrift conditionDrift,
             CaseHealthProperties thresholds,
             Clock clock) {
         this.executionFacts = executionFacts;
         this.approvalFacts = approvalFacts;
+        this.conditionDrift = conditionDrift;
         this.thresholds = thresholds;
         this.clock = clock;
     }
@@ -120,8 +129,13 @@ public class CaseHealthRecomputeService {
         // been edited past the version somebody signed, which is true from the first save and does
         // not become truer in ninety days.
         approvalFacts.recomputeStaleApproval(now);
-        log.debug("Recomputed execution, automation-drift and approval health signals for {} cases",
-                cases);
+        // Fourth statement, same transaction, and the first whose inputs are entirely this
+        // module's own — the newest version snapshot against the live condition library. No
+        // cutoff either: a condition edited an hour ago has changed the case exactly as much as
+        // one edited last year, and ageing the signal would mean an ERROR that arrives late.
+        conditionDrift.recomputeConditionDrift(now);
+        log.debug("Recomputed execution, automation-drift, approval and condition-drift health "
+                + "signals for {} cases", cases);
         return cases;
     }
 }

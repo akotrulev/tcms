@@ -168,7 +168,13 @@ export function AutomationLabel({
 const healthHelp: Record<HealthSignal, string> = {
   OUTDATED_SPEC_CHANGED: 'The documentation block this case verifies has changed since the case was last edited.',
   STALE_APPROVAL: 'This case was edited after it was approved, so the approval no longer covers what it says.',
-  CONDITION_DRIFT: 'A shared condition this case relies on has changed since the case was last reviewed.',
+  // "since the case was last SAVED", not "last reviewed" — corrected in §158, the slice that gave
+  // this signal a derivation. The server compares the newest version's snapshot against the live
+  // library entry (ConditionDrift), which has nothing to do with review: a case in a project with
+  // review switched off raises this exactly as readily. The old wording was harmless while nothing
+  // computed the signal and would have become a tooltip explaining the wrong comparison on the day
+  // it started firing.
+  CONDITION_DRIFT: 'A shared condition this case relies on has changed since the case was last saved.',
   NEVER_EXECUTED: 'This case has never been run.',
   LONG_UNEXECUTED: 'This case has not been executed in over 90 days.',
   STALE_AUTOMATION: 'Marked automated, but no automated result has arrived recently.',

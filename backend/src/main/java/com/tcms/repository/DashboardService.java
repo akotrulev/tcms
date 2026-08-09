@@ -219,6 +219,12 @@ public class DashboardService {
      * {@code STALE_APPROVAL}, which is the first of §156's five to be taken and the first tile on
      * this panel that can appear because somebody edited a case rather than because somebody ran
      * one. Nothing on this method changed for it, which is the property the panel was built for.
+     *
+     * <p><strong>Three, since §158</strong> — {@code ConditionDrift} derives
+     * {@code CONDITION_DRIFT}, and this panel gains its first tile that can appear because somebody
+     * edited <em>something else</em>: a shared condition in the library, on a screen with no case
+     * on it. Nothing on this method changed for that one either, and it is now the second slice
+     * running to say so, which is what "generic over {@code HealthSignal}" was supposed to buy.
      */
     private static List<TileView> health(Map<HealthSignal, Long> counts) {
         List<TileView> tiles = new ArrayList<>();
