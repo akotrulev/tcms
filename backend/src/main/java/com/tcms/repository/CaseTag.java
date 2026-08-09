@@ -17,10 +17,12 @@ import org.hibernate.annotations.Filter;
  * these are the organisational labels the grid shows. Plan §6c keeps them apart precisely because
  * merging them makes "run the smoke suite" and "cases the release manager flagged" the same query.
  *
- * <p>An entity rather than a projection off a native query, unlike {@code SuiteCaseCount}: this one
- * is company-owned and read by a set of case ids, so the Hibernate filter is worth having applied
- * on top of RLS. {@code SuiteCaseCount} could not have it — there is no entity behind an aggregate
- * — and that asymmetry is the reason, not inconsistency.
+ * <p>An entity rather than a projection off a native query, unlike the aggregates
+ * {@link SuiteMembership} reads: this one is company-owned and read by a set of case ids, so the
+ * Hibernate filter is worth having applied on top of RLS. An aggregate could not have it — there
+ * is no entity behind a {@code COUNT} — and that asymmetry is the reason, not inconsistency.
+ * (It named {@code SuiteRepository.SuiteCaseCount} until §152 deleted that projection along with
+ * the uncalled query it belonged to; the contrast it draws is unchanged.)
  */
 @Entity
 @Table(name = "case_tag")

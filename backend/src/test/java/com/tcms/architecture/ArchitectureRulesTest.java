@@ -314,6 +314,80 @@ class ArchitectureRulesTest {
                 .isEmpty();
     }
 
+    @Test
+    @DisplayName("every method a repository DECLARES has a caller — the seam tally, computed")
+    void everyDeclaredRepositoryMethodHasACaller() {
+        // §121 deleted CaseFlakeRepository.findQuarantined rather than using it: a seam written
+        // ahead of its consumer had guessed the module boundary wrong, and the generator its
+        // javadoc named could never have called it. That was found by hand, one method, because
+        // the slice happened to be about the table it hung off. §116, §117, §132 and §151 each
+        // found the same shape from the other end — a column with no writer, a column with no
+        // reader — and each of those was found by hand too.
+        //
+        // This is that tally, computed, at the seam rather than at the column. A repository method
+        // is a query somebody designed, indexed for, and argued for in a javadoc; one with no
+        // caller is a claim about how the product reads its data that the product does not make.
+        // The failure it prevents is not a wasted method. It is the NEXT reader, who finds
+        // findForPages' header stating "this has exactly one caller: the delete path", believes
+        // the delete path works that way, and writes the second one against a premise that was
+        // never true. Every javadoc in this codebase is evidence, and an uncalled method's is
+        // evidence nothing has ever checked.
+        //
+        // Accesses AND references, because a method reference (Repository::find) is a caller and
+        // ArchUnit records the two separately — the projection accessors read via
+        // Comparator.comparingLong(ProjectRoleName::getPermissionCount) are live code, and a rule
+        // that saw only invocations would demand their deletion.
+        //
+        // Over PRODUCTION_AND_TESTS, not PRODUCTION, and that is a deliberate widening rather than
+        // laxness. Three of the methods this found are read only by tests asserting what a write
+        // actually left in the database — AuditEventRepository.findByActionOrderByOccurredAtDesc is
+        // the clearest, since the audit trail has no screen yet and the test IS the only reader
+        // there is. A seam whose consumer is a test is a seam with a consumer. A seam with no
+        // consumer at all has never once been executed, which is the state this rule names.
+        //
+        // Scoped to types named *Repository, deliberately narrow — §147's reason, applied again.
+        // The broad rule ("no uncalled public method anywhere") was measured first and it reports
+        // every controller handler in the codebase, because Spring calls those reflectively and
+        // bytecode cannot see it; it would ship with an ignore list longer than the rule. Spring
+        // Data repositories are the one population where every legitimate caller is a compile-time
+        // one, which is what makes the count trustworthy here and nowhere else.
+        //
+        // Methods INHERITED from JpaRepository (findById, save, count) are out of scope by
+        // construction: they are not declared here, and they are the base interface's cost rather
+        // than anyone's design.
+        Map<String, String> uncalled = new TreeMap<>();
+        int declared = 0;
+
+        for (JavaClass type : PRODUCTION_AND_TESTS) {
+            if (!type.isInterface() || !type.getSimpleName().endsWith("Repository")) {
+                continue;
+            }
+            for (JavaMethod method : type.getMethods()) {
+                declared++;
+                if (method.getAccessesToSelf().isEmpty() && method.getReferencesToSelf().isEmpty()) {
+                    uncalled.put(
+                            type.getSimpleName() + "." + method.getName(),
+                            "declared, indexed for, documented — and called from nowhere");
+                }
+            }
+        }
+
+        assertThat(declared)
+                .as("no repository method was examined at all, so this rule passes vacuously — the "
+                        + "*Repository naming convention or the import has moved")
+                .isGreaterThan(100);
+
+        assertThat(uncalled)
+                .as("a repository declares a query nothing calls. It is not dead weight, it is an "
+                        + "unverified claim: its javadoc describes a read path that has never "
+                        + "executed, and the next author will believe it. Delete it — the query is "
+                        + "three lines to write again on the day something needs it, and §121's "
+                        + "findQuarantined is the precedent, deleted rather than wired because the "
+                        + "consumer it was written for could not legally have called it. If it "
+                        + "genuinely is needed, give it its caller in the same commit")
+                .isEmpty();
+    }
+
     /** A record's components as {@code name:type} pairs — a set, so a reordered copy still matches. */
     private static Set<String> componentsOf(JavaClass record) {
         return record.getFields().stream()

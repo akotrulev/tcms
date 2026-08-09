@@ -206,14 +206,20 @@ public interface TestExecutionRepository extends JpaRepository<TestExecution, UU
     /**
      * How many evidence rows hang off each of a batch of executions, as {@code [executionId, count]}.
      *
-     * <p>Native and grouped, for {@link #findDefectLinks}'s reasons exactly: {@code evidence} has no
-     * entity because nothing in the product uploads one — {@code evidence:attach} has no endpoint —
-     * and an entity would be a mapped write surface for a table with no writer.
+     * <p><strong>This header said three false things until §152, and every one of them had a file
+     * beside it.</strong> It read: <em>"{@code evidence} has no entity because nothing in the
+     * product uploads one — {@code evidence:attach} has no endpoint — and an entity would be a
+     * mapped write surface for a table with no writer."</em> {@link Evidence} is an entity,
+     * {@code EvidenceController} is the endpoint, {@code EvidenceService} enforces
+     * {@code evidence:attach}, and the upload path has had a writer since it shipped. The claim
+     * was true when it was written and nothing brought the two back into contact, because a
+     * javadoc is the one artifact in this repository no gate reads.
      *
-     * <p>It is queried rather than answered as a constant {@code 0} for the other half of that same
-     * argument: a count nobody looked up is a claim, not a lookup, and an ingested run could carry
-     * evidence this module did not create. An execution with no rows is simply absent from the
-     * result, and the caller reads it as zero.
+     * <p>Native and grouped for the reason that survives: this is a {@code GROUP BY} over a batch,
+     * and the alternative is a count per execution. It is queried rather than answered as a
+     * constant {@code 0} because a count nobody looked up is a claim, not a lookup — and that half
+     * was never conditional on the table being empty. An execution with no rows is simply absent
+     * from the result, and the caller reads it as zero.
      */
     @Query(value = """
             SELECT e.execution_id, COUNT(*)
@@ -227,7 +233,7 @@ public interface TestExecutionRepository extends JpaRepository<TestExecution, UU
      * The defects linked to a batch of executions, as {@code [id, executionId, externalKey,
      * provider, url, statusCache]}.
      *
-     * <p>Native, and the only native query in this class, because {@code defect_link} has no entity:
+     * <p>Native because {@code defect_link} has no entity:
      * nothing in the product creates one yet — the {@code IssueTracker} port is M4 — so an entity
      * would be a mapped write surface for a table with no writer. The read is owed all the same,
      * because the contract marks {@code defects} required and answering {@code []} unconditionally
@@ -236,6 +242,10 @@ public interface TestExecutionRepository extends JpaRepository<TestExecution, UU
      *
      * <p>{@code defect_link} is this module's own table (ERD §5), so this is not the cross-module
      * edge the package comment governs.
+     *
+     * <p>It said "and the only native query in this class" until §152. {@link #countEvidence}, ten
+     * lines above, is native too and was when this was written — a claim contradicted by the
+     * method immediately preceding it, which is how little a javadoc costs to be wrong in.
      */
     @Query(value = """
             SELECT d.id, d.execution_id, d.external_key, d.provider, d.url, d.status_cache

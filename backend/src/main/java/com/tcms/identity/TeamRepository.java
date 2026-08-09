@@ -15,10 +15,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public interface TeamRepository extends JpaRepository<Team, UUID> {
 
-    Optional<Team> findByName(String name);
-
-    List<Team> findByParentTeamId(UUID parentTeamId);
-
     List<Team> findAllByOrderByNameAsc();
 
     /**

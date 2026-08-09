@@ -19,8 +19,6 @@ public interface CompanyRepository extends JpaRepository<Company, UUID> {
 
     Optional<Company> findBySlug(String slug);
 
-    boolean existsBySlug(String slug);
-
     /**
      * Used by the permission evaluator to honour suspension in code. The policy is
      * suspend-never-delete (plan §6s), so a suspended company keeps every row it had —

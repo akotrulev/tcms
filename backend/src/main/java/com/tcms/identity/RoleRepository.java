@@ -19,8 +19,6 @@ public interface RoleRepository extends JpaRepository<Role, UUID> {
 
     Optional<Role> findByName(String name);
 
-    java.util.List<Role> findByScope(RoleScope scope);
-
     java.util.List<Role> findAllByOrderByNameAsc();
 
     /**

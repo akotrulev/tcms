@@ -21,20 +21,12 @@ public interface DocBlockRepository extends JpaRepository<DocBlock, UUID> {
             """)
     List<DocBlock> findForPage(@Param("pageId") UUID pageId);
 
-    /**
-     * The blocks of several pages at once, in page-then-position order.
-     *
-     * <p>Exists so the page tree could carry block counts without a query per page. Nothing needs
-     * that yet — {@code DocPageSummary} has no count — so this has exactly one caller: the delete
-     * path, which needs every block of one page and its descendants to check for links before
-     * removing any of them.
-     */
-    @Query("""
-            SELECT b FROM DocBlock b
-             WHERE b.pageId IN :pageIds
-             ORDER BY b.pageId ASC, b.position ASC
-            """)
-    List<DocBlock> findForPages(@Param("pageIds") Collection<UUID> pageIds);
+    // A findForPages(Collection<UUID>) sat here until §152, and its header named "exactly one
+    // caller: the delete path, which needs every block of one page AND ITS DESCENDANTS". It had
+    // none, and the sentence was wrong about the design as well as about the count: delete refuses
+    // outright while countLiveChildren > 0, so it never reaches a descendant's blocks and the
+    // plural query it was written for cannot arise. Restore it when the page tree carries block
+    // counts — that is the batch read it was really for, and DocPageSummary still has no count.
 
     /**
      * How many {@code doc_link} rows target any of these blocks.

@@ -41,10 +41,6 @@ public interface AppUserRepository extends JpaRepository<AppUser, UUID> {
     @Query(nativeQuery = true, value = "SELECT * FROM app_user WHERE email = CAST(:email AS citext)")
     Optional<AppUser> findByEmail(@Param("email") String email);
 
-    @Query(nativeQuery = true,
-            value = "SELECT EXISTS (SELECT 1 FROM app_user WHERE email = CAST(:email AS citext))")
-    boolean existsByEmail(@Param("email") String email);
-
     /**
      * The gate {@link PermissionEvaluator} applies before any grant is read. Expressed as
      * an existence check rather than loading the row, because the evaluator runs on every

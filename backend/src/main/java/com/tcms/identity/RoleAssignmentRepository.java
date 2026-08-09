@@ -296,8 +296,6 @@ public interface RoleAssignmentRepository extends JpaRepository<RoleAssignment, 
     boolean existsByCompanyIdAndRoleIdAndUserIdAndProjectIdIsNull(
             UUID companyId, UUID roleId, UUID userId);
 
-    List<RoleAssignment> findByProjectId(UUID projectId);
-
     /**
      * Every grant in the active company, newest first — the admin screen's list before it is
      * narrowed to what the caller may administer.

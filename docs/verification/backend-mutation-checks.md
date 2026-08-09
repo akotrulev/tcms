@@ -1545,3 +1545,27 @@ cd backend
 > tables, carries three indexes, and **is ordered by nothing in the application** — `releaseVersion`
 > is an exact-match filter in every operation that takes it. See §151 for why that is the finding
 > rather than a footnote.
+
+---
+
+## §152 — the seams nobody calls
+
+`ArchitectureRulesTest.everyDeclaredRepositoryMethodHasACaller` computes the tally §121, §116,
+§117, §132 and §151 each kept by hand: a repository method with no caller anywhere is an unverified
+claim, and its javadoc is evidence nothing has ever checked. Ten were found and deleted.
+
+```bash
+cd backend
+./gradlew test --tests 'com.tcms.architecture.ArchitectureRulesTest'
+```
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| SC-1 | Restore any one of the ten deleted methods — e.g. `List<Team> findByParentTeamId(UUID)` on `TeamRepository` — with no caller | `everyDeclaredRepositoryMethodHasACaller` fails naming exactly that method. **Nothing else does, on any stack**: the interface compiles, Spring Data implements it, the context boots, and every one of the other 2401 tests stays green. That gap is the whole reason the rule exists rather than being a review habit. | ✅ **RUN 2026-08-09** — the pre-fix tree is this mutation ten times over; the rule went red naming all ten and no other test moved |
+| SC-2 | Narrow the rule to `getAccessesToSelf()` alone, dropping `getReferencesToSelf()` | The rule fails on `TestCaseRepository.existsByAutomationKey` and the two `RoleAssignmentRepository` projection accessors — **live code, called by method reference**, which a bytecode scan that reads only invocations cannot see. Following its advice would delete a working call path. | ✅ **RUN 2026-08-09** — the opening hand-grep was this mutation, and it flagged `existsByAutomationKey` exactly as predicted |
+| SC-3 | Point the rule at `PRODUCTION` instead of `PRODUCTION_AND_TESTS` | Three methods whose only reader is a test fail — `AuditEventRepository.findByActionOrderByOccurredAtDesc`, `TeamMembershipRepository.findByTeamId`, `InstanceAuditEventRepository.findByCompanyIdOrderByOccurredAtDesc`. The audit trail has no screen, so deleting the first would remove the only reader that exists and blind three endpoint tests to what they actually wrote. | ⬜ NOT RUN |
+| SC-4 | Rename a repository interface so it no longer ends in `Repository` | The rule silently stops examining it and **stays green** — the `declared > 100` precondition is what keeps the whole rule from passing vacuously, not what protects one interface. Recorded rather than closed: the naming convention is the scope, and a repository not called `*Repository` is a different finding. | ⬜ NOT RUN |
+
+> **No browser-queue row.** Ten methods were deleted and none had a caller, so no request, response
+> or screen can differ — that is the premise the deletions rest on, and `./gradlew build` is where
+> it is checked.

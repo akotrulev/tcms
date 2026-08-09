@@ -21,8 +21,12 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public interface EvidenceRepository extends JpaRepository<Evidence, UUID> {
 
-    /** For the run detail: every execution's evidence in one query rather than one query per row. */
-    List<Evidence> findByExecutionIdIn(List<UUID> executionIds);
+    // A findByExecutionIdIn(List<UUID>) sat here until §152, headed "for the run detail: every
+    // execution's evidence in one query rather than one query per row". The run detail does not
+    // read evidence — it reads COUNTS, through TestExecutionRepository.countEvidence, which is
+    // already the single grouped query that header was worried about. The one screen that needs
+    // the rows is the single-execution detail, and it asks for one execution's, below. So this was
+    // not an N+1 prevented; it was an N+1 that could not occur, guarded against twice.
 
     /**
      * One execution's evidence, oldest first — the order it was attached in, which is the order the

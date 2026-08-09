@@ -61,8 +61,9 @@ final class CaseSpecifications {
         // for want of a test. The suite scope below is already the project's own live tree, and a
         // suite id is a UUID primary key — so a case in another project hangs off a suite that is
         // never in the set, and no fixture can make the difference observable. Recorded rather
-        // than quietly left as a passing predicate nobody can account for; SuiteRepository's
-        // countLiveCasesBySuite documents the same family.
+        // than quietly left as a passing predicate nobody can account for; §22's documented
+        // survivor on RoleAssignmentRepository is the same family. (SuiteRepository's
+        // countLiveCasesBySuite documented it too, until §152 deleted it as callerless.)
         //
         // It stays for two reasons that are not "in case the join key changes". It is what makes
         // the query reachable through test_case_lifecycle_idx (company_id, project_id,

@@ -39,67 +39,15 @@ public interface SuiteRepository extends JpaRepository<Suite, UUID> {
             """)
     List<Suite> findLiveForProject(@Param("projectId") UUID projectId);
 
-    /**
-     * Live case counts per suite for one project, in <strong>one</strong> query.
-     *
-     * <p>Suites with no cases are absent from the result rather than present with zero — a
-     * {@code GROUP BY} cannot invent rows for groups that do not exist — so the caller defaults a
-     * missing suite to 0. An empty folder is the normal state of a tree, not an edge case.
-     *
-     * <h2>Filed cases only, deliberately</h2>
-     *
-     * <p>This counts the cases whose {@code suite_id} <em>is</em> the suite. It counted "not the
-     * subtree" for the SPA's rollup until §98; what it still is not is the resolved membership —
-     * {@link SuiteMembership#countsBySuite} is that, and it is what the wire's {@code caseCount}
-     * carries. This one feeds the internal reads that mean <em>filing</em> specifically.
-     *
-     * <h2>Why native, and why the two tenancy predicates cannot be tested — but stay</h2>
-     *
-     * <p>There is no {@code TestCase} entity yet, and a Hibernate filter does not apply to a
-     * native query, so both scoping predicates are spelled out.
-     *
-     * <p><strong>Removing either one is a mutation that survives, and it survives for a structural
-     * reason rather than a missing test.</strong> The result is keyed on {@code suite_id} and read
-     * back per suite of <em>this</em> project, and a suite id is a UUID primary key — so a case in
-     * another project or another company hangs off a suite whose id is never looked up. No fixture
-     * can make the difference observable, which is why no test here pretends to. Recorded rather
-     * than quietly left as a passing predicate nobody can account for; §22's documented survivor
-     * on {@code RoleAssignmentRepository} is the same family.
-     *
-     * <p>They stay for two reasons that are not "in case the join key changes". {@code company_id}
-     * leads {@code test_case_suite_idx (company_id, suite_id) WHERE deleted_at IS NULL}, so it is
-     * what makes this query index-covered rather than a scan. And {@code project_id} bounds the
-     * aggregate to the project being read instead of grouping every case in the company and
-     * discarding most of them. The intent they state is the same one RLS enforces, and the two
-     * agreeing is what makes a future mismatch return nothing rather than something.
-     *
-     * <p>Unlike that method, this one needs no cross-module apology — {@code test_case} is ERD §4
-     * and therefore <em>this</em> module. The event-updated read model §3 lesson 4 prescribes is
-     * still the long-run answer for a rollup; there is nothing to update from until something
-     * writes a case, so a live count is both correct and cheaper than a counter that can drift.
-     *
-     * <p>{@code deleted_at IS NULL} for the same reason it is on the project count: a soft-deleted
-     * case is gone from the case list, so counting it here makes the tree contradict the grid.
-     *
-     * <p><strong>{@code suite_id IS NOT NULL} is new in §96 and is not defensive.</strong> The column
-     * is nullable since {@code V31}, so without the predicate an unfiled case joins a {@code NULL}
-     * group — a {@code SuiteCaseCount} whose {@code suiteId} is null, which every caller then looks
-     * up by a suite id that cannot match it. Harmless today and exactly the kind of row that is
-     * later "fixed" by rendering it under whichever folder is first. Unfiled cases are counted by
-     * the grid, not by the tree; the tree counts what is <em>filed</em>, and this slice's other two
-     * membership arms are resolved separately rather than summed into this number.
-     */
-    @Query(nativeQuery = true, value = """
-            SELECT tc.suite_id AS suiteId, COUNT(*) AS caseCount
-              FROM test_case tc
-             WHERE tc.company_id = :companyId
-               AND tc.project_id = :projectId
-               AND tc.deleted_at IS NULL
-               AND tc.suite_id IS NOT NULL
-             GROUP BY tc.suite_id
-            """)
-    List<SuiteCaseCount> countLiveCasesBySuite(
-            @Param("companyId") UUID companyId, @Param("projectId") UUID projectId);
+    // A countLiveCasesBySuite(companyId, projectId) + its SuiteCaseCount projection sat here
+    // until §152. §98 replaced it with SuiteMembership.countsBySuite — the three-arm union that
+    // IS a flat suite's membership — and left this one standing, revising its header in the same
+    // slice to claim it "feeds the internal reads that mean FILING specifically". There are no
+    // such reads and there had never been any. That revision is what makes this the dangerous
+    // one of the ten: the query still runs, still returns a plausible number, and the number is
+    // the FILED ARM ALONE — precisely the count §98 stopped putting on the wire. The next author
+    // to need a per-suite count finds this, believes the header, and ships §98's defect back.
+    // CaseScope's header states the same distinction and is the place it is written down now.
 
     /**
      * One live suite of one project, by id — the read every write gates on.
@@ -175,12 +123,4 @@ public interface SuiteRepository extends JpaRepository<Suite, UUID> {
             """)
     Optional<Suite> findByIdempotencyKey(
             @Param("projectId") UUID projectId, @Param("idempotencyKey") String idempotencyKey);
-
-    /** A {@code (suiteId, caseCount)} row from {@link #countLiveCasesBySuite}. */
-    interface SuiteCaseCount {
-
-        UUID getSuiteId();
-
-        long getCaseCount();
-    }
 }

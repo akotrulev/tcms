@@ -2,13 +2,53 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-09 (**§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-09 (**§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `910f7a8` (§150) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `ca5830f` (§151) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
+
+---
+
+## §152 — A REPOSITORY METHOD WITH NO CALLER FAILS THE BUILD NOW
+
+`ArchitectureRulesTest.everyDeclaredRepositoryMethodHasACaller` is the tally §121/§116/§117/§132/
+§151 each kept by hand, computed. Ten methods were found and **deleted**; §121's `findQuarantined`
+is the precedent (deleted, not wired).
+
+- **ADD A REPOSITORY METHOD AND ITS CALLER IN THE SAME COMMIT.** A declared-but-uncalled query now
+  reddens the build. Nothing else catches it — the interface compiles, Spring Data implements it,
+  the context boots, and every other test stays green.
+- **Deleted (do not restore without a caller):** `AppUserRepository.existsByEmail`,
+  `CompanyRepository.existsBySlug`, `DocBlockRepository.findForPages`,
+  `EvidenceRepository.findByExecutionIdIn`, `PermissionRepository.findByAreaOrderByKeyAsc`,
+  `RoleAssignmentRepository.findByProjectId`, `RoleRepository.findByScope`,
+  `SuiteRepository.countLiveCasesBySuite` (+ `SuiteCaseCount`), `TeamRepository.findByName`,
+  `TeamRepository.findByParentTeamId`. Each has a `// … sat here until §152` note where it was.
+- **`SuiteRepository.countLiveCasesBySuite` was the dangerous one.** §98 replaced it with
+  `SuiteMembership.countsBySuite` (filed ∪ added ∪ tagged) and **revised its javadoc in the same
+  slice** to claim it "feeds the internal reads that mean FILING specifically" — there are none. It
+  returned the **filed arm alone**, the count §98 removed from the wire. A superseding slice is when
+  a stale seam's comment gets *more* convincing, not less.
+- **The rule reads accesses AND references.** `cases::existsByAutomationKey` and the projection
+  accessors read via `Comparator.comparingLong(ProjectRoleName::getPermissionCount)` are live code
+  that an invocation-only scan condemns. A hand-grep for `.name(` got two of ten wrong in **both**
+  directions — it also missed `TeamRepository.findByName` because `RoleRepository.findByName` is
+  called.
+- **It runs over `PRODUCTION_AND_TESTS` on purpose.** Three seams' only reader is a test asserting
+  what a write left in the database (`AuditEventRepository.findByActionOrderByOccurredAtDesc` — the
+  audit trail has no screen). A test consumer is a consumer.
+- **It is scoped to `*Repository`, and the broad form was measured before being refused**: "no
+  uncalled public method" reports every controller handler, because Spring calls those reflectively.
+- **`PermissionRepository` declares NOTHING now** and that is correct: `PermissionCatalogue` calls
+  `findAll()` once over 55 immutable seeded rows.
+- **`TestExecutionRepository`'s two headers were wrong in four places** — `countEvidence` claimed
+  `evidence` has no entity, nothing uploads one, and `evidence:attach` has no endpoint (all three
+  false since `Evidence`/`EvidenceController`/`EvidenceService` shipped, seven files in the same
+  package); `findDefectLinks` claimed to be the only native query in a class where the method ten
+  lines above it is native. **A javadoc is the one artifact here no gate reads.**
 
 ---
 
