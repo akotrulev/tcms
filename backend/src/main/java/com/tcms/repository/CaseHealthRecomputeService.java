@@ -26,9 +26,16 @@ import org.springframework.transaction.annotation.Transactional;
  * ingestion still have no writer of their own~~ → <strong>four of the ten, and ingestion is no
  * longer on the list</strong>: §117 gave {@code test_run.source = 'INGESTED'} a writer, which is the
  * whole predicate {@code STALE_AUTOMATION} was blocked on. Approvals, documentation links and the
- * owner check keep their honest zero (see {@code ExecutionFacts}' note on why this job must not
- * touch their columns), as does {@code FAILING_REPEATEDLY}, which is a sibling job's and not
- * absent.
+ * owner check keep their <del>honest</del> zero (see {@code ExecutionFacts}' note on why this job
+ * must not touch their columns), as does {@code FAILING_REPEATEDLY}, which is a sibling job's and
+ * not absent.
+ *
+ * <p><strong>§156: the word "honest" was load-bearing and this service is what took it away.</strong>
+ * A zero is honest while the row is absent — the dashboard's whole three-state design rests on
+ * that. The first run of this job writes a row and a {@code computed_at} for every live case, so
+ * from then on the five signals nobody derives report a zero the read path cannot tell from a check
+ * that passed. Nothing here is wrong; the consequence just belongs written down at the thing that
+ * causes it. {@code CaseHealth}'s header has the account.
  *
  * <h2>Why a scheduled recompute and not an event handler</h2>
  *

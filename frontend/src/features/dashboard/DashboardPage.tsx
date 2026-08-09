@@ -141,13 +141,26 @@ function DashboardBody({ data, projectId }: { data: RepositoryDashboard; project
  * The three states of "Needs attention", which are genuinely three and not two.
  *
  * An empty tile list is a **claim** that nothing is wrong. That claim is only true if somebody
- * looked, and `healthComputedAt` is the server saying whether anybody has: it is `null` while
- * `case_health` has no writer, which is every deployment today. Rendering the empty panel and
- * the never-computed panel identically is the same defect as §46's `met: null` reading as a
- * failed gate — a reassuring sentence where the honest one is "we don't know yet".
+ * looked, and `healthComputedAt` is the server saying whether anybody has. Rendering the empty
+ * panel and the never-computed panel identically is the same defect as §46's `met: null` reading
+ * as a failed gate — a reassuring sentence where the honest one is "we don't know yet".
  *
- * Exported for its own test: two of these three branches are unreachable through the mock (which
- * always supplies both a timestamp and tiles), and §46's finding is that no test written before a
+ * ~~`healthComputedAt` is `null` while `case_health` has no writer, which is every deployment
+ * today.~~ → **superseded 2026-08-09 (§156).** It has three writers, the recompute is
+ * `matchIfMissing = true` on an hourly schedule, so the timestamp is non-null within two minutes
+ * of a deployment starting — and **five of the ten signals still have no computation behind them**
+ * (`ArchitectureRulesTest.everyMappedColumnHasAWriter`). So the middle branch, which used to be
+ * unreachable, is the one every deployment now lands in, and it was saying "Nothing needs
+ * attention" about five checks that had never run.
+ *
+ * The copy is narrowed rather than the branch changed: this panel cannot know *which* signals the
+ * server derives — that is a server fact, and a list of them here would be the second
+ * implementation of it. What it can honestly say is what it actually knows, which is that no
+ * signal was raised. Naming the gap needs the server to say which signals it computes, and that
+ * is a contract change.
+ *
+ * Exported for its own test: two of these three branches are unreachable through a fixture that
+ * always supplies both a timestamp and tiles, and §46's finding is that no test written before a
  * state is reachable can fail on it.
  */
 export function HealthPanel({ data, casesPath }: { data: RepositoryDashboard; casesPath: string }) {
@@ -163,7 +176,7 @@ export function HealthPanel({ data, casesPath }: { data: RepositoryDashboard; ca
   if (data.health.length === 0) {
     return (
       <Typography variant="body2" sx={{ color: 'text.secondary' }} data-testid="Dashboard.Health.Clear">
-        Nothing needs attention. Last checked {formatDateTime(data.healthComputedAt)}.
+        No health signal was raised. Last checked {formatDateTime(data.healthComputedAt)}.
       </Typography>
     );
   }

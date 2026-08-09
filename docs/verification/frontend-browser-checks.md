@@ -1753,3 +1753,30 @@ with a parent value. No new fixture is needed beyond one child value under an ex
 | `EV-5` | As **Test Lead**, in project settings → classification, add two child values under an existing value, then retire the parent | The dialog **stays open** with the warning *"2 values sit under this one. Retire those first — retiring a whole branch at once would unclassify every case beneath it with nothing on screen naming them."* One sentence, correct plural, em-dash intact. Before this slice the page composed the words around a bare `2`; the words are now the server's and the page prints them. |
 | `EV-6` | Retire one child, then retire the parent again | The same warning with **"1 value sits under this one. Retire it first — …"** — the singular arm, which is the server's and not the page's. The page's own composition had the plural bug (`1 value sit under this one`) and could not have produced this. |
 | `EV-7` | With the same two children, run `tcms` against the same value — there is no CLI arm for retiring a classification value, so drive `DELETE /projects/{id}/classification/values/{valueId}` with `curl` and an API token | The body's `errors.children[0]` is the **same sentence** the dialog shows. This is the row that would have caught the original: the response a non-SPA caller sees, read without a screen composing anything around it. |
+
+## §156 — the health panel's all-clear, narrowed to what it actually knows
+
+**Lane: 4 — the scheduler-tick lane**, immediately beside `L4-23`…`L4-29`. It needs the same state
+those rows do (the hourly `CaseHealthScheduler` tick having run at least once, which is
+`matchIfMissing = true` and therefore automatic within two minutes of the stack coming up) and it
+needs **no fixture at all beyond a project with cases and no raised signal** — which, before any
+result is recorded, is the state a freshly provisioned company is already in.
+
+That is the point of the row. The branch it drives was described in the panel's own comment as
+unreachable — *"`healthComputedAt` is null while `case_health` has no writer, which is every
+deployment today"* — and it has been the branch every deployment lands in since §53 gave the table
+its first writer. Five of the ten signals still have no computation behind them
+(`ArchitectureRulesTest.everyMappedColumnHasAWriter`), so the panel was telling the reader that
+nothing needed attention on the strength of five checks that had never run.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `HP-1` | Any account with `report:view`, on a project whose cases have **no** raised signal, after the tick. Open the project dashboard and read the "Needs attention" panel | **"No health signal was raised. Last checked …"** — a statement about the checks. **Not** "Nothing needs attention", which is a statement about the project and is the sentence that shipped from §47 to §156. The timestamp must render (it is non-null here; see below). |
+| `HP-2` | On the same screen, confirm the *third* branch is not what you are looking at — `Dashboard.Health.NotComputed` must be absent | The "have not been computed for this project yet" sentence is now the **rare** branch, not the universal one: it needs a project the scheduler has not reached. Worth confirming which of the three you are in, because the two empty branches read similarly and only one of them is honest about *why* it is empty. |
+| `HP-3` | Raise a real signal (`L4-23`'s three failures is the cheapest), wait a tick, reload | Tiles render and neither sentence shows. This is the row that says the copy change did not move the boundary between the branches — it narrowed one claim, and nothing else. |
+
+**What no row here can check, stated rather than skipped:** that a case which *is* orphaned,
+unlinked, condition-drifted, stale-approved or spec-outdated goes on reporting clean. There is no
+way to drive it, because there is no computation to produce the signal — that is the finding, not a
+gap in the pass. Closing it is five derivations, each owned by the module that can see its cause,
+and the honest sentence is what this slice shipped in the meantime.

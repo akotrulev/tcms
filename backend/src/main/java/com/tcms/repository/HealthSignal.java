@@ -29,8 +29,13 @@ package com.tcms.repository;
  * its own constant.</strong> {@code NEVER_EXECUTED} and {@code LONG_UNEXECUTED} got a writer in §53
  * ({@code ExecutionFacts}), {@code FAILING_REPEATEDLY} in {@code reporting.ExecutionSource}, and
  * {@code STALE_AUTOMATION} + {@code UNDECLARED_AUTOMATION} in M3 slice 5 — <strong>five of the ten
- * are real</strong>. The other five still report an honest zero, which is what the paragraph below
- * about severity and the one in {@code CaseHealth} about column ownership both depend on.
+ * are real</strong>. <del>The other five still report an honest zero</del> → <strong>and §156 is
+ * where "honest" stopped being the right word.</strong> A zero is honest on an <em>absent</em> row,
+ * which is what this sentence was written against; the recompute that made the five real also
+ * writes a row and a {@code computed_at} for every live case, and on a row that exists the other
+ * five report a zero indistinguishable from a check that ran and passed. The dashboard drew exactly
+ * that conclusion until §156 narrowed its copy. See {@code CaseHealth}'s header for the full
+ * account and for why nullable columns are not the fix.
  *
  * <h2>{@code incomplete} is on the table and not in this enum</h2>
  *

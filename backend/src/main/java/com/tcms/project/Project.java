@@ -53,6 +53,25 @@ public class Project {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    /**
+     * When this project was retired — and <strong>nothing has ever set it</strong> (§156,
+     * {@code ArchitectureRulesTest.WRITERLESS_BY_DECISION}).
+     *
+     * <p>{@link #archive} is the writer, it is correct, and it has no caller: {@code openapi.yaml}
+     * declares no archive operation, so there is no request that could reach it. The read half is
+     * fully built and on the wire in the other direction — {@code ProjectView.archived} is
+     * <em>required</em> by the contract and derived from this column, which makes it a field the
+     * SPA and both clients are promised and which is {@code false} in every deployment there has
+     * ever been. That is the writerless shape's expensive half: not a column nobody looks at, but
+     * one a consumer draws a conclusion from.
+     *
+     * <p>Kept rather than deleted, and the mutator with it. Removing {@code archive} would leave
+     * {@link #isArchived} a constant and the contract still promising the field, which is the same
+     * state one layer down; removing the field means a migration and a breaking contract change for
+     * a feature the plan has not withdrawn. {@code ProjectWriteRequest}'s header already argues the
+     * adjacent half — why create and edit must <em>not</em> accept {@code archived} — so what is
+     * missing is one operation, and it is a decision rather than a wiring fix.
+     */
     @Column(name = "archived_at")
     private Instant archivedAt;
 

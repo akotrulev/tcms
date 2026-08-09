@@ -86,14 +86,23 @@ public class IngestionJob {
     private String rawPayload;
 
     /**
-     * Where the raw uploaded file was put — and <strong>nothing reads it</strong> (§154,
-     * {@code ArchitectureRulesTest.READERLESS_BY_DECISION}).
+     * Where the raw uploaded file <em>would</em> be put — and <strong>nothing writes it and nothing
+     * reads it</strong> (§154's {@code READERLESS_BY_DECISION}, §156's {@code WRITERLESS_BY_DECISION}).
      *
-     * <p>The consequence is worth stating plainly, because the field name does not: <strong>the
+     * <p><del>The consequence is worth stating plainly, because the field name does not: <strong>the
      * upload cannot be retrieved.</strong> §117 stores the bytes and stores the key that would find
-     * them again, and {@link #getRawStorageKey} — package-private — has no caller in {@code src/main}
-     * or {@code src/test}. Giving it one is a storage read path and an operation on the contract,
-     * not a wiring fix, which is why this is recorded rather than closed here.
+     * them again, and {@link #getRawStorageKey} — package-private — has no caller.</del>
+     * <strong>→ corrected by §156: the write half of that was false.</strong> {@link #completed} is
+     * the one factory and takes no such parameter, so this field is assigned nowhere; the bytes are
+     * not stored either, which is what the class header above has said since §67 — <em>"there is no
+     * adapter … so that column stays null and says so"</em>. Two javadocs fifty lines apart in one
+     * file disagreed about it for a slice, and the wrong one was written by the slice that argued
+     * for computing hand-kept tallies.
+     *
+     * <p>What stands is the conclusion: there is no retrievable copy of what CI uploaded. Closing
+     * it is §67's port plus a read operation on the contract, not a wiring fix, so it is recorded
+     * here rather than fixed. The getter is kept for the reason the column is: giving one half a
+     * writer without the other is what put this file in two states at once.
      */
     @Column(name = "raw_storage_key")
     private String rawStorageKey;
@@ -108,6 +117,16 @@ public class IngestionJob {
     @Column(name = "unmatched_count", nullable = false)
     private int unmatchedCount;
 
+    /**
+     * Why a {@code FAILED} job failed — and <strong>nothing writes it</strong> (§156,
+     * {@code ArchitectureRulesTest.WRITERLESS_BY_DECISION}), because nothing writes {@code FAILED}.
+     *
+     * <p>That is the class header's decision rather than a gap, and it is the one member of this
+     * rule's population whose argument predates the rule by forty slices: a parse failure leaves no
+     * row at all, so there is no row for this column to explain. It becomes reachable with the
+     * asynchronous lane the header describes, at the same moment {@code PENDING} and
+     * {@code PROCESSING} do — which is why it is mapped now rather than added then.
+     */
     @Column(name = "error")
     private String error;
 

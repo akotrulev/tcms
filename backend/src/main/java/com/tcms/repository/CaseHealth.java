@@ -19,16 +19,36 @@ import org.hibernate.annotations.Filter;
  * — "which cases in this project have a stale approval" is a partial index away in this shape and a
  * join plus a filter in the other, and {@code V1} already ships four such indexes.
  *
- * <h2>Nothing writes this yet, and the endpoint is correct anyway</h2>
+ * <h2><del>Nothing writes this yet, and the endpoint is correct anyway</del> → FIVE OF THE TEN
+ * SIGNALS ARE WRITTEN NOW, AND THAT IS WHAT MAKES THE OTHER FIVE MISLEADING</h2>
  *
- * <p>The signals are computed from executions and documentation links, and neither module exists.
- * So the table is empty, every case reports no signals, and every health facet counts zero. That is
- * the truthful answer rather than a stub: no signal <em>has</em> been computed. It begins working
- * when the computation lands, and nothing in the read path changes.
+ * <p><del>The signals are computed from executions and documentation links, and neither module
+ * exists. So the table is empty, every case reports no signals, and every health facet counts zero.
+ * That is the truthful answer rather than a stub: no signal <em>has</em> been computed.</del>
+ * <strong>→ superseded 2026-08-09 (§156), and the reversal is the point.</strong> Both modules
+ * exist. {@code ExecutionFacts} writes {@link #neverExecuted}, {@link #longUnexecuted},
+ * {@link #staleAutomation} and {@link #undeclaredAutomation} (the last two are §120's),
+ * {@code ExecutionSource} writes {@link #failingRepeatedly}, and all three stamp
+ * {@link #computedAt} in the same statement. So the table is <em>not</em> empty, and the argument
+ * above — which was sound while it was empty — no longer holds for the five signals that stayed
+ * behind.
+ *
+ * <p><strong>What changed is what a {@code false} means.</strong> On an absent row, every signal
+ * reads "not computed", which is honest. On a row that exists,
+ * {@link #outdatedSpecChanged}, {@link #staleApproval}, {@link #conditionDrift}, {@link #unlinked}
+ * and {@link #orphaned} are {@code NOT NULL} columns holding their default, and the read path
+ * cannot tell that from a computation that ran and found nothing wrong. The chip list omits them,
+ * the facet counts them zero, and {@code computedAt} — the column mapped precisely so
+ * "nothing is wrong" and "nobody has looked" render as different sentences — now says
+ * <em>looked</em> for the whole row. The distinction it was added for survives per row and has been
+ * lost per signal. {@code ArchitectureRulesTest.everyMappedColumnHasAWriter} is what names the five;
+ * closing it is five derivations, not a schema change, and each needs the module that owns its
+ * cause.
  *
  * <p>Which is also why there is no factory here and no mutator anywhere: a signal that a human can
  * set is a signal that can be set to false while its cause is still true, and the self-healing
- * property is the entire reason these are derived.
+ * property is the entire reason these are derived. It is also why the five are not "fixed" by
+ * making them nullable — a three-valued signal moves the problem onto every reader.
  *
  * <h2>Two schema properties worth stating, because both look like mistakes</h2>
  *
@@ -47,6 +67,12 @@ import org.hibernate.annotations.Filter;
  * so it is mapped and {@code DashboardView.healthComputedAt} carries it. The original objection is
  * still right about what not to do with it — the SPA reports "not computed yet", never a job's
  * freshness.
+ *
+ * <p><strong>And the sentence above with "no writer for this table" in it is the one §156
+ * falsified</strong> — there are three writers now, so {@code computed_at} is non-null wherever a
+ * recompute has run, the dashboard stops saying "not computed yet", and the five signals nothing
+ * derives are covered by that answer without being part of it. Which is the section above, and the
+ * reason it is above this one.
  */
 @Entity
 @Table(name = "case_health")
@@ -64,12 +90,21 @@ public class CaseHealth {
     @Column(name = "project_id", nullable = false, updatable = false)
     private UUID projectId;
 
+    /**
+     * <strong>No writer</strong> (§156, {@code ArchitectureRulesTest.WRITERLESS_BY_DECISION}), like
+     * the four below it. Its cause is a document change under a linked specification, which is
+     * {@code documentation}'s to see and {@code repository}'s to record — so it is an event and a
+     * derivation, not a column to fill in here. See the class header for why {@code false} on an
+     * existing row is now a claim rather than a silence.
+     */
     @Column(name = "outdated_spec_changed", nullable = false)
     private boolean outdatedSpecChanged;
 
+    /** No writer (§156) — outdatedSpecChanged's case; the cause is an approval outliving an edit. */
     @Column(name = "stale_approval", nullable = false)
     private boolean staleApproval;
 
+    /** No writer (§156) — outdatedSpecChanged's case; the cause is a condition the case no longer matches. */
     @Column(name = "condition_drift", nullable = false)
     private boolean conditionDrift;
 
@@ -82,12 +117,20 @@ public class CaseHealth {
     @Column(name = "long_unexecuted", nullable = false)
     private boolean longUnexecuted;
 
+    /**
+     * No writer (§156) — outdatedSpecChanged's case, and <strong>the one the first draft of that
+     * rule reported as live</strong>: a fixture's unterminated {@code UPDATE} swallowed the rest of
+     * its file's string literals, and an {@code @DisplayName} containing the word "unlinked" stood
+     * in for a writer. The cause is a case with no {@code doc_link}, which {@code BlockLinks} can
+     * see and nothing derives.
+     */
     @Column(name = "unlinked", nullable = false)
     private boolean unlinked;
 
     @Column(name = "failing_repeatedly", nullable = false)
     private boolean failingRepeatedly;
 
+    /** No writer (§156) — outdatedSpecChanged's case; the cause is a case in no suite and no plan. */
     @Column(name = "orphaned", nullable = false)
     private boolean orphaned;
 
@@ -110,7 +153,9 @@ public class CaseHealth {
      * <p>§154 made this the reference entry in
      * {@code ArchitectureRulesTest.READERLESS_BY_DECISION}, because the comment above was already
      * in the shape that rule asks of the other twelve: what the column is, why it is mapped
-     * anyway, and why it stops there.
+     * anyway, and why it stops there. §156 put it in {@code WRITERLESS_BY_DECISION} as well, which
+     * is the harmless overlap: unlike the five signals above it, nothing reads this one either, so
+     * there is no reader to be misled by the default it holds.
      */
     @Column(name = "incomplete", nullable = false)
     private boolean incomplete;

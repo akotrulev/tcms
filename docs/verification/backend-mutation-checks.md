@@ -1651,3 +1651,33 @@ cd backend
 > **No browser-queue row.** Neither column was ever on the wire, no contract changed, and the race
 > the fixes close cannot be provoked from one browser tab — it needs two requests overlapping inside
 > one row's write window, which the browser queue's lanes cannot express.
+
+---
+
+### §156 — the columns nothing writes (`WL-1` … `WL-7`)
+
+`everyMappedColumnHasAWriter` is `everyMappedColumnHasAReader`'s mirror, so `RL-1`…`RL-6` above are
+the shape these follow. What is different is the **direction the corpus fails in**: an over-matching
+reader corpus costs a finding it will catch next time, an over-matching *writer* corpus hides one
+permanently. `WL-3` is the row for the instance that actually happened.
+
+```bash
+cd backend
+./gradlew test --tests 'com.tcms.architecture.ArchitectureRulesTest'   # every row here
+```
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| `WL-1` | Delete one entry from `WRITERLESS_BY_DECISION` — e.g. `Project.archivedAt` — leaving the field as it is | The rule fails naming it as an **unexpected** member. Nothing about the column changed; only the argument for keeping it went away. | ⬜ NOT RUN |
+| `WL-2` | Give a pinned column a writer without removing its entry — call `Project.archive(now)` from `ProjectService` | The rule fails on the **missing** element `Project.archivedAt`, which is the direction an ignore list cannot express. Note what else this mutation shows: nothing else in the suite reddens, because no test asserts a project can be archived. | ⬜ NOT RUN |
+| `WL-3` | Restore the first draft's corpus — `writesIn(literalsOf(source))` in place of `writesInLiterals(source)` | **Two members disappear and the rule goes green.** `CaseHealth.unlinked` and `IngestionJob.error` read as written because `DocPageEndpointTest`'s `"UPDATE key_sequence SET next_value = 1"` has no terminator, so `[^;]*` swallows every later literal in that file and an `@DisplayName` containing the word "unlinked" stands in for a writer. **The most important row in this block**: it is the rule's own failure mode, and it fails silently in the direction that hides findings. | ⬜ NOT RUN |
+| `WL-4` | Drop the SQL arm — keep `isWrittenInJava` and delete both `namedIn` calls | Every column written only by native SQL is reported: the five `case_health` signals that *do* have a writer (`never_executed`, `long_unexecuted`, `stale_automation`, `undeclared_automation`, `failing_repeatedly`), `computed_at`, and the `test_run` columns `startIfNotStarted` sets in JPQL. Bounds the claim that bytecode alone is the wrong observer here — the mirror of §154's measured "212 of 635". | ⬜ NOT RUN |
+| `WL-5` | Drop the field-name arm alone (`namedIn(writeText, null, field.getName())`), keeping the column-name one | The JPQL writers go: `startIfNotStarted` names `r.startedAt`, `V1` names `started_at`, and only the field-name arm connects the two. This is the row that says why there are two spellings rather than one. | ⬜ NOT RUN |
+| `WL-6` | Drop `SQL_ROOTS` — the `.sql` corpus — keeping the Java one | A column written only by a migration is reported. `V44`'s backfill is the worked example, and the general point is that a migration that *backfills* is a writer while one that only creates the column is not, because `CREATE TABLE` is neither verb. | ⬜ NOT RUN |
+| `WL-7` | Count a self-write in an uncalled method as a writer — drop the `origin.getAccessesToSelf().isEmpty()` check in `isWrittenInJava` | `Project.archivedAt` disappears, because `archive(now)` assigns it and nothing calls `archive`. That one line is the whole difference between "this column has a mutator" and "this column has ever held a value", and it is the reason the most expensive member of the population is in it. | ⬜ NOT RUN |
+
+> **One browser-queue row, and only one.** The rule changed no production behaviour and the
+> thirteen javadocs it corrected change nothing a request can see. What *does* differ on screen is
+> the dashboard's health panel sentence, which is `HP-1` in the browser queue — and the reason it
+> is a browser row rather than a mutation row is that the defect was in what the sentence *claims*,
+> which no assertion about the response body can observe.

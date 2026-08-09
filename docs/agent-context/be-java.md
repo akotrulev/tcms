@@ -2,15 +2,51 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-09 (**§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-09 (**§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `6de132b` (§154) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `0233240` (§155) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
 ---
+
+## §156 — A MAPPED COLUMN WITH NO WRITER FAILS THE BUILD NOW, AND FIVE HEALTH SIGNALS ARE THE COST
+
+`ArchitectureRulesTest.everyMappedColumnHasAWriter` is the **fifth** rule in §152/§153/§154/§155's
+family and §154's mirror. Population **fourteen**, pinned in `WRITERLESS_BY_DECISION` with the
+argument at each field. The hand-kept tally it replaces is §116's, §117's, §132's and §151's — four
+slices, four single instances, no question.
+
+- **IT READS BYTECODE FIRST; §154 READS TEXT. Do not converge them.** A reader is a query and a
+  query is a string; a **writer is an assignment**, which is what bytecode records. `isWrittenInJava`
+  is the substance and mirrors `isReadInJava` including the one-level caller check — a mutator whose
+  method has no caller is **not** a writer, which is the only reason `Project.archivedAt` is in the
+  population.
+- **The SQL arm is the remainder and needs BOTH spellings**: the **column** name for native SQL
+  (`case_health` is written by `INSERT … ON CONFLICT`) and the **field** name for JPQL
+  (`startIfNotStarted` names `r.startedAt`, `V1` names `started_at`). `.sql` files are in the corpus
+  — §154's has no need of them — because a migration that **backfills** is a writer (`V44`) and one
+  that only creates the column is not.
+- **`writesInLiterals` matches ONE LITERAL AT A TIME and that is load-bearing.** A statement runs to
+  the next `;`; `DocPageEndpointTest`'s unterminated `"UPDATE key_sequence SET next_value = 1"`
+  swallowed every later literal in the file and an `@DisplayName` made `case_health.unlinked` read
+  as written. **Over-matching here HIDES findings**, unlike §154 where it only defers them.
+- **§154's by-decision javadoc was wrong about two members and is corrected**: `rawStorageKey` and
+  `incomplete` are writerless as well. `IngestionJob.completed` takes no `rawStorageKey`, and the
+  class header has said since §67 that the bytes are not stored either.
+- **`Project.archive(now)` HAS NO CALLER and `ProjectView.archived` is `required` on the wire** —
+  false in every deployment. Do not delete the mutator to "clean up": that leaves `isArchived` a
+  constant with the contract still promising the field. What is missing is an operation.
+- **`case_health` STOPPED BEING EMPTY AT §53 AND FIVE SIGNALS DID NOT.** `outdated_spec_changed`,
+  `stale_approval`, `condition_drift`, `unlinked`, `orphaned` have no computation;
+  `CaseHealthScheduler` is `matchIfMissing = true` on an hourly delay, so **`computed_at` is
+  non-null within two minutes of any deployment** and the dashboard's "not computed yet" branch —
+  which five files still described as universal — is the rare one. The SPA's panel now says **"No
+  health signal was raised"**, a claim about the checks; it must not go back to "Nothing needs
+  attention" until the five have writers. Do not make the columns nullable: that moves a three-valued
+  signal onto every reader.
 
 ## §155 — `lock_version` IS EITHER `@Version` OR UNMAPPED, AND `TestRun` HAS NEITHER
 
