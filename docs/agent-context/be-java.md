@@ -2,13 +2,53 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-09 (**§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-09 (**§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
 **Baseline commit:** `fce9739` (§148) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
+
+---
+
+## §150 — THERE IS A PURE UNIT-TEST LANE NOW, AND `ReleaseSortKey` SORTS A PRE-RELEASE LAST
+
+**Before §150 the split was 100 context-booting test classes to 16 pure ones**; it is 100 to 21.
+Every backend test but those boots a real Postgres through Testcontainers, which is right for what
+this schema is and leaves a pure function reached only through an endpoint asserted at that
+endpoint's resolution — which for five classes was no resolution at all.
+
+- **The five new pure classes, 61 tests, `src/test` only — no production code changed**:
+  `ReleaseSortKeyTest`, `BlobUploadTest` (`storage`), `PlanScopeTest`, `PermissionSetTest`,
+  `ApprovalGatingTest`. None starts a context or a container. `spring-boot-starter-test` already
+  brings `mockito-junit-jupiter` (5.17.0); **no dependency was added.**
+- **`ReleaseSortKey` had NO test naming it at all** before this, and its javadoc is wrong twice.
+  **A pre-release sorts AFTER its release** — `of("4.3.0")` is a strict *prefix* of
+  `of("4.3.0-rc.1")`, and a prefix collates first, so the RC reads as newer. That is the same silent
+  wrong-answer shape the class exists to prevent (`"1.10" < "1.9"`), arriving through the suffix
+  instead of the padding. **It is PINNED AS IT BEHAVES, not repaired**: the column is written on
+  three tables, ordered by Postgres rather than Java, and every existing row holds the current
+  format — the repair is a format change + a backfill + a collation decision, i.e. its own slice.
+  Second: `"2026-W31"` is offered in the javadoc as an example of the text fallback and **is not
+  one** — it parses as `02026.00000.00000-W31`. Order is right, documented value is wrong.
+- **`PlanScope.ofItems(PlanScopeItem.rowsOf(planId, scope)) == scope`** is now asserted. That fixed
+  point is the class's stated purpose ("the one definition of what the same scope means", agreed on
+  by the response, the hash and the written set) and nothing checked it. `CompanyContext.open` is a
+  plain `ThreadLocal` guard, so building rows in a unit test needs no Spring.
+- **`PermissionSet`'s two throws are the assertions worth having**: a `NONE` qualifier stored as a
+  held entry makes `has()` answer true for a grant covering no rows, and an unknown key denies
+  forever while reading as a grants problem. Also pinned: `hasAll()` with **no** keys is `true` —
+  the vacuous arm a future caller passing a computed array will hit.
+- **The suite already conforms to the skill everywhere else, and the scan is the evidence**: zero
+  `@InjectMocks`, `lenient()`, `@MockBean`, `mockStatic`, `spy()`, `Thread.sleep`, `@Disabled`, and
+  zero JUnit `Assertions` (AssertJ throughout). Exactly one pre-existing class imports Mockito.
+- **Four classes were considered and left to the integration lane on purpose** — `CaseSort`,
+  `CaseSpecifications`, `AggregateSelection` (all build SQL or Criteria expressions, where the
+  generated SQL is the thing under test) and every entity. The skill's "never unit-test this" table
+  names them; a mocked `CriteriaBuilder` would assert Mockito.
+- **No PIT / mutation score.** The skill hands assertion quality to `qa-test-quality-check-java`,
+  never run here. Each new assertion was checked red-against-the-denied-behaviour by hand instead.
 
 ---
 
