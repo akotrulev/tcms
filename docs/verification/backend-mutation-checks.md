@@ -1517,3 +1517,31 @@ cd backend
 | EV-2 | Any one `ResponseEntity.status(HttpStatus.CONFLICT).body(…)` → `.build()` (e.g. `SuiteController`'s `NotEmpty`) | `noHandlerOmitsABodyOnABodiedStatus` fails naming that file and line. Nothing else does: the contract still declares the body, and no test drives that arm's payload. | ✅ **RUN 2026-08-09** — failed as stated |
 | EV-3 | Rewrite one 409 as `ResponseEntity.status(409).body(…)` | `noBackDoorSpellingOfABodiedStatus` fails. **`noHandlerOmitsABodyOnABodiedStatus` stays green while its `sites` count silently drops by one** — which is the entire reason the ban exists rather than being left as the scan's hole. | ⬜ NOT RUN |
 | EV-4 | Delete `content` from `components/responses/TooManyRequests` | `bodiedStatusesDeclareContent` fails. **Nothing else does, on either stack** — no operation references that component, so the operation walk never reaches it and both generated clients keep their own hand-written 429 types. | ⬜ NOT RUN |
+
+---
+
+## §151 — the release sort key's precedence flag, and the fix that measures as a no-op
+
+`ReleaseSortKey` appended a pre-release suffix straight after the padded triple, so a release's key
+was a strict **prefix** of its own release candidate's and the candidate sorted as the newer of the
+two — §150's finding 4a. `V44` backfills the flag onto three tables under `FORCE ROW LEVEL
+SECURITY`, and `ReleaseSortKeyBackfillTest` executes **the shipped migration file itself** rather
+than a copy of its `UPDATE`.
+
+```bash
+cd backend
+./gradlew test --tests 'com.tcms.execution.ReleaseSortKeyBackfillTest' \
+               --tests 'com.tcms.execution.ReleaseSortKeyTest'
+```
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| RK-1 | `V44`'s flag becomes a `~` sentinel: `THEN '' ELSE '~'` — i.e. **the standard fix for this exact problem**, applied faithfully | `theCandidateSortsBeforeItsRelease` fails, on a database, with the RC still ordering last; `everyRowMatchesTheApplication` and `theLoopReachesEveryCompany` fail with it. **The point of the row is that this mutation is not a mistake anybody would catch in review** — it is what Debian does, it passes under `C` and under ICU, and it is a no-op only under the libc `en_US` collation this deployment actually runs. | ✅ **RUN 2026-08-09** — three red exactly as stated |
+| RK-2 | Unanchor `V44`'s predicate: drop the `([-+].*)?$` guard, leaving a bare padded-triple prefix match | `theTextFallbackIsUntouched` fails on `12345.12345.12345 hotfix` — a value that was **correct before the migration ran** and is corrupted by it. `everyRowMatchesTheApplication` and `runningItTwiceChangesNothing` fail with it, the latter because an unanchored predicate also matches its own output. | ✅ **RUN 2026-08-09** — three red exactly as stated |
+| RK-3 | Delete the per-company `set_config` loop from `V44`, leaving the three `UPDATE`s at the top level | Every `Rewrite` and `Collation` test fails, and **the migration itself still reports success** — `FORCE ROW LEVEL SECURITY` covers the owner Flyway connects as, so the naive spelling is a clean run that changes nothing on every table for every company. `withoutContextTheUpdateIsASilentNoOp` is the assertion that names the mechanism. | ⬜ NOT RUN |
+| RK-4 | Add a fourth table with a `release_sort_key` column in a later migration and do not name it in `V44` | `everyTableWithTheColumnIsCovered` fails naming it. Nothing else does — the new table simply carries keys in the old format for ever, ordering its releases backwards, which is the shape this computed check exists to refuse. | ⬜ NOT RUN — needs a table that does not exist yet |
+
+> **No browser-queue row.** Nothing renders and no request differs: the column is written on three
+> tables, carries three indexes, and **is ordered by nothing in the application** — `releaseVersion`
+> is an exact-match filter in every operation that takes it. See §151 for why that is the finding
+> rather than a footnote.

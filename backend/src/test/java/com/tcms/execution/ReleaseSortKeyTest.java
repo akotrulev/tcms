@@ -20,10 +20,11 @@ import org.junit.jupiter.params.provider.ValueSource;
  * so {@link #tenSortsAfterNine} compares the two keys and the two raw strings side by side — it is
  * the test this class exists for and the rest pin the parsing around it.
  *
- * <p><strong>Two of these tests pin behaviour the class javadoc describes wrongly</strong> —
- * {@link #preReleaseRidesAfterTheTriple} and {@link #datedBuildParsesRatherThanFallingBack}. Each
- * says so at the assertion, with why it is pinned rather than fixed. Neither was observable from an
- * endpoint test, which is the point.
+ * <p><strong>Two of these tests were §150's pins of behaviour the class javadoc described
+ * wrongly</strong> —
+ * {@link #preReleaseSortsBeforeItsRelease} — repaired in §151 and asserted the right way round
+ * here — and {@link #datedBuildParsesRatherThanFallingBack}, whose javadoc claim §151 corrected to
+ * match the behaviour. Neither was observable from an endpoint test, which is the point.
  */
 @DisplayName("ReleaseSortKey — the padding that makes text collation agree with version order")
 class ReleaseSortKeyTest {
@@ -42,12 +43,12 @@ class ReleaseSortKeyTest {
 
     @ParameterizedTest
     @CsvSource({
-        "1.9,        00001.00009.00000",
-        "1.10,       00001.00010.00000",
-        "4.3.0,      00004.00003.00000",
-        "v4.3.0,     00004.00003.00000",
-        "0.0.1,      00000.00000.00001",
-        "99999.99999.99999, 99999.99999.99999",
+        "1.9,        00001.00009.00000.1",
+        "1.10,       00001.00010.00000.1",
+        "4.3.0,      00004.00003.00000.1",
+        "v4.3.0,     00004.00003.00000.1",
+        "0.0.1,      00000.00000.00001.1",
+        "99999.99999.99999, 99999.99999.99999.1",
     })
     @DisplayName("a semver release pads each component to five digits, and a leading v is dropped")
     void padsSemver(String release, String expected) {
@@ -56,8 +57,8 @@ class ReleaseSortKeyTest {
 
     @ParameterizedTest
     @CsvSource({
-        "4,     00004.00000.00000",
-        "4.3,   00004.00003.00000",
+        "4,     00004.00000.00000.1",
+        "4.3,   00004.00003.00000.1",
     })
     @DisplayName("shorthand is a release: an absent component is zero, not unparseable")
     void shorthandIsAVersion(String release, String expected) {
@@ -67,30 +68,68 @@ class ReleaseSortKeyTest {
     }
 
     @Test
-    @DisplayName("a pre-release rides after the padded triple — and therefore sorts AFTER 4.3.0")
-    void preReleaseRidesAfterTheTriple() {
-        assertThat(ReleaseSortKey.of("4.3.0-rc.1")).isEqualTo("00004.00003.00000-rc.1");
+    @DisplayName("THE §151 invariant: a pre-release sorts BEFORE the release it precedes")
+    void preReleaseSortsBeforeItsRelease() {
+        assertThat(ReleaseSortKey.of("4.3.0-rc.1")).isEqualTo("00004.00003.00000.0-rc.1");
+        assertThat(ReleaseSortKey.of("4.3.0")).isEqualTo("00004.00003.00000.1");
 
-        // PINNING A DEFECT, DELIBERATELY. The class javadoc claims "4.3.0-rc.1 sorts immediately
-        // before 4.3.0 exactly as semver requires", and it does not: the release's key is a
-        // strict PREFIX of its pre-release's, and a prefix collates first. So "what did the newest
-        // release do" answers about the release candidate — which is precisely the silent
-        // wrong-answer shape V1's comment says this column exists to prevent, arriving through the
-        // suffix rather than through the padding.
-        //
-        // Not fixed here, and the reason is not size: release_sort_key is written on three tables
-        // (test_run, test_execution, execution_fact), ORDER BYed by Postgres rather than by Java,
-        // and every existing row already holds the current format — so the repair is a format
-        // change plus a backfill migration plus a decision about which collation the separator is
-        // being chosen under. That is a slice, and it needs the handoff entry a slice gets.
-        // This assertion is what makes it impossible to fix by accident and unnoticeable no longer.
-        assertThat(ReleaseSortKey.of("4.3.0-rc.1")).isGreaterThan(ReleaseSortKey.of("4.3.0"));
+        // §150 pinned this assertion INVERTED, as the class then behaved: the release's key was a
+        // strict prefix of its pre-release's, a prefix collates first, and so "what did the newest
+        // release do" answered about the release candidate. Same silent wrong-answer shape as
+        // "1.10" < "1.9", arriving through the suffix rather than through the padding.
+        assertThat(ReleaseSortKey.of("4.3.0-rc.1")).isLessThan(ReleaseSortKey.of("4.3.0"));
     }
 
     @Test
-    @DisplayName("a build marker is carried verbatim after the padded triple")
-    void buildMarkerIsCarried() {
-        assertThat(ReleaseSortKey.of("4.3.0+build.7")).isEqualTo("00004.00003.00000+build.7");
+    @DisplayName("the precedence flag is a digit because a ~ sentinel is a no-op under libc collation")
+    void precedenceFlagIsADigit() {
+        // The load-bearing property, and the reason the fix is not the obvious one. Postgres orders
+        // this column, and the instance's collation is en_US.utf8 under the libc provider, which
+        // weights punctuation below letters — so Debian's trailing '~' compares BELOW the 'r' of
+        // "rc" and changes nothing. Measured: it passes under C and under ICU and fails under the
+        // one collation actually in use, which is how it would have shipped green.
+        //
+        // A digit compares at the primary level in all three, so this assertion is what says the
+        // ordering is a property of the key and not of how a cluster happened to be initialised.
+        assertThat(ReleaseSortKey.of("4.3.0")).endsWith(".1");
+        assertThat(ReleaseSortKey.of("4.3.0-rc.1")).contains(".0-");
+    }
+
+    @Test
+    @DisplayName("build metadata is not a pre-release: 4.3.0+build.7 flags as the release")
+    void buildMarkerIsCarriedAndIsNotAPreRelease() {
+        // Semver excludes build metadata from precedence entirely, so it must not take the
+        // pre-release flag — otherwise a tagged build of 4.3.0 would sort below plain 4.3.0 and
+        // below every one of its own release candidates.
+        assertThat(ReleaseSortKey.of("4.3.0+build.7")).isEqualTo("00004.00003.00000.1+build.7");
+        assertThat(ReleaseSortKey.of("4.3.0+build.7"))
+                .isGreaterThan(ReleaseSortKey.of("4.3.0-rc.9"));
+    }
+
+    @Test
+    @DisplayName("a release candidate ordering, end to end")
+    void releaseCandidatesOrderBeforeTheRelease() {
+        // The sequence an actual release goes through, asserted as one chain rather than as pairs.
+        assertThat(ReleaseSortKey.of("4.2.9")).isLessThan(ReleaseSortKey.of("4.3.0-alpha.1"));
+        assertThat(ReleaseSortKey.of("4.3.0-alpha.1")).isLessThan(ReleaseSortKey.of("4.3.0-rc.1"));
+        assertThat(ReleaseSortKey.of("4.3.0-rc.1")).isLessThan(ReleaseSortKey.of("4.3.0-rc.2"));
+        assertThat(ReleaseSortKey.of("4.3.0-rc.2")).isLessThan(ReleaseSortKey.of("4.3.0"));
+        assertThat(ReleaseSortKey.of("4.3.0")).isLessThan(ReleaseSortKey.of("4.3.1"));
+    }
+
+    @Test
+    @DisplayName("KNOWN LIMIT: pre-releases compare as text, so rc.10 sorts before rc.9")
+    void preReleasePrecedenceAmongPreReleasesIsNotImplemented() {
+        // Pinned as a known limit, not as a defect being ignored. This is the "1.10" < "1.9" shape
+        // one level down — but confined to the candidates of ONE release, where §150's finding was
+        // between a release and its candidate. Fixing it means padding numeric dot-segments of the
+        // suffix, which is a second format change and a second backfill; §151 deliberately does one.
+        assertThat(ReleaseSortKey.of("4.3.0-rc.10")).isLessThan(ReleaseSortKey.of("4.3.0-rc.9"));
+
+        // What holds regardless, and is the property that matters between releases: both are still
+        // below the release itself.
+        assertThat(ReleaseSortKey.of("4.3.0-rc.10")).isLessThan(ReleaseSortKey.of("4.3.0"));
+        assertThat(ReleaseSortKey.of("4.3.0-rc.9")).isLessThan(ReleaseSortKey.of("4.3.0"));
     }
 
     @ParameterizedTest
@@ -127,7 +166,7 @@ class ReleaseSortKeyTest {
     void stripsBeforeParsing() {
         // A pasted release string with a trailing newline is otherwise unparseable text, and would
         // fall out of numeric order for a reason nobody could see in the UI.
-        assertThat(ReleaseSortKey.of("  4.3.0\n")).isEqualTo("00004.00003.00000");
+        assertThat(ReleaseSortKey.of("  4.3.0\n")).isEqualTo("00004.00003.00000.1");
     }
 
     @Test
@@ -137,7 +176,7 @@ class ReleaseSortKeyTest {
         // and it is not one: the year matches the major component and "-W31" is accepted as a
         // pre-release suffix. The resulting order is right — dated builds sort by date — but the
         // value is not the raw string, and a caller reading the javadoc would expect it to be.
-        assertThat(ReleaseSortKey.of("2026-W31")).isEqualTo("02026.00000.00000-W31");
+        assertThat(ReleaseSortKey.of("2026-W31")).isEqualTo("02026.00000.00000.0-W31");
         assertThat(ReleaseSortKey.of("2026-07-30")).isLessThan(ReleaseSortKey.of("2026-08-01"));
     }
 }

@@ -2,13 +2,47 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-09 (**§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-09 (**§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `fce9739` (§148) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `910f7a8` (§150) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
+
+---
+
+## §151 — THE SORT KEY HAS A PRECEDENCE FLAG, AND THE OBVIOUS FIX IS A NO-OP ON THIS DATABASE
+
+§150's finding 4a, repaired. `ReleaseSortKey.of` now emits a **fourth component** between the triple
+and the suffix — `.0` for a pre-release, `.1` for the release it precedes — so `4.3.0-rc.1` is
+`00004.00003.00000.0-rc.1` and `4.3.0` is `00004.00003.00000.1`.
+
+- **DO NOT "SIMPLIFY" THE FLAG INTO A `~` SENTINEL.** It is the textbook fix for this exact problem
+  and it is a **no-op here**, measured: `'…-rc.1' < '…~'` is **false** under `en_US.utf8` (libc,
+  what this instance runs — glibc weights punctuation below letters) and **true** under `C` and
+  `und-x-icu`. It passes under two collations and fails under the one in use. `RK-1` in the mutation
+  queue is that fix applied faithfully, and it leaves three tests red. **Postgres orders this column,
+  not Java** — no unit test over `String` can settle anything about it.
+- **NOTHING READS `release_sort_key`.** Three tables write it, three indexes cover it
+  (`test_run_release_idx`, `test_execution_release_idx`, `execution_fact_release_idx`), and there is
+  no `ORDER BY release_sort_key` in `src/main` — `releaseVersion` is an exact-match filter in every
+  operation. Readerless, the mirror of the writerless shape. Giving it a reader is §6q's
+  latest-release view and a feature, not a cleanup.
+- **`V44` is data-only and is a STRING REWRITE, not a re-derivation** — it does not re-implement the
+  parser in SQL, because every part of the old key survives into the new one. Its predicate is
+  anchored (`^[0-9]{5}[.][0-9]{5}[.][0-9]{5}([-+].*)?$`), which is what makes it **idempotent** and
+  what keeps it off `12345.12345.12345 hotfix` — a text fallback that merely looks padded and that an
+  unanchored match corrupts.
+- **A backfill on a company-owned table MUST loop over `company` setting `app.current_company`.**
+  `FORCE ROW LEVEL SECURITY` covers the owner Flyway connects as, so the naive spelling updates
+  **zero rows and reports success**. V15, V18, now V44 — third use of that block; copy it.
+- **`ReleaseSortKeyBackfillTest` executes the migration file off the classpath** (`db/migration/
+  V44__*.sql`) and asserts results against `ReleaseSortKey.of()` rather than literals. First test
+  here that runs a migration as its subject. `execution_fact` has **no foreign keys at all**, which
+  makes it the cheap table to build a fixture in. Free id prefix used: `f5…`.
+- **Known limit, pinned not fixed**: pre-release *precedence among pre-releases*. `-rc.10` still
+  sorts before `-rc.9`; repairing it is a second format change plus a second backfill.
 
 ---
 

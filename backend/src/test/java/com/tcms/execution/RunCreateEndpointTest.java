@@ -663,7 +663,7 @@ class RunCreateEndpointTest extends IntegrationTestBase {
             // §6q's silent failure: text collation puts "1.10" before "1.9". Left null, the column
             // test_run_release_idx leads on is empty and every latest-release query is wrong with
             // no error anywhere.
-            assertThat(sortKeyOf(runId)).isEqualTo("00004.00003.00000");
+            assertThat(sortKeyOf(runId)).isEqualTo("00004.00003.00000.1");
         }
 
         @Test
@@ -713,7 +713,7 @@ class RunCreateEndpointTest extends IntegrationTestBase {
             assertThat(executionReleases(runId))
                     .as("test_execution_release_idx leads on the sort key; nearly every report "
                             + "filters executions by release (§6q)")
-                    .containsOnly("4.3.0|00004.00003.00000");
+                    .containsOnly("4.3.0|00004.00003.00000.1");
         }
 
         @Test
