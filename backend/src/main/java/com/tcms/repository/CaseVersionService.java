@@ -1,5 +1,6 @@
 package com.tcms.repository;
 
+import com.tcms.api.UserRef;
 import com.tcms.project.ProjectService;
 import com.tcms.tenancy.CompanyContext;
 import java.util.ArrayList;
@@ -98,7 +99,7 @@ public class CaseVersionService {
     }
 
     private List<EntityVersionView> render(UUID companyId, List<TestCaseVersion> rows) {
-        Map<UUID, UserRefView> authors = people.resolve(companyId, authorIds(rows));
+        Map<UUID, UserRef> authors = people.resolve(companyId, authorIds(rows));
 
         List<EntityVersionView> rendered = new ArrayList<>(rows.size());
         for (TestCaseVersion row : rows) {

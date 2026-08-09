@@ -102,5 +102,5 @@
  * is closed by {@code RollupAgreementTest} rather than by this paragraph.
  */
 @org.springframework.modulith.ApplicationModule(
-        allowedDependencies = {"tenancy", "project", "identity", "storage"})
+        allowedDependencies = {"api", "tenancy", "project", "identity", "storage"})
 package com.tcms.reporting;

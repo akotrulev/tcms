@@ -1,5 +1,6 @@
 package com.tcms.repository;
 
+import com.tcms.api.UserRef;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -65,8 +66,8 @@ public record TestCaseSummaryView(
         LifecycleStatus lifecycleStatus,
         AutomationStatus automationStatus,
         StepFormat stepFormat,
-        UserRefView owner,
-        UserRefView createdBy,
+        UserRef owner,
+        UserRef createdBy,
         String testType,
         String testLevel,
         List<String> features,

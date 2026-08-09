@@ -1,5 +1,6 @@
 package com.tcms.repository;
 
+import com.tcms.api.UserRef;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -23,7 +24,7 @@ public record AiProposalSummaryView(
         VerdictSource verdictSource,
         ProposalStatus status,
         Instant createdAt,
-        UserRefView createdBy,
+        UserRef createdBy,
         boolean filedByAgent,
         int stepCount) {
 }

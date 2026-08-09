@@ -1,5 +1,6 @@
 package com.tcms.repository;
 
+import com.tcms.api.UserRef;
 import com.tcms.storage.Attachment;
 import java.time.Instant;
 import java.util.UUID;
@@ -36,10 +37,10 @@ public record CaseAttachmentView(
         long sizeBytes,
         String url,
         Instant uploadedAt,
-        UserRefView uploadedBy) {
+        UserRef uploadedBy) {
 
     static CaseAttachmentView of(
-            UUID projectId, UUID caseId, Attachment row, UserRefView uploader) {
+            UUID projectId, UUID caseId, Attachment row, UserRef uploader) {
 
         return new CaseAttachmentView(
                 row.getId(),

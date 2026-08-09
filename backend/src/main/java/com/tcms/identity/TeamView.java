@@ -1,5 +1,6 @@
 package com.tcms.identity;
 
+import com.tcms.api.UserRef;
 import java.util.List;
 import java.util.UUID;
 
@@ -23,8 +24,8 @@ public record TeamView(
         UUID parentTeamId,
         String name,
         String description,
-        List<UserRefView> leads,
-        List<UserRefView> members,
+        List<UserRef> leads,
+        List<UserRef> members,
         List<ProjectRole> projects) {
 
     /** One project this team holds a role on, as the org chart renders it. */

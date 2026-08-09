@@ -1,5 +1,6 @@
 package com.tcms.execution;
 
+import com.tcms.api.UserRef;
 import com.tcms.identity.CompanyMembershipRepository;
 import com.tcms.project.PeopleDirectory;
 import java.util.Collection;
@@ -31,18 +32,6 @@ class ExecutionPeople {
     }
 
     /**
-     * Resolves each id, skipping any that names no account.
-     *
-     * <p>An unresolvable id yields no entry, and the caller renders a null. That is deliberate for
-     * an <em>executor</em> in particular: {@code test_execution.executed_by} is nullable and has no
-     * cascade, so "the account that recorded this has since been removed" is a state real rows are
-     * in. Inventing a person there would attribute a verdict to somebody, which is the one thing a
-     * result must not do wrongly.
-     *
-     * @param companyId the active company, passed rather than read from the context so the caller's
-     *                  scope and this lookup's scope are visibly the same one
-     */
-    /**
      * Whether {@code userId} is an <strong>active member of this company</strong> — the question
      * {@link #resolve} deliberately does not answer.
      *
@@ -66,25 +55,35 @@ class ExecutionPeople {
                 companyId, userId, com.tcms.identity.MembershipStatus.ACTIVE);
     }
 
-    Map<UUID, UserRefView> resolve(UUID companyId, Collection<UUID> userIds) {
+    /**
+     * Resolves each id, skipping any that names no account.
+     *
+     * <p>An unresolvable id yields no entry, and the caller renders a null. That is deliberate for
+     * an <em>executor</em> in particular: {@code test_execution.executed_by} is nullable and has no
+     * cascade, so "the account that recorded this has since been removed" is a state real rows are
+     * in. Inventing a person there would attribute a verdict to somebody, which is the one thing a
+     * result must not do wrongly.
+     *
+     * @param companyId the active company, passed rather than read from the context so the caller's
+     *                  scope and this lookup's scope are visibly the same one
+     */
+    Map<UUID, UserRef> resolve(UUID companyId, Collection<UUID> userIds) {
         // Delegated, not implemented. This method was a byte-for-byte copy of
         // repository.CaseOwners#resolve, under a comment saying the two classes must not disagree —
         // §58's E1 exactly, and the copy survived because neither module can import the other. The
         // rule they were both applying (plan §6u: a person is called what their COMPANY MEMBERSHIP
         // calls them, falling back to the account's canonical name for somebody since offboarded)
-        // now lives in project.PeopleDirectory, which both may call. What is left here is the
-        // mapping onto this module's own UserRefView, which is a shape rather than a rule.
-        Map<UUID, UserRefView> resolved = new HashMap<>();
-        for (Map.Entry<UUID, com.tcms.project.UserRefView> person
-                : people.resolve(companyId, userIds).entrySet()) {
-            resolved.put(person.getKey(), new UserRefView(
-                    person.getValue().id(),
-                    person.getValue().displayName(),
-                    person.getValue().email(),
-                    person.getValue().avatarUrl()));
-        }
-        // A HashMap rather than Map.of() all the way down: the latter throws NPE on get(null), which
-        // made exactly this method a 500 on an unassigned, unexecuted execution (§38).
-        return resolved;
+        // now lives in project.PeopleDirectory, which both may call. ~~What is left here is the
+        // mapping onto this module's own UserRef~~ → §147: the record moved to com.tcms.api, so the
+        // port returns the type this method returns and the loop that used to be here copied a
+        // record onto itself, field by field.
+        //
+        // WHAT THE LOOP WAS ALSO DOING, AND THIS COPY STILL DOES: answering with a map that
+        // tolerates get(null). PeopleDirectory#resolve contracts a mutable, never-Map.of() result
+        // and IdentityPeopleDirectory honours it — but Map.of().get(null) throws by contract, and
+        // that is what made exactly this method a 500 on an unassigned, unexecuted execution (§38).
+        // PeopleResolutionNullKeyTest hands this method a directory that returns Map.of() and
+        // asserts the result still answers null; deleting the copy turns it red.
+        return new HashMap<>(people.resolve(companyId, userIds));
     }
 }

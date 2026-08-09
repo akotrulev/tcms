@@ -3,6 +3,7 @@ package com.tcms.repository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tcms.api.UserRef;
 import com.tcms.project.GateResult;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectService;
@@ -312,7 +313,7 @@ public class AiProposalService {
             authorIds.add(row.getCreatedBy());
         }
         // One resolution for the page, never one per row — CaseOwners' rule.
-        Map<UUID, UserRefView> authors = people.resolve(companyId, authorIds);
+        Map<UUID, UserRef> authors = people.resolve(companyId, authorIds);
 
         List<AiProposalSummaryView> summaries = new ArrayList<>();
         for (AiProposal row : rows) {
@@ -378,7 +379,7 @@ public class AiProposalService {
         if (row.getDecidedBy() != null) {
             peopleIds.add(row.getDecidedBy());
         }
-        Map<UUID, UserRefView> resolved = people.resolve(companyId, peopleIds);
+        Map<UUID, UserRef> resolved = people.resolve(companyId, peopleIds);
 
         AiProposalView.AcceptedCaseView accepted = null;
         if (row.getAcceptedCaseId() != null) {

@@ -12,10 +12,21 @@ import java.util.Optional;
  * <p>{@code com.tcms.execution.AggregationPolicy} is the original and this is a second declaration
  * of the same five values. ERD §0.2 lets {@code reporting} depend on {@code tenancy}, {@code project}
  * and {@code identity} and on nothing else, so importing {@code execution}'s copy is a dependency
- * {@code ModuleStructureTest} refuses. This codebase already carries three such families —
+ * {@code ModuleStructureTest} refuses. ~~This codebase already carries three such families —
  * {@code ApiProblem} ×2, {@code UserRefView} ×3, and the storage ports — and slice-plan decision E
  * declines to create a {@code shared} module for a fourth: <em>"a fourth foundation module is a
- * decision, not an import"</em>, and one enum is the wrong reason to spend it.
+ * decision, not an import"</em>, and one enum is the wrong reason to spend it.~~
+ *
+ * <p><strong>→ Superseded 2026-08-09 as to the families, not as to this enum.</strong> The other two
+ * were extracted — the storage ports into {@code storage} (§125), {@code ApiProblem} into
+ * {@code com.tcms.api} as {@code Problem} (§146), and {@code UserRefView} — which was <em>six</em>
+ * copies rather than the three counted here — into {@code com.tcms.api.UserRef} (§147). <strong>This
+ * copy stays</strong>, and the reason is the extraction's own charter: a type belongs in
+ * {@code api} only if the <em>contract</em> defines it and more than one module serves it. The
+ * contract does define {@code AggregationPolicy}, but this module and {@code execution} do not
+ * <em>serve</em> one shape — they each own a vocabulary that must stay equal, which is what
+ * {@code AggregateExecutionPolicyTest} pins. Moving it would make one module's enum the other's,
+ * and the cross-check below would then compare a thing to itself.
  *
  * <p><strong>What is duplicated is the vocabulary. What is NOT duplicated is the algorithm</strong>,
  * and that asymmetry is the load-bearing half of decision D. {@code PlanStatisticsService.resolve}

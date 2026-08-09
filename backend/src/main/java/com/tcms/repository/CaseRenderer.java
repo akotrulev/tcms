@@ -1,5 +1,6 @@
 package com.tcms.repository;
 
+import com.tcms.api.UserRef;
 import com.tcms.project.ClassificationDimensionView;
 import com.tcms.project.ProjectConfigurationService;
 import com.tcms.storage.Attachment;
@@ -119,7 +120,7 @@ class CaseRenderer {
                 .map(Attachment::getCreatedBy)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
-        Map<UUID, UserRefView> named = uploaders.isEmpty()
+        Map<UUID, UserRef> named = uploaders.isEmpty()
                 ? new HashMap<>()
                 : people.resolve(companyId, uploaders);
 
@@ -183,7 +184,7 @@ class CaseRenderer {
         // Map.of().get(null) throws NPE by contract, so the short-circuit made every unquarantined
         // case a 500 in exactly the batches where nobody was quarantined: the common one. The batch
         // containing one quarantined case worked, which is why this reads as fine.
-        Map<UUID, UserRefView> named = deciders.isEmpty()
+        Map<UUID, UserRef> named = deciders.isEmpty()
                 ? new HashMap<>()
                 : people.resolve(companyId, deciders);
 

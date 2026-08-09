@@ -1,5 +1,6 @@
 package com.tcms.documentation;
 
+import com.tcms.api.UserRef;
 import com.tcms.project.ProjectService;
 import com.tcms.storage.Attachment;
 import com.tcms.storage.AttachmentStore;
@@ -110,7 +111,7 @@ public class ArtifactService {
                 inherited.add(scope == ArtifactScope.PLAN);
             }
 
-            Map<UUID, UserRefView> authors = people.resolve(CompanyContext.require(), updaters(rows));
+            Map<UUID, UserRef> authors = people.resolve(CompanyContext.require(), updaters(rows));
             // One query for every upload on the page, not one per row — see ArtifactFiles.
             Map<UUID, Attachment> blobs = files.forArtifacts(rows);
 

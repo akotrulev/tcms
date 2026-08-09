@@ -1,5 +1,6 @@
 package com.tcms.documentation;
 
+import com.tcms.api.UserRef;
 import com.tcms.storage.Attachment;
 import java.time.Instant;
 import java.util.UUID;
@@ -24,8 +25,20 @@ import java.util.UUID;
  * {@code documentation} may not import {@code repository}, and {@code storage} — the only module
  * both can reach — declares {@code tenancy} alone and holds no domain concept, so putting a view
  * there would teach it the API's route shapes and require it to know what a {@code UserRef} is.
- * {@link UserRefView} is already duplicated across four modules for exactly this reason; this is the
- * same trade, taken the same way.
+ * ~~{@link UserRef} is already duplicated across four modules for exactly this reason; this is the
+ * same trade, taken the same way.~~
+ *
+ * <p><strong>→ §147: the second sentence's example moved out from under it, and the first sentence
+ * did not.</strong> {@code UserRef} lives in {@code com.tcms.api} now, where {@link #uploadedBy}
+ * imports it from — so the trade this header cites as precedent is one this codebase no longer
+ * takes for <em>that</em> shape. It still takes it for this one, and deliberately: {@code api}'s
+ * charter admits a type only if the contract defines it and more than one module <em>serves</em> it.
+ * The contract defines no shared attachment schema — it defines
+ * {@code CaseAttachment} and {@code DocPageAttachment} as two schemas that happen to agree — so
+ * moving this record there would not be an extraction but a contract change wearing one, and the
+ * decision about whether the API has one attachment shape or three belongs in {@code openapi.yaml}
+ * rather than in a Java package. If that decision is ever taken, this record and
+ * {@code repository.CaseAttachmentView} are what it collapses.
  *
  * <p><strong>The mapping is what keeps the two honest, and it is deliberately not checked by
  * anything but the contract test.</strong> A field added here and not to
@@ -46,10 +59,10 @@ public record DocPageAttachmentView(
         long sizeBytes,
         String url,
         Instant uploadedAt,
-        UserRefView uploadedBy) {
+        UserRef uploadedBy) {
 
     static DocPageAttachmentView of(
-            UUID projectId, UUID pageId, Attachment row, UserRefView uploader) {
+            UUID projectId, UUID pageId, Attachment row, UserRef uploader) {
 
         return new DocPageAttachmentView(
                 row.getId(),

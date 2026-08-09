@@ -157,13 +157,14 @@ class ModuleStructureTest {
                         Modules whose dependencies are unconstrained. Add \
                         @ApplicationModule(allowedDependencies = {...}) to the package-info — an empty \
                         array means "no module dependencies at all", which is what tenancy declares. \
-                        Per plan §3 the only permitted targets are tenancy, identity, project and \
-                        (since §125) storage; everything else crosses via a CompanyScopedEvent.""")
+                        Per plan §3 the only permitted targets are tenancy, identity, project, \
+                        (since §125) storage and (since §146) api; everything else crosses via a \
+                        CompanyScopedEvent.""")
                 .isEmpty();
     }
 
     @Test
-    @DisplayName("no module declares a dependency outside the foundation — tenancy, identity, project, storage")
+    @DisplayName("no module declares a dependency outside the foundation — api, tenancy, identity, project, storage")
     void declarationsNameOnlyTheFoundationModules() {
         // The declarations themselves are checked, not just honoured. verify() confirms
         // a module stays inside what it declared; it has no opinion on whether the
@@ -192,12 +193,13 @@ class ModuleStructureTest {
 
         assertThat(illegal)
                 .as("""
-                        Declared dependencies on a module outside tenancy/identity/project/storage. \
+                        Declared dependencies on a module outside api/tenancy/identity/project/storage. \
                         Cross-module FKs and direct calls are permitted only toward those (plan §3); \
                         every other edge is a domain event implementing CompanyScopedEvent. Adding a \
-                        FIFTH foundation module is a decision, not an import — §125 took the fourth \
-                        one, and ArchitectureRules.FOUNDATION_MODULES states the three properties \
-                        that made storage a defensible entry rather than a precedent.""")
+                        SIXTH foundation module is a decision, not an import — §125 took the fourth \
+                        and §146 the fifth, and ArchitectureRules.FOUNDATION_MODULES states the three \
+                        properties each of them had to clear rather than being a precedent for the \
+                        next one.""")
                 .isEmpty();
     }
 

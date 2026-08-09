@@ -11,8 +11,8 @@
  * <h2>Why now, and not any of the times it was proposed</h2>
  *
  * <p>{@code repository.ApiProblem}'s header called its duplicate <em>"deliberate, visible, and the
- * extraction is the follow-up"</em>. {@code work.UserRefView} went further and kept a
- * <strong>running tally</strong> — {@code ApiProblem} ×2, {@code UserRefView} ×3 — with the rule
+ * extraction is the follow-up"</em>. {@code work.UserRef} went further and kept a
+ * <strong>running tally</strong> — {@code ApiProblem} ×2, {@code UserRef} ×3 — with the rule
  * attached: <em>"the next one should probably come with the extraction rather than with another
  * comment like this."</em> §146's global error handler is that next one. It is a third caller for
  * the error envelope, in no module at all, so there was no package left to copy it into.
@@ -57,6 +57,15 @@
  * something arrives here that fails that sentence, the sentence was right and the arrival is the
  * bug.
  *
+ * <p>It has already refused things, which is the evidence that it is a charter and not a label.
+ * {@code reporting.AggregationPolicy} is a contract enum declared twice and stays declared twice —
+ * the two modules do not <em>serve</em> one shape, they keep two vocabularies that a test pins
+ * equal, and merging them would make the cross-check compare a thing to itself.
+ * {@code documentation.DocPageAttachmentView} and {@code repository.CaseAttachmentView} agree field
+ * for field and stay apart — the contract defines them as two schemas, so collapsing them here
+ * would be a contract change wearing an extraction's clothes. Each carries the refusal in its own
+ * header.
+ *
  * <h2>What it holds</h2>
  *
  * <ul>
@@ -67,7 +76,24 @@
  *       a hand-written JSON string literal in {@code auth.RateLimitFilter}.</li>
  *   <li>The container-error rendering (§146) — the one place a failure Spring resolves <em>before or
  *       instead of</em> a controller becomes the same envelope a controller would have produced.</li>
+ *   <li>{@link com.tcms.api.UserRef} — {@code UserRef} in the contract, the person a list renders
+ *       beside a row. <strong>Six copies</strong> until §147, in {@code identity}, {@code project},
+ *       {@code repository}, {@code documentation}, {@code execution} and {@code work}, with
+ *       {@code reporting} importing {@code project}'s: seven consumers, which is the strongest
+ *       reading of "more than one module serves it" this codebase has. Its arrival deleted two
+ *       loops that copied a record onto itself field by field
+ *       ({@code repository.CaseOwners}, {@code execution.ExecutionPeople}).</li>
  * </ul>
+ *
+ * <h2>The count is computed now, and that is the part that was actually broken</h2>
+ *
+ * <p>Three of the six {@code UserRefView} headers asked the next reader to keep an accurate count so
+ * that an extraction would have evidence rather than a hunch, and one of them kept it: <em>"{@code
+ * ApiProblem} ×2, {@code UserRefView} ×3"</em>. It was six. A hand-maintained count of copies drifts
+ * exactly the way the copies do — §136's {@code MAX_IDEMPOTENCY_KEY} finding, one module over — so
+ * {@code ArchitectureRulesTest.noRecordOutsideApiRepeatsAnApiShape} compares every production
+ * record's components against this module's and fails the build on a repeat, <strong>matched on
+ * shape rather than on name</strong>, because the next copy will be called something else.
  */
 @org.springframework.modulith.ApplicationModule(allowedDependencies = {})
 package com.tcms.api;

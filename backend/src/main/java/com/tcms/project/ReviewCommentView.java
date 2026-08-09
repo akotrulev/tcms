@@ -1,5 +1,6 @@
 package com.tcms.project;
 
+import com.tcms.api.UserRef;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -26,10 +27,10 @@ import java.util.UUID;
  */
 public record ReviewCommentView(
         UUID id,
-        UserRefView author,
+        UserRef author,
         String body,
         Instant createdAt,
         Instant resolvedAt,
-        UserRefView resolvedBy,
+        UserRef resolvedBy,
         List<ReviewCommentView> replies) {
 }

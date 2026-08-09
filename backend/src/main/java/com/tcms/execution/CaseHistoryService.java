@@ -1,5 +1,6 @@
 package com.tcms.execution;
 
+import com.tcms.api.UserRef;
 import com.tcms.execution.CaseHistoryView.EntryView;
 import com.tcms.execution.CaseHistoryView.MarkerView;
 import com.tcms.execution.CaseHistoryView.SummaryView;
@@ -401,7 +402,7 @@ public class CaseHistoryService {
             executionIds.add(row.execution().getId());
         }
 
-        Map<UUID, UserRefView> resolved = people.resolve(companyId, userIds);
+        Map<UUID, UserRef> resolved = people.resolve(companyId, userIds);
         Map<UUID, String> tokenNames = credentials.resolve(tokenIds);
         Map<UUID, String> configurationNames = configurationNames(projectId);
         Map<UUID, String> planKeys = planKeys(planIds);
@@ -533,7 +534,7 @@ public class CaseHistoryService {
                 authorIds.add(mark.authorId());
             }
         }
-        Map<UUID, UserRefView> resolved = people.resolve(companyId, authorIds);
+        Map<UUID, UserRef> resolved = people.resolve(companyId, authorIds);
 
         List<MarkerView> markers = new ArrayList<>();
         for (CaseFacts.VersionMark mark : marks) {

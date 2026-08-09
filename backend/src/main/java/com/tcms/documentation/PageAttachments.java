@@ -1,5 +1,6 @@
 package com.tcms.documentation;
 
+import com.tcms.api.UserRef;
 import com.tcms.storage.Attachment;
 import com.tcms.storage.AttachmentOwner;
 import com.tcms.storage.AttachmentRepository;
@@ -66,7 +67,7 @@ class PageAttachments {
             }
         }
 
-        Map<UUID, UserRefView> named = people.resolve(CompanyContext.require(), uploaderIds);
+        Map<UUID, UserRef> named = people.resolve(CompanyContext.require(), uploaderIds);
 
         List<DocPageAttachmentView> views = new ArrayList<>(rows.size());
         for (Attachment row : rows) {

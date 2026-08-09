@@ -1,5 +1,6 @@
 package com.tcms.documentation;
 
+import com.tcms.api.UserRef;
 import com.tcms.storage.Attachment;
 import java.time.Instant;
 import java.util.Map;
@@ -48,7 +49,7 @@ public record ArtifactView(
         UUID docPageId,
         String filename,
         Long sizeBytes,
-        UserRefView updatedBy,
+        UserRef updatedBy,
         Instant updatedAt) {
 
     /**
@@ -71,7 +72,7 @@ public record ArtifactView(
             Artifact artifact,
             Attachment file,
             boolean inherited,
-            Map<UUID, UserRefView> people) {
+            Map<UUID, UserRef> people) {
 
         return new ArtifactView(
                 artifact.getId(),

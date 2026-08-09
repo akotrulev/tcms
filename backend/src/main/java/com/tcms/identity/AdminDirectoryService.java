@@ -1,5 +1,6 @@
 package com.tcms.identity;
 
+import com.tcms.api.UserRef;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectRepository;
 import com.tcms.tenancy.CompanyContext;
@@ -271,7 +272,7 @@ public class AdminDirectoryService {
         Map<UUID, String> roleNames = new HashMap<>();
         roles.findAll().forEach(role -> roleNames.put(role.getId(), role.getName()));
 
-        Map<UUID, UserRefView> people = peopleById();
+        Map<UUID, UserRef> people = peopleById();
         Map<UUID, List<TeamMembership>> membersByTeam = new HashMap<>();
         for (TeamMembership membership : teamMemberships.findAll()) {
             membersByTeam.computeIfAbsent(membership.getTeamId(), key -> new ArrayList<>())
@@ -405,7 +406,7 @@ public class AdminDirectoryService {
         Map<UUID, String> projectNames = projectNames();
         Map<UUID, RoleView> roleViews = new HashMap<>();
         roleCatalogue().forEach(role -> roleViews.put(role.id(), role));
-        Map<UUID, UserRefView> people = peopleById();
+        Map<UUID, UserRef> people = peopleById();
         Map<UUID, String> teamNames = new HashMap<>();
         teams.findAllByOrderByNameAsc().forEach(team -> teamNames.put(team.getId(), team.getName()));
 
@@ -427,7 +428,7 @@ public class AdminDirectoryService {
             AdminReach reach,
             Map<UUID, String> projectNames,
             Map<UUID, RoleView> roleViews,
-            Map<UUID, UserRefView> people,
+            Map<UUID, UserRef> people,
             Map<UUID, String> teamNames) {
 
         return new RoleAssignmentView(
@@ -464,15 +465,20 @@ public class AdminDirectoryService {
      * from the account.
      *
      * <p>{@link CompanyMembership#getDisplayName} and not {@link AppUser#getCanonicalName}: §6u, and
-     * the reason {@link UserRefView} says so at length.
+     * the reason {@link UserRef} says so at length.
      *
      * <p>Package-private rather than private since §54, so {@link ProjectMembershipService} can
      * render its list from the same assembly. The alternative was a second implementation of the
-     * §6u display-name rule in the same module — and the codebase already keeps a running tally of
-     * forced copies of this shape ({@code work.UserRefView}); adding one that was not forced would
-     * make that tally meaningless.
+     * §6u display-name rule in the same module — ~~and the codebase already keeps a running tally
+     * of forced copies of this shape ({@code work.UserRefView}); adding one that was not forced
+     * would make that tally meaningless.~~ → <strong>§147: there is no tally and no copies.</strong>
+     * The shape is {@link UserRef} in {@code com.tcms.api}, the six copies are gone, and a seventh
+     * fails {@code ArchitectureRulesTest.noRecordOutsideApiRepeatsAnApiShape} instead of being
+     * counted by hand. What this paragraph is still about is the <em>rule</em> rather than the
+     * shape: {@link IdentityPeopleDirectory} is the one place §6u is applied, and no architecture
+     * test can see a second implementation of it.
      */
-    Map<UUID, UserRefView> peopleById() {
+    Map<UUID, UserRef> peopleById() {
         UUID companyId = CompanyContext.require();
         List<CompanyMembership> present = memberships.findByCompanyId(companyId);
         if (present.isEmpty()) {
@@ -480,10 +486,10 @@ public class AdminDirectoryService {
         }
         Map<UUID, AppUser> accounts = byId(present.stream().map(CompanyMembership::getUserId).toList());
 
-        Map<UUID, UserRefView> people = new HashMap<>();
+        Map<UUID, UserRef> people = new HashMap<>();
         for (CompanyMembership membership : present) {
             AppUser account = accounts.get(membership.getUserId());
-            people.put(membership.getUserId(), new UserRefView(
+            people.put(membership.getUserId(), new UserRef(
                     membership.getUserId(),
                     membership.getDisplayName(),
                     account == null ? null : account.getEmail(),
@@ -521,7 +527,7 @@ public class AdminDirectoryService {
         return byUser;
     }
 
-    private static List<UserRefView> refs(List<UUID> userIds, Map<UUID, UserRefView> people) {
+    private static List<UserRef> refs(List<UUID> userIds, Map<UUID, UserRef> people) {
         return userIds.stream()
                 .map(people::get)
                 .filter(person -> person != null)

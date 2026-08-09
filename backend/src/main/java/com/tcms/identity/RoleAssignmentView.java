@@ -1,5 +1,6 @@
 package com.tcms.identity;
 
+import com.tcms.api.UserRef;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -26,7 +27,7 @@ import java.util.UUID;
 public record RoleAssignmentView(
         UUID id,
         RoleView role,
-        UserRefView user,
+        UserRef user,
         TeamRef team,
         UUID projectId,
         String projectName,

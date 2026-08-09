@@ -1,5 +1,6 @@
 package com.tcms.auth;
 
+import com.tcms.api.UserRef;
 import com.tcms.identity.AppUser;
 import com.tcms.identity.AppUserRepository;
 import com.tcms.identity.CompanyMembership;

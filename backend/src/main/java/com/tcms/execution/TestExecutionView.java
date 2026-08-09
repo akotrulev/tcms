@@ -1,5 +1,6 @@
 package com.tcms.execution;
 
+import com.tcms.api.UserRef;
 import com.tcms.project.CaseStatusView;
 import java.time.Instant;
 import java.util.List;
@@ -27,8 +28,8 @@ public record TestExecutionView(
         String caseTitle,
         int caseVersionNo,
         CaseStatusView status,
-        UserRefView assignee,
-        UserRefView executedBy,
+        UserRef assignee,
+        UserRef executedBy,
         Instant executedAt,
         Long durationMs,
         List<DefectLinkView> defects,

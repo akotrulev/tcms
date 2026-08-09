@@ -1,10 +1,10 @@
 package com.tcms.reporting;
 
+import com.tcms.api.UserRef;
 import com.tcms.project.GateResult;
 import com.tcms.project.PeopleDirectory;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectService;
-import com.tcms.project.UserRefView;
 import com.tcms.tenancy.CompanyContext;
 import java.time.Clock;
 import java.util.ArrayList;
@@ -110,7 +110,7 @@ class ReportDefinitionService {
             // One name lookup for the whole list rather than one per row — the N+1 that looks
             // harmless because each query is fast (ArtifactPeople's note, four modules over). It
             // resolves a single id today, since every row here is the caller's.
-            UserRefView owner = owner(companyId, userId);
+            UserRef owner = owner(companyId, userId);
             List<ReportDefinitionView> views = new ArrayList<>();
             for (ReportDefinition row : rows) {
                 views.add(ReportDefinitionView.of(row, owner));
@@ -216,10 +216,10 @@ class ReportDefinitionService {
      * {@code owner} is a required contract field, so answering with an absent one would be a
      * response no generated client can read. It names the state rather than inventing a person.
      */
-    private UserRefView owner(UUID companyId, UUID userId) {
-        Map<UUID, UserRefView> resolved = people.resolve(companyId, Set.of(userId));
-        UserRefView person = resolved.get(userId);
-        return person == null ? new UserRefView(userId, "Former member", "", null) : person;
+    private UserRef owner(UUID companyId, UUID userId) {
+        Map<UUID, UserRef> resolved = people.resolve(companyId, Set.of(userId));
+        UserRef person = resolved.get(userId);
+        return person == null ? new UserRef(userId, "Former member", "", null) : person;
     }
 
     /**

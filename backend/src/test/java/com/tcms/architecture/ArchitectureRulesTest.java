@@ -13,6 +13,7 @@ import com.tngtech.archunit.core.domain.Dependency;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.domain.JavaMethod;
+import com.tngtech.archunit.core.domain.JavaModifier;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.lang.ArchCondition;
@@ -29,7 +30,10 @@ import java.time.OffsetDateTime;
 import java.time.ZonedDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.event.EventListener;
@@ -250,6 +254,72 @@ class ArchitectureRulesTest {
                         table being visible from the one package everything else imports""");
 
         rule.check(PRODUCTION);
+    }
+
+    @Test
+    @DisplayName("no record outside api repeats an api record's shape — the tally, computed")
+    void noRecordOutsideApiRepeatsAnApiShape() {
+        // §146 extracted the error envelope and §147 the person, and the finding on the way through
+        // was not about either record. It was that the evidence for extracting had been kept BY HAND:
+        // work.UserRefView carried a running tally — "ApiProblem ×2, UserRefView ×3" — with the rule
+        // attached, and the real count when the module was created was six. A hand-maintained count
+        // of copies drifts exactly the way the copies do, which is the thing it was keeping records
+        // about. Same family as §136's MAX_IDEMPOTENCY_KEY, and the same repair: compute it.
+        //
+        // So this is the tally, as a build failure. Once a shape lives in com.tcms.api, a seventh
+        // copy of it — under ANY name, in ANY module — fails here rather than being written down in
+        // a comment for somebody to extract in eleven slices' time.
+        //
+        // MATCHED ON SHAPE, NOT ON NAME, and that is the point: every one of the six copies was
+        // called UserRefView, but the failure this prevents is the next one, which will be called
+        // Person or OwnerRef or CommenterView because whoever writes it will not have read this
+        // file. Components are compared as a SET of name:type pairs, so a reordered copy is still a
+        // copy.
+        //
+        // It deliberately does NOT say "no two records anywhere share a shape". Measured before
+        // being written: fifty records in this codebase are `Invalid(Map<String, List<String>> errors)`,
+        // one per service's sealed Outcome, and they are not copies of anything — they are the same
+        // three words meaning the same thing in fifty local vocabularies. The rule is narrow because
+        // api's charter is narrow: it is about the shapes the CONTRACT owns and more than one module
+        // serves, and it fires only once such a shape has been given a home.
+        Map<Set<String>, String> apiShapes = new LinkedHashMap<>();
+        for (JavaClass type : PRODUCTION) {
+            if (type.isRecord() && "api".equals(moduleOf(type))) {
+                apiShapes.put(componentsOf(type), type.getName());
+            }
+        }
+        assertThat(apiShapes)
+                .as("api holds no records at all, so this rule would pass vacuously — if the module "
+                        + "was emptied deliberately, delete this test with it")
+                .isNotEmpty();
+
+        Map<String, String> copies = new TreeMap<>();
+        for (JavaClass type : PRODUCTION) {
+            if (!type.isRecord() || "api".equals(moduleOf(type)) || moduleOf(type) == null) {
+                continue;
+            }
+            String original = apiShapes.get(componentsOf(type));
+            if (original != null) {
+                copies.put(type.getName(), "repeats the shape of " + original);
+            }
+        }
+
+        assertThat(copies)
+                .as("a record outside com.tcms.api has the same components as one inside it, which "
+                        + "is the duplication api exists to end (§146, §147). The copy is free to "
+                        + "drift from the contract on its own, and the compiler cannot see the two "
+                        + "as related — import com.tcms.api's record instead, or, if this really is "
+                        + "a different concept that happens to have the same fields, give it the "
+                        + "field names of the concept it is")
+                .isEmpty();
+    }
+
+    /** A record's components as {@code name:type} pairs — a set, so a reordered copy still matches. */
+    private static Set<String> componentsOf(JavaClass record) {
+        return record.getFields().stream()
+                .filter(field -> !field.getModifiers().contains(JavaModifier.STATIC))
+                .map(field -> field.getName() + ":" + field.getRawType().getName())
+                .collect(Collectors.toCollection(TreeSet::new));
     }
 
     @Test

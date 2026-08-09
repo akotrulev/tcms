@@ -26,5 +26,5 @@
  * to the list above to make the endpoint possible. If Modulith ever fails on this edge,
  * the fix is a port, never a wider {@code allowedDependencies}.
  */
-@org.springframework.modulith.ApplicationModule(allowedDependencies = "tenancy")
+@org.springframework.modulith.ApplicationModule(allowedDependencies = {"api", "tenancy"})
 package com.tcms.project;

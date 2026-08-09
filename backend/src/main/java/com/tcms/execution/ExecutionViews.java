@@ -1,5 +1,6 @@
 package com.tcms.execution;
 
+import com.tcms.api.UserRef;
 import com.tcms.execution.CaseFacts.PinnedCase;
 import com.tcms.project.CaseStatusView;
 import com.tcms.project.StatusKind;
@@ -75,7 +76,7 @@ class ExecutionViews {
                 userIds.add(row.getExecutedBy());
             }
         }
-        Map<UUID, UserRefView> resolved = people.resolve(companyId, userIds);
+        Map<UUID, UserRef> resolved = people.resolve(companyId, userIds);
         Map<UUID, List<DefectLinkView>> defects = defectsByExecution(
                 rows.stream().map(TestExecution::getId).toList());
 

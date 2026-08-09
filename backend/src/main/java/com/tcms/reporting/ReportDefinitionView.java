@@ -1,7 +1,7 @@
 package com.tcms.reporting;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.tcms.project.UserRefView;
+import com.tcms.api.UserRef;
 import java.util.UUID;
 
 /**
@@ -21,9 +21,9 @@ import java.util.UUID;
  *     does not need a new shape to say whose it is.
  */
 record ReportDefinitionView(UUID id, String type, String name, JsonNode parameters,
-        UserRefView owner) {
+        UserRef owner) {
 
-    static ReportDefinitionView of(ReportDefinition definition, UserRefView owner) {
+    static ReportDefinitionView of(ReportDefinition definition, UserRef owner) {
         return new ReportDefinitionView(
                 definition.getId(),
                 definition.getType(),

@@ -1,5 +1,6 @@
 package com.tcms.execution;
 
+import com.tcms.api.UserRef;
 import com.tcms.storage.Attachment;
 import com.tcms.storage.AttachmentRepository;
 import java.util.ArrayList;
@@ -54,7 +55,7 @@ class EvidenceViews {
         for (Attachment file : attachments.findByIdIn(attachmentIds)) {
             files.put(file.getId(), file);
         }
-        Map<UUID, UserRefView> resolved = people.resolve(companyId, userIds);
+        Map<UUID, UserRef> resolved = people.resolve(companyId, userIds);
 
         List<EvidenceView> views = new ArrayList<>(rows.size());
         for (Evidence row : rows) {

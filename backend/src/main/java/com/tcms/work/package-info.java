@@ -93,5 +93,5 @@
  * later change to <em>configuration</em> rather than to the contract.
  */
 @org.springframework.modulith.ApplicationModule(
-        allowedDependencies = {"tenancy", "project", "identity"})
+        allowedDependencies = {"api", "tenancy", "project", "identity"})
 package com.tcms.work;

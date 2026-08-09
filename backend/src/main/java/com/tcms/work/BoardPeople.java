@@ -1,5 +1,6 @@
 package com.tcms.work;
 
+import com.tcms.api.UserRef;
 import com.tcms.identity.AppUser;
 import com.tcms.identity.AppUserRepository;
 import com.tcms.identity.CompanyMembership;
@@ -78,7 +79,7 @@ class BoardPeople {
      * It made this same method a 500 in {@code execution} (§38); both sibling classes carry the same
      * note so the three cannot quietly disagree.
      */
-    Map<UUID, UserRefView> resolve(UUID companyId, Collection<UUID> userIds) {
+    Map<UUID, UserRef> resolve(UUID companyId, Collection<UUID> userIds) {
         if (userIds.isEmpty()) {
             // An empty collection bound into SQL `IN ()` is a syntax error, and a board with
             // nothing assigned is the ordinary state of a freshly provisioned project.
@@ -91,9 +92,9 @@ class BoardPeople {
             displayNames.put(membership.getUserId(), membership.getDisplayName());
         }
 
-        Map<UUID, UserRefView> resolved = new HashMap<>();
+        Map<UUID, UserRef> resolved = new HashMap<>();
         for (AppUser user : users.findAllById(userIds)) {
-            resolved.put(user.getId(), new UserRefView(
+            resolved.put(user.getId(), new UserRef(
                     user.getId(),
                     // The membership's name wins (plan §6u); the canonical name is the fallback for
                     // somebody offboarded from this company since the card was assigned.

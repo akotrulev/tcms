@@ -1,5 +1,6 @@
 package com.tcms.project;
 
+import com.tcms.api.UserRef;
 import java.util.Collection;
 import java.util.Map;
 import java.util.UUID;
@@ -53,5 +54,5 @@ public interface PeopleDirectory {
      *         {@code Map.of()}, whose {@code get(null)} throws by contract and made this exact
      *         lookup a 500 in §38
      */
-    Map<UUID, UserRefView> resolve(UUID companyId, Collection<UUID> userIds);
+    Map<UUID, UserRef> resolve(UUID companyId, Collection<UUID> userIds);
 }

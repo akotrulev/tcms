@@ -44,5 +44,5 @@
  * project must be answerable, and the only module that can answer it is
  * {@code project}. {@code project} must never depend back (see its package comment).
  */
-@org.springframework.modulith.ApplicationModule(allowedDependencies = {"tenancy", "project"})
+@org.springframework.modulith.ApplicationModule(allowedDependencies = {"api", "tenancy", "project"})
 package com.tcms.identity;

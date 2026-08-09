@@ -1,5 +1,6 @@
 package com.tcms.repository;
 
+import com.tcms.api.UserRef;
 import java.time.Instant;
 
 /**
@@ -32,6 +33,6 @@ public record CaseDraftView(
         Long lockVersion,
         boolean stale,
         Instant updatedAt,
-        UserRefView updatedBy,
+        UserRef updatedBy,
         CaseUpdateRequest content) {
 }

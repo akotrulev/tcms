@@ -1,6 +1,7 @@
 package com.tcms.repository;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.tcms.api.UserRef;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -45,10 +46,10 @@ public record AiProposalView(
         JsonNode grounding,
         ProposalStatus status,
         Instant createdAt,
-        UserRefView createdBy,
+        UserRef createdBy,
         boolean filedByAgent,
         Instant decidedAt,
-        UserRefView decidedBy,
+        UserRef decidedBy,
         String decisionNote,
         AcceptedCaseView acceptedCase) {
 

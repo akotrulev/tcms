@@ -1,5 +1,6 @@
 package com.tcms.identity;
 
+import com.tcms.api.UserRef;
 import com.tcms.project.ProjectAccess;
 import com.tcms.project.ProjectService;
 import com.tcms.tenancy.CompanyContext;
@@ -101,16 +102,16 @@ public class ProjectMembershipService {
      * refuses. When the evaluator gets its cache, this improves for free.
      */
     @Transactional(readOnly = true)
-    public Optional<List<UserRefView>> membersOf(UUID callerId, UUID projectId) {
+    public Optional<List<UserRef>> membersOf(UUID callerId, UUID projectId) {
         return projects.readVisible(callerId, projectId, project -> {
-            Map<UUID, UserRefView> people = directory.peopleById();
+            Map<UUID, UserRef> people = directory.peopleById();
 
             return activeMemberIds().stream()
                     .filter(userId -> access.canView(userId, project.getId()))
                     .map(people::get)
                     .filter(person -> person != null)
                     .sorted(Comparator.comparing(
-                            UserRefView::displayName, String.CASE_INSENSITIVE_ORDER))
+                            UserRef::displayName, String.CASE_INSENSITIVE_ORDER))
                     .toList();
         });
     }

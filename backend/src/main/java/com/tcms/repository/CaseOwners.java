@@ -1,5 +1,6 @@
 package com.tcms.repository;
 
+import com.tcms.api.UserRef;
 import com.tcms.project.PeopleDirectory;
 import java.util.Collection;
 import java.util.HashMap;
@@ -8,7 +9,7 @@ import java.util.UUID;
 import org.springframework.stereotype.Component;
 
 /**
- * Case owners, rendered — a set of user ids in, a {@link UserRefView} each out.
+ * Case owners, rendered — a set of user ids in, a {@link UserRef} each out.
  *
  * <h2>Where the naming rule lives, and why this class is no longer the one applying it</h2>
  *
@@ -56,7 +57,7 @@ public class CaseOwners {
      * @param companyId the active company, passed rather than read from the context so the caller's
      *                  scope and this lookup's scope are visibly the same one
      */
-    Map<UUID, UserRefView> resolve(UUID companyId, Collection<UUID> userIds) {
+    Map<UUID, UserRef> resolve(UUID companyId, Collection<UUID> userIds) {
         // Delegated, not implemented. This method and execution.ExecutionPeople#resolve were
         // byte-for-byte copies of one another, the second carrying the comment "the two classes must
         // not disagree" — §58's E1 exactly: two hand-maintained copies under an instruction to keep
@@ -64,23 +65,22 @@ public class CaseOwners {
         // both applying (plan §6u, below) now lives in project.PeopleDirectory, which both may call,
         // and §76 collapsed them onto it rather than adding a third copy for the review panel.
         //
-        // What remains here is the mapping onto this module's own UserRefView — a shape, not a rule.
-        // Callers still null-check, because "unattributed" is a rendering decision; see
-        // TestCaseSummaryView#owner() for why an unresolvable owner produces a case with no owner
-        // rather than one that is hidden or given an invented one.
-        Map<UUID, UserRefView> resolved = new HashMap<>();
-        for (Map.Entry<UUID, com.tcms.project.UserRefView> person
-                : people.resolve(companyId, userIds).entrySet()) {
-            resolved.put(person.getKey(), new UserRefView(
-                    person.getValue().id(),
-                    person.getValue().displayName(),
-                    person.getValue().email(),
-                    person.getValue().avatarUrl()));
-        }
-        // A HashMap all the way down, never Map.of(): the latter throws NPE on get(null) by
-        // contract, so an immutable empty map would make behaviour on an unresolvable id depend on
-        // whether the page happened to contain anybody resolvable — fine on every page with one
-        // named owner, a 500 on the page where nobody has one (§38).
-        return resolved;
+        // ~~What remains here is the mapping onto this module's own UserRef~~ → §147: there is no
+        // "this module's own UserRef" any more. The record moved to com.tcms.api, so the port
+        // returns the type this method returns and the field-by-field loop that used to sit here
+        // copied a record onto itself.
+        //
+        // WHAT THE LOOP WAS ALSO DOING, AND THIS COPY STILL DOES: answering with a map that
+        // tolerates get(null). PeopleDirectory#resolve CONTRACTS a mutable, never-Map.of() result
+        // and IdentityPeopleDirectory honours it on both paths — but this class is one of two
+        // places §38's 500 actually happened, and it does not have to take another module's word
+        // for the one property whose absence is invisible until the page with nobody named. The
+        // guard is not theoretical: CaseOwnersNullKeyTest hands this method a directory that
+        // returns Map.of() and asserts the result still answers null, and deleting the copy turns
+        // it red — which is how this line got written.
+        //
+        // new HashMap<>(...) rather than the port's own map, therefore, and NOT because a copy of
+        // a copy is thrifty. It is one allocation per page.
+        return new HashMap<>(people.resolve(companyId, userIds));
     }
 }

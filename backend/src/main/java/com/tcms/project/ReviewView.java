@@ -1,5 +1,6 @@
 package com.tcms.project;
 
+import com.tcms.api.UserRef;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -38,9 +39,9 @@ public record ReviewView(
         UUID subjectId,
         int subjectVersionNo,
         ReviewState state,
-        UserRefView submittedBy,
+        UserRef submittedBy,
         Instant createdAt,
-        UserRefView approvedBy,
+        UserRef approvedBy,
         Instant approvedAt,
         List<ReviewAssigneeView> assignees,
         List<ReviewParticipationView> participations,

@@ -1,5 +1,6 @@
 package com.tcms.documentation;
 
+import com.tcms.api.UserRef;
 import com.tcms.project.GateResult;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectService;
@@ -194,7 +195,7 @@ public class ArtifactWriteService {
 
                     audit(project.getId(), userId, artifact, now);
 
-                    Map<UUID, UserRefView> authors =
+                    Map<UUID, UserRef> authors =
                             people.resolve(CompanyContext.require(), List.of(userId));
                     // `inherited` is false: a row just created at either scope is this register's
                     // own. It only becomes inherited when read from inside a plan.
@@ -306,7 +307,7 @@ public class ArtifactWriteService {
         // LAST — the half that does not roll back goes after the half that does.
         store.put(key, upload.bytes());
 
-        Map<UUID, UserRefView> authors = people.resolve(companyId, List.of(userId));
+        Map<UUID, UserRef> authors = people.resolve(companyId, List.of(userId));
         return new Outcome.Created(
                 ArtifactView.of(project.getId(), artifact, file, false, authors));
     }

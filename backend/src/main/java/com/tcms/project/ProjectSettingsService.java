@@ -1,5 +1,6 @@
 package com.tcms.project;
 
+import com.tcms.api.UserRef;
 import com.tcms.tenancy.CompanyContext;
 import java.time.Clock;
 import java.time.Instant;
@@ -226,7 +227,7 @@ public class ProjectSettingsService {
     }
 
     private ProjectSettingsView view(UUID companyId, ProjectSettings row) {
-        UserRefView editor = row.getUpdatedBy() == null
+        UserRef editor = row.getUpdatedBy() == null
                 ? null
                 : people.resolve(companyId, Set.of(row.getUpdatedBy()))
                         .get(row.getUpdatedBy());

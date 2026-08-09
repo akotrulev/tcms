@@ -1,5 +1,6 @@
 package com.tcms.work;
 
+import com.tcms.api.UserRef;
 import com.tcms.project.GateResult;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectService;
@@ -433,7 +434,7 @@ public class BoardService {
             addIfPresent(peopleIds, flake.ownerId());
             addIfPresent(peopleIds, flake.quarantinedBy());
         });
-        Map<UUID, UserRefView> resolved =
+        Map<UUID, UserRef> resolved =
                 people.resolve(CompanyContext.require(), peopleIds);
 
         List<WorkItemView> cards = new ArrayList<>();
@@ -490,7 +491,7 @@ public class BoardService {
     private WorkItemView cardFor(
             BoardFacts.AssignedExecution execution,
             Project project,
-            Map<UUID, UserRefView> resolved) {
+            Map<UUID, UserRef> resolved) {
 
         return new WorkItemView(
                 PREFIX_EXECUTION + execution.executionId(),
@@ -526,7 +527,7 @@ public class BoardService {
     private WorkItemView cardFor(
             BoardFacts.FlaggedCase flagged,
             Project project,
-            Map<UUID, UserRefView> resolved) {
+            Map<UUID, UserRef> resolved) {
 
         return new WorkItemView(
                 PREFIX_CASE + flagged.caseId(),
@@ -581,9 +582,9 @@ public class BoardService {
     private WorkItemView cardFor(
             BoardFacts.PendingReview review,
             Project project,
-            Map<UUID, UserRefView> resolved) {
+            Map<UUID, UserRef> resolved) {
 
-        UserRefView asker = review.requestedBy() == null ? null : resolved.get(review.requestedBy());
+        UserRef asker = review.requestedBy() == null ? null : resolved.get(review.requestedBy());
 
         return new WorkItemView(
                 PREFIX_REVIEW + review.reviewId() + ":" + review.reviewerId(),
@@ -642,9 +643,9 @@ public class BoardService {
     private WorkItemView cardFor(
             BoardFacts.QuarantinedCase flake,
             Project project,
-            Map<UUID, UserRefView> resolved) {
+            Map<UUID, UserRef> resolved) {
 
-        UserRefView decider =
+        UserRef decider =
                 flake.quarantinedBy() == null ? null : resolved.get(flake.quarantinedBy());
 
         return new WorkItemView(
@@ -690,7 +691,7 @@ public class BoardService {
                         task.getAssigneeId() == null ? Set.of() : Set.of(task.getAssigneeId())));
     }
 
-    private WorkItemView viewOf(WorkItem task, Project project, Map<UUID, UserRefView> resolved) {
+    private WorkItemView viewOf(WorkItem task, Project project, Map<UUID, UserRef> resolved) {
         return new WorkItemView(
                 task.getId().toString(),
                 false,

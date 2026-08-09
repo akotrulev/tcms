@@ -1,5 +1,6 @@
 package com.tcms.work;
 
+import com.tcms.api.UserRef;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -46,7 +47,7 @@ public record WorkItemView(
         Priority priority,
         LocalDate dueDate,
         boolean overdue,
-        UserRefView assignee,
+        UserRef assignee,
         UUID projectId,
         String projectKey,
         String linkedKey,

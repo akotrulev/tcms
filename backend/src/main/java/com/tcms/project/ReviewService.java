@@ -1,5 +1,6 @@
 package com.tcms.project;
 
+import com.tcms.api.UserRef;
 import com.tcms.tenancy.CompanyContext;
 import java.time.Clock;
 import java.time.Instant;
@@ -939,7 +940,7 @@ public class ReviewService {
                 addIfPresent(teamIds, row.getAssigneeTeamId());
             }
         }
-        Map<UUID, UserRefView> resolved = people.resolve(companyId, peopleIds);
+        Map<UUID, UserRef> resolved = people.resolve(companyId, peopleIds);
         // A second port, so unavoidably a second call — and skipped entirely when nothing names a
         // team, which is the common case: an empty collection bound into SQL `IN ()` is a syntax
         // error, and the port answers an empty map rather than making every caller remember that.
@@ -999,7 +1000,7 @@ public class ReviewService {
      * {@code SuiteTree}'s orphan-dropping was in before it was not.
      */
     private static List<ReviewCommentView> threads(
-            List<ReviewComment> rows, Map<UUID, UserRefView> resolved) {
+            List<ReviewComment> rows, Map<UUID, UserRef> resolved) {
 
         if (rows.isEmpty()) {
             return List.of();
@@ -1032,7 +1033,7 @@ public class ReviewService {
     }
 
     private static ReviewCommentView view(
-            ReviewComment row, Map<UUID, UserRefView> resolved, List<ReviewCommentView> replies) {
+            ReviewComment row, Map<UUID, UserRef> resolved, List<ReviewCommentView> replies) {
 
         return new ReviewCommentView(
                 row.getId(),

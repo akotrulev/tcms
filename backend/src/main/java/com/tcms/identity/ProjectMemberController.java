@@ -1,5 +1,6 @@
 package com.tcms.identity;
 
+import com.tcms.api.UserRef;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
@@ -53,7 +54,7 @@ public class ProjectMemberController {
      * created a minute ago by the company's first admin.
      */
     @GetMapping
-    public ResponseEntity<List<UserRefView>> list(
+    public ResponseEntity<List<UserRef>> list(
             @AuthenticationPrincipal Jwt jwt, @PathVariable UUID projectId) {
 
         return members.membersOf(UUID.fromString(jwt.getSubject()), projectId)

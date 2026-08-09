@@ -1,5 +1,6 @@
 package com.tcms.repository;
 
+import com.tcms.api.UserRef;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
@@ -45,7 +46,7 @@ public record CaseFlakeView(
         Instant computedAt,
         boolean quarantined,
         Instant quarantinedAt,
-        UserRefView quarantinedBy,
+        UserRef quarantinedBy,
         String quarantineReason) {
 
     /**
@@ -54,7 +55,7 @@ public record CaseFlakeView(
      *                up here for {@link CaseOwners}' reason: a page of cases resolves its people once,
      *                and a view that resolved its own would be one query per row.
      */
-    static CaseFlakeView of(CaseFlake flake, UserRefView decider) {
+    static CaseFlakeView of(CaseFlake flake, UserRef decider) {
         return new CaseFlakeView(
                 flake.getCaseId(),
                 flake.getExecutions(),

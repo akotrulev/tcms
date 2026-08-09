@@ -1,5 +1,6 @@
 package com.tcms.execution;
 
+import com.tcms.api.UserRef;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -25,6 +26,6 @@ public record EvidenceView(
         String url,
         String thumbnailUrl,
         String caption,
-        UserRefView createdBy,
+        UserRef createdBy,
         Instant createdAt) {
 }

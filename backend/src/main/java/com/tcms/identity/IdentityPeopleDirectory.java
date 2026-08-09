@@ -1,7 +1,7 @@
 package com.tcms.identity;
 
+import com.tcms.api.UserRef;
 import com.tcms.project.PeopleDirectory;
-import com.tcms.project.UserRefView;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -33,7 +33,7 @@ public class IdentityPeopleDirectory implements PeopleDirectory {
 
     @Override
     @Transactional(readOnly = true)
-    public Map<UUID, UserRefView> resolve(UUID companyId, Collection<UUID> userIds) {
+    public Map<UUID, UserRef> resolve(UUID companyId, Collection<UUID> userIds) {
         if (userIds.isEmpty()) {
             // Not merely an optimization: an empty collection bound into SQL `IN ()` is a syntax
             // error, and a page whose every row is unattributed is an ordinary state.
@@ -52,9 +52,9 @@ public class IdentityPeopleDirectory implements PeopleDirectory {
             displayNames.put(membership.getUserId(), membership.getDisplayName());
         }
 
-        Map<UUID, UserRefView> resolved = new HashMap<>();
+        Map<UUID, UserRef> resolved = new HashMap<>();
         for (AppUser user : users.findAllById(userIds)) {
-            resolved.put(user.getId(), new UserRefView(
+            resolved.put(user.getId(), new UserRef(
                     user.getId(),
                     // The membership's name wins (plan §6u): the same person is labelled separately
                     // per client, and neither may see the other's label. The account's canonical

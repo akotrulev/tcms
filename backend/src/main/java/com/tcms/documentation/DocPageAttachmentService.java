@@ -1,5 +1,6 @@
 package com.tcms.documentation;
 
+import com.tcms.api.UserRef;
 import com.tcms.project.GateResult;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectService;
@@ -310,8 +311,8 @@ public class DocPageAttachmentService {
      * The uploader, named. Always the caller, so this is one lookup and never a batch — the batch
      * form is {@link PageAttachments}, which resolves a whole page's worth at once.
      */
-    private UserRefView uploader(UUID companyId, UUID userId) {
-        Map<UUID, UserRefView> named = people.resolve(companyId, List.of(userId));
+    private UserRef uploader(UUID companyId, UUID userId) {
+        Map<UUID, UserRef> named = people.resolve(companyId, List.of(userId));
         return named.get(userId);
     }
 

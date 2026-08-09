@@ -1,5 +1,6 @@
 package com.tcms.repository;
 
+import com.tcms.api.UserRef;
 import java.time.Instant;
 
 /**
@@ -24,12 +25,12 @@ import java.time.Instant;
  */
 public record EntityVersionView(
         int versionNo,
-        UserRefView createdBy,
+        UserRef createdBy,
         Instant createdAt,
         String changeComment,
         boolean pinned) {
 
-    static EntityVersionView of(TestCaseVersion version, UserRefView author) {
+    static EntityVersionView of(TestCaseVersion version, UserRef author) {
         return new EntityVersionView(
                 version.getVersionNo(),
                 author,

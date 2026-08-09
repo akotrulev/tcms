@@ -2,13 +2,51 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-09 (**§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-09 (**§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `98d1010` (§145) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `ace42ab` (§146) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
+
+---
+
+## §147 — THERE IS ONE `UserRef` AND SEVEN MODULES IMPORT IT
+
+**`com.tcms.api.UserRef` is the contract's person, and the six `UserRefView` copies are gone**
+(`identity`, `project`, `repository`, `documentation`, `execution`, `work`; `reporting` imported
+`project`'s). If you are looking for `UserRefView`, that is why. Six `package-info.java` files
+gained `"api"` in `allowedDependencies`.
+
+- **`CaseOwners#resolve` and `ExecutionPeople#resolve` are `new HashMap<>(people.resolve(...))` —
+  and the `new HashMap<>` IS THE POINT.** Each held a loop copying `project.UserRefView` into its
+  own; with one type that loop copies a record onto itself, so the obvious repair is a bare
+  delegation. **It is wrong and the suite says so**: `CaseOwnersNullKeyTest` and
+  `PeopleResolutionNullKeyTest` stub a directory returning `Map.of()` and assert the result still
+  answers `null` to `get(null)`, and both go red. The loop was also the **§38 guard**, against the
+  *port* rather than the caller. `PeopleDirectory#resolve` does contract a mutable never-`Map.of()`
+  result and `IdentityPeopleDirectory` honours it — the copy is there so a second implementation
+  cannot reintroduce a 500 nobody sees until the page with nobody named on it.
+- **Both classes stay**: they are the seam that keeps §6u reachable from one place per module (§76),
+  and the header of each says so.
+- **`ArchitectureRulesTest.noRecordOutsideApiRepeatsAnApiShape` is the new check and it replaces a
+  HAND-KEPT TALLY.** For every record in `com.tcms.api`, no record elsewhere may have the same
+  components — **matched on shape, not on name**, because the next copy will be called something
+  else. Set of `name:type` pairs, so a reordering does not evade it.
+- **It is deliberately not "no two records anywhere share a shape".** Measured before writing:
+  fifty `Invalid(Map<String, List<String>> errors)` records exist, one per sealed `Outcome`, plus a
+  dozen `Refused(String message)`. That rule would ship with an ignore list, which is §145's finding
+  arriving before the check does.
+- **The charter has now refused three things, each recorded in its own header**:
+  `reporting.AggregationPolicy` (two vocabularies a cross-check pins equal, not one shape two modules
+  serve), `documentation.DocPageAttachmentView` vs `repository.CaseAttachmentView` (the *contract*
+  declares two schemas — merging them in Java is a contract change in disguise), and
+  `project.TeamRefView` vs `identity.RoleAssignmentView.TeamRef` (**the next tenant**, left for a
+  third consumer).
+- **`ModuleStructureTest`'s two failure messages were stale from §146** — they named four foundation
+  modules and called a fifth "a decision, not an import" after the fifth was taken. Corrected;
+  they now say **sixth**.
 
 ---
 
@@ -35,8 +73,8 @@ re-grep what a later commit could have moved).
   `identity` there is one word, and the next commit composes a refusal out of who was refused.
 - **The charter refuses things**: a type belongs in `api` only if the **contract** defines it and
   more than one module serves it. Not "two modules happen to share it".
-- **`UserRefView` is the next tenant and was deliberately left alone** — SIX copies, not the three
-  `work.UserRefView`'s tally claimed. A migration now, not a decision.
+- ~~**`UserRefView` is the next tenant and was deliberately left alone** — SIX copies, not the three
+  `work.UserRefView`'s tally claimed. A migration now, not a decision.~~ → **done in §147 above.**
 - Contract change is **document-level**: `components.responses.PreHandlerRefusal`, referenced by no
   operation, for `TooManyRequests`' reason. **`NotFound` still over-promises** a body where §6t's
   404s are bodiless — recorded, not fixed.

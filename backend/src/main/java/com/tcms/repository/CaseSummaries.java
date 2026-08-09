@@ -1,5 +1,6 @@
 package com.tcms.repository;
 
+import com.tcms.api.UserRef;
 import com.tcms.project.ClassificationDimensionView;
 import com.tcms.project.ClassificationValueView;
 import java.util.ArrayList;
@@ -94,7 +95,7 @@ public class CaseSummaries {
         // whoever wrote them), and `CaseOwners.resolve` is two queries regardless of how many ids
         // it is given. Two calls would double that for a column, and the duplicate ids would be
         // fetched twice — which is the shape of N+1 that looks fine because each query is fast.
-        Map<UUID, UserRefView> peopleById = owners.resolve(companyId, peopleIds(cases));
+        Map<UUID, UserRef> peopleById = owners.resolve(companyId, peopleIds(cases));
         ClassifiedCases classified = classify(caseIds, vocabularies);
 
         return cases.stream()

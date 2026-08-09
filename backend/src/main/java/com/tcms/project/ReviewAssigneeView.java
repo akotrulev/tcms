@@ -1,5 +1,6 @@
 package com.tcms.project;
 
+import com.tcms.api.UserRef;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -28,8 +29,8 @@ import java.util.UUID;
  */
 public record ReviewAssigneeView(
         UUID id,
-        UserRefView user,
+        UserRef user,
         TeamRefView team,
-        UserRefView assignedBy,
+        UserRef assignedBy,
         Instant assignedAt) {
 }

@@ -1,5 +1,6 @@
 package com.tcms.execution;
 
+import com.tcms.api.UserRef;
 import com.tcms.project.StatusKind;
 import java.time.Instant;
 import java.util.List;
@@ -80,7 +81,7 @@ public record CaseHistoryView(
             boolean runDeleted,
             String planKey,
             String configuration,
-            UserRefView executedBy,
+            UserRef executedBy,
             String executedByToken,
             RunSource source,
             Instant executedAt,
@@ -93,7 +94,7 @@ public record CaseHistoryView(
     public record MarkerView(
             int versionNo,
             Instant occurredAt,
-            UserRefView author,
+            UserRef author,
             String changeComment) {
     }
 }

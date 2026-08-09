@@ -1,10 +1,10 @@
 package com.tcms.reporting;
 
+import com.tcms.api.UserRef;
 import com.tcms.project.PeopleDirectory;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectRepository;
 import com.tcms.project.StatusKind;
-import com.tcms.project.UserRefView;
 import com.tcms.tenancy.CompanyContext;
 import jakarta.persistence.EntityManager;
 import java.time.Duration;
@@ -220,7 +220,7 @@ class RunSummaryReport implements ReportComputation {
 
         Set<UUID> ids = new LinkedHashSet<>();
         testers.stream().map(TesterRow::userId).filter(Objects::nonNull).forEach(ids::add);
-        Map<UUID, UserRefView> names = people.resolve(companyId, ids);
+        Map<UUID, UserRef> names = people.resolve(companyId, ids);
 
         List<List<String>> rows = new ArrayList<>();
         for (TesterRow tester : testers) {
@@ -412,11 +412,11 @@ class RunSummaryReport implements ReportComputation {
         return project.map(p -> p.getKey() + " — " + p.getName()).orElse("—");
     }
 
-    private String testerLabel(UUID userId, Map<UUID, UserRefView> names) {
+    private String testerLabel(UUID userId, Map<UUID, UserRef> names) {
         if (userId == null) {
             return "Unattributed";
         }
-        UserRefView person = names.get(userId);
+        UserRef person = names.get(userId);
         // PeopleDirectory answers nothing for an account that has since been removed. "Former
         // member" says that, where the raw id would say nothing and inventing a name would attribute
         // somebody's work to a person.

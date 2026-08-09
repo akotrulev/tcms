@@ -1,5 +1,6 @@
 package com.tcms.repository;
 
+import com.tcms.api.UserRef;
 import com.tcms.project.ClassificationDimensionView;
 import com.tcms.project.ClassificationValueView;
 import com.tcms.project.ProjectConfigurationService;
@@ -316,11 +317,11 @@ public class DashboardService {
      */
     private List<BreakdownView> byOwner(UUID companyId, CaseQuery request, CaseScope scope) {
         Map<UUID, Map<LifecycleStatus, Long>> counts = tallies.byOwner(request, scope);
-        Map<UUID, UserRefView> people = owners.resolve(companyId, counts.keySet());
+        Map<UUID, UserRef> people = owners.resolve(companyId, counts.keySet());
 
         List<BreakdownView> bars = new ArrayList<>(counts.size());
         for (Map.Entry<UUID, Map<LifecycleStatus, Long>> entry : counts.entrySet()) {
-            UserRefView person = people.get(entry.getKey());
+            UserRef person = people.get(entry.getKey());
             if (person == null) {
                 continue;
             }

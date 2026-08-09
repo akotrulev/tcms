@@ -1,5 +1,6 @@
 package com.tcms.project;
 
+import com.tcms.api.UserRef;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -27,12 +28,12 @@ public record ProjectSettingsView(
         boolean authorMayApproveOwnWork,
         EditAfterApproval editAfterApproval,
         boolean requireApprovedCaseForRun,
-        UserRefView updatedBy,
+        UserRef updatedBy,
         Instant updatedAt) {
 
     /** Assembled from the value every consumer reads, so the wire cannot disagree with the gate. */
     ProjectSettingsView(
-            UUID projectId, ReviewSettings settings, UserRefView updatedBy, Instant updatedAt) {
+            UUID projectId, ReviewSettings settings, UserRef updatedBy, Instant updatedAt) {
 
         this(
                 projectId,

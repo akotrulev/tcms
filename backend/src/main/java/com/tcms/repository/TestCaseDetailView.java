@@ -1,5 +1,6 @@
 package com.tcms.repository;
 
+import com.tcms.api.UserRef;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -98,7 +99,7 @@ public record TestCaseDetailView(
         LifecycleStatus lifecycleStatus,
         AutomationStatus automationStatus,
         StepFormat stepFormat,
-        UserRefView owner,
+        UserRef owner,
         // WHO WROTE THE CASE. Required by TestCaseSummary, which `TestCase` is an allOf of, and
         // MISSING HERE until 2026-08-02 — §66 put it on the wire for the grid and this view, which
         // shares the contract schema, kept omitting the key.
@@ -109,7 +110,7 @@ public record TestCaseDetailView(
         // matches nobody, and the gate therefore refused a Test Engineer their own case — the exact
         // inverse of what §66 shipped. Nothing caught it: `tsc` allows optional chaining on a
         // required field, and the page's own test supplies a fixture that has the key.
-        UserRefView createdBy,
+        UserRef createdBy,
         String testType,
         String testLevel,
         List<String> features,

@@ -1,5 +1,6 @@
 package com.tcms.execution;
 
+import com.tcms.api.UserRef;
 import com.tcms.execution.CaseHistoryView.MarkerView;
 import com.tcms.execution.SuiteHistoryView.EntryView;
 import com.tcms.project.CaseStatusView;
@@ -355,7 +356,7 @@ public class SuiteHistoryService {
                 authorIds.add(mark.authorId());
             }
         }
-        Map<UUID, UserRefView> resolved = people.resolve(companyId, authorIds);
+        Map<UUID, UserRef> resolved = people.resolve(companyId, authorIds);
 
         List<MarkerView> markers = new ArrayList<>(marks.size());
         for (CaseFacts.VersionMark mark : marks) {

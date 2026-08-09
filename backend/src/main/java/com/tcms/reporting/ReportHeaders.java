@@ -1,9 +1,9 @@
 package com.tcms.reporting;
 
+import com.tcms.api.UserRef;
 import com.tcms.project.PeopleDirectory;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectRepository;
-import com.tcms.project.UserRefView;
 import com.tcms.tenancy.CompanyRepository;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -115,8 +115,8 @@ class ReportHeaders {
             // by" line is indistinguishable from a build that never had one.
             return "—";
         }
-        Map<UUID, UserRefView> names = people.resolve(companyId, Set.of(requestedBy));
-        UserRefView person = names.get(requestedBy);
+        Map<UUID, UserRef> names = people.resolve(companyId, Set.of(requestedBy));
+        UserRef person = names.get(requestedBy);
         return person == null ? "Former member" : person.displayName();
     }
 

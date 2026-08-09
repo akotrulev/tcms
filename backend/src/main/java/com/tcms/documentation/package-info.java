@@ -106,5 +106,5 @@
  * waiting for this module.
  */
 @org.springframework.modulith.ApplicationModule(
-        allowedDependencies = {"tenancy", "project", "identity", "storage"})
+        allowedDependencies = {"api", "tenancy", "project", "identity", "storage"})
 package com.tcms.documentation;

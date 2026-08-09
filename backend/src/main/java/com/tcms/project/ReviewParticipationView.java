@@ -1,5 +1,6 @@
 package com.tcms.project;
 
+import com.tcms.api.UserRef;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -16,7 +17,7 @@ import java.util.UUID;
  */
 public record ReviewParticipationView(
         UUID id,
-        UserRefView user,
+        UserRef user,
         ReviewParticipation.Kind kind,
         ReviewParticipation.Verdict verdict,
         String comment,
