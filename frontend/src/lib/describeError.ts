@@ -65,9 +65,25 @@ export function describeError(error: unknown): DescribedError {
       return {
         ...shared,
         title: 'Not found',
-        // A 404 detail names the missing thing, which is the useful part; it is server copy,
-        // not an exception message, so it is safe to show.
-        body: error.detail,
+        /*
+          ~~A 404 detail names the missing thing, which is the useful part; it is server copy,
+          not an exception message, so it is safe to show.~~ → superseded 2026-08-09 (§148).
+
+          THERE IS NO DETAIL ON A 404. Every 404 this API writes is bodiless — `notFound().build()`
+          at all 94 sites, deliberately, because the only thing a body could add is WHICH of the
+          path's ids failed to resolve, and concealing that is what the status is for (§6t). The
+          comment above was written against `openapi.yaml`, which declared a `Problem` here until
+          §148 and was simply wrong.
+
+          So `error.detail` on this branch was never server copy. It was `client.ts`'s floor —
+          `res.statusText`, i.e. the word "Not Found" under the heading "Not found", or the
+          fallback sentence "The request failed (HTTP 404)." under it instead. A promise in the
+          contract became a tautology on a user's screen, and nothing between the two could see it.
+
+          The honest copy names the two states the server refuses to tell apart, since the reader
+          is the one person who can distinguish them — they know whether they expected access.
+        */
+        body: 'It may have been deleted, or it may be in a project you cannot open.',
         retryable: false,
         isAuth: false,
       };

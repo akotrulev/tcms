@@ -145,9 +145,25 @@ describe('describeError — the copy and the two flags that drive behaviour', ()
     })
   })
 
-  it('shows the server detail for a 404, because it names the missing thing', () => {
-    expect(describeError(apiError(404, 'No test case TC-9001 in this project.')).body).toBe(
-      'No test case TC-9001 in this project.',
+  /*
+    ~~shows the server detail for a 404, because it names the missing thing~~ → superseded
+    2026-08-09 (§148). The old assertion's own fixture was the tell: it fed a detail reading
+    "No test case TC-9001 in this project." and no 404 this API writes has ever carried one, or
+    could — every 404 is `notFound().build()`, and naming the missing thing is precisely what
+    §6t forbids. The test passed because it supplied the sentence it then asserted.
+
+    What reached the screen instead was `client.ts`'s floor: the status text, so "Not Found"
+    under the heading "Not found". The copy is fixed and does not read the wire at all.
+  */
+  it('does not read a detail on a 404 — the API never sends one', () => {
+    expect(describeError(apiError(404, 'Not Found')).body).toBe(
+      'It may have been deleted, or it may be in a project you cannot open.',
+    )
+  })
+
+  it('says the same thing even if a 404 somehow arrives with a body', () => {
+    expect(describeError(apiError(404, 'No test case TC-9001 in this project.')).body).not.toContain(
+      'TC-9001',
     )
   })
 

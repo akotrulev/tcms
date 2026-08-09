@@ -1712,3 +1712,28 @@ unacceptable proposal in the CLI and the MCP server, neither of which is a brows
 `packages/` commands, and their live rows are `LP-1` … `LP-5`. The SPA's own editors were not
 touched by §144 — they already submitted every field they render, which is exactly why the server
 was never wrong about this and why it took a second client to find out.
+
+## §148 — what a 404 says on a screen, now that it says nothing on the wire
+
+**Lane: `L2`, the server's refusals** — every row here is a refusal, nothing lands, and `L2`
+already has the personas to hand. Two rows.
+
+The contract declared a `Problem` body on 111 of its 113 404s and the server has never written
+one; §148 made the contract honest. The consequence that reaches a person is in `describeError`,
+whose 404 branch rendered `error.detail` under a comment claiming *"a 404 detail names the missing
+thing"*. There is no detail, so what rendered was `client.ts`'s floor — the status text. **The
+heading is "Not found" and the body was the words "Not Found".** That is not visible to any gate:
+the branch's own unit test supplied a detail no 404 has ever carried and then asserted it back.
+
+`TeamBoardPage` had already found this and worked around it for one screen (its header names the
+"Not found — Not Found" rendering in as many words). These rows are the other screens.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `EB-1` | As any account, open a case URL with a random UUID in place of the case id — `/projects/<real>/cases/00000000-0000-0000-0000-000000000001` | The error panel reads **Not found** over *"It may have been deleted, or it may be in a project you cannot open."* **Not** the word "Not Found" repeated, and not "The request failed (HTTP 404)." Both of those are what shipped before this slice. |
+| `EB-2` | As the **Viewer**, open a URL for a project they hold no grant on (any project id `A0` created that this account was not granted) | The same panel and the same sentence — and *that* is the point of the copy: the server refuses to say whether the project exists, so the screen must not imply either, while still telling a reader who knows they should have access what to suspect. Confirm in DevTools that the response body is genuinely **empty** and the status is 404, not 403. |
+
+**No row for the 401.** Its body is asserted live and on every endpoint by
+`EndpointAccessTest.everyOtherEndpointRequiresAuthentication`, which sweeps the whole mapping
+anonymously; a browser adds nothing to that. The SPA's 401 copy is fixed text and never read the
+wire.

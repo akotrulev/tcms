@@ -2,14 +2,33 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-08 (**§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
+**Last verified:** 2026-08-09 (**§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
 the one doc-block renderer and the editor's three new types; §126 phase 4 — the three attachment
 surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the flake panel and the
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `ab9aecd` (§143) (trust the
+**Baseline commit:** `9586d8c` (§147) (trust the
 body over the header and re-grep what a later commit could have moved).
+
+## §148 — `describeError` DOES NOT READ A DETAIL ON A 404, BECAUSE THERE IS NEVER ONE
+
+**Every 404 the API writes is bodiless** (94 `notFound().build()` sites; `openapi.yaml` declared a
+`Problem` here until §148 and was wrong). So `ApiError.detail` on a 404 is always `client.ts`'s
+floor — `res.statusText`, i.e. the word "Not Found", or `The request failed (HTTP 404).`
+
+- **The 404 branch returns fixed copy now**: *"It may have been deleted, or it may be in a project
+  you cannot open."* It used to return `error.detail`, under a comment claiming a 404 detail "names
+  the missing thing", so every 404 panel in the SPA read **"Not found — Not Found"**. Its unit test
+  passed by supplying a detail no 404 has ever carried and asserting it back.
+- **`TeamBoardPage`'s per-screen workaround stays** and its header is the accurate account of why
+  it exists. It is not the general fix; this is.
+- **The 401 branch never read the wire** and is unchanged — the API's 401 is bodiless too, and the
+  copy is fixed text.
+- **The `statusText` floor in `client.ts` is load-bearing, not a smell.** Without it `detail` is
+  `''` and every consumer that falls back to it renders a blank line. `packages/client` has the
+  identical floor, arrived at independently.
+- Both `schema.d.ts` copies regenerated: 401 and 404 now generate `content?: never`.
 
 ## §144 — `TestCaseInput` REQUIRES FOUR FIELDS, AND `schema.d.ts` WAS REGENERATED
 

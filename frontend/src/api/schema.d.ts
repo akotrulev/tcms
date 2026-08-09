@@ -4811,14 +4811,15 @@ export interface paths {
                  * @description The project, the page, the block, or the source is not visible here. One response for
                  *     all four (§6t) — the source check is against **this project**, not merely this company,
                  *     so a sibling project's case lands here rather than being accepted.
+                 *
+                 *     No body, like every other 404 here — see `NotFound`. Which of the four failed is
+                 *     precisely what must not be published.
                  */
                 404: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content: {
-                        "application/json": components["schemas"]["Problem"];
-                    };
+                    content?: never;
                 };
             };
         };
@@ -4943,14 +4944,15 @@ export interface paths {
                     };
                 };
                 401: components["responses"]["Unauthorized"];
-                /** @description The project or plan is not visible, or the plan has no document yet. */
+                /**
+                 * @description The project or plan is not visible, or the plan has no document yet. No body — see
+                 *     `NotFound`; the three states are one answer and are not told apart.
+                 */
                 404: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content: {
-                        "application/json": components["schemas"]["Problem"];
-                    };
+                    content?: never;
                 };
             };
         };
@@ -5005,14 +5007,12 @@ export interface paths {
                 400: components["responses"]["BadRequest"];
                 401: components["responses"]["Unauthorized"];
                 403: components["responses"]["Forbidden"];
-                /** @description The project, plan or page is not visible. */
+                /** @description The project, plan or page is not visible. No body — see `NotFound`. */
                 404: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content: {
-                        "application/json": components["schemas"]["Problem"];
-                    };
+                    content?: never;
                 };
                 /**
                  * @description The page is already another plan's document, or this plan already has one. `detail`
@@ -5062,14 +5062,15 @@ export interface paths {
                 };
                 401: components["responses"]["Unauthorized"];
                 403: components["responses"]["Forbidden"];
-                /** @description The project or plan is not visible, or the plan has no document. */
+                /**
+                 * @description The project or plan is not visible, or the plan has no document. No body — see
+                 *     `NotFound`.
+                 */
                 404: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content: {
-                        "application/json": components["schemas"]["Problem"];
-                    };
+                    content?: never;
                 };
             };
         };
@@ -10356,14 +10357,33 @@ export interface components {
         };
     };
     responses: {
-        /** @description Not authenticated */
+        /**
+         * @description Not authenticated — no credential, an unreadable or expired one, or a session token that
+         *     predates a change to what the account may do.
+         *
+         *     **There is no body, deliberately, and this response declared one until §148.** The status
+         *     is written by the security chain before any handler is chosen: an `HttpStatusEntryPoint`
+         *     for the unauthenticated case, and `PermissionVersionFilter` for a session the account has
+         *     outlived. Neither writes a document, and neither should — the four conditions that reach
+         *     here are not distinguished on purpose, since which one failed is the answer to a probe
+         *     rather than something the caller can act on. The remedy is the same in every case:
+         *     authenticate again.
+         *
+         *     A client must therefore not parse this response. `@tcms/client` already did not, and the
+         *     workaround is what makes the point: its `problemFrom` falls back to `statusText` and its
+         *     own test says *"the API's own 401 is bodiless"* — a consumer had written down the truth
+         *     this contract was contradicting, and compensated for it silently rather than reporting it.
+         *
+         *     One header is present and is worth reading: `PermissionVersionFilter`'s refusal carries
+         *     `WWW-Authenticate: Bearer error="invalid_token"`, which names the remedy without naming
+         *     the cause. The entry point's does not, deliberately — a challenge would make a browser
+         *     render its own credential dialog over the SPA.
+         */
         Unauthorized: {
             headers: {
                 [name: string]: unknown;
             };
-            content: {
-                "application/json": components["schemas"]["Problem"];
-            };
+            content?: never;
         };
         /**
          * @description The request was understood and will not be stored. `Problem.errors` is keyed by the field
@@ -10384,14 +10404,30 @@ export interface components {
                 "application/json": components["schemas"]["Problem"];
             };
         };
-        /** @description Not found */
+        /**
+         * @description Not found, or not visible to this caller — one status for both, per §6t, because a
+         *     response that distinguished them would be an oracle for ids the caller may not reach.
+         *
+         *     **There is no body, deliberately, and this response declared one until §148.** All 94
+         *     sites that write a 404 in this server are `ResponseEntity.notFound().build()`, and the
+         *     emptiness is the point: a `Problem` here has nothing to say that the status has not
+         *     already said, and everything it *could* say — which of `projectId`, `caseId` or the
+         *     target failed to resolve — is the disclosure §6t exists to prevent. Field-level detail
+         *     belongs on the 400, where the value was legal and merely unacceptable.
+         *
+         *     The contract carried both spellings before this was settled: two operations declared the
+         *     404 bodiless and 111 declared a `Problem`, and nothing compared them. `ErrorBodyPolicyTest`
+         *     does now, in both directions — the declaration here against the source of every handler.
+         *
+         *     **A 404 with a `Problem` body is a different answer and is not this**: that one is the
+         *     container refusing a path with no operation at all, before routing — see
+         *     `PreHandlerRefusal`.
+         */
         NotFound: {
             headers: {
                 [name: string]: unknown;
             };
-            content: {
-                "application/json": components["schemas"]["Problem"];
-            };
+            content?: never;
         };
         /**
          * @description Authenticated, and the target is one the caller may READ, but the action needs a
@@ -10403,6 +10439,15 @@ export interface components {
          *     exists, so answering 404 on the write would conceal nothing and would instead tell an
          *     editor their case had vanished. An unreachable project or case stays 404 here too — 403
          *     is reached only after the read gate has passed.
+         *
+         *     **The body is present on all but three sites, and a client must tolerate its absence.**
+         *     Unlike the 401 and the 404 above, this refusal usually has something actionable to say —
+         *     which permission, and at what scope — so it carries a `Problem` and both non-SPA clients
+         *     print its `detail`. The three exceptions are pinned by `ErrorBodyPolicyTest` and each has
+         *     a reason of its own: a report download is typed to a binary `Resource`, so a JSON document
+         *     under that status is a shape the caller did not ask for; and the two artifact refusals
+         *     (register, unregister) have no field to land a sentence on and nothing the caller can
+         *     change about the request. A fourth cannot appear without editing that list.
          */
         Forbidden: {
             headers: {

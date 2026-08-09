@@ -2,15 +2,41 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-09 (**§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-09 (**§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `ace42ab` (§146) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `9586d8c` (§147) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
 ---
+
+## §148 — A 401 AND A 404 CARRY NO BODY, AND A CHECK NOW READS THE SOURCE TO SAY SO
+
+**Every 404 this server writes is `ResponseEntity.notFound().build()` — 94 sites — and every 401 is
+the security chain setting a status.** `openapi.yaml` declared a `Problem` on both until §148 and
+now declares none, so **adding a body to either is a contract change first.**
+
+- **`ErrorBodyPolicyTest` (`com.tcms.contract`, no Spring) is the check.** Three tests: the contract
+  declares no `content` on any 401/404; every `notFound()` is followed by `.build()` **and no file
+  but `ProblemErrorAttributes` may name `HttpStatus.NOT_FOUND` at all** (the scan knows one spelling,
+  so the other is banned rather than left as its hole); and the bodiless-403 set equals three pinned
+  sites. Each has a floor, so a scan that stops matching fails instead of passing vacuously.
+- **A 403 normally DOES carry a `Problem` — 56 of 59 sites.** The three that do not are
+  `reporting/ReportController` (typed to a binary `Resource`) and the two artifact controllers
+  (no field to land a sentence on). `Forbidden`'s description names them. A fourth fails the build.
+- **`EndpointAccessTest.everyOtherEndpointRequiresAuthentication` now also asserts the 401 body is
+  empty**, on every mapped endpoint. That sweep already existed; the 401 half of this rule therefore
+  needs no source scan and does not have one.
+- **`openapi.yaml` IS OUTSIDE GRADLE'S INPUT SET.** A contract-only edit leaves `:test` UP-TO-DATE,
+  so `./gradlew test` after editing the spec can execute nothing and report success. Use
+  `--rerun-tasks` when verifying a contract change.
+- **Not pinned, deliberately**: 409/400/429 body-presence. A `.build()` on a 409 passes today.
+
+The frontend half: `describeError`'s 404 branch no longer reads `error.detail` — there is none, so
+it was rendering `client.ts`'s `statusText` floor ("Not Found" under "Not found"). Both HTTP clients
+keep that floor and their comments about it are the accurate ones.
 
 ## §147 — THERE IS ONE `UserRef` AND SEVEN MODULES IMPORT IT
 
