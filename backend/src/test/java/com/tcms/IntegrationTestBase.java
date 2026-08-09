@@ -156,14 +156,25 @@ public abstract class IntegrationTestBase {
         // tests cannot collide, and a leftover file is the evidence you want when a download
         // assertion fails. The OS clears the directory; §19's fixture-collision defect is about
         // hand-managed prefixes and does not apply to a key space that is entirely random.
+        //
+        // SUFFIXED BY user.name, and that is not decoration. java.io.tmpdir is /tmp on Linux,
+        // which is shared and sticky (1777): the FIRST user to run the suite creates the
+        // directory 0755 and every OTHER user on that host is then refused write to it. The
+        // failure is an AccessDeniedException wrapped twice, surfacing as ~40 storage tests
+        // failing at once, and it reads as a broken blob adapter rather than a permission.
+        // It cannot happen on a single-user machine, which is why macOS never sees it and why
+        // the suite was green for a year — it appears the moment a second account builds on the
+        // same box, e.g. a developer sharing a host with the CI runner that owns /tmp already.
         registry.add("tcms.storage.evidence.root",
-                () -> System.getProperty("java.io.tmpdir") + "/tcms-evidence-test");
+                () -> System.getProperty("java.io.tmpdir") + "/tcms-evidence-test-"
+                        + System.getProperty("user.name"));
 
         // The same, for report bytes (§87) — a second root because the product has two, and
         // pointing the suite's two at one directory would be the one configuration no deployment
         // is obliged to use and every test would then depend on.
         registry.add("tcms.storage.reports.root",
-                () -> System.getProperty("java.io.tmpdir") + "/tcms-reports-test");
+                () -> System.getProperty("java.io.tmpdir") + "/tcms-reports-test-"
+                        + System.getProperty("user.name"));
 
         // Production sizes this at 20. The suite must not.
         //
