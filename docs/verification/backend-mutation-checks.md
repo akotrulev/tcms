@@ -1619,7 +1619,35 @@ cd backend
 | RL-4 | Stop excluding `ArchitectureRulesTest.java` from its own corpus (`OWN_FILE`) | **Five of the thirteen members vanish and the rule goes green while the defect stands.** Every key is the string `"Entity.field"`, so each argument for keeping a column is itself a literal naming that column. This is the rule's own most dangerous failure mode and the reason the measured population went 7 → 13. | ⬜ NOT RUN |
 | RL-5 | Stop stripping comments from the corpus | Nineteen columns read as live because some javadoc mentions them, and the population collapses to 7. In a repository whose comments carry the reasoning, prose standing in for code is §152's exact finding — the rule must not accept it as a reader. | ⬜ NOT RUN |
 | RL-6 | Stop dropping `INSERT` statements from the corpus | Seven columns read as live off the fixture rows that *create* them. An insert's column list is a write; a fixture inserting `added_by` is not a reader of `added_by`. | ⬜ NOT RUN |
-| RL-7 | Add `@Version` to `TestRun.lockVersion` (the recorded next-slice candidate, **not done here**) | Two concurrent updates to one run answer 409 through `RunController.onWriteRace`, which already exists and has never been reachable. Today the column is `NOT NULL DEFAULT 0`, mapped as a plain column, never incremented and never read — while `RunController` itself cites ERD §5 that "a run is worked by several testers at once by design". `work_item.lock_version` is the same shape. **This row is the check for a slice that has not been written.** | ⬜ NOT RUN |
+| RL-7 | Add `@Version` to `TestRun.lockVersion` (the recorded next-slice candidate, **not done here**) | Two concurrent updates to one run answer 409 through `RunController.onWriteRace`, which already exists and has never been reachable. Today the column is `NOT NULL DEFAULT 0`, mapped as a plain column, never incremented and never read — while `RunController` itself cites ERD §5 that "a run is worked by several testers at once by design". `work_item.lock_version` is the same shape. ~~**This row is the check for a slice that has not been written.**~~ → **SUPERSEDED 2026-08-09 by §155's `LV-1`…`LV-6` below.** The slice was written and the answer was no: `@Version` here makes the product's most-used write a contention point (`TestPlan.lockVersion`'s header said so before §154 proposed it), and the run's real lost update is closed by a conditional `UPDATE` and `@DynamicUpdate`. Both columns are unmapped now, so this mutation no longer describes a reachable state. | ⛔ SUPERSEDED |
 
 > **No browser-queue row.** No production behaviour changed: one test rule was added and thirteen
 > javadocs were corrected at the fields they describe. No request, response or screen differs.
+
+---
+
+### §155 — the guard two entities mapped and neither maintained (`LV-1` … `LV-6`)
+
+**`RL-7` above is superseded by this block and is marked so there.** It proposed adding `@Version`
+to `TestRun`; the audit said no on both entities and closed the run's actual race with a conditional
+`UPDATE` and `@DynamicUpdate` instead. These rows check what shipped.
+
+```bash
+cd backend
+./gradlew test --tests 'com.tcms.architecture.ArchitectureRulesTest'   # LV-3, LV-4
+./gradlew test --tests 'com.tcms.execution.ExecutionEndpointTest'      # LV-1, LV-2, LV-5
+./gradlew test --tests 'com.tcms.execution.IngestionEndpointTest'      # LV-6
+```
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| LV-1 | Remove `@DynamicUpdate` from `TestRun` | The mirror lost update returns: a close loaded before the first result lands writes its own null `started_at` back over the row. Should redden `ending a run does not write started_at — the mirror, and what @DynamicUpdate buys` **and nothing else** — the annotation changes no other observable behaviour, which is the whole reason it is affordable. | ✅ **RUN 2026-08-09** — red on exactly that one test, 83 run / 1 failed; reverted |
+| LV-2 | Drop `AND r.status = …NOT_STARTED` from `startIfNotStarted`'s `WHERE` clause | The statement becomes unconditional, so every result re-stamps the start and a closed run is reopened by a late one. Predicted: the two §155 tests **plus** the two §72 idempotence tests, because those assert the same property through the endpoint. | ✅ **RUN 2026-08-09** — **MORE, and the right more**: 4 red — `a run closed while a result was in flight is NOT put back to IN_PROGRESS`, `the start answers 1 once and 0 for ever after`, `a second result does not re-start it, and writes no second run.started`, `recording in an already-running run leaves its start alone`; reverted |
+| LV-3 | Map `lock_version` again on `WorkItem` (field + `@Column`, no `@Version`) | `everyLockVersionColumnIsAVersion` fails naming `WorkItem.lockVersion`. This is the state §74 left two entities in for eighty slices, and the rule exists so it cannot be re-entered by accident. | ⬜ NOT RUN |
+| LV-4 | Delete `@Version` from `TestPlan.lockVersion`, leaving the mapping | The rule fails naming `TestPlan.lockVersion` — **the expensive direction.** That column is `required` in the contract and `PATCH /plans/{planId}` compares an `If-Match` against it, so this mutation ships a precondition that cannot fail. `PlanUpdateEndpointTest`'s stale-header test should redden too; **if it does not, that test is asserting something other than what it names.** | ⬜ NOT RUN |
+| LV-5 | `ExecutionService` writes the `run.started` audit row unconditionally instead of on a return of 1 | Every result claims to have started the run. Should redden `a second result does not re-start it, and writes no second run.started` and `recording in an already-running run leaves its start alone` — the two that count audit rows. **The row that pins why the statement returns an int at all.** | ⬜ NOT RUN |
+| LV-6 | `IngestionService` passes the token owner's id instead of `null` as `actorId` to `startIfNotStarted` | A machine's start is attributed to a person, which is the attribution `TestExecution#record` refuses on the verdict itself. Predicted **zero** reds — nothing asserts `updated_by` on an ingested run's start, and the honest deliverable of this row is that measurement. A red here would mean the ingestion suite is stricter than it reads. | ⬜ NOT RUN |
+
+> **No browser-queue row.** Neither column was ever on the wire, no contract changed, and the race
+> the fixes close cannot be provoked from one browser tab — it needs two requests overlapping inside
+> one row's write window, which the browser queue's lanes cannot express.

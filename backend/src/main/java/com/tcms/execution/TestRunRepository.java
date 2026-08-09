@@ -1,10 +1,12 @@
 package com.tcms.execution;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
@@ -69,6 +71,60 @@ public interface TestRunRepository extends JpaRepository<TestRun, UUID> {
             + "AND r.id IN :runIds AND r.deletedAt IS NULL")
     List<Object[]> findRunKeys(
             @Param("projectId") UUID projectId, @Param("runIds") Collection<UUID> runIds);
+
+    /**
+     * Starts the run, if it has not started — <strong>the write §72 put in an entity mutator and
+     * §155 moved into a predicate</strong>.
+     *
+     * <p>Called on every result recorded and every ingested report, which makes it the hottest
+     * write in the product, and it is the one write on this table that is not the caller's whole
+     * intent: the tester asked to record a verdict, and the run starting is a consequence.
+     *
+     * <h2>Why the guard is in the WHERE clause and not in Java</h2>
+     *
+     * <p>{@code TestRun.begin} asked {@code status == NOT_STARTED} in the calling transaction and
+     * then wrote the whole row. Both halves are the problem. The <em>question</em> was answered
+     * against a snapshot taken before a lead's {@code PUT /status} committed, so it said yes on a
+     * run that had since been completed; the <em>write</em> then set {@code status} back to
+     * {@code IN_PROGRESS} and cleared {@code completed_at}, discarding the closure with no error on
+     * either request. Here Postgres re-evaluates the predicate against the current row under the
+     * lock this statement takes, so a run somebody closed in the meantime matches nothing and the
+     * start does not happen — which is also the right domain answer, not merely a safe one.
+     *
+     * <p>It is idempotent for the same reason, and that is what makes it safe to call
+     * unconditionally: a second result finds {@code IN_PROGRESS} and updates zero rows. Two testers
+     * whose first results are in flight at once <strong>do not collide</strong> — the second
+     * statement waits for the first to commit, re-reads, and reports nothing done. Under a
+     * {@code @Version} on this row those two would instead be a 409 and a rolled-back verdict, which
+     * is why this row carries no such column (see {@link TestRun}'s header).
+     *
+     * <p>{@code now} is the <em>result's</em> instant rather than a fresh read of the clock: they
+     * are the same event, and two instants a few microseconds apart would let a run's start sort
+     * after the first result recorded in it. {@code actorId} is null on the ingestion path, where
+     * nobody performed the start.
+     *
+     * <p>{@code clearAutomatically} is deliberately not set, for {@code TestCaseDraftRepository}'s
+     * reason: the calling transaction holds this run as a managed entity and detaching it
+     * mid-write is action at a distance. The consequence is that the in-memory copy keeps the
+     * status it was loaded with — no caller re-reads it, and the two that exist use only the id and
+     * the key.
+     *
+     * @return 1 when this call is what started the run, 0 when it was already started, already
+     *         closed, deleted, or in another project — the four cases the caller must treat
+     *         identically, because in every one of them somebody else's fact is the one on the row
+     */
+    @Modifying
+    @Transactional
+    @Query("UPDATE TestRun r "
+            + "SET r.status = com.tcms.execution.RunStatus.IN_PROGRESS, r.startedAt = :now, "
+            + "r.updatedAt = :now, r.updatedBy = :actorId "
+            + "WHERE r.id = :runId AND r.projectId = :projectId AND r.deletedAt IS NULL "
+            + "AND r.status = com.tcms.execution.RunStatus.NOT_STARTED")
+    int startIfNotStarted(
+            @Param("projectId") UUID projectId,
+            @Param("runId") UUID runId,
+            @Param("actorId") UUID actorId,
+            @Param("now") Instant now);
 
     /**
      * How many live runs were created from this plan — what {@link PlanDeleteService} refuses on.

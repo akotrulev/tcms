@@ -175,6 +175,10 @@ class ExecutionEndpointTest extends IntegrationTestBase {
     @Autowired
     private OutboxRepository outboxEntries;
 
+    /** §155's three tests drive the start statement directly — see them for why not the endpoint. */
+    @Autowired
+    private TestRunRepository runs;
+
     /** Authored through {@code POST /cases}, so its v1 snapshot is the real one. */
     private UUID caseA;
     private UUID caseB;
@@ -1452,6 +1456,104 @@ class ExecutionEndpointTest extends IntegrationTestBase {
 
             assertThat(runRow(RUN).startedAt()).isEqualTo(before);
             assertThat(auditCount("run.started")).isZero();
+        }
+
+        // -----------------------------------------------------------------
+        // §155 — the two writers of this row, and the order each of them loses
+        // -----------------------------------------------------------------
+
+        @Test
+        @DisplayName("a run closed while a result was in flight is NOT put back to IN_PROGRESS")
+        void aCloseIsNotErasedByALateStart() throws Exception {
+            // THE INTERLEAVE, reduced to something a single-threaded suite can run. The recording
+            // transaction's snapshot said NOT_STARTED; by the time its write reaches the row a lead
+            // has committed COMPLETED. The reduction is faithful precisely because the guard is no
+            // longer in Java: Postgres re-evaluates this statement's own WHERE clause against the
+            // row as it is at write time, so "closed first" IS the state the late writer meets.
+            //
+            // Under §72's TestRun.begin this is the silent one. The Java guard read the stale
+            // snapshot, said yes, and the full-row UPDATE wrote IN_PROGRESS with completed_at
+            // cleared — a lead's closure gone, two 200s, and nothing anywhere to read afterwards.
+            try (Connection lead = appConnection(ACME)) {
+                execute(lead, "UPDATE test_run SET status = 'COMPLETED', completed_at = now() "
+                        + "WHERE id = '" + FRESH_RUN + "'");
+            }
+
+            int started;
+            try (var ignored = CompanyContext.open(ACME)) {
+                started = runs.startIfNotStarted(ACME_BANKING, FRESH_RUN, ENGINEER, Instant.now());
+            }
+
+            assertThat(started)
+                    .as("the run was not this caller's to start, so nothing was started")
+                    .isZero();
+            RunRow row = runRow(FRESH_RUN);
+            assertThat(row.status()).isEqualTo("COMPLETED");
+            assertThat(row.completedAt())
+                    .as("the end of a run a lead ended must survive a result arriving late")
+                    .isNotNull();
+            assertThat(row.startedAt()).isNull();
+        }
+
+        @Test
+        @DisplayName("the start answers 1 once and 0 for ever after — the audit row hangs on it")
+        void theStartAnswersOnce() {
+            int first;
+            int second;
+            try (var ignored = CompanyContext.open(ACME)) {
+                first = runs.startIfNotStarted(ACME_BANKING, FRESH_RUN, ENGINEER, Instant.now());
+                second = runs.startIfNotStarted(ACME_BANKING, FRESH_RUN, LEAD, Instant.now());
+            }
+
+            // The return value is the whole interface: ExecutionService writes `run.started` on 1
+            // and nothing on 0, so two testers whose first results are in flight at once produce
+            // ONE audit row between them rather than one each. Asserted here as a count because
+            // through the endpoint the two calls cannot be made to overlap.
+            assertThat(first).isEqualTo(1);
+            assertThat(second)
+                    .as("a second start is not an error and not a conflict — it is a no-op, which "
+                            + "is why this row needs no @Version and no If-Match")
+                    .isZero();
+        }
+
+        @Test
+        @DisplayName("ending a run does not write started_at — the mirror, and what @DynamicUpdate buys")
+        void closingDoesNotEraseAStartItNeverSaw() throws Exception {
+            // The same race read the other way round, and it loses a different column. The lead's
+            // transaction loaded this run before the first result landed, so ITS copy of
+            // started_at is null; a full-row UPDATE would write that null back over a run that
+            // demonstrably ran, leaving COMPLETED with no start and every duration wrong.
+            //
+            // @DynamicUpdate is the whole fix: applyStatus does not touch started_at, so the
+            // statement does not name the column. Remove the annotation and this test goes red.
+            try (var ignored = CompanyContext.open(ACME)) {
+                tx.executeWithoutResult(status -> {
+                    TestRun run = runs.findLiveInProject(ACME_BANKING, FRESH_RUN).orElseThrow();
+                    assertThat(run.getStartedAt())
+                            .as("this transaction's copy predates the result, which is the point")
+                            .isNull();
+
+                    // A tester's first result commits while the lead holds that copy.
+                    try (Connection tester = appConnection(ACME)) {
+                        execute(tester, "UPDATE test_run SET status = 'IN_PROGRESS', "
+                                + "started_at = now() WHERE id = '" + FRESH_RUN + "'");
+                    } catch (SQLException unreachable) {
+                        throw new AssertionError("the fixture connection", unreachable);
+                    }
+
+                    // The entity mutator directly rather than through RunStatusService: the lead's
+                    // request already made its decision from the same stale copy, and what is
+                    // under test is the WRITE, not the lifecycle rule that authorised it.
+                    run.applyStatus(RunStatus.COMPLETED, LEAD, Instant.now());
+                    runs.saveAndFlush(run);
+                });
+            }
+
+            RunRow row = runRow(FRESH_RUN);
+            assertThat(row.status()).isEqualTo("COMPLETED");
+            assertThat(row.startedAt())
+                    .as("a run that ran has a start, whatever the closing transaction had read")
+                    .isNotNull();
         }
 
         // -----------------------------------------------------------------

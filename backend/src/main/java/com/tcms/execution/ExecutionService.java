@@ -72,10 +72,15 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>{@code TestRun.create} has said since §42 that a run begins when somebody records the first
  * result rather than when it is named, and until §72 <strong>nothing implemented it</strong> — so
  * {@code test_run.status} was written once, at creation, and every run in the product read "not
- * started" forever. {@link TestRun#begin} is called on every result and answers whether this one was
- * the first; it needs no permission of its own, because the caller has just passed
- * the gates above and a second one here would let a tester record a result the run then
+ * started" forever. {@link TestRunRepository#startIfNotStarted} is called on every result and
+ * answers whether this one was the first; it needs no permission of its own, because the caller has
+ * just passed the gates above and a second one here would let a tester record a result the run then
  * declines to acknowledge.
+ *
+ * <p>It is a conditional {@code UPDATE} and not an entity mutator <strong>since §155</strong>, and
+ * the difference is the whole of that slice: the mutator asked "has this run started" against the
+ * snapshot this transaction read, which is a question whose answer can already be out of date by the
+ * time the write lands. See the repository method.
  */
 @Service
 public class ExecutionService {
@@ -321,11 +326,15 @@ public class ExecutionService {
         executions.saveAndFlush(execution);
         recordSteps(companyId, execution, request);
 
-        // The run starts here or it never starts. Asked unconditionally — begin() answers whether
-        // this call was the first — and inside the result's own transaction, so a run cannot end up
-        // marked as started by a result that rolled back.
-        if (run.begin(userId, now)) {
-            runs.saveAndFlush(run);
+        // The run starts here or it never starts. Asked unconditionally — the statement's own WHERE
+        // clause answers whether this call was the first — and inside the result's own transaction,
+        // so a run cannot end up marked as started by a result that rolled back.
+        //
+        // §155: a conditional UPDATE rather than TestRun.begin, which asked the same question in
+        // Java against a snapshot that could already be out of date. Two testers' first results no
+        // longer collide, exactly one of them writes the audit row, and a run a lead closed while
+        // this result was in flight is not put back to IN_PROGRESS. See the repository method.
+        if (runs.startIfNotStarted(run.getProjectId(), run.getId(), userId, now) == 1) {
             auditEvents.save(AuditEvent.record(
                     execution.getProjectId(),
                     userId,

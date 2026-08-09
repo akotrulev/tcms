@@ -455,8 +455,12 @@ public class IngestionService {
 
         // The run starts here or it never starts — ExecutionService's rule (§72), and an ingested
         // run would otherwise read "not started" for ever while carrying a full set of verdicts.
-        if (!recorded.isEmpty() && run.begin(null, now)) {
-            runs.saveAndFlush(run);
+        //
+        // A conditional UPDATE since §155, and the null actor is the point of it here: nobody
+        // performed this start, so there is no one to attribute it to, and the statement must not
+        // resurrect a run a lead closed between this job's read and its write.
+        if (!recorded.isEmpty()) {
+            runs.startIfNotStarted(run.getProjectId(), run.getId(), null, now);
         }
         if (!recorded.isEmpty()) {
             // Guarded on `recorded`, not on the parse: a report whose every test was unmatched

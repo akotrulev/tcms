@@ -9,6 +9,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
+import org.hibernate.annotations.DynamicUpdate;
 import org.hibernate.annotations.Filter;
 
 /**
@@ -18,10 +19,10 @@ import org.hibernate.annotations.Filter;
  * separate slice</strong>: until it landed, {@code status} had been written exactly once in the
  * product's life — to {@code NOT_STARTED}, by the factory below — so every run on every real
  * instance stayed "not started" after every one of its results had been recorded, and
- * {@code started_at} and {@code completed_at} were columns nothing ever filled. The two mutators
- * here are the whole lifecycle: {@link #begin} (automatic, on the first result) and
- * {@link #applyStatus} (deliberate, behind {@code run:close}). Which moves are legal is
- * {@link RunLifecycle}'s, not this class's.
+ * {@code started_at} and {@code completed_at} were columns nothing ever filled. Two writes are the
+ * whole lifecycle: the automatic one on the first result — {@link TestRunRepository#startIfNotStarted}
+ * since §155, a mutator here until then — and {@link #applyStatus}, deliberate and behind
+ * {@code run:close}. Which moves are legal is {@link RunLifecycle}'s, not this class's.
  *
  * <p>{@code release_sort_key} <strong>is now mapped</strong>, and §38's reason for leaving it out is
  * the reason it arrives here: it is <em>"computed on write from release_version"</em>, and this is
@@ -29,10 +30,53 @@ import org.hibernate.annotations.Filter;
  * {@link #create} derives it from {@link #releaseVersion} through {@link ReleaseSortKey} in the one
  * statement that sets either — so the two cannot come to disagree, which is the failure §6q calls
  * silent: "1.10" sorts before "1.9" and every latest-release query is quietly wrong.
+ *
+ * <h2>Two writers, overlapping on one column — and each order loses something different (§155)</h2>
+ *
+ * <p>This is the only aggregate in the product with <strong>two concurrent writers that are not
+ * the same act</strong>, which ERD §5 says is the ordinary case rather than the race: a run is
+ * worked by several testers at once. A tester's first result <em>starts</em> the run
+ * ({@code status}, {@code started_at}); a lead's {@code PUT /status} <em>ends</em> it
+ * ({@code status}, {@code completed_at}). They overlap on {@code status} alone, and a full-row
+ * {@code UPDATE} from either side therefore discards the other's column:
+ *
+ * <ul>
+ *   <li><strong>Start after close.</strong> The tester's transaction read {@code NOT_STARTED}, the
+ *       lead committed {@code COMPLETED}, and the tester's write puts the run back to
+ *       {@code IN_PROGRESS} with {@code completed_at} cleared — <em>a run closure erased, with no
+ *       error anywhere</em>. Closed by {@link TestRunRepository#startIfNotStarted}, which re-reads
+ *       the predicate under the row lock rather than trusting the snapshot.</li>
+ *   <li><strong>Close after start.</strong> The mirror: the lead's entity was loaded before the
+ *       first result landed, so its {@code started_at} is still null and a full-row write nulls the
+ *       column on a run that demonstrably ran. Closed by {@link DynamicUpdate} — a mutator that
+ *       does not touch a column no longer writes it, so the two writers stop colliding on the
+ *       columns they do not share.</li>
+ * </ul>
+ *
+ * <h2>No {@code @Version} — and that is §155's finding, not §74's omission</h2>
+ *
+ * <p>{@code V1} gives this table a {@code lock_version} column and <strong>this class does not map
+ * it.</strong> §74 swept the entities, annotated three, and left this one and {@code work.WorkItem}
+ * mapped-but-unmaintained — a column reading {@code 0} for ever while looking like a guard, which
+ * {@code TestPlan.lockVersion}'s header has recorded as latent ever since.
+ * {@code ArchitectureRulesTest.everyLockVersionColumnIsAVersion} makes that state unbuildable, and
+ * the way out is not automatically the annotation. {@code ApiToken}'s rubric is the one to apply:
+ * is a lost update here a <em>discarded edit</em> or a <em>duplicated intent</em>?
+ *
+ * <p>It is neither, once the two writes above are correct. There is no {@code PATCH /runs/{runId}}
+ * and no field on this row is edited from a value a client read, so nothing derives a write from a
+ * stale snapshot; the lifecycle write names an absolute target, which is exactly the argument
+ * {@code RunStatusService} already gives for serving no {@code If-Match} and the contract repeats on
+ * three status endpoints. What {@code @Version} would add is a 409 on <strong>the most-used write in
+ * the product</strong> — two testers recording their first results in the same run collide, and one
+ * legitimate verdict rolls back with "someone else recorded a result first" pointing at an execution
+ * that is not the one they were looking at. {@code TestPlan}'s header named that cost before this
+ * slice existed. The guard the row actually needed was a predicate, not a counter.
  */
 @Entity
 @Table(name = "test_run")
 @Filter(name = CompanyFilter.NAME, condition = CompanyFilter.CONDITION)
+@DynamicUpdate
 public class TestRun {
 
     @Id
@@ -93,9 +137,6 @@ public class TestRun {
      */
     @Column(name = "release_sort_key", updatable = false)
     private String releaseSortKey;
-
-    @Column(name = "lock_version", nullable = false)
-    private long lockVersion;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -176,30 +217,12 @@ public class TestRun {
         return created;
     }
 
-    /**
-     * The run starts, because somebody recorded the first result in it.
-     *
-     * <p><strong>Idempotent and self-guarding</strong>: it returns false on a run that has already
-     * begun, so the caller — {@link ExecutionService}, on every single result — asks unconditionally
-     * and writes an audit row only when the answer is yes. A caller-side {@code if} would be the
-     * same test in a second place, and the second place is where it drifts.
-     *
-     * <p>{@code startedAt} takes the <em>result's</em> {@code now}, not a fresh read of the clock:
-     * they are the same event, and two instants a few microseconds apart would let a run's start
-     * sort after the first result recorded in it.
-     *
-     * @return true when this call is what started the run
-     */
-    boolean begin(UUID actorId, Instant now) {
-        if (status != RunStatus.NOT_STARTED) {
-            return false;
-        }
-        status = RunStatus.IN_PROGRESS;
-        startedAt = now;
-        updatedAt = now;
-        updatedBy = actorId;
-        return true;
-    }
+    // There is deliberately no `begin()` mutator here, and §72 wrote one. It was idempotent and
+    // self-guarding — `if (status != NOT_STARTED) return false` — which is the right rule and the
+    // wrong place for it: the test ran against a snapshot this transaction read before a lead's
+    // close committed, so the guard passed and the write then erased the closure (see the class
+    // header). The rule now lives in the WHERE clause of TestRunRepository#startIfNotStarted, where
+    // the database re-evaluates it under the row lock and the answer cannot be stale.
 
     /**
      * Ends the run, or reopens it — the move {@link RunLifecycle} has already ruled legal.

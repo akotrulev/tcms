@@ -27,6 +27,7 @@ import com.tngtech.archunit.lang.syntax.ArchRuleDefinition;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.Version;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -736,10 +737,11 @@ class ArchitectureRulesTest {
         // has no idea which table a statement is about. A rule that reports a field something
         // really reads earns an ignore-list entry and is then ignored; a rule that misses one
         // stays trustworthy and finds it the next time the corpus tightens. What that costs is
-        // named where it is paid: everyLockVersionColumnIsAVersion does not exist yet, and
-        // test_run.lock_version and work_item.lock_version are two columns this rule cannot see —
-        // §154 verified both by hand as mapped without @Version, so a run edited by two testers at
-        // once is last-write-wins on an aggregate whose ERD §5 says that is the ordinary case.
+        // named where it is paid, and §155 paid it: everyLockVersionColumnIsAVersion below is the
+        // rule this comment used to say did not exist, written because test_run.lock_version and
+        // work_item.lock_version are two columns THIS rule cannot see — a native query naming
+        // another table's lock_version marks them read. §154 verified both by hand. Both are
+        // unmapped now, and the run's actual race is closed by a predicate rather than a counter.
         //
         // THE FIRST DRAFT'S CORPUS WAS WRONG IN EXACTLY §152'S WAY. It matched repository method
         // names against findBy*/countBy*/existsBy*, so ReportJob.requestedAt was reported as
@@ -822,6 +824,81 @@ class ArchitectureRulesTest {
                         with the argument written at the field — and if a query DOES read it, the \
                         corpus above is what is wrong, not this list""")
                 .containsExactlyInAnyOrderElementsOf(READERLESS_BY_DECISION.keySet());
+    }
+
+    @Test
+    @DisplayName("no entity maps lock_version without @Version — §74's sweep, computed")
+    void everyLockVersionColumnIsAVersion() {
+        // The rule the comment in everyMappedColumnHasAReader said did not exist yet, and the
+        // reason it is a separate rule rather than a tighter corpus there: the corpus is TEXT and
+        // has no idea which table a statement is about, so a native query naming another table's
+        // lock_version marks every entity's live. This question is not about readers at all. It is
+        // whether a column that exists to be a guard is one.
+        //
+        // §74 asked it BY HAND. It found three entities mapping lock_version without @Version,
+        // annotated three, and left two — and the note about the two lived in a javadoc on a THIRD
+        // entity, TestPlan, from §74 to §155. That is eighty slices of a written finding nothing
+        // could act on, which is §152's shape exactly: the prose about a defect outliving every
+        // opportunity to fix it, because prose is not a check.
+        //
+        // WHAT IT COSTS IS THE POINT. A mapped lock_version Hibernate does not maintain reads 0 on
+        // every row for ever, and it is worse than an absent column rather than merely useless: it
+        // is the value an If-Match is checked against. TestPlan is the recorded instance — the
+        // column had been mapped since M2 slice 2 and REQUIRED by the contract just as long, so the
+        // endpoint would have shipped a concurrency guard structurally incapable of firing, and no
+        // test asserting "a stale header is refused" would have gone red, because there is no such
+        // thing as a stale 0.
+        //
+        // THE RULE DOES NOT SAY "ANNOTATE IT". It says the two states must not be confused, and
+        // unmapping is the other way out — which is the one §155 took for both survivors, because
+        // ApiToken's rubric (is a lost update here a discarded edit, or a duplicated intent?)
+        // answers "neither" for a row whose only writes name an absolute target. The arguments are
+        // at TestRun and WorkItem. What must not happen again is a third entity sitting in between.
+        //
+        // No by-decision map, unlike §153's and §154's, and that is measured rather than hoped: the
+        // population is empty on this tree, so pinning one would be pinning nothing. The moment it
+        // is not, the entry belongs at the field like every other one here.
+        List<String> mappedWithoutVersion = new ArrayList<>();
+        int versioned = 0;
+
+        for (JavaClass type : PRODUCTION) {
+            if (!type.isAnnotatedWith(Entity.class)) {
+                continue;
+            }
+            for (JavaField field : type.getFields()) {
+                if (field.getModifiers().contains(JavaModifier.STATIC)
+                        || !columnOf(field).equals("lock_version")) {
+                    continue;
+                }
+                if (field.isAnnotatedWith(Version.class)) {
+                    versioned++;
+                } else {
+                    mappedWithoutVersion.add(type.getSimpleName() + "." + field.getName());
+                }
+            }
+        }
+
+        // Fifteen on this tree, and the number is worth stating because §154 recorded it by hand as
+        // "nineteen other entities carry @Version on the identically-named column". It was 17
+        // mappings, 15 of them annotated. A hand-kept tally being wrong in the slice that argued
+        // for computing hand-kept tallies is the joke this family of rules keeps telling.
+        assertThat(versioned)
+                .as("no entity maps lock_version at all, so this rule is asserting nothing — the "
+                        + "@Entity predicate, the import or the column convention has moved")
+                .isGreaterThan(10);
+
+        assertThat(mappedWithoutVersion)
+                .as("""
+                        an entity maps lock_version and Hibernate does not maintain it, so the \
+                        column reads 0 on every row for ever while looking like a guard. That is \
+                        worse than not mapping it: it is the value an If-Match is compared \
+                        against, and a precondition against a constant cannot fail — TestPlan \
+                        shipped within a slice of exactly that. Two ways out, and the annotation \
+                        is only one of them: add @Version, or unmap the field and write at the \
+                        class why this row does not need one (ApiToken, TestRun and WorkItem are \
+                        the worked examples). What is not allowed is the third state, which §74 \
+                        left two entities in for eighty slices""")
+                .isEmpty();
     }
 
     /** Whether this field's column is spelled anywhere in {@code corpus} but its own file. */

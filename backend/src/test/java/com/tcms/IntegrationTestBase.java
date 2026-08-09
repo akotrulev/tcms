@@ -156,14 +156,24 @@ public abstract class IntegrationTestBase {
         // tests cannot collide, and a leftover file is the evidence you want when a download
         // assertion fails. The OS clears the directory; §19's fixture-collision defect is about
         // hand-managed prefixes and does not apply to a key space that is entirely random.
+        //
+        // THE USER NAME IS IN THE PATH SINCE §155, and it is not tidiness. The fixture ids are
+        // random, the DIRECTORIES above them are not: the tree is companyId/runId/key, and the
+        // first two segments come from a test class's hand-assigned prefix, which is the same on
+        // every machine and in every checkout. This box runs the nightly lane as `ghrunner` and a
+        // developer as themselves, both against /tmp — so the first user to run ExecutionEndpointTest
+        // creates /tmp/tcms-evidence-test/e2000000-…/e2007000-… mode 0755, and the second user gets
+        // AccessDeniedException on eleven tests that have nothing to do with what they changed.
+        // Observed, not hypothesised: it is what the §155 gate ran into, one day after the runner
+        // was registered on the same machine.
         registry.add("tcms.storage.evidence.root",
-                () -> System.getProperty("java.io.tmpdir") + "/tcms-evidence-test");
+                () -> System.getProperty("java.io.tmpdir") + "/tcms-evidence-test-" + userName());
 
         // The same, for report bytes (§87) — a second root because the product has two, and
         // pointing the suite's two at one directory would be the one configuration no deployment
         // is obliged to use and every test would then depend on.
         registry.add("tcms.storage.reports.root",
-                () -> System.getProperty("java.io.tmpdir") + "/tcms-reports-test");
+                () -> System.getProperty("java.io.tmpdir") + "/tcms-reports-test-" + userName());
 
         // Production sizes this at 20. The suite must not.
         //
@@ -178,6 +188,18 @@ public abstract class IntegrationTestBase {
         // Five is ample: no test drives concurrent load, and a low ceiling means a genuine
         // connection leak shows up as exhaustion quickly rather than hiding behind headroom.
         registry.add("spring.datasource.hikari.maximum-pool-size", () -> 5);
+    }
+
+    /**
+     * The account this JVM runs as, sanitised to a single path segment — see the storage roots.
+     *
+     * <p>{@code "shared"} when the JVM cannot say. That is the honest fallback rather than a
+     * generated name: it collides exactly as the old path did instead of scattering evidence into
+     * a directory nothing else can find.
+     */
+    private static String userName() {
+        String sanitised = System.getProperty("user.name", "").replaceAll("[^A-Za-z0-9_.-]", "");
+        return sanitised.isEmpty() ? "shared" : sanitised;
     }
 
     /**

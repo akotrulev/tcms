@@ -106,11 +106,14 @@ public class Review {
     private UUID createdBy;
 
     /**
-     * {@code @Version}, unlike {@code TestRun} and {@code work.WorkItem}, which map the column
-     * without it (§74's finding, still latent there). Nothing sends an {@code If-Match} for a review
-     * — but two people closing one review is a real race with a real database behind it, and a
-     * mapped {@code lock_version} that Hibernate does not maintain is a column that reads {@code 0}
-     * for ever while looking like a guard.
+     * {@code @Version}. ~~unlike {@code TestRun} and {@code work.WorkItem}, which map the column
+     * without it (§74's finding, still latent there)~~ → <strong>§155 closed that</strong>, by
+     * unmapping the column on both rather than annotating it; the arguments are at those two
+     * classes and the rule that ends the state is
+     * {@code ArchitectureRulesTest.everyLockVersionColumnIsAVersion}. Nothing sends an
+     * {@code If-Match} for a review — but two people closing one review is a real race with a real
+     * database behind it, and a mapped {@code lock_version} that Hibernate does not maintain is a
+     * column that reads {@code 0} for ever while looking like a guard.
      */
     @Version
     @Column(name = "lock_version", nullable = false)

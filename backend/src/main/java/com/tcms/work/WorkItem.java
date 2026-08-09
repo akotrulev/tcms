@@ -38,6 +38,29 @@ import org.hibernate.annotations.Filter;
  * affordance anywhere in the SPA, and an entity that permitted it would be modelling a capability
  * the product does not have — which is how a setter grows a caller that bypasses a permission check
  * nobody remembered to add.
+ *
+ * <h2>No {@code @Version}, and the {@code lock_version} column is not mapped (§155)</h2>
+ *
+ * <p>{@code V1} gives this table the column. §74 swept the entities and annotated three, leaving
+ * this one and {@code execution.TestRun} mapped without {@code @Version} — a column reading
+ * {@code 0} for ever while looking like a guard, which is worse than not mapping it, because the
+ * next slice to add an {@code If-Match} here would build the check on a value that cannot change.
+ * {@code ArchitectureRulesTest.everyLockVersionColumnIsAVersion} now makes that state unbuildable;
+ * unmapping is the other way out of it, and for this entity it is the right one.
+ *
+ * <p>{@code ApiToken}'s rubric decides it. The only write is {@link #moveTo}, and it names an
+ * <strong>absolute destination</strong> chosen by a person dragging a card, never a delta computed
+ * from something they read — so two people dropping the same card in two columns both get what
+ * they asked for and the later drop is the answer, which is what the contract already says on the
+ * three status endpoints that take no {@code If-Match} for the same reason. There is no lost update
+ * to detect. What {@code @Version} would add is an exception on a drag: {@code WorkItemController}
+ * has no {@code OptimisticLockingFailureException} handler, so a board race that today resolves
+ * correctly would answer <strong>500</strong>.
+ *
+ * <p>What would change the answer is a second mutator, or the field edit the contract calls "a
+ * separate slice with no affordance yet" — a title typed over a stale copy really does lose the
+ * other author's words. That slice adds the mapping and the annotation together, which is the point
+ * of not leaving a half of it lying here.
  */
 @Entity
 @Table(name = "work_item")
@@ -99,9 +122,6 @@ public class WorkItem {
 
     @Column(name = "deleted_at")
     private Instant deletedAt;
-
-    @Column(name = "lock_version", nullable = false)
-    private long lockVersion;
 
     /**
      * The {@code Idempotency-Key} the create request carried, or null (V17).

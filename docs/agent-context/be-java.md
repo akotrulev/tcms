@@ -2,13 +2,52 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-09 (**§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-09 (**§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `c3665c2` (§153) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `6de132b` (§154) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
+
+---
+
+## §155 — `lock_version` IS EITHER `@Version` OR UNMAPPED, AND `TestRun` HAS NEITHER
+
+`ArchitectureRulesTest.everyLockVersionColumnIsAVersion` is the fourth rule in §152/§153/§154's
+family. No entity may map a column named `lock_version` without `@Version`. The tally it replaces is
+**§74's, kept by hand**: three annotated, two left, and the note about the two in a javadoc on a
+*third* entity from §74 to §155.
+
+- **THE STATE IT FORBIDS IS A GUARD THAT CANNOT FIRE**, not dead weight. An unmaintained
+  `lock_version` reads `0` for ever and it is the value an `If-Match` is compared against — the
+  precondition passes over any number of intervening saves and no "a stale header is refused" test
+  can go red. `TestPlan` came within one slice of shipping exactly that.
+- **THE RULE HAS TWO EXITS AND THE ANNOTATION IS ONLY ONE.** `ApiToken`'s rubric decides: *is a
+  lost update here a discarded edit, or a duplicated intent?* Both §155 survivors are **unmapped**,
+  with the argument at the class. Population of violators is **empty** — no by-decision map, and
+  the vacuity floor is `versioned > 10` (measured: 17 mappings, 15 annotated; §154 recorded 19).
+- **`work_item.lock_version` — UNMAPPED. Do not "restore" it.** The only mutator is `moveTo`, an
+  absolute destination from a drag; the contract already calls that "no lost update to protect" on
+  three status endpoints. And `WorkItemController` has **no `OptimisticLockingFailureException`
+  handler**, so annotating turns a board race that resolves correctly into a **500**.
+- **`test_run.lock_version` — UNMAPPED, AND ITS RACE IS CLOSED BY TWO OTHER THINGS.** This is the
+  one aggregate with **two writers that are not the same act**, overlapping on `status` alone: the
+  first result (`status`, `started_at`) and a lead's close (`status`, `completed_at`). Each order
+  discarded the other's column — a start after a close **erased the closure** with two 200s.
+  1. **`TestRunRepository.startIfNotStarted`** — a conditional `UPDATE … WHERE status =
+     NOT_STARTED`. `TestRun.begin` is **deleted**; its `if` is the `WHERE`, re-evaluated by Postgres
+     under the row lock. Returns 1/0, and `ExecutionService` writes the `run.started` audit row only
+     on 1. **Do not put the guard back in Java** — a snapshot cannot answer "has this started yet".
+  2. **`@DynamicUpdate` on `TestRun`** — the only one in the codebase. It is why `applyStatus`
+     stops writing `started_at` back. Removing it reddens one test (`LV-1`).
+- `@Version` was the recorded candidate (`RL-7`) and is the **wrong instrument**: it makes the
+  product's most-used write a contention point, and `TestPlan.lockVersion`'s header said so before
+  §154 proposed it. `RunController.onWriteRace` **is** reachable — on the execution, not the run.
+- **Suite storage roots now carry `user.name`** (`IntegrationTestBase`). Fixture prefixes are
+  hand-assigned and identical everywhere, so a fixed `/tmp/tcms-evidence-test` is shared between the
+  nightly lane's `ghrunner` and a developer on the same box: eleven `AccessDeniedException` failures
+  about nothing you changed.
 
 ---
 
@@ -35,12 +74,11 @@ directions, like §153's.
 - **No exemption for `@Id`, `@Version` or `company_id`** — all three were carved out of a draft and
   all three are matched by the corpus anyway (`findById`'s derived name, the queries naming
   `lock_version`, the RLS predicate and filter condition).
-- **What it cannot see, named:** the corpus has no idea which table a statement is about.
-  **`test_run.lock_version` and `work_item.lock_version` are mapped WITHOUT `@Version`** — 19 other
-  entities carry it on the identically-named column, `V1` says the column is for optimistic locking,
-  `RunController` cites ERD §5 that a run is worked by several testers at once, and
-  `RunController.onWriteRace` exists and has never been reachable. **Recorded as the next slice**
-  (`RL-7`), not taken: it is a behaviour change on a concurrently-edited aggregate.
+- **What it cannot see, named:** the corpus has no idea which table a statement is about, so a
+  native query naming *another* table's `lock_version` marks this one read. ~~`test_run` and
+  `work_item` map it WITHOUT `@Version` … recorded as the next slice (`RL-7`)~~ → **§155 took it and
+  the answer was no on both**: see the §155 section above. Its "19 other entities" was a hand count
+  and is **15**.
 - **Near misses recorded at the field, not pinned:** `ReportArtifact.generatedAt` and
   `AuditEvent.actorTokenId` are read only by a test's `SELECT`, which counts (§152's widening).
 
