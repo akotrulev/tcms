@@ -1569,3 +1569,28 @@ cd backend
 > **No browser-queue row.** Ten methods were deleted and none had a caller, so no request, response
 > or screen can differ — that is the premise the deletions rest on, and `./gradlew build` is where
 > it is checked.
+
+---
+
+## §153 — the seams only a test exercises
+
+`ArchitectureRulesTest.everyPublicBeanMethodIsExercisedInProduction` asks §152's question from the
+other side: not *has this seam a caller*, but *is every caller a test*. It pins an exact population
+(`UNEXERCISED_BY_DECISION`) rather than asserting emptiness, so it fails in **both** directions — a
+new unexercised seam, and the disappearance of one whose argument is written down.
+
+```bash
+cd backend
+./gradlew test --tests 'com.tcms.architecture.ArchitectureRulesTest' \
+               --tests 'com.tcms.provisioning.OperatorCommandsTest'
+```
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| UX-1 | Restore `ProvisionCompanyCommand.isRequestedBy` with its old javadoc, calling it from nothing | `everyPublicBeanMethodIsExercisedInProduction` fails naming it as an unexpected member. **Nothing else does** — it compiles, the CLI works, and the method's own test (had it been restored too) passes, which is exactly how the seam survived being superseded. | ✅ **RUN 2026-08-09** — the pre-fix tree is this mutation; the rule went red naming `ProvisionCompanyCommand.isRequestedBy` and nothing else moved |
+| UX-2 | Delete `Outbox.record` and leave `UNEXERCISED_BY_DECISION` naming it | The rule fails on the *missing* element rather than an extra one. This is the direction an ignore list cannot express, and it is what stops the argument at `Outbox#record` from outliving the code it argues about — §152's `countLiveCasesBySuite` in reverse. | ⬜ NOT RUN |
+| UX-3 | Make one `@Scheduled` method public — e.g. `OutboxScheduler.dispatchAllCompanies` | The rule fails naming it, because the container is its only real caller and bytecode cannot see that. **This is a false positive by construction and the row exists to bound the rule's claim**: the `public` narrowing works here only because all four `@Scheduled` methods in this codebase are package-private, which is a property of this codebase and not of Java. If that ever stops being true, the rule needs an annotation-based exclusion rather than another argued entry. | ⬜ NOT RUN |
+| UX-4 | Drop a verb from `OperatorCommands.ALL` — e.g. `GRANT_INSTANCE_ADMIN` | `OperatorCommandsTest.everyVerb` fails naming that verb. Nothing else does: the command bean still runs, does its work correctly, and then **never exits**, because the jar was never switched to non-web. The failure is a hang an operator meets at 2am, and before this slice no test observed the guard at all. | ⬜ NOT RUN |
+
+> **No browser-queue row.** One method was deleted (uncalled), one test moved to the method it was
+> always about, and four javadocs were corrected. No request, response or screen differs.

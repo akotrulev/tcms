@@ -1,6 +1,35 @@
 # TCMS — Session Handoff
 
-**Date:** 2026-08-09 · **Branch:** `master` · **Latest slice:** [§152 — the seams nobody calls, and
+**Date:** 2026-08-09 · **Branch:** `master` · **Latest slice:** [§153 — the seams only a test
+exercises, and the guard whose test stayed
+behind](handoff/153-the-seams-only-a-test-exercises.md) — one phase, **`backend/` only: no
+migration, no contract change, no frontend or `packages/` source.** §152's question from the other
+side. §152 granted a widening and wrote down why — a test counts as a caller, because
+`AuditEventRepository.findByActionOrderByOccurredAtDesc` is read only by a test asserting what a
+write left in the database. **The finding is that the widening holds for a READ seam and not for a
+WRITE one**: a public method on a bean is something the application offers to *do*, so if every
+caller is a test the product has never done it and the test proves only that it *would*.
+`everyPublicBeanMethodIsExercisedInProduction` finds **two**, and they resolve in opposite
+directions. `Outbox.record` — the outbox's occurrence arm, built by §131, never once called — is
+**kept by decision**, because deleting it makes `outbox.aggregate_type`, `aggregate_id` and
+`payload` write-constant, which is the *writerless-column* shape §116/§117/§132/§151 each treated as
+a defect: **the trade is one recorded defect shape for the other**, and the columns are `V1`'s.
+`ProvisionCompanyCommand.isRequestedBy` is **deleted**, and it is §152's javadoc lesson again from
+the other half — its header was rewritten to argue for keeping it (*"the narrower question, and its
+test pins it"*) **in the same slice that stopped calling it**. **What that cost is the finding
+under the finding**: that test, six assertions including the prefix-match trap, was the ONLY test
+the non-web decision had, and it was pointed at the dead copy — the live guard `TcmsApplication`
+calls had none, and the two verbs added since had never been asserted to switch the jar to non-web
+at all, whose failure mode is a command that succeeds and then never exits. **The population is
+PINNED rather than emptied**: `UNEXERCISED_BY_DECISION` is not an ignore list, because it fails in
+**both** directions — deleting an argued method reddens the build too, so an argument cannot outlive
+the code it argues about, which is exactly what an ignore list cannot catch. **The first draft's own
+bug is the §152 lesson reproduced inside the check written to replace hand-greps**: a prefix match
+meant to drop self-calls read `OutboxDispatchTest` as a self-call of `Outbox`, reporting a live
+method and hiding the finding. Gates green (2407 · 501 · frontend and packages unchanged); rows
+`UX-1`…`UX-4`, `UX-1` run, and **no browser row — nothing renders differently.**
+
+Before it: [§152 — the seams nobody calls, and
 the javadoc that was revised into being wrong](handoff/152-the-seams-nobody-calls.md) — one phase,
 **`backend/` only: no migration, no contract change, no frontend or `packages/` source.** A
 re-derivation: *which repository methods have no caller?* — the tally §121, §116, §117, §132 and
@@ -27,7 +56,7 @@ is a test asserting what a write left in the database. Gates green (2402 · fron
 unchanged); rows `SC-1`…`SC-4`, `SC-1`/`SC-2` run, and **no browser row — nothing renders
 differently.**
 
-Before it: [§151 — the release that sorted
+Before that: [§151 — the release that sorted
 after its own candidate, and the standard fix that measures as a
 no-op](handoff/151-the-release-that-sorted-after-its-candidate.md) — one phase, **`backend/` only:
 one migration (`V44`), no contract change, no frontend or `packages/` source.** §150's finding 4a,
@@ -453,7 +482,7 @@ it commits.
 
 | Gate | State |
 |---|---|
-| `cd backend && ./gradlew build` | **SUCCESSFUL in 6m18s — 2402 tests across 499 result classes, 0 failures** (§152: +1 test, no new class — one rule, `everyDeclaredRepositoryMethodHasACaller`, added to the existing `ArchitectureRulesTest`. It is the suite's **first rule that fails on a method's absence of callers** rather than on a dependency edge, and it deleted ten methods without moving any other test). Before it, §151's **SUCCESSFUL in 9m22s — 2401 tests across 499 result classes, 0 failures** (§151: +12 tests, +4 result classes — `ReleaseSortKeyBackfillTest`, whose three `@Nested` groups each report separately, plus a net +3 in `ReleaseSortKeyTest` where §150's single inverted pin became five tests. It is the suite's **first test that executes a migration file off the classpath** rather than asserting the schema Flyway left behind). Before it, §150's **SUCCESSFUL in 7m50s — 2389 tests across 495 result classes, 0 failures** (§150: +61 tests, +5 classes — `ReleaseSortKeyTest`, `BlobUploadTest`, `PlanScopeTest`, `PermissionSetTest`, `ApprovalGatingTest`, **all five pure: no Spring context, no Testcontainers, no container start**, which is why the whole run got *faster* rather than slower). Before it, §149's **2328 tests across 490 result classes, 0 failures** (+5 tests, no new class — five more in `ErrorBodyPolicyTest`, which is eight now). Before it, §148's 16m40s / 2323 / 490 (+3 tests, +1 class — `ErrorBodyPolicyTest`; `EndpointAccessTest` gained an assertion inside an existing test, not a test). Before it, §147's 2320, §146's 2319, §145's 2314, and §143's 8m22s / 2307 / 488 (which was: +5 tests, +1 class — `ErrorDispatchStatusTest`, the suite's **only** test on a real servlet container, because MockMvc performs no ERROR dispatch). Older figures (§143: +5 tests, +1 class — `ErrorDispatchStatusTest`, the suite's **only** test on a real servlet container, because MockMvc performs no ERROR dispatch). Before it, §141's 6m59s / 2302 / 487 (which was: +18 tests, +5 classes — 13 in `TokenRateLimiterTest`'s four nested groups, 4 in `RateLimitTest`, 1 ArchUnit rule). Before it, §138's 5m28s / 2284 / 482 (+42 tests, +7 classes — `AiProposalEndpointTest`'s five nested groups). Before it, §136's 11m59s / 2242 / 475 (which was: +21 tests, +3 classes — 9 in `SuiteWriteEndpointTest$Idempotency`, 9 in `DocPageEndpointTest$Idempotency`, 3 in the new `IdempotencyKeyCapTest`). Before it, §134 phase 1's 2221/472. **Every figure here has been stale at least nine times** — read it off a run rather than deriving it. |
+| `cd backend && ./gradlew build` | **SUCCESSFUL in 8m59s — 2407 tests across 501 result classes, 0 failures** (§153: +5 tests, +2 result classes — one architecture rule (`everyPublicBeanMethodIsExercisedInProduction`), and `OperatorCommandsTest`, whose two `@Nested` groups report separately, replacing the one deleted test that pinned a superseded method. It is the suite's **first rule that pins an exact population rather than asserting an empty one**, so it fails on a *disappearance* as well as on an addition). Before it, §152's **SUCCESSFUL in 6m18s — 2402 tests across 499 result classes, 0 failures** (§152: +1 test, no new class — one rule, `everyDeclaredRepositoryMethodHasACaller`, added to the existing `ArchitectureRulesTest`. It is the suite's **first rule that fails on a method's absence of callers** rather than on a dependency edge, and it deleted ten methods without moving any other test). Before it, §151's **SUCCESSFUL in 9m22s — 2401 tests across 499 result classes, 0 failures** (§151: +12 tests, +4 result classes — `ReleaseSortKeyBackfillTest`, whose three `@Nested` groups each report separately, plus a net +3 in `ReleaseSortKeyTest` where §150's single inverted pin became five tests. It is the suite's **first test that executes a migration file off the classpath** rather than asserting the schema Flyway left behind). Before it, §150's **SUCCESSFUL in 7m50s — 2389 tests across 495 result classes, 0 failures** (§150: +61 tests, +5 classes — `ReleaseSortKeyTest`, `BlobUploadTest`, `PlanScopeTest`, `PermissionSetTest`, `ApprovalGatingTest`, **all five pure: no Spring context, no Testcontainers, no container start**, which is why the whole run got *faster* rather than slower). Before it, §149's **2328 tests across 490 result classes, 0 failures** (+5 tests, no new class — five more in `ErrorBodyPolicyTest`, which is eight now). Before it, §148's 16m40s / 2323 / 490 (+3 tests, +1 class — `ErrorBodyPolicyTest`; `EndpointAccessTest` gained an assertion inside an existing test, not a test). Before it, §147's 2320, §146's 2319, §145's 2314, and §143's 8m22s / 2307 / 488 (which was: +5 tests, +1 class — `ErrorDispatchStatusTest`, the suite's **only** test on a real servlet container, because MockMvc performs no ERROR dispatch). Older figures (§143: +5 tests, +1 class — `ErrorDispatchStatusTest`, the suite's **only** test on a real servlet container, because MockMvc performs no ERROR dispatch). Before it, §141's 6m59s / 2302 / 487 (which was: +18 tests, +5 classes — 13 in `TokenRateLimiterTest`'s four nested groups, 4 in `RateLimitTest`, 1 ArchUnit rule). Before it, §138's 5m28s / 2284 / 482 (+42 tests, +7 classes — `AiProposalEndpointTest`'s five nested groups). Before it, §136's 11m59s / 2242 / 475 (which was: +21 tests, +3 classes — 9 in `SuiteWriteEndpointTest$Idempotency`, 9 in `DocPageEndpointTest$Idempotency`, 3 in the new `IdempotencyKeyCapTest`). Before it, §134 phase 1's 2221/472. **Every figure here has been stale at least nine times** — read it off a run rather than deriving it. |
 | `cd frontend && npm run build` | clean, 0 errors (§149, after `npm run gen:api` — both copies). |
 | `npm run lint` | 0 warnings (§149) |
 | `npm run test:run` | **1198 passed / 1204 across 92 files at §149, and the six are the recorded cliff** — all in `CaseEditorPage.test.tsx`, every one a 30 s timeout and never an assertion, in a 375 s loaded run; that file plus the one this slice changed pass **38/38 in 106 s** run alone. §149 changed one test in `ClassificationSettingsPage.test.tsx` and added none. Before it, **1204 across 92 files at §148, and the cliff recurred in BOTH runs** — 6 failures in 2 files (310 s), then 2 in 1 (`CaseEditorPage`), every one a 30 s timeout and never an assertion; `CaseEditorPage` + `PlanCases` then passed **44/44 in 76 s run alone**. §148 replaced one `describeError` 404 test with two. Before it, **1203 passed / 1203 across 92 files at §138, in 145 s — and the cliff did NOT recur in that run.** §138 added 17 tests in `src/features/proposals/`. Before it: **1172 passed / 5 failed across 90 files at §136 — and the five were the known cliff, not a regression.** All five are in `CaseEditorPage.test.tsx` in a **342 s** loaded run; **that file alone passes 30/30 in 125 s**, verified immediately after. §136 changed no frontend code — its only frontend artifact is the regenerated `schema.d.ts`. Before it, 1177/1177 at §134 phase 1 and **1173/1173** (§132 phase 3). Read it off a run. |
@@ -747,6 +776,18 @@ now sits in front of `fetch` and faults the real backend.
 > §98 removed from the wire. **Four more claims in `TestExecutionRepository` were disproved by
 > files in their own package.** The hand-grep that opened the slice got two of the ten wrong in both
 > directions, which is why the rule is the deliverable and not the deletions.
+>
+> ~~**So the next slice is the browser queue, `TeamRef`, or another re-derivation.**~~ → **the
+> re-derivation ran again: DONE 2026-08-09,
+> [§153](handoff/153-the-seams-only-a-test-exercises.md)** — one phase, `backend/` only, no
+> migration and no contract change. It took §152's question from the other side — *which seams are
+> exercised by nothing but a test* — and **the answer is that §152's own widening does not survive
+> it**: a test caller is a consumer for a *read* seam and not for a *write* one. Two members.
+> `Outbox.record` is **kept by decision** (deleting it makes three `V1` columns write-constant, the
+> mirror defect), `ProvisionCompanyCommand.isRequestedBy` is **deleted** — and with it the finding
+> that its six-assertion test was the only coverage the non-web decision had, aimed at the dead
+> copy while the live guard had none. The population is **pinned rather than emptied**, so an
+> argument for keeping a seam cannot outlive the seam.
 >
 > **So the next slice is the browser queue, `TeamRef`, or another re-derivation.** §147 named the
 > second on its way out: **`TeamRef` is two copies**

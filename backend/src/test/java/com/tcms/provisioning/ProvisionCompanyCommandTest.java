@@ -108,22 +108,10 @@ class ProvisionCompanyCommandTest {
                 .hasMessageContaining("--slug");
     }
 
-    @Test
-    @DisplayName("recognises its own invocation, and only its own")
-    void recognisesItsInvocation() {
-        assertThat(ProvisionCompanyCommand.isRequestedBy(new String[] {"provision-company"})).isTrue();
-        assertThat(ProvisionCompanyCommand.isRequestedBy(
-                new String[] {"--server.port=9000", "provision-company"})).isTrue();
-
-        // A normal server start must NOT be switched to non-web.
-        assertThat(ProvisionCompanyCommand.isRequestedBy(new String[] {})).isFalse();
-        assertThat(ProvisionCompanyCommand.isRequestedBy(
-                new String[] {"--spring.profiles.active=prod"})).isFalse();
-        // Not a prefix match: a future "provision-company-dry-run" must not be mistaken
-        // for this one and silently provision.
-        assertThat(ProvisionCompanyCommand.isRequestedBy(
-                new String[] {"provision-company-dry-run"})).isFalse();
-    }
+    // "recognises its own invocation, and only its own" sat here until §153, over
+    // ProvisionCompanyCommand.isRequestedBy — a method TcmsApplication had stopped calling.
+    // It is OperatorCommandsTest now, over the guard that actually decides, and over all three
+    // verbs rather than this one.
 
     private static DefaultApplicationArguments args(String... args) {
         return new DefaultApplicationArguments(args);

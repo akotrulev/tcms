@@ -28,7 +28,9 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -38,13 +40,21 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Controller;
 
 /**
  * The architecture rules Spring Modulith cannot express, in ArchUnit.
  *
  * <p>{@code ModuleStructureTest} covers what Modulith owns — declared dependencies and
- * cycles. Four properties fall outside it, and each one is a rule this project already
- * wrote down in prose and has so far had no mechanism for:
+ * cycles. Everything else this project wrote down in prose and had no mechanism for lands
+ * here. It started as the four structural properties below and is now thirteen rules — the
+ * later ones are not about dependency edges at all but about <em>tallies this repository was
+ * keeping by hand</em> (§147's duplicate record shapes, §152's callerless repository methods,
+ * §153's unexercised bean methods), each one a question somebody had been answering with a
+ * grep once per slice. The count in this sentence has been wrong before; the rules below are
+ * the list.
+ *
+ * <p>The four it began with:
  *
  * <ol>
  *   <li><strong>{@code tenancy} depends on nothing</strong> — stated from the other
@@ -92,6 +102,15 @@ class ArchitectureRulesTest {
     /** Production and test classes. See the class comment for why the event rule needs both. */
     private static final JavaClasses PRODUCTION_AND_TESTS = new ClassFileImporter()
             .importPackages(ROOT_PACKAGE);
+
+    /**
+     * The production classes by name — the set the caller rules ask "was this a test?" against.
+     * Derived from {@link #PRODUCTION} rather than from a name pattern, so a test class that does
+     * not end in {@code Test} is still a test class here.
+     */
+    private static final Set<String> PRODUCTION_NAMES = PRODUCTION.stream()
+            .map(JavaClass::getName)
+            .collect(Collectors.toCollection(TreeSet::new));
 
     @Test
     @DisplayName("fixture precondition: the two class sets are actually different")
@@ -386,6 +405,132 @@ class ArchitectureRulesTest {
                         + "consumer it was written for could not legally have called it. If it "
                         + "genuinely is needed, give it its caller in the same commit")
                 .isEmpty();
+    }
+
+    /**
+     * The public bean methods no production caller reaches — the population, pinned rather than
+     * emptied.
+     *
+     * <p>Each entry is a decision recorded in the rule below and argued at the method itself. A
+     * new entry, or the disappearance of one of these, fails the build: the first says a seam has
+     * been built and left unexercised without anybody deciding to, the second says an argument
+     * somebody wrote is now describing code that is gone.
+     */
+    private static final Map<String, String> UNEXERCISED_BY_DECISION = Map.of(
+            "Outbox.record",
+            "the outbox's OCCURRENCE arm — see Outbox#record. §131 built both arms and the product "
+                    + "has only ever used the coalesced one, because both handlers of the only "
+                    + "event type are whole-company recomputes that take no arguments by design. "
+                    + "Kept rather than deleted (2026-08-09) because deleting it makes "
+                    + "outbox.aggregate_type, aggregate_id and payload write-constant, which is the "
+                    + "writerless-column shape §116/§117/§132/§151 each found — the trade is one "
+                    + "recorded defect shape for the other, and the columns are V1's");
+
+    @Test
+    @DisplayName("every public bean method is exercised by the product, not only by a test")
+    void everyPublicBeanMethodIsExercisedInProduction() {
+        // §152 asked which repository methods have no caller at all, and counted a test as a
+        // caller on the stated grounds that "a seam whose consumer is a test is a seam with a
+        // consumer" — AuditEventRepository.findByActionOrderByOccurredAtDesc is read only by a
+        // test, because the audit trail has no screen yet, and the row it reads is one the product
+        // really wrote.
+        //
+        // This is the complementary question, and the widening §152 granted does not survive it.
+        // That argument holds for a READ seam: the write is the product's, the test only observes
+        // it. It does not hold for a WRITE seam. A public method on a bean is something the
+        // application offers to do; if every caller is a test, the product has never once done it,
+        // and what the test proves is that it WOULD work rather than that it does.
+        //
+        // Pinned to an exact population rather than asserted empty. §152 refused an ignore list
+        // and was right to — its broad form would have shipped with one longer than the rule — but
+        // an ignore list and this are not the same object. An ignore list says "these do not
+        // count"; this says "these are all of them, and here is the argument for each", and it
+        // fails in BOTH directions. Deleting the argued method reddens the build too, so the
+        // argument cannot outlive the code it is about, which is the failure this whole line of
+        // slices keeps finding (§152's countLiveCasesBySuite, and ProvisionCompanyCommand's own
+        // isRequestedBy, whose javadoc argued for keeping it in the same slice that stopped
+        // calling it).
+        //
+        // THREE narrowings, each measured rather than assumed. Broad, the population is 98 and
+        // unshippable — record accessors, entity getters, and every implementation of an interface
+        // whose production callers go through the interface (ReportParser.parse has four
+        // implementations and no direct caller of any of them).
+        //
+        //   1. Spring beans only, and not controllers: a handler method's caller is the dispatcher,
+        //      reflectively, and bytecode cannot see it.
+        //   2. Public only. It is what makes this rule work here and it is a property of THIS
+        //      codebase rather than of Java: every @Scheduled method in it is package-private
+        //      (four of four, checked), so the container-invoked methods are already out — and a
+        //      package-private method that only a test calls is a seam somebody deliberately opened
+        //      for the test, like TokenRateLimiter.trackedTokens, which exists so §141's eviction
+        //      can be observed at all.
+        //   3. Not an override. The caller of an implementation is whoever holds the interface.
+        //
+        // A self-call counts as a production caller: ProvisionCompanyCommand.parse is reached from
+        // run() in the same class, and a method its own class uses is exercised whenever that class
+        // is. Getting this backwards is how the first draft of this rule reported parse and hid
+        // Outbox.record at the same time — the filter meant to drop self-calls was a prefix match,
+        // so OutboxDispatchTest read as a self-call of Outbox. §152's lesson about a hand-grep,
+        // reproduced inside the check written to replace hand-greps.
+        Map<String, String> unexercised = new TreeMap<>();
+        int examined = 0;
+
+        for (JavaClass type : PRODUCTION_AND_TESTS) {
+            if (!PRODUCTION_NAMES.contains(type.getName())
+                    || type.isInterface()
+                    || !type.isMetaAnnotatedWith(Component.class)
+                    || type.isMetaAnnotatedWith(Controller.class)) {
+                continue;
+            }
+            for (JavaMethod method : type.getMethods()) {
+                if (!method.getModifiers().contains(JavaModifier.PUBLIC) || overridesASupertype(method)) {
+                    continue;
+                }
+                examined++;
+                Set<String> callers = new TreeSet<>();
+                method.getAccessesToSelf().forEach(a -> callers.add(a.getOriginOwner().getName()));
+                method.getReferencesToSelf().forEach(r -> callers.add(r.getOriginOwner().getName()));
+                if (callers.isEmpty() || callers.stream().anyMatch(PRODUCTION_NAMES::contains)) {
+                    continue;
+                }
+                unexercised.put(type.getSimpleName() + "." + method.getName(), String.join(", ", callers));
+            }
+        }
+
+        assertThat(examined)
+                .as("no public bean method was examined, so this rule passes vacuously — the "
+                        + "stereotype predicate or the import has moved")
+                .isGreaterThan(50);
+
+        assertThat(unexercised.keySet())
+                .as("""
+                        a public method on a bean is something the application offers to do, and \
+                        every caller of this one is a test — so the product has never done it, and \
+                        the test proves only that it would. Give it a production caller, delete it \
+                        (§121's findQuarantined and §152's ten are the precedent), or add it to \
+                        UNEXERCISED_BY_DECISION with the argument written at the method itself. \
+                        The third is a decision and costs a sentence somebody has to defend; the \
+                        point of this rule is that it cannot be taken silently""")
+                .containsExactlyInAnyOrderElementsOf(UNEXERCISED_BY_DECISION.keySet());
+    }
+
+    /**
+     * Whether a supertype declares this method — an implementation whose callers hold the
+     * interface, not the class.
+     */
+    private static boolean overridesASupertype(JavaMethod method) {
+        JavaClass owner = method.getOwner();
+        List<JavaClass> supertypes = new ArrayList<>(owner.getAllRawInterfaces());
+        supertypes.addAll(owner.getAllRawSuperclasses());
+        for (JavaClass supertype : supertypes) {
+            for (JavaMethod candidate : supertype.getMethods()) {
+                if (candidate.getName().equals(method.getName())
+                        && candidate.getRawParameterTypes().equals(method.getRawParameterTypes())) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /** A record's components as {@code name:type} pairs — a set, so a reordered copy still matches. */

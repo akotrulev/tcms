@@ -2,15 +2,42 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-09 (**§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-09 (**§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `ca5830f` (§151) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `6d8c65e` (§152) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
 ---
+
+## §153 — A PUBLIC BEAN METHOD ONLY A TEST CALLS FAILS THE BUILD NOW
+
+`ArchitectureRulesTest.everyPublicBeanMethodIsExercisedInProduction` is §152's question from the
+other side: not *has this a caller* but *is every caller a test*. §152's widening (a test counts as
+a consumer) holds for a **read** seam and not for a **write** one — a public bean method every test
+and no production code calls is something the product has never done.
+
+- **THE POPULATION IS PINNED, NOT EMPTIED.** `UNEXERCISED_BY_DECISION` names exactly one member,
+  `Outbox.record`, with its argument. The rule fails **both** on a new member and on the
+  disappearance of a named one — so do not delete `Outbox.record` without removing its entry, and
+  do not add an entry without writing the argument at the method itself. This is deliberately not
+  an ignore list; the both-directions property is what stops an argument outliving its code.
+- **`Outbox.record` is kept by decision (2026-08-09), and nothing calls it.** Only
+  `Outbox.recordCoalesced` is used, by `ExecutionService` and `IngestionService`, for the one event
+  type `OutboxEvents.RESULTS_CHANGED`. Deleting `record` would make `outbox.aggregate_type`,
+  `aggregate_id` and `payload` write-constant — the writerless-column shape §116/§117/§132/§151
+  each found. **A first occurrence event owes a consumer-side payload test**, which does not exist.
+- **Deleted:** `ProvisionCompanyCommand.isRequestedBy` (superseded by `OperatorCommands`, with a
+  javadoc rewritten to defend it in the same slice that stopped calling it). Its test moved to the
+  new pure `OperatorCommandsTest`, derived from `OperatorCommands.ALL` (now package-private for
+  that reason) and covering all three verbs.
+- **The `public` narrowing rests on a codebase property, not on Java**: all four `@Scheduled`
+  methods here are package-private, so container-invoked methods fall outside the rule. Make one
+  public and the rule false-positives (`UX-3`).
+- Rule scope: Spring beans (not `@Controller`), public, non-override; self-calls count as
+  production callers.
 
 ## §152 — A REPOSITORY METHOD WITH NO CALLER FAILS THE BUILD NOW
 
@@ -2653,6 +2680,15 @@ exist**, and the slice plan's decision E declines to create it for two storage p
 
 ## Session log
 
+- 2026-08-09 · EXTEND · **the seams only a test exercises** (§153, one phase, no migration).
+  `everyPublicBeanMethodIsExercisedInProduction` asks §152's question from the other side and finds
+  two: `Outbox.record` (kept by decision — deleting it makes three `V1` columns write-constant) and
+  `ProvisionCompanyCommand.isRequestedBy` (deleted; its six-assertion test was the only coverage the
+  non-web CLI decision had and it pinned the superseded copy — `OperatorCommandsTest` is that test
+  now, over all three verbs). The population is pinned rather than emptied, so it fails on a
+  disappearance too. Four javadocs corrected, including `OutboxMessage.payload`'s honesty mechanism
+  that does not exist and `ArchitectureRulesTest`'s own "four properties" over thirteen rules.
+  2407 tests, green.
 - 2026-08-08 · EXTEND · **Automation Service non-assignable** (§134, `V41`, two phases). The role
   `V3` called token-only becomes `assignable = false`; `RoleGrantService.revoke` **stops** reading
   the flag and names the membership baseline, because reading it there strands every pre-`V41` grant

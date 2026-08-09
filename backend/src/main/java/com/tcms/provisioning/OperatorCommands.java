@@ -20,7 +20,12 @@ public final class OperatorCommands {
     static final String ISSUE_INVITATION = "issue-invitation";
     static final String GRANT_INSTANCE_ADMIN = "grant-instance-admin";
 
-    private static final Set<String> ALL =
+    /**
+     * Package-private rather than private so {@code OperatorCommandsTest} can derive its cases
+     * from the set instead of listing the verbs a second time. A test that lists them is a test
+     * that is silent about the fourth one — which is the same defect the set replaced.
+     */
+    static final Set<String> ALL =
             Set.of(PROVISION_COMPANY, ISSUE_INVITATION, GRANT_INSTANCE_ADMIN);
 
     private OperatorCommands() {

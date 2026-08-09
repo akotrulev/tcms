@@ -58,24 +58,13 @@ public class ProvisionCompanyCommand implements ApplicationRunner {
 
     static final String COMMAND = OperatorCommands.PROVISION_COMPANY;
 
-    /**
-     * Whether these raw {@code main} arguments invoke <em>this</em> command.
-     *
-     * <p>{@code TcmsApplication} no longer asks this — it asks {@link OperatorCommands},
-     * which answers for every verb rather than only this one. Kept because it is the
-     * narrower question and its test pins it; the name itself is spelled once, in
-     * {@code OperatorCommands}, because two spellings that must agree is how a rename ships
-     * a CLI that provisions correctly and then hangs on a servlet container nobody asked
-     * for.
-     */
-    public static boolean isRequestedBy(String[] args) {
-        for (String arg : args) {
-            if (COMMAND.equals(arg)) {
-                return true;
-            }
-        }
-        return false;
-    }
+    // isRequestedBy(String[]) sat here until §153. It answered "do these raw main arguments
+    // invoke THIS command", which TcmsApplication stopped asking when OperatorCommands took
+    // over the question for every verb — and its javadoc was rewritten in that same slice to
+    // argue for keeping it ("the narrower question, and its test pins it"). Nothing asked the
+    // narrower question, neither sibling command has such a method, and the test that pinned it
+    // was the only test the non-web decision had: the live guard was uncovered while its dead
+    // predecessor had six assertions. OperatorCommandsTest is that test now, over all three verbs.
 
     private static final int EXIT_OK = 0;
     private static final int EXIT_FAILED = 1;

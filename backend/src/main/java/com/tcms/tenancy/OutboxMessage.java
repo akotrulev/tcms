@@ -21,9 +21,14 @@ import java.util.UUID;
  * @param payload the event body as a JSON document, exactly as the producer wrote it. A
  *                {@code String} rather than a parsed type on purpose: the producing and consuming
  *                modules may not share a class (plan §3 — see {@link OutboxEntry}'s header), so the
- *                consumer parses it into a record of its own. That record and the producer's are two
- *                declarations of one shape, and the thing that keeps them honest is a test on each
- *                side rather than the compiler.
+ *                consumer parses it into a record of its own. That record and the producer's would
+ *                be two declarations of one shape, and the thing that would keep them honest is a
+ *                test on each side rather than the compiler. <strong>Stated in the conditional
+ *                because no such pair exists (§153):</strong> every event this product records is
+ *                coalesced, so this field is {@code "{}"} in production and the only code that
+ *                has ever read a real one is {@code OutboxDispatchTest}. The honesty mechanism is
+ *                therefore part of what the first occurrence event has to build, not something it
+ *                inherits — see {@link Outbox#record}.
  */
 public record OutboxMessage(
         UUID companyId,

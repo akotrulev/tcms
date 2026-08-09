@@ -53,6 +53,30 @@ public class Outbox {
     /**
      * Records one event in the active company, for delivery to whichever module handles its type.
      *
+     * <h2>NOTHING IN THE PRODUCT CALLS THIS, and that is a decision rather than an oversight</h2>
+     *
+     * <p>§131 built both arms of the outbox and the product has only ever used
+     * {@link #recordCoalesced}. Every caller of this one is {@code OutboxDispatchTest}, which
+     * {@code ArchitectureRulesTest.everyPublicBeanMethodIsExercisedInProduction} names explicitly
+     * so that the fact cannot drift back into being an assumption. What that means concretely:
+     * this method's serialization, its aggregate naming, and a handler receiving a non-empty
+     * payload have never once run outside a test. They are known to work; they are not known to be
+     * <em>right</em>, which is a different thing and is the state §152 named at the repository
+     * seam.
+     *
+     * <p><strong>Why it is kept.</strong> Deleting it would make {@code outbox.aggregate_type},
+     * {@code aggregate_id} and {@code payload} write-constant — {@code "company"}, {@code NULL},
+     * {@code "{}"} — which is precisely the writerless-column shape §116, §117, §132 and §151 each
+     * found and each treated as a defect. The trade is one recorded defect shape for the other, and
+     * the columns are {@code V1}'s rather than this method's. The one candidate producer §131
+     * examined — the invitation email — it refused on grounds that do not expire: only a digest of
+     * the token is stored, so a payload carrying the accept URL would put a live credential at rest.
+     *
+     * <p><strong>What the first real caller owes.</strong> Not just a handler: a consumer-side test
+     * pinning the payload shape, because {@link OutboxMessage#payload()} says the compiler cannot
+     * see across that boundary and a test on each side is what replaces it. Half of that pair does
+     * not exist yet.
+     *
      * <p>No {@code @Transactional} of its own, deliberately: this method has no transaction to
      * manage, it <em>joins</em> the caller's — and an annotation here would let it start one when
      * there is none, which is precisely the case the guard exists to refuse.

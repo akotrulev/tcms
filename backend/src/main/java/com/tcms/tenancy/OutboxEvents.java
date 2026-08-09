@@ -32,6 +32,12 @@ package com.tcms.tenancy;
  * therefore carries no payload and names no aggregate. Getting that backwards is not a compile
  * error: a coalesced occurrence silently loses events, and an uncoalesced state event delivers one
  * whole-company recompute per row.
+ *
+ * <p><strong>The vocabulary is one name, and it is the coalesced half (§153).</strong> The
+ * past-tense form above is a convention with no instance in it — {@code case.deleted} is an
+ * example, not an entry — so the rule stated here has never once discriminated anything. Read the
+ * paragraph as what the second entry has to decide rather than as a description of a practice this
+ * codebase follows; {@link Outbox#record} carries what else that entry owes.
  */
 public final class OutboxEvents {
 
