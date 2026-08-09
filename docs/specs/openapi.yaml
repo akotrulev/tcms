@@ -415,8 +415,11 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
           description: |
-            The value still has live children. `Problem.errors` carries `children`, so the SPA can
-            say how many rather than "it is in use".
+            The value still has live children. `Problem.errors` carries `children` — one sentence
+            naming the count and what to do first, printable as it arrives, rather than "it is in
+            use". ~~It carries the bare count and the SPA composes the sentence.~~ → **corrected
+            §149**: that made this the one site on the API whose `errors` value was a datum, and the
+            two clients that print `errors` verbatim were showing a model `children: 3`.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -4952,8 +4955,10 @@ paths:
         '409':
           description: |
             The team still holds grants, or still has child teams. `Problem.errors` carries
-            `grants` and/or `children` with the counts, so the SPA can say what to clear first
-            rather than "it is in use".
+            `grants` and/or `children` — each one sentence naming its count and what to clear
+            first, printable as it arrives, rather than "it is in use". (It has always sent
+            sentences; the description said "the counts" until §149, which is the same divergence
+            the classification 409 had in the other direction.)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -5600,11 +5605,23 @@ components:
           type: object
           nullable: true
           description: |
-            RFC-7807 `errors` — field name to the messages that field failed on, present only on a
-            validation rejection. The key is the field's name **as it appears on the input schema**
-            (`gherkinSource`, not `gherkin_source` or `caseInput.gherkinSource`), because the SPA
-            maps it straight onto a form input: a key that does not match a field name lands the
-            message nowhere and the form reports a failure with nothing highlighted.
+            RFC-7807 `errors` — a name to the messages it failed on. **Every value is a complete
+            sentence any client may print verbatim**, and that is the load-bearing half: the SPA
+            lands it beside an input, `@tcms/cli` prints `name: message` under the failure, and
+            `@tcms/mcp` hands the same lines to a model that cannot see a screen. A value that is
+            a datum rather than a sentence — a bare count — is meaningless to two of the three.
+
+            The key is the field's name **as it appears on the input schema** (`gherkinSource`, not
+            `gherkin_source` or `caseInput.gherkinSource`) wherever the refusal is about a field the
+            caller sent, because the SPA maps it straight onto a form input: a key that does not
+            match a field name lands the message nowhere and the form reports a failure with
+            nothing highlighted.
+
+            ~~Present only on a validation rejection.~~ → **corrected §149**: it also names the
+            *blockers* on a refusal that is not about an input at all, where the key names the
+            blocking population rather than a field — `children` and `grants` on the two 409s that
+            refuse a delete, `scope` on the artifact 403s. Four sites, each named in the operation
+            that writes it. The rule that holds across both is the sentence one above.
 
             Undeclared until 2026-07-31 while both sides already implemented it — the client has
             read `body.errors` since Phase 1 and the mock has emitted it since. Documented here so

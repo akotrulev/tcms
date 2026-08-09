@@ -377,10 +377,15 @@ function ValueRow({
 /**
  * Confirming a retire — and rendering the one refusal that is not a field error.
  *
- * A value with live children answers **409 with the count**, and this dialog stays open to show
- * it. That is why there is no optimistic removal anywhere in this flow: taking the row off screen
- * and then putting it back with an error beside it is the worst possible treatment of the one
- * action whose failure the user most needs to read.
+ * A value with live children answers **409 with a sentence on `errors.children`**, rendered as it
+ * arrives — the server counted, and a second phrasing here is a copy that drifts (`DeleteTeamDialog`,
+ * same shape, same key). ~~The 409 carries the bare count and this dialog composes the sentence~~ →
+ * **superseded §149**: an `errors` value is a message every client prints verbatim, and the CLI and
+ * the MCP server were printing `children: 3` at a caller who cannot see this screen.
+ *
+ * This dialog stays open to show it. That is why there is no optimistic removal anywhere in this
+ * flow: taking the row off screen and then putting it back with an error beside it is the worst
+ * possible treatment of the one action whose failure the user most needs to read.
  *
  * The copy says what a retire *is*, because the word does not carry it: cases already classified
  * with the value keep it in their history and past runs still resolve it. The row survives; the
@@ -396,18 +401,16 @@ function RetireValueDialog({
   onClose: () => void;
 }) {
   const retire = useRetireClassificationValue(projectId);
-  const children =
+  const blocked =
     retire.error instanceof ApiError ? retire.error.fieldErrors?.children?.[0] : undefined;
 
   return (
     <Dialog open onClose={onClose} fullWidth maxWidth="xs">
       <DialogTitle>Retire {value.name}?</DialogTitle>
       <DialogContent>
-        {children ? (
+        {blocked ? (
           <Alert severity="warning" data-testid="Classification.Retire.Blocked">
-            {children} value{children === '1' ? '' : 's'} sit under this one. Retire those first —
-            retiring a whole branch at once would unclassify every case beneath it with nothing on
-            screen naming them.
+            {blocked}
           </Alert>
         ) : retire.error ? (
           <Alert severity="error" data-testid="Classification.Retire.Error">

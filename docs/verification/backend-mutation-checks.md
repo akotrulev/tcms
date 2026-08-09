@@ -1490,3 +1490,30 @@ cd backend
 | PR-1 | Remove `@Component` from `ProblemErrorAttributes` | **The original defect, restored.** Exactly the three body tests fail (`theBodyIsAProblem`, `theDetailIsCuratedRatherThanForwarded`, `theOtherContainerFailuresAreShapedAlike`); the five status tests and `aControllersOwn404IsStillBodiless` stay **green** — which is the shape of the gap, since those five are what §143 added and they never looked at the body. | ✅ **RUN 2026-08-09** — failed as stated, six green |
 | PR-2 | `ProblemErrorAttributes.detailOf` returns `getError(webRequest).getMessage()` instead of the curated sentence | `theDetailIsCuratedRatherThanForwarded` fails on `com.tcms` or `com.fasterxml` appearing in `detail`. The row that matters most for a machine caller: the forwarded message is *longer and more specific*, which is exactly why it looks like an improvement in review. | ⬜ NOT RUN |
 | PR-3 | `api/package-info.java` gains `allowedDependencies = {"identity"}` and `Problem` imports anything from it | `ArchitectureRulesTest.apiDependsOnNothing` fails. **Nothing else does** — the edge is legal under the foundation rule (`identity` is itself a foundation module), the Modulith declaration permits it, and the module graph still verifies. That is the whole reason the rule reads the *code* rather than the declaration. | ⬜ NOT RUN |
+
+---
+
+## §149 — an `errors` value is a sentence, not a datum
+
+The 409 that refuses to retire a classification value sent `errors.children = ["3"]` while the team
+delete, under the same key and read by the same client code, sent a full sentence. The SPA composed
+words around the number in JSX and looked right; `@tcms/cli` printed `children: 3` and `@tcms/mcp`
+handed that to a model. Both tests pinned the wrong side — the backend one asserted
+`containsExactly("2")` and the SPA one supplied `{ children: ['2'] }` before asserting it back.
+
+```bash
+cd backend
+./gradlew test --tests 'com.tcms.contract.ErrorBodyPolicyTest' \
+               --tests 'com.tcms.project.ClassificationValueWriteEndpointTest' --rerun-tasks
+```
+
+> **`--rerun-tasks` is not optional here.** `openapi.yaml` is outside Gradle's input set (§148), so
+> a mutation to the contract alone leaves `:test` UP-TO-DATE and the run reports success having
+> executed nothing.
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| EV-1 | `ProjectController.childrenProblem` back to `List.of(Long.toString(blocked.children()))` | **The original defect, restored.** `everyErrorsValueIsASentence` fails naming `project/ProjectController.java`; `aParentIsNotRetiredOutFromUnderItsChildren` fails on the sentence. The other seven `ErrorBodyPolicyTest` tests stay green — the body is present, the status is right, the key is pinned; only the *value* is wrong, which is why §148's three did not see it. | ✅ **RUN 2026-08-09** — the first half, as stated: datum check red, other seven green |
+| EV-2 | Any one `ResponseEntity.status(HttpStatus.CONFLICT).body(…)` → `.build()` (e.g. `SuiteController`'s `NotEmpty`) | `noHandlerOmitsABodyOnABodiedStatus` fails naming that file and line. Nothing else does: the contract still declares the body, and no test drives that arm's payload. | ✅ **RUN 2026-08-09** — failed as stated |
+| EV-3 | Rewrite one 409 as `ResponseEntity.status(409).body(…)` | `noBackDoorSpellingOfABodiedStatus` fails. **`noHandlerOmitsABodyOnABodiedStatus` stays green while its `sites` count silently drops by one** — which is the entire reason the ban exists rather than being left as the scan's hole. | ⬜ NOT RUN |
+| EV-4 | Delete `content` from `components/responses/TooManyRequests` | `bodiedStatusesDeclareContent` fails. **Nothing else does, on either stack** — no operation references that component, so the operation walk never reaches it and both generated clients keep their own hand-written 429 types. | ⬜ NOT RUN |

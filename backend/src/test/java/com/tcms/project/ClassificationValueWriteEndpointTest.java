@@ -496,7 +496,7 @@ class ClassificationValueWriteEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("a value with live children is refused, and the count is on the problem")
+        @DisplayName("a value with live children is refused, in a sentence naming the count")
         void aParentIsNotRetiredOutFromUnderItsChildren() throws Exception {
             UUID parent = idOf(create(LEAD, BANKING, featureDimension, "Lending", null));
             create(LEAD, BANKING, featureDimension, "Mortgages", parent);
@@ -508,7 +508,15 @@ class ClassificationValueWriteEndpointTest extends IntegrationTestBase {
             // request, and each of those assignments is unrestorable through the API because a
             // retired value is served to no client (§68's bound).
             assertThat(refused.getStatus()).isEqualTo(409);
-            assertThat(messagesFor(refused, "children")).containsExactly("2");
+            // A sentence, not the bare "2" this asserted until §149. `Problem.errors` values are
+            // printed verbatim by `@tcms/cli` and handed to a model by `@tcms/mcp`, so a datum
+            // here reads as `children: 2` at the two callers that cannot see the dialog which
+            // used to compose the words. The count is still in it, and still comes from the row.
+            List<String> children = messagesFor(refused, "children");
+            assertThat(children).hasSize(1);
+            assertThat(children.get(0))
+                    .startsWith("2 values sit under this one.")
+                    .contains("Retire those first");
         }
 
         @Test

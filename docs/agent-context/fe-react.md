@@ -2,14 +2,30 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-09 (**§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
+**Last verified:** 2026-08-09 (**§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
 the one doc-block renderer and the editor's three new types; §126 phase 4 — the three attachment
 surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the flake panel and the
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `9586d8c` (§147) (trust the
+**Baseline commit:** `fce9739` (§148) (trust the
 body over the header and re-grep what a later commit could have moved).
+
+## §149 — AN `errors` VALUE IS THE SERVER'S SENTENCE; NEVER COMPOSE WORDS AROUND IT
+
+`Problem.errors` is `{name: [messages]}` and **every value is a complete sentence, rendered as it
+arrives.** Two dialogs read one directly rather than through a form's field mapping, and they must
+agree: `DeleteTeamDialog` (`grants`, `children`) and `RetireValueDialog` in
+`ClassificationSettingsPage` (`children`).
+
+- **`RetireValueDialog` used to compose the sentence around a bare count** the server sent as
+  `children: "3"`. It looked right on screen and was meaningless at `@tcms/cli` and `@tcms/mcp`,
+  which print `errors` values verbatim. The server sends the sentence now; the page prints it.
+- **Its test supplied `{ children: ['2'] }` and asserted the page showed `2`** — a fixture inventing
+  the payload it checks, §148's `describeError` shape. When a test's fixture is the only statement
+  of a wire shape, it cannot disagree with the server.
+- The composition also carried a plural bug (`1 value sit under this one`) that only existed because
+  the page was writing the sentence.
 
 ## §148 — `describeError` DOES NOT READ A DETAIL ON A 404, BECAUSE THERE IS NEVER ONE
 

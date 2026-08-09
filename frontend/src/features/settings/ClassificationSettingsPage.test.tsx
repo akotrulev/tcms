@@ -201,10 +201,16 @@ describe('ClassificationSettingsPage — retiring', () => {
     expect(screen.getByRole('dialog')).toHaveTextContent(/past runs still resolve it/i)
   })
 
-  it('keeps the dialog open and names the count when the value still has children', async () => {
+  it('keeps the dialog open and shows the server sentence when the value still has children', async () => {
     mockApi(['project:settings'], ['company:read'])
+    // The payload the server actually sends since §149 — a sentence, not the bare `'2'` this
+    // fixture used to supply and then assert. That pairing is what let the page and the API
+    // disagree in the first place: the dialog composed words around a count, so no test on this
+    // side could notice that the CLI and the MCP server were printing the count alone.
     vi.spyOn(api, 'del').mockRejectedValue(
-      new ApiError(409, 'Retire the values underneath this one first.', { children: ['2'] }),
+      new ApiError(409, 'Retire the values underneath this one first.', {
+        children: ['2 values sit under this one. Retire those first — retiring a whole branch at once would unclassify every case beneath it with nothing on screen naming them.'],
+      }),
     )
     renderPage()
     await permissionsResolved()
@@ -215,7 +221,8 @@ describe('ClassificationSettingsPage — retiring', () => {
     // Not a toast over a closed dialog, and not an optimistic removal that puts the row back: the
     // refusal is the one thing the user needs to read, and it names how many rows are in the way.
     const blocked = await screen.findByTestId('Classification.Retire.Blocked')
-    expect(blocked).toHaveTextContent('2')
+    expect(blocked).toHaveTextContent('2 values sit under this one')
+    expect(blocked).toHaveTextContent(/retire those first/i)
     expect(screen.getByTestId('Classification.Retire.Confirm')).toBeInTheDocument()
   })
 })

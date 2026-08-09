@@ -310,12 +310,26 @@ public class ProjectController {
     }
 
     /**
-     * The refusal to retire a value that still has children, with the count on {@code errors}.
+     * The refusal to retire a value that still has children, with a sentence on {@code errors}.
      *
-     * <p>The count is on the problem rather than in the sentence because the SPA renders it — "3
-     * values sit under this one" beside a tree it can expand — and a number embedded in prose is
-     * one a client has to parse back out. {@code SuiteWriteService}'s {@code NotEmpty} does the
-     * same for a folder.
+     * <p><s>The count is on the problem rather than in the sentence because the SPA renders it —
+     * "3 values sit under this one" beside a tree it can expand — and a number embedded in prose
+     * is one a client has to parse back out. {@code SuiteWriteService}'s {@code NotEmpty} does the
+     * same for a folder.</s> → <strong>superseded §149. Both halves of that were wrong.</strong>
+     *
+     * <p>{@code SuiteWriteService}'s {@code NotEmpty} does the <em>opposite</em>: it puts the count
+     * in the sentence, on {@code detail}, and writes no {@code errors} at all — so the precedent
+     * this cited as agreement was the one site that disagreed with it. The reason it matters is the
+     * other half: <strong>an {@code errors} value is a message, and two clients print it
+     * verbatim.</strong> {@code @tcms/cli} prints {@code field: message} under the failure and
+     * {@code @tcms/mcp} hands the same lines to a model, so this arm told a model
+     * {@code children: 3} — a key naming no argument and a value that is not a sentence — where
+     * §141's rule is that a refusal must say what to do next. The SPA was the only reader that
+     * could turn it back into English, and only because that one dialog knew which of the two
+     * conventions this endpoint used.
+     *
+     * <p>The singular/plural pair is {@link com.tcms.identity.TeamController}'s, which has always
+     * sent sentences under the same {@code children} key. One key, one meaning.
      */
     private static ProblemDetail childrenProblem(
             ClassificationValueWriteService.Outcome.HasChildren blocked) {
@@ -324,7 +338,13 @@ public class ProjectController {
         problem.setTitle("Still in use");
         problem.setDetail("Retire the values underneath this one first.");
         problem.setProperty("errors", Map.of(
-                "children", List.of(Long.toString(blocked.children()))));
+                "children", List.of(blocked.children() == 1
+                        ? "1 value sits under this one. Retire it first — retiring a whole branch "
+                                + "at once would unclassify every case beneath it with nothing on "
+                                + "screen naming them."
+                        : blocked.children() + " values sit under this one. Retire those first — "
+                                + "retiring a whole branch at once would unclassify every case "
+                                + "beneath it with nothing on screen naming them.")));
         return problem;
     }
 }

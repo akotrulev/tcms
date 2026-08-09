@@ -1737,3 +1737,19 @@ the branch's own unit test supplied a detail no 404 has ever carried and then as
 `EndpointAccessTest.everyOtherEndpointRequiresAuthentication`, which sweeps the whole mapping
 anonymously; a browser adds nothing to that. The SPA's 401 copy is fixed text and never read the
 wire.
+
+## §149 — the refusal a dialog used to write for itself
+
+The retire-blocked warning now renders the server's sentence verbatim instead of composing one
+around a count. Two things a gate cannot see: whether the sentence *reads* correctly in place (it
+was written for a `<Alert severity="warning">` and includes its own em-dash clause), and whether the
+em-dash and the count survive the round trip through `Problem.errors` at all.
+
+Lane: **8 — company settings and vocabularies**, which already creates a classification dimension
+with a parent value. No new fixture is needed beyond one child value under an existing parent.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `EV-5` | As **Test Lead**, in project settings → classification, add two child values under an existing value, then retire the parent | The dialog **stays open** with the warning *"2 values sit under this one. Retire those first — retiring a whole branch at once would unclassify every case beneath it with nothing on screen naming them."* One sentence, correct plural, em-dash intact. Before this slice the page composed the words around a bare `2`; the words are now the server's and the page prints them. |
+| `EV-6` | Retire one child, then retire the parent again | The same warning with **"1 value sits under this one. Retire it first — …"** — the singular arm, which is the server's and not the page's. The page's own composition had the plural bug (`1 value sit under this one`) and could not have produced this. |
+| `EV-7` | With the same two children, run `tcms` against the same value — there is no CLI arm for retiring a classification value, so drive `DELETE /projects/{id}/classification/values/{valueId}` with `curl` and an API token | The body's `errors.children[0]` is the **same sentence** the dialog shows. This is the row that would have caught the original: the response a non-SPA caller sees, read without a screen composing anything around it. |

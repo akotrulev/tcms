@@ -57,6 +57,57 @@ class ErrorBodyPolicyTest {
     private static final Set<String> BODILESS_STATUSES = Set.of("401", "404");
 
     /**
+     * Statuses this API always answers with a {@code Problem}, which is the other half of the rule
+     * and was unpinned until §149.
+     *
+     * <p>§148 pinned the two that carry nothing and recorded in as many words that these were not
+     * audited site by site — <em>"a {@code .build()} on a 409 would pass today"</em>. The direction
+     * matters as much here as there: a refusal with no body is one a caller cannot act on, and
+     * §141's finding is what that costs — the caller is a model, and the failure it cannot read is
+     * the one it retries.
+     *
+     * <p>All three are actionable by construction, which is why the rule is absolute rather than
+     * carrying an exception list like {@code BODILESS_FORBIDDEN_SITES}. A 400 names the field, a
+     * 409 names the blocker, a 429 names the number of seconds to wait.
+     */
+    private static final Set<String> BODIED_STATUSES = Set.of("400", "409", "422", "429");
+
+    /**
+     * The spellings that write a bodied status, and what each must be followed by.
+     *
+     * <p>Same reasoning as the {@code HttpStatus.NOT_FOUND} ban below: a scan that knows one
+     * spelling leaves the others as its hole, so the ones it does not know are banned outright
+     * (see {@link #noBackDoorSpellingOfABodiedStatus}).
+     */
+    private static final List<String> BODIED_SITE_SPELLINGS = List.of(
+            "badRequest()",
+            "unprocessableEntity()",
+            "status(HttpStatus.BAD_REQUEST)",
+            "status(HttpStatus.CONFLICT)",
+            "status(HttpStatus.UNPROCESSABLE_ENTITY)",
+            "status(HttpStatus.TOO_MANY_REQUESTS)");
+
+    /**
+     * The four sites that put {@code errors} on something other than a validation rejection, and
+     * therefore key it by a blocker rather than by a field.
+     *
+     * <p>Pinned for the reason the bodiless 403s are: it is a documented property of the envelope
+     * ({@code Problem.errors} in {@code openapi.yaml} names these four), so a fifth is a decision
+     * about the contract rather than a local choice. <strong>What is not negotiable is the value</strong>
+     * — see {@link #everyErrorsValueIsASentence}, which is the rule §149 was written for.
+     */
+    private static final Set<String> NON_VALIDATION_ERRORS_SITES = Set.of(
+            // The two deletes that refuse because something still points at the row. The key names
+            // the blocking population — `children`, `grants` — because there is no input field to
+            // name: the request is a DELETE with no body at all.
+            "identity/TeamController.java",
+            "project/ProjectController.java",
+            // `scope` on the artifact 403s: the form has a scope selector, so the message has
+            // somewhere to land even though the refusal is about the caller rather than the value.
+            "documentation/ArtifactController.java",
+            "documentation/ArtifactFileController.java");
+
+    /**
      * The 403s that write no body, and the reason each one does not.
      *
      * <p><strong>Unlike the 401 and the 404, a 403 normally carries a {@code Problem}</strong> —
@@ -136,7 +187,206 @@ class ErrorBodyPolicyTest {
                 .isEmpty();
     }
 
+    @Test
+    @DisplayName("every declared 400, 409, 422 and 429 promises a body")
+    void bodiedStatusesDeclareContent() {
+        List<String> offenders = new ArrayList<>();
+        int checked = 0;
+
+        for (OpenApiContract.Operation operation : contract.operations()) {
+            for (Map.Entry<String, Object> entry : responsesOf(operation).entrySet()) {
+                if (!BODIED_STATUSES.contains(entry.getKey())) {
+                    continue;
+                }
+                checked++;
+                if (!contract.resolve(asMap(entry.getValue())).containsKey("content")) {
+                    offenders.add(operation.describe() + "  " + entry.getKey());
+                }
+            }
+        }
+
+        // `TooManyRequests` is referenced by no operation on purpose — it is written by a filter
+        // before routing, so it is not a property of any one operation (§141) — which puts it
+        // outside the walk above and would leave the one status a model is most likely to meet
+        // unchecked.
+        Map<String, Object> rateLimited = componentResponse("TooManyRequests");
+        checked++;
+        if (!rateLimited.containsKey("content")) {
+            offenders.add("components/responses/TooManyRequests  429");
+        }
+
+        assertThat(checked)
+                .as("the response walk found almost no 400/409/422 — it has stopped matching the "
+                        + "contract's shape and this asserted nothing")
+                .isGreaterThan(70);
+
+        assertThat(offenders)
+                .as("""
+                        These refusals are declared with no body, and this API always writes one.
+
+                        This is the other half of the 401/404 rule above, and it fails in the
+                        opposite direction: there the contract promised a document nothing wrote,
+                        here it withholds one every site sends. A generated client types the
+                        response as `never`, so the caller that most needs the message — the CLI
+                        prints `field: message`, the MCP server hands those lines to a model — is
+                        the one whose types say there is nothing to read.
+
+                        All three statuses are actionable by construction. A 400 names the field, a
+                        409 names the blocker, a 429 names the seconds. §141: a refusal that does
+                        not say what to do next is the one a caller retries unchanged.
+
+                        Declaring one empty:""")
+                .isEmpty();
+    }
+
     // --------------------------------------------------------------- source ----
+
+    @Test
+    @DisplayName("no handler omits the body on a 400, 409 or 422")
+    void noHandlerOmitsABodyOnABodiedStatus() {
+        List<String> offenders = new ArrayList<>();
+        int sites = 0;
+
+        for (Path file : mainSources()) {
+            String source = read(file);
+            for (String spelling : BODIED_SITE_SPELLINGS) {
+                for (int at : occurrencesOf(source, spelling)) {
+                    sites++;
+                    if (!continuesWith(source, at + spelling.length(), ".body(")) {
+                        offenders.add(describe(file, source, at) + "  " + spelling);
+                    }
+                }
+            }
+        }
+
+        assertThat(sites)
+                .as("the scan found almost no 400/409 sites — a spelling has changed and this test "
+                        + "is now checking nothing")
+                .isGreaterThan(80);
+
+        assertThat(offenders)
+                .as("""
+                        These sites answer a bodied status with no document.
+
+                        `BadRequest` and `Conflict` in openapi.yaml both declare a `Problem`, so an
+                        empty one makes the contract false for every generated client — the mirror
+                        of what §148 fixed, arriving from the other side.
+
+                        It is also the failure §141 spent a slice on: the 400 is the one refusal a
+                        caller can fix from the response alone, and it can only do that if the
+                        response says which field. `Problem.errors` is that, and `.build()` drops it.
+
+                        Sites refusing without a body:""")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("no back-door spelling of a bodied status")
+    void noBackDoorSpellingOfABodiedStatus() {
+        // The scan above matches six spellings, so anything that writes one of these statuses
+        // another way is invisible to it. Banning the alternatives outright is what makes that
+        // scan a rule rather than a sample — §148's `HttpStatus.NOT_FOUND` ban, generalised.
+        List<String> banned = List.of("status(400)", "status(409)", "status(422)", "status(429)",
+                "HttpStatusCode.valueOf(", "SC_BAD_REQUEST", "SC_CONFLICT");
+        List<String> offenders = new ArrayList<>();
+
+        for (Path file : mainSources()) {
+            String source = read(file);
+            for (String spelling : banned) {
+                for (int at : occurrencesOf(source, spelling)) {
+                    offenders.add(describe(file, source, at) + "  " + spelling);
+                }
+            }
+        }
+
+        assertThat(offenders)
+                .as("""
+                        A refusal is written here in a spelling the body-presence scan cannot see.
+
+                        Write it as `ResponseEntity.badRequest()` or
+                        `ResponseEntity.status(HttpStatus.CONFLICT)`, both followed by `.body(…)`.
+                        A numeric literal or a `HttpStatusCode.valueOf` is not wrong on its own —
+                        it is invisible, which is worse, because the check above then reports a
+                        clean run over a codebase it did not read.
+
+                        Sites:""")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("every literal `errors` value is a sentence, not a datum")
+    void everyErrorsValueIsASentence() {
+        List<String> offenders = new ArrayList<>();
+        int values = 0;
+
+        for (Path file : mainSources()) {
+            String source = read(file);
+            for (int at : occurrencesOf(source, "setProperty(\"errors\"")) {
+                String method = enclosingMethod(source, at);
+                for (int listAt : occurrencesOf(method, "List.of(")) {
+                    values++;
+                    String argument = balanced(method, listAt + "List.of(".length() - 1);
+                    if (!argument.contains("\"")) {
+                        offenders.add(describe(file, source, at) + "  List.of(" + argument + ")");
+                    }
+                }
+            }
+        }
+
+        assertThat(values)
+                .as("no literal `errors` value was inspected — the construction has moved and this "
+                        + "test is now checking nothing")
+                .isGreaterThanOrEqualTo(4);
+
+        assertThat(offenders)
+                .as("""
+                        An `errors` value here carries no words, so it is a datum rather than a
+                        message.
+
+                        `Problem.errors` in openapi.yaml says every value is a complete sentence a
+                        client may print verbatim, and that is not decoration: `@tcms/cli` prints
+                        `name: value` under the failure and `@tcms/mcp` hands the same lines to a
+                        model. §149 found one site sending `children: 3` — the SPA rendered it,
+                        because that one dialog knew to compose a sentence around it, and the two
+                        callers that cannot see a screen were told a bare number.
+
+                        Put the count in the sentence. `TeamController` is the shape.
+
+                        Values with no words in them:""")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("the sites keying `errors` by a blocker rather than a field are the four named")
+    void nonValidationErrorsSitesArePinned() {
+        Set<String> found = new LinkedHashSet<>();
+
+        for (Path file : mainSources()) {
+            String source = read(file);
+            for (int at : occurrencesOf(source, "setProperty(\"errors\"")) {
+                String method = enclosingMethod(source, at);
+                // A validation rejection takes its map from the service and names input fields;
+                // these four build it here, from literal keys, on a refusal with no field to name.
+                if (method.contains("List.of(") || method.contains("Map.of(")) {
+                    found.add(moduleRelative(file));
+                }
+            }
+        }
+
+        assertThat(found)
+                .as("""
+                        The set of refusals keying `errors` by something that is not an input field
+                        has changed.
+
+                        `Problem.errors` in openapi.yaml names these four — `children` and `grants`
+                        on the two deletes that refuse, `scope` on the artifact 403s — so the set is
+                        part of the contract. A fifth means either the key should be a field name,
+                        or the schema's description needs editing too. Do not add a row to make a
+                        red run green.
+
+                        Found:""")
+                .isEqualTo(NON_VALIDATION_ERRORS_SITES);
+    }
 
     @Test
     @DisplayName("no handler writes a body on a 404")
@@ -230,6 +480,60 @@ class ErrorBodyPolicyTest {
 
     private static Map<String, Object> responsesOf(OpenApiContract.Operation operation) {
         return asMap(operation.body().get("responses"));
+    }
+
+    /**
+     * A named entry under {@code components/responses}, reached the only way this helper can — as
+     * a {@code $ref}, which {@code resolve} throws on if it dangles. That throw is the check that
+     * the component still exists, so a renamed one fails loudly instead of asserting over nothing.
+     */
+    private static Map<String, Object> componentResponse(String name) {
+        return contract.resolve(Map.of("$ref", "#/components/responses/" + name));
+    }
+
+    /**
+     * The source of the method containing {@code at}, so a rule about how a value is built can be
+     * asked of the method that builds it rather than of the whole file.
+     *
+     * <p>Deliberately crude — it walks back to the nearest member declaration and forward to its
+     * matching brace. It is reading a fixed handful of private factory methods in controllers, all
+     * of which this project's formatter indents identically; a parser would be more machinery than
+     * the question needs.
+     */
+    private static String enclosingMethod(String source, int at) {
+        int start = -1;
+        for (String modifier : List.of("\n    private", "\n    public", "\n    static")) {
+            start = Math.max(start, source.lastIndexOf(modifier, at));
+        }
+        if (start < 0) {
+            return source;
+        }
+        int open = source.indexOf('{', start);
+        return open < 0 ? source.substring(start) : source.substring(start, balancedEnd(source, open));
+    }
+
+    /** The text between {@code open}'s bracket and its match, exclusive. */
+    private static String balanced(String source, int open) {
+        return source.substring(open + 1, balancedEnd(source, open) - 1);
+    }
+
+    /** One past the bracket matching the one at {@code open}. Handles {@code (} and <code>{</code>. */
+    private static int balancedEnd(String source, int open) {
+        char opener = source.charAt(open);
+        char closer = opener == '(' ? ')' : '}';
+        int depth = 0;
+        for (int i = open; i < source.length(); i++) {
+            char c = source.charAt(i);
+            if (c == opener) {
+                depth++;
+            } else if (c == closer) {
+                depth--;
+                if (depth == 0) {
+                    return i + 1;
+                }
+            }
+        }
+        return source.length();
     }
 
     @SuppressWarnings("unchecked")
