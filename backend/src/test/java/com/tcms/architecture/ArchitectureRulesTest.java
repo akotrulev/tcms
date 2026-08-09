@@ -217,6 +217,42 @@ class ArchitectureRulesTest {
     }
 
     @Test
+    @DisplayName("api depends on NOTHING in com.tcms — the property that makes it a legal fifth")
+    void apiDependsOnNothing() {
+        // §146 added a fifth entry to FOUNDATION_MODULES, and it is the first that reaches for
+        // nothing at all — not even tenancy, which storage above legitimately needs. That is the
+        // whole of its defence: a module every other module may depend on, holding types the
+        // CONTRACT owns, which cannot see a company, a person, a permission or a table.
+        //
+        // The declaration in api/package-info.java is `allowedDependencies = {}`, and Modulith
+        // enforces it. What Modulith has nothing to say about is that declaration being WIDENED —
+        // §125 made exactly this point about storage, and it is sharper here: every widening
+        // available is toward a foundation module, so it is legal under the rule above and passes
+        // every other test in this class. One word, and the module that everything depends on
+        // starts depending on something.
+        //
+        // The failure it prevents is specific rather than aesthetic. `Problem` is the shape of a
+        // REFUSAL. The moment this module can see identity or tenancy, the tempting next commit is
+        // a factory that reads the caller — "forbidden(user, permission)" — and the permission
+        // catalogue starts being published to the caller who is not entitled to it, from inside a
+        // record whose javadoc says never to name the key.
+        ArchRule rule = noClasses()
+                .that().resideInAPackage("com.tcms.api..")
+                .should().dependOnClassesThat(
+                        JavaClass.Predicates.resideInAPackage(ROOT_PACKAGE + "..")
+                                .and(JavaClass.Predicates.resideOutsideOfPackage("com.tcms.api..")))
+                .because("""
+                        api is the foundation module every other module may depend on for the wire \
+                        shapes the contract defines (§146), and it earns that by depending on \
+                        NOTHING: it holds no domain concept, no persistence and no notion of a \
+                        caller, so a refusal cannot start being composed from facts about who was \
+                        refused. An edge out of it is the beginning of authorization, tenancy or a \
+                        table being visible from the one package everything else imports""");
+
+        rule.check(PRODUCTION);
+    }
+
+    @Test
     @DisplayName("no two Spring beans share a simple name — the collision no test can see")
     void springStereotypesHaveDistinctSimpleNames() {
         // §131 shipped `reporting.ResultsChangedHandler` and `repository.ResultsChangedHandler`,

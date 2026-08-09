@@ -10422,6 +10422,40 @@ export interface components {
             };
         };
         /**
+         * @description A failure the **container** resolved, before or instead of any operation — an unreadable
+         *     body, malformed JSON, an unsupported `Content-Type`, a method this path does not offer, or
+         *     a path with no operation at all. `Problem`, exactly as a handler would have answered.
+         *
+         *     **Referenced by no operation, deliberately**, for `TooManyRequests`' reason one step later:
+         *     these are properties of the *request*, not of an operation, and three of them happen
+         *     precisely when the API could not decide which operation was meant. Enumerating a 405 on
+         *     every path would document a method that does not exist there.
+         *
+         *     **This is recorded because it was not always true.** Spring resolves these through
+         *     `sendError`, which hands the response to the container's own error handling, and the body
+         *     that produced was `{timestamp, status, error, path}` — a shape this contract declares
+         *     nowhere, arriving on the paths a machine caller hits most, where the CLI and the MCP server
+         *     read `detail` and found none. §143 corrected the *status* on all five (each had been `401`
+         *     for an API-token caller); §145's live pass found the *shape* still the container's; §146
+         *     made it `Problem`.
+         *
+         *     `detail` is a fixed sentence per status, never the exception's own message: a forwarded
+         *     message names internal types and JSON pointers, which is neither actionable for the caller
+         *     nor safe to publish.
+         *
+         *     **A `404` with no body at all is a different answer and is not this.** Those are written by
+         *     an operation that resolved nothing the caller may see (§6t), and the empty body is the
+         *     point — see `NotFound`.
+         */
+        PreHandlerRefusal: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Problem"];
+            };
+        };
+        /**
          * @description The API-token rate limit. **Referenced by no operation, deliberately** — every other
          *     response here is declared per operation because it is a property of that operation, and
          *     this one is not: it is written by a servlet filter BEFORE routing, so the API refuses

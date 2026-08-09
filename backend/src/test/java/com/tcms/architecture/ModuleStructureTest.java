@@ -110,10 +110,20 @@ class ModuleStructureTest {
                         `shared` module the paragraph above still calls "the last one" is \
                         unaffected: `storage` is not it, and decision E's refusal to create a \
                         module for two interfaces and a record is what this one was measured \
-                        against rather than an argument it overturns.""")
+                        against rather than an argument it overturns. \
+                        §146 adds `api`, and it IS the module the paragraph above kept calling \
+                        `shared` — under a name that states a charter instead of an access level, \
+                        because §125 refused `shared` on the grounds that a module every other \
+                        module may depend on must not be a grab bag, and that argument did not \
+                        expire. It holds the wire shapes the CONTRACT owns and more than one \
+                        module serves: `Problem`, which was package-private in `repository` while \
+                        six modules referred to it in prose, plus the same record written again in \
+                        `auth` and a third time as a JSON string literal. The forcing function was \
+                        a caller with no module at all — the container-error rendering, which runs \
+                        when no controller did.""")
                 .containsExactly(
-                        "auth", "documentation", "execution", "identity", "project", "provisioning",
-                        "reporting", "repository", "storage", "tenancy", "work");
+                        "api", "auth", "documentation", "execution", "identity", "project",
+                        "provisioning", "reporting", "repository", "storage", "tenancy", "work");
     }
 
     @Test

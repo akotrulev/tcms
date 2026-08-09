@@ -2,15 +2,44 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-09 (**§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-09 (**§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `b1ad572` (§144) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `98d1010` (§145) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
 ---
+
+## §146 — ONE ERROR ENVELOPE, AND A FIFTH FOUNDATION MODULE
+
+**`com.tcms.api` exists and is a FOUNDATION module — the fifth.** `allowedDependencies = {}`.
+
+- **`Problem` is the one error envelope.** It was `repository.ApiProblem` (package-private, so six
+  modules named it in *prose* and none could call it), `auth.InvitationController.ProblemBody`, and
+  a hand-written JSON **string literal** in `auth.RateLimitFilter`. All three collapse here.
+  `ProblemWriter` is for the two callers with no controller — a filter refusing before dispatch,
+  and the container-error path.
+- **`ProblemErrorAttributes` makes `/error` answer `Problem`**, so the five failures Spring resolves
+  through `sendError` (unreadable body, malformed JSON, wrong `Content-Type`, wrong method, unmapped
+  path) stop answering Boot's `{timestamp,status,error,path}`. `detail` is a **fixed sentence per
+  status and never the exception's message** — forwarding it publishes Jackson types and JSON
+  pointers to a CI job or a model.
+- **An empty 404 does NOT pass through it.** `ResponseEntity.notFound().build()` writes its status
+  directly and never calls `sendError`, which is what keeps §6t's bodiless 404 intact.
+  `aControllersOwn404IsStillBodiless` asserts it rather than trusting the reasoning.
+- **`ArchitectureRulesTest.apiDependsOnNothing` is load-bearing.** Modulith enforces the
+  declaration and cannot object to it being *widened*, and every widening available is toward
+  another foundation module — legal under the foundation rule and green everywhere else. Adding
+  `identity` there is one word, and the next commit composes a refusal out of who was refused.
+- **The charter refuses things**: a type belongs in `api` only if the **contract** defines it and
+  more than one module serves it. Not "two modules happen to share it".
+- **`UserRefView` is the next tenant and was deliberately left alone** — SIX copies, not the three
+  `work.UserRefView`'s tally claimed. A migration now, not a decision.
+- Contract change is **document-level**: `components.responses.PreHandlerRefusal`, referenced by no
+  operation, for `TooManyRequests`' reason. **`NotFound` still over-promises** a body where §6t's
+  404s are bodiless — recorded, not fixed.
 
 ## §145 — EVERY DECLARED OPERATION MUST HAVE A HANDLER, AND ONE DID NOT
 

@@ -1,5 +1,6 @@
 package com.tcms.repository;
 
+import com.tcms.api.Problem;
 import java.net.URI;
 import java.util.List;
 import java.util.UUID;
@@ -99,11 +100,11 @@ public class SharedStepController {
                     .body(created.view());
             case SharedStepService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
             case SharedStepService.Outcome.Forbidden ignored ->
-                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiProblem.forbidden(
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(Problem.forbidden(
                             "You do not have permission to maintain the step library in this "
                                     + "project."));
             case SharedStepService.Outcome.Invalid invalid ->
-                    ResponseEntity.badRequest().body(ApiProblem.validation(invalid.errors()));
+                    ResponseEntity.badRequest().body(Problem.validation(invalid.errors()));
         };
     }
 

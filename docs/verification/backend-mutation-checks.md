@@ -1466,3 +1466,27 @@ cd backend
 | SD-2 | Add a plausible unimplemented operation to `openapi.yaml` (e.g. `delete` on `/projects/{projectId}/suites/{suiteId}/status`) | The check fails naming it. This is the row that proves it guards the contract *generally* rather than having been fitted to one known gap — and it is the shape a contract-first slice produces on purpose, so the failure message must be the one that tells an author to implement or delete rather than to add an exemption. | ⬜ NOT RUN |
 | SD-3 | `SuiteService.findOne` drops the `projectId` gate and looks the suite up by id alone | `Detail.aSiblingProjectsSuiteIsNotReachableThroughThisProject` fails. **Nothing else does** — the row is in the caller's own company and satisfies the FK, so every cross-company assertion in the class still passes. Same shape as the tree's own persona-3 row, one endpoint over. | ⬜ NOT RUN |
 | SD-4 | `SuiteService.findOne` assembles its own `SuiteView` instead of calling `render` | `Detail.detailAgreesWithTheList` fails on whichever field the copy gets wrong — and if the copy happens to be complete today it passes, which is the *reason* the assertion compares the two documents rather than listing fields: the second definition is only wrong later. | ⬜ NOT RUN |
+
+---
+
+### §146 — one error envelope, and the module that had to exist first (`PR-1` … `PR-3`)
+
+**The container's own failures now answer `Problem`.** Five of them never reach a handler — an
+unreadable body, malformed JSON, a wrong `Content-Type`, a wrong method, an unmapped path — and
+until this slice they answered Boot's `{timestamp,status,error,path}`, a shape the contract declares
+nowhere, on the paths a machine caller hits most. §143 fixed the status; §145's live pass found the
+shape; this fixes the shape.
+
+> **`PR-1` IS RUN** — it is how the new assertions were accepted. The other two are not.
+
+```bash
+cd backend
+./gradlew test --tests 'com.tcms.auth.ErrorDispatchStatusTest' \
+               --tests 'com.tcms.architecture.ArchitectureRulesTest'
+```
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| PR-1 | Remove `@Component` from `ProblemErrorAttributes` | **The original defect, restored.** Exactly the three body tests fail (`theBodyIsAProblem`, `theDetailIsCuratedRatherThanForwarded`, `theOtherContainerFailuresAreShapedAlike`); the five status tests and `aControllersOwn404IsStillBodiless` stay **green** — which is the shape of the gap, since those five are what §143 added and they never looked at the body. | ✅ **RUN 2026-08-09** — failed as stated, six green |
+| PR-2 | `ProblemErrorAttributes.detailOf` returns `getError(webRequest).getMessage()` instead of the curated sentence | `theDetailIsCuratedRatherThanForwarded` fails on `com.tcms` or `com.fasterxml` appearing in `detail`. The row that matters most for a machine caller: the forwarded message is *longer and more specific*, which is exactly why it looks like an improvement in review. | ⬜ NOT RUN |
+| PR-3 | `api/package-info.java` gains `allowedDependencies = {"identity"}` and `Problem` imports anything from it | `ArchitectureRulesTest.apiDependsOnNothing` fails. **Nothing else does** — the edge is legal under the foundation rule (`identity` is itself a foundation module), the Modulith declaration permits it, and the module graph still verifies. That is the whole reason the rule reads the *code* rather than the declaration. | ⬜ NOT RUN |

@@ -2,6 +2,7 @@ package com.tcms.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tcms.IntegrationTestBase;
 import com.tcms.identity.AppUser;
@@ -197,6 +198,83 @@ class ErrorDispatchStatusTest extends IntegrationTestBase {
         assertThat(get("/api/v1/projects/" + PROJECT + "/cases", "tcms_not-a-real-secret")
                 .getStatusCode().value())
                 .isEqualTo(401);
+    }
+
+    @Test
+    @DisplayName("the body is a Problem, not the container's whitelabel shape")
+    void theBodyIsAProblem() throws Exception {
+        // §145's live pass found this residue: §143 fixed the STATUS on these five and left the
+        // SHAPE the container's — `{timestamp,status,error,path}`, which this contract declares
+        // nowhere, on the paths a machine caller hits most. A client cannot read `detail` out of
+        // it, so the one refusal a model is least able to interpret arrived in the one shape it
+        // could not parse.
+        //
+        // Asserted on a token, deliberately: the token is the caller that reaches these paths, and
+        // this is the assertion that fails if ProblemErrorAttributes is removed while every
+        // MockMvc test in the suite stays green.
+        JsonNode body = json.readTree(
+                post("/api/v1/projects/" + PROJECT + "/cases", UNREADABLE_CASE, issueToken())
+                        .getBody());
+
+        assertThat(body.has("timestamp")).as("the container's shape must be gone entirely").isFalse();
+        assertThat(body.has("path")).as("`path` echoes the request back into the body").isFalse();
+        assertThat(body.get("type").asText()).isEqualTo("about:blank");
+        assertThat(body.get("status").asInt()).isEqualTo(400);
+        assertThat(body.get("title").asText()).isNotBlank();
+        assertThat(body.get("detail").asText())
+                .as("`detail` is what @tcms/cli prints verbatim and what a model acts on")
+                .isNotBlank();
+    }
+
+    @Test
+    @DisplayName("the detail never carries the exception's own message")
+    void theDetailIsCuratedRatherThanForwarded() throws Exception {
+        // The tempting implementation forwards getError().getMessage(), and for THIS request that
+        // message names a Jackson type, the enum's fully-qualified class and a JSON pointer. The
+        // caller is a CI job or a model; none of that is actionable and some of it is internal.
+        String detail = json.readTree(
+                post("/api/v1/projects/" + PROJECT + "/cases", UNREADABLE_CASE, issueToken())
+                        .getBody())
+                .get("detail").asText();
+
+        assertThat(detail)
+                .doesNotContain("com.tcms")
+                .doesNotContain("com.fasterxml")
+                .doesNotContain("Exception")
+                .doesNotContain("AutomationStatus");
+    }
+
+    @Test
+    @DisplayName("an unmapped path and a wrong method are Problems too")
+    void theOtherContainerFailuresAreShapedAlike() throws Exception {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.AUTHORIZATION, "Bearer " + issueToken());
+
+        JsonNode unmapped = json.readTree(get("/api/v1/no-such-thing", issueToken()).getBody());
+        assertThat(unmapped.get("status").asInt()).isEqualTo(404);
+        assertThat(unmapped.get("detail").asText()).isNotBlank();
+
+        JsonNode wrongMethod = json.readTree(http.exchange(
+                url("/api/v1/projects/" + PROJECT + "/suites"),
+                HttpMethod.DELETE, new HttpEntity<>(headers), String.class).getBody());
+        assertThat(wrongMethod.get("status").asInt()).isEqualTo(405);
+        assertThat(wrongMethod.get("detail").asText()).isNotBlank();
+    }
+
+    @Test
+    @DisplayName("a deliberate empty 404 from a controller stays empty — §6t is untouched")
+    void aControllersOwn404IsStillBodiless() throws Exception {
+        // The rule this fix must not run over. "Ungranted", "another company's" and "does not
+        // exist" answer identically and with NO body, because a body explaining a 404 is an oracle
+        // even when the explanation is generic. Those are ResponseEntity.notFound().build(), which
+        // writes the status directly and never calls sendError — so they never reach /error at
+        // all. Asserted rather than reasoned, because the reasoning is exactly the kind that is
+        // right until Boot changes how a bodiless response is committed.
+        ResponseEntity<String> response =
+                get("/api/v1/projects/" + UUID.randomUUID() + "/suites", issueToken());
+
+        assertThat(response.getStatusCode().value()).isEqualTo(404);
+        assertThat(response.getBody()).isNull();
     }
 
     // =====================================================================

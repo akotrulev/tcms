@@ -1,5 +1,7 @@
 package com.tcms.auth;
 
+import com.tcms.api.Problem;
+import com.tcms.api.ProblemWriter;
 import com.tcms.tenancy.TokenContext;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -62,9 +64,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final Logger log = LoggerFactory.getLogger(RateLimitFilter.class);
 
     private final TokenRateLimiter limiter;
+    private final ProblemWriter problems;
 
-    RateLimitFilter(TokenRateLimiter limiter) {
+    RateLimitFilter(TokenRateLimiter limiter, ProblemWriter problems) {
         this.limiter = limiter;
+        this.problems = problems;
     }
 
     @Override
@@ -96,31 +100,25 @@ public class RateLimitFilter extends OncePerRequestFilter {
     /**
      * The refusal.
      *
-     * <h2>A third copy of the error envelope, recorded as one</h2>
+     * <h2>~~A third copy of the error envelope, recorded as one~~ → one envelope since §146</h2>
      *
-     * <p>{@code ApiProblem} ({@code repository}) is the first and {@code
-     * InvitationController.ProblemBody} the second, and {@code ApiProblem}'s own header already
-     * names the duplication as deliberate with a {@code shared} module as the follow-up. This copy
-     * is forced twice over: a filter's response never reaches Spring MVC's exception handling, and
-     * {@code auth} may not import {@code repository} in any case. Composed as a string rather than
-     * through Jackson because the shape is four constants and a number, and reaching for the
-     * mapper here would be a bean this module does not otherwise need.
+     * <p>This was the third spelling, and the one that showed what the duplication cost: the JSON
+     * was composed as a <strong>string literal</strong>, because the shape is four constants and a
+     * number and reaching for the mapper looked like a bean this module did not otherwise need. A
+     * field renamed in the contract would have been caught here by nothing at all. It is
+     * {@link Problem} through {@link ProblemWriter} now — the writer exists precisely because a
+     * filter's response never reaches Spring MVC's message converters.
      *
      * <p>The wait is in the {@code detail} as well as in {@code Retry-After}. Both readers need it:
      * {@code @tcms/cli} prints {@code detail} verbatim (§139), and a model handed a failure with no
      * number in it retries immediately — which is the loop this filter exists to stop, arriving one
      * refusal later.
      */
-    private static void refuse(HttpServletResponse response, long retryAfterSeconds) throws IOException {
-        response.setStatus(429);
+    private void refuse(HttpServletResponse response, long retryAfterSeconds) throws IOException {
         response.setHeader(HttpHeaders.RETRY_AFTER, Long.toString(retryAfterSeconds));
-        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        response.getWriter().write("""
-                {"type":"about:blank","title":"Too many requests",\
-                "status":429,\
-                "detail":"This token has made too many requests. Wait %d second%s and try again. \
-                Nothing was changed by this call."}"""
-                .formatted(retryAfterSeconds, retryAfterSeconds == 1 ? "" : "s"));
+        problems.write(response, Problem.tooManyRequests(
+                "This token has made too many requests. Wait %d second%s and try again. "
+                        .formatted(retryAfterSeconds, retryAfterSeconds == 1 ? "" : "s")
+                        + "Nothing was changed by this call."));
     }
 }

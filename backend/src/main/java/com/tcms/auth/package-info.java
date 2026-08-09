@@ -37,5 +37,5 @@
  * in would be reaching for the session, and the session is not an application-wide ambient:
  * {@code CompanyContext} is.
  */
-@org.springframework.modulith.ApplicationModule(allowedDependencies = {"tenancy", "identity"})
+@org.springframework.modulith.ApplicationModule(allowedDependencies = {"api", "tenancy", "identity"})
 package com.tcms.auth;

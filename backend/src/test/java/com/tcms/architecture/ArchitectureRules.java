@@ -37,9 +37,25 @@ final class ArchitectureRules {
      * module proposing itself will not. §76 refused a {@code review} module on exactly this
      * bar — "a fourth foundation module is a decision, not an import" — and the sentence is
      * still the rule; this is the decision.
+     *
+     * <p><strong>{@code api} is a fifth, added in §146, and it clears that bar in the
+     * strongest available form.</strong> It declares <em>nothing</em> — not even
+     * {@code tenancy}, which {@code storage} needs because its table is company-owned — so
+     * it cannot reach the isolation boundary, let alone become a second place authorization
+     * is decided. It holds no domain concept and no persistence: a {@code Problem} is four
+     * fields and a map, and the writer beside it turns one into bytes. And the question it
+     * answers is not the database's at all but the one underneath {@code storage}'s test —
+     * <em>whose is a shape the CONTRACT defines?</em> For eleven slices the answer was
+     * "whichever module noticed first, plus a comment explaining that it could not import
+     * the last copy", which produced five copies of two records across five modules.
+     *
+     * <p>Its charter is narrow enough to refuse things, and refusing is the point: <em>a
+     * type belongs there only if the contract defines it and more than one module serves
+     * it.</em> A helper two modules happen to share is a copy or an event, not an entry
+     * here. If this list ever needs a sixth, it needs a paragraph like this one first.
      */
     static final Set<String> FOUNDATION_MODULES =
-            Set.of("tenancy", "identity", "project", "storage");
+            Set.of("api", "tenancy", "identity", "project", "storage");
 
     private ArchitectureRules() {
     }

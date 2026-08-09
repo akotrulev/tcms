@@ -44,5 +44,5 @@
  * for {@code test_execution} directly.
  */
 @org.springframework.modulith.ApplicationModule(
-        allowedDependencies = {"tenancy", "project", "identity", "storage"})
+        allowedDependencies = {"api", "tenancy", "project", "identity", "storage"})
 package com.tcms.repository;

@@ -1,5 +1,6 @@
 package com.tcms.repository;
 
+import com.tcms.api.Problem;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
@@ -174,7 +175,7 @@ public class SuiteController {
         } catch (NumberFormatException notAVersion) {
             // 400 rather than 409, for CaseController's reason: answering 409 would send a client
             // with a malformed header into a reload-and-retry loop that cannot succeed.
-            return ResponseEntity.badRequest().body(ApiProblem.validation(Map.of(
+            return ResponseEntity.badRequest().body(Problem.validation(Map.of(
                     "If-Match",
                     List.of("Send the suite's lockVersion as the If-Match header, or omit the "
                             + "header."))));
@@ -247,15 +248,15 @@ public class SuiteController {
             case SuiteStatusService.Outcome.Updated updated -> ResponseEntity.ok(updated.view());
             case SuiteStatusService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
             case SuiteStatusService.Outcome.Forbidden ignored ->
-                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiProblem.forbidden(
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(Problem.forbidden(
                             "You do not have permission to make this change to suites in this "
                                     + "project."));
             case SuiteStatusService.Outcome.Invalid invalid ->
-                    ResponseEntity.badRequest().body(ApiProblem.validation(invalid.errors()));
+                    ResponseEntity.badRequest().body(Problem.validation(invalid.errors()));
             // 409 rather than 400: the payload is well-formed and the permission is held — it is
             // the suite's current state that refuses, which is a different thing to fix.
             case SuiteStatusService.Outcome.Refused refused ->
-                    ResponseEntity.status(HttpStatus.CONFLICT).body(ApiProblem.conflict(
+                    ResponseEntity.status(HttpStatus.CONFLICT).body(Problem.conflict(
                             "Status change refused", refused.message()));
         };
     }
@@ -279,14 +280,14 @@ public class SuiteController {
             case SuiteWriteService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
             case SuiteWriteService.Outcome.Forbidden ignored ->
                     ResponseEntity.status(HttpStatus.FORBIDDEN)
-                            .body(ApiProblem.forbidden("You do not have permission to " + action
+                            .body(Problem.forbidden("You do not have permission to " + action
                                     + "."));
             case SuiteWriteService.Outcome.Invalid invalid ->
-                    ResponseEntity.badRequest().body(ApiProblem.validation(invalid.errors()));
+                    ResponseEntity.badRequest().body(Problem.validation(invalid.errors()));
             case SuiteWriteService.Outcome.Stale ignored ->
-                    ResponseEntity.status(HttpStatus.CONFLICT).body(ApiProblem.stale("suite"));
+                    ResponseEntity.status(HttpStatus.CONFLICT).body(Problem.stale("suite"));
             case SuiteWriteService.Outcome.NotEmpty notEmpty ->
-                    ResponseEntity.status(HttpStatus.CONFLICT).body(ApiProblem.conflict(
+                    ResponseEntity.status(HttpStatus.CONFLICT).body(Problem.conflict(
                             "Suite is not empty", describe(notEmpty)));
             // The four success shapes. Reached only if a call site above routes one here — each
             // handles its own success and delegates the rest — so these arms exist to satisfy
@@ -324,7 +325,7 @@ public class SuiteController {
      */
     @ExceptionHandler(OptimisticLockingFailureException.class)
     public ResponseEntity<Object> onWriteRace(OptimisticLockingFailureException race) {
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiProblem.conflict());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Problem.conflict());
     }
 
     /**

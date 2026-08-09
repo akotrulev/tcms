@@ -1,5 +1,6 @@
 package com.tcms.repository;
 
+import com.tcms.api.Problem;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
@@ -245,10 +246,10 @@ public class CaseController {
         return switch (outcome) {
             case CaseCreateService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
             case CaseCreateService.Outcome.Forbidden ignored ->
-                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiProblem.forbidden(
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(Problem.forbidden(
                             "You do not have permission to create test cases in this project."));
             case CaseCreateService.Outcome.Invalid invalid ->
-                    ResponseEntity.badRequest().body(ApiProblem.validation(invalid.errors()));
+                    ResponseEntity.badRequest().body(Problem.validation(invalid.errors()));
             case CaseCreateService.Outcome.Created created -> ResponseEntity
                     .created(location(projectId, created.view().id()))
                     .body(created.view());
@@ -295,10 +296,10 @@ public class CaseController {
         return switch (outcome) {
             case CaseCloneService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
             case CaseCloneService.Outcome.Forbidden ignored ->
-                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiProblem.forbidden(
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(Problem.forbidden(
                             "You do not have permission to create test cases in this project."));
             case CaseCloneService.Outcome.Invalid invalid ->
-                    ResponseEntity.badRequest().body(ApiProblem.validation(invalid.errors()));
+                    ResponseEntity.badRequest().body(Problem.validation(invalid.errors()));
             case CaseCloneService.Outcome.Created created -> ResponseEntity
                     .created(location(projectId, created.view().id()))
                     .body(created.view());
@@ -342,7 +343,7 @@ public class CaseController {
             // 400 rather than 409: a stale precondition and an unparseable one are different bugs,
             // and answering 409 would send a client with a malformed header into a reload-and-retry
             // loop that cannot succeed.
-            return ResponseEntity.badRequest().body(ApiProblem.validation(
+            return ResponseEntity.badRequest().body(Problem.validation(
                     Map.of("If-Match", List.of("Send the case's lockVersion as the If-Match "
                             + "header, or omit the header."))));
         }
@@ -353,12 +354,12 @@ public class CaseController {
         return switch (outcome) {
             case CaseUpdateService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
             case CaseUpdateService.Outcome.Forbidden ignored ->
-                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiProblem.forbidden(
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(Problem.forbidden(
                             "You do not have permission to edit test cases in this project."));
             case CaseUpdateService.Outcome.Invalid invalid ->
-                    ResponseEntity.badRequest().body(ApiProblem.validation(invalid.errors()));
+                    ResponseEntity.badRequest().body(Problem.validation(invalid.errors()));
             case CaseUpdateService.Outcome.Stale ignored ->
-                    ResponseEntity.status(HttpStatus.CONFLICT).body(ApiProblem.conflict());
+                    ResponseEntity.status(HttpStatus.CONFLICT).body(Problem.conflict());
             case CaseUpdateService.Outcome.Updated updated -> ResponseEntity.ok(updated.view());
         };
     }
@@ -399,9 +400,9 @@ public class CaseController {
             case CaseBulkService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
             case CaseBulkService.Outcome.Forbidden forbidden ->
                     ResponseEntity.status(HttpStatus.FORBIDDEN)
-                            .body(ApiProblem.forbidden(forbidden.detail()));
+                            .body(Problem.forbidden(forbidden.detail()));
             case CaseBulkService.Outcome.Invalid invalid ->
-                    ResponseEntity.badRequest().body(ApiProblem.validation(invalid.errors()));
+                    ResponseEntity.badRequest().body(Problem.validation(invalid.errors()));
             case CaseBulkService.Outcome.Done done -> ResponseEntity.ok(done.result());
         };
     }
@@ -445,7 +446,7 @@ public class CaseController {
         if (request == null || request.quarantined() == null) {
             // A Boolean, so an absent field arrives as null rather than as a silent false that
             // would release a quarantine the caller never mentioned. See the request's header.
-            return ResponseEntity.badRequest().body(ApiProblem.validation(Map.of(
+            return ResponseEntity.badRequest().body(Problem.validation(Map.of(
                     "quarantined", List.of("Say whether to quarantine or release."))));
         }
 
@@ -456,10 +457,10 @@ public class CaseController {
         return switch (outcome) {
             case CaseQuarantineService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
             case CaseQuarantineService.Outcome.Forbidden ignored ->
-                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiProblem.forbidden(
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(Problem.forbidden(
                             "You do not have permission to change test cases in this project."));
             case CaseQuarantineService.Outcome.Invalid invalid ->
-                    ResponseEntity.badRequest().body(ApiProblem.validation(
+                    ResponseEntity.badRequest().body(Problem.validation(
                             Map.of(invalid.field(), List.of(invalid.message()))));
             // Already a rendered view, decider and all — the service resolves the name inside its
             // own transaction, because CaseOwners reads app_user through the tenancy filter and a
@@ -553,10 +554,10 @@ public class CaseController {
         return switch (outcome) {
             case CaseDraftService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
             case CaseDraftService.Outcome.Forbidden ignored ->
-                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiProblem.forbidden(
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(Problem.forbidden(
                             "You do not have permission to edit test cases in this project."));
             case CaseDraftService.Outcome.Invalid invalid ->
-                    ResponseEntity.badRequest().body(ApiProblem.validation(
+                    ResponseEntity.badRequest().body(Problem.validation(
                             Map.of(invalid.field(), List.of(invalid.message()))));
             case CaseDraftService.Outcome.Empty ignored -> ResponseEntity.noContent().build();
             case CaseDraftService.Outcome.Found found -> ResponseEntity.ok(found.draft());
@@ -598,10 +599,10 @@ public class CaseController {
         return switch (outcome) {
             case CaseDeleteService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
             case CaseDeleteService.Outcome.Forbidden ignored ->
-                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiProblem.forbidden(
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(Problem.forbidden(
                             "You do not have permission to delete test cases in this project."));
             case CaseDeleteService.Outcome.NotTheAuthor ignored ->
-                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiProblem.forbidden(
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(Problem.forbidden(
                             "You can only delete test cases you created. Ask a test lead to delete "
                                     + "this one."));
             case CaseDeleteService.Outcome.Deleted ignored -> ResponseEntity.noContent().build();
@@ -629,7 +630,7 @@ public class CaseController {
      */
     @ExceptionHandler(OptimisticLockingFailureException.class)
     public ResponseEntity<Object> onWriteRace(OptimisticLockingFailureException race) {
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiProblem.conflict());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Problem.conflict());
     }
 
     /**

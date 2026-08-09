@@ -1,5 +1,6 @@
 package com.tcms.repository;
 
+import com.tcms.api.Problem;
 import java.net.URI;
 import java.util.List;
 import java.util.UUID;
@@ -146,17 +147,17 @@ public class ConditionController {
             case ConditionService.Outcome.Updated updated -> ResponseEntity.ok(updated.view());
             case ConditionService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
             case ConditionService.Outcome.Forbidden ignored ->
-                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiProblem.forbidden(
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(Problem.forbidden(
                             "You do not have permission to maintain the condition library in this "
                                     + "project."));
             case ConditionService.Outcome.Invalid invalid ->
-                    ResponseEntity.badRequest().body(ApiProblem.validation(invalid.errors()));
+                    ResponseEntity.badRequest().body(Problem.validation(invalid.errors()));
             // stale(noun), not conflict(title, detail): this is a lost update, and the two 409s
             // want opposite advice — "reload and reapply" is exactly right here and is useless for
             // a refusal about the target's state. The noun is parameterized so the copy does not
             // send the reader to the wrong screen.
             case ConditionService.Outcome.Conflict ignored ->
-                    ResponseEntity.status(HttpStatus.CONFLICT).body(ApiProblem.stale("condition"));
+                    ResponseEntity.status(HttpStatus.CONFLICT).body(Problem.stale("condition"));
         };
     }
 

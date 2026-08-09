@@ -1,5 +1,6 @@
 package com.tcms.repository;
 
+import com.tcms.api.Problem;
 import java.net.URI;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -106,10 +107,10 @@ public class AiProposalController {
         return switch (outcome) {
             case AiProposalService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
             case AiProposalService.Outcome.Forbidden ignored ->
-                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiProblem.forbidden(
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(Problem.forbidden(
                             "You do not have permission to propose test cases in this project."));
             case AiProposalService.Outcome.Invalid invalid ->
-                    ResponseEntity.badRequest().body(ApiProblem.validation(invalid.errors()));
+                    ResponseEntity.badRequest().body(Problem.validation(invalid.errors()));
             case AiProposalService.Outcome.Filed filed -> ResponseEntity
                     .created(location(projectId, filed.view().id()))
                     .body(filed.view());
@@ -144,16 +145,16 @@ public class AiProposalController {
             case AiProposalDecisionService.Outcome.NotFound ignored ->
                     ResponseEntity.notFound().build();
             case AiProposalDecisionService.Outcome.Forbidden ignored ->
-                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiProblem.forbidden(
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(Problem.forbidden(
                             "You do not have permission to create test cases in this project."));
             case AiProposalDecisionService.Outcome.CredentialRefused ignored ->
-                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiProblem.forbidden(
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(Problem.forbidden(
                             "Accepting a generated case is a person's decision, so it cannot be "
                                     + "done with an API token. Sign in and review it."));
             case AiProposalDecisionService.Outcome.Invalid invalid ->
-                    ResponseEntity.badRequest().body(ApiProblem.validation(invalid.errors()));
+                    ResponseEntity.badRequest().body(Problem.validation(invalid.errors()));
             case AiProposalDecisionService.Outcome.AlreadyDecided decided ->
-                    ResponseEntity.status(HttpStatus.CONFLICT).body(ApiProblem.conflict(
+                    ResponseEntity.status(HttpStatus.CONFLICT).body(Problem.conflict(
                             "Already decided",
                             decided.status() == ProposalStatus.REJECTED
                                     ? "This proposal was rejected. Reload the queue."
@@ -185,16 +186,16 @@ public class AiProposalController {
             case AiProposalDecisionService.Outcome.NotFound ignored ->
                     ResponseEntity.notFound().build();
             case AiProposalDecisionService.Outcome.Forbidden ignored ->
-                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiProblem.forbidden(
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(Problem.forbidden(
                             "You do not have permission to decide proposals in this project."));
             case AiProposalDecisionService.Outcome.CredentialRefused ignored ->
-                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiProblem.forbidden(
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(Problem.forbidden(
                             "Rejecting a generated case is a person's decision, so it cannot be "
                                     + "done with an API token. Sign in and review it."));
             case AiProposalDecisionService.Outcome.Invalid invalid ->
-                    ResponseEntity.badRequest().body(ApiProblem.validation(invalid.errors()));
+                    ResponseEntity.badRequest().body(Problem.validation(invalid.errors()));
             case AiProposalDecisionService.Outcome.AlreadyDecided ignored ->
-                    ResponseEntity.status(HttpStatus.CONFLICT).body(ApiProblem.conflict(
+                    ResponseEntity.status(HttpStatus.CONFLICT).body(Problem.conflict(
                             "Already accepted",
                             "This proposal has already become a case. Reload the queue."));
             case AiProposalDecisionService.Outcome.Rejected rejected ->

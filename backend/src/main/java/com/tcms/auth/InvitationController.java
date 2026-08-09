@@ -1,5 +1,6 @@
 package com.tcms.auth;
 
+import com.tcms.api.Problem;
 import com.tcms.identity.InvitationService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -66,7 +67,7 @@ public class InvitationController {
      * credential.
      */
     @PostMapping("/{token}/accept")
-    public ResponseEntity<ProblemBody> accept(
+    public ResponseEntity<Problem> accept(
             @PathVariable String token, @Valid @RequestBody AcceptRequest request) {
 
         InvitationService.AcceptOutcome outcome =
@@ -80,16 +81,10 @@ public class InvitationController {
                 // submitted, not anything about the account or the instance, so saying "too
                 // short" leaks nothing while saying nothing would leave them guessing.
                 case PASSWORD_UNACCEPTABLE, PASSWORD_NOT_REQUIRED ->
-                        ResponseEntity.unprocessableEntity().body(new ProblemBody(
-                                "about:blank",
-                                "The password was not accepted",
-                                HttpStatus.UNPROCESSABLE_ENTITY.value(),
-                                rejected.detail()));
+                        ResponseEntity.unprocessableEntity().body(Problem.unprocessable(
+                                "The password was not accepted", rejected.detail()));
             };
         };
     }
 
-    /** {@code Problem} in the contract. */
-    public record ProblemBody(String type, String title, int status, String detail) {
-    }
 }

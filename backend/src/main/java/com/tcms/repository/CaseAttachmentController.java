@@ -1,5 +1,6 @@
 package com.tcms.repository;
 
+import com.tcms.api.Problem;
 import com.tcms.storage.BlobUpload;
 import java.io.IOException;
 import java.net.URI;
@@ -68,7 +69,7 @@ class CaseAttachmentController {
             @RequestPart("file") MultipartFile file) throws IOException {
 
         if (file.isEmpty()) {
-            return ResponseEntity.badRequest().body(ApiProblem.validation(
+            return ResponseEntity.badRequest().body(Problem.validation(
                     Map.of("file", List.of("Choose a file to attach."))));
         }
 
@@ -90,10 +91,10 @@ class CaseAttachmentController {
             case CaseAttachmentService.Outcome.NotFound ignored ->
                     ResponseEntity.notFound().build();
             case CaseAttachmentService.Outcome.Forbidden ignored ->
-                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiProblem.forbidden(
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(Problem.forbidden(
                             "You do not have permission to edit cases in this project."));
             case CaseAttachmentService.Outcome.Invalid invalid ->
-                    ResponseEntity.badRequest().body(ApiProblem.validation(
+                    ResponseEntity.badRequest().body(Problem.validation(
                             Map.of(invalid.field(), List.of(invalid.message()))));
             case CaseAttachmentService.Outcome.Attached attached ->
                     ResponseEntity.created(URI.create(attached.file().url()))
@@ -142,7 +143,7 @@ class CaseAttachmentController {
             // whoever may edit the case may remove any of its files, so "you can only remove your
             // own" would be a rule this endpoint does not have. See CaseAttachmentService's header.
             case CaseAttachmentService.Outcome.Forbidden ignored ->
-                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiProblem.forbidden(
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(Problem.forbidden(
                             "You do not have permission to edit cases in this project."));
             case CaseAttachmentService.Outcome.Deleted ignored ->
                     ResponseEntity.noContent().build();
@@ -163,7 +164,7 @@ class CaseAttachmentController {
      */
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     ResponseEntity<Object> onTooLarge(MaxUploadSizeExceededException ignored) {
-        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(new ApiProblem(
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(new Problem(
                 "about:blank",
                 "File too large",
                 HttpStatus.PAYLOAD_TOO_LARGE.value(),
