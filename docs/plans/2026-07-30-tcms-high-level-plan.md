@@ -1658,6 +1658,13 @@ Search covers **test id, name, feature, release version** and the rest of the fi
 
 ## 6r. External Identity & Integration Credentials — Design
 
+> **This section stands as written and is what M4 builds.** None of it is implemented yet (zero
+> `oidc`, zero `saml` in `backend/src/main`; `company:idp` is seeded with no consumer). §8 **#61**
+> records an *unpursued possibility* — that a second application might one day share this — and is
+> filed for reference only: **it changes nothing here, decides nothing, and is not a precondition
+> for building any of the below.** Worth a glance before M4 only because that is when it would be
+> cheapest to consider, if it were ever live. It is not.
+
 ### Three concerns, deliberately not conflated
 
 The requested list — Cognito, Microsoft, Google, Jira — spans **three different problems** that share the word "OAuth" and nothing else. Treating them as one system is the most consequential mistake available here, so they are separated first:
@@ -2257,6 +2264,62 @@ everything this round ships.**
 
 **#54, #55 and #58 are not in the order** because they are deferred, and each names what it waits
 on: M6, the Helm chart, and after-M4 respectively.
+
+### Possible future improvement — 2026-08-09
+
+**Not a decision, and not on any roadmap.** This entry is a *possibility that was evaluated*, filed
+so the evaluation is not re-derived from scratch later. It is written up because the question was
+asked, not because anything has been chosen. Every current plan, estimate and milestone in this
+document assumes M4 is built **in-process, as designed in §6r** — none of them is amended by this
+entry, and §7's M4 row stands unchanged.
+
+| # | Question | Status |
+|---|---|---|
+| 61 | **If a second application ever shares TCMS's identity and permission model, does M4's external-identity and credential half stay in-process or become a shared service?** | **OPEN — a possibility, not a plan. Nothing is committed, nothing is scheduled, and no other entry depends on this one.** Full evaluation: `docs/plans/2026-08-09-extracting-auth-as-a-service.md`. Prompted by a *prospective* second application ("Mission Control") that might want the same SSO, the same Jira/GitHub/GitLab credentials, and the same shape of roles and permissions. **If it is ever pursued**, the evaluation's conclusion is a three-way split rather than an extraction: authorization stays in-process as a shared library, authentication brokers to Keycloak per **#37**, and only the outbound credential vault is a clean cross-application component. The one finding that holds **regardless of whether this is pursued**: the permission evaluator is not extractable at a sane price (see below). |
+
+**Why this is filed rather than scheduled.** Nothing is blocked on it, nothing changes today, and the
+second application may never exist. What makes it worth writing down at all is that the cost is not
+flat over time: **M4 would build ~80% of what a shared auth service provides** — generic OIDC +
+LDAP/AD, account linking, claim→role mapping, and four `IssueTracker` adapters with encrypted
+OAuth/PAT credentials — and §6r is currently a design with **no implementation anywhere** (zero
+`oidc`, zero `saml` in `backend/src/main`; `company:idp` seeded in `V3` with no consumer).
+
+So *if* the second application becomes real, this is cheapest to consider before M4 is built and
+more expensive after — the shape #43 and #37 both named. **That is a note about sequencing if the
+question ever becomes live, not a deadline, and not a reason to bring M4 forward.** The honest
+default is that M4 is built in-process as designed and this entry is closed as "not pursued".
+
+**Four things the evaluation found that this table row cannot carry:**
+
+- **The evaluator is not extractable at any sane price, and the reason is structural rather than
+  effort.** `PermissionEvaluator.evaluate` reads TCMS's own `project` table for the
+  foreign-project check, runs inside the RLS transaction that `CompanyContext` establishes, and
+  would **force the cache its own header defers on the grounds that a wrongly-keyed one is a
+  cross-company leak**. `RlsIsolationTest`, `PrivilegeSplitTest` and `RepositoryTransactionTest`
+  assert properties of co-location and do not survive the move.
+- **The reusable part is ~425 LOC of pure logic** — `PermissionQualifier` and `PermissionSet` have
+  zero Spring and zero JPA imports. **A second application can have those for the cost of a jar**,
+  with no service anywhere, which is most of the reuse value at a fraction of the cost.
+- **The 55-key catalogue is TCMS vocabulary and does not travel.** What travels is the *shape*
+  (scopes, qualifiers, strongest-wins merge, the token intersection). A shared service serving two
+  applications needs runtime-configurable catalogues and role sets — which forfeits **#10**'s
+  six-immutable-roles simplification and everything derived from it, including
+  `SeedDataTest.agentIsTestEngineerMinusThree` and the frontend's `satisfies Record<Union, string>`
+  compile-time exhaustiveness.
+- **`app_user` is the real obstacle, not the evaluator.** 87 files outside `identity/` import from
+  it, and they are overwhelmingly the *data* — authorship, assignees, reviewers, comment authors,
+  audit rows — not the permission API. `PermissionEvaluator` itself is imported by **exactly one**
+  file, because `ProjectAccess`'s inversion already narrowed the decision seam. **The decision
+  boundary is clean; the data boundary is not**, and that is what usually kills extractions of this
+  kind.
+
+**If it ever becomes live, the first sub-question is a product question rather than a technical
+one:** is a **company** shared across applications, or per-application? Shared makes `company_id` a
+cross-application identifier and takes company lifecycle away from `provision-company` — a large,
+invasive change to the most load-bearing invariant in the schema, and one that `user_identity`'s
+`(company_id, issuer, subject)` key would have to absorb. Per-application means the shared database
+shares only the user directory, which is a shared hostname and not a shared service. **Recorded so
+that whoever picks this up knows it is the first question, not so that anyone answers it now.**
 
 ---
 
