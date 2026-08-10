@@ -14,16 +14,29 @@
 >    stood as fact for two days in the document later slices cite. The redo is to check whether
 >    §154 got anything *else* wrong that no later slice happened to trip over: two of its factual
 >    claims failed on the first look, which is not a rate that justifies trusting the rest.
-> 2. **Its mutation rows `RL-1`…`RL-7` collide with §141's `RL-1`…`RL-8`** in one file. Ids are
+> 2. ~~**Its mutation rows `RL-1`…`RL-7` collide with §141's `RL-1`…`RL-8`** in one file. Ids are
 >    quoted from handoff sections, so the collision makes an id ambiguous and the ✅/⬜ marks
->    unresolvable by reading. §154 is one of three collisions — see the note in
->    `docs/verification/backend-mutation-checks.md`.
+>    unresolvable by reading. §154 is one of three collisions.~~ → **RESOLVED 2026-08-11 by
+>    qualification, at the user's direction.** All three colliding ranges — `AG-*` (§124 vs §133),
+>    `CD-*` (§128 vs §158), `RL-*` (§141 vs §154) — now carry their section in the `id` column of
+>    all six tables, and **no id was renumbered**: an id a section has quoted keeps its meaning, and
+>    renaming the later owner would have made a lane wrong for arriving second. **The form is
+>    `§154 RL-4`, never bare `RL-4`.** The rule, the range table and the reason are in the banner at
+>    the head of §154's block in `docs/verification/backend-mutation-checks.md`; each of the six
+>    blocks now says so at its own head too. **The bare ids in the prose below are deliberately not
+>    back-patched** — they resolve through the banner. When minting a new prefix, grep the file
+>    first: all three collisions came from two lanes independently choosing the obvious initials.
 > 3. **Four of its seven rows have never been run** (`RL-3`…`RL-6`). That is §65-compliant, but
 >    `RL-4` is the row that reproduces the finding the slice is *named for* — five members
 >    vanishing when the file is not excluded from its own corpus — so the slice's headline result
 >    is the one property of its rule nothing has verified.
 >
-> **The redo of item 1 RAN on 2026-08-11 and is done. Items 2 and 3 are still open.** All twelve
+> **Items 1 and 2 are DONE (2026-08-11). Item 3 is deliberately still open** — `RL-3`…`RL-6` stay
+> deferred under §65 rather than being run because this redo happened to be standing next to them;
+> §72–§76 ran "just the high-signal one" inline and that is what made the exception look like the
+> rule. They are run when the queue is run.
+>
+> **The redo of item 1 RAN on 2026-08-11 and is done.** All twelve
 > surviving `READERLESS_BY_DECISION` members were re-derived against the tree at `e3f0b45`, one at a
 > time, and the rule was re-run green (`ArchitectureRulesTest`, every rule PASSED). Eleven hold
 > exactly as written — `AppUser.locale`/`timezone` are still the two constants set in `invite`,

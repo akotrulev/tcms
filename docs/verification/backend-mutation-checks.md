@@ -759,6 +759,8 @@ endpoint test and no persona matrix — the only caller is a shell on the box.
 
 ## §124 — the BEST removal and the two unwired gates (M3 slice 8)
 
+> **`AG-*` IS A COLLIDING PREFIX — quote these as `§124 AG-n`, never bare.** The other owner is §133 — the `Agent` role; see the ID COLLISION banner above for the rule (qualify, never renumber — decided 2026-08-11).
+
 Three phases, three files' worth of assertions: `PlanStatisticsEndpointTest` (the policy set),
 `ExecutionEndpointTest.Deletion`'s sibling nested class for `run:execute`, and
 `ArtifactEndpointTest.Deletion` (10 tests, the `af…` namespace, `af009000-…` for the seeded
@@ -770,10 +772,10 @@ sibling-project row).
 
 | # | Mutation | Expected | Result |
 |---|---|---|---|
-| AG-1 | `AggregationPolicy.BEST` is restored to **one** of the two enums (either one) | `AggregateExecutionPolicyTest` pins the two name sets equal, so the copies cannot drift. This is the check that made the removal landable at all, and it matters more for a deletion than an addition: a missing value fails closed and loudly, while a copy that still *accepts* a retired policy answers a number the plan page can no longer produce. | ⬜ NOT RUN |
-| AG-2 | `PlanController` falls back to `DEFAULT` for an unparseable policy instead of 400ing | A bookmark, a saved URL or a screenshot's query string carrying `BEST` answers a **different question under the same name**, silently and in the flattering direction — which is the exact harm the removal exists to prevent, reintroduced by the error path. Should redden `bestIsRefused` and `anUnknownPolicyIsRefused`. | ⬜ NOT RUN |
-| AG-3 | `WORST_FIRST`'s severity order is reversed, restoring `BEST`'s behaviour under `WORST`'s name | The dropdown says "worst result per case" and computes the best. **Worse than shipping `BEST`**, which at least said what it did. Should redden `worst`, `noPolicyClearsTheBlockerList` and `thePoliciesActuallyDiffer`. | ⬜ NOT RUN |
-| AG-4 | `criteriaFollowTheDisplayedCounts`' tolerance is tightened back to `within(0.01)` | *(Not a mutation — the finding.)* `actual` is rounded to one decimal for display, so three of thirteen is served as `23.1` against an unrounded `23.0769…`. **This was the phase's only red run**, and the honest fix was the tolerance and not the endpoint: a test asserting the unrounded value asserts against a number no screen shows. | ✅ **FOUND AND FIXED** — `within(0.05)`, with the rounding named in a comment |
+| §124 AG-1 | `AggregationPolicy.BEST` is restored to **one** of the two enums (either one) | `AggregateExecutionPolicyTest` pins the two name sets equal, so the copies cannot drift. This is the check that made the removal landable at all, and it matters more for a deletion than an addition: a missing value fails closed and loudly, while a copy that still *accepts* a retired policy answers a number the plan page can no longer produce. | ⬜ NOT RUN |
+| §124 AG-2 | `PlanController` falls back to `DEFAULT` for an unparseable policy instead of 400ing | A bookmark, a saved URL or a screenshot's query string carrying `BEST` answers a **different question under the same name**, silently and in the flattering direction — which is the exact harm the removal exists to prevent, reintroduced by the error path. Should redden `bestIsRefused` and `anUnknownPolicyIsRefused`. | ⬜ NOT RUN |
+| §124 AG-3 | `WORST_FIRST`'s severity order is reversed, restoring `BEST`'s behaviour under `WORST`'s name | The dropdown says "worst result per case" and computes the best. **Worse than shipping `BEST`**, which at least said what it did. Should redden `worst`, `noPolicyClearsTheBlockerList` and `thePoliciesActuallyDiffer`. | ⬜ NOT RUN |
+| §124 AG-4 | `criteriaFollowTheDisplayedCounts`' tolerance is tightened back to `within(0.01)` | *(Not a mutation — the finding.)* `actual` is rounded to one decimal for display, so three of thirteen is served as `23.1` against an unrounded `23.0769…`. **This was the phase's only red run**, and the honest fix was the tolerance and not the endpoint: a test asserting the unrounded value asserts against a number no screen shows. | ✅ **FOUND AND FIXED** — `within(0.05)`, with the rounding named in a comment |
 | RX-1 | `projects.holds(userId, projectId, EXECUTE_RUN)` is deleted from `ExecutionService.record` | **RUN.** A leaked CI token can hand-record verdicts through the endpoint a tester uses — with an `If-Match`, with evidence, indistinguishable in the audit trail from a person. | ✅ **RUN — reddened exactly the three new tests** (`theRobotCannotExecuteByHand`, `theTwoRefusalsGiveOppositeAdvice`, `theRefusalsNameNoKey`) and nothing else |
 | RX-2 | The `run:execute` check moves **in front of** the verdict gate | The draft this slice started from. A Viewer, who holds neither key, is told to post to the ingestion endpoint they may not use either — advice that is confidently wrong, which is worse than a flat refusal. Should redden `theTwoRefusalsGiveOppositeAdvice` and `viewerIsRefused`. | ⬜ NOT RUN |
 | RX-3 | `IngestionService`'s gate is changed from `result:submit` to `run:execute` | The mirror image, and the one that breaks the product rather than opening it: Automation Service is the one role without `run:execute`, so **every CI credential 401s on the endpoint built for it** and ingestion has no caller at all. Should redden most of `IngestionEndpointTest`. | ⬜ NOT RUN |
@@ -944,32 +946,34 @@ searchable with no migration. `SearchVectorTest.tableCellsAreSearchable` is the 
 
 ## §128 — the case draft buffer (M3 #57, decision round 3 step 8)
 
+> **`CD-*` IS A COLLIDING PREFIX — quote these as `§128 CD-n`, never bare.** The other owner is §158 — condition drift; see the ID COLLISION banner above for the rule (qualify, never renumber — decided 2026-08-11).
+
 Added 2026-08-08. `test_case_draft` got its first writer since `V1`, three endpoints, and a clear on
 every successful save. Assertions live in `CaseDraftEndpointTest` (26 tests across four nested
 classes). **No migration** — every column has been there since M0.
 
-> **NONE RUN**, per §65. **`CD-1` is the row worth running first and it is not close.** It is the
+> **NONE RUN**, per §65. **`§128 CD-1` is the row worth running first and it is not close.** It is the
 > only mutation here whose failure is invisible to every *other* test in the class: writing and
 > reading a draft works perfectly with the clear deleted, and what breaks is the next mount.
 
 | # | Mutation | Expected | Result |
 |---|---|---|---|
-| CD-1 | `CaseUpdateService.apply` drops the `drafts.deleteForCase(...)` call | **The mutation of this slice.** V1's own comment has promised this since M0 and nothing enforced it. The editor's next mount offers to restore content the user already saved — "your save did not land", about a save that did. Should redden `Promotion.savingTheCaseClearsTheBuffer` **and nothing else**, which is the point: every other test in the class passes. | ⬜ NOT RUN |
-| CD-2 | The `deleteForCase` call is moved to the **top** of `apply`, before validation | The clear that destroys the work it was protecting: a save refused for a blank title also throws away the buffered draft the author was about to lose. Should redden `Promotion.aFailedSaveKeepsTheDraft` while `savingTheCaseClearsTheBuffer` stays green — the pair is why the placement is asserted separately. | ⬜ NOT RUN |
-| CD-3 | `CaseDraftService.findOne` uses `readVisible` / `project:read` instead of `writeGranted` / `case:edit` | The gate most likely to be "simplified", on the argument that a draft discloses nothing the case does not. It discloses somebody's unfinished sentence, shown nowhere else in the product, to the one role invited to read coverage rather than watch it being written. Should redden `Gates.aViewerCannotReadTheDraftEither` and leave `theViewerReachesTheCase` green. | ⬜ NOT RUN |
-| CD-4 | `save`/`discard` swap `writeGranted` for `readVisible` | A Viewer can overwrite and destroy other people's unsaved work. Should redden `Gates.aViewerCannotBuffer` and `aViewerCannotDiscard` — and note both assert the row's *state* as well as the status, so a 403 that wrote anyway is caught too. | ⬜ NOT RUN |
-| CD-5 | `buffer` drops the `cases.findLiveInProject` check and trusts the project gate alone | `/projects/{granted}/cases/{ungranted}` buffers against a case the caller was never given, and the `GET` then reads it back. Should redden `Gates.theSecondPathSegmentIsGatedToo`. | ⬜ NOT RUN |
-| CD-6 | The `lockVersion == null` check is replaced with a default of `0` | The field exists precisely because guessing it wrong loses a committed edit: a draft that claims version 0 is stale against every case, or — worse, if the default were the case's current version — is silently *never* stale. Should redden `Writing.theLockVersionIsRequired`. | ⬜ NOT RUN |
-| CD-7 | The `lockVersion` check is moved **below** the `findLiveInProject` lookup | A malformed body answers 404, sending the caller to check a case id that is fine. Should redden `Writing.theBodyIsCheckedBeforeThe404` only — the 400 itself still happens for a reachable case, which is why the ordering has its own test. | ⬜ NOT RUN |
-| CD-8 | `render` computes `stale` as `false` unconditionally | The restore-over-a-colleague's-edit path goes unreported, and it is the one the existing `If-Match` machinery **structurally cannot catch** — the client's precondition comes from a fresh read and is correct. Should redden `Staleness.aDraftWrittenAgainstAnOlderVersionSaysSo` and leave `aCurrentDraftIsNotStale` green. | ⬜ NOT RUN |
-| CD-9 | `render` makes a stale draft return empty `content` instead of the buffered text | The refusal dressed as safety: the product deciding somebody else's edit invalidates your sentence. Should redden the second assertion of `aDraftWrittenAgainstAnOlderVersionSaysSo`, which exists separately from the `stale` flag for exactly this. | ⬜ NOT RUN |
-| CD-10 | `read` returns `Outcome.NotFound` instead of `Outcome.Empty` when no draft exists | Collapses the 204 into the 404 and tells an editor their case is gone every time they open one they had not left work in — which is almost every case, almost always. Should redden `Reading.noDraftIsA204AndNotA404` and leave `theCaseGateStillAnswers404` green; the pair is the whole distinction. | ⬜ NOT RUN |
-| CD-11 | `discard` answers `NotFound` when `deleteForCase` returns 0 | A second click, a retry after a timeout, and a concurrent save that already cleared the row all become errors. Should redden `Promotion.discardingNothingIsNotA404` on its **second** call — the first still finds a row, which is why the test discards twice. | ⬜ NOT RUN |
-| CD-12 | `buffer` validates the content through `CaseEdit.validate` before storing | The tempting "surely we should check it" change, and it breaks the one thing a keystroke buffer may never do: autosave starts failing while somebody is mid-sentence, so the buffer protects nothing during exactly the interval it exists for. Should redden `Writing.aHalfWrittenDraftIsBuffered`. | ⬜ NOT RUN |
-| CD-13 | `MAX_CONTENT_BYTES` is measured in `String.length()` rather than UTF-8 bytes | A different ceiling per language — a case written in Cyrillic or Japanese gets up to four times the storage of one written in English, on a column that stores bytes. Should redden nothing in the current suite, which is the finding: the assertion uses ASCII. **Recorded as a known gap rather than a mutation with an expected red.** | ⬜ NOT RUN |
-| CD-14 | `TestCaseDraft.overwrite` merges the incoming content instead of replacing it | A merge has to decide what an absent field means, and `CaseUpdateRequest`'s header records that absent and null are the same Java value here — so clearing a field would never survive an autosave. Should redden `Writing.theBufferIsReplacedWholesale`. | ⬜ NOT RUN |
-| CD-15 | `TestCaseDraft` is given a `@Version` column and optimistic locking | An autosave that answers 409 is one the user cannot resolve — they never asked for it and there is no dialog. Would not redden anything in this suite, because reaching it needs two interleaved transactions. **Recorded as a decision to defend, not a mutation with an expected red** — the same honesty `CaseUpdateService` applies to its own second concurrency check. | ⬜ NOT RUN |
-| CD-16 | `TestCaseDraftRepository` loses its `@Transactional` (or gains `readOnly = true`) | The first is the repository rule this project has a build-failing test for; the second is subtler — Hibernate skips the flush, so the write silently does nothing while every assertion about the *read* still passes. `RepositoryTransactionTest` catches the first from the live context. Should redden most of `Writing` for the second. | ⬜ NOT RUN |
+| §128 CD-1 | `CaseUpdateService.apply` drops the `drafts.deleteForCase(...)` call | **The mutation of this slice.** V1's own comment has promised this since M0 and nothing enforced it. The editor's next mount offers to restore content the user already saved — "your save did not land", about a save that did. Should redden `Promotion.savingTheCaseClearsTheBuffer` **and nothing else**, which is the point: every other test in the class passes. | ⬜ NOT RUN |
+| §128 CD-2 | The `deleteForCase` call is moved to the **top** of `apply`, before validation | The clear that destroys the work it was protecting: a save refused for a blank title also throws away the buffered draft the author was about to lose. Should redden `Promotion.aFailedSaveKeepsTheDraft` while `savingTheCaseClearsTheBuffer` stays green — the pair is why the placement is asserted separately. | ⬜ NOT RUN |
+| §128 CD-3 | `CaseDraftService.findOne` uses `readVisible` / `project:read` instead of `writeGranted` / `case:edit` | The gate most likely to be "simplified", on the argument that a draft discloses nothing the case does not. It discloses somebody's unfinished sentence, shown nowhere else in the product, to the one role invited to read coverage rather than watch it being written. Should redden `Gates.aViewerCannotReadTheDraftEither` and leave `theViewerReachesTheCase` green. | ⬜ NOT RUN |
+| §128 CD-4 | `save`/`discard` swap `writeGranted` for `readVisible` | A Viewer can overwrite and destroy other people's unsaved work. Should redden `Gates.aViewerCannotBuffer` and `aViewerCannotDiscard` — and note both assert the row's *state* as well as the status, so a 403 that wrote anyway is caught too. | ⬜ NOT RUN |
+| §128 CD-5 | `buffer` drops the `cases.findLiveInProject` check and trusts the project gate alone | `/projects/{granted}/cases/{ungranted}` buffers against a case the caller was never given, and the `GET` then reads it back. Should redden `Gates.theSecondPathSegmentIsGatedToo`. | ⬜ NOT RUN |
+| §128 CD-6 | The `lockVersion == null` check is replaced with a default of `0` | The field exists precisely because guessing it wrong loses a committed edit: a draft that claims version 0 is stale against every case, or — worse, if the default were the case's current version — is silently *never* stale. Should redden `Writing.theLockVersionIsRequired`. | ⬜ NOT RUN |
+| §128 CD-7 | The `lockVersion` check is moved **below** the `findLiveInProject` lookup | A malformed body answers 404, sending the caller to check a case id that is fine. Should redden `Writing.theBodyIsCheckedBeforeThe404` only — the 400 itself still happens for a reachable case, which is why the ordering has its own test. | ⬜ NOT RUN |
+| §128 CD-8 | `render` computes `stale` as `false` unconditionally | The restore-over-a-colleague's-edit path goes unreported, and it is the one the existing `If-Match` machinery **structurally cannot catch** — the client's precondition comes from a fresh read and is correct. Should redden `Staleness.aDraftWrittenAgainstAnOlderVersionSaysSo` and leave `aCurrentDraftIsNotStale` green. | ⬜ NOT RUN |
+| §128 CD-9 | `render` makes a stale draft return empty `content` instead of the buffered text | The refusal dressed as safety: the product deciding somebody else's edit invalidates your sentence. Should redden the second assertion of `aDraftWrittenAgainstAnOlderVersionSaysSo`, which exists separately from the `stale` flag for exactly this. | ⬜ NOT RUN |
+| §128 CD-10 | `read` returns `Outcome.NotFound` instead of `Outcome.Empty` when no draft exists | Collapses the 204 into the 404 and tells an editor their case is gone every time they open one they had not left work in — which is almost every case, almost always. Should redden `Reading.noDraftIsA204AndNotA404` and leave `theCaseGateStillAnswers404` green; the pair is the whole distinction. | ⬜ NOT RUN |
+| §128 CD-11 | `discard` answers `NotFound` when `deleteForCase` returns 0 | A second click, a retry after a timeout, and a concurrent save that already cleared the row all become errors. Should redden `Promotion.discardingNothingIsNotA404` on its **second** call — the first still finds a row, which is why the test discards twice. | ⬜ NOT RUN |
+| §128 CD-12 | `buffer` validates the content through `CaseEdit.validate` before storing | The tempting "surely we should check it" change, and it breaks the one thing a keystroke buffer may never do: autosave starts failing while somebody is mid-sentence, so the buffer protects nothing during exactly the interval it exists for. Should redden `Writing.aHalfWrittenDraftIsBuffered`. | ⬜ NOT RUN |
+| §128 CD-13 | `MAX_CONTENT_BYTES` is measured in `String.length()` rather than UTF-8 bytes | A different ceiling per language — a case written in Cyrillic or Japanese gets up to four times the storage of one written in English, on a column that stores bytes. Should redden nothing in the current suite, which is the finding: the assertion uses ASCII. **Recorded as a known gap rather than a mutation with an expected red.** | ⬜ NOT RUN |
+| §128 CD-14 | `TestCaseDraft.overwrite` merges the incoming content instead of replacing it | A merge has to decide what an absent field means, and `CaseUpdateRequest`'s header records that absent and null are the same Java value here — so clearing a field would never survive an autosave. Should redden `Writing.theBufferIsReplacedWholesale`. | ⬜ NOT RUN |
+| §128 CD-15 | `TestCaseDraft` is given a `@Version` column and optimistic locking | An autosave that answers 409 is one the user cannot resolve — they never asked for it and there is no dialog. Would not redden anything in this suite, because reaching it needs two interleaved transactions. **Recorded as a decision to defend, not a mutation with an expected red** — the same honesty `CaseUpdateService` applies to its own second concurrency check. | ⬜ NOT RUN |
+| §128 CD-16 | `TestCaseDraftRepository` loses its `@Transactional` (or gains `readOnly = true`) | The first is the repository rule this project has a build-failing test for; the second is subtler — Hibernate skips the flush, so the write silently does nothing while every assertion about the *read* still passes. `RepositoryTransactionTest` catches the first from the live context. Should redden most of `Writing` for the second. | ⬜ NOT RUN |
 
 **Not a mutation, recorded as an observation:** `findScopedById` is a `@Query` and deliberately not
 `findById`. A primary-key lookup resolves through the persistence context and Hibernate filters do
@@ -1158,26 +1162,28 @@ on the policed row — and only when the recorded value is stale by more than
 
 ### §133 — the `Agent` role, `role.assignable` and the agent-token expiry (`AG-1` … `AG-9`)
 
+> **`AG-*` IS A COLLIDING PREFIX — quote these as `§133 AG-n`, never bare.** The other owner is §124 — the `BEST` removal; see the ID COLLISION banner above for the rule (qualify, never renumber — decided 2026-08-11).
+
 `V40` seeds an eighth `role` row and a flag that replaces two of five hardcoded
 `COMPANY_MEMBER_ID` comparisons. **The failure mode this whole slice guards is a tidy-up**: three
 of the five sites must stay baseline-specific, and every one of them looks like it wants the flag.
 Assertions live in `SeedDataTest` (3 new), `RoleGrantEndpointTest` (1 new), `ApiTokenEndpointTest`
 (2 new) and three frontend tests.
 
-> **NONE RUN.** **`AG-1` first** — it is the one whose failure makes the role unobtainable through
+> **NONE RUN.** **`§133 AG-1` first** — it is the one whose failure makes the role unobtainable through
 > the product while every other screen keeps working.
 
 | # | Mutation | Expected | Result |
 |---|---|---|---|
-| AG-1 | `ApiTokenService.validate`'s `COMPANY_MEMBER_ID` check becomes `!role.isAssignable()` | The one-line "cleanup" the code comments refuse in three places. An `Agent` token becomes unissuable — the single thing the role exists for — and nothing else changes: every other role still issues, every grant still refuses. Should redden `theAgentCeilingIsIssuable`. | ⬜ NOT RUN |
-| AG-2 | `AdminDirectoryService.roleCatalogue`'s filter becomes `WHERE assignable` | Same outcome by the other route: `Agent` vanishes from `GET /roles`, so the token form cannot offer it. Should redden `theRoleCatalogueIsWholeAndHasNoWildcard` and the SPA's `offers Agent, which every grant picker hides`. | ⬜ NOT RUN |
-| AG-3 | `RoleGrantService.grant` goes back to comparing `COMPANY_MEMBER_ID` | The state before the flag: an administrator can grant `Agent` to a person, conferring a capability set no evaluation path reads. Should redden `theAgentCeilingIsNotGrantableEvenThoughItIsListed`. | ⬜ NOT RUN |
-| AG-4 | `RoleGrantService.revoke`'s `orElse(false)` becomes `orElse(true)` | The fail-open arm of the same check. Unreachable today (`role_id` is a foreign key), so it reddens nothing — recorded because "an unknown role is revocable" is the arm that only has to be wrong once, and a future soft-deleted role row is what would reach it. **Known gap.** | ⬜ NOT RUN |
-| AG-5 | `V40` grants `Agent` `library:manage` | The permission roles spec §A3 gates by an *impact modal*, handed to a caller that never sees one: editing a shared condition propagates to every referencing case with no confirmation anywhere. Should redden `agentIsTestEngineerMinusThree`. | ⬜ NOT RUN |
-| AG-6 | `V40` grants `Agent` `case:delete` (`OWN`, copying Test Engineer) | `OWN` resolves against `created_by` while the token's owner is `api_token.owner_id`, so the agent deletes cases **the human authored** — the reason the key is withheld rather than qualified. Should redden `agentIsTestEngineerMinusThree`. | ⬜ NOT RUN |
-| AG-7 | `V40` spells `Agent`'s `artifact:edit` qualifier as `ALL` | An agent rewrites the project-scope strategy document every plan inherits read-only (§6n). Should redden `testEngineerHoldsArtifactEditOnlyAtPlanScope`; a *different* misspelling (a new qualifier value) should instead redden `noPermissionCarriesTwoDifferentRestrictiveQualifiers`. Run both variants. | ⬜ NOT RUN |
-| AG-8 | `ApiTokenService.validate` drops the `Agent` expiry rule | Every agent token issued from `curl` is open-ended, and the form's pre-fill is the only thing standing — which is exactly the boundary §2.5 says a client cannot hold. Should redden `anAgentTokenMustExpire`. | ⬜ NOT RUN |
-| AG-9 | The intersection is asserted end-to-end: issue an `Agent` token owned by a **Viewer**, then `POST` a case with it | **Not a mutation — a missing test.** The whole design rests on `evaluate(ownerId) ∩ permissionsOf(Agent)`, and nothing drives it for an `Agent` token; §132 already recorded that `IngestionEndpointTest.Attribution` is the only place in the suite a write is authenticated by a real `api_token` at all. Expect a 403. **Known gap, and the highest-value row here.** | ⬜ NOT RUN |
+| §133 AG-1 | `ApiTokenService.validate`'s `COMPANY_MEMBER_ID` check becomes `!role.isAssignable()` | The one-line "cleanup" the code comments refuse in three places. An `Agent` token becomes unissuable — the single thing the role exists for — and nothing else changes: every other role still issues, every grant still refuses. Should redden `theAgentCeilingIsIssuable`. | ⬜ NOT RUN |
+| §133 AG-2 | `AdminDirectoryService.roleCatalogue`'s filter becomes `WHERE assignable` | Same outcome by the other route: `Agent` vanishes from `GET /roles`, so the token form cannot offer it. Should redden `theRoleCatalogueIsWholeAndHasNoWildcard` and the SPA's `offers Agent, which every grant picker hides`. | ⬜ NOT RUN |
+| §133 AG-3 | `RoleGrantService.grant` goes back to comparing `COMPANY_MEMBER_ID` | The state before the flag: an administrator can grant `Agent` to a person, conferring a capability set no evaluation path reads. Should redden `theAgentCeilingIsNotGrantableEvenThoughItIsListed`. | ⬜ NOT RUN |
+| §133 AG-4 | `RoleGrantService.revoke`'s `orElse(false)` becomes `orElse(true)` | The fail-open arm of the same check. Unreachable today (`role_id` is a foreign key), so it reddens nothing — recorded because "an unknown role is revocable" is the arm that only has to be wrong once, and a future soft-deleted role row is what would reach it. **Known gap.** | ⬜ NOT RUN |
+| §133 AG-5 | `V40` grants `Agent` `library:manage` | The permission roles spec §A3 gates by an *impact modal*, handed to a caller that never sees one: editing a shared condition propagates to every referencing case with no confirmation anywhere. Should redden `agentIsTestEngineerMinusThree`. | ⬜ NOT RUN |
+| §133 AG-6 | `V40` grants `Agent` `case:delete` (`OWN`, copying Test Engineer) | `OWN` resolves against `created_by` while the token's owner is `api_token.owner_id`, so the agent deletes cases **the human authored** — the reason the key is withheld rather than qualified. Should redden `agentIsTestEngineerMinusThree`. | ⬜ NOT RUN |
+| §133 AG-7 | `V40` spells `Agent`'s `artifact:edit` qualifier as `ALL` | An agent rewrites the project-scope strategy document every plan inherits read-only (§6n). Should redden `testEngineerHoldsArtifactEditOnlyAtPlanScope`; a *different* misspelling (a new qualifier value) should instead redden `noPermissionCarriesTwoDifferentRestrictiveQualifiers`. Run both variants. | ⬜ NOT RUN |
+| §133 AG-8 | `ApiTokenService.validate` drops the `Agent` expiry rule | Every agent token issued from `curl` is open-ended, and the form's pre-fill is the only thing standing — which is exactly the boundary §2.5 says a client cannot hold. Should redden `anAgentTokenMustExpire`. | ⬜ NOT RUN |
+| §133 AG-9 | The intersection is asserted end-to-end: issue an `Agent` token owned by a **Viewer**, then `POST` a case with it | **Not a mutation — a missing test.** The whole design rests on `evaluate(ownerId) ∩ permissionsOf(Agent)`, and nothing drives it for an `Agent` token; §132 already recorded that `IngestionEndpointTest.Attribution` is the only place in the suite a write is authenticated by a real `api_token` at all. Expect a 403. **Known gap, and the highest-value row here.** | ⬜ NOT RUN |
 
 ### §134 — Automation Service becomes non-assignable, and revoke leaves the flag (`AS-1` … `AS-5`)
 
@@ -1194,7 +1200,7 @@ SPA's `IssueTokenDialog.test.tsx`.
 | AS-1 | `V41`'s `UPDATE` is reverted (`assignable` stays true for `…0005`) | The state before this slice: `POST /role-assignments` accepts a CI capability set for a person, and every grant picker offers it. Should redden `automationServiceIsNotGrantableToAPerson` and `nonAssignableRolesAreExactlyTheThree`. | ⬜ NOT RUN |
 | AS-2 | `RoleGrantService.revoke` goes back to `Role::isAssignable` | **The row this slice exists for.** Every person-held `Automation Service` grant made before `V41` becomes permanently unrevokable while `GET /role-assignments` keeps listing it — a Revoke button that 403s forever, with no message naming a role. Should redden `anAutomationServiceGrantMadeBeforeTheRuleIsStillRevocable`. | ⬜ NOT RUN |
 | AS-3 | `AdminDirectoryService.listRoleAssignments` filters non-assignable roles' grants | The other half of the same defect, arrived at from the "tidy it up" direction: the stranded grant becomes invisible instead of unrevokable, so nobody can even see what to clean up, and the permissions keep resolving. Should redden `anAutomationServiceGrantIsStillListed`. | ⬜ NOT RUN |
-| AS-4 | `AdminDirectoryService.roleCatalogue` becomes `WHERE assignable` | `AG-2` with a second victim: `Automation Service` leaves `GET /roles` as well as `Agent`, so **no CI credential can be issued through the product**. Should redden `theRoleCatalogueIsWholeAndHasNoWildcard` and the SPA's `offers BOTH roles every grant picker hides`. | ⬜ NOT RUN |
+| AS-4 | `AdminDirectoryService.roleCatalogue` becomes `WHERE assignable` | `§133 AG-2` with a second victim: `Automation Service` leaves `GET /roles` as well as `Agent`, so **no CI credential can be issued through the product**. Should redden `theRoleCatalogueIsWholeAndHasNoWildcard` and the SPA's `offers BOTH roles every grant picker hides`. | ⬜ NOT RUN |
 | AS-5 | `V41` also `DELETE`s existing person-held `Automation Service` grants | The option refused on 2026-08-08: a migration removing access on a live instance, with no actor and therefore no audit row `RoleGrantService` would have written. Reddens nothing — the fixtures create their grants after migration — which is the finding. **Known gap: the suite cannot observe a migration that deletes production data.** | ⬜ NOT RUN |
 
 ### §136 — `Idempotency-Key` on suite and doc-page creates (`IK-1` … `IK-7`)
@@ -1342,31 +1348,33 @@ named in the handoff as its own outstanding item.
 
 ### §141 — rate limiting (`RL-1` … `RL-8`)
 
-**A mixed batch, and the first one that is.** `RL-1`…`RL-6` are backend rows and run the ordinary
-way (`cd backend && ./gradlew test --tests '<scope>'`); `RL-7`…`RL-8` mutate `packages/` and run as
+> **`RL-*` IS A COLLIDING PREFIX — quote these as `§141 RL-n`, never bare.** The other owner is §154 — the readerless rule; see the ID COLLISION banner above for the rule (qualify, never renumber — decided 2026-08-11).
+
+**A mixed batch, and the first one that is.** `§141 RL-1`…`RL-6` are backend rows and run the ordinary
+way (`cd backend && ./gradlew test --tests '<scope>'`); `§141 RL-7`…`RL-8` mutate `packages/` and run as
 `cd packages && npm run test:run --workspaces`, on `TS-*`'s terms. Assertions live in
 `backend/src/test/java/com/tcms/auth/TokenRateLimiterTest.java` (13 across four groups),
 `RateLimitTest.java` (4), `ArchitectureRulesTest.java` (the new clock rule) and
 `packages/client/src/core/core.test.ts`'s `refusal copy` (2 new).
 
-> **NONE RUN.** **`RL-1` first** — it is the row that pins the slice's finding, and its failure mode
+> **NONE RUN.** **`§141 RL-1` first** — it is the row that pins the slice's finding, and its failure mode
 > is a refused caller that obeys the header exactly and is refused again, which is the loop the whole
-> slice exists to interrupt. **`RL-3` second**, because its failure is a limit that silently does
+> slice exists to interrupt. **`§141 RL-3` second**, because its failure is a limit that silently does
 > not apply.
 
 | # | Mutation | Expected | Result |
 |---|---|---|---|
-| RL-1 | `TokenRateLimiter.Bucket` goes back to a fractional `available` accumulator (`available += elapsed × rate`, clamped at `capacity`) | The floating-point defect this slice found by writing the test first: ten increments of `0.1` sum to `0.9999999999999999`, so a caller that waited exactly one second is refused again. Should redden `fractions of a permit accumulate rather than being lost per request`. **The row that pins why the state is a timestamp and not a count** — and note that a *counting* implementation is what almost everybody writes. | ⬜ NOT RUN |
-| RL-2 | `Decision.refusedFor` drops the floor and returns `Duration.ofSeconds(wait.toSeconds())` (truncating instead of rounding up) | Two failures in one line: a sub-second wait becomes `Retry-After: 0`, which is an instruction to retry immediately, and a 1.5 s wait becomes 1 s, so a compliant client is refused again through no fault of its own. Should redden `the wait is rounded UP, so a client that obeys it is not refused again` and `and is never zero, whatever the arithmetic says`. | ⬜ NOT RUN |
-| RL-3 | `RateLimitFilter` keys on the authenticated JWT subject (`jwt.getSubject()`) instead of `TokenContext.currentOrNull()` | Two changes at once, and both are wrong quietly: a person in the SPA starts being counted (a 429 the SPA has no copy for and no test anywhere expects), and every token issued by one owner shares one bucket, so a person's second CI job is refused by their first. Should redden `a session is never counted, however fast the person clicks` and `a second token is untouched — the bucket is per credential, not per company`. | ⬜ NOT RUN |
-| RL-4 | `SecurityConfiguration` moves `rateLimitFilter` to `.addFilterAfter(…, CompanyContextFilter.class)` | The refusal now happens *after* the company is open, so every refused request has established tenancy context for a request that will not be served. Reddens **nothing** — the 429 still has the right status, header and body. **Known gap, and the honest answer is that this ordering is an efficiency and a hygiene property rather than a behavioural one**; what would make it observable is an assertion about `CompanyContext` during a refusal, which is a test about a `ThreadLocal` from outside a filter. Recorded rather than faked. | ⬜ NOT RUN |
-| RL-5 | `RateLimitProperties`' compact constructor drops the `burst > requestsPerMinute` check | The configuration that reads as generous and is not: the bucket empties in one batch that takes longer than a minute to earn back, so the first caller of the minute meets a different API from the second. Should redden `a burst larger than one minute of refill is refused at bind time`. | ⬜ NOT RUN |
-| RL-6 | `TokenRateLimiter.nowMillis()` goes back to `clock.millis()` | **The slice's second finding, restored.** `TcmsApplication.clock()` is `Clock.tick(…, ofNanos(1000))` and `TickClock.millis()` divides by `tickNanos / 1_000_000` — zero — so this is an `ArithmeticException` on the request path, not an imprecise reading. Should redden all four of `RateLimitTest` **and** `nothing calls Clock.millis() — on this application's clock bean it throws`. **The ArchUnit rule is what makes the next caller find it at build time instead of in production.** | ⬜ NOT RUN |
-| RL-7 | `packages/client`'s `describeRefusal` loses its `429` branch, falling back to `default:` | The client half of the finding: the model receives `Could not …: <server prose>` with no structural signal, and an unexplained failure is the one it retries — the loop, produced by the client one refusal later. Should redden `turns a 429 into a wait, taken from Retry-After rather than from the prose` and `does not invent a wait the server did not state`. | ⬜ NOT RUN |
-| RL-8 | The `429` branch's fallback becomes `Wait 60 seconds` when `retryAfterMs` is null | An invented number is worse than none precisely because it *will* be obeyed — a caller sleeps a minute the server never asked for, or (with a smaller literal) hammers a limit it was told nothing about. Should redden `does not invent a wait the server did not state`. | ⬜ NOT RUN |
+| §141 RL-1 | `TokenRateLimiter.Bucket` goes back to a fractional `available` accumulator (`available += elapsed × rate`, clamped at `capacity`) | The floating-point defect this slice found by writing the test first: ten increments of `0.1` sum to `0.9999999999999999`, so a caller that waited exactly one second is refused again. Should redden `fractions of a permit accumulate rather than being lost per request`. **The row that pins why the state is a timestamp and not a count** — and note that a *counting* implementation is what almost everybody writes. | ⬜ NOT RUN |
+| §141 RL-2 | `Decision.refusedFor` drops the floor and returns `Duration.ofSeconds(wait.toSeconds())` (truncating instead of rounding up) | Two failures in one line: a sub-second wait becomes `Retry-After: 0`, which is an instruction to retry immediately, and a 1.5 s wait becomes 1 s, so a compliant client is refused again through no fault of its own. Should redden `the wait is rounded UP, so a client that obeys it is not refused again` and `and is never zero, whatever the arithmetic says`. | ⬜ NOT RUN |
+| §141 RL-3 | `RateLimitFilter` keys on the authenticated JWT subject (`jwt.getSubject()`) instead of `TokenContext.currentOrNull()` | Two changes at once, and both are wrong quietly: a person in the SPA starts being counted (a 429 the SPA has no copy for and no test anywhere expects), and every token issued by one owner shares one bucket, so a person's second CI job is refused by their first. Should redden `a session is never counted, however fast the person clicks` and `a second token is untouched — the bucket is per credential, not per company`. | ⬜ NOT RUN |
+| §141 RL-4 | `SecurityConfiguration` moves `rateLimitFilter` to `.addFilterAfter(…, CompanyContextFilter.class)` | The refusal now happens *after* the company is open, so every refused request has established tenancy context for a request that will not be served. Reddens **nothing** — the 429 still has the right status, header and body. **Known gap, and the honest answer is that this ordering is an efficiency and a hygiene property rather than a behavioural one**; what would make it observable is an assertion about `CompanyContext` during a refusal, which is a test about a `ThreadLocal` from outside a filter. Recorded rather than faked. | ⬜ NOT RUN |
+| §141 RL-5 | `RateLimitProperties`' compact constructor drops the `burst > requestsPerMinute` check | The configuration that reads as generous and is not: the bucket empties in one batch that takes longer than a minute to earn back, so the first caller of the minute meets a different API from the second. Should redden `a burst larger than one minute of refill is refused at bind time`. | ⬜ NOT RUN |
+| §141 RL-6 | `TokenRateLimiter.nowMillis()` goes back to `clock.millis()` | **The slice's second finding, restored.** `TcmsApplication.clock()` is `Clock.tick(…, ofNanos(1000))` and `TickClock.millis()` divides by `tickNanos / 1_000_000` — zero — so this is an `ArithmeticException` on the request path, not an imprecise reading. Should redden all four of `RateLimitTest` **and** `nothing calls Clock.millis() — on this application's clock bean it throws`. **The ArchUnit rule is what makes the next caller find it at build time instead of in production.** | ⬜ NOT RUN |
+| §141 RL-7 | `packages/client`'s `describeRefusal` loses its `429` branch, falling back to `default:` | The client half of the finding: the model receives `Could not …: <server prose>` with no structural signal, and an unexplained failure is the one it retries — the loop, produced by the client one refusal later. Should redden `turns a 429 into a wait, taken from Retry-After rather than from the prose` and `does not invent a wait the server did not state`. | ⬜ NOT RUN |
+| §141 RL-8 | The `429` branch's fallback becomes `Wait 60 seconds` when `retryAfterMs` is null | An invented number is worse than none precisely because it *will* be obeyed — a caller sleeps a minute the server never asked for, or (with a smaller literal) hammers a limit it was told nothing about. Should redden `does not invent a wait the server did not state`. | ⬜ NOT RUN |
 
-**Still three packages wide, and now four surfaces.** `RL-7`/`RL-8` join `MS-*`, `CW-*` and `TS-*`
-in being observed only by a stubbed `fetch` — and `RL-1`…`RL-6` are the first rows in this queue
+**Still three packages wide, and now four surfaces.** `§141 RL-7`/`RL-8` join `MS-*`, `CW-*` and `TS-*`
+in being observed only by a stubbed `fetch` — and `§141 RL-1`…`RL-6` are the first rows in this queue
 whose behaviour a live pass would exercise *by accident*, since any looping client meets them. The
 same one setup closes all of it.
 
@@ -1597,10 +1605,23 @@ cd backend
 
 ---
 
-> ### ⚠ ID COLLISION — THIS FILE REUSES THREE PREFIXES, AND `RL-*` IS ONE OF THEM
+> ### ⚠ ID COLLISION — THREE PREFIXES ARE MINTED TWICE. **RESOLVED BY QUALIFICATION, 2026-08-11.**
+>
+> **THE RULE: AN ID IN A COLLIDING RANGE IS WRITTEN `§NNN XX-n` AND NEVER BARE.** Decided
+> 2026-08-11 at the user's direction, closing §161's item 2 of the §154 redo. **No id was
+> renumbered** — the working agreement says an id a handoff section has quoted is never renumbered,
+> and both owners of every range below have quoted theirs. The `id` column of all six affected
+> tables now carries its section, so a mark resolves by reading. **This is the form to use when
+> quoting one from anywhere in the repo**, and the qualifier is *only* required for the three
+> ranges below; every other prefix in this file is minted once and stays bare.
+>
+> **A new block must not take a prefix this file already uses.** Grep before minting one. The
+> collision was free to happen because two lanes each picked the obvious initials for their slice —
+> `AG` for *aggregation* and again for *agent*, `CD` for *case draft* and again for *condition
+> drift* — which is the fixture-UUID-prefix failure (§19 … §62) in another namespace.
 >
 > Recorded 2026-08-10 (§161). **Three id ranges are minted twice in this file**, so an id quoted
-> from a handoff section does not resolve to one row:
+> from a handoff section did not resolve to one row:
 >
 > | id range | first owner | second owner |
 > |---|---|---|
@@ -1613,19 +1634,35 @@ cd backend
 > checking whether a row ran has two candidates and no way to choose from the text. §156's own
 > block below says *"`RL-1`…`RL-6` above"*, and there are two blocks above it.
 >
-> **Not renumbered here on purpose.** The working agreement says an id is never renumbered once a
-> handoff section has quoted it, and both owners of each range have. Resolving this means deciding
-> between qualifying every reference (`§154 RL-3`) and renaming one side and back-patching the
-> sections that quote it — a decision, not a cleanup, and it belongs to the §154 redo.
+> ~~**Not renumbered here on purpose.** … a decision, not a cleanup, and it belongs to the §154
+> redo.~~ → **DECIDED 2026-08-11: qualify, do not renumber.** The alternative was renaming one side
+> of each range and back-patching every section that quotes it; qualification was chosen because it
+> changes no id's meaning, touches no handoff text that has already been read, and leaves each
+> range's two owners equal rather than making the later one wrong for arriving second. The six
+> tables carry the qualifier; the sections that quote bare ids are **not** back-patched, and this
+> banner is what makes them resolvable.
 
 ## §154 — the columns nothing reads
+
+> **`RL-*` IS A COLLIDING PREFIX — quote these as `§154 RL-n`, never bare.** The other owner is §141 — rate limiting; see the ID COLLISION banner above for the rule (qualify, never renumber — decided 2026-08-11).
 
 `ArchitectureRulesTest.everyMappedColumnHasAReader` asks the third question in §152's and §153's
 family, at the column: *which mapped column does nothing read back*. It is the only rule in that
 file that reads **source text** rather than bytecode, because a column's reader is usually a query
 and a query is a string — over bytecode alone the population is 212 of 635 fields, which was
-measured before the rule was written. It pins an exact population (`READERLESS_BY_DECISION`,
-thirteen members) like §153's, so it fails in **both** directions.
+measured before the rule was written. It pins an exact population (`READERLESS_BY_DECISION`) like
+§153's, so it fails in **both** directions.
+
+> **THE POPULATION IS TWELVE, NOT THE THIRTEEN §154 SHIPPED** (checked 2026-08-11).
+> `IngestionJob.rawStorageKey` left the map when §156 found it writerless as well and §160 built it
+> a store — so **`§154 RL-1` no longer works as written**: deleting *that* entry deletes nothing.
+> Use any surviving member; `AppUser.locale` is the closest equivalent. The row is left as it was
+> because it has already RUN and a run row is a record, not an instruction.
+>
+> **`§154 RL-4` is the row to run first** and it is not close: it is the only property of this rule
+> that nothing has verified, and it is the finding the slice is named for. Not run inline on
+> 2026-08-11 when this block was last edited — that is §65, and §72–§76 are what taking the
+> exception looks like.
 
 ```bash
 cd backend
@@ -1634,13 +1671,13 @@ cd backend
 
 | # | Mutation | Expected | Result |
 |---|---|---|---|
-| RL-1 | Delete one entry from `READERLESS_BY_DECISION` — e.g. `IngestionJob.rawStorageKey` — leaving the column as it is | The rule fails naming it as an **unexpected** member. The column is still readerless; only the argument for keeping it went away. | ✅ **RUN 2026-08-09** — red naming `IngestionJob.rawStorageKey`, nothing else moved |
-| RL-2 | Give a pinned column a reader without removing its entry — add `List<SuiteCase> findByAddedBy(UUID)` to `SuiteCaseRepository` | The rule fails on the **missing** element `SuiteCase.addedBy`. This is the direction an ignore list cannot express: an argument for a readerless column cannot outlive the column being read. | ✅ **RUN 2026-08-09** — red on the missing element; reverted after |
-| RL-3 | Restore the corpus to `src/main` only, dropping `src/test` | The rule reports columns whose only reader is a test's `SELECT` — `AuditEvent.actorTokenId` is the instance, which §132 spent a whole slice giving a writer and which `IngestionEndpointTest` selects to assert token attribution. **This bounds §152's widening**: a test that reads a column to check what a write left behind is that column's reader. | ⬜ NOT RUN |
-| RL-4 | Stop excluding `ArchitectureRulesTest.java` from its own corpus (`OWN_FILE`) | **Five of the thirteen members vanish and the rule goes green while the defect stands.** Every key is the string `"Entity.field"`, so each argument for keeping a column is itself a literal naming that column. This is the rule's own most dangerous failure mode and the reason the measured population went 7 → 13. | ⬜ NOT RUN |
-| RL-5 | Stop stripping comments from the corpus | Nineteen columns read as live because some javadoc mentions them, and the population collapses to 7. In a repository whose comments carry the reasoning, prose standing in for code is §152's exact finding — the rule must not accept it as a reader. | ⬜ NOT RUN |
-| RL-6 | Stop dropping `INSERT` statements from the corpus | Seven columns read as live off the fixture rows that *create* them. An insert's column list is a write; a fixture inserting `added_by` is not a reader of `added_by`. | ⬜ NOT RUN |
-| RL-7 | Add `@Version` to `TestRun.lockVersion` (the recorded next-slice candidate, **not done here**) | Two concurrent updates to one run answer 409 through `RunController.onWriteRace`, which already exists and has never been reachable. Today the column is `NOT NULL DEFAULT 0`, mapped as a plain column, never incremented and never read — while `RunController` itself cites ERD §5 that "a run is worked by several testers at once by design". `work_item.lock_version` is the same shape. ~~**This row is the check for a slice that has not been written.**~~ → **SUPERSEDED 2026-08-09 by §155's `LV-1`…`LV-6` below.** The slice was written and the answer was no: `@Version` here makes the product's most-used write a contention point (`TestPlan.lockVersion`'s header said so before §154 proposed it), and the run's real lost update is closed by a conditional `UPDATE` and `@DynamicUpdate`. Both columns are unmapped now, so this mutation no longer describes a reachable state. | ⛔ SUPERSEDED |
+| §154 RL-1 | Delete one entry from `READERLESS_BY_DECISION` — e.g. `IngestionJob.rawStorageKey` — leaving the column as it is | The rule fails naming it as an **unexpected** member. The column is still readerless; only the argument for keeping it went away. | ✅ **RUN 2026-08-09** — red naming `IngestionJob.rawStorageKey`, nothing else moved |
+| §154 RL-2 | Give a pinned column a reader without removing its entry — add `List<SuiteCase> findByAddedBy(UUID)` to `SuiteCaseRepository` | The rule fails on the **missing** element `SuiteCase.addedBy`. This is the direction an ignore list cannot express: an argument for a readerless column cannot outlive the column being read. | ✅ **RUN 2026-08-09** — red on the missing element; reverted after |
+| §154 RL-3 | Restore the corpus to `src/main` only, dropping `src/test` | The rule reports columns whose only reader is a test's `SELECT` — `AuditEvent.actorTokenId` is the instance, which §132 spent a whole slice giving a writer and which `IngestionEndpointTest` selects to assert token attribution. **This bounds §152's widening**: a test that reads a column to check what a write left behind is that column's reader. | ⬜ NOT RUN |
+| §154 RL-4 | Stop excluding `ArchitectureRulesTest.java` from its own corpus (`OWN_FILE`) | **Five members vanish and the rule goes green while the defect stands.** Every key is the string `"Entity.field"`, so each argument for keeping a column is itself a literal naming that column. This is the rule's own most dangerous failure mode and the reason the measured population went 7 → 13. | ⬜ NOT RUN |
+| §154 RL-5 | Stop stripping comments from the corpus | Nineteen columns read as live because some javadoc mentions them, and the population collapses to 7. In a repository whose comments carry the reasoning, prose standing in for code is §152's exact finding — the rule must not accept it as a reader. | ⬜ NOT RUN |
+| §154 RL-6 | Stop dropping `INSERT` statements from the corpus | Seven columns read as live off the fixture rows that *create* them. An insert's column list is a write; a fixture inserting `added_by` is not a reader of `added_by`. | ⬜ NOT RUN |
+| §154 RL-7 | Add `@Version` to `TestRun.lockVersion` (the recorded next-slice candidate, **not done here**) | Two concurrent updates to one run answer 409 through `RunController.onWriteRace`, which already exists and has never been reachable. Today the column is `NOT NULL DEFAULT 0`, mapped as a plain column, never incremented and never read — while `RunController` itself cites ERD §5 that "a run is worked by several testers at once by design". `work_item.lock_version` is the same shape. ~~**This row is the check for a slice that has not been written.**~~ → **SUPERSEDED 2026-08-09 by §155's `LV-1`…`LV-6` below.** The slice was written and the answer was no: `@Version` here makes the product's most-used write a contention point (`TestPlan.lockVersion`'s header said so before §154 proposed it), and the run's real lost update is closed by a conditional `UPDATE` and `@DynamicUpdate`. Both columns are unmapped now, so this mutation no longer describes a reachable state. | ⛔ SUPERSEDED |
 
 > **No browser-queue row.** No production behaviour changed: one test rule was added and thirteen
 > javadocs were corrected at the fields they describe. No request, response or screen differs.
@@ -1649,7 +1686,7 @@ cd backend
 
 ### §155 — the guard two entities mapped and neither maintained (`LV-1` … `LV-6`)
 
-**`RL-7` above is superseded by this block and is marked so there.** It proposed adding `@Version`
+**`§154 RL-7` above is superseded by this block and is marked so there.** It proposed adding `@Version`
 to `TestRun`; the audit said no on both entities and closed the run's actual race with a conditional
 `UPDATE` and `@DynamicUpdate` instead. These rows check what shipped.
 
@@ -1677,7 +1714,7 @@ cd backend
 
 ### §156 — the columns nothing writes (`WL-1` … `WL-7`)
 
-`everyMappedColumnHasAWriter` is `everyMappedColumnHasAReader`'s mirror, so `RL-1`…`RL-6` above are
+`everyMappedColumnHasAWriter` is `everyMappedColumnHasAReader`'s mirror, so `§154 RL-1`…`RL-6` above are
 the shape these follow. What is different is the **direction the corpus fails in**: an over-matching
 reader corpus costs a finding it will catch next time, an over-matching *writer* corpus hides one
 permanently. `WL-3` is the row for the instance that actually happened.
@@ -1735,6 +1772,8 @@ cd backend
 
 ### §158 — the condition-drift derivation (`CD-1` … `CD-7`)
 
+> **`CD-*` IS A COLLIDING PREFIX — quote these as `§158 CD-n`, never bare.** The other owner is §128 — the case-draft buffer; see the ID COLLISION banner above for the rule (qualify, never renumber — decided 2026-08-11).
+
 The second of §156's five to get a computation, and the same kind of block as `SA-*`: these mutate a
 **statement** and predict which cases change their answer. The population under test is one
 `INSERT … ON CONFLICT` in `repository/ConditionDrift.java`.
@@ -1753,13 +1792,13 @@ cd backend
 
 | # | Mutation | Expected | Result |
 |---|---|---|---|
-| `CD-1` | `LEFT JOIN condition lib` → `JOIN condition lib` | A soft-deleted entry stops being comparable, so the case that lost a step outright reports clean. Should redden `a soft-deleted entry is drift, and it is the case an inner join would miss` **and nothing else.** | ✅ **RUN 2026-08-09** — red on exactly that one test; reverted |
-| `CD-2` | `ORDER BY v.version_no DESC` → `ASC` | The oldest snapshot decides, so a case brought up to date still reports drift. Should redden `the NEWEST snapshot decides, not any snapshot` **and nothing else.** | ✅ **RUN 2026-08-09** — red on exactly that one test; reverted |
-| `CD-3` | Drop the `lib.title IS DISTINCT FROM …` term | A rename with unchanged steps reads clean. Should redden `a rename with the same steps is drift too` **and nothing else.** | ✅ **RUN 2026-08-09** — red on exactly that one test; reverted |
-| `CD-4` | Drop the `postconditions` half of the `||` | Only the PRE arm is compared. Should redden `the postcondition arm counts, not only the preconditions`. Worth measuring rather than assuming, because the two arms are concatenated in one expression and an edit that "simplifies" it drops the second silently. | ⬜ NOT RUN |
-| `CD-5` | `coalesce(drift.drifted, false)` → `drift.drifted` | `bool_or` over zero rows is NULL and the column is `NOT NULL`, so this is not a wrong answer but an **aborted transaction**, taking the other three statements' work with it. Should redden `a snapshot with no conditions raises nothing rather than failing`, `a case with no version at all has nothing to have drifted from`, and — because the whole tick rolls back — most of the class. **The row exists to measure how far the blast radius reaches**, since the failure mode is a job that stops rather than one that lies. | ⬜ NOT RUN |
-| `CD-6` | Replace the content comparison with the timestamp one — `lib.updated_at > newest.created_at` | Predicted **some** reds (`an entry still saying what the snapshot recorded raises nothing`, since every fixture condition is written after its case's version row) but **not** the one that matters: nothing here expresses "edited and changed straight back", which is the state where the timestamp spelling can never heal. **The deliverable is the gap**, and closing it is a fixture that writes a version, bumps `condition.updated_at`, and restores the body. | ⬜ NOT RUN |
-| `CD-7` | Add `condition_drift` to `ApprovalFacts.recomputeStaleApproval`'s `ON CONFLICT` update list | The third statement in the tick blanks the fourth's — or rather, being third, is blanked *by* it, so the mutation that shows the hazard is the one on the **later** statement. Should redden `an entry edited since the snapshot drifts the case that references it`. `SA-6`'s row for the other pair; the column-ownership rule now binds four statements and the number of ways to break it grows with it. | ⬜ NOT RUN |
+| §158 `CD-1` | `LEFT JOIN condition lib` → `JOIN condition lib` | A soft-deleted entry stops being comparable, so the case that lost a step outright reports clean. Should redden `a soft-deleted entry is drift, and it is the case an inner join would miss` **and nothing else.** | ✅ **RUN 2026-08-09** — red on exactly that one test; reverted |
+| §158 `CD-2` | `ORDER BY v.version_no DESC` → `ASC` | The oldest snapshot decides, so a case brought up to date still reports drift. Should redden `the NEWEST snapshot decides, not any snapshot` **and nothing else.** | ✅ **RUN 2026-08-09** — red on exactly that one test; reverted |
+| §158 `CD-3` | Drop the `lib.title IS DISTINCT FROM …` term | A rename with unchanged steps reads clean. Should redden `a rename with the same steps is drift too` **and nothing else.** | ✅ **RUN 2026-08-09** — red on exactly that one test; reverted |
+| §158 `CD-4` | Drop the `postconditions` half of the `||` | Only the PRE arm is compared. Should redden `the postcondition arm counts, not only the preconditions`. Worth measuring rather than assuming, because the two arms are concatenated in one expression and an edit that "simplifies" it drops the second silently. | ⬜ NOT RUN |
+| §158 `CD-5` | `coalesce(drift.drifted, false)` → `drift.drifted` | `bool_or` over zero rows is NULL and the column is `NOT NULL`, so this is not a wrong answer but an **aborted transaction**, taking the other three statements' work with it. Should redden `a snapshot with no conditions raises nothing rather than failing`, `a case with no version at all has nothing to have drifted from`, and — because the whole tick rolls back — most of the class. **The row exists to measure how far the blast radius reaches**, since the failure mode is a job that stops rather than one that lies. | ⬜ NOT RUN |
+| §158 `CD-6` | Replace the content comparison with the timestamp one — `lib.updated_at > newest.created_at` | Predicted **some** reds (`an entry still saying what the snapshot recorded raises nothing`, since every fixture condition is written after its case's version row) but **not** the one that matters: nothing here expresses "edited and changed straight back", which is the state where the timestamp spelling can never heal. **The deliverable is the gap**, and closing it is a fixture that writes a version, bumps `condition.updated_at`, and restores the body. | ⬜ NOT RUN |
+| §158 `CD-7` | Add `condition_drift` to `ApprovalFacts.recomputeStaleApproval`'s `ON CONFLICT` update list | The third statement in the tick blanks the fourth's — or rather, being third, is blanked *by* it, so the mutation that shows the hazard is the one on the **later** statement. Should redden `an entry edited since the snapshot drifts the case that references it`. `SA-6`'s row for the other pair; the column-ownership rule now binds four statements and the number of ways to break it grows with it. | ⬜ NOT RUN |
 
 > **One browser-queue row block, `CD-B1`…`CD-B3`**, in lane 4 beside `HP-1`…`HP-3` and
 > `SA-B1`…`SA-B3`. Its fixture is the **cheapest of the three blocks** and worth saying so: no

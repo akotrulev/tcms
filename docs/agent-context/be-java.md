@@ -57,9 +57,17 @@ re-grep what a later commit could have moved).
   **not** the "caller-supplied actor id" §154 called it at three sites, and
   `CompanyMembership.invitedBy` has **three** writers (`MembershipInviteService`'s two plus
   `CompanyProvisioningService`, which passes null on an unattended run), not the two factory methods
-  §154 counted. **What still makes the section unquotable is only the id collision and `RL-3`…`RL-6`
-  being unrun.** Four wrong claims in one section, none of which touched the rule: the check
+  §154 counted. Four wrong claims in one section, none of which touched the rule: the check
   recomputes its population, the arguments beside it are prose.
+- **AN ID IN A COLLIDING MUTATION-QUEUE RANGE IS WRITTEN `§154 RL-4`, NEVER BARE** — decided
+  2026-08-11, closing §161's second item. Three ranges in
+  `docs/verification/backend-mutation-checks.md` are minted twice: `AG-*` (§124 vs §133), `CD-*`
+  (§128 vs §158), `RL-*` (§141 vs §154). All six tables carry the section in the `id` column and
+  **nothing was renumbered** — an id a handoff section has quoted keeps its meaning. **Grep the
+  file before minting a prefix**: every collision came of two lanes picking the obvious initials.
+  **`READERLESS_BY_DECISION` holds TWELVE members, not §154's thirteen** (`rawStorageKey` left with
+  §156/§160), which is why `§154 RL-1` no longer works as written — it names that column. Only
+  `§154 RL-3`…`RL-6` remain unrun, deferred under §65 on purpose.
 - **THE TEST WORKER'S HEAP IS PINNED AT `2g` IN `build.gradle.kts` — DO NOT REMOVE IT.** Gradle's
   default is 512m and the suite was measured at **522685K of 524288K** while hanging. An exhausted
   G1 heap here throws nothing and fails nothing: every test passes, then the worker parks for ever
