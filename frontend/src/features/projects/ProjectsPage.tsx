@@ -1,4 +1,4 @@
-import { Box, Button, Stack, Typography } from '@mui/material';
+import { Box, Button, Chip, Stack, Typography } from '@mui/material';
 import { useState } from 'react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useProjects } from '../../api/queries';
@@ -108,6 +108,24 @@ export function ProjectsPage() {
                     <Typography variant="h4" component="h2" sx={{ color: 'text.primary' }}>
                       {project.name}
                     </Typography>
+                    {/*
+                      The archived marker, and the reason the list is not filtered instead: the
+                      server returns retired projects deliberately, because omitting them would
+                      make one unreachable rather than marked — and this card is the only route
+                      back to the screen that can un-archive it. `archived` was a required field
+                      of this response from M0 and nothing in the SPA read it until §159, for the
+                      honest reason that nothing could set it. Same chip decision as the docs tree
+                      makes for an archived page.
+                    */}
+                    {project.archived && (
+                      <Chip
+                        size="small"
+                        variant="outlined"
+                        label="Archived"
+                        sx={{ flexShrink: 0 }}
+                        data-testid="Projects.Card.Archived"
+                      />
+                    )}
                   </Stack>
                   <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1.5 }}>
                     {project.description}

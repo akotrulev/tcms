@@ -1,10 +1,11 @@
-import { Box, Button, Stack, Tooltip, Typography } from '@mui/material';
+import { Box, Button, Chip, Stack, Tooltip, Typography } from '@mui/material';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 import type { DashboardBreakdown, DashboardTile, RepositoryDashboard } from '../../api/types';
-import { useDashboard, useProject } from '../../api/queries';
+import { useDashboard, useProject, useSetProjectArchived } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
+import { PermissionGate } from '../../components/PermissionGate';
 import { formatCount, formatDateTime, formatPercent } from '../../lib/format';
 import { automationLabels } from '../../lib/labels';
 
@@ -45,19 +46,37 @@ export function DashboardPage() {
                   Your role: {project.data.myRole}
                 </Typography>
               )}
+              {/*
+                Stated on the project's own landing page as well as on the picker card, because
+                this is where somebody arrives from a bookmark — and a retired project that looks
+                identical to a live one is how work gets filed into it for another six months.
+              */}
+              {project.data.archived && (
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  label="Archived"
+                  data-testid="Dashboard.Archived"
+                />
+              )}
             </>
           )
         }
         subtitle={project.data?.description}
         actions={
-          <Button
-            component={RouterLink}
-            to={`/projects/${projectId}/cases`}
-            variant="contained"
-            data-testid="Dashboard.BrowseCasesButton"
-          >
-            Browse test cases
-          </Button>
+          <>
+            {project.data && (
+              <ArchiveButton projectId={projectId} archived={project.data.archived} />
+            )}
+            <Button
+              component={RouterLink}
+              to={`/projects/${projectId}/cases`}
+              variant="contained"
+              data-testid="Dashboard.BrowseCasesButton"
+            >
+              Browse test cases
+            </Button>
+          </>
         }
       />
 
@@ -68,6 +87,44 @@ export function DashboardPage() {
         {(data) => <DashboardBody data={data} projectId={projectId} />}
       </DataRegion>
     </Box>
+  );
+}
+
+/**
+ * Retire this project, or bring it back (§159).
+ *
+ * Here rather than on a settings screen because this page is the project's front door and the two
+ * settings screens are each about one subsystem — §6g's review policy, the classification
+ * vocabulary — while this is about the project as a whole. It is the same shape the docs tree uses
+ * for a page's publication state: **one button whose label is the move available from the state the
+ * project is in**, never two of which one is always a no-op the server would answer 200 to.
+ *
+ * **No confirmation dialog, deliberately.** The action destroys nothing, hides nothing and is
+ * undone by the button that replaces it. A dialog here would teach people to click through dialogs
+ * on a screen that also has real ones.
+ *
+ * Disabled rather than hidden for a caller without `project:settings`, with the reason in the
+ * tooltip — `PermissionGate`'s whole content, and the reason a Test Engineer learns the capability
+ * exists and who to ask.
+ */
+function ArchiveButton({ projectId, archived }: { projectId: string; archived: boolean }) {
+  const setArchived = useSetProjectArchived(projectId);
+
+  return (
+    <PermissionGate projectId={projectId} permission="project:settings">
+      {({ allowed }) => (
+        <Button
+          variant="outlined"
+          disabled={!allowed || setArchived.isPending}
+          // The target state, not a toggle of what this render happens to hold: a stale copy then
+          // asks for the state it can already see rather than for the opposite of it.
+          onClick={() => setArchived.mutate(!archived)}
+          data-testid="Dashboard.ArchiveButton"
+        >
+          {archived ? 'Restore project' : 'Archive project'}
+        </Button>
+      )}
+    </PermissionGate>
   );
 }
 
