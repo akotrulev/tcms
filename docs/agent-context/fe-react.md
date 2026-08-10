@@ -8,7 +8,7 @@ surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the fl
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `be2de9d` (§160) (trust the
+**Baseline commit:** `462a6d0` (§160) (trust the
 body over the header and re-grep what a later commit could have moved).
 
 ## §160 — THE POSTED CI REPORT IS A DOWNLOAD, AND IT KEYS ON `reportUrl` ALONE

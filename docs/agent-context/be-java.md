@@ -7,7 +7,7 @@ draft buffer; **§127 phase 1** — the table and image block payloads; **§126 
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `be2de9d` (§160) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `462a6d0` (§160) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
 ---
