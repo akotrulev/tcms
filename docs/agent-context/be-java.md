@@ -2,12 +2,12 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-09 (**§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-10 (**§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `2af89be` (§157) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `5169971` (§159 phase 2) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
 ---
@@ -39,6 +39,36 @@ Population there is **thirteen**, not fourteen.
 - **Tests must stop borrowing `stale_approval` as the empty column.** `CaseHealthRecomputeTest`'s
   clobber test uses `unlinked` now. The remaining borrowable ones are `outdated_spec_changed`,
   ~~`condition_drift`~~ (§158), `unlinked`, `orphaned` — and each disappears when it gets a writer.
+
+## §159 — `project.archived_at` HAS A WRITER; ARCHIVING MARKS AND DOES NOT LOCK
+
+`PUT /projects/{projectId}/archive` → `ProjectArchiveService` (`project` module).
+`ArchitectureRulesTest.WRITERLESS_BY_DECISION` is **eleven**, not twelve — and that map's javadoc
+was stale by one from §158 to §159 while the method comment below it was right, so read the map, not
+the prose.
+
+- **THE BODY NAMES THE TARGET STATE, NOT A VERB.** `{"archived": true|false}` on one endpoint, both
+  directions. Two verb endpoints make a stale client do the opposite of what was pressed; this makes
+  it a no-op. Absent field ⇒ **400 on the field**, never a default — a default un-archives.
+- **IDEMPOTENT AND SILENT.** Setting the state a project already has writes nothing: no timestamp
+  re-stamped, no audit row, no `lock_version` bump. Decided in `apply` before either mutator runs,
+  which is why `Project.archive` does not defend itself.
+- **THE GATE IS `project:settings` (PROJECT scope).** Not `project:create`: `createGranted` has **no
+  `Unreachable` arm**, so a company key answers 403 for a project the caller cannot see — §6t's
+  oracle through the gate. Roles spec §A6a withholds the key from both token-only roles, so no agent
+  and no CI credential can retire a project; **do not add a second check for that.**
+- **ARCHIVING IS A MARK, NOT A LOCK.** An archived project is listed, readable and fully writable —
+  `DocPageStatus.ARCHIVED` one level up. Making it read-only is a **separate decision**: a fourth
+  `GateResult` arm at **53 call sites**, pinned meanwhile by `Archiving.archivingDoesNotLock` and
+  browser row `AR-3`.
+- **`archived_at` stays a timestamp**; `unarchive()` clears it and the sequence lives in
+  `audit_event` (`project.archived` / `project.unarchived`). No second column.
+- **`ProjectService.viewOfChanged`** is the write-path assembler — `viewOfCreated`'s sibling, but it
+  runs the case-count query. Use it for any future project write; `viewOfCreated`'s empty map is only
+  correct for a project created in that transaction.
+- **`ProjectEndpointTest` now writes.** Its seed calls `restoreArchiveState()` and must keep doing
+  so: nothing cleans between tests and every helper there is "create if absent", so a state one test
+  writes survives into the read-only assertions two groups up.
 
 ## §158 — `CONDITION_DRIFT` HAS A DERIVATION; THREE HEALTH SIGNALS ARE LEFT WITHOUT ONE
 

@@ -2,14 +2,35 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-09 (**§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
+**Last verified:** 2026-08-10 (**§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
 the one doc-block renderer and the editor's three new types; §126 phase 4 — the three attachment
 surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the flake panel and the
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `2af89be` (§157) (trust the
+**Baseline commit:** `5169971` (§159 phase 2) (trust the
 body over the header and re-grep what a later commit could have moved).
+
+## §159 — `Project.archived` IS READ AT LAST, AND A GATE VERDICT REPLACES THE CONTROL'S SUBTREE
+
+The field was `required` in the contract from M0 and **no file here read it until §159**, because
+nothing could set it. Two surfaces now do: `ProjectsPage`'s card chip and `DashboardPage`'s header
+chip + `ArchiveButton`.
+
+- **DO NOT FILTER ARCHIVED PROJECTS OUT OF THE PICKER.** The server returns them deliberately; the
+  card is the only route to the page that can restore one.
+- **`useSetProjectArchived` sends the target state**, never `!archived` re-derived at click time —
+  the endpoint is idempotent so a stale render is a no-op, and a toggle throws that away.
+- **It writes the detail cache from the mutation response.** Legal *here only*: the response comes
+  from the server's own assembler, the same one `GET /projects/{id}` uses, and a backend test pins
+  them together. Everywhere else in `queries/projects.ts` the rule is still invalidate-don't-assemble.
+- **TESTING A `PermissionGate`D CONTROL: RE-QUERY THE NODE INSIDE THE WAIT.** The denied branch wraps
+  the child in a tooltip anchor, so when the verdict lands the subtree is replaced and any element
+  captured earlier is **detached and disabled for ever**. A test holding it across `waitFor` times
+  out blaming the permission. `ArchiveProject.test.tsx` says so at the line.
+- **One button, labelled for the move available from the current state** (Archive ↔ Restore), and
+  **no confirmation dialog** — the action destroys nothing and is undone by the button that replaces
+  it.
 
 ## §149 — AN `errors` VALUE IS THE SERVER'S SENTENCE; NEVER COMPOSE WORDS AROUND IT
 

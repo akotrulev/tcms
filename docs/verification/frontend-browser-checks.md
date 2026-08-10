@@ -1852,3 +1852,32 @@ them needs two cases under one suite and is a fixture the pass may add if `CD-B1
 when it gets there. The gap `ConditionDrift`'s header names — a suite-level **attach or detach**,
 which writes no case version and is therefore *not* reported — is not drivable here at all, because
 its expected outcome is that nothing happens.
+
+## §159 — archiving a project, on the two screens that show the state
+
+**Lane: 2 — `A0`, accounts, projects and teams**, at the end of it, after `MOB` exists. Not lane 4:
+this needs no tick, no health signal and no review row. It needs one project and one account holding
+`project:settings`, which `A0` has already created by the time these rows run — the cheapest fixture
+of any block added since §156.
+
+**Why the rows exist at all.** `Project.archived` was `required` in the contract from M0, `false` in
+every deployment there has ever been, and read by no file in the SPA or `packages/` outside a test
+fixture — because no request could set it (§156's finding, §159's slice). Everything below is a
+first observation, not a regression check: there is no earlier pass any of it could have failed in.
+
+**Drive `AR-3` even if the others are skipped.** It is the one row that observes a *decision* rather
+than a rendering — the server marks an archived project and deliberately does not lock it — and it
+is the row that would catch the opposite behaviour arriving by accident in a later slice.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `AR-1` | As **Test Lead** on `MOB`, open the project's own page and press **Archive project** | The button becomes **Restore project**, an **Archived** chip appears beside the key and case count, and no dialog is shown on the way (the action destroys nothing and is undone by the same button). No global error toast. |
+| `AR-2` | Go to the project picker | `MOB`'s card is **still listed**, with an **Archived** chip. Not filtered out: the server returns retired projects on purpose, and a client-side filter here would make the project unreachable rather than marked — the picker is the only route back to the page that restores it. |
+| `AR-3` | While `MOB` is archived, create a case in it (or edit any artifact) | **It succeeds.** Archiving is a mark, not a lock — `DocPageStatus.ARCHIVED` one level up. A refusal here means a later slice has taken the read-only decision without taking it deliberately; the enforcement point exists (`ProjectService.writeGranted` and its three siblings) and adding an arm to it touches 53 call sites, which is why it is a decision and not a tidy-up. |
+| `AR-4` | Press **Restore project**, then press **Archive project** twice in a row, then read `audit_event` for the project in `psql` | Two rows only — `project.archived`, `project.unarchived`, `project.archived` in order, and **no fourth row** for the repeated press. A repeated click that writes an audit row buries the change that actually happened, and the second press must also leave `archived_at` **unchanged** rather than re-dating the retirement. |
+| `AR-5` | As **Test Engineer** (no `project:settings`), open the same project's page | The button is **present, disabled, and explains itself on hover** — "You don't have permission to change this project's settings in this project." Disabled rather than hidden is §31's rule: a hidden control teaches that the product cannot do it. |
+| `AR-6` | As that Test Engineer, drive `PUT /projects/{id}/archive` with `curl` and their token | **403 with a `Problem` body** whose `detail` names the action — "You do not have permission to archive this project." — and **never the permission key**. Belongs in lane **L2** if the pass prefers to keep server refusals together; it is written here so the block reads as one. |
+
+**What no row here can check:** that an archived project reads any differently to a caller who has
+never seen it live. It does not, deliberately — the flag is a label, and every list, board and report
+in the product treats the project exactly as before.

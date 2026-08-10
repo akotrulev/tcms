@@ -1745,3 +1745,30 @@ cd backend
 > review settings, no second account, no approval — attach a library condition to a case, save the
 > case so a version is written, then edit the condition from the library screen. Everything this
 > signal needs is one author with `library:manage`.
+
+## §159 — the project archive operation
+
+Run with:
+
+```bash
+./gradlew test --tests 'com.tcms.project.ProjectEndpointTest'      # every row here
+./gradlew test --tests 'com.tcms.architecture.ArchitectureRulesTest'   # AR-M5 only
+```
+
+**None of these were run during the slice.** The policy at the top of this file says none should be,
+and §157 and §158 between them ran four; this block restores the queue's own rule.
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| `AR-M1` | In `ProjectArchiveService.apply`, delete the `project.isArchived() == target` early return | Every request writes: the timestamp is re-stamped on an already-archived project and a second audit row is written. Should redden `setting the state a project already has writes nothing at all` **and nothing else** — which is the row that says the idempotence is in the service and not an accident of the gate. | ⬜ NOT RUN |
+| `AR-M2` | `PROJECT_SETTINGS` → `"project:read"` | Every visible caller may retire a project. Should redden `a Test Engineer is refused with 403, and nothing moves` **and nothing else.** The narrow blast radius is the point: it demonstrates that the 404-over-403 rows are answering the *visibility* gate rather than passing because the permission happened to be missing too. | ⬜ NOT RUN |
+| `AR-M3` | In the controller's switch, answer `Unreachable` with 403 instead of 404 | Should redden `a project the caller cannot see is 404, never 403` — **both arms**, the no-grant one and the other company's. Worth measuring rather than assuming, because the two reach the same arm by different routes and a mutation that reddens only one would mean the second assertion is decorative. | ⬜ NOT RUN |
+| `AR-M4` | In `ProjectArchiveService.set`, treat a null `archived` as `false` instead of a field error | A malformed body silently un-archives. Should redden `an absent archived field is a 400 on the field, not a silent un-archive`. **This is the mutation a reviewer would call a simplification** — `Boolean.TRUE.equals(request.archived())` reads as tidier than the null check and is exactly the defect `ProjectSettingsRequest` documents for `requiredPeerReviews`. | ⬜ NOT RUN |
+| `AR-M5` | Re-add `Project.archivedAt` to `ArchitectureRulesTest.WRITERLESS_BY_DECISION` | The population is eleven and the map says twelve. Should redden `every mapped column has a writer — the writerless tally, computed`. It measures the rule from the direction that matters now: the column has a writer, so the by-decision entry is the thing that would be wrong, and the rule must say so rather than tolerating a stale entry. | ⬜ NOT RUN |
+| `AR-M6` | Have `ProjectArchiveService` return `projects.viewOfCreated(project, userId)` instead of `viewOfChanged` | `caseCount` is 0 on the response and correct on the next `GET`. Should redden `the response is the same shape the list and the detail serve` **and nothing else**. The two assemblers differ in exactly one thing and it is the field a client renders straight onto the card it just acted on. | ⬜ NOT RUN |
+
+> **Six browser rows, `AR-1`…`AR-6`**, in lane **2 (`A0`)** rather than lane 4: this block needs no
+> scheduler tick, no review row and no second account except for `AR-5`/`AR-6`. `AR-3` — an archived
+> project still accepts writes — is the one that observes a decision rather than a rendering, and
+> `AR-4` is the only place the no-op's *silence* (no audit row, no re-dated timestamp) is visible
+> outside a test.
