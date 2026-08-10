@@ -14,7 +14,11 @@ import org.hibernate.annotations.Filter;
 /**
  * The derived health of one case — a <strong>read model</strong>, not authored state (plan §6o).
  *
- * <p>Nine booleans, one per {@link HealthSignal}, keyed on the case. Denormalized into columns
+ * <p><del>Nine booleans, one per {@link HealthSignal}</del> <strong>Eleven booleans: one per
+ * {@link HealthSignal}, of which there are ten, plus {@link #incomplete}, which is a column and not
+ * a signal</strong> — keyed on the case. The struck sentence counted the signals (nine, then) and
+ * called the answer the number of columns, which was already ten; {@code V37}'s
+ * {@code UNDECLARED_AUTOMATION} then moved both and neither was corrected. §161. Denormalized into columns
  * rather than held as a set of signal rows because every use is a predicate over a specific signal
  * — "which cases in this project have a stale approval" is a partial index away in this shape and a
  * join plus a filter in the other, and {@code V1} already ships four such indexes.
@@ -173,15 +177,34 @@ public class CaseHealth {
 
     /**
      * {@code case_health.incomplete} — mapped so {@code ddl-auto: validate} has the whole row in
-     * view, and deliberately absent from {@link HealthSignal}: the contract's enum has no such
-     * member, and inventing one would put a value on the wire the SPA cannot label.
+     * view, and absent from the server's {@link HealthSignal} because
+     * <strong>nothing derives it</strong>: there is no computation to name, so there is no constant.
+     *
+     * <p><del>The contract's enum has no such member, and inventing one would put a value on the
+     * wire the SPA cannot label.</del> <strong>→ corrected 2026-08-10 (§161), and the correction
+     * reverses what closing this costs.</strong> {@code openapi.yaml}'s {@code HealthSignal} has
+     * declared {@code INCOMPLETE} since <em>2026-07-30</em> — the day before this comment was
+     * written — {@code lib/labels.ts} has read <em>"Missing required fields"</em> for it just as
+     * long, {@code StatusChip} has a sentence for it, and both copies of {@code schema.d.ts} carry
+     * it. The contract states the arrangement in its own words at the schema and calls it
+     * deliberate: the member is kept so a client's labels stay complete. So the wire side is
+     * already paid for and always was. What is missing is <em>this end</em> — a derivation, and
+     * before it a decision about what "incomplete" means for a case, which is
+     * {@link #orphaned}'s shape rather than {@link #staleApproval}'s.
+     *
+     * <p>The direction matters because it is what a reader acts on. Stated as a contract problem,
+     * closing this reads as a wire change — the expensive kind, two generated copies and every
+     * client. It is not one.
      *
      * <p>§154 made this the reference entry in
      * {@code ArchitectureRulesTest.READERLESS_BY_DECISION}, because the comment above was already
      * in the shape that rule asks of the other twelve: what the column is, why it is mapped
-     * anyway, and why it stops there. §156 put it in {@code WRITERLESS_BY_DECISION} as well, which
-     * is the harmless overlap: unlike the signals above it, nothing reads this one either, so
-     * there is no reader to be misled by the default it holds.
+     * anyway, and why it stops there. It was the right shape carrying a false premise, copied
+     * twelve times before anybody checked it; {@code ContractEnumTest} is the check that reads the
+     * contract instead of trusting a sentence about it. §156 put it in
+     * {@code WRITERLESS_BY_DECISION} as well, which is the harmless overlap: unlike the signals
+     * above it, nothing reads this one either, so there is no reader to be misled by the default
+     * it holds.
      */
     @Column(name = "incomplete", nullable = false)
     private boolean incomplete;

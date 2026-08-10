@@ -225,6 +225,30 @@ public final class OpenApiContract {
     }
 
     /**
+     * The named enum types — every {@code components.schemas} entry that declares an
+     * {@code enum}, mapped to its members in declaration order.
+     *
+     * <p><strong>Component-level only, and the narrowing is measured rather than assumed.</strong>
+     * The document holds 44 more enums inline on a property ({@code TestRun.status},
+     * {@code DocBlock.blockType}, …). Those are the same kind of value and a rule over them would
+     * be the same rule, but they have no name to correspond by: the owner map
+     * {@link ContractEnumTest} needs would be 64 hand-written lines instead of 20, and two thirds
+     * of it would be guesses about which entity's field an anonymous list belongs to. A named
+     * schema is a named server type, which is what makes the correspondence checkable at all —
+     * and it is also what the generator emits as a named union, so it is the population a client
+     * can be wrong about by name.
+     */
+    Map<String, List<String>> enumSchemas() {
+        Map<String, List<String>> enums = new LinkedHashMap<>();
+        map(map(root, "components"), "schemas").forEach((name, schema) -> {
+            if (asMap(schema).get("enum") instanceof List<?> members) {
+                enums.put(name, members.stream().map(String::valueOf).toList());
+            }
+        });
+        return enums;
+    }
+
+    /**
      * Visits every mapping node in the document, deepest-last, handing the visitor a
      * JSON-Pointer-ish location so a failure message names the line a human has to edit.
      */

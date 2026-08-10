@@ -7529,16 +7529,27 @@ export interface components {
          * @description Derived, never authored — self-heals when the cause is fixed (plan §6o). No endpoint sets
          *     one and none ever will: a "mark as not stale" button is a button for lying.
          *
-         *     **Five of these have a writer.** `NEVER_EXECUTED` and `LONG_UNEXECUTED` (§53),
+         *     **Not every member has a derivation behind it yet**, so a client must treat an absent
+         *     signal as *"nobody has looked"* rather than as *"not raised"* — which is what
+         *     `DashboardSummary.healthComputedAt` exists to distinguish. That rule is the same whichever
+         *     members are derived, and it is the only thing a client has to act on.
+         *
+         *     ~~**Five of these have a writer.** `NEVER_EXECUTED` and `LONG_UNEXECUTED` (§53),
          *     `FAILING_REPEATEDLY`, and — since M3 slice 5 — the §6c automation-drift pair,
          *     `STALE_AUTOMATION` and `UNDECLARED_AUTOMATION`. The rest are computed by nothing and are
-         *     therefore never sent; a client must treat an absent signal as *"nobody has looked"* rather
-         *     than as *"not raised"*, which is what `DashboardSummary.healthComputedAt` exists to
-         *     distinguish.
+         *     therefore never sent.~~ → **the enumeration is removed, not updated (§161).** It was
+         *     stale within a day of §157 and stayed stale through §158, so it spent two slices telling
+         *     clients that `STALE_APPROVAL` and `CONDITION_DRIFT` are never sent while the server was
+         *     sending both. It was a second copy of a list the server already keeps — and keeps
+         *     mechanically, in `ArchitectureRulesTest.WRITERLESS_BY_DECISION`, which fails the build when
+         *     a member gains or loses a derivation. A copy of a computed list, in the document nobody
+         *     recompiles, is how it goes wrong.
          *
-         *     `INCOMPLETE` is a special case in the other direction: it is a column in the schema, it is
-         *     in this enum, and there is **no server constant for it**, so it cannot appear on the wire
-         *     today. Kept so a client's labels stay complete.
+         *     `INCOMPLETE` is the one member that genuinely cannot appear: it is a column in the schema,
+         *     it is in this enum, and there is **no server constant for it**. Kept so a client's labels
+         *     stay complete. `ContractEnumTest` is what holds that to a decision rather than an accident,
+         *     and §161 is why — the server-side note about this member argued the opposite, that *this
+         *     contract* lacked the member, for as long as the member had been here.
          * @enum {string}
          */
         HealthSignal: "OUTDATED_SPEC_CHANGED" | "STALE_APPROVAL" | "CONDITION_DRIFT" | "STALE_AUTOMATION" | "NEVER_EXECUTED" | "LONG_UNEXECUTED" | "UNLINKED" | "FAILING_REPEATEDLY" | "ORPHANED" | "INCOMPLETE" | "UNDECLARED_AUTOMATION";

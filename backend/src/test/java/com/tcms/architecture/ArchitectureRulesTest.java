@@ -643,11 +643,17 @@ class ArchitectureRulesTest {
      */
     private static final Map<String, String> READERLESS_BY_DECISION = Map.ofEntries(
             Map.entry("CaseHealth.incomplete",
-                    "mapped so ddl-auto: validate has the whole row in view, and deliberately "
-                            + "absent from HealthSignal — the contract's enum has no such member "
-                            + "and inventing one puts a value on the wire the SPA cannot label. "
-                            + "The argument was at the field before this rule existed and is the "
-                            + "shape the other eleven are held to"),
+                    "mapped so ddl-auto: validate has the whole row in view, and absent from the "
+                            + "SERVER's HealthSignal because nothing derives it — no computation, "
+                            + "so no constant. §161 corrected the reason this entry used to give "
+                            + "(\"the contract's enum has no such member\"), which was false the "
+                            + "day it was written: openapi.yaml has declared INCOMPLETE since "
+                            + "2026-07-30 and lib/labels.ts has labelled it as long, so closing "
+                            + "this is a derivation and a product decision, NOT a contract change. "
+                            + "ContractEnumTest checks the claim instead of repeating it. The "
+                            + "argument was at the field before this rule existed and is the "
+                            + "shape the other eleven are held to — which is how one false premise "
+                            + "became the exemplar for twelve"),
             Map.entry("AppUser.locale",
                     "V1 NOT NULL, set to the constant \"en\" by AppUser.invite and never read. A "
                             + "stored preference with no writer but the default and no reader at "
@@ -911,8 +917,10 @@ class ArchitectureRulesTest {
                             + "MISSED — see writesInLiterals for the corpus bug that hid it"),
             Map.entry("CaseHealth.incomplete",
                     "writerless AND readerless — the reference entry in READERLESS_BY_DECISION, "
-                            + "mapped so ddl-auto: validate has the whole row in view and "
-                            + "deliberately absent from HealthSignal"));
+                            + "mapped so ddl-auto: validate has the whole row in view and absent "
+                            + "from the SERVER's HealthSignal because nothing derives it. The wire "
+                            + "has carried INCOMPLETE since 2026-07-30; see §161 and the twin "
+                            + "entry for why that direction is the whole finding"));
 
     @Test
     @DisplayName("every mapped column has a writer — the writerless tally, computed")
