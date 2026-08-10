@@ -407,10 +407,13 @@ a hundred slightly different ones.
   because one `backend/build/` and one Gradle daemon cannot serve two lanes. Say so before using it.
 - **Push after each lane** (set 2026-08-10, at the user's direction). When a lane's work is
   committed, `git push` it — do not leave a lane's commits sitting only in the local worktree.
-  A lane's commits are unobserved until they are pushed: `ci.yml` runs on push, and the nightly
-  Linux lane observes the default branch only, so an unpushed lane has passed exactly one machine's
-  gates. This does not license pushing a red gate — the phase commit rule above still binds, and
-  what gets pushed is a state whose gates were run.
+  **Know what the push does and does not buy.** `ci.yml` triggers on `push` to **`master`** and on
+  pull requests targeting it, and `tests.yml` runs nightly on the **default branch** only — so
+  pushing a worktree branch gets the commits off one machine and gates **nothing** until it is
+  merged or a PR is opened. That is still worth doing (§0's three silent losses of committed work
+  were all local), but a pushed lane branch is *backed up*, not *observed*, and saying otherwise is
+  the shape §161 found. This does not license pushing a red gate — the phase commit rule above
+  still binds, and what gets pushed is a state whose gates were run.
 
 ## Running work in parallel — don't
 
