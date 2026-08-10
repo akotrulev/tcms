@@ -1597,6 +1597,27 @@ cd backend
 
 ---
 
+> ### ⚠ ID COLLISION — THIS FILE REUSES THREE PREFIXES, AND `RL-*` IS ONE OF THEM
+>
+> Recorded 2026-08-10 (§161). **Three id ranges are minted twice in this file**, so an id quoted
+> from a handoff section does not resolve to one row:
+>
+> | id range | first owner | second owner |
+> |---|---|---|
+> | `AG-1`…`AG-4` | §124 — the `BEST` removal | §133 — the `Agent` role |
+> | `CD-1`…`CD-7` | §128 — the case-draft buffer | §158 — condition drift |
+> | `RL-1`…`RL-7` | §141 — rate limiting | §154 — the readerless rule |
+>
+> **This is not cosmetic.** Sections quote these ids as their record of what was verified — §158
+> says *"`CD-1`, `CD-2`, `CD-3` **run**"* and §154 says *"`RL-1` and `RL-2` run"* — so a reader
+> checking whether a row ran has two candidates and no way to choose from the text. §156's own
+> block below says *"`RL-1`…`RL-6` above"*, and there are two blocks above it.
+>
+> **Not renumbered here on purpose.** The working agreement says an id is never renumbered once a
+> handoff section has quoted it, and both owners of each range have. Resolving this means deciding
+> between qualifying every reference (`§154 RL-3`) and renaming one side and back-patching the
+> sections that quote it — a decision, not a cleanup, and it belongs to the §154 redo.
+
 ## §154 — the columns nothing reads
 
 `ArchitectureRulesTest.everyMappedColumnHasAReader` asks the third question in §152's and §153's

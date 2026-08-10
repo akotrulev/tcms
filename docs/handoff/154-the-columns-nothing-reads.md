@@ -1,5 +1,32 @@
 # §154 — the columns nothing reads, and the check that read its own argument
 
+> ## ⚠ THIS SECTION IS NOT COMPLETE — §154 NEEDS A REDO
+>
+> **Recorded 2026-08-10 by [§161](161-the-exemplar-that-was-never-true.md)'s audit**, which
+> re-derived every `*_BY_DECISION` entry and then re-checked the slice that created the largest of
+> them. **The rule §154 shipped is sound and is not in question** — `everyMappedColumnHasAReader`
+> exists, passes, pins its population in both directions, and all thirteen fields carry their
+> argument at the field, each verified individually. What follows is what §154 left undone:
+>
+> 1. **Two claims below were disproved by later slices and are still asserted here, unstruck.**
+>    They are struck in place now (see ⚠ markers), but the working agreement's rule —
+>    *write the superseded decision **and** its reversal* — was not followed at the time, so both
+>    stood as fact for two days in the document later slices cite. The redo is to check whether
+>    §154 got anything *else* wrong that no later slice happened to trip over: two of its factual
+>    claims failed on the first look, which is not a rate that justifies trusting the rest.
+> 2. **Its mutation rows `RL-1`…`RL-7` collide with §141's `RL-1`…`RL-8`** in one file. Ids are
+>    quoted from handoff sections, so the collision makes an id ambiguous and the ✅/⬜ marks
+>    unresolvable by reading. §154 is one of three collisions — see the note in
+>    `docs/verification/backend-mutation-checks.md`.
+> 3. **Four of its seven rows have never been run** (`RL-3`…`RL-6`). That is §65-compliant, but
+>    `RL-4` is the row that reproduces the finding the slice is *named for* — five members
+>    vanishing when the file is not excluded from its own corpus — so the slice's headline result
+>    is the one property of its rule nothing has verified.
+>
+> **What is NOT wrong with it:** its push left `master`'s CI red for 23 hours on
+> `CaseEditorPage.test.tsx`, and that was a 239-second timeout flake on the runner. §154 is
+> backend-only and could not have caused it; the run on 2026-08-10 passed the same job clean.
+
 **Date:** 2026-08-09 · **Branch:** `master` · **One phase** · **`backend/` only: no migration, no
 contract change, no frontend or `packages/` source.**
 
@@ -70,7 +97,7 @@ M0 to §151 with 2389 tests green.
 
 | Column | What it costs |
 |---|---|
-| `IngestionJob.rawStorageKey` | **The upload cannot be retrieved.** §117 stores the raw CI file *and* the key that would find it again; the package-private getter has no caller in main or test. |
+| `IngestionJob.rawStorageKey` | ⚠ **WRONG, AND IN BOTH HALVES — struck 2026-08-10 (§161).** ~~The upload cannot be retrieved. §117 stores the raw CI file *and* the key that would find it again; the package-private getter has no caller in main or test.~~ §117 stored **neither**: `raw_payload` holds the normalized *parse*, the file CI sent was never written anywhere, and nothing ever wrote the key — so this column does not belong in the *written*-and-readerless half of this table at all. [§156](156-the-columns-nothing-writes.md) found it writerless as well and recorded that §154 had filed it here "fifty lines below a header saying otherwise"; [§160](160-the-upload-nobody-kept.md) then had to build a store, a port and a root from scratch. The getter having no caller was the one true clause. |
 | `AppUser.locale` · `AppUser.timezone` | Constants `"en"` and `"UTC"`, written by `invite` and never read. `AppUser`'s own `@Version` javadoc reasons about "when someone edited their own timezone" — **an act this product cannot perform.** |
 | `DocPage.spaceId` | `V1 NOT NULL`, written on every page. `DocSpace`'s header states the other half: the space "is not on the wire and has no endpoint". |
 | `SuiteCase.addedAt` · `addedBy` | §98's *added* arm records who filed a case and when, on every add. `addedBy` is a caller-supplied actor id carried endpoint→service→database so that nothing can read who did it. |
@@ -102,10 +129,17 @@ are `NOT NULL DEFAULT 0` columns, mapped as plain columns **with no `@Version`**
 and never read — while nineteen other entities carry `@Version` on the identically-named column,
 `V1`'s header says the column exists "for optimistic locking on concurrently-edited entities", and
 `RunController` itself cites ERD §5 that "a run is worked by several testers at once by design". Two
-concurrent run edits are last-write-wins with no detection; `RunController.onWriteRace` already
-exists and has never been reachable. **That is the recorded next slice** — it is a behaviour change
-on a concurrently-edited aggregate and wants its own tests, so it was not taken here. `RL-7` in the
-mutation queue is its check.
+concurrent run edits are last-write-wins with no detection; ~~`RunController.onWriteRace` already
+exists and has never been reachable~~ ⚠ **WRONG — struck 2026-08-10 (§161).**
+[§155](155-the-guard-that-was-not-one.md) took this as its slice and found the handler **is**
+reachable, via the execution, which does carry `@Version`; its own text says *"§154 had that half
+wrong."* §155 also answered the proposal itself with **no**: `ApiToken`'s rubric says neither
+survivor should be annotated, both are **unmapped** now, and the run's real race — two writers that
+are not the same act, overlapping on `status` alone — took a conditional
+`UPDATE … WHERE status = NOT_STARTED` plus `@DynamicUpdate` instead, because `@Version` would have
+made the product's most-used write a contention point. **That is the recorded next slice** — it is a
+behaviour change on a concurrently-edited aggregate and wants its own tests, so it was not taken
+here. `RL-7` in the mutation queue is its check, and is marked superseded there.
 
 ## Gates
 

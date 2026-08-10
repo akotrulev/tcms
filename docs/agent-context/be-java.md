@@ -45,6 +45,12 @@ re-grep what a later commit could have moved).
   nothing derives it"** — in three places (field javadoc, both decision-map entries). The old reason
   blamed the contract, which has carried `INCOMPLETE` since 2026-07-30. Closing it is a derivation
   plus a product decision; **it is not a contract change**.
+- **§154's HANDOFF SECTION IS FLAGGED "REDO REQUIRED" — do not quote it as fact.** The *rule* it
+  shipped (`everyMappedColumnHasAReader`) is sound and passes; two of its written claims were
+  disproved and stood unstruck for two days — that `RunController.onWriteRace` "has never been
+  reachable" (§155: it is, via the execution) and that `IngestionJob.rawStorageKey` was *written*
+  and merely unread (§117 stored neither the file nor the key; §156, §160). Both are struck in place
+  now. Its `RL-*` mutation ids also collide with §141's, one of three collisions in that file.
 - **THE TEST WORKER'S HEAP IS PINNED AT `2g` IN `build.gradle.kts` — DO NOT REMOVE IT.** Gradle's
   default is 512m and the suite was measured at **522685K of 524288K** while hanging. An exhausted
   G1 heap here throws nothing and fails nothing: every test passes, then the worker parks for ever
