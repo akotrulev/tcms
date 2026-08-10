@@ -157,24 +157,31 @@ public abstract class IntegrationTestBase {
         // assertion fails. The OS clears the directory; §19's fixture-collision defect is about
         // hand-managed prefixes and does not apply to a key space that is entirely random.
         //
-        // SUFFIXED BY user.name, and that is not decoration. java.io.tmpdir is /tmp on Linux,
-        // which is shared and sticky (1777): the FIRST user to run the suite creates the
-        // directory 0755 and every OTHER user on that host is then refused write to it. The
-        // failure is an AccessDeniedException wrapped twice, surfacing as ~40 storage tests
-        // failing at once, and it reads as a broken blob adapter rather than a permission.
-        // It cannot happen on a single-user machine, which is why macOS never sees it and why
-        // the suite was green for a year — it appears the moment a second account builds on the
-        // same box, e.g. a developer sharing a host with the CI runner that owns /tmp already.
+        // THE USER NAME IS IN THE PATH SINCE §155, and it is not tidiness. The fixture ids are
+        // random, the DIRECTORIES above them are not: the tree is companyId/runId/key, and the
+        // first two segments come from a test class's hand-assigned prefix, which is the same on
+        // every machine and in every checkout. This box runs the nightly lane as `ghrunner` and a
+        // developer as themselves, both against /tmp — so the first user to run ExecutionEndpointTest
+        // creates /tmp/tcms-evidence-test/e2000000-…/e2007000-… mode 0755, and the second user gets
+        // AccessDeniedException on eleven tests that have nothing to do with what they changed.
+        // Observed, not hypothesised: it is what the §155 gate ran into, one day after the runner
+        // was registered on the same machine.
         registry.add("tcms.storage.evidence.root",
-                () -> System.getProperty("java.io.tmpdir") + "/tcms-evidence-test-"
-                        + System.getProperty("user.name"));
+                () -> System.getProperty("java.io.tmpdir") + "/tcms-evidence-test-" + userName());
 
         // The same, for report bytes (§87) — a second root because the product has two, and
         // pointing the suite's two at one directory would be the one configuration no deployment
         // is obliged to use and every test would then depend on.
         registry.add("tcms.storage.reports.root",
-                () -> System.getProperty("java.io.tmpdir") + "/tcms-reports-test-"
-                        + System.getProperty("user.name"));
+                () -> System.getProperty("java.io.tmpdir") + "/tcms-reports-test-" + userName());
+
+        // The third root (§160) — the verbatim CI upload. A third directory for the reason the
+        // second one is separate: the product has three roots, and a suite that pointed them at one
+        // would be testing the single configuration no deployment is obliged to use. It would also
+        // hide the one defect the split exists to catch, a store constructed with its sibling's
+        // property key — which CA-20 in the mutation queue names against these very lines.
+        registry.add("tcms.storage.raw-reports.root",
+                () -> System.getProperty("java.io.tmpdir") + "/tcms-raw-reports-test-" + userName());
 
         // Production sizes this at 20. The suite must not.
         //
@@ -189,6 +196,18 @@ public abstract class IntegrationTestBase {
         // Five is ample: no test drives concurrent load, and a low ceiling means a genuine
         // connection leak shows up as exhaustion quickly rather than hiding behind headroom.
         registry.add("spring.datasource.hikari.maximum-pool-size", () -> 5);
+    }
+
+    /**
+     * The account this JVM runs as, sanitised to a single path segment — see the storage roots.
+     *
+     * <p>{@code "shared"} when the JVM cannot say. That is the honest fallback rather than a
+     * generated name: it collides exactly as the old path did instead of scattering evidence into
+     * a directory nothing else can find.
+     */
+    private static String userName() {
+        String sanitised = System.getProperty("user.name", "").replaceAll("[^A-Za-z0-9_.-]", "");
+        return sanitised.isEmpty() ? "shared" : sanitised;
     }
 
     /**

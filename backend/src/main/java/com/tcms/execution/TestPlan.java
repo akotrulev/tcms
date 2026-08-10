@@ -134,13 +134,14 @@ public class TestPlan {
      *
      * <p>{@code TestCase}, {@code Suite}, {@code DocPage}, {@code Artifact}, {@code Project},
      * {@code Team}, {@code Company}, {@code AppUser}, {@code CompanyMembership},
-     * {@code MembershipInvitation} and {@code TestExecution} all had it. <strong>{@code TestRun} and
-     * {@code work.WorkItem} still do not</strong> — found by the same sweep, deliberately left, and
-     * recorded in the handoff: neither serves {@code lockVersion} on the wire and nothing sends an
-     * {@code If-Match} for either, so both are latent rather than live. Adding it to {@code TestRun}
-     * is specifically <em>not</em> a free repair: {@code TestRun.begin} touches the run on every
-     * result recorded, so two testers working through the same run concurrently would start
-     * colliding on the product's most-used write.
+     * {@code MembershipInvitation} and {@code TestExecution} all had it. ~~{@code TestRun} and
+     * {@code work.WorkItem} still do not~~ → <strong>§155 resolved both, and not by annotating
+     * them</strong>: the paragraph this replaces warned that adding it to {@code TestRun} is
+     * specifically <em>not</em> a free repair, because {@code begin} touches the run on every result
+     * recorded and two testers would start colliding on the product's most-used write. That held.
+     * Both entities now leave the column <strong>unmapped</strong>, with the argument at each class,
+     * and {@code ArchitectureRulesTest.everyLockVersionColumnIsAVersion} is what stops a third
+     * entity spending eighty slices in the state this sentence described.
      */
     @jakarta.persistence.Version
     @Column(name = "lock_version", nullable = false)

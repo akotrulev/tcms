@@ -63,6 +63,40 @@ export function useProject(projectId: string | undefined): UseQueryResult<Projec
 }
 
 /**
+ * Retires a project, or brings it back (§159).
+ *
+ * Three decisions, and the first two are the same pair `useCreateProject` above makes in the
+ * opposite direction:
+ *
+ *   - **The detail cache is written from the response, and the list is invalidated.** Normally the
+ *     safe move is to invalidate both — a locally-assembled row would be the client's guess at
+ *     `caseCount` and `myRole`, which only the server can compute. Here the response *is* the
+ *     server's own assembly of exactly those fields, from the one assembler the `GET` uses, and a
+ *     backend test pins the two against each other. So the detail is written rather than refetched,
+ *     and the list — where this project is one row among several the response says nothing about —
+ *     is invalidated.
+ *   - **No `meta: { handled: true }`.** The button lives in a page header with nowhere to put an
+ *     inline alert, so a failure needs the global notification. The 403 is not the expected path
+ *     either: the control is disabled for anyone without `project:settings`.
+ *   - **The argument is the target state, not a verb**, mirroring the endpoint. A component that
+ *     sends `!project.archived` from a stale render performs a no-op rather than the opposite of
+ *     what was clicked.
+ */
+export function useSetProjectArchived(
+  projectId: string,
+): UseMutationResult<Project, Error, boolean> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (archived: boolean) =>
+      api.put<Project>(`${base(projectId)}/archive`, { archived }),
+    onSuccess: (project) => {
+      client.setQueryData(keys.project(projectId), project);
+      void client.invalidateQueries({ queryKey: keys.projects });
+    },
+  });
+}
+
+/**
  * The people who can be given work in this project.
  *
  * The server defines this as *active company members holding a grant on the project*, and

@@ -1597,6 +1597,27 @@ cd backend
 
 ---
 
+> ### ⚠ ID COLLISION — THIS FILE REUSES THREE PREFIXES, AND `RL-*` IS ONE OF THEM
+>
+> Recorded 2026-08-10 (§161). **Three id ranges are minted twice in this file**, so an id quoted
+> from a handoff section does not resolve to one row:
+>
+> | id range | first owner | second owner |
+> |---|---|---|
+> | `AG-1`…`AG-4` | §124 — the `BEST` removal | §133 — the `Agent` role |
+> | `CD-1`…`CD-7` | §128 — the case-draft buffer | §158 — condition drift |
+> | `RL-1`…`RL-7` | §141 — rate limiting | §154 — the readerless rule |
+>
+> **This is not cosmetic.** Sections quote these ids as their record of what was verified — §158
+> says *"`CD-1`, `CD-2`, `CD-3` **run**"* and §154 says *"`RL-1` and `RL-2` run"* — so a reader
+> checking whether a row ran has two candidates and no way to choose from the text. §156's own
+> block below says *"`RL-1`…`RL-6` above"*, and there are two blocks above it.
+>
+> **Not renumbered here on purpose.** The working agreement says an id is never renumbered once a
+> handoff section has quoted it, and both owners of each range have. Resolving this means deciding
+> between qualifying every reference (`§154 RL-3`) and renaming one side and back-patching the
+> sections that quote it — a decision, not a cleanup, and it belongs to the §154 redo.
+
 ## §154 — the columns nothing reads
 
 `ArchitectureRulesTest.everyMappedColumnHasAReader` asks the third question in §152's and §153's
@@ -1619,7 +1640,193 @@ cd backend
 | RL-4 | Stop excluding `ArchitectureRulesTest.java` from its own corpus (`OWN_FILE`) | **Five of the thirteen members vanish and the rule goes green while the defect stands.** Every key is the string `"Entity.field"`, so each argument for keeping a column is itself a literal naming that column. This is the rule's own most dangerous failure mode and the reason the measured population went 7 → 13. | ⬜ NOT RUN |
 | RL-5 | Stop stripping comments from the corpus | Nineteen columns read as live because some javadoc mentions them, and the population collapses to 7. In a repository whose comments carry the reasoning, prose standing in for code is §152's exact finding — the rule must not accept it as a reader. | ⬜ NOT RUN |
 | RL-6 | Stop dropping `INSERT` statements from the corpus | Seven columns read as live off the fixture rows that *create* them. An insert's column list is a write; a fixture inserting `added_by` is not a reader of `added_by`. | ⬜ NOT RUN |
-| RL-7 | Add `@Version` to `TestRun.lockVersion` (the recorded next-slice candidate, **not done here**) | Two concurrent updates to one run answer 409 through `RunController.onWriteRace`, which already exists and has never been reachable. Today the column is `NOT NULL DEFAULT 0`, mapped as a plain column, never incremented and never read — while `RunController` itself cites ERD §5 that "a run is worked by several testers at once by design". `work_item.lock_version` is the same shape. **This row is the check for a slice that has not been written.** | ⬜ NOT RUN |
+| RL-7 | Add `@Version` to `TestRun.lockVersion` (the recorded next-slice candidate, **not done here**) | Two concurrent updates to one run answer 409 through `RunController.onWriteRace`, which already exists and has never been reachable. Today the column is `NOT NULL DEFAULT 0`, mapped as a plain column, never incremented and never read — while `RunController` itself cites ERD §5 that "a run is worked by several testers at once by design". `work_item.lock_version` is the same shape. ~~**This row is the check for a slice that has not been written.**~~ → **SUPERSEDED 2026-08-09 by §155's `LV-1`…`LV-6` below.** The slice was written and the answer was no: `@Version` here makes the product's most-used write a contention point (`TestPlan.lockVersion`'s header said so before §154 proposed it), and the run's real lost update is closed by a conditional `UPDATE` and `@DynamicUpdate`. Both columns are unmapped now, so this mutation no longer describes a reachable state. | ⛔ SUPERSEDED |
 
 > **No browser-queue row.** No production behaviour changed: one test rule was added and thirteen
 > javadocs were corrected at the fields they describe. No request, response or screen differs.
+
+---
+
+### §155 — the guard two entities mapped and neither maintained (`LV-1` … `LV-6`)
+
+**`RL-7` above is superseded by this block and is marked so there.** It proposed adding `@Version`
+to `TestRun`; the audit said no on both entities and closed the run's actual race with a conditional
+`UPDATE` and `@DynamicUpdate` instead. These rows check what shipped.
+
+```bash
+cd backend
+./gradlew test --tests 'com.tcms.architecture.ArchitectureRulesTest'   # LV-3, LV-4
+./gradlew test --tests 'com.tcms.execution.ExecutionEndpointTest'      # LV-1, LV-2, LV-5
+./gradlew test --tests 'com.tcms.execution.IngestionEndpointTest'      # LV-6
+```
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| LV-1 | Remove `@DynamicUpdate` from `TestRun` | The mirror lost update returns: a close loaded before the first result lands writes its own null `started_at` back over the row. Should redden `ending a run does not write started_at — the mirror, and what @DynamicUpdate buys` **and nothing else** — the annotation changes no other observable behaviour, which is the whole reason it is affordable. | ✅ **RUN 2026-08-09** — red on exactly that one test, 83 run / 1 failed; reverted |
+| LV-2 | Drop `AND r.status = …NOT_STARTED` from `startIfNotStarted`'s `WHERE` clause | The statement becomes unconditional, so every result re-stamps the start and a closed run is reopened by a late one. Predicted: the two §155 tests **plus** the two §72 idempotence tests, because those assert the same property through the endpoint. | ✅ **RUN 2026-08-09** — **MORE, and the right more**: 4 red — `a run closed while a result was in flight is NOT put back to IN_PROGRESS`, `the start answers 1 once and 0 for ever after`, `a second result does not re-start it, and writes no second run.started`, `recording in an already-running run leaves its start alone`; reverted |
+| LV-3 | Map `lock_version` again on `WorkItem` (field + `@Column`, no `@Version`) | `everyLockVersionColumnIsAVersion` fails naming `WorkItem.lockVersion`. This is the state §74 left two entities in for eighty slices, and the rule exists so it cannot be re-entered by accident. | ⬜ NOT RUN |
+| LV-4 | Delete `@Version` from `TestPlan.lockVersion`, leaving the mapping | The rule fails naming `TestPlan.lockVersion` — **the expensive direction.** That column is `required` in the contract and `PATCH /plans/{planId}` compares an `If-Match` against it, so this mutation ships a precondition that cannot fail. `PlanUpdateEndpointTest`'s stale-header test should redden too; **if it does not, that test is asserting something other than what it names.** | ⬜ NOT RUN |
+| LV-5 | `ExecutionService` writes the `run.started` audit row unconditionally instead of on a return of 1 | Every result claims to have started the run. Should redden `a second result does not re-start it, and writes no second run.started` and `recording in an already-running run leaves its start alone` — the two that count audit rows. **The row that pins why the statement returns an int at all.** | ⬜ NOT RUN |
+| LV-6 | `IngestionService` passes the token owner's id instead of `null` as `actorId` to `startIfNotStarted` | A machine's start is attributed to a person, which is the attribution `TestExecution#record` refuses on the verdict itself. Predicted **zero** reds — nothing asserts `updated_by` on an ingested run's start, and the honest deliverable of this row is that measurement. A red here would mean the ingestion suite is stricter than it reads. | ⬜ NOT RUN |
+
+> **No browser-queue row.** Neither column was ever on the wire, no contract changed, and the race
+> the fixes close cannot be provoked from one browser tab — it needs two requests overlapping inside
+> one row's write window, which the browser queue's lanes cannot express.
+
+---
+
+### §156 — the columns nothing writes (`WL-1` … `WL-7`)
+
+`everyMappedColumnHasAWriter` is `everyMappedColumnHasAReader`'s mirror, so `RL-1`…`RL-6` above are
+the shape these follow. What is different is the **direction the corpus fails in**: an over-matching
+reader corpus costs a finding it will catch next time, an over-matching *writer* corpus hides one
+permanently. `WL-3` is the row for the instance that actually happened.
+
+```bash
+cd backend
+./gradlew test --tests 'com.tcms.architecture.ArchitectureRulesTest'   # every row here
+```
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| `WL-1` | Delete one entry from `WRITERLESS_BY_DECISION` — e.g. `Project.archivedAt` — leaving the field as it is | The rule fails naming it as an **unexpected** member. Nothing about the column changed; only the argument for keeping it went away. | ⬜ NOT RUN |
+| `WL-2` | Give a pinned column a writer without removing its entry — call `Project.archive(now)` from `ProjectService` | The rule fails on the **missing** element `Project.archivedAt`, which is the direction an ignore list cannot express. Note what else this mutation shows: nothing else in the suite reddens, because no test asserts a project can be archived. | ⬜ NOT RUN |
+| `WL-3` | Restore the first draft's corpus — `writesIn(literalsOf(source))` in place of `writesInLiterals(source)` | **Two members disappear and the rule goes green.** `CaseHealth.unlinked` and `IngestionJob.error` read as written because `DocPageEndpointTest`'s `"UPDATE key_sequence SET next_value = 1"` has no terminator, so `[^;]*` swallows every later literal in that file and an `@DisplayName` containing the word "unlinked" stands in for a writer. **The most important row in this block**: it is the rule's own failure mode, and it fails silently in the direction that hides findings. | ⬜ NOT RUN |
+| `WL-4` | Drop the SQL arm — keep `isWrittenInJava` and delete both `namedIn` calls | Every column written only by native SQL is reported: the five `case_health` signals that *do* have a writer (`never_executed`, `long_unexecuted`, `stale_automation`, `undeclared_automation`, `failing_repeatedly`), `computed_at`, and the `test_run` columns `startIfNotStarted` sets in JPQL. Bounds the claim that bytecode alone is the wrong observer here — the mirror of §154's measured "212 of 635". | ⬜ NOT RUN |
+| `WL-5` | Drop the field-name arm alone (`namedIn(writeText, null, field.getName())`), keeping the column-name one | The JPQL writers go: `startIfNotStarted` names `r.startedAt`, `V1` names `started_at`, and only the field-name arm connects the two. This is the row that says why there are two spellings rather than one. | ⬜ NOT RUN |
+| `WL-6` | Drop `SQL_ROOTS` — the `.sql` corpus — keeping the Java one | A column written only by a migration is reported. `V44`'s backfill is the worked example, and the general point is that a migration that *backfills* is a writer while one that only creates the column is not, because `CREATE TABLE` is neither verb. | ⬜ NOT RUN |
+| `WL-7` | Count a self-write in an uncalled method as a writer — drop the `origin.getAccessesToSelf().isEmpty()` check in `isWrittenInJava` | `Project.archivedAt` disappears, because `archive(now)` assigns it and nothing calls `archive`. That one line is the whole difference between "this column has a mutator" and "this column has ever held a value", and it is the reason the most expensive member of the population is in it. | ⬜ NOT RUN |
+
+> **One browser-queue row, and only one.** The rule changed no production behaviour and the
+> thirteen javadocs it corrected change nothing a request can see. What *does* differ on screen is
+> the dashboard's health panel sentence, which is `HP-1` in the browser queue — and the reason it
+> is a browser row rather than a mutation row is that the defect was in what the sentence *claims*,
+> which no assertion about the response body can observe.
+
+---
+
+### §157 — the stale-approval derivation (`SA-1` … `SA-6`)
+
+The first of §156's five writerless signals to get a computation, so these rows are unlike the
+`RL-*`/`WL-*` blocks above them: those mutate a **rule** and predict which entries a tally loses,
+these mutate a **statement** and predict which cases change their answer. The population under test
+is one `INSERT … ON CONFLICT` in `repository/ApprovalFacts.java`.
+
+```bash
+cd backend
+./gradlew test --tests 'com.tcms.repository.CaseHealthRecomputeTest'   # every row here
+```
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| `SA-1` | Drop `AND r.state = 'APPROVED'` from the lateral | A refused review reads as an aged sign-off. Should redden `a REJECTED review at an old version is not a stale approval` **and nothing else.** | ✅ **RUN 2026-08-09** — red on exactly that one test; reverted |
+| `SA-2` | `max(r.subject_version_no)` → `min(...)`, or an `ORDER BY r.approved_at DESC LIMIT 1` | A case approved at v1, edited, and approved again at v3 reports stale while sitting on v3. Should redden `the HIGHEST approved version decides, not the latest sign-off`. The `ORDER BY` spelling is the one worth measuring, because it is the reading somebody will propose as more natural. | ⬜ NOT RUN |
+| `SA-3` | Move `c.lifecycle_status = 'APPROVED'` out of the `SELECT` expression and into the `WHERE` | The statement becomes a filter, so a row already flagged stale and then demoted keeps the flag for ever. Should redden `a stale flag left behind by an earlier tick is cleared, not merely not set` and `a case sent back to DRAFT is not stale, even with the old approval on record`. **The expensive direction**: it is a signal with no route back, which is `HealthSignal`'s no-button-for-lying rule failing from the other side. | ⬜ NOT RUN |
+| `SA-4` | Drop `c.lifecycle_status = 'APPROVED'` entirely | Every case whose review history is behind its current version reports stale regardless of whether it claims to be approved. Should redden `a case sent back to DRAFT is not stale, even with the old approval on record`. | ⬜ NOT RUN |
+| `SA-5` | Replace the version comparison with the timestamp one — `c.updated_at > approved.at` | Predicted **zero** reds, and that is the deliverable: this fixture cannot tell the two apart, because the case that separates them is a save whose content hash is unchanged (no new version, `updated_at` moved). Writing the row is what records that the argument at the method is unasserted. A red here would mean the fixture is stricter than it reads. | ⬜ NOT RUN |
+| `SA-6` | Add `stale_approval` to `ExecutionFacts.recomputeAutomationDrift`'s `ON CONFLICT` update list | The last statement in the tick blanks the third one's work. Should redden `APPROVED at a version the case has since moved past is STALE_APPROVAL` — and it is the concrete instance of the hazard `signals this job does not compute survive a recompute` has guarded against hypothetically since §53. | ⬜ NOT RUN |
+
+> **One browser-queue row block, `SA-B1`…`SA-B3`**, in lane 4 beside `HP-1`…`HP-3`. Unlike §156's,
+> these need a fixture the pass must author — a project with §6g review switched **on** for cases,
+> a case taken to `APPROVED`, and an edit after it — because the signal cannot exist without a
+> review row and `ReviewService.moved` opens none for a project with the default settings.
+
+---
+
+### §158 — the condition-drift derivation (`CD-1` … `CD-7`)
+
+The second of §156's five to get a computation, and the same kind of block as `SA-*`: these mutate a
+**statement** and predict which cases change their answer. The population under test is one
+`INSERT … ON CONFLICT` in `repository/ConditionDrift.java`.
+
+```bash
+cd backend
+./gradlew test --tests 'com.tcms.repository.CaseHealthRecomputeTest'   # every row here
+```
+
+> **Three of these were run during the slice, which the policy at the top of this file says should
+> be none.** Recorded as run rather than quietly re-listed as pending: §157 did the same for one row
+> and the honest count across the two slices is four. They were run because each measures a
+> *decision the statement had to take* — join type, ordering, and which fields are content — and a
+> statement whose competing spelling is never measured is a paragraph of prose, which is §152's
+> lesson. The other four are queued.
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| `CD-1` | `LEFT JOIN condition lib` → `JOIN condition lib` | A soft-deleted entry stops being comparable, so the case that lost a step outright reports clean. Should redden `a soft-deleted entry is drift, and it is the case an inner join would miss` **and nothing else.** | ✅ **RUN 2026-08-09** — red on exactly that one test; reverted |
+| `CD-2` | `ORDER BY v.version_no DESC` → `ASC` | The oldest snapshot decides, so a case brought up to date still reports drift. Should redden `the NEWEST snapshot decides, not any snapshot` **and nothing else.** | ✅ **RUN 2026-08-09** — red on exactly that one test; reverted |
+| `CD-3` | Drop the `lib.title IS DISTINCT FROM …` term | A rename with unchanged steps reads clean. Should redden `a rename with the same steps is drift too` **and nothing else.** | ✅ **RUN 2026-08-09** — red on exactly that one test; reverted |
+| `CD-4` | Drop the `postconditions` half of the `||` | Only the PRE arm is compared. Should redden `the postcondition arm counts, not only the preconditions`. Worth measuring rather than assuming, because the two arms are concatenated in one expression and an edit that "simplifies" it drops the second silently. | ⬜ NOT RUN |
+| `CD-5` | `coalesce(drift.drifted, false)` → `drift.drifted` | `bool_or` over zero rows is NULL and the column is `NOT NULL`, so this is not a wrong answer but an **aborted transaction**, taking the other three statements' work with it. Should redden `a snapshot with no conditions raises nothing rather than failing`, `a case with no version at all has nothing to have drifted from`, and — because the whole tick rolls back — most of the class. **The row exists to measure how far the blast radius reaches**, since the failure mode is a job that stops rather than one that lies. | ⬜ NOT RUN |
+| `CD-6` | Replace the content comparison with the timestamp one — `lib.updated_at > newest.created_at` | Predicted **some** reds (`an entry still saying what the snapshot recorded raises nothing`, since every fixture condition is written after its case's version row) but **not** the one that matters: nothing here expresses "edited and changed straight back", which is the state where the timestamp spelling can never heal. **The deliverable is the gap**, and closing it is a fixture that writes a version, bumps `condition.updated_at`, and restores the body. | ⬜ NOT RUN |
+| `CD-7` | Add `condition_drift` to `ApprovalFacts.recomputeStaleApproval`'s `ON CONFLICT` update list | The third statement in the tick blanks the fourth's — or rather, being third, is blanked *by* it, so the mutation that shows the hazard is the one on the **later** statement. Should redden `an entry edited since the snapshot drifts the case that references it`. `SA-6`'s row for the other pair; the column-ownership rule now binds four statements and the number of ways to break it grows with it. | ⬜ NOT RUN |
+
+> **One browser-queue row block, `CD-B1`…`CD-B3`**, in lane 4 beside `HP-1`…`HP-3` and
+> `SA-B1`…`SA-B3`. Its fixture is the **cheapest of the three blocks** and worth saying so: no
+> review settings, no second account, no approval — attach a library condition to a case, save the
+> case so a version is written, then edit the condition from the library screen. Everything this
+> signal needs is one author with `library:manage`.
+
+## §159 — the project archive operation
+
+Run with:
+
+```bash
+./gradlew test --tests 'com.tcms.project.ProjectEndpointTest'      # every row here
+./gradlew test --tests 'com.tcms.architecture.ArchitectureRulesTest'   # AR-M5 only
+```
+
+**None of these were run during the slice.** The policy at the top of this file says none should be,
+and §157 and §158 between them ran four; this block restores the queue's own rule.
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| `AR-M1` | In `ProjectArchiveService.apply`, delete the `project.isArchived() == target` early return | Every request writes: the timestamp is re-stamped on an already-archived project and a second audit row is written. Should redden `setting the state a project already has writes nothing at all` **and nothing else** — which is the row that says the idempotence is in the service and not an accident of the gate. | ⬜ NOT RUN |
+| `AR-M2` | `PROJECT_SETTINGS` → `"project:read"` | Every visible caller may retire a project. Should redden `a Test Engineer is refused with 403, and nothing moves` **and nothing else.** The narrow blast radius is the point: it demonstrates that the 404-over-403 rows are answering the *visibility* gate rather than passing because the permission happened to be missing too. | ⬜ NOT RUN |
+| `AR-M3` | In the controller's switch, answer `Unreachable` with 403 instead of 404 | Should redden `a project the caller cannot see is 404, never 403` — **both arms**, the no-grant one and the other company's. Worth measuring rather than assuming, because the two reach the same arm by different routes and a mutation that reddens only one would mean the second assertion is decorative. | ⬜ NOT RUN |
+| `AR-M4` | In `ProjectArchiveService.set`, treat a null `archived` as `false` instead of a field error | A malformed body silently un-archives. Should redden `an absent archived field is a 400 on the field, not a silent un-archive`. **This is the mutation a reviewer would call a simplification** — `Boolean.TRUE.equals(request.archived())` reads as tidier than the null check and is exactly the defect `ProjectSettingsRequest` documents for `requiredPeerReviews`. | ⬜ NOT RUN |
+| `AR-M5` | Re-add `Project.archivedAt` to `ArchitectureRulesTest.WRITERLESS_BY_DECISION` | The population is eleven and the map says twelve. Should redden `every mapped column has a writer — the writerless tally, computed`. It measures the rule from the direction that matters now: the column has a writer, so the by-decision entry is the thing that would be wrong, and the rule must say so rather than tolerating a stale entry. | ⬜ NOT RUN |
+| `AR-M6` | Have `ProjectArchiveService` return `projects.viewOfCreated(project, userId)` instead of `viewOfChanged` | `caseCount` is 0 on the response and correct on the next `GET`. Should redden `the response is the same shape the list and the detail serve` **and nothing else**. The two assemblers differ in exactly one thing and it is the field a client renders straight onto the card it just acted on. | ⬜ NOT RUN |
+
+> **Six browser rows, `AR-1`…`AR-6`**, in lane **2 (`A0`)** rather than lane 4: this block needs no
+> scheduler tick, no review row and no second account except for `AR-5`/`AR-6`. `AR-3` — an archived
+> project still accepts writes — is the one that observes a decision rather than a rendering, and
+> `AR-4` is the only place the no-op's *silence* (no audit row, no re-dated timestamp) is visible
+> outside a test.
+
+## §160 — the verbatim CI upload
+
+*Six mutations. `RR-M1` is the one worth running first: it is the defect the whole slice exists to
+prevent, it produces a perfectly valid file, and the only assertion that catches it is a byte
+comparison against what was posted.*
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| `RR-M1` | In `IngestionService.completed`, store `payload(matches, recorded)` instead of `request.report()` | The download serves the server's *reading* of the report — valid JSON, plausible content, and not what CI sent. Should redden `the bytes come back EXACTLY as posted, not the parsed payload` **and nothing else.** This is the mutation that proves the test asserts byte identity rather than "a file came back", and it is the defect a reviewer is least likely to spot because both columns are called `raw`. | ⬜ NOT RUN |
+| `RR-M2` | In `IngestionReadService.locate`, delete the `.filter(job -> job.getRawStorageKey() != null)` | A job with no stored upload reaches `rawReports.open(null)`. Should redden `a job whose key is null — every row posted before §160 — is the same 404` — and the **manner** matters more than the redness: a `NullPointerException` surfacing as a 500 is a different failure from a 404, and it is what every historical row in an upgraded instance would meet. Record which it is. | ⬜ NOT RUN |
+| `RR-M3` | In `FilesystemRawReportStore`, construct `FilesystemBlobStore` with `"${tcms.storage.reports.root}"` | `CA-20`'s shape at the new root: CI uploads land in the regenerable report root, which has different retention and is the one an operator is told is safe to lose. **Should redden nothing in the suite** — `IntegrationTestBase` points all three at temp directories and the tests never compare roots — which is exactly why it is here and why `RR-7` exists in the browser lane. | ⬜ NOT RUN |
+| `RR-M4` | In `FilesystemRawReportStore`, pass the label `"report"` instead of `"raw report"` | An operator reading a storage failure is told the regenerable root failed when the irreproducible one did. Should redden `raw reports — the third root, §160`. Worth measuring because the assertion is a substring: `"report"` **is** contained in `"raw report"`, so the sibling's test would survive this swap in the other direction and this one must not. | ⬜ NOT RUN |
+| `RR-M5` | In `IngestionService.apply`, move `rawReports.put(...)` to before `jobs.saveAndFlush(job)` | Bytes before row — `ReportJobRunner`'s ordering imported into the caller that must not have it. **Should redden nothing**, and that is the finding: the ordering only matters when the transaction rolls back, which no test drives. The consequence is an orphan blob no row names, unreachable and uncollectable — `EvidenceService`'s stated reason for the opposite order, unobserved by this suite. | ⬜ NOT RUN |
+| `RR-M6` | In `IngestionJobView.reportUrl`, return the URL unconditionally instead of null for a null key | Every job advertises a download; the historical ones 404. Should redden `renders no download for a job posted before uploads were kept` in the **frontend** suite and nothing in the backend one — the field is required-and-nullable and the backend never renders it, so this is one of the few mutations whose only observer is on the other stack. | ⬜ NOT RUN |
+
+> **Seven browser rows, `RR-1`…`RR-7`**, in lane **`A3`** — the CI ingestion block, which already
+> builds every fixture they need. `RR-M3` and `RR-M5` are the two that redden nothing here and are
+> the reason both queues have a row about roots and orderings.
+
+## §161 — the contract-versus-server enum rule
+
+*Three mutations, and **two of them were already run** — before the slice's prose was written,
+because a rule whose failure mode is untested is the shape §161 is about. `CE-M3` is the one left,
+and it is the interesting one: it asks whether the rule that pins the correspondence can itself be
+silently emptied.*
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| `CE-M1` | Add a constant (`MARKDOWN`) to `execution.StepFormat` and not to `repository.StepFormat` or the contract | Should redden `a contract enum and its server type hold the same members` as **SERVER-ONLY**, naming the copy that moved. This is the defect the rule exists for — a constant Jackson will write that no generated union contains — and the two-copy case is the one a name-matching rule would have missed. | ✅ **RUN 2026-08-10 — red, on the predicted rule and message** |
+| `CE-M2` | Delete `- INCOMPLETE` from `openapi.yaml`'s `HealthSignal` enum | Should redden the **healed** arm: `HealthSignal.INCOMPLETE` is in `DIVERGENCE_BY_DECISION`, and with the member gone from both sides the divergence no longer exists, so the argument for it has outlived its gap. Proves the map fails in *both* directions — the property §157–§160 each relied on in the writerless twin. | ✅ **RUN 2026-08-10 — red, `Expecting empty but was: ["HealthSignal.INCOMPLETE"]`** |
+| `CE-M3` | In `constantsOf`, revert `JavaModifier.ENUM` to `JavaModifier.STATIC` | Restores the bug the rule shipped with for one run: `execution.AggregationPolicy.DEFAULT` — a `public static final` alias for `LATEST`, never serialized — is counted as a constant and reported as SERVER-ONLY. **Should redden the same rule with a false finding**, which is the failure mode worth measuring: a green suite proves the rule finds things, and nothing here proves it does not manufacture them. If it stays green, the alias has gone and the mutation needs a new target. | ⬜ NOT RUN |
+
+> **`CE-M1` and `CE-M2` were run inline and that is a deliberate exception to §65, not a drift back
+> to §72–§76's.** They mutate a *check* rather than the product: the thing under test is the
+> assertion, there is no screen and no request, and a rule shipped without them is a rule nobody has
+> seen fail. Everything §65 defers — the browser pass and the product's own behaviour — is deferred.

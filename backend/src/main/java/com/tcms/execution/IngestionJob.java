@@ -35,14 +35,18 @@ import org.hibernate.type.SqlTypes;
  * for {@code LinkSourceType}'s reason (§93) — a constraint tightened and loosened again is one
  * nobody trusts.
  *
- * <h2>{@code raw_payload} holds what was UNDERSTOOD, not the file</h2>
+ * <h2>{@code raw_payload} holds what was UNDERSTOOD; the file itself is in {@code storage}</h2>
  *
- * <p>The verbatim report belongs in an object store, which is what {@code raw_storage_key} is for
- * and there is no adapter (§67's port argument, {@code storage.AttachmentStore}) — so that column
- * stays null
- * and says so. What makes this row useful afterwards is the normalized parse and the match outcome
- * per test: that is what a human binding an unmatched name needs to see, and it is the only record
- * of <em>why</em> a test that clearly ran produced no result.
+ * <p>Two columns, two questions, and they are not redundant. {@code raw_payload} is the normalized
+ * parse and the match outcome per test — what a human binding an unmatched name reads, and the only
+ * record of <em>why</em> a test that clearly ran produced no result. {@code raw_storage_key} names
+ * the verbatim upload in {@code storage.RawReportStore}, which answers the different question of
+ * whether this server understood correctly what CI actually sent.
+ *
+ * <p><del>The verbatim report belongs in an object store, which is what {@code raw_storage_key} is
+ * for and there is no adapter (§67's port argument) — so that column stays null and says so.</del>
+ * <strong>→ superseded by §160.</strong> The adapter has existed since §125;
+ * {@code raw_storage_key}'s own javadoc below carries what changed and what a null there means now.
  *
  * <h2>No {@code lock_version}, and the table has no such column</h2>
  *
@@ -86,14 +90,22 @@ public class IngestionJob {
     private String rawPayload;
 
     /**
-     * Where the raw uploaded file was put — and <strong>nothing reads it</strong> (§154,
-     * {@code ArchitectureRulesTest.READERLESS_BY_DECISION}).
+     * Where the raw uploaded file is — <strong>the key into {@code storage.RawReportStore}</strong>,
+     * and non-null on every job written since §160.
      *
-     * <p>The consequence is worth stating plainly, because the field name does not: <strong>the
-     * upload cannot be retrieved.</strong> §117 stores the bytes and stores the key that would find
-     * them again, and {@link #getRawStorageKey} — package-private — has no caller in {@code src/main}
-     * or {@code src/test}. Giving it one is a storage read path and an operation on the contract,
-     * not a wiring fix, which is why this is recorded rather than closed here.
+     * <p><del>Nothing writes it and nothing reads it (§154's {@code READERLESS_BY_DECISION}, §156's
+     * {@code WRITERLESS_BY_DECISION}); the upload cannot be retrieved. Closing it is §67's port plus
+     * a read operation on the contract, not a wiring fix.</del> <strong>→ superseded by §160, which
+     * did exactly that.</strong> The port arrived in §125 when {@code storage} became a foundation
+     * module, so the argument this column rested on had already expired by two slices' worth of
+     * commits when §154 and §156 each recorded it as a standing decision — the comment outlived what
+     * made it true, which is the shape those two rules exist to find.
+     *
+     * <p><strong>Null means "posted before §160", not "lost".</strong> The column is nullable and
+     * stays nullable: every row {@code V1} through §159 has no upload behind it and no migration can
+     * invent one. {@code IngestionReadService.openRawReport} answers 404 for those, which is the
+     * same answer it gives when a blob has been pruned, and deliberately so — the caller's next
+     * action is identical and a second spelling would be a distinction with no act behind it.
      */
     @Column(name = "raw_storage_key")
     private String rawStorageKey;
@@ -108,6 +120,16 @@ public class IngestionJob {
     @Column(name = "unmatched_count", nullable = false)
     private int unmatchedCount;
 
+    /**
+     * Why a {@code FAILED} job failed — and <strong>nothing writes it</strong> (§156,
+     * {@code ArchitectureRulesTest.WRITERLESS_BY_DECISION}), because nothing writes {@code FAILED}.
+     *
+     * <p>That is the class header's decision rather than a gap, and it is the one member of this
+     * rule's population whose argument predates the rule by forty slices: a parse failure leaves no
+     * row at all, so there is no row for this column to explain. It becomes reachable with the
+     * asynchronous lane the header describes, at the same moment {@code PENDING} and
+     * {@code PROCESSING} do — which is why it is mapped now rather than added then.
+     */
     @Column(name = "error")
     private String error;
 
@@ -121,27 +143,38 @@ public class IngestionJob {
     /**
      * The one factory — a job that has already run.
      *
+     * <p><strong>The id is the caller's</strong>, unlike every other factory in this module, and
+     * §160 is why: {@code raw_storage_key} names a blob whose key contains this job's id, so the id
+     * has to exist before the row does. The alternative was a second mutator to set the key after
+     * construction, on an entity whose header says nothing edits an ingestion job — a mutation seam
+     * bought to avoid a parameter.
+     *
      * @param runId null when nothing matched, so no run was created or used
+     * @param rawStorageKey where the verbatim upload was put — see the field
      */
+    @SuppressWarnings("checkstyle:ParameterNumber")
     static IngestionJob completed(
+            UUID id,
             UUID companyId,
             UUID projectId,
             UUID runId,
             ReportFormat format,
             String idempotencyKey,
             String rawPayload,
+            String rawStorageKey,
             int matchedCount,
             int unmatchedCount,
             Instant now) {
 
         IngestionJob job = new IngestionJob();
-        job.id = UUID.randomUUID();
+        job.id = id;
         job.companyId = companyId;
         job.projectId = projectId;
         job.runId = runId;
         job.format = format;
         job.idempotencyKey = idempotencyKey;
         job.rawPayload = rawPayload;
+        job.rawStorageKey = rawStorageKey;
         job.status = IngestionStatus.COMPLETED;
         job.matchedCount = matchedCount;
         job.unmatchedCount = unmatchedCount;

@@ -72,10 +72,17 @@ public class ProjectService {
     /**
      * Every project in the active company this caller may see, by name.
      *
-     * <p>Archived projects are included. The contract carries {@code archived} as a field
-     * rather than as a filter, and the SPA's picker distinguishes them — omitting them
-     * server-side would make an archived project unreachable rather than marked, which is not
-     * what "suspend, never delete" means one level down.
+     * <p>Archived projects are included. The contract carries {@code archived} as a field rather
+     * than as a filter: omitting them server-side would make an archived project unreachable rather
+     * than marked, which is not what "suspend, never delete" means one level down — and it would
+     * take the un-archive away from the only screen that could offer it.
+     *
+     * <p>~~and the SPA's picker distinguishes them~~ — <strong>it did not, from §34 to §159</strong>.
+     * No file outside a test fixture in either the SPA or {@code packages/} so much as named the
+     * field, because nothing could set it, so this sentence described a rendering that existed
+     * nowhere while the state it rendered existed nowhere either. Both halves are true now (§159),
+     * and the pair is worth remembering as one defect rather than two: the prose was consistent with
+     * itself and with nothing else.
      */
     @Transactional(readOnly = true)
     public List<ProjectView> listVisible(UUID userId) {
@@ -600,6 +607,28 @@ public class ProjectService {
         // reaches it purely by inheritance — and would otherwise be told they have no role on the
         // project they just made.
         return view(project, Map.of(), access.projectRoleNames(userId),
+                access.inheritedProjectRoleName(userId).orElse(null));
+    }
+
+    /**
+     * The wire shape of a project a write has just changed — {@link #viewOfCreated}'s sibling, and
+     * the same argument for existing: one assembler, so the response to a write cannot come to
+     * differ from the response to the {@code GET} the client makes next.
+     *
+     * <p>It runs the count query where {@code viewOfCreated} passes an empty map, and that is the
+     * whole difference between them: a project created in this transaction provably has no cases,
+     * an archived one usually has a great many, and returning zero for it would put a wrong number
+     * on the card the caller is looking at.
+     *
+     * <p>Package-private, and the project is passed in rather than re-read: the only callers are
+     * inside a write that has already been through {@link #writeGranted}, so re-fetching would be a
+     * round trip whose one purpose would be to re-gate what is already gated.
+     */
+    ProjectView viewOfChanged(Project project, UUID userId) {
+        return view(
+                project,
+                caseCounts(CompanyContext.require(), List.of(project.getId())),
+                access.projectRoleNames(userId),
                 access.inheritedProjectRoleName(userId).orElse(null));
     }
 

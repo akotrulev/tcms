@@ -7,14 +7,18 @@ import { theme } from '../../app/theme'
 import { HealthPanel } from './DashboardPage'
 
 /**
- * "Needs attention" has three states and only one of them is reachable through the mock.
+ * "Needs attention" has three states and only one of them was reachable through the fixture.
  *
  * An empty tile list is a **claim that nothing is wrong**, and it is only true if somebody
- * looked. `case_health` has no writer, so on a live server nobody has — and the panel that
- * says "nothing needs attention" would be the most confidently wrong sentence on the page.
- * `healthComputedAt: null` is what separates the two, and both branches are asserted here
+ * looked. `healthComputedAt: null` is what separates the two, and both branches are asserted here
  * because the fixture can never show them (§46: no test written before a state is reachable
  * can fail on it).
+ *
+ * ~~`case_health` has no writer, so on a live server nobody has.~~ → **superseded 2026-08-09
+ * (§156): it has three, and the hourly recompute is on by default.** The branch this file called
+ * unreachable is the one every deployment lands in, and it said "Nothing needs attention" while
+ * five of the ten signals had no computation behind them at all. The copy is narrower now, and
+ * the last test here is what holds it there.
  */
 
 const dashboard = (partial: Partial<RepositoryDashboard>): RepositoryDashboard =>
@@ -119,5 +123,17 @@ describe('HealthPanel — the difference between clean and unchecked', () => {
       'href',
       '/projects/p/cases?healthSignal=UNLINKED',
     )
+  })
+
+  it('claims only that no signal was raised, never that nothing is wrong', () => {
+    // §156. Five of the ten signals have no computation behind them, and the server has no way to
+    // say which — so an empty tile list means "none of the checks that run raised anything", and
+    // the panel must not upgrade that into an all-clear. The assertion is on the WORDS rather than
+    // the testid because the testid is unchanged and the defect was entirely in the sentence.
+    renderPanel(dashboard({ health: [], healthComputedAt: '2026-08-01T08:00:00Z' }))
+
+    const clear = screen.getByTestId('Dashboard.Health.Clear')
+    expect(clear).toHaveTextContent(/no health signal was raised/i)
+    expect(clear).not.toHaveTextContent(/nothing needs attention/i)
   })
 })

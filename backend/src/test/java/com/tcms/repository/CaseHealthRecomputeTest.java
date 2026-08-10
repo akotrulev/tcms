@@ -16,6 +16,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -26,7 +27,11 @@ import org.springframework.beans.factory.annotation.Autowired;
  * The {@code case_health} recompute — the first writer this read model has ever had, and since M3
  * slice 5 the writer of <strong>four</strong> signals rather than two: §6c's automation-drift pair
  * joined the execution pair once §117 made {@code test_run.source = 'INGESTED'} a thing that
- * exists.
+ * exists. <strong>Five since §157</strong>, which added §6g's stale approval — the first signal
+ * here that is not about running anything, and the first of the five §156 found writerless to get
+ * a derivation. <strong>Six since §158</strong>, which added §6f's condition drift: the second of
+ * the five, and the first whose cause is neither an execution nor another module's table but this
+ * module's own version history read against its own library.
  *
  * <h2>What this class is really guarding</h2>
  *
@@ -51,9 +56,9 @@ import org.springframework.beans.factory.annotation.Autowired;
  *       {@code ExecutionFacts} reads the newest result of any kind. A case CI abandoned but a
  *       person still runs by hand satisfies one and not the other, and copying the neighbouring
  *       lateral — the likeliest edit anybody makes here — reports it as healthy.</li>
- *   <li><strong>The job asserting signals it did not compute.</strong> Five of the ten signals
- *       have no writer, and one more ({@code failing_repeatedly}) has a writer in another module
- *       writing the same rows on its own schedule. An {@code ON CONFLICT} that set every column would make this job the author
+ *   <li><strong>The job asserting signals it did not compute.</strong> <del>Five</del> four of the
+ *       ten signals have no writer, and one more ({@code failing_repeatedly}) has a writer in
+ *       another module writing the same rows on its own schedule. An {@code ON CONFLICT} that set every column would make this job the author
  *       of claims it has no evidence for, and would blank a future approval computation's work on
  *       every tick. The columns are owned individually even though the row is shared.</li>
  *   <li><strong>Writing across companies.</strong> The statement carries no company predicate — it
@@ -158,6 +163,103 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
     private static final UUID UNDECLARED_IMPOSSIBLE =
             UUID.fromString("ce004000-0000-4000-8000-00000000000e");
 
+    // ---- stale approval (§157, plan §6g) ----------------------------------------------------
+    //
+    // Every one of these is a lifecycle status crossed with a review history, and each is exercised
+    // alone for §117's ladder reason. None of them has an execution row, so they all report
+    // NEVER_EXECUTED too — asserted rather than filtered out, because a containsExactly that
+    // quietly ignored a sibling signal would pass against an implementation that raised it wrongly.
+
+    /** APPROVED at v1, edited twice since. The signal's whole point. */
+    private static final UUID APPROVED_THEN_EDITED =
+            UUID.fromString("ce004000-0000-4000-8000-00000000000f");
+    /** APPROVED at the version it is still on. Clean. */
+    private static final UUID APPROVED_AND_UNTOUCHED =
+            UUID.fromString("ce004000-0000-4000-8000-000000000010");
+    /**
+     * {@code APPROVED} on the ladder, with no review row at all — which is <em>most</em> approved
+     * cases, because §6g's opt-in is off by default and {@code ReviewService.moved} opens nothing
+     * for a project that has not turned it on.
+     */
+    private static final UUID APPROVED_WITHOUT_A_REVIEW =
+            UUID.fromString("ce004000-0000-4000-8000-000000000011");
+    /**
+     * A stale approval on the record and the case back in {@code DRAFT} — what
+     * {@code EditAfterApproval.RE_REVIEW} produces on every edit, and what rescinding an approval
+     * by hand produces once. The review row stands; the case is not claiming to be approved.
+     */
+    private static final UUID DEMOTED_AFTER_APPROVAL =
+            UUID.fromString("ce004000-0000-4000-8000-000000000012");
+    /** Rejected at v1, approved by nobody, and {@code APPROVED} on the ladder. A rejection is not a sign-off. */
+    private static final UUID REJECTED_AT_AN_OLD_VERSION =
+            UUID.fromString("ce004000-0000-4000-8000-000000000013");
+    /** Approved at v1, edited, approved again at v3, and still on v3. Not stale — the newest sign-off covers it. */
+    private static final UUID APPROVED_TWICE =
+            UUID.fromString("ce004000-0000-4000-8000-000000000014");
+
+    // ---- condition drift (§158, plan §6f) ---------------------------------------------------
+    //
+    // Every one of these is a version snapshot crossed with the state of the library entry it
+    // names, and each is exercised alone for §117's ladder reason. None has an execution row, so
+    // they all report NEVER_EXECUTED too — asserted rather than filtered out, for the reason the
+    // stale-approval block gives.
+
+    /** Its entry's body was edited after the snapshot was taken. The signal's whole point. */
+    private static final UUID CONDITION_EDITED =
+            UUID.fromString("ce004000-0000-4000-8000-000000000015");
+    /** Its entry says exactly what the snapshot recorded. Clean. */
+    private static final UUID CONDITION_UNCHANGED =
+            UUID.fromString("ce004000-0000-4000-8000-000000000016");
+    /** Same steps, different name. Drift — the title is on the screen the tester reads. */
+    private static final UUID CONDITION_RETITLED =
+            UUID.fromString("ce004000-0000-4000-8000-000000000017");
+    /**
+     * Its entry was soft-deleted. The loudest drift there is: {@code CaseConditions.forCase} drops
+     * an attachment that no longer resolves, so the live case renders one instruction fewer than
+     * the snapshot says it should — silently, and with nothing on the case itself changed.
+     */
+    private static final UUID CONDITION_DELETED =
+            UUID.fromString("ce004000-0000-4000-8000-000000000018");
+    /** Drift in the POST arm only — an implementation reading {@code preconditions} alone calls it clean. */
+    private static final UUID POSTCONDITION_EDITED =
+            UUID.fromString("ce004000-0000-4000-8000-000000000019");
+    /** A snapshot with both arms empty. Clean, and the case the {@code coalesce} exists for. */
+    private static final UUID CASE_WITHOUT_CONDITIONS =
+            UUID.fromString("ce004000-0000-4000-8000-00000000001a");
+    /** No {@code test_case_version} row at all — {@code CaseVersions}' v1 gap. Nothing to have drifted from. */
+    private static final UUID CASE_WITHOUT_A_VERSION =
+            UUID.fromString("ce004000-0000-4000-8000-00000000001b");
+    /** v2's snapshot drifted, v3's does not. The newest snapshot is the one that decides. */
+    private static final UUID DRIFT_IN_AN_OLD_VERSION =
+            UUID.fromString("ce004000-0000-4000-8000-00000000001c");
+
+    /** The library entry every clean case names, and the one the drifted snapshots were taken of. */
+    private static final UUID STABLE_ENTRY = UUID.fromString("ce006000-0000-4000-8000-000000000001");
+    /** Same id in the snapshot, different body in the library. */
+    private static final UUID EDITED_ENTRY = UUID.fromString("ce006000-0000-4000-8000-000000000002");
+    /** Same id, same body, different title. */
+    private static final UUID RETITLED_ENTRY =
+            UUID.fromString("ce006000-0000-4000-8000-000000000003");
+    /** Same id, same content, {@code deleted_at} set — so no live row resolves it at all. */
+    private static final UUID DELETED_ENTRY =
+            UUID.fromString("ce006000-0000-4000-8000-000000000004");
+    /** A {@code POST} entry, edited. */
+    private static final UUID EDITED_POST_ENTRY =
+            UUID.fromString("ce006000-0000-4000-8000-000000000005");
+
+    /**
+     * The two bodies the drift fixtures move between, as constants rather than literals at each
+     * site.
+     *
+     * <p>Not tidiness: the whole comparison is "does the snapshot's text still match the library's",
+     * so a fixture that spelled the <em>same</em> body twice with one character different would
+     * report drift for a reason no test names, and every assertion in the block would still pass.
+     */
+    private static final List<String> STANDARD_USER =
+            List.of("Open /login", "Sign in as qa@acme.test");
+    private static final List<String> ADMIN_USER =
+            List.of("Open /login", "Sign in as admin@acme.test");
+
     /**
      * Comfortably either side of the 90-day default rather than exactly on it — <strong>and either
      * side of the 14-day stale-automation default too</strong>, which is what lets one pair of
@@ -227,6 +329,74 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
                     "MANUAL");
             testCase(acme, UNDECLARED_IMPOSSIBLE, ACME, ACME_PROJECT, ACME_SUITE, "TC-13", 13, false,
                     "NOT_AUTOMATABLE");
+
+            // ---- stale approval ---------------------------------------------------------------
+            authoredCase(acme, APPROVED_THEN_EDITED, ACME_PROJECT, "TC-14", 14, "APPROVED", 3);
+            approvedReview(acme, ACME_PROJECT, APPROVED_THEN_EDITED, 1, "ce005000-0000-4000-8000-000000000001");
+
+            authoredCase(acme, APPROVED_AND_UNTOUCHED, ACME_PROJECT, "TC-15", 15, "APPROVED", 2);
+            approvedReview(acme, ACME_PROJECT, APPROVED_AND_UNTOUCHED, 2, "ce005000-0000-4000-8000-000000000002");
+
+            authoredCase(acme, APPROVED_WITHOUT_A_REVIEW, ACME_PROJECT, "TC-16", 16, "APPROVED", 4);
+
+            authoredCase(acme, DEMOTED_AFTER_APPROVAL, ACME_PROJECT, "TC-17", 17, "DRAFT", 3);
+            approvedReview(acme, ACME_PROJECT, DEMOTED_AFTER_APPROVAL, 1, "ce005000-0000-4000-8000-000000000003");
+
+            authoredCase(acme, REJECTED_AT_AN_OLD_VERSION, ACME_PROJECT, "TC-18", 18, "APPROVED", 3);
+            review(acme, ACME_PROJECT, REJECTED_AT_AN_OLD_VERSION, 1, "REJECTED",
+                    "ce005000-0000-4000-8000-000000000004");
+
+            authoredCase(acme, APPROVED_TWICE, ACME_PROJECT, "TC-19", 19, "APPROVED", 3);
+            approvedReview(acme, ACME_PROJECT, APPROVED_TWICE, 1, "ce005000-0000-4000-8000-000000000005");
+            approvedReview(acme, ACME_PROJECT, APPROVED_TWICE, 3, "ce005000-0000-4000-8000-000000000006");
+
+            // ---- condition drift --------------------------------------------------------------
+            //
+            // No case_condition rows anywhere in this block, and that is the fixture stating the
+            // derivation's actual shape rather than a convenient shortcut. The comparison is
+            // between the SNAPSHOT and the LIBRARY; the live attachment set is not a term in it,
+            // because attaching or detaching is authored content on CaseEdit and therefore writes
+            // a new version whose snapshot re-baselines. Seeding attachments would assert a
+            // dependency the statement does not have.
+            condition(acme, STABLE_ENTRY, "Log in as standard user", "PRE", STANDARD_USER, false);
+            condition(acme, EDITED_ENTRY, "Log in as standard user", "PRE", ADMIN_USER, false);
+            condition(acme, RETITLED_ENTRY, "Seed billing data (v2)", "PRE", STANDARD_USER, false);
+            condition(acme, DELETED_ENTRY, "Log in as standard user", "PRE", STANDARD_USER, true);
+            condition(acme, EDITED_POST_ENTRY, "Tear down the tenant", "POST", ADMIN_USER, false);
+
+            authoredCase(acme, CONDITION_EDITED, ACME_PROJECT, "TC-20", 20, "DRAFT", 1);
+            version(acme, CONDITION_EDITED, 1, snapshot(
+                    entry(EDITED_ENTRY, "Log in as standard user", STANDARD_USER), ""));
+
+            authoredCase(acme, CONDITION_UNCHANGED, ACME_PROJECT, "TC-21", 21, "DRAFT", 1);
+            version(acme, CONDITION_UNCHANGED, 1, snapshot(
+                    entry(STABLE_ENTRY, "Log in as standard user", STANDARD_USER), ""));
+
+            authoredCase(acme, CONDITION_RETITLED, ACME_PROJECT, "TC-22", 22, "DRAFT", 1);
+            version(acme, CONDITION_RETITLED, 1, snapshot(
+                    entry(RETITLED_ENTRY, "Seed billing data", STANDARD_USER), ""));
+
+            authoredCase(acme, CONDITION_DELETED, ACME_PROJECT, "TC-23", 23, "DRAFT", 1);
+            version(acme, CONDITION_DELETED, 1, snapshot(
+                    entry(DELETED_ENTRY, "Log in as standard user", STANDARD_USER), ""));
+
+            authoredCase(acme, POSTCONDITION_EDITED, ACME_PROJECT, "TC-24", 24, "DRAFT", 1);
+            version(acme, POSTCONDITION_EDITED, 1, snapshot(
+                    entry(STABLE_ENTRY, "Log in as standard user", STANDARD_USER),
+                    entry(EDITED_POST_ENTRY, "Tear down the tenant", STANDARD_USER)));
+
+            authoredCase(acme, CASE_WITHOUT_CONDITIONS, ACME_PROJECT, "TC-25", 25, "DRAFT", 1);
+            version(acme, CASE_WITHOUT_CONDITIONS, 1, snapshot("", ""));
+
+            // No version() call at all — the v1 gap, which is every case authored before §6j's
+            // write path existed.
+            authoredCase(acme, CASE_WITHOUT_A_VERSION, ACME_PROJECT, "TC-26", 26, "DRAFT", 1);
+
+            authoredCase(acme, DRIFT_IN_AN_OLD_VERSION, ACME_PROJECT, "TC-27", 27, "DRAFT", 2);
+            version(acme, DRIFT_IN_AN_OLD_VERSION, 1, snapshot(
+                    entry(EDITED_ENTRY, "Log in as standard user", STANDARD_USER), ""));
+            version(acme, DRIFT_IN_AN_OLD_VERSION, 2, snapshot(
+                    entry(EDITED_ENTRY, "Log in as standard user", ADMIN_USER), ""));
 
             run(acme, ACME_RUN, ACME, ACME_PROJECT, "TR-1", 1, "MANUAL");
             run(acme, ACME_OLD_RUN, ACME, ACME_PROJECT, "TR-2", 2, "MANUAL");
@@ -436,23 +606,216 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
     }
 
     @Nested
+    @DisplayName("Stale approval — §6g, and §157's derivation of it")
+    class StaleApproval {
+
+        @Test
+        @DisplayName("APPROVED at a version the case has since moved past is STALE_APPROVAL")
+        void approvedThenEdited() {
+            recomputeFor(ACME);
+            assertThat(signalsOf(APPROVED_THEN_EDITED))
+                    .containsExactlyInAnyOrder("stale_approval", "never_executed");
+        }
+
+        @Test
+        @DisplayName("APPROVED at the version it is still on raises nothing")
+        void approvedAndUntouched() {
+            recomputeFor(ACME);
+            assertThat(signalsOf(APPROVED_AND_UNTOUCHED)).containsExactly("never_executed");
+        }
+
+        @Test
+        @DisplayName("an APPROVED case with no review at all is not stale")
+        void noReviewIsNotAStaleReview() {
+            // Not an edge case: §6g's opt-in is OFF by default and ReviewService.moved opens no
+            // review for a project that has not turned it on, so this is the state most approved
+            // cases in most projects are in. The alternative reading — "approved, and nobody has
+            // signed anything, so flag it" — would raise a WARNING on every case in every project
+            // that uses the status ladder without the reviewer apparatus, which §6g explicitly
+            // permits. There is nothing to be stale.
+            recomputeFor(ACME);
+            assertThat(signalsOf(APPROVED_WITHOUT_A_REVIEW)).containsExactly("never_executed");
+        }
+
+        @Test
+        @DisplayName("a case sent back to DRAFT is not stale, even with the old approval on record")
+        void demotedAfterApproval() {
+            // What EditAfterApproval.RE_REVIEW produces on every edit. The review row stands — it
+            // is a record of something that happened — but the case is no longer claiming to be
+            // approved, so there is no claim to be out of date.
+            recomputeFor(ACME);
+            assertThat(signalsOf(DEMOTED_AFTER_APPROVAL)).containsExactly("never_executed");
+        }
+
+        @Test
+        @DisplayName("a REJECTED review at an old version is not a stale approval")
+        void aRejectionIsNotASignOff() {
+            // The predicate needs state = 'APPROVED' and not merely "a review exists at an older
+            // version". Dropping that clause is the likeliest edit here, and it reports a case
+            // somebody REFUSED to sign as one whose sign-off has aged.
+            recomputeFor(ACME);
+            assertThat(signalsOf(REJECTED_AT_AN_OLD_VERSION)).containsExactly("never_executed");
+        }
+
+        @Test
+        @DisplayName("the HIGHEST approved version decides, not the latest sign-off")
+        void reApprovalClearsIt() {
+            // Approved at v1, edited, approved again at v3, sitting on v3. Any implementation that
+            // takes one review rather than the maximum reports a case whose current content was
+            // signed off as stale — and it self-heals only if re-approval is what clears the
+            // signal, which is the whole "no button for lying" property.
+            recomputeFor(ACME);
+            assertThat(signalsOf(APPROVED_TWICE)).containsExactly("never_executed");
+        }
+
+        @Test
+        @DisplayName("a stale flag left behind by an earlier tick is cleared, not merely not set")
+        void theSignalSelfHeals() throws SQLException {
+            recomputeFor(ACME);
+            setSignal(ACME, APPROVED_AND_UNTOUCHED, "stale_approval", true);
+
+            recomputeFor(ACME);
+
+            assertThat(signalsOf(APPROVED_AND_UNTOUCHED))
+                    .as("the case's status is a term in the expression, not a filter in the WHERE "
+                            + "— a filter would skip the row and leave the stale flag for ever")
+                    .containsExactly("never_executed");
+        }
+    }
+
+    @Nested
+    @DisplayName("Condition drift — §6f, and §158's derivation of it")
+    class ConditionDriftSignal {
+
+        @Test
+        @DisplayName("an entry edited since the snapshot drifts the case that references it")
+        void aLibraryEditReachesTheCase() {
+            recomputeFor(ACME);
+            assertThat(signalsOf(CONDITION_EDITED))
+                    .containsExactlyInAnyOrder("condition_drift", "never_executed");
+        }
+
+        @Test
+        @DisplayName("an entry still saying what the snapshot recorded raises nothing")
+        void anUnchangedEntryIsClean() {
+            recomputeFor(ACME);
+            assertThat(signalsOf(CONDITION_UNCHANGED)).containsExactly("never_executed");
+        }
+
+        @Test
+        @DisplayName("a rename with the same steps is drift too")
+        void aRenameIsDrift() {
+            // The title is not metadata here: CaseConditionRefView carries it because the contract
+            // requires one, and the case detail renders it above the steps. "Log in as standard
+            // user" becoming "Log in as admin" changes what the case tells a tester to do quite as
+            // much as editing the body does, and a comparison over body alone calls it clean.
+            recomputeFor(ACME);
+            assertThat(signalsOf(CONDITION_RETITLED))
+                    .containsExactlyInAnyOrder("condition_drift", "never_executed");
+        }
+
+        @Test
+        @DisplayName("a soft-deleted entry is drift, and it is the case an inner join would miss")
+        void aDeletedEntryIsTheLoudestDrift() {
+            // THE test of the join type. This entry's title and body are byte-identical to what the
+            // snapshot recorded — the ONLY difference is deleted_at — so every content comparison
+            // in the statement answers "unchanged", and an inner join would drop the row before any
+            // of them ran and report the case clean. Meanwhile CaseConditions.forCase has stopped
+            // resolving it, so the live case renders one instruction fewer than the snapshot says
+            // it should. The case that lost content outright must not be the one that reads well.
+            recomputeFor(ACME);
+            assertThat(signalsOf(CONDITION_DELETED))
+                    .as("lib.id IS NULL is a term in the expression, not an accident of LEFT JOIN")
+                    .containsExactlyInAnyOrder("condition_drift", "never_executed");
+        }
+
+        @Test
+        @DisplayName("the postcondition arm counts, not only the preconditions")
+        void bothArmsAreCompared() {
+            // Its preconditions are clean and only its postcondition drifted, so an implementation
+            // that unnested one array passes every other test in this class. A postcondition is
+            // cleanup a tester is told to perform; drifting silently is the same defect.
+            recomputeFor(ACME);
+            assertThat(signalsOf(POSTCONDITION_EDITED))
+                    .containsExactlyInAnyOrder("condition_drift", "never_executed");
+        }
+
+        @Test
+        @DisplayName("a snapshot with no conditions raises nothing rather than failing")
+        void aCaseWithNoConditionsIsClean() {
+            // bool_or over zero rows is NULL, and condition_drift is NOT NULL — so without the
+            // coalesce this is not a wrong answer but an aborted recompute, taking every other
+            // signal in the same transaction with it. The safe direction, and invisible until
+            // something asserts it.
+            recomputeFor(ACME);
+            assertThat(signalsOf(CASE_WITHOUT_CONDITIONS)).containsExactly("never_executed");
+        }
+
+        @Test
+        @DisplayName("a case with no version at all has nothing to have drifted from")
+        void theV1GapIsNotDrift() {
+            // Every case authored before §6j's write path is in this state permanently. Reporting
+            // drift here would raise an ERROR on the oldest half of a real repository on the day
+            // this shipped, for a comparison that was never taken.
+            recomputeFor(ACME);
+            assertThat(signalsOf(CASE_WITHOUT_A_VERSION)).containsExactly("never_executed");
+        }
+
+        @Test
+        @DisplayName("the NEWEST snapshot decides, not any snapshot")
+        void theNewestSnapshotWins() {
+            // v1 recorded the old body and v2 the current one. An implementation folding bool_or
+            // over every version reports a case as drifted for ever the moment it is edited once
+            // after a library change — inverting the signal for exactly the cases somebody has
+            // just brought up to date, which is theNewestResultWins()'s defect one table over.
+            recomputeFor(ACME);
+            assertThat(signalsOf(DRIFT_IN_AN_OLD_VERSION)).containsExactly("never_executed");
+        }
+
+        @Test
+        @DisplayName("a drift flag left behind by an earlier tick is cleared, not merely not set")
+        void theSignalSelfHeals() throws SQLException {
+            // The property the whole class of "outdated" signals rests on, and the one the
+            // timestamp spelling of this statement (condition.updated_at > version.created_at)
+            // cannot have: editing an entry and changing it straight back leaves updated_at moved
+            // for ever, so the flag would outlive its cause with no action available to clear it.
+            recomputeFor(ACME);
+            setSignal(ACME, CONDITION_UNCHANGED, "condition_drift", true);
+
+            recomputeFor(ACME);
+
+            assertThat(signalsOf(CONDITION_UNCHANGED))
+                    .as("the comparison is content, so reverting the library reverts the signal")
+                    .containsExactly("never_executed");
+        }
+    }
+
+    @Nested
     @DisplayName("What the job must not touch")
     class Boundaries {
 
         @Test
         @DisplayName("signals this job does not compute survive a recompute")
         void otherSignalsAreNotClobbered() throws SQLException {
-            // The ON CONFLICT clause names three columns. If it named all of them, this job would
-            // blank the approval computation's work on every tick once that lands — a defect that
-            // appears an hour after the other feature ships and looks like the other feature's bug.
+            // The three ON CONFLICT clauses name two or three columns each. If any named all of
+            // them, this job would blank a sibling's work on every tick — a defect that appears an
+            // hour after the other feature ships and looks like the other feature's bug.
+            //
+            // The column asserted here was stale_approval until §157, which gave that one a writer
+            // in this very service and so had to move the assertion. unlinked is the replacement
+            // and is the same shape: read by the facet, the chip and the board, written by nothing
+            // in any module (ArchitectureRulesTest.WRITERLESS_BY_DECISION). failing_repeatedly
+            // would be the stronger choice — it has a real writer in reporting — and it is not
+            // used, because setting it here would be this test asserting over another module's
+            // schedule.
             recomputeFor(ACME);
-            setSignal(ACME, RECENT, "stale_approval", true);
+            setSignal(ACME, RECENT, "unlinked", true);
 
             recomputeFor(ACME);
 
             assertThat(signalsOf(RECENT))
-                    .as("stale_approval belongs to a computation this job knows nothing about")
-                    .containsExactly("stale_approval");
+                    .as("unlinked belongs to a computation this job knows nothing about")
+                    .containsExactly("unlinked");
         }
 
         @Test
@@ -596,7 +959,12 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
     private void clearHealthAndExecutions() throws SQLException {
         for (UUID companyId : List.of(ACME, UMBRA)) {
             try (Connection connection = appConnection(companyId)) {
-                for (String table : List.of("case_health", "step_result", "test_execution",
+                // review_participation before review (FK), and both before test_case even though
+                // review.subject_id is deliberately NOT a foreign key — a review row surviving its
+                // subject would be seeded onto the next class's cases through the id, which is the
+                // §19 shape with an extra table in it.
+                for (String table : List.of("case_health", "review_participation", "review",
+                        "step_result", "test_execution",
                         "test_run", "test_case_version", "test_case", "suite")) {
                     try (PreparedStatement statement =
                             connection.prepareStatement("DELETE FROM " + table)) {
@@ -698,6 +1066,179 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             statement.setString(1, companyId.toString());
             statement.setString(2, id.toString());
             statement.setString(3, "hash-" + key);
+            statement.executeUpdate();
+        }
+    }
+
+    /**
+     * One case whose <em>authoring</em> state is what matters — its lifecycle status and the version
+     * it is on — rather than its automation.
+     *
+     * <p>Separate from {@link #testCase} instead of widening it: that helper's thirteen call sites
+     * are all about the automation columns, and a fourteenth and fifteenth parameter on them would
+     * make every drift fixture state two facts it does not care about. Both write the same table.
+     *
+     * @param currentVersionNo the right-hand side of the stale-approval comparison. No matching
+     *                         {@code test_case_version} rows are written for versions above 1,
+     *                         because nothing in this signal's path joins them — the case's own
+     *                         column is what {@code ReviewPanel} compares against too.
+     */
+    private void authoredCase(Connection connection, UUID id, UUID projectId, String key,
+            long keySeq, String lifecycleStatus, int currentVersionNo) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO test_case
+                    (id, company_id, project_id, suite_id, key, key_seq, title, step_format,
+                     priority, lifecycle_status, automation_status, current_version_no,
+                     created_at, updated_at, deleted_at)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?,
+                        ?, 'STRUCTURED', 'MEDIUM', ?, 'MANUAL', ?, now(), now(), NULL)
+                ON CONFLICT (id) DO NOTHING
+                """)) {
+            statement.setString(1, id.toString());
+            statement.setString(2, ACME.toString());
+            statement.setString(3, projectId.toString());
+            statement.setString(4, ACME_SUITE.toString());
+            statement.setString(5, key);
+            statement.setLong(6, keySeq);
+            statement.setString(7, "Case " + key);
+            statement.setString(8, lifecycleStatus);
+            statement.setInt(9, currentVersionNo);
+            statement.executeUpdate();
+        }
+    }
+
+    /**
+     * One library condition.
+     *
+     * @param body the ordered steps, written as a JSONB array because that is what {@code V1}
+     *             declares and {@code Condition.body} maps — the same shape the snapshot's
+     *             {@code body} carries, which is what lets the statement compare the two with
+     *             {@code IS DISTINCT FROM} rather than unnesting both.
+     * @param deleted soft-deleted. The one fixture axis with no counterpart in the snapshot: a
+     *                deleted entry is identical to a live one in every column the comparison reads.
+     */
+    private void condition(Connection connection, UUID id, String title, String type,
+            List<String> body, boolean deleted) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO condition
+                    (id, company_id, project_id, title, type, body, created_at, updated_at,
+                     deleted_at)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?, CAST(? AS jsonb),
+                        now(), now(), CAST(? AS timestamptz))
+                ON CONFLICT (id) DO NOTHING
+                """)) {
+            statement.setString(1, id.toString());
+            statement.setString(2, ACME.toString());
+            statement.setString(3, ACME_PROJECT.toString());
+            statement.setString(4, title);
+            statement.setString(5, type);
+            statement.setString(6, jsonArray(body));
+            statement.setString(7, deleted ? "2026-01-01T00:00:00Z" : null);
+            statement.executeUpdate();
+        }
+    }
+
+    /**
+     * One version row carrying a real snapshot.
+     *
+     * <p>{@link #testCase} writes a {@code '{}'} snapshot for its thirteen cases, which is what
+     * makes every one of them clean under this signal without saying so — an empty object has no
+     * condition arrays and therefore nothing to compare. This helper is for the cases where the
+     * snapshot <em>is</em> the fixture.
+     */
+    private void version(Connection connection, UUID caseId, int versionNo, String snapshot)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO test_case_version
+                    (id, company_id, case_id, version_no, snapshot, content_hash, created_at)
+                VALUES (gen_random_uuid(), CAST(? AS uuid), CAST(? AS uuid), ?,
+                        CAST(? AS jsonb), ?, now())
+                ON CONFLICT (case_id, version_no) DO NOTHING
+                """)) {
+            statement.setString(1, ACME.toString());
+            statement.setString(2, caseId.toString());
+            statement.setInt(3, versionNo);
+            statement.setString(4, snapshot);
+            statement.setString(5, "hash-" + caseId + "-v" + versionNo);
+            statement.executeUpdate();
+        }
+    }
+
+    /**
+     * A version snapshot with these resolved condition entries and nothing else that matters.
+     *
+     * <p>Deliberately <em>not</em> the whole {@code TestCaseDetailView} shape: the real snapshot
+     * carries thirty-odd fields and this statement reads two of them, so a fixture spelling out the
+     * rest would suggest a coupling that does not exist. The two arrays are named exactly as
+     * Jackson serializes the record's components, which <em>is</em> the coupling — rename
+     * {@code preconditions} on the view and this fixture, not the compiler, is what notices.
+     */
+    private static String snapshot(String preconditions, String postconditions) {
+        return """
+                {"title":"as the API served it","preconditions":[%s],"postconditions":[%s]}"""
+                .formatted(preconditions, postconditions);
+    }
+
+    /**
+     * One resolved condition inside a snapshot — {@code CaseConditionRefView}'s serialization.
+     *
+     * <p>The fields the statement never reads are present rather than trimmed, because a fixture
+     * carrying only {@code conditionId}, {@code title} and {@code body} would pass against an
+     * implementation that assumed the entry had nothing else in it.
+     */
+    private static String entry(UUID conditionId, String title, List<String> body) {
+        return """
+                {"id":"ce007000-0000-4000-8000-000000000001","position":0,"conditionId":"%s",\
+                "title":"%s","body":%s,"inline":false,"inherited":false,"inheritedFrom":null}"""
+                .formatted(conditionId, title, jsonArray(body));
+    }
+
+    private static String jsonArray(List<String> values) {
+        return values.stream()
+                .map(value -> "\"" + value + "\"")
+                .collect(Collectors.joining(",", "[", "]"));
+    }
+
+    /** A sign-off on one version of one case — {@code state = 'APPROVED'}, with an approver. */
+    private void approvedReview(Connection connection, UUID projectId, UUID caseId, int versionNo,
+            String reviewId) throws SQLException {
+        review(connection, projectId, caseId, versionNo, "APPROVED", reviewId);
+    }
+
+    /**
+     * One review row.
+     *
+     * <p>{@code subject_version_no} is stamped at <em>submission</em> and never re-stamped
+     * ({@code Review}'s header), so it is passed in rather than derived from the case: a fixture
+     * that always matched the case's current version could not express the state this signal
+     * exists to find.
+     *
+     * @param state one of {@code V1}'s three plus {@code V22}'s {@code WITHDRAWN}. Only
+     *              {@code APPROVED} gets an {@code approved_at}, which is {@code Review.approve}'s
+     *              invariant rather than a schema one. {@code approved_by} stays null in every row
+     *              — the column is a foreign key to {@code app_user} and this class seeds no
+     *              people, which is legitimate because the derivation asks <em>which version</em>
+     *              was signed off and never <em>by whom</em>. A fixture that seeded a user to fill
+     *              a column nothing reads would be stating a dependency that does not exist.
+     */
+    private void review(Connection connection, UUID projectId, UUID caseId, int versionNo,
+            String state, String reviewId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO review
+                    (id, company_id, project_id, subject_type, subject_id, subject_version_no,
+                     state, required_peer_reviews, approved_by, approved_at, created_at, created_by)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), 'CASE', CAST(? AS uuid),
+                        ?, ?, 0, NULL, CASE WHEN ? = 'APPROVED' THEN now() ELSE NULL END,
+                        now(), NULL)
+                ON CONFLICT (id) DO NOTHING
+                """)) {
+            statement.setString(1, reviewId);
+            statement.setString(2, ACME.toString());
+            statement.setString(3, projectId.toString());
+            statement.setString(4, caseId.toString());
+            statement.setInt(5, versionNo);
+            statement.setString(6, state);
+            statement.setString(7, state);
             statement.executeUpdate();
         }
     }

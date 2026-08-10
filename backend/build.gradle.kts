@@ -67,6 +67,21 @@ tasks.withType<Test>().configureEach {
     // Overridable, so a CI image with a different daemon can set its own.
     // docker-java reads the "api.version" property (not DOCKER_API_VERSION), so it has
     // to be a system property on the forked test JVM.
+    // Gradle gives a test worker 512m by default, and this suite had been running against that
+    // ceiling without anybody knowing — §161 measured the hung worker at 522685K used of 524288K.
+    // THE FAILURE MODE IS WHY THIS IS PINNED RATHER THAN LEFT TO THE DEFAULT: an exhausted G1 heap
+    // here does not throw OutOfMemoryError and does not fail a test. Every test passes, the worker
+    // finishes them, and then hangs for ever in MessageHub.stop with the collector spinning — a
+    // build that never returns and reports nothing, which is the least diagnosable outcome
+    // available. It cost two 20-minute runs to see it, and the second only because a heap dump was
+    // taken of a process that looked idle.
+    //
+    // What lives in that heap is not the product: it is three ArchUnit class graphs (two held
+    // statically by ArchitectureRulesTest for the JVM's whole life, one by ContractEnumTest),
+    // several cached Spring contexts, and Testcontainers' client. The graphs are the large,
+    // long-lived part and they grow with the codebase, so the ceiling gets closer every slice.
+    maxHeapSize = "2g"
+
     systemProperty("api.version", System.getenv("DOCKER_API_VERSION") ?: "1.41")
     testLogging {
         events("passed", "skipped", "failed")

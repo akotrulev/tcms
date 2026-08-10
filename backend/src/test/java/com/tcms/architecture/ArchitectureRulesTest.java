@@ -27,6 +27,7 @@ import com.tngtech.archunit.lang.syntax.ArchRuleDefinition;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.Version;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -44,6 +45,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.regex.MatchResult;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -168,6 +170,23 @@ class ArchitectureRulesTest {
 
     /** Any declared name followed by a parameter list — Spring Data derives the query from it. */
     private static final Pattern METHOD_NAME = Pattern.compile("\\b(\\w+)\\s*\\(");
+
+    /** The migrations and the test's init script — SQL that writes without any Java in between. */
+    private static final List<Path> SQL_ROOTS = List.of(
+            Path.of("src", "main", "resources"), Path.of("src", "test", "resources"));
+
+    /** {@link #COMMENT}'s SQL spelling. V1's comments carry the why, and prose is not a write. */
+    private static final Pattern SQL_COMMENT = Pattern.compile("--[^\\n]*");
+
+    /**
+     * A statement that WRITES, up to its terminator — {@link #everyMappedColumnHasAWriter}'s whole
+     * SQL corpus, and the exact complement of what {@link #withoutWrites} strips for the reader
+     * rule. Deliberately not narrowed to the column list or the {@code SET} clause: a {@code WHERE}
+     * inside an {@code UPDATE} would then be the only place a column is spelled and the rule would
+     * call it written, which over-counts in the direction this file has already chosen twice.
+     */
+    private static final Pattern WRITE_STATEMENT = Pattern.compile(
+            "\\b(?:insert\\s+into|update)\\b[^;]*", Pattern.CASE_INSENSITIVE);
 
     @Test
     @DisplayName("fixture precondition: the two class sets are actually different")
@@ -598,15 +617,24 @@ class ArchitectureRulesTest {
      * giving one of these a reader without deleting its entry. The argument for each is written at
      * the field itself; what is here is the one-line reason and the shape it is an instance of.
      *
-     * <p>Thirteen, and they are two different defects. <strong>Written and readerless</strong> —
-     * {@code locale}, {@code timezone}, {@code spaceId}, {@code rawStorageKey}, {@code addedAt},
-     * {@code addedBy}, {@code invitedAt}, {@code invitedBy}, {@code incomplete} — is §151's shape
+     * <p><strong>Twelve since §160</strong> — {@code rawStorageKey} left by getting both halves at
+     * once, which is the first exit from this rule in either direction and the second time a member
+     * has been written out rather than argued for (§157 did it in the writerless twin). Its entry
+     * had said closing it was "a storage read path and an operation, not a wiring fix", and that was
+     * accurate; what neither §154 nor §156 checked was whether the port it was waiting for had
+     * already arrived, which it had, in §125.
+     *
+     * <p>They are two different defects — <strong>and which member is which was itself wrong twice
+     * until {@link #everyMappedColumnHasAWriter} computed the other half</strong> (§156).
+     * <strong>Written and readerless</strong> — {@code locale}, {@code timezone}, {@code spaceId},
+     * {@code addedAt}, {@code addedBy}, {@code invitedAt}, {@code invitedBy} — is §151's shape
      * and the expensive one: a write per row recording something no screen, report or query has
      * ever asked for, free to be wrong for as long as nobody looks, which is exactly how
      * {@code release_sort_key} sorted a release below its own release candidate from M0 to §151
      * with 2389 tests green. <strong>Writerless as well</strong> — {@code anchorSlug},
-     * {@code scheduleCron}, {@code sharedWithTeamId}, {@code bulkOperationId} — is §116's cheaper
-     * one: a column nobody fills is a column nobody is misled by, and its whole cost is that four
+     * {@code scheduleCron}, {@code sharedWithTeamId}, {@code bulkOperationId}, and since §156's
+     * correction {@code incomplete} — is §116's cheaper
+     * one: a column nobody fills is a column nobody is misled by, and its whole cost is that six
      * javadocs describe a state the database has never been in.
      *
      * <p>{@code CaseHealth.incomplete} is the entry to copy. Its argument was already at the field
@@ -615,11 +643,17 @@ class ArchitectureRulesTest {
      */
     private static final Map<String, String> READERLESS_BY_DECISION = Map.ofEntries(
             Map.entry("CaseHealth.incomplete",
-                    "mapped so ddl-auto: validate has the whole row in view, and deliberately "
-                            + "absent from HealthSignal — the contract's enum has no such member "
-                            + "and inventing one puts a value on the wire the SPA cannot label. "
-                            + "The argument was at the field before this rule existed and is the "
-                            + "shape the other twelve are held to"),
+                    "mapped so ddl-auto: validate has the whole row in view, and absent from the "
+                            + "SERVER's HealthSignal because nothing derives it — no computation, "
+                            + "so no constant. §161 corrected the reason this entry used to give "
+                            + "(\"the contract's enum has no such member\"), which was false the "
+                            + "day it was written: openapi.yaml has declared INCOMPLETE since "
+                            + "2026-07-30 and lib/labels.ts has labelled it as long, so closing "
+                            + "this is a derivation and a product decision, NOT a contract change. "
+                            + "ContractEnumTest checks the claim instead of repeating it. The "
+                            + "argument was at the field before this rule existed and is the "
+                            + "shape the other eleven are held to — which is how one false premise "
+                            + "became the exemplar for twelve"),
             Map.entry("AppUser.locale",
                     "V1 NOT NULL, set to the constant \"en\" by AppUser.invite and never read. A "
                             + "stored preference with no writer but the default and no reader at "
@@ -637,12 +671,6 @@ class ArchitectureRulesTest {
                             + "DocSpace's own header states the other half — the space \"is not on "
                             + "the wire and has no endpoint\" — so the foreign key is maintained "
                             + "for a grouping no caller can ask for"),
-            Map.entry("IngestionJob.rawStorageKey",
-                    "the blob key of the raw CI file §117 stores, with a package-private getter "
-                            + "nothing calls: THE UPLOAD CANNOT BE RETRIEVED. The bytes are "
-                            + "written, the key that would find them again is written, and no "
-                            + "endpoint, service or test reads either. Closing it is a storage "
-                            + "read path and an operation, not a wiring fix"),
             Map.entry("SuiteCase.addedAt",
                     "§98 made a suite flat — filed, added and tagged — and this is the added "
                             + "arm's own provenance, stamped by SuiteCase.of on every membership "
@@ -736,10 +764,11 @@ class ArchitectureRulesTest {
         // has no idea which table a statement is about. A rule that reports a field something
         // really reads earns an ignore-list entry and is then ignored; a rule that misses one
         // stays trustworthy and finds it the next time the corpus tightens. What that costs is
-        // named where it is paid: everyLockVersionColumnIsAVersion does not exist yet, and
-        // test_run.lock_version and work_item.lock_version are two columns this rule cannot see —
-        // §154 verified both by hand as mapped without @Version, so a run edited by two testers at
-        // once is last-write-wins on an aggregate whose ERD §5 says that is the ordinary case.
+        // named where it is paid, and §155 paid it: everyLockVersionColumnIsAVersion below is the
+        // rule this comment used to say did not exist, written because test_run.lock_version and
+        // work_item.lock_version are two columns THIS rule cannot see — a native query naming
+        // another table's lock_version marks them read. §154 verified both by hand. Both are
+        // unmapped now, and the run's actual race is closed by a predicate rather than a counter.
         //
         // THE FIRST DRAFT'S CORPUS WAS WRONG IN EXACTLY §152'S WAY. It matched repository method
         // names against findBy*/countBy*/existsBy*, so ReportJob.requestedAt was reported as
@@ -822,6 +851,331 @@ class ArchitectureRulesTest {
                         with the argument written at the field — and if a query DOES read it, the \
                         corpus above is what is wrong, not this list""")
                 .containsExactlyInAnyOrderElementsOf(READERLESS_BY_DECISION.keySet());
+    }
+
+    /**
+     * The columns nothing writes, with the one-line reason each stays mapped. The argument itself
+     * lives at the field, like {@link #READERLESS_BY_DECISION}'s.
+     *
+     * <p><del>Fourteen</del> <del>thirteen since §157</del> <del>twelve since §158</del> <del>eleven since §159</del>
+     * <strong>ten since §160</strong>. Four members have now left by being <em>written</em>
+     * rather than deleted — {@code CaseHealth.staleApproval} (§157), {@code CaseHealth.conditionDrift}
+     * (§158), {@code Project.archivedAt} (§159) and {@code IngestionJob.rawStorageKey} (§160) — and
+     * the rule itself has not moved for any of them, which is what makes "an entry here is a
+     * decision to leave a column empty, not a permit to keep it that way" a description rather than
+     * a hope. <strong>This javadoc's own count was stale by one from §158 to §159</strong>, while
+     * the comment inside the test method below said twelve: two tallies, four lines apart, in the
+     * file whose subject is tallies kept by hand.
+     *
+     * <p>§160 is the first member to leave <em>both</em> this rule and
+     * {@link #READERLESS_BY_DECISION} in one slice, and that is not a coincidence: its entry in each
+     * argued for the other half's absence, so writing one alone would have been the two-states-at-once
+     * shape {@code IngestionJob}'s own field javadoc warned about.
+     *
+     * <p>Five of the ten are already in {@link #READERLESS_BY_DECISION} — the four §154 called
+     * "writerless as well" plus {@code CaseHealth.incomplete},
+     * whose classification §154 got wrong in this exact direction. That overlap is the point of
+     * running both rules rather than one: a column can be dead at either end, and only the pair says
+     * <em>which</em>. The five this rule sees alone are the ones §154 structurally could not,
+     * because a column with a reader is invisible to a rule about readers — and read-but-never-written
+     * is the worse half, since something downstream is drawing a conclusion from a value nothing
+     * produces.
+     */
+    private static final Map<String, String> WRITERLESS_BY_DECISION = Map.ofEntries(
+            Map.entry("AuditEvent.bulkOperationId",
+                    "writerless AND readerless — argued at the field and in "
+                            + "READERLESS_BY_DECISION; the field, its mapping and its getter are "
+                            + "the only three mentions of it anywhere"),
+            Map.entry("DocBlock.anchorSlug",
+                    "writerless AND readerless — argued at the field: a link targets "
+                            + "(page_id, block_id), never an anchor derived from content"),
+            Map.entry("ReportDefinition.scheduleCron",
+                    "writerless AND readerless — scheduled reports are on the high-level plan's "
+                            + "§8 blocked list and ReportDefinition.create takes no parameter for "
+                            + "it, with the reason at the factory"),
+            Map.entry("ReportDefinition.sharedWithTeamId",
+                    "writerless AND readerless, scheduleCron's shape and the same factory's "
+                            + "decision: sharing a saved report with a team is not built"),
+            Map.entry("CompanyMembership.avatarUrl",
+                    "V1's column for a picture nothing uploads. Already stated on the contract "
+                            + "side — api.UserRef's javadoc calls it \"null for everyone today\" — "
+                            + "and now stated at the column that would hold it"),
+            Map.entry("IngestionJob.error",
+                    "the detail of a FAILED job, and this lane never writes FAILED — argued at "
+                            + "IngestionJob's header since §117: the idempotency key is consumed "
+                            + "by whichever attempt writes a row, so a failed row would make the "
+                            + "corrected retry replay the failure. A report that cannot be parsed "
+                            + "leaves no row at all"),
+            Map.entry("CaseHealth.outdatedSpecChanged",
+                    "one of the three HealthSignal members no recompute writes (five until §157, "
+                            + "four until §158) — argued once at "
+                            + "CaseHealth's header, which is where the state that makes them "
+                            + "misleading is described"),
+            Map.entry("CaseHealth.orphaned", "outdatedSpecChanged's case exactly"),
+            Map.entry("CaseHealth.unlinked",
+                    "outdatedSpecChanged's case, and the member the first draft of this rule "
+                            + "MISSED — see writesInLiterals for the corpus bug that hid it"),
+            Map.entry("CaseHealth.incomplete",
+                    "writerless AND readerless — the reference entry in READERLESS_BY_DECISION, "
+                            + "mapped so ddl-auto: validate has the whole row in view and absent "
+                            + "from the SERVER's HealthSignal because nothing derives it. The wire "
+                            + "has carried INCOMPLETE since 2026-07-30; see §161 and the twin "
+                            + "entry for why that direction is the whole finding"));
+
+    @Test
+    @DisplayName("every mapped column has a writer — the writerless tally, computed")
+    void everyMappedColumnHasAWriter() {
+        // §154 asked which mapped column nothing READS. This is the same question at the other
+        // end, and it is the older of the two: §116, §117, §132 and §151 each found one instance of
+        // it by hand, one slice at a time, and each wrote the instance down rather than the
+        // question. §116's phrasing — "three V1 tables had never had a writer" — is this rule at
+        // table granularity, answered by a person who happened to be looking.
+        //
+        // THE TWO RULES ARE NOT REDUNDANT AND THE OVERLAP PROVES IT. Five of these ten are in
+        // READERLESS_BY_DECISION too, which is the harmless half: a column nobody fills and nobody
+        // consults costs a javadoc describing a state the database has never been in. The FIVE
+        // this rule sees alone are the expensive half, and they are invisible to §154 by
+        // construction — a column with a reader passes that rule no matter what fills it. Something
+        // downstream is drawing a conclusion from a value nothing produces: five HealthSignal
+        // members were rendered as chips and counted in facets while no recompute wrote them, and
+        // ProjectView.archived was required by the contract and false in every deployment there had
+        // ever been. Both examples are past tense now — FOUR health signals since §157, THREE since
+        // §158, and Project.archivedAt left this map in §159 when the archive operation was built.
+        // That is the intended exit from this list, it has now been taken three times, and each
+        // time the rule's population fell by one without the rule changing: an entry here is a
+        // decision to leave a column empty, not a permit to keep it that way.
+        //
+        // IT ALSO CORRECTED §154 RATHER THAN ONLY EXTENDING IT. That rule's javadoc sorted its
+        // thirteen into "written and readerless" and "writerless as well" BY HAND, one slice after
+        // arguing that hand-kept tallies are what this family exists to replace, and it put
+        // rawStorageKey in the expensive half — asserting a write that does not happen, fifty lines
+        // below a class header that says so. The classification was a claim nothing checked, inside
+        // the check written to end claims nothing checks.
+        //
+        // IT READS BYTECODE FIRST, WHICH IS THE MIRROR OF WHY §154 READS TEXT. A reader is usually
+        // a query and a query is a string; a WRITER is an assignment, and an assignment is exactly
+        // what bytecode records. The SQL arm is the remainder rather than the substance: this
+        // codebase writes case_health through native INSERT ... ON CONFLICT and starts a run
+        // through JPQL UPDATE, and neither is a field access. Both spellings are matched — the
+        // column name for native SQL, the field name for JPQL — because startIfNotStarted names
+        // r.startedAt and V1 names started_at.
+        //
+        // ONLY INSERT AND UPDATE STATEMENTS ARE IN THE CORPUS, which is the exact complement of
+        // withoutWrites: there, an insert's column list is stripped because it is not a read; here
+        // it is the only thing kept. The .sql files are in as well and the reader rule has no need
+        // of them — a migration that backfills a column is a writer of it (V44 is the worked
+        // example), and one that only creates it is not, because CREATE TABLE is neither verb.
+        //
+        // THE FIRST DRAFT OVER-MATCHED, WHICH IN THIS DIRECTION HIDES FINDINGS. §154's corpus joins
+        // a file's literals and searches the join, which is right for a word-boundary read; here a
+        // statement runs to the next semicolon, and a fixture's "UPDATE key_sequence SET
+        // next_value = 1" — no terminator — then swallowed every later literal in its file. Two of
+        // the fourteen (as the population then stood) were invisible, one of them
+        // case_health.unlinked, marked live by an
+        // @DisplayName. writesInLiterals is the bound. Note which way each rule's over-match cuts:
+        // §154's costs a missed finding it will catch next time the corpus tightens, and this one's
+        // costs a finding that never appears at all.
+        //
+        // WHAT IT DOES NOT SEE, stated because the count would otherwise look like a claim it is
+        // not making: Hibernate populates every field of every row it loads, by reflection, and
+        // that is not a writer in any sense this rule cares about — the question is whether the
+        // product ever PRODUCES a value, not whether one round-trips. Nor does a self-write in a
+        // method with no caller count, which is isWrittenInJava's whole content and was the reason
+        // Project.archivedAt was on this list until §159: it had a mutator, a good one, and the
+        // only caller it had was a test fixture seeding a state no request could produce.
+        Map<Path, String> writeText = new LinkedHashMap<>();
+        for (Path root : SOURCE_ROOTS) {
+            try (Stream<Path> sources = Files.walk(root)) {
+                for (Path file : sources.filter(p -> p.toString().endsWith(".java"))
+                        .filter(p -> !p.getFileName().toString().equals(OWN_FILE))
+                        .toList()) {
+                    writeText.put(file, writesInLiterals(
+                            COMMENT.matcher(Files.readString(file)).replaceAll(" ")));
+                }
+            } catch (IOException unreadable) {
+                throw new AssertionError("the sources are this rule's corpus", unreadable);
+            }
+        }
+        for (Path root : SQL_ROOTS) {
+            try (Stream<Path> sources = Files.walk(root)) {
+                for (Path file : sources.filter(p -> p.toString().endsWith(".sql")).toList()) {
+                    writeText.put(file, writesIn(
+                            SQL_COMMENT.matcher(Files.readString(file)).replaceAll(" ")));
+                }
+            } catch (IOException unreadable) {
+                throw new AssertionError("the migrations are this rule's corpus too", unreadable);
+            }
+        }
+
+        assertThat(writeText)
+                .as("the source corpus is empty or tiny, so every column below would read as "
+                        + "unwritten — the working directory or the source layout has moved")
+                .hasSizeGreaterThan(600);
+
+        Map<String, String> writerless = new TreeMap<>();
+        int examined = 0;
+
+        for (JavaClass type : PRODUCTION) {
+            if (!type.isAnnotatedWith(Entity.class)) {
+                continue;
+            }
+            for (JavaField field : type.getFields()) {
+                if (field.getModifiers().contains(JavaModifier.STATIC)) {
+                    continue;
+                }
+                examined++;
+                boolean written = isWrittenInJava(field)
+                        || namedIn(writeText, null, columnOf(field))
+                        || namedIn(writeText, null, field.getName());
+                if (!written) {
+                    writerless.put(type.getSimpleName() + "." + field.getName(), columnOf(field));
+                }
+            }
+        }
+
+        assertThat(examined)
+                .as("no entity field was examined, so this rule passes vacuously — the @Entity "
+                        + "predicate or the import has moved")
+                .isGreaterThan(500);
+
+        assertThat(writerless.keySet())
+                .as("""
+                        no assignment, no INSERT, no UPDATE and no migration ever puts a value in \
+                        this column, so every row holds its default for ever. That is harmless \
+                        only while nothing reads it — and when something does, the read is a \
+                        conclusion drawn from a value the product never produced: \
+                        ProjectView.archived is required by the contract and false in every \
+                        deployment, and a HealthSignal nothing computes renders as "clean" rather \
+                        than as "not looked at". Give it a writer, drop the column in a migration, \
+                        or add it to WRITERLESS_BY_DECISION with the argument written at the field \
+                        — and if something DOES write it, this rule's corpus is what is wrong, not \
+                        the list. Its mirror is everyMappedColumnHasAReader; a member of both is \
+                        the cheap case, a member of this one alone is not""")
+                .containsExactlyInAnyOrderElementsOf(WRITERLESS_BY_DECISION.keySet());
+    }
+
+    @Test
+    @DisplayName("no entity maps lock_version without @Version — §74's sweep, computed")
+    void everyLockVersionColumnIsAVersion() {
+        // The rule the comment in everyMappedColumnHasAReader said did not exist yet, and the
+        // reason it is a separate rule rather than a tighter corpus there: the corpus is TEXT and
+        // has no idea which table a statement is about, so a native query naming another table's
+        // lock_version marks every entity's live. This question is not about readers at all. It is
+        // whether a column that exists to be a guard is one.
+        //
+        // §74 asked it BY HAND. It found three entities mapping lock_version without @Version,
+        // annotated three, and left two — and the note about the two lived in a javadoc on a THIRD
+        // entity, TestPlan, from §74 to §155. That is eighty slices of a written finding nothing
+        // could act on, which is §152's shape exactly: the prose about a defect outliving every
+        // opportunity to fix it, because prose is not a check.
+        //
+        // WHAT IT COSTS IS THE POINT. A mapped lock_version Hibernate does not maintain reads 0 on
+        // every row for ever, and it is worse than an absent column rather than merely useless: it
+        // is the value an If-Match is checked against. TestPlan is the recorded instance — the
+        // column had been mapped since M2 slice 2 and REQUIRED by the contract just as long, so the
+        // endpoint would have shipped a concurrency guard structurally incapable of firing, and no
+        // test asserting "a stale header is refused" would have gone red, because there is no such
+        // thing as a stale 0.
+        //
+        // THE RULE DOES NOT SAY "ANNOTATE IT". It says the two states must not be confused, and
+        // unmapping is the other way out — which is the one §155 took for both survivors, because
+        // ApiToken's rubric (is a lost update here a discarded edit, or a duplicated intent?)
+        // answers "neither" for a row whose only writes name an absolute target. The arguments are
+        // at TestRun and WorkItem. What must not happen again is a third entity sitting in between.
+        //
+        // No by-decision map, unlike §153's and §154's, and that is measured rather than hoped: the
+        // population is empty on this tree, so pinning one would be pinning nothing. The moment it
+        // is not, the entry belongs at the field like every other one here.
+        List<String> mappedWithoutVersion = new ArrayList<>();
+        int versioned = 0;
+
+        for (JavaClass type : PRODUCTION) {
+            if (!type.isAnnotatedWith(Entity.class)) {
+                continue;
+            }
+            for (JavaField field : type.getFields()) {
+                if (field.getModifiers().contains(JavaModifier.STATIC)
+                        || !columnOf(field).equals("lock_version")) {
+                    continue;
+                }
+                if (field.isAnnotatedWith(Version.class)) {
+                    versioned++;
+                } else {
+                    mappedWithoutVersion.add(type.getSimpleName() + "." + field.getName());
+                }
+            }
+        }
+
+        // Fifteen on this tree, and the number is worth stating because §154 recorded it by hand as
+        // "nineteen other entities carry @Version on the identically-named column". It was 17
+        // mappings, 15 of them annotated. A hand-kept tally being wrong in the slice that argued
+        // for computing hand-kept tallies is the joke this family of rules keeps telling.
+        assertThat(versioned)
+                .as("no entity maps lock_version at all, so this rule is asserting nothing — the "
+                        + "@Entity predicate, the import or the column convention has moved")
+                .isGreaterThan(10);
+
+        assertThat(mappedWithoutVersion)
+                .as("""
+                        an entity maps lock_version and Hibernate does not maintain it, so the \
+                        column reads 0 on every row for ever while looking like a guard. That is \
+                        worse than not mapping it: it is the value an If-Match is compared \
+                        against, and a precondition against a constant cannot fail — TestPlan \
+                        shipped within a slice of exactly that. Two ways out, and the annotation \
+                        is only one of them: add @Version, or unmap the field and write at the \
+                        class why this row does not need one (ApiToken, TestRun and WorkItem are \
+                        the worked examples). What is not allowed is the third state, which §74 \
+                        left two entities in for eighty slices""")
+                .isEmpty();
+    }
+
+    /**
+     * Whether Java writes this field's value.
+     *
+     * <p>{@link #isReadInJava}'s mirror, with the same one-level caller check and one asymmetry
+     * that matters: a JPA field is private, so almost every write is <em>inside</em> the entity —
+     * a factory, a constructor or a mutator. The qualifying question is therefore whether the
+     * method doing the assigning is itself called by anything. A setter nobody calls is not a
+     * writer, which is the whole shape §116, §117 and §132 each found by hand.
+     */
+    private static boolean isWrittenInJava(JavaField field) {
+        for (JavaFieldAccess access : field.getAccessesToSelf()) {
+            if (access.getAccessType() != JavaFieldAccess.AccessType.SET) {
+                continue;
+            }
+            JavaCodeUnit origin = access.getOrigin();
+            if (!origin.getOwner().equals(field.getOwner()) || !origin.getAccessesToSelf().isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Every {@code INSERT} and {@code UPDATE} statement in a piece of SQL, and nothing else. */
+    private static String writesIn(String text) {
+        return WRITE_STATEMENT.matcher(text).results()
+                .map(MatchResult::group)
+                .collect(Collectors.joining(" "));
+    }
+
+    /**
+     * The same, over a Java compilation unit — <strong>one literal at a time, which is the whole
+     * point of the method existing.</strong>
+     *
+     * <p>A SQL statement lives inside one string literal, and {@link #WRITE_STATEMENT} runs to the
+     * next {@code ;} because that is where a statement ends. Joining the literals first and
+     * matching once — the first version — made those two facts contradict each other: a literal
+     * with no terminator (<code>"UPDATE key_sequence SET next_value = 1"</code> in a test fixture)
+     * swallowed every later literal in the file, and {@code case_health.unlinked} read as written
+     * by an {@code @DisplayName}. Over-matching in the writer direction hides findings, unlike the
+     * reader rule where it only costs a missed one, so the bound is the literal.
+     */
+    private static String writesInLiterals(String reading) {
+        return STRING_LITERAL.matcher(reading).results()
+                .map(m -> m.group(1) != null ? m.group(1) : m.group(2))
+                .map(ArchitectureRulesTest::writesIn)
+                .filter(writes -> !writes.isEmpty())
+                .collect(Collectors.joining(" ; "));
     }
 
     /** Whether this field's column is spelled anywhere in {@code corpus} but its own file. */

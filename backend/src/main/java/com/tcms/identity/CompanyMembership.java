@@ -50,6 +50,18 @@ public class CompanyMembership {
     @Column(name = "display_name", nullable = false)
     private String displayName;
 
+    /**
+     * {@code displayName}'s per-membership sibling, and <strong>nothing writes it</strong> (§156,
+     * {@code ArchitectureRulesTest.WRITERLESS_BY_DECISION}): there is no upload, no URL field on
+     * any request body, and no default derived from the address.
+     *
+     * <p>Unlike {@code Project.archivedAt} this one is already stated on the side that matters —
+     * {@code api.UserRef}'s javadoc calls it "null for everyone today: nothing uploads one", so the
+     * ~25 places a person appears on the wire are honest about it. It is mapped rather than dropped
+     * because the read path is the finished half: resolve through the active company (§6u) and the
+     * column is the only place a per-company picture could go. Adding one is a storage operation on
+     * the contract, which is {@code IngestionJob.rawStorageKey}'s shape and not a wiring fix.
+     */
     @Column(name = "avatar_url")
     private String avatarUrl;
 

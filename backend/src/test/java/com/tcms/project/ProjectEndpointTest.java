@@ -131,7 +131,7 @@ class ProjectEndpointTest extends IntegrationTestBase {
     private TransactionTemplate tx;
 
     @BeforeEach
-    void seed() {
+    void seed() throws SQLException {
         Instant now = Instant.now();
 
         tx.executeWithoutResult(status -> {
@@ -185,6 +185,44 @@ class ProjectEndpointTest extends IntegrationTestBase {
         seedCases("NB", NORTH, NORTH_BANKING, 3, 2);
         seedCases("NM", NORTH, NORTH_MOBILE, 0, 1);
         seedCases("SB", SOUTH, SOUTH_BANKING, 7, 0);
+
+        restoreArchiveState();
+    }
+
+    /**
+     * Puts North's three projects back the way the fixture above describes them, and clears their
+     * audit trail.
+     *
+     * <p>Here rather than in {@link Archiving} because §159 gave this class its first tests that
+     * <em>write</em>, and {@code IntegrationTestBase} does not clean between tests: everything above
+     * is written as "create if absent", so a project one test archives is still archived when the
+     * next test seeds — including the read-only tests two groups up, which assert that
+     * {@code NORTH_BANKING} is not archived and that {@code NORTH_ARCHIVED} is. Left to the nested
+     * class, the restore would run for its own tests and not for theirs, and the result would depend
+     * on the order JUnit happened to choose. That is §19's failure mode: green alone, red in the
+     * suite, and attributed to whichever slice was being written at the time.
+     */
+    private void restoreArchiveState() throws SQLException {
+        try (var connection = superuserConnection()) {
+            try (var statement = connection.prepareStatement(
+                    "UPDATE project SET archived_at = NULL WHERE id IN (?, ?)")) {
+                statement.setObject(1, NORTH_BANKING);
+                statement.setObject(2, NORTH_MOBILE);
+                statement.executeUpdate();
+            }
+            try (var statement = connection.prepareStatement(
+                    "UPDATE project SET archived_at = now() WHERE id = ? AND archived_at IS NULL")) {
+                statement.setObject(1, NORTH_ARCHIVED);
+                statement.executeUpdate();
+            }
+            try (var statement = connection.prepareStatement(
+                    "DELETE FROM audit_event WHERE project_id IN (?, ?, ?)")) {
+                statement.setObject(1, NORTH_BANKING);
+                statement.setObject(2, NORTH_MOBILE);
+                statement.setObject(3, NORTH_ARCHIVED);
+                statement.executeUpdate();
+            }
+        }
     }
 
     // =====================================================================
@@ -460,6 +498,213 @@ class ProjectEndpointTest extends IntegrationTestBase {
         void listIsOrderedByName() throws Exception {
             assertThat(namesOf(listAs(ADMIN, NORTH)))
                     .containsExactly("Mobile App", "Online Banking", "Retired Platform");
+        }
+    }
+
+    // =====================================================================
+    // Archiving — §159, the operation the column waited for since V1
+    // =====================================================================
+
+    /**
+     * {@code PUT /projects/{projectId}/archive}.
+     *
+     * <p>Nested here rather than in a class of its own because the fixture this needs already
+     * exists above and is the hostile one: a Test Lead granted on exactly one project (holds
+     * {@code project:settings} there and nowhere else), a Test Engineer reaching another project
+     * through a team (holds it nowhere), a member with no grant at all, a Company Admin who reaches
+     * every project without a project grant, and a project that is <em>already</em> archived, which
+     * from {@code V1} to §159 was a state only a test could produce.
+     */
+    @Nested
+    @DisplayName("Archiving — project:settings, idempotent, and a mark rather than a lock")
+    class Archiving {
+
+        @Test
+        @DisplayName("a Test Lead archives their project, and the column is finally written")
+        void leadArchives() throws Exception {
+            JsonNode body = json.readTree(archiveAs(LEAD, NORTH, NORTH_BANKING, "true").body());
+
+            assertThat(body.get("archived").asBoolean()).isTrue();
+            assertThat(archivedAtOf(NORTH_BANKING))
+                    .as("the response says archived, so the column must actually hold a timestamp")
+                    .isNotNull();
+        }
+
+        @Test
+        @DisplayName("the response is the same shape the list and the detail serve")
+        void responseIsTheOneAssembler() throws Exception {
+            // viewOfChanged exists so a write cannot answer with a project shaped differently from
+            // the GET the client makes next — the field that would drift first being caseCount,
+            // which viewOfCreated is allowed to leave at zero and this one is not.
+            JsonNode written = json.readTree(archiveAs(LEAD, NORTH, NORTH_BANKING, "true").body());
+            JsonNode read = detailAs(LEAD, NORTH, NORTH_BANKING);
+
+            assertThat(written).isEqualTo(read);
+            assertThat(written.get("caseCount").asLong())
+                    .as("three live cases were seeded into this project")
+                    .isEqualTo(3);
+            assertThat(written.get("myRole").asText()).isEqualTo("Test Lead");
+        }
+
+        @Test
+        @DisplayName("archiving and un-archiving round-trips, and both are audited")
+        void roundTrip() throws Exception {
+            archiveAs(LEAD, NORTH, NORTH_BANKING, "true");
+            JsonNode back = json.readTree(archiveAs(LEAD, NORTH, NORTH_BANKING, "false").body());
+
+            assertThat(back.get("archived").asBoolean()).isFalse();
+            assertThat(archivedAtOf(NORTH_BANKING))
+                    .as("un-archiving clears the timestamp — the sequence lives in audit_event")
+                    .isNull();
+            assertThat(auditActionsFor(NORTH_BANKING))
+                    .containsExactly("project.archived", "project.unarchived");
+        }
+
+        @Test
+        @DisplayName("setting the state a project already has writes nothing at all")
+        void idempotent() throws Exception {
+            // The already-archived project, through the Company Admin who reaches it without a
+            // project grant. Nothing may move: not the timestamp, which would re-date a retirement
+            // that happened months ago, and not the audit trail, where a row per repeated click
+            // buries the change that actually happened.
+            Instant before = archivedAtOf(NORTH_ARCHIVED);
+
+            Response response = archiveAs(ADMIN, NORTH, NORTH_ARCHIVED, "true");
+
+            assertThat(response.status()).isEqualTo(200);
+            assertThat(json.readTree(response.body()).get("archived").asBoolean()).isTrue();
+            assertThat(archivedAtOf(NORTH_ARCHIVED)).isEqualTo(before);
+            assertThat(auditActionsFor(NORTH_ARCHIVED)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("an archived project still accepts writes — it is a mark, not a lock")
+        void archivingDoesNotLock() throws Exception {
+            archiveAs(ADMIN, NORTH, NORTH_BANKING, "true");
+
+            // A real project-scoped write through the same gate, on the archived project. If a
+            // later slice makes archived projects read-only, this test is where that decision has
+            // to be taken deliberately rather than discovered by a client.
+            int status = mvc.perform(MockMvcRequestBuilders
+                            .put("/api/v1/projects/" + NORTH_BANKING + "/settings")
+                            .header("Authorization", "Bearer " + tokenFor(ADMIN, NORTH))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"reviewEnabledCase": true, "reviewEnabledSuite": false,
+                                     "reviewEnabledPlan": false, "requiredPeerReviews": 1,
+                                     "authorMayApproveOwnWork": false,
+                                     "editAfterApproval": "RE_REVIEW",
+                                     "requireApprovedCaseForRun": false}
+                                    """))
+                    .andReturn().getResponse().getStatus();
+
+            assertThat(status).isEqualTo(200);
+        }
+
+        @Test
+        @DisplayName("a Test Engineer is refused with 403, and nothing moves")
+        void engineerIsRefused() throws Exception {
+            // TEAM_MEMBER reaches NORTH_MOBILE through a team grant of Test Engineer, which
+            // carries project:read and not project:settings. They can see the project, so 403 is
+            // the honest answer and 404 would claim their own project had vanished.
+            Response response = archiveAs(TEAM_MEMBER, NORTH, NORTH_MOBILE, "true");
+
+            assertThat(response.status()).isEqualTo(403);
+            assertThat(response.body())
+                    .as("the refusal never names the permission key")
+                    .doesNotContain("project:settings");
+            assertThat(archivedAtOf(NORTH_MOBILE)).isNull();
+        }
+
+        @Test
+        @DisplayName("a project the caller cannot see is 404, never 403")
+        void unreachableIs404() throws Exception {
+            // Both unreachable reasons, answered identically: no grant inside the caller's own
+            // company, and another company's project entirely. A 403 for either would confirm the
+            // id names something real (§6t).
+            assertThat(archiveAs(NO_GRANT, NORTH, NORTH_BANKING, "true").status()).isEqualTo(404);
+            assertThat(archiveAs(SOUTHERNER, SOUTH, NORTH_BANKING, "true").status()).isEqualTo(404);
+            assertThat(archivedAtOf(NORTH_BANKING)).isNull();
+        }
+
+        @Test
+        @DisplayName("an absent archived field is a 400 on the field, not a silent un-archive")
+        void absentFieldIsAFieldError() throws Exception {
+            Response response = archiveAs(ADMIN, NORTH, NORTH_ARCHIVED, null);
+
+            assertThat(response.status()).isEqualTo(400);
+            assertThat(json.readTree(response.body()).get("errors").has("archived")).isTrue();
+            assertThat(archivedAtOf(NORTH_ARCHIVED))
+                    .as("a malformed request must not be read as 'set it to false'")
+                    .isNotNull();
+        }
+
+        @Test
+        @DisplayName("an anonymous caller is refused before the project is resolved")
+        void anonymousIsRefused() throws Exception {
+            assertThat(mvc.perform(MockMvcRequestBuilders
+                            .put("/api/v1/projects/" + NORTH_BANKING + "/archive")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"archived\": true}"))
+                    .andReturn().getResponse().getStatus())
+                    .isEqualTo(401);
+        }
+    }
+
+    /** A status and a body together, so a test can assert on both without a second request. */
+    private record Response(int status, String body) {
+    }
+
+    /**
+     * @param archived the JSON value for the field, or {@code null} to send a body without it
+     */
+    private Response archiveAs(UUID userId, UUID companyId, UUID projectId, String archived)
+            throws Exception {
+
+        var result = mvc.perform(MockMvcRequestBuilders
+                        .put("/api/v1/projects/" + projectId + "/archive")
+                        .header("Authorization", "Bearer " + tokenFor(userId, companyId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(archived == null ? "{}" : "{\"archived\": " + archived + "}")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andReturn().getResponse();
+
+        return new Response(result.getStatus(), result.getContentAsString());
+    }
+
+    /**
+     * {@code project.archived_at} as the database holds it, read through the container's superuser.
+     *
+     * <p>Ground truth rather than the endpoint's own answer: the response saying "archived" and the
+     * column holding a value are two claims, and this slice exists because the second one had never
+     * been true.
+     */
+    private Instant archivedAtOf(UUID projectId) throws SQLException {
+        try (var connection = superuserConnection();
+                var statement = connection.prepareStatement(
+                        "SELECT archived_at FROM project WHERE id = ?")) {
+            statement.setObject(1, projectId);
+            try (var rows = statement.executeQuery()) {
+                assertThat(rows.next()).as("the project must exist").isTrue();
+                var value = rows.getTimestamp("archived_at");
+                return value == null ? null : value.toInstant();
+            }
+        }
+    }
+
+    /** This project's audit actions, oldest first. */
+    private List<String> auditActionsFor(UUID projectId) throws SQLException {
+        try (var connection = superuserConnection();
+                var statement = connection.prepareStatement(
+                        "SELECT action FROM audit_event WHERE project_id = ? ORDER BY occurred_at")) {
+            statement.setObject(1, projectId);
+            try (var rows = statement.executeQuery()) {
+                List<String> actions = new java.util.ArrayList<>();
+                while (rows.next()) {
+                    actions.add(rows.getString("action"));
+                }
+                return List.copyOf(actions);
+            }
         }
     }
 

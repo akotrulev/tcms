@@ -1753,3 +1753,181 @@ with a parent value. No new fixture is needed beyond one child value under an ex
 | `EV-5` | As **Test Lead**, in project settings → classification, add two child values under an existing value, then retire the parent | The dialog **stays open** with the warning *"2 values sit under this one. Retire those first — retiring a whole branch at once would unclassify every case beneath it with nothing on screen naming them."* One sentence, correct plural, em-dash intact. Before this slice the page composed the words around a bare `2`; the words are now the server's and the page prints them. |
 | `EV-6` | Retire one child, then retire the parent again | The same warning with **"1 value sits under this one. Retire it first — …"** — the singular arm, which is the server's and not the page's. The page's own composition had the plural bug (`1 value sit under this one`) and could not have produced this. |
 | `EV-7` | With the same two children, run `tcms` against the same value — there is no CLI arm for retiring a classification value, so drive `DELETE /projects/{id}/classification/values/{valueId}` with `curl` and an API token | The body's `errors.children[0]` is the **same sentence** the dialog shows. This is the row that would have caught the original: the response a non-SPA caller sees, read without a screen composing anything around it. |
+
+## §156 — the health panel's all-clear, narrowed to what it actually knows
+
+**Lane: 4 — the scheduler-tick lane**, immediately beside `L4-23`…`L4-29`. It needs the same state
+those rows do (the hourly `CaseHealthScheduler` tick having run at least once, which is
+`matchIfMissing = true` and therefore automatic within two minutes of the stack coming up) and it
+needs **no fixture at all beyond a project with cases and no raised signal** — which, before any
+result is recorded, is the state a freshly provisioned company is already in.
+
+That is the point of the row. The branch it drives was described in the panel's own comment as
+unreachable — *"`healthComputedAt` is null while `case_health` has no writer, which is every
+deployment today"* — and it has been the branch every deployment lands in since §53 gave the table
+its first writer. Five of the ten signals still have no computation behind them
+(`ArchitectureRulesTest.everyMappedColumnHasAWriter`), so the panel was telling the reader that
+nothing needed attention on the strength of five checks that had never run.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `HP-1` | Any account with `report:view`, on a project whose cases have **no** raised signal, after the tick. Open the project dashboard and read the "Needs attention" panel | **"No health signal was raised. Last checked …"** — a statement about the checks. **Not** "Nothing needs attention", which is a statement about the project and is the sentence that shipped from §47 to §156. The timestamp must render (it is non-null here; see below). |
+| `HP-2` | On the same screen, confirm the *third* branch is not what you are looking at — `Dashboard.Health.NotComputed` must be absent | The "have not been computed for this project yet" sentence is now the **rare** branch, not the universal one: it needs a project the scheduler has not reached. Worth confirming which of the three you are in, because the two empty branches read similarly and only one of them is honest about *why* it is empty. |
+| `HP-3` | Raise a real signal (`L4-23`'s three failures is the cheapest), wait a tick, reload | Tiles render and neither sentence shows. This is the row that says the copy change did not move the boundary between the branches — it narrowed one claim, and nothing else. |
+
+**What no row here can check, stated rather than skipped:** that a case which *is* orphaned,
+unlinked, condition-drifted, stale-approved or spec-outdated goes on reporting clean. There is no
+way to drive it, because there is no computation to produce the signal — that is the finding, not a
+gap in the pass. Closing it is five derivations, each owned by the module that can see its cause,
+and the honest sentence is what this slice shipped in the meantime.
+
+## §157 — the stale-approval signal, on the three screens that were already waiting for it
+
+**Lane: 4 — the scheduler-tick lane**, immediately after `HP-1`…`HP-3`. Same tick, different
+premise: §156's rows drive a project with **no** raised signal, these drive one where a signal that
+had never been computable now fires.
+
+**The fixture is this block's real cost and the pass must author it**, because nothing else in the
+queue produces a review row and **three separate settings/permission facts have to line up**:
+
+1. In project settings → review, switch **§6g review on for cases** — it is off by default, and
+   `ReviewService.moved` opens no review at all for a project that has not turned it on.
+2. Select the case in the grid and **submit it for review** (`SET_STATUS` → `IN_REVIEW`). This is
+   what opens the review row and stamps `subject_version_no` at the case's current version. Going
+   straight to `APPROVED` from `DRAFT` writes **no review row** — `moved` closes an open review and
+   opens none — so a fixture that skips this step produces a case the signal cannot see.
+3. **Approve as a different account from the one that submitted it**, because
+   `authorMayApproveOwnWork` defaults to false and `refusesEach` will refuse the bulk approval
+   otherwise. Either use a second Test Lead session or turn that setting on for the project, and
+   say in the result which one was done — they are not the same fixture.
+
+Then open the case and save an edit that changes content, so the version advances past the one the
+review names. Leave `Edit after approval` on its default (`RETAIN`); the `RE_REVIEW` arm sends the
+case back to `DRAFT` on that edit, which is the state `SA-B3` drives deliberately and at the end.
+Then wait for a tick.
+
+The three screens below need no change to have been made to them, which is why they are worth
+driving: the facet, the chip and the board card were all written generic over `HealthSignal` and
+have counted this signal as zero since M0.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `SA-B1` | Project dashboard, "Needs attention" panel, after the tick | A **"Stale approval"** tile with a count of 1, at WARNING severity, sorted below any ERROR tile. Clicking it opens the case grid filtered to `healthSignal=STALE_APPROVAL` and the edited case is in it. This is the first tile on that panel that can appear because somebody *edited* a case rather than ran one. |
+| `SA-B2` | Open the case itself | The health chip reads **"Approved before its last edit"** (`lib/labels.ts`, not the server's label) with the hover copy from `StatusChip.tsx`, **and** the review panel's own stale banner is showing — *"This case has changed since it was submitted — the review covers v1, and you are looking at v2."* The two must agree: they are one claim drawn from one comparison, and a screen where the banner shows and the chip does not is the disagreement `ApprovalFacts` was written to avoid. |
+| `SA-B3` | Set the case's status back to `DRAFT`, wait a tick, reload both screens | Tile gone, chip gone, banner still there. The banner is about the review record and does not care about the ladder; the signal is about a claim the case is no longer making. **If the tile survives, the status term has become a filter** — `SA-4`/`SA-3` in the mutation queue are the same defect seen from the server side. |
+
+**What no row here can check:** that a project which has never turned review on reports an honest
+zero rather than a missing feature. It renders identically to a project with nothing stale, and the
+only way to tell them apart is to read `review` — which is `SA-5`'s territory, not a browser lane's.
+
+## §158 — the condition-drift signal, and the tooltip that described the wrong comparison
+
+**Lane: 4 — the scheduler-tick lane**, immediately after `SA-B1`…`SA-B3`. Third block on one tick,
+and the **cheapest fixture of the three**, which is worth stating because the previous two set the
+expectation that a health signal costs a settings change and a second account. This one does not:
+no review settings, no approval, no second session. Everything it needs is one author with
+`library:manage` and `case:edit`.
+
+**The fixture:**
+
+1. Project → **Conditions** (the §6f library), create an entry — title *"Log in as standard user"*,
+   two steps.
+2. Open a case, attach that entry as a **precondition**, and **save**. The save is the load-bearing
+   step and the one to get wrong: attaching is authored content on `CaseEdit`, so the save is what
+   writes the `test_case_version` whose snapshot this signal compares against. A case that was
+   never saved after attaching has no snapshot naming the entry and can never drift.
+3. Go back to the library and **edit the entry's body** — change one step. Do not touch the case.
+4. Wait for a tick.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `CD-B1` | Project dashboard, "Needs attention" panel, after the tick | A **"Shared condition changed"** tile with a count of 1, at **ERROR** severity — so sorted *above* the WARNING tiles, unlike `SA-B1`'s. Clicking it opens the case grid filtered to `healthSignal=CONDITION_DRIFT` with the case in it. This is the first tile on that panel that appears because somebody edited **something that is not the case** — the drive for it never opens the case at all, which is the whole point of §6f's reference-while-live design and the reason the signal has to exist. |
+| `CD-B2` | Open the case | The health chip reads **"Shared condition changed"**, and its tooltip — corrected in this slice — says *"…has changed since the case was last **saved**."* It said *"last reviewed"* until §158, which describes a comparison the server does not make; a project with review switched off raises this signal exactly as readily. **If the tooltip still says "reviewed", the built asset is stale**, not the copy. |
+| `CD-B3` | Edit the library entry back to exactly what it said before, wait a tick, reload both screens | Tile gone, chip gone. **This is the row worth driving even if the other two are skipped.** The comparison is content, so reverting the cause reverts the signal; the spelling somebody will propose instead (`condition.updated_at > version.created_at`) leaves the flag standing for ever after this drive, with nothing on any screen able to clear it. `CD-6` in the mutation queue is the same question asked of the tests, and it records that the tests **cannot** currently answer it — this row is the only place the property is observable. |
+
+**What no row here can check:** the *inherited* arm. A condition attached at suite level and then
+edited drifts every case beneath the suite by the same mechanism, and the fixture above cannot tell
+that apart from the own-attachment case on screen — both render one chip on one case. Distinguishing
+them needs two cases under one suite and is a fixture the pass may add if `CD-B1` is cheap enough
+when it gets there. The gap `ConditionDrift`'s header names — a suite-level **attach or detach**,
+which writes no case version and is therefore *not* reported — is not drivable here at all, because
+its expected outcome is that nothing happens.
+
+## §159 — archiving a project, on the two screens that show the state
+
+**Lane: 2 — `A0`, accounts, projects and teams**, at the end of it, after `MOB` exists. Not lane 4:
+this needs no tick, no health signal and no review row. It needs one project and one account holding
+`project:settings`, which `A0` has already created by the time these rows run — the cheapest fixture
+of any block added since §156.
+
+**Why the rows exist at all.** `Project.archived` was `required` in the contract from M0, `false` in
+every deployment there has ever been, and read by no file in the SPA or `packages/` outside a test
+fixture — because no request could set it (§156's finding, §159's slice). Everything below is a
+first observation, not a regression check: there is no earlier pass any of it could have failed in.
+
+**Drive `AR-3` even if the others are skipped.** It is the one row that observes a *decision* rather
+than a rendering — the server marks an archived project and deliberately does not lock it — and it
+is the row that would catch the opposite behaviour arriving by accident in a later slice.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `AR-1` | As **Test Lead** on `MOB`, open the project's own page and press **Archive project** | The button becomes **Restore project**, an **Archived** chip appears beside the key and case count, and no dialog is shown on the way (the action destroys nothing and is undone by the same button). No global error toast. |
+| `AR-2` | Go to the project picker | `MOB`'s card is **still listed**, with an **Archived** chip. Not filtered out: the server returns retired projects on purpose, and a client-side filter here would make the project unreachable rather than marked — the picker is the only route back to the page that restores it. |
+| `AR-3` | While `MOB` is archived, create a case in it (or edit any artifact) | **It succeeds.** Archiving is a mark, not a lock — `DocPageStatus.ARCHIVED` one level up. A refusal here means a later slice has taken the read-only decision without taking it deliberately; the enforcement point exists (`ProjectService.writeGranted` and its three siblings) and adding an arm to it touches 53 call sites, which is why it is a decision and not a tidy-up. |
+| `AR-4` | Press **Restore project**, then press **Archive project** twice in a row, then read `audit_event` for the project in `psql` | Two rows only — `project.archived`, `project.unarchived`, `project.archived` in order, and **no fourth row** for the repeated press. A repeated click that writes an audit row buries the change that actually happened, and the second press must also leave `archived_at` **unchanged** rather than re-dating the retirement. |
+| `AR-5` | As **Test Engineer** (no `project:settings`), open the same project's page | The button is **present, disabled, and explains itself on hover** — "You don't have permission to change this project's settings in this project." Disabled rather than hidden is §31's rule: a hidden control teaches that the product cannot do it. |
+| `AR-6` | As that Test Engineer, drive `PUT /projects/{id}/archive` with `curl` and their token | **403 with a `Problem` body** whose `detail` names the action — "You do not have permission to archive this project." — and **never the permission key**. Belongs in lane **L2** if the pass prefers to keep server refusals together; it is written here so the block reads as one. |
+
+**What no row here can check:** that an archived project reads any differently to a caller who has
+never seen it live. It does not, deliberately — the flag is a label, and every list, board and report
+in the product treats the project exactly as before.
+
+## §160 — the verbatim CI upload, downloadable at last
+
+**Lane: `A3`, the CI ingestion block**, immediately after `A3-13` and the token-attribution rows.
+Not a lane of its own: every fixture these rows need is one `A3` already builds — a live
+`Automation Service` credential, a report posted by `curl`, and a job screen reached from the
+history. `RR-4` is the exception and says what it needs.
+
+**Why the rows exist.** `ingestion_job.raw_storage_key` has been on the table since `V1` and was
+never written; the file CI posted was not kept anywhere. These are first observations, not
+regression checks — there is no earlier pass any of them could have failed in, and the fourth row
+observes a state **no fixture in this file can create going forward**.
+
+**Drive `RR-2` even if the others are skipped.** It is the row that separates this feature from the
+one it is easily confused with: `raw_payload` has always been stored and has always been *the
+server's reading* of the report. Only a byte comparison against what `curl` sent shows which of the
+two is on screen, and a store that kept the wrong one would serve a valid, plausible file.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `RR-1` | After `A3-6`, open that job from the history | A **Download the posted report** button in the header, beside the status and format chips — present whether or not anything went unmatched, because it sits outside the unmatched panel. |
+| `RR-2` | Press it, then `diff` the saved file against the exact XML `A3-6` sent | **Byte-identical.** Not the parsed payload, not re-serialised, not pretty-printed. This is the whole point of the column and the one thing a green suite cannot tell you about a real filesystem. The saved name ends `-junit.xml` and contains the job id. |
+| `RR-3` | Open the job from `A3-10` (Matched 2, Unmatched 0) and look at the header | The button is **still there**. The unmatched panel is empty and renders its "Every test found a case" state; the download must not vanish with it — a report where everything matched is exactly when somebody checks what was actually posted. |
+| `RR-4` | `psql`: `UPDATE ingestion_job SET raw_storage_key = NULL WHERE id = '<the A3-6 job>'`, reload the page | **No button at all** — not a disabled one, not a broken link. This is what every job in an upgraded instance looks like, and hand-SQL is the only way to produce it because the writer now always sets the key. Restore the value afterwards, or run this row last. |
+| `RR-5` | With the row still nulled, `curl` `GET …/ingestions/{jobId}/report` with `lead`'s token | **404 with an empty body.** Same answer as an id that is nothing at all — the caller's next act is identical, so the two are deliberately not told apart. |
+| `RR-6` | As `viewer`, open the same job screen and press the button | **It downloads.** The gate is membership, exactly as for the history: no `ingestion:read` key was invented, and a viewer who may read the verdicts may read what produced them. |
+| `RR-7` | On the host, `ls -R` the raw-reports root (`/var/lib/tcms/raw-reports` in compose, or the dev override) | The company id is the first path segment and the job id the second, and **no file appears under the reports or evidence roots.** The three roots are separate on purpose; a store constructed with a sibling's property key is silent until a restore, which is the defect `CA-20` names on the same lines. |
+
+**What no row here can check:** that the bytes survive a container restart. The mount is in
+`compose.prod.yaml` and the runbook records both earlier roots defaulting into the container's
+writable layer before anyone noticed — but this pass runs against a dev stack, and the row that
+would catch it belongs to a deployment check rather than a browser one.
+
+## §161 — nothing to drive, and the row that says so
+
+**§161 changes no runtime behaviour on either stack.** No endpoint, no schema on the wire, no
+query, no component, no copy a user reads. The backend diff is one new test class, three corrected
+comments and a class header; the contract diff is one `description` block; both `schema.d.ts`
+copies were regenerated and their diff is **comments only — no generated type changed**, which was
+verified by `git diff` at the time.
+
+So there is one row, and it is a row about the absence rather than a placeholder for a check:
+
+| # | What | Expected |
+|---|---|---|
+| `CE-1` | With the stack up, open any case with a health signal (lane `A0`'s fixture is enough) and confirm the chip list, the grid facet and the dashboard tile render exactly as they did before §161 | **No visible difference at all.** The row exists because the slice touched `openapi.yaml` and both generated clients, and "only comments changed" is a claim about a generator's output that costs one screen to confirm and is embarrassing to be wrong about. If anything *has* moved, the regeneration was not comment-only and the finding is bigger than this row. |
+
+**Deliberately not queued:** an `INCOMPLETE` health chip. The server has no constant for it and this
+slice did not add one, so there is no fixture that can produce the value — which is the state the
+whole slice is about, and inventing a row for it would be recording a check nobody can run.

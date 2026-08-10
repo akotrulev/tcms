@@ -2,13 +2,265 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-09 (**§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-10 (**§161** — the by-decision audit, and the contract-versus-server enum rule; **§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `c3665c2` (§153) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `ca20094` (§161) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
+
+---
+
+## §161 — CONTRACT ENUMS ARE CHECKED AGAINST SERVER ENUMS; THE BY-DECISION MAPS WERE RE-DERIVED
+
+`contract/ContractEnumTest.java` is the new seam — the **third** contract-versus-server rule, after
+`ContractParameterBindingTest`'s two. No Spring context, no database: one YAML parse
+(`OpenApiContract.enumSchemas()`, new) and one ArchUnit import.
+
+- **`OWNERS` is the contract↔server correspondence and nothing recorded it before §161.** Twenty
+  named enum schemas; the map must cover them exactly, both ways, so a new one fails the build until
+  somebody names the type that serves it. **Do not treat it as an ignore list.**
+- **Four schemas have TWO owners** — `Priority` (`repository`+`work`), `StepFormat`
+  (`repository`+`execution`), `AggregationPolicy` (`reporting`+`execution`). Copied because a
+  feature module may not import another's types; both copies are compared, which is the point.
+- **`ReportFormat` is a HOMONYM, not a copy.** `execution.ReportFormat` = the dialect CI posted
+  (JUNIT/TESTNG/ALLURE/CUCUMBER, and the contract's schema); `reporting.ReportFormat` = what a
+  report's bytes are (PDF/MD/HTML/CSV/XLSX/JSON). One word of context apart. `HOMONYMS` holds the
+  second, and that entry is itself checked for staleness.
+- **Direction is recorded, and it is not symmetric.** SERVER-ONLY is the defect (a constant Jackson
+  writes that no generated union contains — `undefined` in every `satisfies Record<Union, …>`);
+  CONTRACT-ONLY is a dead branch. `DIVERGENCE_BY_DECISION` has two: `HealthSignal.INCOMPLETE`
+  (contract-only) and `PermissionQualifier.NONE` (server-only, safe because `PermissionSet`'s
+  constructor **throws** on a key held as `NONE`).
+- **An enum constant is `ACC_ENUM`, not "a static field of the enum's own type."**
+  `execution.AggregationPolicy.DEFAULT` is a `public static final` alias for `LATEST` and the first
+  draft reported it as a missing contract member. `JavaModifier.ENUM` is the filter.
+- **Never spell a column name in a string literal in a test that argues a column is dead.**
+  `ArchitectureRulesTest.everyMappedColumnHasAReader` reads *string literals* across `src/main` and
+  `src/test` with comments stripped, so such a literal marks the column read and its
+  `READERLESS_BY_DECISION` entry disappears. Identifiers go in the javadoc. §154 solved this for its
+  own file by exclusion; the shape is general.
+- **`CaseHealth.incomplete`'s reason is now "the SERVER's `HealthSignal` has no constant, because
+  nothing derives it"** — in three places (field javadoc, both decision-map entries). The old reason
+  blamed the contract, which has carried `INCOMPLETE` since 2026-07-30. Closing it is a derivation
+  plus a product decision; **it is not a contract change**.
+- **§154's HANDOFF SECTION IS FLAGGED "REDO REQUIRED" — do not quote it as fact.** The *rule* it
+  shipped (`everyMappedColumnHasAReader`) is sound and passes; two of its written claims were
+  disproved and stood unstruck for two days — that `RunController.onWriteRace` "has never been
+  reachable" (§155: it is, via the execution) and that `IngestionJob.rawStorageKey` was *written*
+  and merely unread (§117 stored neither the file nor the key; §156, §160). Both are struck in place
+  now. Its `RL-*` mutation ids also collide with §141's, one of three collisions in that file.
+- **THE TEST WORKER'S HEAP IS PINNED AT `2g` IN `build.gradle.kts` — DO NOT REMOVE IT.** Gradle's
+  default is 512m and the suite was measured at **522685K of 524288K** while hanging. An exhausted
+  G1 heap here throws nothing and fails nothing: every test passes, then the worker parks for ever
+  in `MessageHub.stop` and the build never returns or prints. Three ArchUnit class graphs live in
+  that heap (two `static final` in `ArchitectureRulesTest`, one in `ContractEnumTest`, the last
+  released in `@AfterAll`), and they grow with the codebase. A build that "hangs after the tests
+  pass" is this, and `jcmd <worker pid> GC.heap_info` is how to confirm it in one command.
+- **`openapi.yaml`'s `HealthSignal` no longer enumerates which signals have writers.** That list was
+  stale from §157 to §161 and is a second copy of `WRITERLESS_BY_DECISION`. Do not re-add it.
+
+---
+
+## §160 — `raw_storage_key` HAS BOTH HALVES; `storage` HAS A THIRD PORT AND A THIRD ROOT
+
+`storage/RawReportStore.java` + `FilesystemRawReportStore.java` are the new seam — the **third**
+blob port, beside `AttachmentStore` and `ReportStore`, over the same `FilesystemBlobStore` body.
+`IngestionJob.rawStorageKey` leaves **both** `ArchitectureRulesTest` decision maps at once:
+`READERLESS_BY_DECISION` is **twelve**, `WRITERLESS_BY_DECISION` is **ten**.
+
+- **`RawReportStore` IS NOT `ReportStore` and the names are one letter apart.** `ReportStore` holds
+  reports this product *generated* and can regenerate from `execution_fact`; this holds the file CI
+  *sent*, which nothing can reproduce. Wrong one handed over = a compile error, which is the whole
+  reason the module keeps them as separate types rather than one bean behind a qualifier.
+- **Three roots now**, and `IntegrationTestBase` registers three temp directories.
+  `tcms.storage.raw-reports.root` / `TCMS_RAW_REPORTS_ROOT`. A new store means a line in
+  `application.yml`, a line in `compose.prod.yaml`'s environment **and** one under its `volumes:` —
+  a root without a mount is the runbook's recorded outage.
+- **`IngestionJob.completed` takes the id from the caller.** The only factory in `execution` that
+  does. The blob key's middle segment is the job id, so the id must exist before the row; the
+  alternative was a second mutator on an entity whose header says nothing edits an ingestion job.
+- **Row first, bytes second, inside the transaction** — `EvidenceService`'s ordering, not
+  `ReportJobRunner`'s. This is external I/O inside a transaction boundary on purpose: 1 MB cap,
+  local write, and the sibling caller in this module does the same. Do not "fix" it.
+- **`IngestionReadService.openRawReport` and `locate` are BOTH unannotated.** Annotating `locate`
+  would be a self-invocation Spring's proxy never sees — no `app.current_company`, every
+  RLS-protected read silently zero rows. `ProjectService.readVisible` and the repositories carry the
+  boundaries. `ReportReadService.open` is the shape being copied.
+- **The gate is membership** (`readVisible`), not a new key. No `ingestion:read` exists and one
+  seeded to nobody is a 403 nobody can grant their way out of.
+- **`IngestionJobView.reportUrl` is server-composed and required-and-nullable.** Null is the only
+  wire signal distinguishing a job posted before uploads were kept; `raw_storage_key` itself is
+  deliberately not served. `IngestionJobView.reportUrl(...)` is the one place it is built.
+
+---
+
+## §157 — `STALE_APPROVAL` HAS A DERIVATION; FOUR HEALTH SIGNALS ARE LEFT WITHOUT ONE
+
+`repository/ApprovalFacts.java` is the new seam and the first exit from
+`ArchitectureRulesTest.WRITERLESS_BY_DECISION` **by writing the column** rather than by deleting it.
+Population there is **thirteen**, not fourteen.
+
+- **`repository` may name `project`'s tables directly** — `project` is a foundation module, so this
+  is a permitted edge and `ApprovalFacts` is a *convention* (one file, no second entity over
+  `review`), not a boundary like `ExecutionFacts`. Do not describe the two as the same kind.
+- **The predicate is a VERSION comparison** — `max(review.subject_version_no) WHERE state =
+  'APPROVED'` against `test_case.current_version_no` — because that is what `ReviewPanel`'s stale
+  banner has used since §76. The timestamp spelling (`updated_at > approved_at`) is shorter, looks
+  equivalent, and disagrees with the banner: a no-op save moves `updated_at` and writes no version.
+- **`lifecycle_status = 'APPROVED'` is a TERM, not a `WHERE` filter.** As a filter the statement
+  skips the row and a demoted case keeps a stale flag for ever. Same for any future signal here.
+- **No review settings predicate.** `ReviewService.moved` opens no review for a project with §6g
+  off, so those projects are honestly zero; a predicate would erase the signal for a project that
+  switches review off with approvals outstanding.
+- **A review row needs `SUBMIT_FOR_REVIEW` first.** Going `DRAFT → APPROVED` writes **no** review —
+  `moved` closes an open one and opens none — and `authorMayApproveOwnWork` defaults to false, so
+  approving needs a second account. Any fixture for this signal has to do all three.
+- **`CaseHealthRecomputeService` is no longer "execution-driven"** — three statements, one
+  transaction, one `computed_at`. The `ON CONFLICT` column-ownership rule now matters in-module:
+  each statement names only its own columns.
+- **Tests must stop borrowing `stale_approval` as the empty column.** `CaseHealthRecomputeTest`'s
+  clobber test uses `unlinked` now. The remaining borrowable ones are `outdated_spec_changed`,
+  ~~`condition_drift`~~ (§158), `unlinked`, `orphaned` — and each disappears when it gets a writer.
+
+## §159 — `project.archived_at` HAS A WRITER; ARCHIVING MARKS AND DOES NOT LOCK
+
+`PUT /projects/{projectId}/archive` → `ProjectArchiveService` (`project` module).
+`ArchitectureRulesTest.WRITERLESS_BY_DECISION` is **eleven**, not twelve — and that map's javadoc
+was stale by one from §158 to §159 while the method comment below it was right, so read the map, not
+the prose.
+
+- **THE BODY NAMES THE TARGET STATE, NOT A VERB.** `{"archived": true|false}` on one endpoint, both
+  directions. Two verb endpoints make a stale client do the opposite of what was pressed; this makes
+  it a no-op. Absent field ⇒ **400 on the field**, never a default — a default un-archives.
+- **IDEMPOTENT AND SILENT.** Setting the state a project already has writes nothing: no timestamp
+  re-stamped, no audit row, no `lock_version` bump. Decided in `apply` before either mutator runs,
+  which is why `Project.archive` does not defend itself.
+- **THE GATE IS `project:settings` (PROJECT scope).** Not `project:create`: `createGranted` has **no
+  `Unreachable` arm**, so a company key answers 403 for a project the caller cannot see — §6t's
+  oracle through the gate. Roles spec §A6a withholds the key from both token-only roles, so no agent
+  and no CI credential can retire a project; **do not add a second check for that.**
+- **ARCHIVING IS A MARK, NOT A LOCK.** An archived project is listed, readable and fully writable —
+  `DocPageStatus.ARCHIVED` one level up. Making it read-only is a **separate decision**: a fourth
+  `GateResult` arm at **53 call sites**, pinned meanwhile by `Archiving.archivingDoesNotLock` and
+  browser row `AR-3`.
+- **`archived_at` stays a timestamp**; `unarchive()` clears it and the sequence lives in
+  `audit_event` (`project.archived` / `project.unarchived`). No second column.
+- **`ProjectService.viewOfChanged`** is the write-path assembler — `viewOfCreated`'s sibling, but it
+  runs the case-count query. Use it for any future project write; `viewOfCreated`'s empty map is only
+  correct for a project created in that transaction.
+- **`ProjectEndpointTest` now writes.** Its seed calls `restoreArchiveState()` and must keep doing
+  so: nothing cleans between tests and every helper there is "create if absent", so a state one test
+  writes survives into the read-only assertions two groups up.
+
+## §158 — `CONDITION_DRIFT` HAS A DERIVATION; THREE HEALTH SIGNALS ARE LEFT WITHOUT ONE
+
+`repository/ConditionDrift.java` is the fourth statement in the recompute tick and the **second exit
+from `ArchitectureRulesTest.WRITERLESS_BY_DECISION` by writing the column**. Population there is
+**twelve**, not thirteen.
+
+- **NOT named `*Facts`, deliberately.** That suffix means "rows another module owns, read through
+  one file" — `ExecutionFacts` over a *forbidden* edge, `ApprovalFacts` over a permitted one. Every
+  table here (`test_case`, `test_case_version`, `condition`) is `repository`'s own, so there is no
+  crossing to announce. Do not rename it for symmetry.
+- **THE JOIN IS `LEFT` AND `lib.id IS NULL` IS A TERM IN THE EXPRESSION.** A soft-deleted library
+  condition is dropped by `CaseConditions.forCase`, so the live case renders one instruction fewer
+  than the snapshot records — the *worst* drift — and an inner join makes it the case that reports
+  clean. Its test's fixture is byte-identical to the snapshot except `deleted_at`.
+- **THE COMPARISON IS CONTENT (title + body), NOT `updated_at`.** The timestamp spelling
+  (`condition.updated_at > version.created_at`) is one join shorter and **can never go false**:
+  editing a condition and reverting it leaves `updated_at` moved for ever. That is `case_health`'s
+  self-healing rule inverted. The test suite **cannot currently distinguish the two** — no fixture
+  expresses edit-and-revert — and `CD-6`/`CD-B3` say so rather than implying coverage.
+- **The reference point is the NEWEST version's snapshot**, not the approved one. Pinning to
+  approvals reports a confident zero for every project with §6g off, which is exactly the state
+  `STALE_AUTOMATION` was stuck in from `V1` to M3.
+- **Attachment changes are not reported and that is correct for the case's own arm**:
+  `preconditionIds`/`postconditionIds` are on `CaseEdit`, so attach/detach moves
+  `CaseVersions.hash` and writes a version that re-baselines. The **inherited** arm is a real gap
+  (a suite-level attach writes no case version) and is named at the method rather than closed.
+- **`StatusChip.tsx`'s tooltip said "since the case was last reviewed" and now says "last saved".**
+  The server compares versions and never consults review; a project with review off raises this
+  signal identically.
+- **Four statements now share the `case_health` row.** The `ON CONFLICT` column-ownership rule binds
+  `ExecutionFacts` ×2, `ApprovalFacts`, `ConditionDrift` and `reporting.ExecutionSource`. Each names
+  only its own columns; adding a column to one of the five blanks another's work.
+
+## §156 — A MAPPED COLUMN WITH NO WRITER FAILS THE BUILD NOW, AND FIVE HEALTH SIGNALS ARE THE COST
+
+`ArchitectureRulesTest.everyMappedColumnHasAWriter` is the **fifth** rule in §152/§153/§154/§155's
+family and §154's mirror. Population **fourteen**, pinned in `WRITERLESS_BY_DECISION` with the
+argument at each field. The hand-kept tally it replaces is §116's, §117's, §132's and §151's — four
+slices, four single instances, no question.
+
+- **IT READS BYTECODE FIRST; §154 READS TEXT. Do not converge them.** A reader is a query and a
+  query is a string; a **writer is an assignment**, which is what bytecode records. `isWrittenInJava`
+  is the substance and mirrors `isReadInJava` including the one-level caller check — a mutator whose
+  method has no caller is **not** a writer, which is the only reason `Project.archivedAt` is in the
+  population.
+- **The SQL arm is the remainder and needs BOTH spellings**: the **column** name for native SQL
+  (`case_health` is written by `INSERT … ON CONFLICT`) and the **field** name for JPQL
+  (`startIfNotStarted` names `r.startedAt`, `V1` names `started_at`). `.sql` files are in the corpus
+  — §154's has no need of them — because a migration that **backfills** is a writer (`V44`) and one
+  that only creates the column is not.
+- **`writesInLiterals` matches ONE LITERAL AT A TIME and that is load-bearing.** A statement runs to
+  the next `;`; `DocPageEndpointTest`'s unterminated `"UPDATE key_sequence SET next_value = 1"`
+  swallowed every later literal in the file and an `@DisplayName` made `case_health.unlinked` read
+  as written. **Over-matching here HIDES findings**, unlike §154 where it only defers them.
+- **§154's by-decision javadoc was wrong about two members and is corrected**: `rawStorageKey` and
+  `incomplete` are writerless as well. `IngestionJob.completed` takes no `rawStorageKey`, and the
+  class header has said since §67 that the bytes are not stored either.
+- **`Project.archive(now)` HAS NO CALLER and `ProjectView.archived` is `required` on the wire** —
+  false in every deployment. Do not delete the mutator to "clean up": that leaves `isArchived` a
+  constant with the contract still promising the field. What is missing is an operation.
+- **`case_health` STOPPED BEING EMPTY AT §53 AND FIVE SIGNALS DID NOT** (**four** since §157,
+  **three** since §158 — `stale_approval` and `condition_drift` are derived now, see the sections
+  above). `outdated_spec_changed`,
+  ~~`stale_approval`~~, ~~`condition_drift`~~, `unlinked`, `orphaned` have no computation;
+  `CaseHealthScheduler` is `matchIfMissing = true` on an hourly delay, so **`computed_at` is
+  non-null within two minutes of any deployment** and the dashboard's "not computed yet" branch —
+  which five files still described as universal — is the rare one. The SPA's panel now says **"No
+  health signal was raised"**, a claim about the checks; it must not go back to "Nothing needs
+  attention" until the remaining three have writers. Do not make the columns nullable: that moves a three-valued
+  signal onto every reader.
+
+## §155 — `lock_version` IS EITHER `@Version` OR UNMAPPED, AND `TestRun` HAS NEITHER
+
+`ArchitectureRulesTest.everyLockVersionColumnIsAVersion` is the fourth rule in §152/§153/§154's
+family. No entity may map a column named `lock_version` without `@Version`. The tally it replaces is
+**§74's, kept by hand**: three annotated, two left, and the note about the two in a javadoc on a
+*third* entity from §74 to §155.
+
+- **THE STATE IT FORBIDS IS A GUARD THAT CANNOT FIRE**, not dead weight. An unmaintained
+  `lock_version` reads `0` for ever and it is the value an `If-Match` is compared against — the
+  precondition passes over any number of intervening saves and no "a stale header is refused" test
+  can go red. `TestPlan` came within one slice of shipping exactly that.
+- **THE RULE HAS TWO EXITS AND THE ANNOTATION IS ONLY ONE.** `ApiToken`'s rubric decides: *is a
+  lost update here a discarded edit, or a duplicated intent?* Both §155 survivors are **unmapped**,
+  with the argument at the class. Population of violators is **empty** — no by-decision map, and
+  the vacuity floor is `versioned > 10` (measured: 17 mappings, 15 annotated; §154 recorded 19).
+- **`work_item.lock_version` — UNMAPPED. Do not "restore" it.** The only mutator is `moveTo`, an
+  absolute destination from a drag; the contract already calls that "no lost update to protect" on
+  three status endpoints. And `WorkItemController` has **no `OptimisticLockingFailureException`
+  handler**, so annotating turns a board race that resolves correctly into a **500**.
+- **`test_run.lock_version` — UNMAPPED, AND ITS RACE IS CLOSED BY TWO OTHER THINGS.** This is the
+  one aggregate with **two writers that are not the same act**, overlapping on `status` alone: the
+  first result (`status`, `started_at`) and a lead's close (`status`, `completed_at`). Each order
+  discarded the other's column — a start after a close **erased the closure** with two 200s.
+  1. **`TestRunRepository.startIfNotStarted`** — a conditional `UPDATE … WHERE status =
+     NOT_STARTED`. `TestRun.begin` is **deleted**; its `if` is the `WHERE`, re-evaluated by Postgres
+     under the row lock. Returns 1/0, and `ExecutionService` writes the `run.started` audit row only
+     on 1. **Do not put the guard back in Java** — a snapshot cannot answer "has this started yet".
+  2. **`@DynamicUpdate` on `TestRun`** — the only one in the codebase. It is why `applyStatus`
+     stops writing `started_at` back. Removing it reddens one test (`LV-1`).
+- `@Version` was the recorded candidate (`RL-7`) and is the **wrong instrument**: it makes the
+  product's most-used write a contention point, and `TestPlan.lockVersion`'s header said so before
+  §154 proposed it. `RunController.onWriteRace` **is** reachable — on the execution, not the run.
+- **Suite storage roots now carry `user.name`** (`IntegrationTestBase`). Fixture prefixes are
+  hand-assigned and identical everywhere, so a fixed `/tmp/tcms-evidence-test` is shared between the
+  nightly lane's `ghrunner` and a developer on the same box: eleven `AccessDeniedException` failures
+  about nothing you changed.
 
 ---
 
@@ -35,12 +287,11 @@ directions, like §153's.
 - **No exemption for `@Id`, `@Version` or `company_id`** — all three were carved out of a draft and
   all three are matched by the corpus anyway (`findById`'s derived name, the queries naming
   `lock_version`, the RLS predicate and filter condition).
-- **What it cannot see, named:** the corpus has no idea which table a statement is about.
-  **`test_run.lock_version` and `work_item.lock_version` are mapped WITHOUT `@Version`** — 19 other
-  entities carry it on the identically-named column, `V1` says the column is for optimistic locking,
-  `RunController` cites ERD §5 that a run is worked by several testers at once, and
-  `RunController.onWriteRace` exists and has never been reachable. **Recorded as the next slice**
-  (`RL-7`), not taken: it is a behaviour change on a concurrently-edited aggregate.
+- **What it cannot see, named:** the corpus has no idea which table a statement is about, so a
+  native query naming *another* table's `lock_version` marks this one read. ~~`test_run` and
+  `work_item` map it WITHOUT `@Version` … recorded as the next slice (`RL-7`)~~ → **§155 took it and
+  the answer was no on both**: see the §155 section above. Its "19 other entities" was a hand count
+  and is **15**.
 - **Near misses recorded at the field, not pinned:** `ReportArtifact.generatedAt` and
   `AuditEvent.actorTokenId` are read only by a test's `SELECT`, which counts (§152's widening).
 

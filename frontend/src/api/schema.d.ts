@@ -432,6 +432,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Retire a project, or bring it back
+         * @description Requires `project:settings` — a **PROJECT-scope** permission, held by Test Lead and up on
+         *     the project itself (roles spec §A3). It is deliberately not the COMPANY-scope
+         *     `project:create` that the create beside it needs: archiving is reversible, destroys
+         *     nothing, and is the lead of a finished engagement tidying up their own project. Company
+         *     Admin and Instance Admin hold `project:settings` on every project anyway, so nothing they
+         *     could do before is withheld. It also matters that both token-only roles are denied it
+         *     (roles spec §A6a): **no CI credential and no agent can retire a project.**
+         *
+         *     **Archiving marks a project; it does not lock it.** An archived project is still listed by
+         *     `GET /projects`, still readable, and every write in this contract still succeeds against
+         *     it. That is `doc_page`'s `ARCHIVED` one level up — a state that takes something out of
+         *     circulation while keeping it and everything pointing at it resolvable — and not a soft
+         *     delete. A rule that *refuses* writes to an archived project is a separate decision with a
+         *     much larger blast radius (every project-scoped write shares one gate), and it must be taken
+         *     as a product rule rather than inherited as a side effect of this endpoint.
+         *
+         *     One endpoint for both directions, and idempotent: archiving an archived project answers
+         *     `200` with the project and writes nothing — no timestamp re-stamped and no audit row, so a
+         *     repeated click cannot bury the change that actually happened. `SuiteStatusInput`'s
+         *     argument, and for the same reason there is no `If-Match`: the request names an absolute
+         *     target state rather than a delta against something the client read.
+         */
+        put: operations["setProjectArchived"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/classification": {
         parameters: {
             query?: never;
@@ -5928,6 +5970,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/ingestions/{jobId}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                jobId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * The verbatim file CI posted
+         * @description The report exactly as it arrived, byte for byte, before this server parsed any of it.
+         *
+         *     **This is not `raw_payload` and the two are not redundant.** `GET /ingestions/{jobId}`
+         *     serves what the server *understood* — the normalized parse and where every test landed,
+         *     which is what the binder screen reads. This serves what CI *sent*, which answers the
+         *     different question of whether the server understood correctly. A test that is missing from
+         *     `unmatched` and missing from the run is the case where only this endpoint can tell you
+         *     whether the report ever mentioned it.
+         *
+         *     **Project membership**, as for the list and the job — and no new permission key. The
+         *     catalogue has no `ingestion:read`, and inventing one would be a `403` no administrator can
+         *     grant their way out of. The upload is the evidence behind verdicts a member may already
+         *     read in full, posted by that member's own CI job.
+         *
+         *     Served `inline` with the dialect's media type (`application/xml` for JUnit and TestNG,
+         *     `application/json` for Allure and Cucumber) — the opposite of a generated report, which is
+         *     `attachment`. What somebody clicking this from the ingestion history wants is to read forty
+         *     lines of test names against what the binder says, and forcing a download puts a second
+         *     application between the question and the answer. **The `Content-Type` does not identify the
+         *     dialect** — `application/xml` is true of both JUnit and TestNG and distinguishes neither,
+         *     which is `IngestionInput.format`'s opening argument read backwards. The filename carries it.
+         *
+         *     One bodiless `404` for four things (§6t): an unreachable project, another project's job id,
+         *     an id that is nothing at all, and **a job posted before the upload was kept** — every row
+         *     written before this endpoint existed has no bytes behind it and no migration can invent
+         *     them. A pruned blob answers the same way, deliberately: the caller's next action is
+         *     identical, so a second spelling would be a distinction with no act behind it.
+         */
+        get: operations["downloadIngestionReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/automation-mappings": {
         parameters: {
             query?: never;
@@ -7438,16 +7529,27 @@ export interface components {
          * @description Derived, never authored — self-heals when the cause is fixed (plan §6o). No endpoint sets
          *     one and none ever will: a "mark as not stale" button is a button for lying.
          *
-         *     **Five of these have a writer.** `NEVER_EXECUTED` and `LONG_UNEXECUTED` (§53),
+         *     **Not every member has a derivation behind it yet**, so a client must treat an absent
+         *     signal as *"nobody has looked"* rather than as *"not raised"* — which is what
+         *     `DashboardSummary.healthComputedAt` exists to distinguish. That rule is the same whichever
+         *     members are derived, and it is the only thing a client has to act on.
+         *
+         *     ~~**Five of these have a writer.** `NEVER_EXECUTED` and `LONG_UNEXECUTED` (§53),
          *     `FAILING_REPEATEDLY`, and — since M3 slice 5 — the §6c automation-drift pair,
          *     `STALE_AUTOMATION` and `UNDECLARED_AUTOMATION`. The rest are computed by nothing and are
-         *     therefore never sent; a client must treat an absent signal as *"nobody has looked"* rather
-         *     than as *"not raised"*, which is what `DashboardSummary.healthComputedAt` exists to
-         *     distinguish.
+         *     therefore never sent.~~ → **the enumeration is removed, not updated (§161).** It was
+         *     stale within a day of §157 and stayed stale through §158, so it spent two slices telling
+         *     clients that `STALE_APPROVAL` and `CONDITION_DRIFT` are never sent while the server was
+         *     sending both. It was a second copy of a list the server already keeps — and keeps
+         *     mechanically, in `ArchitectureRulesTest.WRITERLESS_BY_DECISION`, which fails the build when
+         *     a member gains or loses a derivation. A copy of a computed list, in the document nobody
+         *     recompiles, is how it goes wrong.
          *
-         *     `INCOMPLETE` is a special case in the other direction: it is a column in the schema, it is
-         *     in this enum, and there is **no server constant for it**, so it cannot appear on the wire
-         *     today. Kept so a client's labels stay complete.
+         *     `INCOMPLETE` is the one member that genuinely cannot appear: it is a column in the schema,
+         *     it is in this enum, and there is **no server constant for it**. Kept so a client's labels
+         *     stay complete. `ContractEnumTest` is what holds that to a decision rather than an accident,
+         *     and §161 is why — the server-side note about this member argued the opposite, that *this
+         *     contract* lacked the member, for as long as the member had been here.
          * @enum {string}
          */
         HealthSignal: "OUTDATED_SPEC_CHANGED" | "STALE_APPROVAL" | "CONDITION_DRIFT" | "STALE_AUTOMATION" | "NEVER_EXECUTED" | "LONG_UNEXECUTED" | "UNLINKED" | "FAILING_REPEATEDLY" | "ORPHANED" | "INCOMPLETE" | "UNDECLARED_AUTOMATION";
@@ -7522,6 +7624,12 @@ export interface components {
              */
             name: string;
             description?: string | null;
+            /**
+             * @description Whether this project has been retired — see `PUT /projects/{projectId}/archive`, which
+             *     is the only thing that sets it. An archived project is **still listed here and still
+             *     fully writable**: the flag is a label for a picker to render, not a lock, and omitting
+             *     such a project from the list would make it unreachable rather than marked.
+             */
             archived: boolean;
             caseCount: number;
             /**
@@ -7554,6 +7662,16 @@ export interface components {
              */
             name: string;
             description?: string | null;
+        };
+        /**
+         * @description The body of `PUT /projects/{projectId}/archive`. One field, and it is the target state
+         *     rather than a verb: `true` retires the project, `false` brings it back, and sending the
+         *     state the project already has is a no-op that answers `200`. A pair of verb endpoints
+         *     would make the client decide which to call from a copy of the state it may have read
+         *     minutes ago.
+         */
+        ProjectArchiveInput: {
+            archived: boolean;
         };
         ClassificationDimension: {
             /** Format: uuid */
@@ -8862,6 +8980,25 @@ export interface components {
              *     the *common* case at exactly the moment the response is largest.
              */
             unmatched: components["schemas"]["UnmatchedTest"][];
+            /**
+             * @description `GET` here for the **verbatim file CI posted** — see that endpoint.
+             *
+             *     **Null when this job has no stored upload**, which is every job posted before uploads
+             *     were kept and cannot be repaired by a migration. Key a control on this field rather
+             *     than on `status` or on the format: null is the only thing on the wire that tells the
+             *     two eras apart, and it is null precisely when there is nothing to link to.
+             *
+             *     Composed by the server, like `ReportJob.downloadUrl` and for the same reason — the
+             *     client holds no copy of this server's routing. It already carries `/api/v1`, so a
+             *     client that prefixes its own base produces `/api/v1/api/v1/…` and a 404 that reads as
+             *     a missing report.
+             *
+             *     **The session is a bearer token**, so a plain `<a href>` sends no credential and
+             *     answers `401` while rendering as a working link. Fetch it with the `Authorization`
+             *     header the rest of the API takes.
+             * @example /api/v1/projects/4f.../ingestions/9c.../report
+             */
+            reportUrl: string | null;
             /** Format: date-time */
             createdAt: string;
         };
@@ -10607,6 +10744,36 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    setProjectArchived: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectArchiveInput"];
+            };
+        };
+        responses: {
+            /** @description The project, as the picker renders it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     getProjectSettings: {
         parameters: {
             query?: never;
@@ -11904,6 +12071,32 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IngestionJob"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    downloadIngestionReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                jobId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The bytes, as posted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/xml": string;
+                    "application/json": string;
                 };
             };
             401: components["responses"]["Unauthorized"];

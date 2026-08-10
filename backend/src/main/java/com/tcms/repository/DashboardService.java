@@ -198,13 +198,33 @@ public class DashboardService {
      * filter that opens an empty grid, and nine of them bury the two that matter. The panel is
      * headed "Needs attention", so an absent tile reads correctly as nothing to attend to.
      *
-     * <p><strong>Which is exactly why {@code healthComputedAt} exists beside this.</strong> Nothing
-     * writes {@code case_health} — the signals are derived from executions and documentation links,
-     * and the computation has no owner yet — so this list is empty in every deployment, and an empty
-     * "Needs attention" panel is a page telling the reader everything is fine. It is not; nobody has
-     * looked. The timestamp is null in exactly that case and the SPA renders a different sentence for
-     * it. Same defect class as §46's {@code met: null} rendering as a failed gate, caught before it
-     * could ship rather than after.
+     * <p><strong>Which is exactly why {@code healthComputedAt} exists beside this.</strong>
+     * <del>Nothing writes {@code case_health} — the signals are derived from executions and
+     * documentation links, and the computation has no owner yet — so this list is empty in every
+     * deployment, and an empty "Needs attention" panel is a page telling the reader everything is
+     * fine. It is not; nobody has looked.</del> The timestamp is null in exactly that case and the
+     * SPA renders a different sentence for it. Same defect class as §46's {@code met: null}
+     * rendering as a failed gate, caught before it could ship rather than after.
+     *
+     * <p><strong>→ superseded 2026-08-09 (§156), and the escape hatch above no longer covers the
+     * whole panel.</strong> Three writers exist and the recompute runs hourly by default, so the
+     * timestamp is non-null in any running deployment — while five of the ten signals still have no
+     * computation at all. The null branch is therefore the rare one now, and the tile list being
+     * empty no longer means "nothing was found": for five of the ten it means nothing was looked
+     * for. That is why the SPA's second sentence says a signal was not raised rather than that
+     * nothing needs attention, and why the real fix is a derivation per remaining signal rather
+     * than anything on this method.
+     *
+     * <p><strong>Four of the ten, since §157</strong> — {@code ApprovalFacts} derives
+     * {@code STALE_APPROVAL}, which is the first of §156's five to be taken and the first tile on
+     * this panel that can appear because somebody edited a case rather than because somebody ran
+     * one. Nothing on this method changed for it, which is the property the panel was built for.
+     *
+     * <p><strong>Three, since §158</strong> — {@code ConditionDrift} derives
+     * {@code CONDITION_DRIFT}, and this panel gains its first tile that can appear because somebody
+     * edited <em>something else</em>: a shared condition in the library, on a screen with no case
+     * on it. Nothing on this method changed for that one either, and it is now the second slice
+     * running to say so, which is what "generic over {@code HealthSignal}" was supposed to buy.
      */
     private static List<TileView> health(Map<HealthSignal, Long> counts) {
         List<TileView> tiles = new ArrayList<>();

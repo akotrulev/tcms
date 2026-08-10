@@ -203,5 +203,33 @@ class FilesystemBlobStoreTest {
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("report");
         }
+
+        @Test
+        @DisplayName("raw reports — the third root, §160")
+        void rawReportAdapterRoundTripsAndRefusesTraversal() throws IOException {
+            RawReportStore store = new FilesystemRawReportStore(root.toString());
+            String key = UUID.randomUUID().toString();
+
+            store.put(key, "bytes".getBytes(StandardCharsets.UTF_8));
+            assertThat(store.exists(key)).isTrue();
+            try (StoredBlob blob = store.open(key).orElseThrow()) {
+                assertThat(blob.stream().readAllBytes())
+                        .isEqualTo("bytes".getBytes(StandardCharsets.UTF_8));
+            }
+            store.delete(key);
+            assertThat(store.exists(key)).isFalse();
+
+            // "raw report", not "report" — the two roots hold opposite things (one regenerable, one
+            // irreproducible) and an operator reading a failure has to be told which is gone.
+            //
+            // NOTE THE ASYMMETRY, because it is a trap in the sibling test above and not in this
+            // one: "report" is a substring of "raw report", so the reports case would still pass if
+            // its adapter were handed this label, while this case cannot pass under the sibling's.
+            // The one-directional check is the best a substring assertion can do here; what pins
+            // the other direction is that the two adapters read two different property keys.
+            assertThatThrownBy(() -> store.put("../escaped", new byte[] {1}))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("raw report");
+        }
     }
 }

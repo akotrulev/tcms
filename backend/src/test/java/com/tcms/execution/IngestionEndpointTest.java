@@ -699,6 +699,133 @@ class IngestionEndpointTest extends IntegrationTestBase {
     }
 
     // =====================================================================
+    // The verbatim upload — §160
+    // =====================================================================
+
+    /**
+     * {@code GET /ingestions/{jobId}/report} — the column {@code raw_storage_key} finally names
+     * something retrievable.
+     *
+     * <p>The assertion that matters is <strong>byte identity with what was posted</strong>, not that
+     * a download happens. A store that wrote {@code raw_payload} here instead would serve a
+     * perfectly valid file, 200 with plausible JSON, and be wrong in the one way this endpoint
+     * exists to prevent — so every test below compares against the exact string the post sent.
+     */
+    @Nested
+    @DisplayName("The verbatim upload — GET /ingestions/{jobId}/report")
+    class RawReport {
+
+        @Test
+        @DisplayName("the bytes come back EXACTLY as posted, not the parsed payload")
+        void theBytesRoundTrip() throws Exception {
+            String report = junit(
+                    testCase("com.acme.RefundTest", "refundsInFull", null),
+                    testCase("com.acme.GhostTest", "unknown", null));
+            MvcResult posted = ingest(ROBOT, report, "ik-r1");
+            String jobId = body(posted).get("id").asText();
+
+            MvcResult fetched = download(LEAD,
+                    "/projects/" + BANKING + "/ingestions/" + jobId + "/report");
+
+            assertThat(fetched.getResponse().getStatus()).isEqualTo(200);
+            // Byte-identical to the string the CI job sent — the whole point of the column. A
+            // comparison against a re-serialised parse would pass on a store that kept the wrong
+            // thing, which is the defect this endpoint is for.
+            assertThat(fetched.getResponse().getContentAsString()).isEqualTo(report);
+        }
+
+        @Test
+        @DisplayName("the dialect is in the FILENAME; the media type cannot carry it")
+        void theFilenameCarriesTheDialect() throws Exception {
+            String jobId = body(ingest(ROBOT,
+                    junit(testCase("com.acme.RefundTest", "refundsInFull", null)), "ik-r2"))
+                    .get("id").asText();
+
+            MvcResult fetched = download(LEAD,
+                    "/projects/" + BANKING + "/ingestions/" + jobId + "/report");
+
+            // application/xml is true of BOTH JUnit and TestNG and distinguishes neither — which is
+            // IngestionInput.format's own opening argument, read backwards on the way out.
+            assertThat(fetched.getResponse().getContentType()).startsWith("application/xml");
+            String disposition =
+                    fetched.getResponse().getHeader(HttpHeaders.CONTENT_DISPOSITION);
+            assertThat(disposition).contains("-junit.xml");
+            // inline, not attachment: the reader opens this beside the binder to check one name.
+            assertThat(disposition).startsWith("inline;");
+            // Nothing a client sent is in the name. CI never named the file — IngestionInput
+            // carries the report as a string and has no filename field — so the one string that
+            // reaches a response header is composed of server-generated values alone.
+            assertThat(disposition).contains(jobId);
+        }
+
+        @Test
+        @DisplayName("a Viewer may download it — membership, exactly as for the history")
+        void aViewerMayDownload() throws Exception {
+            String jobId = body(ingest(ROBOT,
+                    junit(testCase("com.acme.RefundTest", "refundsInFull", null)), "ik-r3"))
+                    .get("id").asText();
+
+            // The same reasoning the list is gated by: no ingestion:read key was invented, so the
+            // person who may read the verdicts may read what produced them.
+            assertThat(download(VIEWER,
+                    "/projects/" + BANKING + "/ingestions/" + jobId + "/report")
+                    .getResponse().getStatus()).isEqualTo(200);
+        }
+
+        @Test
+        @DisplayName("a sibling project's job, and an id that is nothing, are the same bodiless 404")
+        void unreachableJobsAre404() throws Exception {
+            UUID elsewhere = seedJobInSavings();
+
+            MvcResult sibling = download(LEAD,
+                    "/projects/" + BANKING + "/ingestions/" + elsewhere + "/report");
+            MvcResult absent = download(LEAD,
+                    "/projects/" + BANKING + "/ingestions/" + ABSENT + "/report");
+
+            assertThat(sibling.getResponse().getStatus()).isEqualTo(404);
+            assertThat(sibling.getResponse().getContentAsString()).isEmpty();
+            assertThat(absent.getResponse().getStatus()).isEqualTo(404);
+            assertThat(absent.getResponse().getContentAsString()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a job whose key is null — every row posted before §160 — is the same 404")
+        void aJobWithNoStoredUploadIs404() throws Exception {
+            // seedJobInSavings writes a row by hand, the way every ingestion_job in a deployed
+            // instance was written before this slice: no key, no bytes. The endpoint must not 500
+            // on it, and must not tell it apart from a pruned blob — the caller's next act is the
+            // same and a second spelling would be a distinction with no act behind it.
+            UUID legacy = seedJobInBanking();
+
+            MvcResult fetched = download(LEAD,
+                    "/projects/" + BANKING + "/ingestions/" + legacy + "/report");
+
+            assertThat(fetched.getResponse().getStatus()).isEqualTo(404);
+            assertThat(fetched.getResponse().getContentAsString()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a REPLAY does not overwrite the first upload")
+        void aReplayKeepsTheOriginalBytes() throws Exception {
+            String first = junit(testCase("com.acme.RefundTest", "refundsInFull", null));
+            String jobId = body(ingest(ROBOT, first, "ik-r4")).get("id").asText();
+
+            // The same key with DIFFERENT content — a CI job that retried after somebody edited the
+            // build. The replay answers 200 with the original job and writes no second set of
+            // results, so it must not write a second set of bytes either: the stored upload is what
+            // produced the recorded verdicts, and swapping it would make the audit trail describe a
+            // run that never happened.
+            ingest(ROBOT, junit(testCase("com.acme.RefundTest", "refundsInFull", "now failing")),
+                    "ik-r4");
+
+            MvcResult fetched = download(LEAD,
+                    "/projects/" + BANKING + "/ingestions/" + jobId + "/report");
+
+            assertThat(fetched.getResponse().getContentAsString()).isEqualTo(first);
+        }
+    }
+
+    // =====================================================================
     // The columns that record that a CREDENTIAL acted
     // =====================================================================
 
@@ -1017,6 +1144,48 @@ class IngestionEndpointTest extends IntegrationTestBase {
             statement.executeUpdate();
         }
         return id;
+    }
+
+    /**
+     * A job row in THIS project with no {@code raw_storage_key} — every row a deployed instance
+     * wrote before §160.
+     *
+     * <p>Seeded by hand for §153's reason and against its rule at once: the state cannot be reached
+     * through the API any more, because the one writer now always sets the key. That makes hand-SQL
+     * the only way to produce it, and the state is worth pinning because it is what every existing
+     * production row looks like.
+     */
+    private UUID seedJobInBanking() throws SQLException {
+        UUID id = UUID.fromString("d7005000-0000-4000-8000-000000000002");
+        try (Connection connection = appConnection(ACME);
+             var statement = connection.prepareStatement("""
+                     INSERT INTO ingestion_job
+                         (id, company_id, project_id, format, idempotency_key, status,
+                          matched_count, unmatched_count, created_at)
+                     VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), 'JUNIT',
+                             'pre-160', 'COMPLETED', 0, 0, now())
+                     ON CONFLICT (id) DO NOTHING
+                     """)) {
+            statement.setString(1, id.toString());
+            statement.setString(2, ACME.toString());
+            statement.setString(3, BANKING.toString());
+            statement.executeUpdate();
+        }
+        return id;
+    }
+
+    /**
+     * A GET that will take any media type back.
+     *
+     * <p>Not {@link #get}, which sends {@code Accept: application/json} — against an endpoint that
+     * answers {@code application/xml} for two of the four dialects that is a 406, and the test would
+     * fail on its own request rather than on the product.
+     */
+    private MvcResult download(UUID userId, String path) throws Exception {
+        return mvc.perform(MockMvcRequestBuilders
+                        .get("/api/v1" + path)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId)))
+                .andReturn();
     }
 
     private void clearMutableRows() throws SQLException {

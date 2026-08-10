@@ -2,14 +2,77 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-09 (**§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
+**Last verified:** 2026-08-10 (**§161** — no frontend source moved; `schema.d.ts` regenerated, comments only; **§160** — the posted CI report becomes a download, keyed on a URL the server composes; **§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
 the one doc-block renderer and the editor's three new types; §126 phase 4 — the three attachment
 surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the flake panel and the
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `fce9739` (§148) (trust the
+**Baseline commit:** `ca20094` (§161) (trust the
 body over the header and re-grep what a later commit could have moved).
+
+## §161 — NO FRONTEND SOURCE MOVED, AND THAT IS THE ENTRY
+
+`schema.d.ts` was regenerated and its diff is **comments only — no generated type changed**
+(verified by `git diff` in the slice). The contract change was one `description` block on
+`HealthSignal`. Recorded here anyway, because a regenerated `schema.d.ts` in a commit normally means
+a type moved, and the next reader should not go looking.
+
+- **`INCOMPLETE` was never a frontend gap.** `lib/labels.ts` has read *"Missing required fields"*
+  and `StatusChip` has had its sentence since 2026-07-30. The server has no constant for it and
+  still does not, so **no fixture can produce the chip** — do not write a test or a browser row
+  that expects one. §161's whole finding is that a backend comment claimed the opposite.
+- **`openapi.yaml`'s `HealthSignal` no longer lists which signals have writers.** The list was stale
+  for two slices and said `STALE_APPROVAL` and `CONDITION_DRIFT` are never sent while they were
+  being sent. A client's rule is unchanged and is the only thing to code against: **an absent signal
+  means "nobody has looked", not "not raised"** — `DashboardSummary.healthComputedAt` is what tells
+  the two apart.
+
+---
+
+## §160 — THE POSTED CI REPORT IS A DOWNLOAD, AND IT KEYS ON `reportUrl` ALONE
+
+`features/ingestion/DownloadRawReportButton.tsx` is the new component, rendered in
+`IngestionJobPage`'s **header** `meta` stack.
+
+- **KEY THE CONTROL ON `reportUrl`, NEVER ON `status` OR `format`.** It is `required` and nullable,
+  and null for every job posted before uploads were kept — which no migration can repair. A control
+  keyed on `status: COMPLETED` renders a button that 404s on every historical row.
+- **IN THE HEADER, NOT IN THE PANEL.** The panel is a `DataRegion` that renders nothing when
+  `unmatched` is empty, and a report where *everything* matched is exactly when somebody wants to
+  check what was posted — a test that never ran is absent from `unmatched` and from the run, and
+  looks identical to one never written.
+- **`fetchArtifact` + `saveBlob`, never `<a href>` and never `api.get`.** The session is a bearer
+  token, so an anchor sends no credential and 401s while rendering as a working link; `reportUrl`
+  already carries `/api/v1` because the server composed it, so `api.get` yields `/api/v1/api/v1/…`.
+  `DownloadReportButton`'s two reasons exactly — `api/client.ts` has the account.
+- **A sibling of `DownloadReportButton`, not a reuse.** That one names a format a person chose; this
+  one a dialect CI chose, with a different fallback filename. What `ui-rules` §8 forbids duplicating
+  is the *authenticated download*, and both share it.
+- The server sends `Content-Disposition: inline` and a filename carrying the dialect
+  (`ingestion-{id}-junit.xml`); the media type cannot carry it, because `application/xml` is true of
+  both JUnit and TestNG.
+
+## §159 — `Project.archived` IS READ AT LAST, AND A GATE VERDICT REPLACES THE CONTROL'S SUBTREE
+
+The field was `required` in the contract from M0 and **no file here read it until §159**, because
+nothing could set it. Two surfaces now do: `ProjectsPage`'s card chip and `DashboardPage`'s header
+chip + `ArchiveButton`.
+
+- **DO NOT FILTER ARCHIVED PROJECTS OUT OF THE PICKER.** The server returns them deliberately; the
+  card is the only route to the page that can restore one.
+- **`useSetProjectArchived` sends the target state**, never `!archived` re-derived at click time —
+  the endpoint is idempotent so a stale render is a no-op, and a toggle throws that away.
+- **It writes the detail cache from the mutation response.** Legal *here only*: the response comes
+  from the server's own assembler, the same one `GET /projects/{id}` uses, and a backend test pins
+  them together. Everywhere else in `queries/projects.ts` the rule is still invalidate-don't-assemble.
+- **TESTING A `PermissionGate`D CONTROL: RE-QUERY THE NODE INSIDE THE WAIT.** The denied branch wraps
+  the child in a tooltip anchor, so when the verdict lands the subtree is replaced and any element
+  captured earlier is **detached and disabled for ever**. A test holding it across `waitFor` times
+  out blaming the permission. `ArchiveProject.test.tsx` says so at the line.
+- **One button, labelled for the move available from the current state** (Archive ↔ Restore), and
+  **no confirmation dialog** — the action destroys nothing and is undone by the button that replaces
+  it.
 
 ## §149 — AN `errors` VALUE IS THE SERVER'S SENTENCE; NEVER COMPOSE WORDS AROUND IT
 
@@ -570,6 +633,15 @@ directly above the switcher) and the wordmark links there too.
   `Record<HealthSignal, string>`, so a new member is a **compile error until labelled** and there is
   nothing else to wire: the dashboard tile, the case grid's facet and `HealthChip` all iterate the
   enum. Do not plan a signal slice as though it needs a page.
+  **BUT THE TOOLTIP IS A CLAIM ABOUT THE SERVER'S COMPARISON AND NOTHING TYPECHECKS IT (§158).**
+  `healthHelp[CONDITION_DRIFT]` said the condition had changed *"since the case was last
+  **reviewed**"* from M0 until §158 gave the signal a derivation — which compares the case's newest
+  **version snapshot** against the live library and never consults review at all. The record being
+  exhaustive guarantees a *string* exists, not that it is true; a signal nothing computes has a
+  tooltip nobody can falsify. **When a backend slice gives a signal its first writer, re-read that
+  signal's `healthHelp` line in the same commit.** Two remain unverifiable on the same terms:
+  `outdated_spec_changed` and `orphaned` have no writer, so their sentences describe comparisons no
+  code makes.
   **THE DRIFT PAIR MUST NOT LOOK ALIKE, AND THAT IS THE WHOLE FRONTEND DECISION.**
   `STALE_AUTOMATION` is in `SEVERE_SIGNALS` and `UNDECLARED_AUTOMATION` is deliberately **not**.
   They are mirrors and read as a matched set, so matching their appearance is the *tidy* change —
