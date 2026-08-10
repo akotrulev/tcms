@@ -854,18 +854,23 @@ class ArchitectureRulesTest {
      * The columns nothing writes, with the one-line reason each stays mapped. The argument itself
      * lives at the field, like {@link #READERLESS_BY_DECISION}'s.
      *
-     * <p><del>Fourteen</del> <strong>thirteen since §157</strong>, which gave
-     * {@code CaseHealth.staleApproval} a derivation rather than an argument — the first member this
-     * rule has lost to a writer rather than to a deletion, and the shape the remaining four
-     * {@code CaseHealth} entries are expected to leave by. Six of the thirteen are already in
-     * {@link #READERLESS_BY_DECISION} — the four §154
-     * called "writerless as well" plus {@code CaseHealth.incomplete} and
-     * {@code IngestionJob.rawStorageKey}, whose classification §154 got wrong in this exact
-     * direction. That overlap is the point of running both rules rather than one: a column can be
-     * dead at either end, and only the pair says <em>which</em>. The seven this rule sees alone are
-     * the ones §154 structurally could not, because a column with a reader is invisible to a rule
-     * about readers — and read-but-never-written is the worse half, since something downstream is
-     * drawing a conclusion from a value nothing produces.
+     * <p><del>Fourteen</del> <del>thirteen since §157</del> <del>twelve since §158</del>
+     * <strong>eleven since §159</strong>. Three members have now left by being <em>written</em>
+     * rather than deleted — {@code CaseHealth.staleApproval} (§157), {@code CaseHealth.conditionDrift}
+     * (§158) and {@code Project.archivedAt} (§159) — and the rule itself has not moved for any of
+     * them, which is what makes "an entry here is a decision to leave a column empty, not a permit
+     * to keep it that way" a description rather than a hope. <strong>This javadoc's own count was
+     * stale by one from §158 to §159</strong>, while the comment inside the test method below said
+     * twelve: two tallies, four lines apart, in the file whose subject is tallies kept by hand.
+     *
+     * <p>Six of the eleven are already in {@link #READERLESS_BY_DECISION} — the four §154 called
+     * "writerless as well" plus {@code CaseHealth.incomplete} and {@code IngestionJob.rawStorageKey},
+     * whose classification §154 got wrong in this exact direction. That overlap is the point of
+     * running both rules rather than one: a column can be dead at either end, and only the pair says
+     * <em>which</em>. The five this rule sees alone are the ones §154 structurally could not,
+     * because a column with a reader is invisible to a rule about readers — and read-but-never-written
+     * is the worse half, since something downstream is drawing a conclusion from a value nothing
+     * produces.
      */
     private static final Map<String, String> WRITERLESS_BY_DECISION = Map.ofEntries(
             Map.entry("AuditEvent.bulkOperationId",
@@ -891,12 +896,6 @@ class ArchitectureRulesTest {
                     "V1's column for a picture nothing uploads. Already stated on the contract "
                             + "side — api.UserRef's javadoc calls it \"null for everyone today\" — "
                             + "and now stated at the column that would hold it"),
-            Map.entry("Project.archivedAt",
-                    "Project.archive(now) is the writer and NOTHING CALLS IT: there is no archive "
-                            + "operation in openapi.yaml. The column stays because the read half "
-                            + "is on the wire and required (ProjectView.archived, always false); "
-                            + "deleting the mutator would leave the contract promising a field "
-                            + "whose value no code could ever change. Argued at the field"),
             Map.entry("IngestionJob.error",
                     "the detail of a FAILED job, and this lane never writes FAILED — argued at "
                             + "IngestionJob's header since §117: the idempotency key is consumed "
@@ -926,19 +925,19 @@ class ArchitectureRulesTest {
         // question. §116's phrasing — "three V1 tables had never had a writer" — is this rule at
         // table granularity, answered by a person who happened to be looking.
         //
-        // THE TWO RULES ARE NOT REDUNDANT AND THE OVERLAP PROVES IT. Six of these twelve are in
+        // THE TWO RULES ARE NOT REDUNDANT AND THE OVERLAP PROVES IT. Six of these eleven are in
         // READERLESS_BY_DECISION too, which is the harmless half: a column nobody fills and nobody
-        // consults costs a javadoc describing a state the database has never been in. The SIX
+        // consults costs a javadoc describing a state the database has never been in. The FIVE
         // this rule sees alone are the expensive half, and they are invisible to §154 by
         // construction — a column with a reader passes that rule no matter what fills it. Something
-        // downstream is drawing a conclusion from a value nothing produces: ProjectView.archived is
-        // required by the contract and false in every deployment there has ever been, and five
-        // HealthSignal members are rendered as chips and counted in facets while no recompute
-        // writes them — FOUR since §157, which took stale_approval out of this map by giving it
-        // the derivation the argument was standing in for, and THREE since §158, which did the
-        // same for condition_drift. That is the intended exit from this list, it has now been
-        // taken twice, and both times the rule's population fell by one without the rule changing:
-        // an entry here is a decision to leave a column empty, not a permit to keep it that way.
+        // downstream is drawing a conclusion from a value nothing produces: five HealthSignal
+        // members were rendered as chips and counted in facets while no recompute wrote them, and
+        // ProjectView.archived was required by the contract and false in every deployment there had
+        // ever been. Both examples are past tense now — FOUR health signals since §157, THREE since
+        // §158, and Project.archivedAt left this map in §159 when the archive operation was built.
+        // That is the intended exit from this list, it has now been taken three times, and each
+        // time the rule's population fell by one without the rule changing: an entry here is a
+        // decision to leave a column empty, not a permit to keep it that way.
         //
         // IT ALSO CORRECTED §154 RATHER THAN ONLY EXTENDING IT. That rule's javadoc sorted its
         // thirteen into "written and readerless" and "writerless as well" BY HAND, one slice after
@@ -975,8 +974,9 @@ class ArchitectureRulesTest {
         // not making: Hibernate populates every field of every row it loads, by reflection, and
         // that is not a writer in any sense this rule cares about — the question is whether the
         // product ever PRODUCES a value, not whether one round-trips. Nor does a self-write in a
-        // method with no caller count, which is isWrittenInJava's whole content and the reason
-        // Project.archivedAt is here at all: it has a mutator, a good one, and no caller.
+        // method with no caller count, which is isWrittenInJava's whole content and was the reason
+        // Project.archivedAt was on this list until §159: it had a mutator, a good one, and the
+        // only caller it had was a test fixture seeding a state no request could produce.
         Map<Path, String> writeText = new LinkedHashMap<>();
         for (Path root : SOURCE_ROOTS) {
             try (Stream<Path> sources = Files.walk(root)) {

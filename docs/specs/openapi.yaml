@@ -293,6 +293,50 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /projects/{projectId}/archive:
+    parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+    put:
+      tags: [projects]
+      operationId: setProjectArchived
+      summary: Retire a project, or bring it back
+      description: |
+        Requires `project:settings` — a **PROJECT-scope** permission, held by Test Lead and up on
+        the project itself (roles spec §A3). It is deliberately not the COMPANY-scope
+        `project:create` that the create beside it needs: archiving is reversible, destroys
+        nothing, and is the lead of a finished engagement tidying up their own project. Company
+        Admin and Instance Admin hold `project:settings` on every project anyway, so nothing they
+        could do before is withheld. It also matters that both token-only roles are denied it
+        (roles spec §A6a): **no CI credential and no agent can retire a project.**
+
+        **Archiving marks a project; it does not lock it.** An archived project is still listed by
+        `GET /projects`, still readable, and every write in this contract still succeeds against
+        it. That is `doc_page`'s `ARCHIVED` one level up — a state that takes something out of
+        circulation while keeping it and everything pointing at it resolvable — and not a soft
+        delete. A rule that *refuses* writes to an archived project is a separate decision with a
+        much larger blast radius (every project-scoped write shares one gate), and it must be taken
+        as a product rule rather than inherited as a side effect of this endpoint.
+
+        One endpoint for both directions, and idempotent: archiving an archived project answers
+        `200` with the project and writes nothing — no timestamp re-stamped and no audit row, so a
+        repeated click cannot bury the change that actually happened. `SuiteStatusInput`'s
+        argument, and for the same reason there is no `If-Match`: the request names an absolute
+        target state rather than a delta against something the client read.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectArchiveInput' }
+      responses:
+        '200':
+          description: The project, as the picker renders it
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /projects/{projectId}/classification:
     parameters: [{ $ref: '#/components/parameters/ProjectId' }]
     get:
@@ -6177,7 +6221,13 @@ components:
             in the Feature classification dimension and the suite tree (plan §1, §6b).
           example: Acme Online Banking
         description: { type: string, nullable: true }
-        archived: { type: boolean }
+        archived:
+          type: boolean
+          description: |
+            Whether this project has been retired — see `PUT /projects/{projectId}/archive`, which
+            is the only thing that sets it. An archived project is **still listed here and still
+            fully writable**: the flag is a label for a picker to render, not a lock, and omitting
+            such a project from the list would make it unreachable rather than marked.
         caseCount: { type: integer }
         myRole:
           type: string
@@ -6214,6 +6264,18 @@ components:
             A whole client product or engagement, not a feature area. "Payments" is a Feature
             value or a suite folder, never a project (plan §1).
         description: { type: string, nullable: true, maxLength: 2000 }
+
+    ProjectArchiveInput:
+      type: object
+      required: [archived]
+      description: |
+        The body of `PUT /projects/{projectId}/archive`. One field, and it is the target state
+        rather than a verb: `true` retires the project, `false` brings it back, and sending the
+        state the project already has is a no-op that answers `200`. A pair of verb endpoints
+        would make the client decide which to call from a copy of the state it may have read
+        minutes ago.
+      properties:
+        archived: { type: boolean }
 
     ClassificationDimension:
       type: object

@@ -432,6 +432,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Retire a project, or bring it back
+         * @description Requires `project:settings` — a **PROJECT-scope** permission, held by Test Lead and up on
+         *     the project itself (roles spec §A3). It is deliberately not the COMPANY-scope
+         *     `project:create` that the create beside it needs: archiving is reversible, destroys
+         *     nothing, and is the lead of a finished engagement tidying up their own project. Company
+         *     Admin and Instance Admin hold `project:settings` on every project anyway, so nothing they
+         *     could do before is withheld. It also matters that both token-only roles are denied it
+         *     (roles spec §A6a): **no CI credential and no agent can retire a project.**
+         *
+         *     **Archiving marks a project; it does not lock it.** An archived project is still listed by
+         *     `GET /projects`, still readable, and every write in this contract still succeeds against
+         *     it. That is `doc_page`'s `ARCHIVED` one level up — a state that takes something out of
+         *     circulation while keeping it and everything pointing at it resolvable — and not a soft
+         *     delete. A rule that *refuses* writes to an archived project is a separate decision with a
+         *     much larger blast radius (every project-scoped write shares one gate), and it must be taken
+         *     as a product rule rather than inherited as a side effect of this endpoint.
+         *
+         *     One endpoint for both directions, and idempotent: archiving an archived project answers
+         *     `200` with the project and writes nothing — no timestamp re-stamped and no audit row, so a
+         *     repeated click cannot bury the change that actually happened. `SuiteStatusInput`'s
+         *     argument, and for the same reason there is no `If-Match`: the request names an absolute
+         *     target state rather than a delta against something the client read.
+         */
+        put: operations["setProjectArchived"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/classification": {
         parameters: {
             query?: never;
@@ -7522,6 +7564,12 @@ export interface components {
              */
             name: string;
             description?: string | null;
+            /**
+             * @description Whether this project has been retired — see `PUT /projects/{projectId}/archive`, which
+             *     is the only thing that sets it. An archived project is **still listed here and still
+             *     fully writable**: the flag is a label for a picker to render, not a lock, and omitting
+             *     such a project from the list would make it unreachable rather than marked.
+             */
             archived: boolean;
             caseCount: number;
             /**
@@ -7554,6 +7602,16 @@ export interface components {
              */
             name: string;
             description?: string | null;
+        };
+        /**
+         * @description The body of `PUT /projects/{projectId}/archive`. One field, and it is the target state
+         *     rather than a verb: `true` retires the project, `false` brings it back, and sending the
+         *     state the project already has is a no-op that answers `200`. A pair of verb endpoints
+         *     would make the client decide which to call from a copy of the state it may have read
+         *     minutes ago.
+         */
+        ProjectArchiveInput: {
+            archived: boolean;
         };
         ClassificationDimension: {
             /** Format: uuid */
@@ -10607,6 +10665,36 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    setProjectArchived: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectArchiveInput"];
+            };
+        };
+        responses: {
+            /** @description The project, as the picker renders it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     getProjectSettings: {
         parameters: {
             query?: never;

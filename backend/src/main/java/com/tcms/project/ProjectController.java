@@ -62,17 +62,20 @@ public class ProjectController {
     private final ProjectService projects;
     private final ProjectConfigurationService configuration;
     private final ProjectCreateService creates;
+    private final ProjectArchiveService archives;
     private final ClassificationValueWriteService classificationValues;
 
     public ProjectController(
             ProjectService projects,
             ProjectConfigurationService configuration,
             ProjectCreateService creates,
+            ProjectArchiveService archives,
             ClassificationValueWriteService classificationValues) {
 
         this.projects = projects;
         this.configuration = configuration;
         this.creates = creates;
+        this.archives = archives;
         this.classificationValues = classificationValues;
     }
 
@@ -135,6 +138,33 @@ public class ProjectController {
         return projects.findVisible(UUID.fromString(jwt.getSubject()), projectId)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /**
+     * Retires this project, or brings it back. Needs {@code project:settings} on it.
+     *
+     * <p>Its own endpoint rather than a field on an edit, for {@code ProjectWriteRequest}'s reason:
+     * a lifecycle state that rides along on a rename is one a stale form can flip by accident. The
+     * body names the <em>target state</em>, so the request is idempotent and a client that acted on
+     * a stale copy performs a no-op rather than the opposite of what was intended —
+     * {@link ProjectArchiveService} has the rest, including what archiving deliberately does
+     * <strong>not</strong> do.
+     */
+    @PutMapping("/{projectId}/archive")
+    public ResponseEntity<Object> setArchived(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @RequestBody ProjectArchiveRequest request) {
+
+        return switch (archives.set(UUID.fromString(jwt.getSubject()), projectId, request)) {
+            case ProjectArchiveService.Outcome.Updated updated -> ResponseEntity.ok(updated.view());
+            case ProjectArchiveService.Outcome.Invalid invalid ->
+                    ResponseEntity.badRequest().body(validationProblem(invalid.errors()));
+            case ProjectArchiveService.Outcome.Forbidden ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(archiveForbiddenProblem());
+            case ProjectArchiveService.Outcome.NotFound ignored ->
+                    ResponseEntity.notFound().build();
+        };
     }
 
     /**
@@ -291,6 +321,21 @@ public class ProjectController {
         // by someone who cannot grant it to themselves, and naming it publishes the catalogue to
         // exactly the caller who is not entitled to it.
         problem.setDetail("You do not have permission to create projects in this company.");
+        return problem;
+    }
+
+    /**
+     * The refusal to retire a project, in the words of the thing the caller tried to do.
+     *
+     * <p>Not "you cannot change this project's settings", even though it is the same key: the caller
+     * pressed Archive, and a sentence about a settings screen they were not on reads as the wrong
+     * refusal arriving. {@code ProjectSettingsController} keeps its own for the same reason from the
+     * other side.
+     */
+    private static ProblemDetail archiveForbiddenProblem() {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
+        problem.setTitle("Not allowed");
+        problem.setDetail("You do not have permission to archive this project.");
         return problem;
     }
 
