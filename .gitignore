@@ -51,3 +51,9 @@ packages/*/node_modules/.tmp/
 .env.lane-b
 !.env.example
 !.env.lane-b.example
+
+# --- Concurrency worktrees ---
+# `git worktree add .claude/worktrees/<name>` puts a whole second checkout inside this one, so
+# git offers to commit a checkout into itself. `.claude/settings.json` stays tracked — it is the
+# plugin configuration the working agreement depends on; only the worktrees are local.
+.claude/worktrees/
