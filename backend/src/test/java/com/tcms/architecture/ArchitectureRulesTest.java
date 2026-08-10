@@ -617,18 +617,23 @@ class ArchitectureRulesTest {
      * giving one of these a reader without deleting its entry. The argument for each is written at
      * the field itself; what is here is the one-line reason and the shape it is an instance of.
      *
-     * <p>Thirteen, and they are two different defects — <strong>and which member is which was
-     * itself wrong twice until {@link #everyMappedColumnHasAWriter} computed the other half</strong>
-     * (§156): {@code rawStorageKey} is not written and {@code incomplete} is not either, so the
-     * split below is the corrected one. <strong>Written and readerless</strong> —
-     * {@code locale}, {@code timezone}, {@code spaceId}, {@code addedAt},
-     * {@code addedBy}, {@code invitedAt}, {@code invitedBy} — is §151's shape
+     * <p><strong>Twelve since §160</strong> — {@code rawStorageKey} left by getting both halves at
+     * once, which is the first exit from this rule in either direction and the second time a member
+     * has been written out rather than argued for (§157 did it in the writerless twin). Its entry
+     * had said closing it was "a storage read path and an operation, not a wiring fix", and that was
+     * accurate; what neither §154 nor §156 checked was whether the port it was waiting for had
+     * already arrived, which it had, in §125.
+     *
+     * <p>They are two different defects — <strong>and which member is which was itself wrong twice
+     * until {@link #everyMappedColumnHasAWriter} computed the other half</strong> (§156).
+     * <strong>Written and readerless</strong> — {@code locale}, {@code timezone}, {@code spaceId},
+     * {@code addedAt}, {@code addedBy}, {@code invitedAt}, {@code invitedBy} — is §151's shape
      * and the expensive one: a write per row recording something no screen, report or query has
      * ever asked for, free to be wrong for as long as nobody looks, which is exactly how
      * {@code release_sort_key} sorted a release below its own release candidate from M0 to §151
      * with 2389 tests green. <strong>Writerless as well</strong> — {@code anchorSlug},
      * {@code scheduleCron}, {@code sharedWithTeamId}, {@code bulkOperationId}, and since §156's
-     * correction {@code rawStorageKey} and {@code incomplete} — is §116's cheaper
+     * correction {@code incomplete} — is §116's cheaper
      * one: a column nobody fills is a column nobody is misled by, and its whole cost is that six
      * javadocs describe a state the database has never been in.
      *
@@ -642,7 +647,7 @@ class ArchitectureRulesTest {
                             + "absent from HealthSignal — the contract's enum has no such member "
                             + "and inventing one puts a value on the wire the SPA cannot label. "
                             + "The argument was at the field before this rule existed and is the "
-                            + "shape the other twelve are held to"),
+                            + "shape the other eleven are held to"),
             Map.entry("AppUser.locale",
                     "V1 NOT NULL, set to the constant \"en\" by AppUser.invite and never read. A "
                             + "stored preference with no writer but the default and no reader at "
@@ -660,14 +665,6 @@ class ArchitectureRulesTest {
                             + "DocSpace's own header states the other half — the space \"is not on "
                             + "the wire and has no endpoint\" — so the foreign key is maintained "
                             + "for a grouping no caller can ask for"),
-            Map.entry("IngestionJob.rawStorageKey",
-                    "the blob key of the raw CI file, with a package-private getter nothing "
-                            + "calls: THE UPLOAD CANNOT BE RETRIEVED. ~~The bytes are written, "
-                            + "the key that would find them again is written~~ — corrected by "
-                            + "§156, which found the field in WRITERLESS_BY_DECISION as well: "
-                            + "neither is written, IngestionJob.completed takes no such parameter, "
-                            + "and the class header has said so since §67. Closing it is a storage "
-                            + "read path and an operation, not a wiring fix"),
             Map.entry("SuiteCase.addedAt",
                     "§98 made a suite flat — filed, added and tagged — and this is the added "
                             + "arm's own provenance, stamped by SuiteCase.of on every membership "
@@ -854,17 +851,23 @@ class ArchitectureRulesTest {
      * The columns nothing writes, with the one-line reason each stays mapped. The argument itself
      * lives at the field, like {@link #READERLESS_BY_DECISION}'s.
      *
-     * <p><del>Fourteen</del> <del>thirteen since §157</del> <del>twelve since §158</del>
-     * <strong>eleven since §159</strong>. Three members have now left by being <em>written</em>
+     * <p><del>Fourteen</del> <del>thirteen since §157</del> <del>twelve since §158</del> <del>eleven since §159</del>
+     * <strong>ten since §160</strong>. Four members have now left by being <em>written</em>
      * rather than deleted — {@code CaseHealth.staleApproval} (§157), {@code CaseHealth.conditionDrift}
-     * (§158) and {@code Project.archivedAt} (§159) — and the rule itself has not moved for any of
-     * them, which is what makes "an entry here is a decision to leave a column empty, not a permit
-     * to keep it that way" a description rather than a hope. <strong>This javadoc's own count was
-     * stale by one from §158 to §159</strong>, while the comment inside the test method below said
-     * twelve: two tallies, four lines apart, in the file whose subject is tallies kept by hand.
+     * (§158), {@code Project.archivedAt} (§159) and {@code IngestionJob.rawStorageKey} (§160) — and
+     * the rule itself has not moved for any of them, which is what makes "an entry here is a
+     * decision to leave a column empty, not a permit to keep it that way" a description rather than
+     * a hope. <strong>This javadoc's own count was stale by one from §158 to §159</strong>, while
+     * the comment inside the test method below said twelve: two tallies, four lines apart, in the
+     * file whose subject is tallies kept by hand.
      *
-     * <p>Six of the eleven are already in {@link #READERLESS_BY_DECISION} — the four §154 called
-     * "writerless as well" plus {@code CaseHealth.incomplete} and {@code IngestionJob.rawStorageKey},
+     * <p>§160 is the first member to leave <em>both</em> this rule and
+     * {@link #READERLESS_BY_DECISION} in one slice, and that is not a coincidence: its entry in each
+     * argued for the other half's absence, so writing one alone would have been the two-states-at-once
+     * shape {@code IngestionJob}'s own field javadoc warned about.
+     *
+     * <p>Five of the ten are already in {@link #READERLESS_BY_DECISION} — the four §154 called
+     * "writerless as well" plus {@code CaseHealth.incomplete},
      * whose classification §154 got wrong in this exact direction. That overlap is the point of
      * running both rules rather than one: a column can be dead at either end, and only the pair says
      * <em>which</em>. The five this rule sees alone are the ones §154 structurally could not,
@@ -887,11 +890,6 @@ class ArchitectureRulesTest {
             Map.entry("ReportDefinition.sharedWithTeamId",
                     "writerless AND readerless, scheduleCron's shape and the same factory's "
                             + "decision: sharing a saved report with a team is not built"),
-            Map.entry("IngestionJob.rawStorageKey",
-                    "§154 recorded this as written-and-readerless and THE WRITE HALF WAS WRONG: "
-                            + "IngestionJob.completed takes no such parameter, so neither the "
-                            + "bytes nor the key exist. Corrected at the field; the port that "
-                            + "would store them is §67's and is not built"),
             Map.entry("CompanyMembership.avatarUrl",
                     "V1's column for a picture nothing uploads. Already stated on the contract "
                             + "side — api.UserRef's javadoc calls it \"null for everyone today\" — "
@@ -925,7 +923,7 @@ class ArchitectureRulesTest {
         // question. §116's phrasing — "three V1 tables had never had a writer" — is this rule at
         // table granularity, answered by a person who happened to be looking.
         //
-        // THE TWO RULES ARE NOT REDUNDANT AND THE OVERLAP PROVES IT. Six of these eleven are in
+        // THE TWO RULES ARE NOT REDUNDANT AND THE OVERLAP PROVES IT. Five of these ten are in
         // READERLESS_BY_DECISION too, which is the harmless half: a column nobody fills and nobody
         // consults costs a javadoc describing a state the database has never been in. The FIVE
         // this rule sees alone are the expensive half, and they are invisible to §154 by

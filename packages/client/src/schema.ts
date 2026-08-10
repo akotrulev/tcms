@@ -5970,6 +5970,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/ingestions/{jobId}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                jobId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * The verbatim file CI posted
+         * @description The report exactly as it arrived, byte for byte, before this server parsed any of it.
+         *
+         *     **This is not `raw_payload` and the two are not redundant.** `GET /ingestions/{jobId}`
+         *     serves what the server *understood* — the normalized parse and where every test landed,
+         *     which is what the binder screen reads. This serves what CI *sent*, which answers the
+         *     different question of whether the server understood correctly. A test that is missing from
+         *     `unmatched` and missing from the run is the case where only this endpoint can tell you
+         *     whether the report ever mentioned it.
+         *
+         *     **Project membership**, as for the list and the job — and no new permission key. The
+         *     catalogue has no `ingestion:read`, and inventing one would be a `403` no administrator can
+         *     grant their way out of. The upload is the evidence behind verdicts a member may already
+         *     read in full, posted by that member's own CI job.
+         *
+         *     Served `inline` with the dialect's media type (`application/xml` for JUnit and TestNG,
+         *     `application/json` for Allure and Cucumber) — the opposite of a generated report, which is
+         *     `attachment`. What somebody clicking this from the ingestion history wants is to read forty
+         *     lines of test names against what the binder says, and forcing a download puts a second
+         *     application between the question and the answer. **The `Content-Type` does not identify the
+         *     dialect** — `application/xml` is true of both JUnit and TestNG and distinguishes neither,
+         *     which is `IngestionInput.format`'s opening argument read backwards. The filename carries it.
+         *
+         *     One bodiless `404` for four things (§6t): an unreachable project, another project's job id,
+         *     an id that is nothing at all, and **a job posted before the upload was kept** — every row
+         *     written before this endpoint existed has no bytes behind it and no migration can invent
+         *     them. A pruned blob answers the same way, deliberately: the caller's next action is
+         *     identical, so a second spelling would be a distinction with no act behind it.
+         */
+        get: operations["downloadIngestionReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/automation-mappings": {
         parameters: {
             query?: never;
@@ -8920,6 +8969,25 @@ export interface components {
              *     the *common* case at exactly the moment the response is largest.
              */
             unmatched: components["schemas"]["UnmatchedTest"][];
+            /**
+             * @description `GET` here for the **verbatim file CI posted** — see that endpoint.
+             *
+             *     **Null when this job has no stored upload**, which is every job posted before uploads
+             *     were kept and cannot be repaired by a migration. Key a control on this field rather
+             *     than on `status` or on the format: null is the only thing on the wire that tells the
+             *     two eras apart, and it is null precisely when there is nothing to link to.
+             *
+             *     Composed by the server, like `ReportJob.downloadUrl` and for the same reason — the
+             *     client holds no copy of this server's routing. It already carries `/api/v1`, so a
+             *     client that prefixes its own base produces `/api/v1/api/v1/…` and a 404 that reads as
+             *     a missing report.
+             *
+             *     **The session is a bearer token**, so a plain `<a href>` sends no credential and
+             *     answers `401` while rendering as a working link. Fetch it with the `Authorization`
+             *     header the rest of the API takes.
+             * @example /api/v1/projects/4f.../ingestions/9c.../report
+             */
+            reportUrl: string | null;
             /** Format: date-time */
             createdAt: string;
         };
@@ -11992,6 +12060,32 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IngestionJob"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    downloadIngestionReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                jobId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The bytes, as posted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/xml": string;
+                    "application/json": string;
                 };
             };
             401: components["responses"]["Unauthorized"];

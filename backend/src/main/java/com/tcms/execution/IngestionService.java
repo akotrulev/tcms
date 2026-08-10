@@ -7,11 +7,14 @@ import com.tcms.project.CaseStatusView;
 import com.tcms.project.GateResult;
 import com.tcms.project.ProjectService;
 import com.tcms.project.StatusKind;
+import com.tcms.storage.BlobUpload;
+import com.tcms.storage.RawReportStore;
 import com.tcms.tenancy.AuditEvent;
 import com.tcms.tenancy.AuditEventRepository;
 import com.tcms.tenancy.Outbox;
 import com.tcms.tenancy.OutboxEvents;
 import com.tcms.tenancy.CompanyContext;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -136,6 +139,13 @@ public class IngestionService {
      */
     private final Outbox outbox;
 
+    /**
+     * The verbatim upload's home (§160). The <em>third</em> blob port and deliberately not
+     * {@code ReportStore} — that one holds reports this product generated and can regenerate, and
+     * this holds the one artifact in the product nothing can reproduce.
+     */
+    private final RawReportStore rawReports;
+
     private final Clock clock;
 
     @SuppressWarnings("checkstyle:ParameterNumber")
@@ -153,6 +163,7 @@ public class IngestionService {
             UnmatchedTests unmatchedTests,
             TransactionTemplate transactions,
             Outbox outbox,
+            RawReportStore rawReports,
             Clock clock) {
 
         this.projects = projects;
@@ -168,6 +179,7 @@ public class IngestionService {
         this.unmatchedTests = unmatchedTests;
         this.transactions = transactions;
         this.outbox = outbox;
+        this.rawReports = rawReports;
         this.clock = clock;
     }
 
@@ -489,17 +501,33 @@ public class IngestionService {
         List<UnmatchedTestView> unmatched = unmatchedIn(matches, byCase, recorded);
         int matchedCount = matches.size() - unmatched.size();
 
+        // The key is built before the row so the row can carry it, and its middle segment is the
+        // JOB's id rather than the run's: a run can be posted into many times, and a key keyed by
+        // run would put several builds' uploads in one directory with nothing but a random tail to
+        // tell them apart. The job is the thing one upload belongs to.
+        UUID jobId = UUID.randomUUID();
+        String rawStorageKey = BlobUpload.key(companyId, jobId);
+
         IngestionJob job = IngestionJob.completed(
+                jobId,
                 companyId,
                 projectId,
                 run == null ? null : run.getId(),
                 request.format(),
                 idempotencyKey,
                 payload(matches, recorded),
+                rawStorageKey,
                 matchedCount,
                 unmatched.size(),
                 now);
-        jobs.save(job);
+        jobs.saveAndFlush(job);
+
+        // Row first, bytes second — EvidenceService's ordering and its reason (a row whose blob is
+        // missing downloads as a 404 and is findable; a blob no row names is unreachable and
+        // uncollectable). This is I/O inside the transaction, which the general rule is against:
+        // the report is capped at 1 MB by IngestionEdit and the write is local, and the sibling
+        // caller in this module does exactly this. RawReportStore's header carries the argument.
+        rawReports.put(rawStorageKey, request.report().getBytes(StandardCharsets.UTF_8));
 
         auditEvents.save(AuditEvent.record(
                 projectId,
@@ -619,11 +647,13 @@ public class IngestionService {
     /**
      * {@code raw_payload} — the normalized parse and where each test landed.
      *
-     * <p><strong>Not the verbatim file</strong> (slice plan decision N). That belongs in an object
-     * store, which is what {@code raw_storage_key} is for and there is no adapter (§67's port
-     * argument). What makes this row useful afterwards is what was understood and what it matched
-     * to — which is what a person binding unmatched names reads, and the only record of why a test
-     * that clearly ran produced no result.
+     * <p><strong>Not the verbatim file</strong> (slice plan decision N). That is in
+     * {@code storage.RawReportStore} under {@code raw_storage_key} since §160 — <del>and there is no
+     * adapter (§67's port argument)</del>, an argument that expired in §125 and was restated as a
+     * standing decision twice afterwards. What makes <em>this</em> column useful is what was
+     * understood and what it matched to, which is what a person binding unmatched names reads and
+     * the only record of why a test that clearly ran produced no result. The two columns answer
+     * different questions and neither replaces the other.
      */
     private String payload(List<AutomationMatcher.Match> matches, Set<UUID> recorded) {
         ArrayNode results = json.createArrayNode();
@@ -666,6 +696,8 @@ public class IngestionService {
                 job.getMatchedCount(),
                 job.getUnmatchedCount(),
                 cap(unmatched),
+                IngestionJobView.reportUrl(
+                        job.getProjectId(), job.getId(), job.getRawStorageKey()),
                 job.getCreatedAt());
     }
 

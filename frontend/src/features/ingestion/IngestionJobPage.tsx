@@ -29,6 +29,7 @@ import {
   ingestionStatusLabels,
 } from '../../lib/labels';
 import { BindTestDialog } from './BindTestDialog';
+import { DownloadRawReportButton } from './DownloadRawReportButton';
 
 /**
  * One posted report — **the unmatched-test binder**, and the screen §117 named on its way out.
@@ -60,6 +61,13 @@ import { BindTestDialog } from './BindTestDialog';
  * The server serves at most 50 names beside a true `unmatchedCount`. When they differ this page
  * says which, because a reader who binds all 50 and sees the count unchanged would otherwise
  * conclude the binding did not work.
+ *
+ * ## The posted file is downloadable, and that is the other half of binding
+ *
+ * The table says which names the server could not place. It cannot say whether a test the person
+ * *expected* was in the report at all — a test that never ran is absent from `unmatched` and absent
+ * from the run, and looks identical to one that was never written. `reportUrl` is the only way to
+ * tell those apart, which is why the control sits on this screen rather than on the history list.
  */
 export function IngestionJobPage() {
   const { projectId = '', jobId = '' } = useParams();
@@ -106,6 +114,14 @@ export function IngestionJobPage() {
                   <Identifier>{job.data.runKey}</Identifier>
                 </RouterLink>
               )}
+              {/*
+                In the header rather than in the panel below, because the panel is a DataRegion that
+                renders nothing when every test matched — and a report where everything matched is
+                exactly when somebody wants to check what was actually posted. The control renders
+                itself away when `reportUrl` is null, which is every job from before uploads were
+                kept.
+              */}
+              <DownloadRawReportButton job={job.data} testId="Ingestion.DownloadReport" />
             </Stack>
           ) : undefined
         }

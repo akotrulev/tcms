@@ -4,7 +4,11 @@ import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -71,6 +75,40 @@ public class IngestionController {
         return history.findOne(caller(jwt), projectId, jobId)
                 .<ResponseEntity<Object>>map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /**
+     * The verbatim file CI posted for this job (§160).
+     *
+     * <p><strong>{@code inline}, not {@code attachment}</strong> — the opposite of a generated
+     * report and for {@code EvidenceController}'s reason. A report is a file somebody keeps; this is
+     * 40 lines of XML somebody opens from the ingestion history to check one test name against what
+     * the binder says, and forcing a download puts a second application between the question and the
+     * answer. The filename is composed entirely from server-generated values, which is what keeps a
+     * newline out of a response header without a sanitizer standing between them.
+     *
+     * <p>One bodiless 404 covers every way this is unreachable, including a job posted before §160
+     * and a blob that is gone — {@link IngestionReadService#openRawReport} carries why those are not
+     * told apart. No 403 arm: the gate is membership, so an unreachable project is already the 404.
+     */
+    @GetMapping("/{jobId}/report")
+    public ResponseEntity<Resource> rawReport(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID jobId) {
+
+        return history.openRawReport(caller(jwt), projectId, jobId)
+                .map(IngestionController::body)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    private static ResponseEntity<Resource> body(IngestionReadService.RawReport report) {
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(report.contentType()))
+                .contentLength(report.blob().size())
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "inline; filename=\"" + report.filename() + "\"")
+                .body(new InputStreamResource(report.blob().stream()));
     }
 
     /** Posts a CI report. 201 when ingested, 200 on a replay of the same {@code Idempotency-Key}. */

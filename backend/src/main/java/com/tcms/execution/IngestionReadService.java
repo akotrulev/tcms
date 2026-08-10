@@ -1,6 +1,8 @@
 package com.tcms.execution;
 
 import com.tcms.project.ProjectService;
+import com.tcms.storage.RawReportStore;
+import com.tcms.storage.StoredBlob;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -47,16 +49,21 @@ public class IngestionReadService {
     private final TestRunRepository runs;
     private final UnmatchedTests unmatchedTests;
 
+    /** The verbatim upload's home (§160) — {@code IngestionService} is the writer. */
+    private final RawReportStore rawReports;
+
     public IngestionReadService(
             ProjectService projects,
             IngestionJobRepository jobs,
             TestRunRepository runs,
-            UnmatchedTests unmatchedTests) {
+            UnmatchedTests unmatchedTests,
+            RawReportStore rawReports) {
 
         this.projects = projects;
         this.jobs = jobs;
         this.runs = runs;
         this.unmatchedTests = unmatchedTests;
+        this.rawReports = rawReports;
     }
 
     /**
@@ -120,7 +127,106 @@ public class IngestionReadService {
                         // screen that could ask for 5,000 names by following a Location header would
                         // make the cap on the post cosmetic.
                         IngestionService.cap(unmatchedTests.of(job.getRawPayload())),
+                        IngestionJobView.reportUrl(
+                                job.getProjectId(), job.getId(), job.getRawStorageKey()),
                         job.getCreatedAt()));
+    }
+
+    /** A download, ready to be written to the response. The caller closes {@link #blob()}. */
+    public record RawReport(String filename, String contentType, StoredBlob blob) {
+    }
+
+    /**
+     * The verbatim file CI posted for this job (§160) — the read half of {@code raw_storage_key}.
+     *
+     * <p><strong>Not {@code @Transactional}, and neither is {@link #locate}</strong> — which is
+     * {@code ReportReadService.open}'s shape for two reasons that compound. This returns an
+     * <em>open stream</em> the controller writes to the response after the method returns, so a
+     * transaction around it would either be closed under the stream or held for the length of the
+     * download. And annotating {@code locate} instead would be a <em>self-invocation</em>: Spring's
+     * proxy does not intercept a call from this class to its own method, so the annotation would do
+     * nothing — under {@code CompanyAwareTransactionManager} not merely a missing rollback but a
+     * missing {@code app.current_company}, and every RLS-protected read silently returning zero
+     * rows. {@code IngestionService}'s {@code TransactionTemplate} field carries the same warning
+     * from the write side, where it cost §116 a red run. The boundaries here are
+     * {@code ProjectService.readVisible}'s and each repository's own, which is where isolation is
+     * established for both other reads on this class.
+     *
+     * <p><strong>Membership, not a new key.</strong> Same gate as {@link #list} and {@link #findOne}
+     * — {@code ProjectService.readVisible} — and for this class's stated reason: there is no
+     * {@code ingestion:read} in the catalogue and inventing one would be §67's refused shape, a key
+     * seeded to nobody that no administrator can grant their way out of. The upload is the evidence
+     * behind verdicts a project member may already read in full, and it is the same bytes that
+     * member's own CI job posted.
+     *
+     * <p><strong>Three different facts answer as one empty.</strong> An unreachable project, a job
+     * id that is not this project's, a pre-§160 row whose key is null, and a key whose blob is gone
+     * all return empty and the controller answers one bodiless 404 (§6t). The first three are the
+     * §6t rule; the fourth is a judgment and worth naming: a caller cannot act differently on "never
+     * stored" than on "stored and pruned", so a second spelling would be a distinction with no act
+     * behind it. The operator's signal is the store adapter's own log line.
+     */
+    public Optional<RawReport> openRawReport(UUID userId, UUID projectId, UUID jobId) {
+        return locate(userId, projectId, jobId)
+                .flatMap(located -> rawReports.open(located.storageKey())
+                        .map(blob -> new RawReport(located.filename(), located.contentType(), blob)));
+    }
+
+    /** Everything the download needs out of the database, read before the stream is opened. */
+    private record Located(String storageKey, String filename, String contentType) {
+    }
+
+    /** The row behind the bytes. Deliberately unannotated — see {@link #openRawReport}. */
+    private Optional<Located> locate(UUID userId, UUID projectId, UUID jobId) {
+        return projects.readVisible(userId, projectId, project -> project)
+                .flatMap(project -> jobs.findOneInProject(project.getId(), jobId))
+                .filter(job -> job.getRawStorageKey() != null)
+                .map(job -> new Located(
+                        job.getRawStorageKey(),
+                        filename(job.getId(), job.getFormat()),
+                        contentType(job.getFormat())));
+    }
+
+    /**
+     * What the file is called when it lands in somebody's downloads folder.
+     *
+     * <p>{@code ReportReadService.filename}'s rule verbatim: composed from server-generated values
+     * only. This string reaches a {@code Content-Disposition} header, where a newline is header
+     * injection rather than an odd name, and nothing a client sent is in it — CI never named this
+     * file on the wire in the first place, because {@code IngestionRequest} carries the report as a
+     * string and has no filename field.
+     */
+    private static String filename(UUID jobId, ReportFormat format) {
+        return "ingestion-" + jobId + extensionOf(format);
+    }
+
+    /**
+     * <strong>The dialect decides the extension, and two of the four are XML.</strong> This is
+     * {@code IngestionRequest}'s own opening argument read backwards: a {@code Content-Type} could
+     * not tell JUnit from TestNG on the way in, and it cannot on the way out either — so the name
+     * carries the dialect and the media type carries only what a browser needs to not mangle it.
+     */
+    private static String extensionOf(ReportFormat format) {
+        return switch (format) {
+            case JUNIT -> "-junit.xml";
+            case TESTNG -> "-testng.xml";
+            case ALLURE -> "-allure.json";
+            case CUCUMBER -> "-cucumber.json";
+        };
+    }
+
+    /**
+     * Served as its dialect's media type, not as {@code application/octet-stream}.
+     *
+     * <p>The point of keeping the file is that somebody can read it, and the commonest reader is a
+     * browser tab opened from the ingestion history. XML and JSON both render there; an octet-stream
+     * forces a download and then a second application to look at 40 lines of test names.
+     */
+    private static String contentType(ReportFormat format) {
+        return switch (format) {
+            case JUNIT, TESTNG -> "application/xml";
+            case ALLURE, CUCUMBER -> "application/json";
+        };
     }
 
     /** Every run key the page names, in one query — {@code AutomationMappingService.render}'s rule. */

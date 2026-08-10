@@ -1772,3 +1772,22 @@ and §157 and §158 between them ran four; this block restores the queue's own r
 > project still accepts writes — is the one that observes a decision rather than a rendering, and
 > `AR-4` is the only place the no-op's *silence* (no audit row, no re-dated timestamp) is visible
 > outside a test.
+
+## §160 — the verbatim CI upload
+
+*Six mutations. `RR-M1` is the one worth running first: it is the defect the whole slice exists to
+prevent, it produces a perfectly valid file, and the only assertion that catches it is a byte
+comparison against what was posted.*
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| `RR-M1` | In `IngestionService.completed`, store `payload(matches, recorded)` instead of `request.report()` | The download serves the server's *reading* of the report — valid JSON, plausible content, and not what CI sent. Should redden `the bytes come back EXACTLY as posted, not the parsed payload` **and nothing else.** This is the mutation that proves the test asserts byte identity rather than "a file came back", and it is the defect a reviewer is least likely to spot because both columns are called `raw`. | ⬜ NOT RUN |
+| `RR-M2` | In `IngestionReadService.locate`, delete the `.filter(job -> job.getRawStorageKey() != null)` | A job with no stored upload reaches `rawReports.open(null)`. Should redden `a job whose key is null — every row posted before §160 — is the same 404` — and the **manner** matters more than the redness: a `NullPointerException` surfacing as a 500 is a different failure from a 404, and it is what every historical row in an upgraded instance would meet. Record which it is. | ⬜ NOT RUN |
+| `RR-M3` | In `FilesystemRawReportStore`, construct `FilesystemBlobStore` with `"${tcms.storage.reports.root}"` | `CA-20`'s shape at the new root: CI uploads land in the regenerable report root, which has different retention and is the one an operator is told is safe to lose. **Should redden nothing in the suite** — `IntegrationTestBase` points all three at temp directories and the tests never compare roots — which is exactly why it is here and why `RR-7` exists in the browser lane. | ⬜ NOT RUN |
+| `RR-M4` | In `FilesystemRawReportStore`, pass the label `"report"` instead of `"raw report"` | An operator reading a storage failure is told the regenerable root failed when the irreproducible one did. Should redden `raw reports — the third root, §160`. Worth measuring because the assertion is a substring: `"report"` **is** contained in `"raw report"`, so the sibling's test would survive this swap in the other direction and this one must not. | ⬜ NOT RUN |
+| `RR-M5` | In `IngestionService.apply`, move `rawReports.put(...)` to before `jobs.saveAndFlush(job)` | Bytes before row — `ReportJobRunner`'s ordering imported into the caller that must not have it. **Should redden nothing**, and that is the finding: the ordering only matters when the transaction rolls back, which no test drives. The consequence is an orphan blob no row names, unreachable and uncollectable — `EvidenceService`'s stated reason for the opposite order, unobserved by this suite. | ⬜ NOT RUN |
+| `RR-M6` | In `IngestionJobView.reportUrl`, return the URL unconditionally instead of null for a null key | Every job advertises a download; the historical ones 404. Should redden `renders no download for a job posted before uploads were kept` in the **frontend** suite and nothing in the backend one — the field is required-and-nullable and the backend never renders it, so this is one of the few mutations whose only observer is on the other stack. | ⬜ NOT RUN |
+
+> **Seven browser rows, `RR-1`…`RR-7`**, in lane **`A3`** — the CI ingestion block, which already
+> builds every fixture they need. `RR-M3` and `RR-M5` are the two that redden nothing here and are
+> the reason both queues have a row about roots and orderings.

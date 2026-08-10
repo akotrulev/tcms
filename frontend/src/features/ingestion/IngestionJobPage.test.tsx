@@ -43,6 +43,7 @@ const JOB: IngestionJob = {
       outcome: 'PASSED',
     },
   ],
+  reportUrl: '/api/v1/projects/p1/ingestions/job-1/report',
   createdAt: '2026-08-06T09:00:00Z',
 }
 
@@ -122,5 +123,34 @@ describe('IngestionJobPage', () => {
     renderPage()
 
     expect(await screen.findByText('Every test found a case')).toBeInTheDocument()
+  })
+
+  it('offers the posted report when the server sent a URL for it', async () => {
+    mockApi(['case:read', 'case:edit'])
+    renderPage()
+
+    expect(await screen.findByTestId('Ingestion.DownloadReport')).toBeInTheDocument()
+  })
+
+  it('offers it even when every test matched — that is when it is most wanted', async () => {
+    // The control is in the header rather than in the panel for exactly this: the panel is a
+    // DataRegion that renders nothing when `unmatched` is empty, and a report where everything
+    // matched is when somebody most wants to check what was actually posted — a test that never
+    // ran is absent from `unmatched` and absent from the run, and looks like one never written.
+    mockApi(['case:read', 'case:edit'], { ...JOB, unmatchedCount: 0, unmatched: [] })
+    renderPage()
+
+    expect(await screen.findByTestId('Ingestion.DownloadReport')).toBeInTheDocument()
+  })
+
+  it('renders no download for a job posted before uploads were kept', async () => {
+    // `reportUrl` is null for every historical row and no migration can change that. The control
+    // keys on the URL rather than on the status or the format, so there is nothing to render — a
+    // button here would 404 on every job in an upgraded instance.
+    mockApi(['case:read', 'case:edit'], { ...JOB, reportUrl: null })
+    renderPage()
+
+    await screen.findAllByTestId('Ingestion.UnmatchedRow')
+    expect(screen.queryByTestId('Ingestion.DownloadReport')).not.toBeInTheDocument()
   })
 })

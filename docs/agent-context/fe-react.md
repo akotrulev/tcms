@@ -2,14 +2,37 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-10 (**§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
+**Last verified:** 2026-08-10 (**§160** — the posted CI report becomes a download, keyed on a URL the server composes; **§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
 the one doc-block renderer and the editor's three new types; §126 phase 4 — the three attachment
 surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the flake panel and the
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `5169971` (§159 phase 2) (trust the
+**Baseline commit:** `be2de9d` (§160) (trust the
 body over the header and re-grep what a later commit could have moved).
+
+## §160 — THE POSTED CI REPORT IS A DOWNLOAD, AND IT KEYS ON `reportUrl` ALONE
+
+`features/ingestion/DownloadRawReportButton.tsx` is the new component, rendered in
+`IngestionJobPage`'s **header** `meta` stack.
+
+- **KEY THE CONTROL ON `reportUrl`, NEVER ON `status` OR `format`.** It is `required` and nullable,
+  and null for every job posted before uploads were kept — which no migration can repair. A control
+  keyed on `status: COMPLETED` renders a button that 404s on every historical row.
+- **IN THE HEADER, NOT IN THE PANEL.** The panel is a `DataRegion` that renders nothing when
+  `unmatched` is empty, and a report where *everything* matched is exactly when somebody wants to
+  check what was posted — a test that never ran is absent from `unmatched` and from the run, and
+  looks identical to one never written.
+- **`fetchArtifact` + `saveBlob`, never `<a href>` and never `api.get`.** The session is a bearer
+  token, so an anchor sends no credential and 401s while rendering as a working link; `reportUrl`
+  already carries `/api/v1` because the server composed it, so `api.get` yields `/api/v1/api/v1/…`.
+  `DownloadReportButton`'s two reasons exactly — `api/client.ts` has the account.
+- **A sibling of `DownloadReportButton`, not a reuse.** That one names a format a person chose; this
+  one a dialect CI chose, with a different fallback filename. What `ui-rules` §8 forbids duplicating
+  is the *authenticated download*, and both share it.
+- The server sends `Content-Disposition: inline` and a filename carrying the dialect
+  (`ingestion-{id}-junit.xml`); the media type cannot carry it, because `application/xml` is true of
+  both JUnit and TestNG.
 
 ## §159 — `Project.archived` IS READ AT LAST, AND A GATE VERDICT REPLACES THE CONTROL'S SUBTREE
 

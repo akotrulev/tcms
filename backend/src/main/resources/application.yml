@@ -173,6 +173,31 @@ tcms:
       # reports a company generates. §6n is the section that will eventually govern retention.
       root: ${TCMS_REPORTS_ROOT:/var/lib/tcms/reports}
 
+    raw-reports:
+      # Where the VERBATIM CI upload lands (§160) — the file a build posted, byte for byte, before
+      # this server understood any of it. A third root, under the same rule that split the two
+      # above: retention and loss consequences differ from both.
+      #
+      # NOT the reports root. That one holds reports this product GENERATED and can regenerate;
+      # this holds a report it RECEIVED and can never reproduce. Opposite in every property an
+      # operator cares about, and one letter apart in the two type names, which is why they are two
+      # types rather than one bean with a qualifier.
+      #
+      # THE HIGHEST WRITE RATE IN THE PRODUCT. Evidence arrives when a person attaches a
+      # screenshot and a report when somebody asks; this arrives on every CI run of every project.
+      # It is the one root an operator will plausibly want to prune first.
+      #
+      # Losing it does NOT lose the results. ingestion_job.raw_payload keeps the normalized parse
+      # and every match outcome in Postgres, so the history screen and the binder survive intact.
+      # What is lost is the answer to "is that what CI actually sent?" — an audit question. So it
+      # sits between the two above: worth backing up, not worth blocking a release over.
+      #
+      # NOTHING EVER DELETES FROM IT IN v1, exactly as with the other two, and deliberately: a
+      # retention sweep is a scheduled job with a company-scoped context and a policy nobody has
+      # set, and shipping one here would make the product's first retention rule a side effect of
+      # adding a download. §6n is where it will eventually be governed.
+      root: ${TCMS_RAW_REPORTS_ROOT:/var/lib/tcms/raw-reports}
+
   invitation:
     # The SPA's public origin — what an invitee's browser can reach, NOT what the container
     # sees. Behind Caddy the app only ever knows localhost:8080, and a link built from the

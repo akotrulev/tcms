@@ -175,6 +175,14 @@ public abstract class IntegrationTestBase {
         registry.add("tcms.storage.reports.root",
                 () -> System.getProperty("java.io.tmpdir") + "/tcms-reports-test-" + userName());
 
+        // The third root (§160) — the verbatim CI upload. A third directory for the reason the
+        // second one is separate: the product has three roots, and a suite that pointed them at one
+        // would be testing the single configuration no deployment is obliged to use. It would also
+        // hide the one defect the split exists to catch, a store constructed with its sibling's
+        // property key — which CA-20 in the mutation queue names against these very lines.
+        registry.add("tcms.storage.raw-reports.root",
+                () -> System.getProperty("java.io.tmpdir") + "/tcms-raw-reports-test-" + userName());
+
         // Production sizes this at 20. The suite must not.
         //
         // Spring caches one context per distinct configuration, and this suite now has

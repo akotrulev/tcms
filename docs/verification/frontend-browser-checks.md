@@ -1881,3 +1881,35 @@ is the row that would catch the opposite behaviour arriving by accident in a lat
 **What no row here can check:** that an archived project reads any differently to a caller who has
 never seen it live. It does not, deliberately — the flag is a label, and every list, board and report
 in the product treats the project exactly as before.
+
+## §160 — the verbatim CI upload, downloadable at last
+
+**Lane: `A3`, the CI ingestion block**, immediately after `A3-13` and the token-attribution rows.
+Not a lane of its own: every fixture these rows need is one `A3` already builds — a live
+`Automation Service` credential, a report posted by `curl`, and a job screen reached from the
+history. `RR-4` is the exception and says what it needs.
+
+**Why the rows exist.** `ingestion_job.raw_storage_key` has been on the table since `V1` and was
+never written; the file CI posted was not kept anywhere. These are first observations, not
+regression checks — there is no earlier pass any of them could have failed in, and the fourth row
+observes a state **no fixture in this file can create going forward**.
+
+**Drive `RR-2` even if the others are skipped.** It is the row that separates this feature from the
+one it is easily confused with: `raw_payload` has always been stored and has always been *the
+server's reading* of the report. Only a byte comparison against what `curl` sent shows which of the
+two is on screen, and a store that kept the wrong one would serve a valid, plausible file.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `RR-1` | After `A3-6`, open that job from the history | A **Download the posted report** button in the header, beside the status and format chips — present whether or not anything went unmatched, because it sits outside the unmatched panel. |
+| `RR-2` | Press it, then `diff` the saved file against the exact XML `A3-6` sent | **Byte-identical.** Not the parsed payload, not re-serialised, not pretty-printed. This is the whole point of the column and the one thing a green suite cannot tell you about a real filesystem. The saved name ends `-junit.xml` and contains the job id. |
+| `RR-3` | Open the job from `A3-10` (Matched 2, Unmatched 0) and look at the header | The button is **still there**. The unmatched panel is empty and renders its "Every test found a case" state; the download must not vanish with it — a report where everything matched is exactly when somebody checks what was actually posted. |
+| `RR-4` | `psql`: `UPDATE ingestion_job SET raw_storage_key = NULL WHERE id = '<the A3-6 job>'`, reload the page | **No button at all** — not a disabled one, not a broken link. This is what every job in an upgraded instance looks like, and hand-SQL is the only way to produce it because the writer now always sets the key. Restore the value afterwards, or run this row last. |
+| `RR-5` | With the row still nulled, `curl` `GET …/ingestions/{jobId}/report` with `lead`'s token | **404 with an empty body.** Same answer as an id that is nothing at all — the caller's next act is identical, so the two are deliberately not told apart. |
+| `RR-6` | As `viewer`, open the same job screen and press the button | **It downloads.** The gate is membership, exactly as for the history: no `ingestion:read` key was invented, and a viewer who may read the verdicts may read what produced them. |
+| `RR-7` | On the host, `ls -R` the raw-reports root (`/var/lib/tcms/raw-reports` in compose, or the dev override) | The company id is the first path segment and the job id the second, and **no file appears under the reports or evidence roots.** The three roots are separate on purpose; a store constructed with a sibling's property key is silent until a restore, which is the defect `CA-20` names on the same lines. |
+
+**What no row here can check:** that the bytes survive a container restart. The mount is in
+`compose.prod.yaml` and the runbook records both earlier roots defaulting into the container's
+writable layer before anyone noticed — but this pass runs against a dev stack, and the row that
+would catch it belongs to a deployment check rather than a browser one.

@@ -2,13 +2,46 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-10 (**§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-10 (**§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `5169971` (§159 phase 2) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `be2de9d` (§160) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
+
+---
+
+## §160 — `raw_storage_key` HAS BOTH HALVES; `storage` HAS A THIRD PORT AND A THIRD ROOT
+
+`storage/RawReportStore.java` + `FilesystemRawReportStore.java` are the new seam — the **third**
+blob port, beside `AttachmentStore` and `ReportStore`, over the same `FilesystemBlobStore` body.
+`IngestionJob.rawStorageKey` leaves **both** `ArchitectureRulesTest` decision maps at once:
+`READERLESS_BY_DECISION` is **twelve**, `WRITERLESS_BY_DECISION` is **ten**.
+
+- **`RawReportStore` IS NOT `ReportStore` and the names are one letter apart.** `ReportStore` holds
+  reports this product *generated* and can regenerate from `execution_fact`; this holds the file CI
+  *sent*, which nothing can reproduce. Wrong one handed over = a compile error, which is the whole
+  reason the module keeps them as separate types rather than one bean behind a qualifier.
+- **Three roots now**, and `IntegrationTestBase` registers three temp directories.
+  `tcms.storage.raw-reports.root` / `TCMS_RAW_REPORTS_ROOT`. A new store means a line in
+  `application.yml`, a line in `compose.prod.yaml`'s environment **and** one under its `volumes:` —
+  a root without a mount is the runbook's recorded outage.
+- **`IngestionJob.completed` takes the id from the caller.** The only factory in `execution` that
+  does. The blob key's middle segment is the job id, so the id must exist before the row; the
+  alternative was a second mutator on an entity whose header says nothing edits an ingestion job.
+- **Row first, bytes second, inside the transaction** — `EvidenceService`'s ordering, not
+  `ReportJobRunner`'s. This is external I/O inside a transaction boundary on purpose: 1 MB cap,
+  local write, and the sibling caller in this module does the same. Do not "fix" it.
+- **`IngestionReadService.openRawReport` and `locate` are BOTH unannotated.** Annotating `locate`
+  would be a self-invocation Spring's proxy never sees — no `app.current_company`, every
+  RLS-protected read silently zero rows. `ProjectService.readVisible` and the repositories carry the
+  boundaries. `ReportReadService.open` is the shape being copied.
+- **The gate is membership** (`readVisible`), not a new key. No `ingestion:read` exists and one
+  seeded to nobody is a 403 nobody can grant their way out of.
+- **`IngestionJobView.reportUrl` is server-composed and required-and-nullable.** Null is the only
+  wire signal distinguishing a job posted before uploads were kept; `raw_storage_key` itself is
+  deliberately not served. `IngestionJobView.reportUrl(...)` is the one place it is built.
 
 ---
 
