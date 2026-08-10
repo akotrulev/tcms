@@ -23,6 +23,32 @@
 >    vanishing when the file is not excluded from its own corpus — so the slice's headline result
 >    is the one property of its rule nothing has verified.
 >
+> **The redo of item 1 RAN on 2026-08-11 and is done. Items 2 and 3 are still open.** All twelve
+> surviving `READERLESS_BY_DECISION` members were re-derived against the tree at `e3f0b45`, one at a
+> time, and the rule was re-run green (`ArchitectureRulesTest`, every rule PASSED). Eleven hold
+> exactly as written — `AppUser.locale`/`timezone` are still the two constants set in `invite`,
+> `DocPage.spaceId` is still written from `spaces.requireForProject(...)` and read by nothing,
+> `AuditEvent.bulkOperationId` still has exactly three mentions in the whole repo, and both named
+> near-misses (`ReportArtifact.generatedAt`, `AuditEvent.actorTokenId`) still have a test as their
+> only reader. **Two more claims were wrong and are struck at every site:**
+>
+> - **`SuiteCase.addedBy` is not "caller-supplied".** It is `jwt.getSubject()` in
+>   `SuiteController.create`, handed down through `SuiteWriteService` → `SuiteMembershipWriter` →
+>   `SuiteCase.of`: the authenticated principal, never a request field. The wording appeared in the
+>   table above **and** in the field javadoc **and** in the rule's own argument, and in a repo whose
+>   tenancy rule is *never from a request parameter, header, or path segment* it reads as a security
+>   claim. The sibling entry it cites as "the same shape", `CompanyMembership.invitedBy`, had it
+>   right — "written from a real actor id" — which is how the wrong half went unnoticed.
+> - **`invitedBy` has three writers, not two.** §154 counted the two factory *methods*;
+>   `CompanyMembership.invite` is called by `MembershipInviteService` **and**
+>   `CompanyProvisioningService` — the latter with a value that may be null, because an unattended
+>   provisioning run has no actor — and `reinvite` is the third.
+>
+> That is four disproved claims in one section (§155's, §156/§160's, and these two) against eleven
+> that hold. **None of them touched the rule**, and that is the point worth carrying: the check
+> computes its population every run and cannot go stale, while the arguments beside it are prose and
+> went stale four times in two days. An argument at a field is documentation, not a gate.
+>
 > **What is NOT wrong with it:** its push left `master`'s CI red for 23 hours on
 > `CaseEditorPage.test.tsx`, and that was a 239-second timeout flake on the runner. §154 is
 > backend-only and could not have caused it; the run on 2026-08-10 passed the same job clean.
@@ -100,8 +126,8 @@ M0 to §151 with 2389 tests green.
 | `IngestionJob.rawStorageKey` | ⚠ **WRONG, AND IN BOTH HALVES — struck 2026-08-10 (§161).** ~~The upload cannot be retrieved. §117 stores the raw CI file *and* the key that would find it again; the package-private getter has no caller in main or test.~~ §117 stored **neither**: `raw_payload` holds the normalized *parse*, the file CI sent was never written anywhere, and nothing ever wrote the key — so this column does not belong in the *written*-and-readerless half of this table at all. [§156](156-the-columns-nothing-writes.md) found it writerless as well and recorded that §154 had filed it here "fifty lines below a header saying otherwise"; [§160](160-the-upload-nobody-kept.md) then had to build a store, a port and a root from scratch. The getter having no caller was the one true clause. |
 | `AppUser.locale` · `AppUser.timezone` | Constants `"en"` and `"UTC"`, written by `invite` and never read. `AppUser`'s own `@Version` javadoc reasons about "when someone edited their own timezone" — **an act this product cannot perform.** |
 | `DocPage.spaceId` | `V1 NOT NULL`, written on every page. `DocSpace`'s header states the other half: the space "is not on the wire and has no endpoint". |
-| `SuiteCase.addedAt` · `addedBy` | §98's *added* arm records who filed a case and when, on every add. `addedBy` is a caller-supplied actor id carried endpoint→service→database so that nothing can read who did it. |
-| `CompanyMembership.invitedAt` · `invitedBy` | `SuiteCase`'s shape exactly, from `invite()` and `reinvite()`. `UserView` is the contract's `User` and carries neither, so the reader is a contract change. |
+| `SuiteCase.addedAt` · `addedBy` | §98's *added* arm records who filed a case and when, on every add. `addedBy` is a ~~caller-supplied~~ ⚠ **struck 2026-08-11 — see the redo note below** — actor id carried endpoint→service→database so that nothing can read who did it. |
+| `CompanyMembership.invitedAt` · `invitedBy` | `SuiteCase`'s shape exactly, from `invite()` and `reinvite()` — ~~two call sites~~ ⚠ **three, struck 2026-08-11.** `UserView` is the contract's `User` and carries neither, so the reader is a contract change. |
 | `CaseHealth.incomplete` | **The reference entry** — its argument was already at the field, in the shape the rule asks of the other twelve. |
 
 **Writerless as well — §116's cheaper one.** A column nobody fills is a column nobody is misled by,

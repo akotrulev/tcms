@@ -64,8 +64,16 @@ public class SuiteCase {
      * Nullable like every other actor column since §66 — offboarding does not un-add a case.
      *
      * <p>{@link #addedAt}'s pair and the worse half of it (§154): this one is not a clock stamp but
-     * a <em>caller-supplied actor id</em>, carried from the endpoint through the service to the
-     * database on every add, so that nothing can read who did it.
+     * a <em>real actor id</em>, carried from the endpoint through the service to the database on
+     * every add, so that nothing can read who did it.
+     *
+     * <p>§154 called it "caller-supplied" and that was wrong, corrected 2026-08-10: the value is
+     * {@code jwt.getSubject()} in {@code SuiteController.create}, handed down through
+     * {@code SuiteWriteService} and {@code SuiteMembershipWriter} to {@link #of}. It is the
+     * authenticated principal and never a request field — which is the only shape an actor column
+     * may have, since an actor id a caller supplies is one a caller chooses. {@code
+     * CompanyMembership.invitedBy} had it right ("written from a real actor id") while pointing
+     * here as "the same shape", which is how the wrong half stood for a day.
      */
     @Column(name = "added_by", updatable = false)
     private UUID addedBy;

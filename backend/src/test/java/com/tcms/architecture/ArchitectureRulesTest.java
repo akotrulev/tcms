@@ -678,18 +678,26 @@ class ArchitectureRulesTest {
                             + "answerable from the row and has never been asked"),
             Map.entry("SuiteCase.addedBy",
                     "addedAt's pair and the worse half, for CompanyMembership.invitedBy's reason: "
-                            + "this one is not a clock stamp but a caller-supplied actor id, "
-                            + "carried from the endpoint to the database on every add so that "
-                            + "nothing can read who did it"),
+                            + "this one is not a clock stamp but a real actor id, carried from the "
+                            + "endpoint to the database on every add so that nothing can read who "
+                            + "did it. §154 wrote \"caller-supplied\" here and at the field, which "
+                            + "was wrong (corrected 2026-08-10): the value is jwt.getSubject() in "
+                            + "SuiteController.create, passed down through SuiteWriteService and "
+                            + "SuiteMembershipWriter. An actor id a caller supplies is one a "
+                            + "caller chooses, so the two are not the same claim"),
             Map.entry("CompanyMembership.invitedAt",
                     "stamped by invite() and again by reinvite(), read by nothing. UserView is "
                             + "the contract's User and carries neither this nor invitedBy, so the "
                             + "reader it wants is an administrative column on the members screen "
                             + "and therefore a contract change rather than a wiring fix"),
             Map.entry("CompanyMembership.invitedBy",
-                    "invitedAt's pair and the worse half, SuiteCase.addedBy's shape exactly: two "
-                            + "call sites carry a real actor id to the database for a fact "
-                            + "nothing has ever read back"),
+                    "invitedAt's pair and the worse half, SuiteCase.addedBy's shape exactly: "
+                            + "THREE writers carry an actor id to the database for a fact nothing "
+                            + "has ever read back — MembershipInviteService's invite() and "
+                            + "reinvite(), plus CompanyProvisioningService, whose value may be "
+                            + "null because an unattended provisioning run has no actor. §154 "
+                            + "counted two, having counted the two factory METHODS rather than "
+                            + "their call sites (corrected 2026-08-10)"),
             Map.entry("DocBlock.anchorSlug",
                     "writerless AND readerless. V1's human-readable URL convenience, and the "
                             + "class header already names it as the trap the schema names beside "

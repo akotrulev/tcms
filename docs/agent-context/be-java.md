@@ -51,6 +51,15 @@ re-grep what a later commit could have moved).
   reachable" (§155: it is, via the execution) and that `IngestionJob.rawStorageKey` was *written*
   and merely unread (§117 stored neither the file nor the key; §156, §160). Both are struck in place
   now. Its `RL-*` mutation ids also collide with §141's, one of three collisions in that file.
+  **The claim audit RAN on 2026-08-11 and closed that item**: all twelve surviving
+  `READERLESS_BY_DECISION` members re-derived one at a time, rule re-run green, **eleven hold and
+  two more were wrong** — `SuiteCase.addedBy` is `jwt.getSubject()` from `SuiteController.create`,
+  **not** the "caller-supplied actor id" §154 called it at three sites, and
+  `CompanyMembership.invitedBy` has **three** writers (`MembershipInviteService`'s two plus
+  `CompanyProvisioningService`, which passes null on an unattended run), not the two factory methods
+  §154 counted. **What still makes the section unquotable is only the id collision and `RL-3`…`RL-6`
+  being unrun.** Four wrong claims in one section, none of which touched the rule: the check
+  recomputes its population, the arguments beside it are prose.
 - **THE TEST WORKER'S HEAP IS PINNED AT `2g` IN `build.gradle.kts` — DO NOT REMOVE IT.** Gradle's
   default is 512m and the suite was measured at **522685K of 524288K** while hanging. An exhausted
   G1 heap here throws nothing and fails nothing: every test passes, then the worker parks for ever

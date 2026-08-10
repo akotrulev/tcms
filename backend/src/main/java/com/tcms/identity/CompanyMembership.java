@@ -74,8 +74,12 @@ public class CompanyMembership {
      * (§154, {@code ArchitectureRulesTest.READERLESS_BY_DECISION}).
      *
      * <p>The worse half of the pair with {@link #invitedAt}, because this one is not a clock
-     * stamp: {@link #invite} and {@link #reinvite} both take it as an argument, so two call sites
-     * carry an actor's id all the way to the database for a fact nothing has ever read back. It is
+     * stamp: {@link #invite} and {@link #reinvite} both take it as an argument, so <strong>three
+     * call sites</strong> carry an actor's id all the way to the database for a fact nothing has
+     * ever read back — {@code MembershipInviteService} calls both, and
+     * {@code CompanyProvisioningService} calls {@link #invite} with a value that may be null,
+     * because an unattended provisioning run has no actor. (§154 said two, having counted the
+     * factory methods rather than their callers; corrected 2026-08-10.) It is
      * kept rather than dropped because {@code UserView} is the contract's {@code User} and carries
      * neither field — the reader this wants is an administrative column on the members screen, and
      * that is a contract change.
