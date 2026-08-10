@@ -2,14 +2,33 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-10 (**§160** — the posted CI report becomes a download, keyed on a URL the server composes; **§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
+**Last verified:** 2026-08-10 (**§161** — no frontend source moved; `schema.d.ts` regenerated, comments only; **§160** — the posted CI report becomes a download, keyed on a URL the server composes; **§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
 the one doc-block renderer and the editor's three new types; §126 phase 4 — the three attachment
 surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the flake panel and the
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `462a6d0` (§160) (trust the
+**Baseline commit:** `ca20094` (§161) (trust the
 body over the header and re-grep what a later commit could have moved).
+
+## §161 — NO FRONTEND SOURCE MOVED, AND THAT IS THE ENTRY
+
+`schema.d.ts` was regenerated and its diff is **comments only — no generated type changed**
+(verified by `git diff` in the slice). The contract change was one `description` block on
+`HealthSignal`. Recorded here anyway, because a regenerated `schema.d.ts` in a commit normally means
+a type moved, and the next reader should not go looking.
+
+- **`INCOMPLETE` was never a frontend gap.** `lib/labels.ts` has read *"Missing required fields"*
+  and `StatusChip` has had its sentence since 2026-07-30. The server has no constant for it and
+  still does not, so **no fixture can produce the chip** — do not write a test or a browser row
+  that expects one. §161's whole finding is that a backend comment claimed the opposite.
+- **`openapi.yaml`'s `HealthSignal` no longer lists which signals have writers.** The list was stale
+  for two slices and said `STALE_APPROVAL` and `CONDITION_DRIFT` are never sent while they were
+  being sent. A client's rule is unchanged and is the only thing to code against: **an absent signal
+  means "nobody has looked", not "not raised"** — `DashboardSummary.healthComputedAt` is what tells
+  the two apart.
+
+---
 
 ## §160 — THE POSTED CI REPORT IS A DOWNLOAD, AND IT KEYS ON `reportUrl` ALONE
 

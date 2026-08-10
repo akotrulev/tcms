@@ -2,13 +2,58 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-10 (**§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-10 (**§161** — the by-decision audit, and the contract-versus-server enum rule; **§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `462a6d0` (§160) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `ca20094` (§161) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
+
+---
+
+## §161 — CONTRACT ENUMS ARE CHECKED AGAINST SERVER ENUMS; THE BY-DECISION MAPS WERE RE-DERIVED
+
+`contract/ContractEnumTest.java` is the new seam — the **third** contract-versus-server rule, after
+`ContractParameterBindingTest`'s two. No Spring context, no database: one YAML parse
+(`OpenApiContract.enumSchemas()`, new) and one ArchUnit import.
+
+- **`OWNERS` is the contract↔server correspondence and nothing recorded it before §161.** Twenty
+  named enum schemas; the map must cover them exactly, both ways, so a new one fails the build until
+  somebody names the type that serves it. **Do not treat it as an ignore list.**
+- **Four schemas have TWO owners** — `Priority` (`repository`+`work`), `StepFormat`
+  (`repository`+`execution`), `AggregationPolicy` (`reporting`+`execution`). Copied because a
+  feature module may not import another's types; both copies are compared, which is the point.
+- **`ReportFormat` is a HOMONYM, not a copy.** `execution.ReportFormat` = the dialect CI posted
+  (JUNIT/TESTNG/ALLURE/CUCUMBER, and the contract's schema); `reporting.ReportFormat` = what a
+  report's bytes are (PDF/MD/HTML/CSV/XLSX/JSON). One word of context apart. `HOMONYMS` holds the
+  second, and that entry is itself checked for staleness.
+- **Direction is recorded, and it is not symmetric.** SERVER-ONLY is the defect (a constant Jackson
+  writes that no generated union contains — `undefined` in every `satisfies Record<Union, …>`);
+  CONTRACT-ONLY is a dead branch. `DIVERGENCE_BY_DECISION` has two: `HealthSignal.INCOMPLETE`
+  (contract-only) and `PermissionQualifier.NONE` (server-only, safe because `PermissionSet`'s
+  constructor **throws** on a key held as `NONE`).
+- **An enum constant is `ACC_ENUM`, not "a static field of the enum's own type."**
+  `execution.AggregationPolicy.DEFAULT` is a `public static final` alias for `LATEST` and the first
+  draft reported it as a missing contract member. `JavaModifier.ENUM` is the filter.
+- **Never spell a column name in a string literal in a test that argues a column is dead.**
+  `ArchitectureRulesTest.everyMappedColumnHasAReader` reads *string literals* across `src/main` and
+  `src/test` with comments stripped, so such a literal marks the column read and its
+  `READERLESS_BY_DECISION` entry disappears. Identifiers go in the javadoc. §154 solved this for its
+  own file by exclusion; the shape is general.
+- **`CaseHealth.incomplete`'s reason is now "the SERVER's `HealthSignal` has no constant, because
+  nothing derives it"** — in three places (field javadoc, both decision-map entries). The old reason
+  blamed the contract, which has carried `INCOMPLETE` since 2026-07-30. Closing it is a derivation
+  plus a product decision; **it is not a contract change**.
+- **THE TEST WORKER'S HEAP IS PINNED AT `2g` IN `build.gradle.kts` — DO NOT REMOVE IT.** Gradle's
+  default is 512m and the suite was measured at **522685K of 524288K** while hanging. An exhausted
+  G1 heap here throws nothing and fails nothing: every test passes, then the worker parks for ever
+  in `MessageHub.stop` and the build never returns or prints. Three ArchUnit class graphs live in
+  that heap (two `static final` in `ArchitectureRulesTest`, one in `ContractEnumTest`, the last
+  released in `@AfterAll`), and they grow with the codebase. A build that "hangs after the tests
+  pass" is this, and `jcmd <worker pid> GC.heap_info` is how to confirm it in one command.
+- **`openapi.yaml`'s `HealthSignal` no longer enumerates which signals have writers.** That list was
+  stale from §157 to §161 and is a second copy of `WRITERLESS_BY_DECISION`. Do not re-add it.
 
 ---
 

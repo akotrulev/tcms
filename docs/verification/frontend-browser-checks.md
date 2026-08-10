@@ -1913,3 +1913,21 @@ two is on screen, and a store that kept the wrong one would serve a valid, plaus
 `compose.prod.yaml` and the runbook records both earlier roots defaulting into the container's
 writable layer before anyone noticed — but this pass runs against a dev stack, and the row that
 would catch it belongs to a deployment check rather than a browser one.
+
+## §161 — nothing to drive, and the row that says so
+
+**§161 changes no runtime behaviour on either stack.** No endpoint, no schema on the wire, no
+query, no component, no copy a user reads. The backend diff is one new test class, three corrected
+comments and a class header; the contract diff is one `description` block; both `schema.d.ts`
+copies were regenerated and their diff is **comments only — no generated type changed**, which was
+verified by `git diff` at the time.
+
+So there is one row, and it is a row about the absence rather than a placeholder for a check:
+
+| # | What | Expected |
+|---|---|---|
+| `CE-1` | With the stack up, open any case with a health signal (lane `A0`'s fixture is enough) and confirm the chip list, the grid facet and the dashboard tile render exactly as they did before §161 | **No visible difference at all.** The row exists because the slice touched `openapi.yaml` and both generated clients, and "only comments changed" is a claim about a generator's output that costs one screen to confirm and is embarrassing to be wrong about. If anything *has* moved, the regeneration was not comment-only and the finding is bigger than this row. |
+
+**Deliberately not queued:** an `INCOMPLETE` health chip. The server has no constant for it and this
+slice did not add one, so there is no fixture that can produce the value — which is the state the
+whole slice is about, and inventing a row for it would be recording a check nobody can run.

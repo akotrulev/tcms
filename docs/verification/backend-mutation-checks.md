@@ -1791,3 +1791,21 @@ comparison against what was posted.*
 > **Seven browser rows, `RR-1`…`RR-7`**, in lane **`A3`** — the CI ingestion block, which already
 > builds every fixture they need. `RR-M3` and `RR-M5` are the two that redden nothing here and are
 > the reason both queues have a row about roots and orderings.
+
+## §161 — the contract-versus-server enum rule
+
+*Three mutations, and **two of them were already run** — before the slice's prose was written,
+because a rule whose failure mode is untested is the shape §161 is about. `CE-M3` is the one left,
+and it is the interesting one: it asks whether the rule that pins the correspondence can itself be
+silently emptied.*
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| `CE-M1` | Add a constant (`MARKDOWN`) to `execution.StepFormat` and not to `repository.StepFormat` or the contract | Should redden `a contract enum and its server type hold the same members` as **SERVER-ONLY**, naming the copy that moved. This is the defect the rule exists for — a constant Jackson will write that no generated union contains — and the two-copy case is the one a name-matching rule would have missed. | ✅ **RUN 2026-08-10 — red, on the predicted rule and message** |
+| `CE-M2` | Delete `- INCOMPLETE` from `openapi.yaml`'s `HealthSignal` enum | Should redden the **healed** arm: `HealthSignal.INCOMPLETE` is in `DIVERGENCE_BY_DECISION`, and with the member gone from both sides the divergence no longer exists, so the argument for it has outlived its gap. Proves the map fails in *both* directions — the property §157–§160 each relied on in the writerless twin. | ✅ **RUN 2026-08-10 — red, `Expecting empty but was: ["HealthSignal.INCOMPLETE"]`** |
+| `CE-M3` | In `constantsOf`, revert `JavaModifier.ENUM` to `JavaModifier.STATIC` | Restores the bug the rule shipped with for one run: `execution.AggregationPolicy.DEFAULT` — a `public static final` alias for `LATEST`, never serialized — is counted as a constant and reported as SERVER-ONLY. **Should redden the same rule with a false finding**, which is the failure mode worth measuring: a green suite proves the rule finds things, and nothing here proves it does not manufacture them. If it stays green, the alias has gone and the mutation needs a new target. | ⬜ NOT RUN |
+
+> **`CE-M1` and `CE-M2` were run inline and that is a deliberate exception to §65, not a drift back
+> to §72–§76's.** They mutate a *check* rather than the product: the thing under test is the
+> assertion, there is no screen and no request, and a rule shipped without them is a rule nobody has
+> seen fail. Everything §65 defers — the browser pass and the product's own behaviour — is deferred.
