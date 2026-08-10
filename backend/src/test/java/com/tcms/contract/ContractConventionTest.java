@@ -99,13 +99,14 @@ class ContractConventionTest {
      * here.
      */
     private static final Set<String> NO_ALWAYS_PRESENT_PROPERTY = Set.of(
-            // Genuinely exclusive: a case condition is EITHER a library reference
-            // (`conditionId`) OR an inline body, never both and never neither. There is no
-            // property common to both shapes, so any `required` array here would be a lie
-            // about one of them. The exclusivity itself is enforced server-side and covered
-            // by CaseWriteEndpointTest; expressing it as `oneOf` was rejected because
-            // openapi-typescript renders that as a union the SPA's form state cannot hold.
-            ".components.schemas.CaseConditionInput",
+            // ~~Genuinely exclusive: a case condition is EITHER a library reference
+            // (`conditionId`) OR an inline body, never both and never neither.~~
+            // → REMOVED §162. The exclusivity was real when this was written and §95 ended it:
+            // only the reference form is accepted, `inlineBody` is declared solely so it can be
+            // REFUSED with a field error, and the schema has carried `required: [conditionId]`
+            // ever since. The entry exempted nothing for sixty-seven sections and a green build
+            // re-affirmed it every run, which is the property §161 named on its way out and the
+            // reason `everyExemptionStillExemptsSomething` below now exists.
 
             // Accepting an invitation carries a password ONLY when the invitee has no account
             // yet — `passwordRequired` on the preceding GET says which. A returning user
@@ -158,6 +159,84 @@ class ContractConventionTest {
                         null" is what nullable+required says, and it is what the server does.
 
                         Schemas missing one:""")
+                .isEmpty();
+    }
+
+    // ------------------------------------------------------------ exemptions ----
+
+    /**
+     * Every exemption above still exempts something.
+     *
+     * <p><strong>This is the rule §161 named on its way out, built for the two populations in this
+     * file.</strong> An ignore list is an argument, and an argument a green build re-affirms every
+     * run is the one that survives the constraint it was about: §160's {@code rawStorageKey} said
+     * "there is no adapter" for twenty-nine slices after {@code storage} built one, and §161 found
+     * the reference entry of {@code READERLESS_BY_DECISION} had never been true at all. Both were
+     * caught by a human re-deriving them, which does not scale and did not happen for two days
+     * either time.
+     *
+     * <p>The two lists above are <em>one-directional</em>, and that is what makes them rot
+     * silently: a location that stops violating the rule it is exempt from goes on being skipped,
+     * and skipping something that would have passed anyway costs nothing and reports nothing. The
+     * maps in {@code ArchitectureRulesTest} and {@code ContractEnumTest} do not have this problem —
+     * each is pinned in both directions, and {@code DIVERGENCE_BY_DECISION}'s entries must
+     * <em>still diverge</em> or the build fails. This gives the same property to the two here.
+     *
+     * <p>§162 found one dead on the first run: {@code CaseConditionInput} had declared
+     * {@code required: [conditionId]} since §95 made the reference form the only accepted one, so
+     * the exclusivity its comment argued from no longer existed.
+     */
+    @Test
+    @DisplayName("every exemption is still exempting something")
+    void everyExemptionStillExemptsSomething() {
+        List<String> inert = new ArrayList<>();
+
+        Set<String> withoutAClientError = new java.util.LinkedHashSet<>();
+        for (OpenApiContract.Operation operation : contract.operations()) {
+            if (operation.responseCodes().stream().noneMatch(code -> code.startsWith("4"))) {
+                withoutAClientError.add(operation.describe());
+            }
+        }
+        for (String exempt : NO_CLIENT_ERROR_POSSIBLE) {
+            if (!withoutAClientError.contains(exempt)) {
+                inert.add("NO_CLIENT_ERROR_POSSIBLE  " + exempt
+                        + "  — the operation is gone, or it now declares a 4xx");
+            }
+        }
+
+        Map<String, Boolean> objectSchemasMissingRequired = new java.util.LinkedHashMap<>();
+        contract.walk((location, node) -> {
+            if (isObjectSchema(node)) {
+                objectSchemasMissingRequired.put(location, !node.containsKey("required"));
+            }
+        });
+        for (String exempt : NO_ALWAYS_PRESENT_PROPERTY) {
+            Boolean missing = objectSchemasMissingRequired.get(exempt);
+            if (missing == null) {
+                inert.add("NO_ALWAYS_PRESENT_PROPERTY  " + exempt
+                        + "  — no object schema at that location any more");
+            } else if (!missing) {
+                inert.add("NO_ALWAYS_PRESENT_PROPERTY  " + exempt
+                        + "  — it declares `required` now, so nothing is being excused");
+            }
+        }
+
+        assertThat(inert)
+                .as("""
+                        These exemptions no longer exempt anything.
+
+                        Each is an argument for why some location may break a rule, and the location
+                        either does not break it any more or is gone. Nothing failed — that is the
+                        whole problem. A one-directional ignore list cannot report a member that
+                        stopped needing to be on it, so the argument outlives the constraint and the
+                        next reader takes it for a live one. §160 and §161 are both instances, two
+                        days apart, in three different files.
+
+                        Delete the row. If the constraint has merely MOVED — the schema was renamed,
+                        the operation re-pathed — the row's location is what to update, and the
+                        comment beside it is what to re-read while you are there.
+
+                        Inert:""")
                 .isEmpty();
     }
 

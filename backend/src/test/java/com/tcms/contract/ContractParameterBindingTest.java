@@ -80,6 +80,10 @@ class ContractParameterBindingTest extends IntegrationTestBase {
      * finding. Delete the declaration instead: an unimplemented filter is a promise the
      * generated types make on the server's behalf, and the contract is cheap to re-add from
      * when a consumer actually needs it.
+     *
+     * <p>Empty today, and {@link #everyUnboundExemptionStillExemptsSomething} is what keeps it
+     * honest once it is not — the same one-directional rot {@code ContractConventionTest}'s two
+     * lists had, pinned before the first entry rather than after the first stale one.
      */
     private static final Set<String> DELIBERATELY_UNBOUND = Set.of();
 
@@ -101,7 +105,14 @@ class ContractParameterBindingTest extends IntegrationTestBase {
             }
             Set<String> bound = boundParametersOf(operation);
             if (bound == null) {
-                continue; // not implemented — still MSW, and not this check's business
+                // Unmapped, which everyDeclaredOperationHasAHandler below reports as a finding —
+                // so this arm is reached only on a run that is already red for it, and skipping
+                // is what keeps the failure list about the missing handler rather than about
+                // every parameter that handler would have bound. ~~"not implemented — still MSW,
+                // and not this check's business"~~ → the MSW premise was deleted with the mock
+                // layer in §107 and struck in this class's header in §145; the inline copy
+                // survived both and was still giving the retired reason (§162).
+                continue;
             }
             compared++;
 
@@ -138,6 +149,42 @@ class ContractParameterBindingTest extends IntegrationTestBase {
 
                         Operations ignoring a declared parameter:""")
                 .isEmpty();
+    }
+
+    /**
+     * Each {@code DELIBERATELY_UNBOUND} entry still names a parameter that is declared and unbound.
+     *
+     * <p>{@code ContractConventionTest.everyExemptionStillExemptsSomething} is this rule for that
+     * file's two lists, and the argument is there. The short form: an entry here excuses a
+     * parameter the handler ignores, and if the handler starts binding it — or the contract stops
+     * declaring it — nothing fails, because a skip that was never going to fire looks exactly like
+     * a rule being obeyed.
+     */
+    @Test
+    @DisplayName("every unbound-parameter exemption is still exempting something")
+    void everyUnboundExemptionStillExemptsSomething() {
+        OpenApiContract contract = OpenApiContract.load();
+        Set<String> live = new TreeSet<>();
+
+        for (OpenApiContract.Operation operation : contract.operations()) {
+            Set<String> bound = boundParametersOf(operation);
+            if (bound == null) {
+                continue;
+            }
+            for (String declared : contract.queryParametersOf(operation)) {
+                if (!bound.contains(declared)) {
+                    live.add(operation.describe() + " " + declared);
+                }
+            }
+        }
+
+        assertThat(DELIBERATELY_UNBOUND)
+                .as("""
+                        A DELIBERATELY_UNBOUND entry no longer names a declared-and-unbound \
+                        parameter — the handler binds it now, or the contract stopped declaring \
+                        it. Either way the argument has outlived what it was about and the row is \
+                        excusing nothing. Delete it.""")
+                .isSubsetOf(live);
     }
 
     @Test

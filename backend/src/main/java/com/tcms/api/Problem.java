@@ -5,8 +5,19 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * {@code Problem} in {@code docs/specs/openapi.yaml} — the error envelope <strong>every</strong>
- * refusal in this API answers with, whether a controller wrote it or the container did.
+ * {@code Problem} in {@code docs/specs/openapi.yaml} — <s>the error envelope <strong>every</strong>
+ * refusal in this API answers with, whether a controller wrote it or the container did.</s>
+ *
+ * <p><strong>→ corrected §162: it is one of two, and the smaller one.</strong> Eight production
+ * files return this record; <strong>twenty-one</strong> return Spring's {@code ProblemDetail}, each
+ * arguing for it in a header of its own ({@code RunController}: <em>"serializes to exactly the
+ * {@code Problem} the contract declares"</em>). Both claims were written in good faith and neither
+ * was checked, and they are not merely two spellings: Jackson gives {@code ProblemDetail} the
+ * default content type {@code application/problem+json} and this record {@code application/json},
+ * and {@code ProblemDetail} carries an {@code instance} property this record has no component for.
+ * <strong>132 of the contract's 176 declared error bodies named the wrong media type as a result</strong>,
+ * in both directions at once. {@link ProblemMediaType} closes the media-type half; {@code instance}
+ * is declared optional in the contract and its reconciliation is recorded there as a decision.
  *
  * <h2>~~A second copy, and it is recorded as one rather than defended~~ → extracted in §146</h2>
  *

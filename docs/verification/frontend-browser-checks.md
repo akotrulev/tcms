@@ -1931,3 +1931,24 @@ So there is one row, and it is a row about the absence rather than a placeholder
 **Deliberately not queued:** an `INCOMPLETE` health chip. The server has no constant for it and this
 slice did not add one, so there is no fixture that can produce the value — which is the state the
 whole slice is about, and inventing a row for it would be recording a check nobody can run.
+
+## §162 — the media type changes on every refusal, and no client should notice
+
+**§162 changes no body, no status, no field a screen renders.** What moves is the `Content-Type`
+header on every 4xx and 5xx: `application/json` → `application/problem+json` on the refusals written
+with `api.Problem`, the filter's 429 and the container's `/error` dispatch. The twenty-one
+`ProblemDetail` controllers were already sending it.
+
+The claim being tested is a **negative**, and it is the reason the defect survived: both TypeScript
+consumers call `.json()` without consulting `Content-Type`, so nothing *should* change. A negative
+asserted from reading the source is exactly what §161 is about.
+
+One row, in lane **`A0`** — it needs no fixture beyond a signed-in session:
+
+| # | What | Expected |
+|---|---|---|
+| `MT-1` | With the stack up, drive one refusal of each envelope and watch the network tab: a **400** from a case edit with an empty title (`api.Problem`, the record), a **403** from any gated action available to the signed-in role (`ProblemDetail`), and a **404** from a hand-typed bad id. For each, note the response `Content-Type` **and** whether the SPA renders its usual message. | The 400 and 403 both carry `application/problem+json`; the 404 carries no body and no content type at all (§148). **The rendered message is identical to before in every case** — `describeError` reads `detail` off a parsed body and never looks at the header. If a refusal renders as a bare status or a blank notification, the header *is* being consulted somewhere and the finding is larger than this row. |
+
+**Deliberately not queued:** a 429. Driving the rate limit needs an API token and 4 requests in a
+minute, which is a `packages/` lane rather than a browser one, and `RateLimitTest` already asserts
+that header over real HTTP.

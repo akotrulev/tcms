@@ -1,6 +1,7 @@
 package com.tcms.contract;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -15,6 +16,15 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Which refusals carry a document and which are a status and nothing else — checked against the
@@ -52,6 +62,9 @@ import org.junit.jupiter.api.Test;
  */
 @DisplayName("Error bodies — what the contract promises against what the server writes")
 class ErrorBodyPolicyTest {
+
+    /** The one media type every refusal in this API is announced under (§162). */
+    private static final String PROBLEM_JSON = MediaType.APPLICATION_PROBLEM_JSON_VALUE;
 
     /** Statuses this API answers with a status line and nothing else. */
     private static final Set<String> BODILESS_STATUSES = Set.of("401", "404");
@@ -127,13 +140,17 @@ class ErrorBodyPolicyTest {
             "documentation/ArtifactController.java",
             "documentation/ArtifactFileController.java");
 
-    /**
-     * The one file allowed to name a 404 status directly: it serves {@code /error}, where the
-     * container has resolved a path with no operation at all and the {@code Problem} body is the
-     * point (§146, {@code PreHandlerRefusal}). That 404 is not an operation's answer and this
-     * rule is not about it.
-     */
-    private static final String CONTAINER_ERROR_PATH = "api/ProblemErrorAttributes.java";
+    // ~~CONTAINER_ERROR_PATH — the one file allowed to name a 404 status directly: it serves
+    // /error, where the container has resolved a path with no operation at all and the Problem
+    // body is the point (§146, PreHandlerRefusal).~~
+    // → REMOVED §162, and the removal is the more interesting half. The exemption was inert:
+    // ProblemErrorAttributes contains no `HttpStatus.NOT_FOUND` at all and never has — it keys its
+    // curated sentences by the int 404 and resolves the status with `HttpStatus.resolve(status)`.
+    // So the file DOES body a 404, legitimately, by a spelling this scan cannot see, while the
+    // exemption said it was permitted to do so by one it does not use. An ignore list naming the
+    // wrong mechanism reads as coverage and is the absence of it. The ban below now applies to
+    // every file; if that file is ever rewritten to name the constant, the red run is a decision
+    // worth taking rather than one already made here.
 
     private static OpenApiContract contract;
 
@@ -237,6 +254,144 @@ class ErrorBodyPolicyTest {
 
                         Declaring one empty:""")
                 .isEmpty();
+    }
+
+    // ----------------------------------------------------------- media type ----
+
+    /**
+     * Every declared refusal body is {@code application/problem+json} — the contract half.
+     *
+     * <p>The two rules above ask <em>whether</em> a refusal carries a document. This asks what it is
+     * announced as, which is the third property of the same declaration and was the one nothing
+     * looked at: before §162 the string {@code problem+json} did not occur anywhere in
+     * {@code backend/src}, main or test.
+     *
+     * <p><strong>132 of the 176 declared error bodies named the wrong type, in both directions.</strong>
+     * This API had two envelopes — Spring's {@code ProblemDetail} in twenty-one controllers and
+     * {@code api.Problem} in eight — and Jackson gives the first {@code application/problem+json}
+     * and the second {@code application/json}. The contract said {@code application/json} for 123
+     * responses that arrive as {@code problem+json}, and {@code problem+json} for the case-attachment
+     * 413, the one upload handler written with the record rather than the {@code ProblemDetail} its
+     * three siblings use. Both envelopes send {@code problem+json} now
+     * ({@code api.ProblemMediaType}), so the contract can state one type for all of them.
+     *
+     * <p>It cost nothing at runtime and that is why it lasted: both TypeScript consumers call
+     * {@code .json()} without reading {@code Content-Type}. What was false was the artifact
+     * everyone else generates from.
+     *
+     * <p><strong>Deliberately every 4xx and 5xx rather than the two status sets above.</strong>
+     * {@code BODILESS_STATUSES} and {@code BODIED_STATUSES} between them name six, and the document
+     * declares 403 eighty times and 413 four — neither of which either set covers, so the
+     * body-presence rules have never had an opinion about them. Keying this one on "declares
+     * content at all" leaves no status outside it, which is the property the other two want and
+     * cannot have while their populations are hand-written.
+     */
+    @Test
+    @DisplayName("every declared refusal body is application/problem+json")
+    void everyDeclaredErrorBodyIsProblemJson() {
+        List<String> offenders = new ArrayList<>();
+        int checked = 0;
+
+        for (OpenApiContract.Operation operation : contract.operations()) {
+            for (Map.Entry<String, Object> entry : responsesOf(operation).entrySet()) {
+                if (!entry.getKey().startsWith("4") && !entry.getKey().startsWith("5")) {
+                    continue;
+                }
+                Set<String> mediaTypes = mediaTypesOf(contract.resolve(asMap(entry.getValue())));
+                if (mediaTypes.isEmpty()) {
+                    continue;
+                }
+                checked++;
+                if (!mediaTypes.equals(Set.of(PROBLEM_JSON))) {
+                    offenders.add(operation.describe() + "  " + entry.getKey() + "  " + mediaTypes);
+                }
+            }
+        }
+
+        for (String name : List.of("BadRequest", "Forbidden", "Conflict", "PreHandlerRefusal",
+                "TooManyRequests")) {
+            Set<String> mediaTypes = mediaTypesOf(componentResponse(name));
+            checked++;
+            if (!mediaTypes.equals(Set.of(PROBLEM_JSON))) {
+                offenders.add("components/responses/" + name + "  " + mediaTypes);
+            }
+        }
+
+        assertThat(checked)
+                .as("the response walk found almost no bodied refusal — it has stopped matching "
+                        + "the contract's shape and this asserted nothing")
+                .isGreaterThan(150);
+
+        assertThat(offenders)
+                .as("""
+                        These refusals declare a body under a media type this server does not send.
+
+                        Every refusal in this API — a controller's, a filter's 429, and the
+                        container's /error dispatch — is written as `application/problem+json`.
+                        RFC 7807 is the reason, and Spring is the mechanism: `ProblemDetail`
+                        carries that type by construction and wins even against an explicit
+                        `Accept: application/json`, which is what @tcms/client sends.
+
+                        `application/json` here is not a smaller mistake than a wrong schema. It is
+                        the key `schema.d.ts` generates the payload type under, so a consumer that
+                        parses by the media type it was given — which is the only reason to publish
+                        a contract at all — finds `never` where the document is.
+
+                        Declaring the wrong one:""")
+                .isEmpty();
+    }
+
+    /**
+     * The same rule from the server's end, on both envelopes at once.
+     *
+     * <p>A standalone {@code MockMvc}, so it boots no context and needs no database, and it is
+     * asking the one question a source scan cannot: the media type is chosen by the message
+     * converter, not written at the site. {@code Accept: application/json} is exercised because it
+     * is what {@code @tcms/client} sends on every request and the obvious worry about this change
+     * is a 406 — Spring answers the problem type anyway, for both spellings.
+     *
+     * <p>The container's {@code /error} dispatch is the third writer and is asserted where it can
+     * be, over real HTTP, in {@code auth.ErrorDispatchStatusTest.theBodyIsAProblem}.
+     */
+    @Test
+    @DisplayName("both envelopes go out as application/problem+json")
+    void bothEnvelopesWriteProblemJson() throws Exception {
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new Refusals())
+                .setControllerAdvice(new com.tcms.api.ProblemMediaType())
+                .build();
+
+        for (String path : List.of("/record", "/detail")) {
+            for (String accept : List.of("*/*", MediaType.APPLICATION_JSON_VALUE)) {
+                var response = mvc.perform(get(path).header(HttpHeaders.ACCEPT, accept))
+                        .andReturn().getResponse();
+
+                assertThat(response.getContentType())
+                        .as("%s with Accept: %s — one envelope, one media type. `api.Problem` is an "
+                                + "ordinary bean, so it went out as application/json until "
+                                + "ProblemMediaType; ProblemDetail has always been the other one",
+                                path, accept)
+                        .isEqualTo(PROBLEM_JSON);
+                assertThat(response.getStatus()).isEqualTo(409);
+            }
+        }
+    }
+
+    /** The two envelopes, each returned the way its seven-or-twenty-one controllers return it. */
+    @RestController
+    static class Refusals {
+
+        @GetMapping("/record")
+        ResponseEntity<Object> record() {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(com.tcms.api.Problem.stale("case"));
+        }
+
+        @GetMapping("/detail")
+        ResponseEntity<Object> detail() {
+            ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+            problem.setTitle("Someone else saved first");
+            problem.setDetail("Reload the case.");
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+        }
     }
 
     // --------------------------------------------------------------- source ----
@@ -407,10 +562,8 @@ class ErrorBodyPolicyTest {
             // same status, carries a document, and contains no `notFound()` to be found. The
             // codebase writes `notFound()` at all 94 sites, so an occurrence here is either a
             // body arriving by the back door or a second spelling of a rule that has one.
-            if (!CONTAINER_ERROR_PATH.equals(moduleRelative(file))) {
-                for (int at : occurrencesOf(source, "HttpStatus.NOT_FOUND")) {
-                    offenders.add(describe(file, source, at) + "  (writes 404 the long way)");
-                }
+            for (int at : occurrencesOf(source, "HttpStatus.NOT_FOUND")) {
+                offenders.add(describe(file, source, at) + "  (writes 404 the long way)");
             }
         }
 
@@ -480,6 +633,14 @@ class ErrorBodyPolicyTest {
 
     private static Map<String, Object> responsesOf(OpenApiContract.Operation operation) {
         return asMap(operation.body().get("responses"));
+    }
+
+    /** The media types a resolved response declares a body under — empty when it declares none. */
+    private static Set<String> mediaTypesOf(Map<String, Object> response) {
+        return response.get("content") instanceof Map<?, ?> content
+                ? content.keySet().stream().map(String::valueOf)
+                        .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new))
+                : Set.of();
     }
 
     /**

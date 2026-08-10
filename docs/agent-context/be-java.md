@@ -2,13 +2,64 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-10 (**§161** — the by-decision audit, and the contract-versus-server enum rule; **§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-11 (**§162** — one media type for every refusal, the two envelopes nobody compared, and the exemptions that excused nothing; **§161** — the by-decision audit, and the contract-versus-server enum rule; **§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `ca20094` (§161) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `d68545d` (pre-§162) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
+
+---
+
+## §162 — ONE MEDIA TYPE FOR EVERY REFUSAL, AND THERE ARE TWO ERROR ENVELOPES
+
+**Read this before touching any refusal, any `Problem`, or `openapi.yaml`'s error responses.**
+
+- **THERE ARE TWO ENVELOPES AND BOTH ARE LEGITIMATE.** Spring's `ProblemDetail` in **21**
+  production files; `com.tcms.api.Problem` (the record, with the curated `validation` / `stale` /
+  `conflict` / `forbidden` factories) in **8**. `api.Problem`'s header and `api/package-info.java`
+  both used to say the record was *the* envelope "every refusal answers with" — **it never was**,
+  and §146 did not make it so: that slice removed the copies that could not *reach* a shared record
+  and never touched the ones that had chosen `ProblemDetail`. Both claims are struck in place.
+- **ALL REFUSALS ARE `application/problem+json`.** Four writers, three mechanisms:
+  | writer | how the type is set |
+  |---|---|
+  | `ProblemDetail` (21 files) | Spring, by construction — and it **beats** an explicit `Accept: application/json`, which is what `@tcms/client` sends |
+  | `api.Problem` (8 files, ~50 sites) | `api.ProblemMediaType`, a `ResponseBodyAdvice` keyed on the **type** — no call site sets it |
+  | Boot's `/error` dispatch | the same advice, matched on `BasicErrorController` (its mapping is hard-coded `produces = application/json`) |
+  | `ProblemWriter` (the filter 429) | set directly — **a filter's response reaches no advice** |
+  So: **returning a `Problem` from a new controller needs no content type.** Writing one from a new
+  *filter* does, and there is exactly one existing example.
+- **`ErrorBodyPolicyTest.everyDeclaredErrorBodyIsProblemJson` is the contract-side gate**, keyed on
+  "declares content at all" rather than on `BODILESS_STATUSES`/`BODIED_STATUSES` — those two name
+  six statuses between them and the document declares 403 eighty times and 413 four, so neither had
+  an opinion about either. A new error response declaring `application/json` fails the build.
+- **What it cost before the gate: 132 of 176 declared error bodies named the wrong media type, in
+  both directions.** Nothing observed it — `problem+json` occurred **zero** times in
+  `backend/src` — because both TS consumers call `.json()` without reading `Content-Type`. The
+  falsehood was in the generated types, not at runtime.
+- **`Problem.instance` is declared, optional, and UNRESOLVED.** `ProblemDetail` writes the request
+  path as `instance` on 123 of 176 refusals; the record's eight omit the key entirely. **It is
+  `path` under another name and §146 deliberately removed `path` from the container's body** —
+  `ErrorDispatchStatusTest` asserts `body.has("path")` is false while `instance` carries the same
+  string. Do not "tidy" either side: closing this is a decision (suppress `instance`, or amend
+  §146's reasoning), named as §162's next-slice candidate.
+
+## §162 — AN EXEMPTION MUST STILL EXEMPT SOMETHING
+
+- **`ContractConventionTest.everyExemptionStillExemptsSomething`** (+ the `DELIBERATELY_UNBOUND`
+  sibling in `ContractParameterBindingTest`) pins the file's ignore lists in the **second**
+  direction. A one-directional list cannot report a member that stopped needing to be on it: the
+  skip that was never going to fire looks exactly like a rule being obeyed.
+- Two were dead when the rule was written: `CaseConditionInput` (§95 gave the schema
+  `required: [conditionId]`; the exclusivity its comment argued from is gone) and
+  `CONTAINER_ERROR_PATH`, which exempted `ProblemErrorAttributes` from the `HttpStatus.NOT_FOUND`
+  ban — **a string that file has never contained.** It bodies a 404 via the int `404`, i.e. by a
+  spelling the scan cannot see. *An ignore list naming the wrong mechanism reads as coverage and is
+  the absence of it.*
+- **`ArchitectureRulesTest`'s and `ContractEnumTest`'s maps did not rot**, and that is the whole
+  finding's control group: every one of them is asserted in both directions.
 
 ---
 

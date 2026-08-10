@@ -1869,3 +1869,24 @@ silently emptied.*
 > to §72–§76's.** They mutate a *check* rather than the product: the thing under test is the
 > assertion, there is no screen and no request, and a rule shipped without them is a rule nobody has
 > seen fail. Everything §65 defers — the browser pass and the product's own behaviour — is deferred.
+
+## §162 — one media type for every refusal, and the exemptions that excused nothing
+
+*Four mutations. **All four were run** before the slice's prose was written, for `CE-M1`/`CE-M2`'s
+reason: each mutates a **check** rather than the product — no screen, no request, no user-visible
+behaviour — and a rule shipped without seeing it fail is the rule this slice exists because of.
+They are recorded here rather than omitted, because "run" is a result and the queue is the record
+of what ran.*
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| `§162 MT-1` | In `openapi.yaml`, revert `components/responses/Conflict` to `application/json` | Should redden `every declared refusal body is application/problem+json`, naming the component. Proves the rule sees a shared response — 30 of the document's error bodies reach their media type through a `$ref`, so a rule that walked only inline `content` blocks would have reported clean over almost the whole document. | ✅ **RUN 2026-08-11 — red, on the named rule** |
+| `§162 MT-2` | In `ProblemMediaType.beforeBodyWrite`, make the condition `if (false)` | Should redden **two** things in different harnesses: `both envelopes go out as application/problem+json` (standalone MockMvc, the record's arm) and `the body is a Problem, not the container's whitelabel shape` (real HTTP, the `/error` dispatch). The pair is the point — the advice serves two paths and one test each, so a single red would mean one of the two paths is unobserved. | ✅ **RUN 2026-08-11 — both red, as predicted** |
+| `§162 MT-3` | In `ProblemWriter.write`, revert to `MediaType.APPLICATION_JSON_VALUE` | Should redden `a token is refused at its ceiling, and told how long to wait` and **nothing else** — a filter's response reaches no `ResponseBodyAdvice`, so this is the one writer the advice cannot cover and the only assertion standing over it. | ✅ **RUN 2026-08-11 — red, only that test** |
+| `§162 MT-4` | Re-add `".components.schemas.CaseConditionInput"` to `ContractConventionTest.NO_ALWAYS_PRESENT_PROPERTY` | Should redden `every exemption is still exempting something`. This is the slice's own finding replayed: before the rule existed, the entry sat there for sixty-seven sections excusing a schema that had stopped needing it, and **every run was green**. | ✅ **RUN 2026-08-11 — red, `NO_ALWAYS_PRESENT_PROPERTY … it declares required now`** |
+
+> **Not mutation-tested and worth knowing:** nothing pins that the *record* and `ProblemDetail`
+> carry the same field names. `ContractConventionTest.RESPONSE_RECORDS` does that job for four
+> response schemas and `Problem` is not one of them — it is written by two Java types, only one of
+> which this project owns, so the record-component comparison has nothing to compare. §162 declared
+> `instance` rather than closing that gap.

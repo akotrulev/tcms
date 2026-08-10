@@ -69,13 +69,24 @@
  * <h2>What it holds</h2>
  *
  * <ul>
- *   <li>{@link com.tcms.api.Problem} — the RFC 7807 envelope every 4xx and 5xx in this API answers
- *       with, {@code Problem} in the contract. Previously {@code repository.ApiProblem}
+ *   <li>{@link com.tcms.api.Problem} — <s>the RFC 7807 envelope every 4xx and 5xx in this API
+ *       answers with</s>, {@code Problem} in the contract. <strong>§162: eight files return this
+ *       record and twenty-one return Spring's {@code ProblemDetail}</strong> — the same sentence
+ *       this module was founded on, still not true after the extraction, because §146 removed the
+ *       copies that could not <em>reach</em> a shared record and never touched the ones that had
+ *       chosen a different one. What the schema names is now one wire shape rather than one Java
+ *       type ({@link com.tcms.api.ProblemMediaType}). Previously {@code repository.ApiProblem}
  *       (package-private, so six modules referred to it in <em>prose</em> and none could call it),
  *       {@code auth.InvitationController.ProblemBody} (the same record without {@code errors}) and
  *       a hand-written JSON string literal in {@code auth.RateLimitFilter}.</li>
  *   <li>The container-error rendering (§146) — the one place a failure Spring resolves <em>before or
  *       instead of</em> a controller becomes the same envelope a controller would have produced.</li>
+ *   <li>{@link com.tcms.api.ProblemMediaType} (§162) — the one place a refusal's media type is
+ *       decided. <strong>It is here as rendering, not as a shape</strong>, which is the charter's
+ *       second clause rather than its first: it defines nothing, and a rule that lived in one
+ *       module would be a rule about one module's refusals. Whether every refusal in this API
+ *       announces itself the same way is a property of the API, and the API is what this package
+ *       is.</li>
  *   <li>{@link com.tcms.api.UserRef} — {@code UserRef} in the contract, the person a list renders
  *       beside a row. <strong>Six copies</strong> until §147, in {@code identity}, {@code project},
  *       {@code repository}, {@code documentation}, {@code execution} and {@code work}, with

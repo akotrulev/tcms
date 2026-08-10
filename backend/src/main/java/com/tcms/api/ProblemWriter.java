@@ -40,7 +40,10 @@ public class ProblemWriter {
      */
     public void write(HttpServletResponse response, Problem problem) throws IOException {
         response.setStatus(problem.status());
-        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        // `application/problem+json` since §162, matching every other refusal in this API. It was
+        // `application/json` here, and Spring's ProblemDetail sites were already sending the other
+        // one — two media types for one envelope, which the contract described as neither.
+        response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         json.writeValue(response.getWriter(), problem);
     }

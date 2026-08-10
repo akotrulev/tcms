@@ -141,6 +141,15 @@ class RateLimitTest extends IntegrationTestBase {
 
         assertThat(refused.getResponse().getStatus()).isEqualTo(429);
 
+        // §162. This refusal is composed by a filter, before routing, so it is the one path where
+        // neither Spring's converter nor `ProblemMediaType` decides the type — `ProblemWriter` sets
+        // it by hand, and a hand-set header is exactly what went on saying `application/json` while
+        // twenty-one controllers said the other thing. Pinned here because a filter's response
+        // reaches no `ResponseBodyAdvice` to be corrected by.
+        assertThat(refused.getResponse().getContentType())
+                .as("every refusal in this API is application/problem+json, a filter's included")
+                .startsWith(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+
         // Six a minute is a permit every ten seconds, so an exhausted bucket's honest wait is ten
         // — minus however long the three requests above actually took, which is why this is a band
         // and not an equality. A CONSTANT would satisfy an equality just as well; what the band

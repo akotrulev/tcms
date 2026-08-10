@@ -212,9 +212,18 @@ class ErrorDispatchStatusTest extends IntegrationTestBase {
         // Asserted on a token, deliberately: the token is the caller that reaches these paths, and
         // this is the assertion that fails if ProblemErrorAttributes is removed while every
         // MockMvc test in the suite stays green.
-        JsonNode body = json.readTree(
-                post("/api/v1/projects/" + PROJECT + "/cases", UNREADABLE_CASE, issueToken())
-                        .getBody());
+        var refusal = post("/api/v1/projects/" + PROJECT + "/cases", UNREADABLE_CASE, issueToken());
+
+        // §162. `BasicErrorController`'s mapping is hard-coded to `produces = application/json`,
+        // so until `ProblemMediaType` set the header this was the last refusal in the API still
+        // announcing itself as ordinary JSON — on the paths a machine caller hits most, which is
+        // the same reason §146 shaped the body here in the first place. Asserted over real HTTP
+        // because the header is written on the ERROR dispatch, which MockMvc does not run.
+        assertThat(refusal.getHeaders().getContentType())
+                .as("every refusal in this API is application/problem+json, the container's too")
+                .isEqualTo(MediaType.APPLICATION_PROBLEM_JSON);
+
+        JsonNode body = json.readTree(refusal.getBody());
 
         assertThat(body.has("timestamp")).as("the container's shape must be gone entirely").isFalse();
         assertThat(body.has("path")).as("`path` echoes the request back into the body").isFalse();
