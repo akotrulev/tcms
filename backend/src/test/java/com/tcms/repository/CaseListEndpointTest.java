@@ -263,13 +263,22 @@ class CaseListEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("lastResult is absent rather than null — no execution has ever happened")
-        void lastResultIsAbsent() throws Exception {
-            // Not marked required by the contract, and the SPA renders a missing lastResult as
-            // "Never run" — which is exactly true. A fabricated UNTESTED result would be the
-            // response inventing an execution that never happened.
-            assertThat(byKey(itemsAs(LEAD, ACME, ACME_BANKING, ""), "TC-1").has("lastResult"))
-                    .isFalse();
+        @DisplayName("lastResult is present and null — the key is served, this case has never run")
+        void lastResultIsAnExplicitNull() throws Exception {
+            // ~~absent rather than null~~ — §166 served the field, and required it. The two
+            // assertions below are one statement each of what that means, and neither is
+            // redundant: the key being PRESENT is what lets a client tell "never run" from "this
+            // server does not serve last results", and the value being NULL is what stops a
+            // fabricated UNTESTED result inventing an execution that never happened.
+            //
+            // This class seeds no executions at all, so null here is the true answer and not a
+            // gap. CaseHealthRecomputeTest is where a non-null one is asserted, because producing
+            // one needs a recorded execution and a recompute.
+            JsonNode row = byKey(itemsAs(LEAD, ACME, ACME_BANKING, ""), "TC-1");
+            assertThat(row.has("lastResult"))
+                    .as("required by the contract since §166 — always present, sometimes null")
+                    .isTrue();
+            assertThat(row.get("lastResult").isNull()).isTrue();
         }
 
         @Test

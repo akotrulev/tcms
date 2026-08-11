@@ -515,12 +515,13 @@ class ContractConventionTest {
      * property is the whole reason those maps did not rot while §162's one-directional exemptions
      * did.
      *
-     * <p><strong>All four are contract-only, which is the safe direction</strong> — a declared
-     * property nothing sends costs a dead branch in a client, where a component nothing declares is
-     * a value no generated union can name. And all four are blocked by <em>the same</em> rule, which
-     * is what makes them one decision rather than four: {@code repository} and {@code documentation}
-     * may not import {@code execution}, so a value sourced from {@code test_execution} has to arrive
-     * as a read model fed by events (§3 lesson 4) rather than as a join.
+     * <p><strong><del>All four</del> Both remaining entries are contract-only, which is the safe
+     * direction</strong> — a declared property nothing sends costs a dead branch in a client, where
+     * a component nothing declares is a value no generated union can name. And all of them are
+     * blocked by <em>the same</em> rule, which is what made them one decision rather than four:
+     * {@code repository} and {@code documentation} may not import {@code execution}, so a value
+     * sourced from {@code test_execution} has to arrive as a read model fed by events (§3 lesson 4)
+     * rather than as a join.
      *
      * <p><strong>Three of the four said something else until §165, and what they said was that the
      * module "does not exist".</strong> {@code execution} is 119 files and {@code documentation} is
@@ -528,21 +529,19 @@ class ContractConventionTest {
      * twenty-nine sections after {@code storage} built one — and it cost the same thing: an
      * argument that misnames the obstacle deters the repair, because "the module does not exist"
      * reads as *wait* and "the module boundary forbids the join" reads as *design a read model*.
+     *
+     * <p><strong>§166 is the evidence for that last sentence, and it is why this map is now two
+     * entries.</strong> The rewritten argument named a repair — derive it into a read model this
+     * module owns — and the next slice did it, for both {@code lastResult} keys, one section later.
+     * The two remaining are the ones the rewrite did not make cheap: {@code relatedDocuments} needs
+     * a table rather than a column, and {@code DocBlock.coverage} needs two modules
+     * {@code documentation} may not name.
      */
     private static final Map<String, String> MEMBER_DIVERGENCE_BY_DECISION = Map.ofEntries(
-            Map.entry("TestCaseSummary.lastResult",
-                    "CONTRACT-ONLY. Sourced from test_execution, which is `execution` — a module "
-                            + "`repository` may not import (see its package-info: the same rule "
-                            + "that keeps suite_run_summary a read model in `reporting`). Not "
-                            + "required, so omitting the key is legal, and the SPA renders its "
-                            + "absence as \"Never run\". WHAT THAT COSTS TODAY: every case in the "
-                            + "product reads \"Never run\", including ones with recorded "
-                            + "executions — CaseGrid's Last result column has been a confident "
-                            + "falsehood since `execution` shipped"),
-            Map.entry("TestCase.lastResult",
-                    "CONTRACT-ONLY, inherited through the allOf from TestCaseSummary and absent "
-                            + "from TestCaseDetailView for the same reason; the case detail page "
-                            + "renders it the same way and is wrong the same way"),
+            // TestCaseSummary.lastResult and TestCase.lastResult WERE HERE and are deleted rather
+            // than edited — §166 served the field, and this map is pinned in both directions
+            // precisely so a closed divergence cannot keep its argument. Deleting them IS the
+            // build passing again; that is the property, exercised.
             Map.entry("TestCase.relatedDocuments",
                     "CONTRACT-ONLY. Sourced from doc_link, which is `documentation` — the other "
                             + "module `repository` may not import. Its old argument added that "

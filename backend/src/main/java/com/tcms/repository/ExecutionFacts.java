@@ -17,8 +17,8 @@ import org.springframework.stereotype.Component;
  * {@code test_execution} would end that property, and it would end it for the most tempting reason
  * there is — that the new query is short.
  *
- * <p>Two facts live on the other side of this seam, and <strong>neither is ever needed as a
- * value</strong> — both are folded directly into the statement that consumes them, because moving a
+ * <p>Two facts live on the other side of this seam, and <del>neither is ever needed as a
+ * value</del> — both are folded directly into the statement that consumes them, because moving a
  * row per case through the application to decide a boolean is the shape that turns a read-model
  * refresh into an N-query job:
  *
@@ -29,6 +29,22 @@ import org.springframework.stereotype.Component;
  *       #recomputeAutomationDrift}. The same {@code test_execution} rows, narrowed to those whose
  *       run came through the ingestion door.</li>
  * </ol>
+ *
+ * <p><strong>The struck clause stopped being true in §166 and the property it was protecting did
+ * not.</strong> {@code TestCaseSummary.lastResult} needs the first fact <em>as a value</em> — the
+ * status, the moment and the release of the winning row, on the wire — so
+ * {@link #recomputeExecutionSignals} now stores those three alongside the two booleans it already
+ * derived from the same row.
+ *
+ * <p>What has not changed is the shape of the crossing, which is what the sentence was really
+ * about: <strong>no row of another module's table moves through this application, and no request
+ * ever reaches this file.</strong> The value is written into {@code case_health} by the same
+ * {@code INSERT … SELECT} on the same tick, and the request path reads it from a table this module
+ * owns. A value-returning method here — a "just fetch the last result for these forty case ids"
+ * convenience — is the edit that would end the property, and it is the tempting one, because on the
+ * detail endpoint it is a single row. Do not add it: the boundary this file exists to hold is
+ * <em>synchronous request-path coupling to {@code execution}</em>, not the mere presence of a
+ * non-boolean value in a statement.
  *
  * <p>Two statements rather than one, though they scan the same table for the same cases. They are
  * separable because they own <strong>disjoint columns</strong> (see either method's {@code ON
@@ -69,22 +85,67 @@ class ExecutionFacts {
     }
 
     /**
-     * Re-derive {@link HealthSignal#NEVER_EXECUTED} and {@link HealthSignal#LONG_UNEXECUTED} for
-     * every live case in the currently-open company, in one statement.
+     * Re-derive {@link HealthSignal#NEVER_EXECUTED}, {@link HealthSignal#LONG_UNEXECUTED} and
+     * <strong>the case's last result</strong> for every live case in the currently-open company, in
+     * one statement.
      *
-     * <h2>The {@code ON CONFLICT} clause names three columns, and that is the important part</h2>
+     * <h2>Three columns became six, and they are all one fact (§166)</h2>
      *
-     * <p>It updates {@code never_executed}, {@code long_unexecuted} and {@code computed_at} — and
-     * <strong>deliberately not the other seven signals</strong>. This job computes two things; the
-     * remaining seven are derived from documentation links, approvals and ingestion, none of which
-     * have a writer. Setting them here, even to their existing value, would make this statement the
-     * author of claims it has no evidence for, and the day the approval computation lands the two
-     * jobs would race to blank each other's columns. A signal's owner writes its own column and no
-     * others; the row is shared, the columns are not.
+     * <p>The fact is <em>the newest recorded execution of this case</em>. The two booleans were
+     * always derived from it; {@code V45} added the three columns that carry the row itself, so
+     * that {@code TestCaseSummary.lastResult} can be served without {@code repository} reaching
+     * into {@code execution} on a request path.
+     *
+     * <p><strong>They are computed together because computing them apart is the defect.</strong>
+     * {@code CaseGrid} renders the health chips and the Last result cell on one row, inches apart.
+     * A second job — or a second statement, or a live join at read time — deriving "has this case
+     * ever run" a second way puts two answers to one question on one screen, each plausible, with
+     * nothing on the page saying which is right. One lateral, one row, five columns: the agreement
+     * is structural rather than maintained. {@code CaseHealthRecomputeTest} asserts the invariant
+     * ({@code never_executed} exactly when {@code last_executed_at} is null) rather than leaving it
+     * to this paragraph.
+     *
+     * <h2>The lateral takes the ROW now, not {@code max()} — and that needed one more predicate</h2>
+     *
+     * <p>{@code max(executed_at)} cannot carry the status and the release beside it, so the
+     * subquery orders and limits instead. That swap is not neutral: <strong>Postgres sorts NULLs
+     * FIRST under {@code ORDER BY … DESC}</strong>, so a row with a status and no
+     * {@code executed_at} would have won, and {@code max()} — which skips nulls — would not have
+     * chosen it. Hence the explicit {@code executed_at IS NOT NULL}, which restores the old
+     * statement's semantics exactly rather than approximately.
+     *
+     * <p>That state is not reachable today ({@code TestExecution.record()} sets both together, and
+     * the note below explains why the {@code status_id} predicate is kept anyway), which is
+     * precisely why the predicate is written rather than reasoned about: the mutation that would
+     * expose its absence is one nothing in the product can currently produce, so no test would ever
+     * have caught it.
+     *
+     * <p>The tiebreak is {@code id DESC}. Two executions of one case recorded in the same
+     * microsecond are possible across two runs, and without a tiebreak the winner is whatever the
+     * plan happens to return — so the release version shown on a case could change between two
+     * recomputes with nothing having happened. The id is arbitrary and it is <em>stable</em>, which
+     * is the property that matters; a flickering value is a bug report nobody can reproduce.
+     *
+     * <h2>The {@code ON CONFLICT} clause names six columns, and that is the important part</h2>
+     *
+     * <p>It updates {@code never_executed}, {@code long_unexecuted}, the three last-result columns
+     * and {@code computed_at} — and <strong>deliberately not the other seven signals</strong>. This
+     * job computes one fact; the remaining signals are derived from documentation links, approvals
+     * and ingestion, and the ones that have writers have them elsewhere. Setting them here, even to
+     * their existing value, would make this statement the author of claims it has no evidence for,
+     * and would blank a sibling job's live work on every tick. A signal's owner writes its own
+     * column and no others; the row is shared, the columns are not.
      *
      * <p>The seven do get written on <em>insert</em>, because a row has to have values — but there
      * they are the column defaults (false), which is the same thing "no computation has asserted
      * this" already meant everywhere else in the read path.
+     *
+     * <p>The three last-result columns are the one place where writing a NULL is the whole point
+     * rather than a default: a case whose executions were removed must stop reporting a result on
+     * the same tick it starts reporting {@code NEVER_EXECUTED}, and {@code EXCLUDED} carries the
+     * null out of the {@code LEFT JOIN LATERAL} for exactly that. An {@code ON CONFLICT} that
+     * updated these only when non-null is the plausible-looking edit that would leave a deleted
+     * run's result on the screen forever.
      *
      * <h2>Recorded means {@code status_id IS NOT NULL} — and that is guarded twice on purpose</h2>
      *
@@ -107,6 +168,13 @@ class ExecutionFacts {
      * is the thing that keeps being true when that assumption stops holding, and its cost is one
      * line in an already-indexed scan.
      *
+     * <p>§166 gave it a <em>third</em> reader that also makes it redundant: the inner
+     * {@code JOIN case_status}, which the last result's {@code kind} needs, drops any row with a
+     * null {@code status_id} on its own. Three spellings of one predicate is more than this
+     * statement needs and the line still stays, for the reason above — the join is there to fetch a
+     * value, and a predicate that survives only as a side effect of somebody else's fetch is a
+     * predicate one refactor away from gone.
+     *
      * @param cutoff  the moment a newest-result older than which raises {@code LONG_UNEXECUTED}.
      *                Passed in rather than computed here so the caller owns the clock and the test
      *                can put the boundary wherever it needs it.
@@ -120,23 +188,37 @@ class ExecutionFacts {
         return entities.createNativeQuery("""
                 INSERT INTO case_health (
                         case_id, company_id, project_id,
-                        never_executed, long_unexecuted, computed_at)
+                        never_executed, long_unexecuted,
+                        last_status_kind, last_executed_at, last_release_version,
+                        computed_at)
                 SELECT c.id, c.company_id, c.project_id,
                        last_run.at IS NULL,
                        last_run.at IS NOT NULL AND last_run.at < :cutoff,
+                       last_run.kind,
+                       last_run.at,
+                       last_run.release_version,
                        :now
                   FROM test_case c
                   LEFT JOIN LATERAL (
-                           SELECT max(e.executed_at) AS at
+                           SELECT e.executed_at AS at,
+                                  s.kind        AS kind,
+                                  e.release_version
                              FROM test_execution e
+                             JOIN case_status s ON s.id = e.status_id
                             WHERE e.case_id = c.id
                               AND e.status_id IS NOT NULL
+                              AND e.executed_at IS NOT NULL
+                            ORDER BY e.executed_at DESC, e.id DESC
+                            LIMIT 1
                        ) last_run ON true
                  WHERE c.deleted_at IS NULL
                     ON CONFLICT (case_id) DO UPDATE
-                   SET never_executed  = EXCLUDED.never_executed,
-                       long_unexecuted = EXCLUDED.long_unexecuted,
-                       computed_at     = EXCLUDED.computed_at
+                   SET never_executed       = EXCLUDED.never_executed,
+                       long_unexecuted      = EXCLUDED.long_unexecuted,
+                       last_status_kind     = EXCLUDED.last_status_kind,
+                       last_executed_at     = EXCLUDED.last_executed_at,
+                       last_release_version = EXCLUDED.last_release_version,
+                       computed_at          = EXCLUDED.computed_at
                 """)
                 .setParameter("cutoff", cutoff)
                 .setParameter("now", now)

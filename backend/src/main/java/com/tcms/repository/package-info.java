@@ -39,9 +39,24 @@
  *
  * <p>Everything else crosses by event. In particular {@code execution} must not be
  * imported when run results start rolling up against suites — {@code suite_run_summary}
- * is a read model in {@code reporting}, fed by events, per §3 lesson 4. The same rule is
+ * is a read model in {@code reporting}, fed by events, per §3 lesson 4. <del>The same rule is
  * what keeps {@code TestCaseSummary.lastResult} off the wire today rather than reaching
- * for {@code test_execution} directly.
+ * for {@code test_execution} directly.</del>
+ *
+ * <p><strong>§166 put {@code lastResult} on the wire and the rule is why it looks the way
+ * it does.</strong> The sentence above was the one live argument for that field's absence
+ * while three others in this module blamed {@code execution} for not existing (§165), and
+ * it is kept struck rather than deleted because it is what the repair was designed
+ * against: {@code ExecutionFacts} derives the value on the
+ * {@code execution.results_changed} event and on a schedule, writes it into
+ * {@code case_health} — a table this module owns — and the request path reads that.
+ * Nothing on a request path names {@code test_execution}, which is the property the rule
+ * was ever about.
+ *
+ * <p>{@link com.tcms.repository.ExecutionFacts} remains <strong>the only</strong> file
+ * here that may name an {@code execution} table, and it remains write-side only. A
+ * value-returning helper on it would satisfy every ArchUnit rule in this repository and
+ * give away the thing they are protecting; that file's header says so at the method.
  */
 @org.springframework.modulith.ApplicationModule(
         allowedDependencies = {"api", "tenancy", "project", "identity", "storage"})

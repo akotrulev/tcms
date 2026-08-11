@@ -89,7 +89,11 @@ public class CaseSummaries {
         liveSuites.forEach(suite -> suiteNames.put(suite.getId(), suite.getName()));
 
         Map<UUID, List<String>> tagsByCase = tagsByCase(caseIds);
-        Map<UUID, List<HealthSignal>> healthByCase = healthByCase(caseIds);
+        // ONE lookup, two outputs. The health signals and the last result are different columns of
+        // the same case_health row (§166), so reading them separately would be a second bulk query
+        // for rows already in hand — and, worse, two reads that could observe two different ticks
+        // of the recompute and disagree about whether the case has ever run.
+        Map<UUID, CaseHealth> healthByCase = healthByCase(caseIds);
         // Owners and authors resolve through ONE call, not two. They are the same kind of lookup
         // over the same two tables, they overlap heavily in practice (most cases are still owned by
         // whoever wrote them), and `CaseOwners.resolve` is two queries regardless of how many ids
@@ -140,7 +144,14 @@ public class CaseSummaries {
                         classified.single(row.getId(), DimensionKeys.TEST_LEVEL),
                         classified.all(row.getId(), DimensionKeys.FEATURE),
                         tagsByCase.getOrDefault(row.getId(), List.of()),
-                        healthByCase.getOrDefault(row.getId(), List.of()),
+                        signalsOf(healthByCase.get(row.getId())),
+                        // Null for a case that has never been executed AND for one the recompute
+                        // has not reached yet — a row absent entirely. The two are the same answer
+                        // here on purpose: the SPA has one rendering for "Never run" and inventing a
+                        // second for "nobody has looked" would put a state on a grid cell that the
+                        // dashboard's healthComputedAt already reports properly, once, for the whole
+                        // project.
+                        lastResultOf(healthByCase.get(row.getId())),
                         row.getUpdatedAt()))
                 .toList();
     }
@@ -173,12 +184,39 @@ public class CaseSummaries {
         return grouped;
     }
 
-    private Map<UUID, List<HealthSignal>> healthByCase(List<UUID> caseIds) {
-        Map<UUID, List<HealthSignal>> grouped = new HashMap<>();
+    /**
+     * The batch's health rows by case — the <em>rows</em>, not one of their projections.
+     *
+     * <p>It used to map straight to {@code List<HealthSignal>}, which was right while the signals
+     * were the only thing on the row that reached a response. §166 put the last result there too,
+     * and mapping to a second projection in a second pass would have been a second traversal of the
+     * same rows for no benefit. Cases with no row are absent; see the two accessors below for what
+     * that means on each side.
+     */
+    private Map<UUID, CaseHealth> healthByCase(List<UUID> caseIds) {
+        Map<UUID, CaseHealth> byCase = new HashMap<>();
         for (CaseHealth row : health.findForCases(caseIds)) {
-            grouped.put(row.getCaseId(), row.signals());
+            byCase.put(row.getCaseId(), row);
         }
-        return grouped;
+        return byCase;
+    }
+
+    /**
+     * No row means no signals — the contract marks {@code healthSignals} required, so this is a
+     * list and never a null.
+     *
+     * <p>An absent row is "nothing has been derived for this case", which renders identically to
+     * "nothing is wrong with this case" and is the distinction {@code CaseHealth}'s header is
+     * about. It is answered per project by the dashboard's {@code healthComputedAt}, deliberately
+     * not per row here.
+     */
+    private static List<HealthSignal> signalsOf(CaseHealth row) {
+        return row == null ? List.of() : row.signals();
+    }
+
+    /** No row, or a row from before the case was ever executed, means no last result. */
+    private static LastResultView lastResultOf(CaseHealth row) {
+        return row == null ? null : row.lastResult();
     }
 
     /**

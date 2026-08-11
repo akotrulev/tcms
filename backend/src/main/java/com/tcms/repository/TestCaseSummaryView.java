@@ -46,26 +46,40 @@ import java.util.UUID;
  * @param healthSignals derived, never authored, and <strong>empty for every case today</strong>
  *               because nothing computes them yet — see {@link HealthSignal}. Never null: the
  *               contract marks it required, so the SPA cannot null-check it.
+ * @param lastResult the case's newest recorded execution, or <strong>null when it has never been
+ *               executed</strong>. Nullable rather than a fabricated {@code UNTESTED} result: the
+ *               latter would invent an execution that never happened, and the SPA already has a
+ *               different rendering for the absence ("Never run"). See {@link LastResultView}.
  *
- * <p><strong>{@code lastResult} is deliberately not a field here — and the reason below is §165's,
- * because the one this javadoc gave had expired.</strong> It said the {@code execution} module
- * "does not exist — nothing can record a result, so no case has one", and it concluded "it appears
- * when {@code execution} does". That module is 119 files; results have been recorded since §117 and
- * ingested from CI since §119. <strong>The SPA has therefore been rendering "Never run" for every
- * case in the product, including ones with executions</strong> — {@code CaseGrid}'s Last result
- * column, and the same value on {@link TestCaseDetailView}'s page.
+ *               <p>Resolved from {@code case_health} — the row {@code healthSignals} is already
+ *               read from, so it costs <strong>no additional query</strong> on a page of two
+ *               hundred. That is a consequence of where the derivation was put and is worth
+ *               stating, because the obvious alternative (a {@code case_last_result} table) would
+ *               have made it a fifth bulk lookup for the same fact.
  *
- * <p>The live obstacle is not existence, it is the module boundary: {@code repository} may not
- * import {@code execution} (see this package's {@code package-info}, which states it correctly and
- * always did — "the same rule is what keeps {@code TestCaseSummary.lastResult} off the wire today
- * rather than reaching for {@code test_execution} directly"). Closing it is a read model fed by
- * events, §3 lesson 4's shape, <strong>not</strong> a wiring fix and not a wait.
+ * <p><del>{@code lastResult} is deliberately not a field here</del> → <strong>it is one, since
+ * §166, and both of the reasons this javadoc has given for its absence are now history worth
+ * keeping.</strong> The first said the {@code execution} module "does not exist — nothing can
+ * record a result, so no case has one", and concluded "it appears when {@code execution} does".
+ * That module is 119 files; results have been recorded since §117 and ingested from CI since §119,
+ * so <strong>the SPA rendered "Never run" for every case in the product</strong>, executed ones
+ * included — {@code CaseGrid}'s Last result column, and the same value on
+ * {@link TestCaseDetailView}'s page. §165 measured that and replaced the argument.
  *
- * <p>What holds unchanged: the contract does not mark it required, so omitting the key is legal;
- * serializing an explicit {@code null} would say the same thing more expensively; serializing a
- * fabricated {@code UNTESTED} result would invent an execution that never happened. Pinned as
- * CONTRACT-ONLY in {@code ContractConventionTest.MEMBER_DIVERGENCE_BY_DECISION}, which fails the
- * build if the contract drops the property or this record grows the component.
+ * <p>The second, §165's, was correct and is what this slice acted on: the obstacle is not
+ * existence, it is the module boundary — {@code repository} may not import {@code execution} (see
+ * this package's {@code package-info}, which stated it correctly the whole time), so the value has
+ * to arrive as a read model fed by events, §3 lesson 4's shape, <strong>not</strong> a wiring fix
+ * and not a wait. It does: {@code ExecutionFacts} derives it on the
+ * {@code execution.results_changed} event and on the hourly schedule, and this field reads
+ * {@code case_health}.
+ *
+ * <p>What holds unchanged from both: the contract does not mark it required, so omitting the key
+ * for a case that has never run is legal, and serializing an explicit {@code null} would say the
+ * same thing more expensively. The pair of entries in
+ * {@code ContractConventionTest.MEMBER_DIVERGENCE_BY_DECISION} are <em>deleted</em> rather than
+ * edited — that map is pinned in both directions, so a closed divergence whose entry stayed would
+ * fail the build, which is the property §165 built it for.
  */
 public record TestCaseSummaryView(
         UUID id,
@@ -85,5 +99,10 @@ public record TestCaseSummaryView(
         List<String> features,
         List<String> tags,
         List<HealthSignal> healthSignals,
+        // Positioned where the contract positions it — after healthSignals, before updatedAt.
+        // Jackson serializes a record in declaration order, so a component out of place produces a
+        // response whose key order does not match the schema it claims to implement. Nothing breaks;
+        // it just makes every hand-comparison of the two documents harder for no reason.
+        LastResultView lastResult,
         Instant updatedAt) {
 }

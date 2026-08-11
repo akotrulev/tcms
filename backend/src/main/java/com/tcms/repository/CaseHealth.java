@@ -1,8 +1,11 @@
 package com.tcms.repository;
 
+import com.tcms.project.StatusKind;
 import com.tcms.tenancy.CompanyFilter;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
@@ -22,6 +25,14 @@ import org.hibernate.annotations.Filter;
  * rather than held as a set of signal rows because every use is a predicate over a specific signal
  * — "which cases in this project have a stale approval" is a partial index away in this shape and a
  * join plus a filter in the other, and {@code V1} already ships four such indexes.
+ *
+ * <p><strong>And since {@code V45} it is not only booleans: {@link #lastStatusKind},
+ * {@link #lastExecutedAt} and {@link #lastReleaseVersion} carry the case's newest recorded
+ * execution.</strong> That makes the class name narrower than its contents, which is deliberate and
+ * argued at V45's header — the short form is that {@link #neverExecuted}, {@link #longUnexecuted}
+ * and those three are <em>one fact</em> read at three altitudes, they are rendered inches apart on
+ * one grid row, and one statement deriving all five is the only arrangement in which they cannot
+ * contradict each other. The honest alternative was renaming the table, not splitting it.
  *
  * <h2><del>Nothing writes this yet, and the endpoint is correct anyway</del> → <del>FIVE</del> SIX OF
  * THE TEN SIGNALS ARE WRITTEN NOW, AND THAT IS WHAT MAKES THE OTHER <del>FIVE</del> FOUR
@@ -227,12 +238,64 @@ public class CaseHealth {
     @Column(name = "computed_at", nullable = false)
     private Instant computedAt;
 
+    /**
+     * {@code case_health.last_status_kind} — the first of {@code V45}'s three, and the first
+     * columns on this row that are <strong>not signals</strong> beyond {@link #computedAt} and
+     * {@link #incomplete}.
+     *
+     * <p>They are here rather than in a {@code case_last_result} table because
+     * {@link #neverExecuted}, {@link #longUnexecuted} and these are <em>one fact</em> —
+     * "the newest recorded execution of this case" — read at three altitudes.
+     * {@code ExecutionFacts.recomputeExecutionSignals} computes it once and derives all five
+     * columns from it in a single statement, so the health chips and the Last result cell of one
+     * grid row cannot disagree about whether the case has ever run. Two tables would have made that
+     * agreement a property of two jobs staying in step; V45's header has the full argument and what
+     * it costs.
+     *
+     * <p>{@code EnumType.STRING}, matching {@code case_status.kind}, which is TEXT with a CHECK.
+     * Nullable — a case that has never been executed has no last result, and that is the same
+     * condition {@link #neverExecuted} asserts.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "last_status_kind")
+    private StatusKind lastStatusKind;
+
+    /** {@code case_health.last_executed_at} — see {@link #lastStatusKind}. */
+    @Column(name = "last_executed_at")
+    private Instant lastExecutedAt;
+
+    /** {@code case_health.last_release_version} — see {@link #lastStatusKind}. Null outside a release. */
+    @Column(name = "last_release_version")
+    private String lastReleaseVersion;
+
     /** JPA only. */
     protected CaseHealth() {
     }
 
     public UUID getCaseId() {
         return caseId;
+    }
+
+    /**
+     * The case's newest recorded execution, or <strong>null when it has never been executed</strong>
+     * — which is also the state a row written before {@code V45} is in, until the recompute next
+     * runs.
+     *
+     * <p>Keyed on {@link #lastExecutedAt} rather than on the kind, and the choice is not arbitrary:
+     * the moment is the fact the whole derivation is about, and the two columns beside it are
+     * things that were true of the row carrying that moment. A case executed into a project whose
+     * statuses were later re-kinded could in principle be found with a moment and no kind; keying
+     * on the moment renders that as an incomplete-but-real result rather than as "never run", and
+     * keying the other way would silently reinstate the exact falsehood §165 measured.
+     *
+     * <p>Never a partially-filled {@link LastResultView}: the contract makes the object nullable
+     * and its members required, and the three columns are written by one statement from one
+     * execution row, so there is no code path that fills some of them.
+     */
+    LastResultView lastResult() {
+        return lastExecutedAt == null
+                ? null
+                : new LastResultView(lastStatusKind, lastExecutedAt, lastReleaseVersion);
     }
 
     /**

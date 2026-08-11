@@ -6576,7 +6576,7 @@ components:
 
     TestCaseSummary:
       type: object
-      required: [id, key, keySeq, title, suiteId, suiteName, priority, lifecycleStatus, automationStatus, stepFormat, owner, createdBy, features, tags, healthSignals, updatedAt]
+      required: [id, key, keySeq, title, suiteId, suiteName, priority, lifecycleStatus, automationStatus, stepFormat, owner, createdBy, features, tags, healthSignals, lastResult, updatedAt]
       properties:
         id: { type: string, format: uuid }
         key: { type: string, example: TC-1 }
@@ -6633,6 +6633,26 @@ components:
           # every member is, `releaseVersion` as an explicit null for a run outside a release.
           # Nullability belongs on the object, not on its members — a half-populated last result
           # is not a state the server can produce.
+          #
+          # SERVED SINCE §166, and it was declared here from M0 with nothing behind it. What that
+          # cost while it was unserved is worth keeping, because it is not "an empty column": the
+          # SPA renders a missing lastResult as "Never run", so EVERY CASE IN THE PRODUCT read
+          # "Never run" — including ones with recorded executions, and including one a tester had
+          # just recorded a result on. A confident falsehood, since `execution` shipped in §117.
+          #
+          # It is REQUIRED as of §166, which is a change of declaration and not of shape. The
+          # server has one rendering path for it and that path always emits the key (Jackson's
+          # default inclusion; there is no @JsonInclude here), so "always present, sometimes null"
+          # is what the response actually is — the same sentence the TestCase branch below writes
+          # out for its own nullable scalars. Leaving it optional would have meant a consumer
+          # cannot tell "this case has never run" from "this endpoint does not serve the field",
+          # which is precisely the distinction that was live and unanswerable until this slice.
+          #
+          # Sourced from case_health, NOT from test_execution: `repository` may not import
+          # `execution` (plan §3), so ExecutionFacts derives it into that read model on the
+          # execution.results_changed event and on the hourly schedule, and the request path reads
+          # a table its own module owns. never_executed, long_unexecuted and this are one fact
+          # computed by one statement — see V45's header for why they share a row.
           required: [statusKind, executedAt, releaseVersion]
           properties:
             statusKind: { $ref: '#/components/schemas/StatusKind' }
@@ -6661,6 +6681,13 @@ components:
           # `documentation` (see its package-info), so this has to arrive as a read model fed by
           # events (§3 lesson 4) rather than as a join. The server still omits the key rather than
           # serving [] and claiming a case has no linked documents (§27).
+          #
+          # §166 CLOSED THE OTHER HALF OF THIS PAIR THE WAY THIS PARAGRAPH PRESCRIBES —
+          # `lastResult` is served now, derived into case_health by ExecutionFacts on the
+          # execution.results_changed event. So the shape is demonstrated rather than proposed, and
+          # this field is the one that remains. Its read model does not get to be a column on
+          # case_health, because a list of links is not one; it wants its own table, which is the
+          # difference between the two and the whole of the extra work.
           #
           # WHAT IT COSTS NOW THAT LINKS ARE CREATABLE: a link made from a doc block to a case is
           # never shown on the case. `CaseDetailPage` reads `data.relatedDocuments ?? []` and

@@ -7850,7 +7850,7 @@ export interface components {
             features: string[];
             tags: string[];
             healthSignals: components["schemas"]["HealthSignal"][];
-            lastResult?: {
+            lastResult: {
                 statusKind: components["schemas"]["StatusKind"];
                 /** Format: date-time */
                 executedAt: string;

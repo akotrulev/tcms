@@ -23,7 +23,7 @@ import java.util.UUID;
  * same object the grid renders — and copies it component by component, so a grid row and a detail
  * page cannot disagree about a case. The copying is mechanical; the resolution is shared.
  *
- * <h2>Two fields the contract has and this response does not</h2>
+ * <h2><del>Two fields</del> One field the contract has and this response does not</h2>
  *
  * <p><strong>Both reasons below were rewritten by §165, and both used to blame a module for not
  * existing.</strong> {@code documentation} is 57 files and {@code execution} is 119. What actually
@@ -31,6 +31,12 @@ import java.util.UUID;
  * this package's {@code package-info} has stated correctly the whole time — so each closes as a
  * read model fed by events (§3 lesson 4), not by a join and not by waiting. An argument that
  * misnames the obstacle deters the repair, which is §160's finding at a different field.
+ *
+ * <p><strong>§166 acted on that for the second of the two, which is the evidence the rewrite was
+ * worth doing.</strong> {@code lastResult} is a field on this record now, carried through from
+ * {@link TestCaseSummaryView} by {@link #of} like every other summary component, and derived by
+ * {@code ExecutionFacts} into {@code case_health} exactly as the paragraph above prescribed. One
+ * remains:
  *
  * <ol>
  *   <li><strong>{@code relatedDocuments}.</strong> Sourced from {@code doc_link} against
@@ -43,16 +49,21 @@ import java.util.UUID;
  *       <strong>never shown on the case</strong>: {@code CaseDetailPage} reads
  *       {@code data.relatedDocuments ?? []} and renders an empty panel. The contract does not mark
  *       the field required, and serializing {@code []} would still be worse — it would claim the
- *       question had been asked.</li>
- *   <li><strong>{@code lastResult}.</strong> Sourced from {@code test_execution}. Same call as
- *       {@link TestCaseSummaryView} makes, made the same way for the same reason, and wrong in the
- *       same way today — the SPA reads a missing {@code lastResult} as "Never run", and every case
- *       in the product reads that whether or not it has been executed.</li>
+ *       question had been asked.
+ *
+ *       <p>It closes the same way {@code lastResult} just did, and the shape is now demonstrated
+ *       rather than proposed: a derivation writing into a table this module owns, fed by an event
+ *       from the module that sees the cause. What it does <em>not</em> get to reuse is
+ *       {@code case_health}'s row — a list of links is not a column, so this one really does want
+ *       its own table, and the argument V45 makes against a second table does not apply to a value
+ *       nothing here derives twice.</li>
  * </ol>
  *
- * <p>Both are pinned as CONTRACT-ONLY in
- * {@code ContractConventionTest.MEMBER_DIVERGENCE_BY_DECISION}, in both directions, so neither
- * argument can outlive its gap the way these two did.
+ * <p>It stays pinned as CONTRACT-ONLY in
+ * {@code ContractConventionTest.MEMBER_DIVERGENCE_BY_DECISION}, in both directions, so the argument
+ * cannot outlive its gap the way these two did. The two {@code lastResult} entries are gone from
+ * that map, which is what a both-ways pin means: closing a divergence and leaving its entry fails
+ * the build.
  *
  * @param gherkinSource null for a {@code STRUCTURED} case; {@link #steps} is empty for a
  *              {@code GHERKIN} one. The two are alternatives (plan §6a) and the SPA branches on
@@ -141,6 +152,12 @@ public record TestCaseDetailView(
         List<UUID> classificationValueIds,
         List<String> tags,
         List<HealthSignal> healthSignals,
+        // Carried from the summary, in the contract's position. It lands in the version snapshot
+        // (see `flake` below for the full account) on the same terms `healthSignals` has since M1:
+        // a v7 row records the case's last result as it stood when somebody saved. Derived, not
+        // authored, and the content hash is computed over CaseEdit — so a recompute that changes
+        // this value still cannot cause a save that changed nothing to write a version.
+        LastResultView lastResult,
         Instant updatedAt,
         String description,
         String objective,
@@ -188,6 +205,7 @@ public record TestCaseDetailView(
                 classificationValueIds,
                 summary.tags(),
                 summary.healthSignals(),
+                summary.lastResult(),
                 summary.updatedAt(),
                 row.getDescription(),
                 row.getObjective(),

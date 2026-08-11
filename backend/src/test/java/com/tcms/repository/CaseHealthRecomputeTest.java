@@ -12,8 +12,10 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -130,6 +132,24 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
     private static final UUID REMOVED = UUID.fromString("ce004000-0000-4000-8000-000000000006");
     /** Umbra's only case. Never executed, and must stay invisible to Acme's recompute. */
     private static final UUID FOREIGN = UUID.fromString("ce004000-0000-4000-8000-000000000007");
+
+    // ---- the last result (§166) -------------------------------------------------------------
+    //
+    // These share the two booleans' fixtures wherever the discrimination is the same one — NEVER,
+    // PLANNED and REVISITED already express "no row", "a row with no result" and "two results, the
+    // newest wins", and asserting the stored VALUE over them is what proves the five columns come
+    // out of one statement rather than merely agreeing today. Only the two facts the booleans never
+    // carried need fixtures of their own.
+
+    /**
+     * Executed once, with a status whose kind is pinned and a release version set.
+     *
+     * <p>The two things {@code never_executed} and {@code long_unexecuted} throw away. Without a
+     * case whose kind is <em>known</em>, every assertion about {@code last_status_kind} would have
+     * to accept whatever {@code LIMIT 1} handed the fixture, which is an assertion about nothing.
+     */
+    private static final UUID EXECUTED_IN_A_RELEASE =
+            UUID.fromString("ce004000-0000-4000-8000-00000000001d");
 
     // ---- the automation-drift pair (M3 slice 5, plan §6c) ----------------------------------
     //
@@ -315,6 +335,8 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             testCase(acme, ANCIENT, ACME, ACME_PROJECT, ACME_SUITE, "TC-4", 4, false, "MANUAL");
             testCase(acme, REVISITED, ACME, ACME_PROJECT, ACME_SUITE, "TC-5", 5, false, "MANUAL");
             testCase(acme, REMOVED, ACME, ACME_PROJECT, ACME_SUITE, "TC-6", 6, true, "MANUAL");
+            testCase(acme, EXECUTED_IN_A_RELEASE, ACME, ACME_PROJECT, ACME_SUITE, "TC-28", 28,
+                    false, "MANUAL");
 
             testCase(acme, CI_STOPPED, ACME, ACME_PROJECT, ACME_SUITE, "TC-7", 7, false,
                     "AUTOMATED");
@@ -409,8 +431,19 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             execution(acme, ACME, ACME_PROJECT, ACME_RUN, ANCIENT, now.minus(WELL_OUTSIDE));
             // Two results across two runs. Inserted oldest-last, so "the last row wins" and "any
             // row wins" both produce the stale answer that theNewestResultWins() rejects.
-            execution(acme, ACME, ACME_PROJECT, ACME_RUN, REVISITED, now.minus(WELL_INSIDE));
-            execution(acme, ACME, ACME_PROJECT, ACME_OLD_RUN, REVISITED, now.minus(WELL_OUTSIDE));
+            //
+            // The KINDS are pinned in opposite directions for §166: the stale row is the passing
+            // one, so an implementation that takes the wrong row reports a green case rather than
+            // merely an old date. A test whose two candidate rows carry the same value cannot tell
+            // "the newest wins" from "there was only ever one answer".
+            execution(acme, ACME, ACME_PROJECT, ACME_RUN, REVISITED, now.minus(WELL_INSIDE),
+                    "FAILED", null);
+            execution(acme, ACME, ACME_PROJECT, ACME_OLD_RUN, REVISITED, now.minus(WELL_OUTSIDE),
+                    "PASSED", "1.0.0");
+
+            // The two facts the booleans never carried: a pinned kind and a release version.
+            execution(acme, ACME, ACME_PROJECT, ACME_RUN, EXECUTED_IN_A_RELEASE,
+                    now.minus(WELL_INSIDE), "BLOCKED", "4.2.0");
 
             // ---- the drift pair --------------------------------------------------------------
             execution(acme, ACME, ACME_PROJECT, ACME_OLD_CI_RUN, CI_STOPPED, now.minus(WELL_OUTSIDE));
@@ -498,6 +531,159 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
                     .as("a deleted case is absent from every dashboard count; a health row for it "
                             + "would be a signal with nothing to navigate to")
                     .isFalse();
+        }
+    }
+
+    // =====================================================================
+
+    /**
+     * The last result — §166, the same statement's third output and the first one that is a
+     * <em>value</em> rather than a signal.
+     *
+     * <h2>What these are guarding that the two booleans above are not</h2>
+     *
+     * <p>{@code TestCaseSummary.lastResult} was declared in {@code openapi.yaml} from M0 and served
+     * by nothing, and the SPA renders its absence as "Never run" — so every case in the product
+     * read "Never run", executed ones included, from the day {@code execution} shipped (§117) until
+     * §166. The failures worth catching here are the ones that would restore some version of that
+     * silence, and every one of them <strong>looks like data</strong>:
+     *
+     * <ol>
+     *   <li><strong>A planned run counted as a result.</strong> The value side of the predicate the
+     *       booleans already guard — §42 writes one empty execution per case when a run is created,
+     *       so "has a row" would put a status chip on a case nobody has run.</li>
+     *   <li><strong>The wrong execution winning.</strong> {@code REVISITED}'s two rows carry
+     *       <em>opposite</em> kinds on purpose: taking the stale row reports a green case, not
+     *       merely an old date, and a fixture whose candidates agreed could not tell the two apart.
+     *       This is the assertion {@code max(executed_at)} → {@code ORDER BY … LIMIT 1} had to keep
+     *       true through a rewrite.</li>
+     *   <li><strong>The five columns drifting apart.</strong> {@code never_executed},
+     *       {@code long_unexecuted} and these three are one fact, which is the entire argument for
+     *       them sharing a row (V45). {@link #theBooleanAndTheValueCannotDisagree} asserts it over
+     *       every case in the company rather than at the two or three where it is interesting,
+     *       because the failure mode is a case nobody thought about.</li>
+     *   <li><strong>A result outliving its execution.</strong> {@code EXCLUDED} carries the null
+     *       out of the {@code LEFT JOIN LATERAL} on update, and the plausible-looking edit that
+     *       breaks it (updating these columns only when non-null) leaves a deleted run's verdict on
+     *       the screen forever. Asserted by removing rows and recomputing, which is the only way to
+     *       reach that branch.</li>
+     * </ol>
+     *
+     * <p><strong>What is deliberately not asserted:</strong> the {@code id DESC} tiebreak between
+     * two executions recorded in the same microsecond. It exists so the value does not flicker
+     * between recomputes, and a test for it cannot fail — without the tiebreak Postgres may return
+     * either row, so an assertion naming one would be flaky rather than red, and an assertion that
+     * two recomputes agree passes on a small fixture whichever way the plan goes. Recorded in the
+     * mutation queue instead, where "no test can catch this" is a legitimate entry.
+     */
+    @Nested
+    @DisplayName("The last result — the value the same statement carries (§166)")
+    class TheLastResult {
+
+        @Test
+        @DisplayName("a case with no execution row at all has no last result")
+        void noExecutionsAtAll() {
+            recomputeFor(ACME);
+            assertThat(lastResultOf(NEVER))
+                    .isEqualTo(new StoredLastResult(null, null, null, true));
+        }
+
+        @Test
+        @DisplayName("a planned-but-unrecorded execution is not a last result")
+        void aPlannedRunIsNotAResult() {
+            // The value side of the booleans' most important discrimination. If "has a row" were
+            // the predicate here, planning a run would put a status chip on every case in it — the
+            // grid would show a verdict for work nobody has done, which is worse than the "Never
+            // run" this slice was fixing because it is not obviously wrong on the screen.
+            recomputeFor(ACME);
+            assertThat(lastResultOf(PLANNED))
+                    .isEqualTo(new StoredLastResult(null, null, null, true));
+        }
+
+        @Test
+        @DisplayName("the kind and the release come off the winning row, not the project's names")
+        void theKindAndReleaseAreCarried() {
+            recomputeFor(ACME);
+            StoredLastResult stored = lastResultOf(EXECUTED_IN_A_RELEASE);
+            assertThat(stored.kind())
+                    .as("case_status.kind, which is fixed — not the project's own name for the "
+                            + "status, which a client may rename to \"Environment down\"")
+                    .isEqualTo("BLOCKED");
+            assertThat(stored.releaseVersion()).isEqualTo("4.2.0");
+            assertThat(stored.executedAt()).isNotNull();
+            assertThat(stored.neverExecuted()).isFalse();
+        }
+
+        @Test
+        @DisplayName("the newest execution wins, and the stale one is the PASSING one")
+        void theNewestExecutionWins() {
+            // REVISITED was executed 120 days ago (PASSED, release 1.0.0) and 10 days ago (FAILED,
+            // no release). An implementation that takes any row but the newest reports a case as
+            // green that is currently red — and reports a release it has not been run in since.
+            recomputeFor(ACME);
+            StoredLastResult stored = lastResultOf(REVISITED);
+            assertThat(stored.kind()).isEqualTo("FAILED");
+            assertThat(stored.releaseVersion())
+                    .as("null while the object is present — a run outside a release. The stale row "
+                            + "HAS a version, so a non-null here names the row that lost")
+                    .isNull();
+            assertThat(stored.neverExecuted()).isFalse();
+        }
+
+        @Test
+        @DisplayName("never_executed and last_executed_at agree for EVERY case in the company")
+        void theBooleanAndTheValueCannotDisagree() {
+            // The invariant V45's header is built on, and the reason those columns share a row:
+            // the health chips and the Last result cell are inches apart on one CaseGrid row, so
+            // two derivations of "has this case ever run" is two answers on one screen with
+            // nothing saying which is right.
+            //
+            // It cannot be a CHECK constraint — every row that existed before V45 violates it the
+            // instant the columns are added, and a migration cannot reach those rows to fix them
+            // (Flyway runs as tcms_owner, which does not bypass FORCE ROW LEVEL SECURITY, so the
+            // backfill would report a confident zero). So it is asserted here, over rows a
+            // recompute has actually written.
+            //
+            // Over every case rather than the interesting ones: a derivation that agrees on the
+            // cases somebody thought about and disagrees on the twenty-eighth is the exact shape
+            // of every finding §152-§165 turned up.
+            recomputeFor(ACME);
+            for (UUID caseId : liveAcmeCases()) {
+                StoredLastResult stored = lastResultOf(caseId);
+                assertThat(stored)
+                        .as("every live case gets a row from the recompute: %s", caseId)
+                        .isNotNull();
+                assertThat(stored.neverExecuted())
+                        .as("never_executed must be exactly \"last_executed_at is null\" for %s "
+                                + "— stored %s", caseId, stored)
+                        .isEqualTo(stored.executedAt() == null);
+                assertThat(stored.kind() == null)
+                        .as("the kind and the moment are written by one statement from one row, "
+                                + "so a half-populated last result is unreachable: %s", caseId)
+                        .isEqualTo(stored.executedAt() == null);
+            }
+        }
+
+        @Test
+        @DisplayName("removing the executions clears the last result on the next tick")
+        void aRemovedExecutionClearsTheResult() throws SQLException {
+            recomputeFor(ACME);
+            assertThat(lastResultOf(RECENT).kind()).isNotNull();
+
+            try (Connection connection = appConnection(ACME);
+                    PreparedStatement statement = connection.prepareStatement(
+                            "DELETE FROM test_execution WHERE case_id = CAST(? AS uuid)")) {
+                statement.setString(1, RECENT.toString());
+                statement.executeUpdate();
+            }
+            recomputeFor(ACME);
+
+            // The ON CONFLICT branch, which the first recompute never reaches. Updating these
+            // columns only when EXCLUDED is non-null is the tidy-looking edit that leaves a deleted
+            // run's verdict on the case forever — and it would leave never_executed correct, so
+            // the two would disagree on one grid row.
+            assertThat(lastResultOf(RECENT))
+                    .isEqualTo(new StoredLastResult(null, null, null, true));
         }
     }
 
@@ -1285,18 +1471,45 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
      */
     private void execution(Connection connection, UUID companyId, UUID projectId, UUID runId,
             UUID caseId, Instant executedAt) throws SQLException {
+        execution(connection, companyId, projectId, runId, caseId, executedAt, null, null);
+    }
+
+    /**
+     * One execution row, with the two things the booleans never looked at.
+     *
+     * @param statusKind which of the project's seeded statuses to record, <em>by kind</em>. Null
+     *              takes whichever one the project happens to have first, which is what every
+     *              fixture written before §166 does and is fine for a test that only asks whether
+     *              a status is set. It is <strong>not</strong> fine for one asserting the stored
+     *              kind: {@code LIMIT 1} with no {@code ORDER BY} is a value nobody chose, so an
+     *              assertion against it would be an assertion about the seeder.
+     *
+     *              <p>Ignored when {@code executedAt} is null — the two move together in
+     *              {@code TestExecution.record()} and a fixture that set a status without a moment
+     *              would be building a state the application cannot produce, which is exactly the
+     *              row {@code ExecutionFacts}' {@code executed_at IS NOT NULL} predicate exists for
+     *              and exactly why that predicate has no test.
+     * @param releaseVersion denormalized onto the execution since {@code V1}, so it is set here
+     *              rather than on the run — same as the product does, and the derivation reads it
+     *              off this row without a {@code test_run} join.
+     */
+    private void execution(Connection connection, UUID companyId, UUID projectId, UUID runId,
+            UUID caseId, Instant executedAt, String statusKind, String releaseVersion)
+            throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
                 INSERT INTO test_execution
                     (id, company_id, project_id, run_id, case_id, case_version_id, status_id,
-                     executed_at, created_at, updated_at)
+                     executed_at, release_version, created_at, updated_at)
                 VALUES (gen_random_uuid(), CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid),
                         CAST(? AS uuid),
                         (SELECT v.id FROM test_case_version v
                           WHERE v.case_id = CAST(? AS uuid) AND v.version_no = 1),
                         CASE WHEN CAST(? AS timestamptz) IS NULL THEN NULL
                              ELSE (SELECT s.id FROM case_status s
-                                    WHERE s.project_id = CAST(? AS uuid) LIMIT 1) END,
-                        CAST(? AS timestamptz), now(), now())
+                                    WHERE s.project_id = CAST(? AS uuid)
+                                      AND (CAST(? AS text) IS NULL OR s.kind = CAST(? AS text))
+                                    LIMIT 1) END,
+                        CAST(? AS timestamptz), ?, now(), now())
                 """)) {
             String at = executedAt == null ? null : executedAt.toString();
             statement.setString(1, companyId.toString());
@@ -1306,8 +1519,104 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             statement.setString(5, caseId.toString());
             statement.setString(6, at);
             statement.setString(7, projectId.toString());
-            statement.setString(8, at);
+            statement.setString(8, statusKind);
+            statement.setString(9, statusKind);
+            statement.setString(10, at);
+            statement.setString(11, releaseVersion);
             statement.executeUpdate();
         }
+        if (executedAt != null && statusKind != null) {
+            // A kind the project has no status for makes the subselect above return null, which
+            // writes an UNRECORDED execution — and every assertion about this case would then be
+            // measuring a fixture bug while looking exactly like a derivation bug. Loud here.
+            assertThat(recordedStatusKind(companyId, caseId, runId))
+                    .as("fixture: project has no case_status of kind %s", statusKind)
+                    .isEqualTo(statusKind);
+        }
+    }
+
+    /**
+     * Every live case in Acme, read from the database rather than listed as constants.
+     *
+     * <p>The point of {@link TheLastResult#theBooleanAndTheValueCannotDisagree} is that it covers
+     * cases nobody thought about, and a hand-written list is exactly the thing that stops covering
+     * them the first time somebody adds a fixture for an unrelated signal.
+     */
+    private List<UUID> liveAcmeCases() {
+        try (Connection connection = appConnection(ACME);
+                PreparedStatement statement = connection.prepareStatement(
+                        "SELECT id FROM test_case WHERE deleted_at IS NULL")) {
+            try (ResultSet rows = statement.executeQuery()) {
+                List<UUID> ids = new ArrayList<>();
+                while (rows.next()) {
+                    ids.add(UUID.fromString(rows.getString("id")));
+                }
+                assertThat(ids).as("fixture: Acme must have live cases to sweep").isNotEmpty();
+                return ids;
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** The kind actually written on one execution, read back through the app role. */
+    private String recordedStatusKind(UUID companyId, UUID caseId, UUID runId) {
+        try (Connection connection = appConnection(companyId);
+                PreparedStatement statement = connection.prepareStatement("""
+                        SELECT s.kind FROM test_execution e
+                          JOIN case_status s ON s.id = e.status_id
+                         WHERE e.case_id = CAST(? AS uuid) AND e.run_id = CAST(? AS uuid)
+                        """)) {
+            statement.setString(1, caseId.toString());
+            statement.setString(2, runId.toString());
+            try (ResultSet rows = statement.executeQuery()) {
+                return rows.next() ? rows.getString(1) : null;
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /**
+     * The three {@code V45} columns of one case's health row, or null when the row is absent.
+     *
+     * <p>Read as raw columns rather than through {@code CaseHealth}, for the same reason
+     * {@link #signalsOf} does: this class asserts what the <em>statement</em> wrote, and going
+     * through the entity would let a mapping bug and a derivation bug cancel each other out.
+     */
+    private StoredLastResult lastResultOf(UUID caseId) {
+        UUID companyId = caseId.equals(FOREIGN) ? UMBRA : ACME;
+        try (Connection connection = appConnection(companyId);
+                PreparedStatement statement = connection.prepareStatement("""
+                        SELECT last_status_kind, last_executed_at, last_release_version,
+                               never_executed
+                          FROM case_health WHERE case_id = CAST(? AS uuid)
+                        """)) {
+            statement.setString(1, caseId.toString());
+            try (ResultSet rows = statement.executeQuery()) {
+                if (!rows.next()) {
+                    return null;
+                }
+                Timestamp at = rows.getTimestamp("last_executed_at");
+                return new StoredLastResult(
+                        rows.getString("last_status_kind"),
+                        at == null ? null : at.toInstant(),
+                        rows.getString("last_release_version"),
+                        rows.getBoolean("never_executed"));
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /**
+     * One health row's last-result columns, with {@code never_executed} carried alongside.
+     *
+     * <p>The boolean is in here rather than fetched separately because every assertion in
+     * {@code TheLastResult} is about the two staying in step, and a shape that made it possible to
+     * assert one without the other would make forgetting easy.
+     */
+    private record StoredLastResult(
+            String kind, Instant executedAt, String releaseVersion, boolean neverExecuted) {
     }
 }
