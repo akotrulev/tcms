@@ -1942,3 +1942,29 @@ each is a screen that looks correct while showing a key the server has never sen
 > schema, over a real `MockMvc` response, and generalising *that* to 79 pairings needs a fixture per
 > pairing rather than a class literal. The narrowing is the same one §164's queue recorded from the
 > other side, and it is the reason `Problem` stays in `PAIRED_ELSEWHERE` rather than being folded in.
+
+## §166 — the result every case said it never had
+
+*Five mutations, **NONE RUN**. §165's four were checks over checks and exercised no product
+behaviour, which is why running them was not the §65 exception; this slice ships a derivation that
+decides what a user reads on every case row, so §65 applies in full — write the row, run nothing.
+Two of the five (`LR-4`, `LR-5`) are the ones worth running first if this queue is ever drained
+partially: each reddens on a state the product reaches routinely and neither has a sibling
+assertion elsewhere.*
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| `§166 LR-1` | In `ExecutionFacts.recomputeExecutionSignals`, delete `AND e.executed_at IS NOT NULL` from the lateral | Should redden **nothing**, and that is the finding rather than a pass. The predicate exists because `ORDER BY … DESC` sorts NULLs **first** in Postgres where `max()` skipped them, so a row with a status and no `executed_at` would win — and `TestExecution.record()` sets both together, so no fixture may legitimately build that row. A mutation that kills no test on a line that is load-bearing is exactly what §53's note about `status_id IS NOT NULL` recorded from the other side. **If it DOES redden, the fixture has drifted into an unreachable state and that is the more interesting finding.** | ⬜ not run |
+| `§166 LR-2` | Change the lateral's `ORDER BY e.executed_at DESC, e.id DESC` to `ORDER BY e.executed_at ASC, e.id DESC` | Should redden `the newest execution wins, and the stale one is the PASSING one` — `REVISITED`'s two rows carry opposite kinds precisely so this reports a **green case that is currently red**, not merely an old date. Should also redden `long_unexecuted`'s own assertion, and the pair reddening together is the property: one statement, one row, five columns. | ⬜ not run |
+| `§166 LR-3` | In the `ON CONFLICT DO UPDATE`, drop the three `last_*` assignments (keep `never_executed`, `long_unexecuted`, `computed_at`) | Should redden `removing the executions clears the last result on the next tick` and **only** that one — every other assertion runs against a first recompute, which takes the INSERT arm. That asymmetry is the reason the removal test exists: the update arm is unreachable from a fresh fixture, and it is the arm a live deployment is in on every tick after the first. | ⬜ not run |
+| `§166 LR-4` | In the same `ON CONFLICT`, guard the three with `COALESCE(EXCLUDED.last_status_kind, case_health.last_status_kind)` etc. — i.e. "only update when non-null", the tidy-looking edit | Should redden `removing the executions clears the last result on the next tick` while leaving `never_executed` correct — so the two **disagree on one grid row**, which is the exact failure the shared-row design is arranged against. Distinct from `LR-3` because this one is what a reader trying to be careful would write. | ⬜ not run |
+| `§166 LR-5` | In `CaseHealth.lastResult()`, key on `lastStatusKind == null` instead of `lastExecutedAt == null` | Should redden **nothing today** — the two columns are written together, so they are null together. It is recorded because the accessor's javadoc claims the choice is not arbitrary: keying on the moment renders a kind-less row as an incomplete-but-real result, and keying on the kind renders it as "never run", which is the falsehood this whole slice removed. A mutation with no killer is a claim with no check, and saying so is the point of the row. | ⬜ not run |
+
+> **Not mutation-tested and NO TEST IS POSSIBLE — the `id DESC` tiebreak.** Two executions of one
+> case recorded in the same microsecond (two runs, `uq_execution_run_case` permitting) have no
+> `executed_at` ordering between them. Without the tiebreak Postgres may return either row, so a
+> test naming one would be **flaky rather than red**, and a test asserting that two recomputes agree
+> passes on a small fixture whichever way the plan goes. The tiebreak buys determinism *across
+> recomputes* — without it a case's shown release version can change with nothing having happened,
+> which is a bug report nobody can reproduce. Recorded here because "no test can catch this" is a
+> legitimate entry and an unwritten one is indistinguishable from an oversight.

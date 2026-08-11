@@ -2,13 +2,58 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-11 (**§165** — the members nobody compared, and the three arguments that blamed a module for not existing; **§164** — the two types that agreed by accident, and the schema in no pairing check; **§163** — the request echo nobody wrote, and the decision §162 left declared; **§162** — one media type for every refusal, the two envelopes nobody compared, and the exemptions that excused nothing; **§161** — the by-decision audit, and the contract-versus-server enum rule; **§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-11 (**§166** — the result every case said it never had, and the seam that stayed write-only; **§165** — the members nobody compared, and the three arguments that blamed a module for not existing; **§164** — the two types that agreed by accident, and the schema in no pairing check; **§163** — the request echo nobody wrote, and the decision §162 left declared; **§162** — one media type for every refusal, the two envelopes nobody compared, and the exemptions that excused nothing; **§161** — the by-decision audit, and the contract-versus-server enum rule; **§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `2bc1e43` (§164; §165 is this session, uncommitted at the time of writing) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `cde35bb` (§165; §166 is this session, uncommitted at the time of writing) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
+
+---
+
+## §166 — `lastResult` IS SERVED, AND `case_health` IS THE PER-CASE READ MODEL
+
+**`TestCaseSummary.lastResult` is on the wire.** It was declared from M0 and served by nothing, so
+`CaseGrid`'s Last result column read **"Never run" for every case in the product** — executed ones
+included. Read this before touching `case_health`, `ExecutionFacts` or either case view.
+
+- **`case_health` is not only health signals.** `V45` added `last_status_kind`, `last_executed_at`
+  and `last_release_version`. The table name is narrower than its contents **on purpose**:
+  `never_executed`, `long_unexecuted` and those three are **one fact** (the newest recorded
+  execution) computed by **one statement**, and they are rendered inches apart on one grid row — two
+  tables would be two answers to "has this case ever run" on one screen. V45's header is the full
+  argument; the honest alternative was renaming the table, not splitting it.
+- **`ExecutionFacts` is still the ONLY file here that may name an `execution` table, and it is still
+  WRITE-SIDE ONLY.** Its opening clause ("neither is ever needed as a value") is struck — the last
+  result is a value — and the property is not. **Do not add a value-returning helper to it.** A
+  "just fetch the last result for these ids" method satisfies every ArchUnit rule in this repo and
+  gives away the thing they protect; on the detail endpoint it is a single row, which is why
+  somebody will propose it.
+- **The lateral takes the ROW now (`ORDER BY … LIMIT 1`), not `max()`** — so
+  `AND e.executed_at IS NOT NULL` is load-bearing: **Postgres sorts NULLs FIRST under `DESC`** where
+  `max()` skipped them. That state is unreachable today (`TestExecution.record()` sets both
+  columns), so **no test can catch its removal** — recorded as `§166 LR-1`.
+- **The `ON CONFLICT` must write the three `last_*` columns unconditionally.** `EXCLUDED` carries
+  the null out of the `LEFT JOIN LATERAL`, which is what clears a result whose executions were
+  removed. A `COALESCE(EXCLUDED.x, case_health.x)` "only update when non-null" guard leaves a
+  deleted run's verdict on the case forever while `never_executed` goes correct — the two then
+  disagree on one grid row (`§166 LR-4`).
+- **A migration cannot backfill a company-owned table.** Flyway runs as `tcms_owner`, which does not
+  bypass `FORCE ROW LEVEL SECURITY`, so `app.current_company` is unset, V4's `nullif` matches
+  nothing and the UPDATE reports a confident zero. The job owns the backfill; that is also why the
+  `never_executed` ⇔ `last_executed_at IS NULL` invariant is a **test**, not a `CHECK`.
+- **The contract change was one word: `required`.** The shape was already declared. Jackson's
+  default inclusion means the key is always emitted, so "always present, sometimes null" is what the
+  response *is* — and optional would have left a consumer unable to tell "never run" from "not
+  served". Both `schema.d.ts` copies: `lastResult?:` → `lastResult:`. No frontend source changed.
+- **The two `lastResult` entries left `MEMBER_DIVERGENCE_BY_DECISION` by DELETION.** That map is
+  pinned both ways, so closing a divergence and keeping its argument fails the build — first time
+  that fired on a divergence somebody actually closed. **`TestCase.relatedDocuments` and
+  `DocBlock.coverage` remain**, and `relatedDocuments` does **not** get a column on `case_health`:
+  a list of links is not one, so it needs its own table. That is the next slice.
+- `CaseSummaries.healthByCase` returns the **rows** now, not `List<HealthSignal>` — two projections
+  off one bulk lookup, so the last result costs **no extra query**.
 
 ---
 
@@ -53,15 +98,18 @@ Read this before adding a schema, adding a record, or changing either's members.
   model fed by events (§3 lesson 4). `repository/package-info.java` said this correctly the whole
   time, forty lines from the expired version. §160's shape, and the cost is the same: an argument
   that misnames the obstacle deters the repair.
-- **`TestCaseSummary.lastResult` HAS NEVER BEEN ON THE WIRE**, so `CaseGrid`'s Last result column
-  and the case detail's read **"Never run" for every case in the product**, executed or not.
+- ~~**`TestCaseSummary.lastResult` HAS NEVER BEEN ON THE WIRE**, so `CaseGrid`'s Last result column
+  and the case detail's read **"Never run" for every case in the product**, executed or not.~~ →
+  **CLOSED BY §166** — see the section above. Kept because it is what the repair was written
+  against, and because the measurement (a declared field served by nothing for nine months) is the
+  finding rather than the fix.
 - **`TestCase.relatedDocuments` likewise**, and links have been creatable since
   `POST …/blocks/{blockId}/links`: **a doc link is never shown on the case it links to.**
   `DocBlockView` struck its "nothing can create a link" clause when that shipped and the
   `repository` side never heard — one claim, struck in one module, left standing in another.
 - **`DocBlock.coverage` is the control** and holds: the one argument that was *revised* when its
   constraint moved rather than left to expire.
-- Both gaps are the recorded next slice, and both have browser rows (`§165 RC-1`, `§165 RC-2`) that
+- ~~Both gaps are~~ **`relatedDocuments` is** the recorded next slice, and both have browser rows (`§165 RC-1` — revised in place by §166, `§165 RC-2`) that
   exist so a live pass **looks for the value rather than at the widget** — each screen is a correct
   rendering of a key the server does not send, which reads as working.
 

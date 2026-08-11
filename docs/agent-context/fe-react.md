@@ -8,8 +8,31 @@ surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the fl
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `2bc1e43` (§164; §165 is this session, uncommitted at the time of writing) (trust the
+**Baseline commit:** `cde35bb` (§165; §166 is this session, uncommitted at the time of writing) (trust the
 body over the header and re-grep what a later commit could have moved).
+
+## §166 — ONE OF §165'S TWO SCREENS IS FIXED, AND STILL NO FRONTEND SOURCE MOVED
+
+**`CaseGrid`'s Last result column and `CaseDetailPage`'s result chip now show real values.** No
+component, no fixture and no test changed here: `row.lastResult?.statusKind ? … : 'Never run'` was
+right the whole time and the server started sending the key (§166, a backend read model on
+`case_health` fed by the `execution.results_changed` outbox event). `schema.d.ts` changes by one
+character in both copies — `lastResult?:` → `lastResult:`, i.e. **required and nullable**, because
+the server always emits the key.
+
+- **"Never run" is now a real state and also a TIMING state.** The value is a read model refreshed
+  on an event and on an hourly floor, so for a short window after a tester records a result the
+  column legitimately still says "Never run". **Do not treat that as a bug and do not add a
+  client-side workaround** — no optimistic patch, no refetch loop. `§166 LR-1` in the browser queue
+  exists to measure the window, and it must be run before `§165 RC-1`.
+- **The status is a `StatusKind`, never the project's own status name.** A project may rename
+  "Blocked" to "Environment down"; the wire carries `BLOCKED`. `StatusDot`/`StatusChip` + `labels.ts`
+  already handle this correctly — the point is that a future change must not start reading a name
+  off this object, because there is none.
+- **`lastResult` is `sortable: false` in `CaseGrid` and the reason written down is now wrong.**
+  `CaseSort`'s note grouped it with `owner` ("would need `app_user` inside this module's ORDER BY"),
+  which was never this field's obstacle and is certainly not one now that it is a column on a table
+  the module owns. Nobody has asked for the sort; the *argument* against it has simply expired.
 
 ## §165 — TWO SCREENS RENDER A CONFIDENT FALSEHOOD, AND NEITHER IS A FRONTEND BUG
 
@@ -17,11 +40,10 @@ No frontend source moved. `schema.d.ts` gains one property (`TestPlanSummary.key
 here reads). **The entry is what §165 measured about two screens this codebase owns**, because both
 look correct and are not, and a browser pass that does not know will pass them.
 
-- **`CaseGrid`'s "Last result" column reads "Never run" for EVERY case in the product** — executed
-  or not. `row.lastResult?.statusKind ? … : 'Never run'` is right; the server has **never sent
-  `lastResult`**, on the list or the detail. `TestCaseSummaryView` has no such component and
-  `repository` may not import `execution` (module boundary), so closing it is a backend read model
-  fed by events, **not** a frontend change. `CaseDetailPage` renders the same value the same way.
+- ~~**`CaseGrid`'s "Last result" column reads "Never run" for EVERY case in the product** — executed
+  or not.~~ → **CLOSED BY §166**, and closed exactly as this bullet predicted: a backend read model
+  fed by events, **not** a frontend change. Kept because "the fallback is right and the data is
+  absent" is the diagnosis worth being able to reach again.
 - **`CaseDetailPage`'s `DocLinksPanel` is empty for every case, including cases a doc block links
   to.** `data.relatedDocuments ?? []`, and the server omits the key for the same reason. Links have
   been creatable since `POST …/blocks/{blockId}/links`, so the link is real and visible **from the
