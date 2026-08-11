@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.lang.reflect.RecordComponent;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -13,6 +14,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -459,7 +461,7 @@ class ErrorBodyPolicyTest {
         ObjectMapper json = new ObjectMapper();
         int bodies = 0;
 
-        for (String path : List.of("/record", "/detail", "/detail-with-errors")) {
+        for (String path : List.of("/record", "/record-with-errors", "/detail", "/detail-with-errors")) {
             for (String accept : List.of("*/*", MediaType.APPLICATION_JSON_VALUE)) {
                 Set<String> members = new LinkedHashSet<>();
                 json.readTree(refuse(path, accept).getContentAsString())
@@ -488,7 +490,100 @@ class ErrorBodyPolicyTest {
 
         assertThat(bodies)
                 .as("no refusal was driven — the fixtures below have stopped answering")
-                .isEqualTo(6);
+                .isEqualTo(8);
+    }
+
+    // ------------------------------------------------ one envelope, one shape ----
+
+    /**
+     * The two envelopes, key for key, on equivalent refusals — the gap §162 recorded and §163 left.
+     *
+     * <p>§162's mutation queue named it and gave the reason it was not closed: <em>"it is written by
+     * two Java types, only one of which this project owns, so the record-component comparison has
+     * nothing to compare."</em> That is true of a <em>static</em> comparison and not of the
+     * serialized bytes, which is what a client actually receives — so the comparison is made there.
+     *
+     * <p><strong>Why it is worth a test after the divergence is gone.</strong> §163 removed the one
+     * member that differed, which makes the two types agree today with nothing saying so — its own
+     * closing paragraph says as much. {@link #noRefusalBodyEchoesTheRequest} does not cover this: it
+     * is a subset rule against the contract, so both envelopes can satisfy it while sending
+     * different subsets. The next divergence is a component added to {@link com.tcms.api.Problem}
+     * that no {@code ProblemDetail} controller sets, and it would pass every other rule in this file.
+     *
+     * <p>Both shapes are compared, plain and validation, because {@code errors} is the one optional
+     * member and a rule that only saw the plain pair would not notice the two disagreeing about it.
+     */
+    @Test
+    @DisplayName("the two envelopes serialize the same keys")
+    void bothEnvelopesSerializeTheSameKeys() throws Exception {
+        assertThat(membersOf("/detail"))
+                .as("""
+                        One envelope means one shape, not one media type over two shapes.
+
+                        `api.Problem` and Spring's `ProblemDetail` both serve the contract's
+                        `Problem`, this project owns only the first, and no static comparison can
+                        reach the second — so the two are compared as bytes, on equivalent refusals.
+                        `instance` was the divergence until §163 suppressed it.
+
+                        A member on one writer and not the other makes the contract true of some
+                        refusals and false of others, which is §162's finding one property down.""")
+                .isEqualTo(membersOf("/record"));
+
+        assertThat(membersOf("/detail-with-errors"))
+                .as("the two envelopes disagree on the validation shape — `errors` is the one "
+                        + "optional member, so it is the one most likely to be set by a writer and "
+                        + "not its counterpart")
+                .isEqualTo(membersOf("/record-with-errors"));
+
+        assertThat(membersOf("/record"))
+                .as("the fixtures have stopped answering with a problem at all")
+                .containsExactlyInAnyOrder("type", "title", "status", "detail");
+    }
+
+    /**
+     * The contract's {@code Problem} and the record that serves it, compared both ways.
+     *
+     * <p>This is the check whose absence let the schema grow a property no Java type here declares.
+     * §161's {@code ContractEnumTest} is this rule for the twenty enums and
+     * {@code ContractConventionTest.RESPONSE_RECORDS} is it for four response schemas — {@code Problem},
+     * the envelope every refusal in the API answers with, was in neither.
+     *
+     * <p><strong>Both directions, because they fail differently.</strong> A property here the record
+     * lacks is a promise nothing keeps — §148's defect, and the direction {@code RESPONSE_RECORDS}
+     * already covers for its four. A component the record has and the document does not is a value
+     * on the wire no generated client has a name for, which is the direction {@code instance} went
+     * and the one §163's subset rule explicitly does not reach.
+     */
+    @Test
+    @DisplayName("the contract's Problem is exactly the record that serves it")
+    void theContractsProblemIsThisRecord() {
+        Set<String> components = Stream.of(com.tcms.api.Problem.class.getRecordComponents())
+                .map(RecordComponent::getName)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        assertThat(declaredProblemProperties())
+                .as("""
+                        `Problem` in openapi.yaml and `com.tcms.api.Problem` name different members.
+
+                        A property only the contract has is a promise no writer keeps; a component
+                        only the record has is a value on the wire no generated client can read.
+                        `instance` was the first kind for sixteen sections — declared in §162,
+                        suppressed in §163 — and nothing in this repo could see it, because the
+                        one schema written by two Java types was in no pairing check.
+
+                        Adding a member is a contract change: edit both, in either order, and this
+                        rule is what makes the second edit non-optional.""")
+                .isEqualTo(components);
+    }
+
+    /** The member names a refusal from {@code path} actually serializes, under a wildcard Accept. */
+    private static Set<String> membersOf(String path) throws Exception {
+        Set<String> members = new LinkedHashSet<>();
+        new ObjectMapper()
+                .readTree(refuse(path, "*/*").getContentAsString())
+                .fieldNames()
+                .forEachRemaining(members::add);
+        return members;
     }
 
     /** A refusal from the fixture controller, serialized exactly as the running app serializes one. */
@@ -522,6 +617,18 @@ class ErrorBodyPolicyTest {
             problem.setTitle("Someone else saved first");
             problem.setDetail("Reload the case.");
             return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+        }
+
+        /**
+         * The record's validation shape — {@code /detail-with-errors}' counterpart, and it exists so
+         * {@link #bothEnvelopesSerializeTheSameKeys} can compare the two envelopes on the shape where
+         * they are most likely to disagree. {@code errors} is the one optional member, so it is the
+         * one a writer can set and its counterpart omit while every other rule here stays green.
+         */
+        @GetMapping("/record-with-errors")
+        ResponseEntity<Object> recordWithErrors() {
+            return ResponseEntity.badRequest()
+                    .body(com.tcms.api.Problem.validation(Map.of("title", List.of("Required."))));
         }
 
         /**

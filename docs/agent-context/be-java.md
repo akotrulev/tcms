@@ -2,12 +2,12 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-11 (**§163** — the request echo nobody wrote, and the decision §162 left declared; **§162** — one media type for every refusal, the two envelopes nobody compared, and the exemptions that excused nothing; **§161** — the by-decision audit, and the contract-versus-server enum rule; **§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-11 (**§164** — the two types that agreed by accident, and the schema in no pairing check; **§163** — the request echo nobody wrote, and the decision §162 left declared; **§162** — one media type for every refusal, the two envelopes nobody compared, and the exemptions that excused nothing; **§161** — the by-decision audit, and the contract-versus-server enum rule; **§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `b17b34f` (pre-§163) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `0d06cbb` (§163; §164 is this session, uncommitted at the time of writing) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
 ---
@@ -48,10 +48,35 @@ re-grep what a later commit could have moved).
   (an Automation Service token refused `token:issue` → `ApiTokenController`'s `ProblemDetail` 403),
   and `theBodyIsAProblem` now asserts no `instance` in the same words it has asserted no `path`
   since §146.
-- **Still not pinned:** `Problem` is the one contract schema written by **two Java types**, and
-  nothing compares their field names. `ContractConventionTest.RESPONSE_RECORDS` does that for four
-  response schemas and `Problem` is not one. §163 removed the only member that differed, so they
-  agree today with no check saying so — named as §163's next-slice candidate.
+- ~~**Still not pinned:** `Problem` is the one contract schema written by **two Java types**, and
+  nothing compares their field names.~~ → **PINNED §164 — see the section immediately below.**
+
+## §164 — THE TWO ENVELOPES AND THE SCHEMA ARE NOW COMPARED, BOTH WAYS
+
+**Read this with §163 and §162 above; the three together are the whole of what a refusal looks like.**
+
+- **`ErrorBodyPolicyTest.bothEnvelopesSerializeTheSameKeys`** — the two envelopes as **serialized
+  JSON keys**, on equivalent refusals, through the same standalone `MockMvc` fixture. §162's queue
+  excused this gap (*"only one [type] this project owns, so the record-component comparison has
+  nothing to compare"*) — true of a **static** comparison, false of the bytes.
+  **`noRefusalBodyEchoesTheRequest` does not cover it and cannot**: that is a *subset* rule against
+  the contract, and both envelopes can satisfy it while sending **different subsets**.
+- **`ErrorBodyPolicyTest.theContractsProblemIsThisRecord`** — `Problem`'s declared properties
+  against `com.tcms.api.Problem`'s record components, **both directions**. A property only the
+  contract has is a promise nothing keeps (§148); a component only the record has is a value on the
+  wire no generated client can name (the direction `instance` went). §161's `ContractEnumTest` is
+  this rule for the twenty enums and `RESPONSE_RECORDS` is it for four response schemas — **the
+  envelope every refusal answers with was in neither.**
+- **New fixture `/record-with-errors`** (`Problem.validation(…)`), the counterpart to
+  `/detail-with-errors`, so both shapes are compared. `errors` is the one optional member, hence the
+  one a writer can set and its counterpart omit while every other rule in the file stays green —
+  which is exactly mutation `EN-1b`, red on the new rule **alone**.
+- **Adding a member to `Problem` is now a two-file edit**, in either order, and the second is not
+  optional. `openapi.yaml`'s comment says so and names both rules.
+- **Do not "simplify" these into `RESPONSE_RECORDS`.** That map is four entries and **one
+  direction** (every *required* property has a component), so a component the schema does not
+  declare passes it. Generalising it is the standing next-slice candidate; folding `Problem` into it
+  as it stands would lose the direction this section exists for.
 
 ## §162 — ONE MEDIA TYPE FOR EVERY REFUSAL, AND THERE ARE TWO ERROR ENVELOPES
 
@@ -3070,6 +3095,24 @@ exist**, and the slice plan's decision E declines to create it for two storage p
 
 ## Session log
 
+- 2026-08-11 · CHECK · **the two types that agreed by accident** (§164, one phase, `backend/` tests +
+  a contract *comment*; no migration, no production Java, neither `schema.d.ts` moves). Closes the
+  two gaps §163 named on its way out. `bothEnvelopesSerializeTheSameKeys` compares the two envelopes
+  as **serialized keys** on equivalent refusals — the gap §162's queue excused as uncomparable,
+  which was true statically and false of the bytes; `noRefusalBodyEchoesTheRequest` cannot cover it,
+  being a **subset** rule both envelopes satisfy while sending different subsets.
+  `theContractsProblemIsThisRecord` pins the schema to `api.Problem`'s components **both ways** —
+  `Problem` was in neither `ContractEnumTest` nor `RESPONSE_RECORDS`. New fixture
+  `/record-with-errors` so the validation shape is compared too. **Origin is worth knowing: §163 was
+  written TWICE, concurrently, by two sessions that never saw each other** — both decided *suppress*,
+  by different mechanisms, and the pull was a **clean fast-forward with no textual conflict**, git
+  having nothing to say about a collision that was semantic. Wire outcomes were byte-identical; only
+  the checks differed, and these two are the pushed variant's own named next work. Mutations `EN-1`,
+  `EN-1b`, `EN-2` red then reverted — **`EN-1b` (a *declared* member on one envelope only) is the one
+  that justifies the rules, being invisible to every pre-existing check in the file**; `EN-3` does
+  not compile (~50 canonical-constructor call sites) and is recorded as abandoned. Also fixed
+  `openapi.yaml` still naming `api.ProblemMediaType`, renamed by the same commit that wrote it.
+  `./gradlew build` **2457 / 506 / 0**. `#confirmed`
 - 2026-08-11 · FIX · **the request echo nobody wrote** (§163, one phase, `backend/` + contract + both
   `schema.d.ts` copies, no migration). Took §162's declared-but-unresolved `instance`. Measured
   first, and the obvious hypothesis (nothing writes it) was **false**: all 21 `ProblemDetail`

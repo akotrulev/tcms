@@ -5709,8 +5709,15 @@ components:
       # on 123 of them and as `application/problem+json` on one that sent `application/json` —
       # a document wrong in both directions about the type its own body arrives under, because the
       # server had two envelopes (Spring's `ProblemDetail`, and `api.Problem`) and Jackson gives
-      # them different defaults. `api.ProblemMediaType` makes it one type; this makes it one
+      # them different defaults. `api.ProblemEnvelope` makes it one type; this makes it one
       # declaration.
+      #
+      # **§164: the two envelopes are now compared as serialized keys, and this schema against the
+      # record.** §163 removed the one member that differed, which left the two types agreeing with
+      # nothing saying so — `ErrorBodyPolicyTest.bothEnvelopesSerializeTheSameKeys` says so, on
+      # both the plain and the validation shape, and `theContractsProblemIsThisRecord` pins this
+      # property list to `com.tcms.api.Problem`'s components in both directions. Adding a member
+      # below without adding it to the record is now a red run rather than a broken client.
       required: [type, title, status, detail]
       properties:
         type: { type: string }
