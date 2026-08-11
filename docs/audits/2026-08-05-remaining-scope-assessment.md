@@ -1,5 +1,14 @@
 # Remaining-scope assessment — what is left to build
 
+> **⚠ SUPERSEDED 2026-08-11 by `docs/audits/2026-08-11-remaining-scope-assessment.md` (round 4,
+> baseline `89ce051`, §166).** Ten of this document's twenty-one "not started" rows have closed, M3
+> went 0% → 100%, and the total went 36.9% → **24.4%** remaining. **Two of its checks were right and
+> are now retired for it**: §1.5's permission check has exhausted itself (every remaining key belongs
+> to a feature with no code), and §1.6's enum check became **five standing build gates** across
+> §154–§165 rather than a script anyone re-runs. Round 4 also records this document's one false
+> positive — its `DocBlockType` 2-of-6 finding was real and is closed by §127, but the *check* would
+> still report 2 of 6 today for the wrong reason. Read round 4; this file is history.
+
 > **⚠ STALE BY 21 SLICES as of 2026-08-07 — read the method, not the shot list.** This round's
 > baseline is `ced197e`; HEAD is `e43e1b3` with §98–§122 in between, and most of its headline items
 > have closed: **#1 CI ingestion** (§117), **#2 API tokens** (§116/§118), **#3 quarantine** (§121),
