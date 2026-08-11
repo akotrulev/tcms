@@ -3,6 +3,7 @@ package com.tcms.contract;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -21,7 +22,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
-import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -273,7 +274,7 @@ class ErrorBodyPolicyTest {
      * responses that arrive as {@code problem+json}, and {@code problem+json} for the case-attachment
      * 413, the one upload handler written with the record rather than the {@code ProblemDetail} its
      * three siblings use. Both envelopes send {@code problem+json} now
-     * ({@code api.ProblemMediaType}), so the contract can state one type for all of them.
+     * ({@code api.ProblemEnvelope}), so the contract can state one type for all of them.
      *
      * <p>It cost nothing at runtime and that is why it lasted: both TypeScript consumers call
      * {@code .json()} without reading {@code Content-Type}. What was false was the artifact
@@ -356,27 +357,157 @@ class ErrorBodyPolicyTest {
     @Test
     @DisplayName("both envelopes go out as application/problem+json")
     void bothEnvelopesWriteProblemJson() throws Exception {
-        MockMvc mvc = MockMvcBuilders.standaloneSetup(new Refusals())
-                .setControllerAdvice(new com.tcms.api.ProblemMediaType())
-                .build();
-
-        for (String path : List.of("/record", "/detail")) {
+        for (String path : List.of("/record", "/detail", "/detail-with-errors")) {
             for (String accept : List.of("*/*", MediaType.APPLICATION_JSON_VALUE)) {
-                var response = mvc.perform(get(path).header(HttpHeaders.ACCEPT, accept))
-                        .andReturn().getResponse();
+                var response = refuse(path, accept);
 
                 assertThat(response.getContentType())
                         .as("%s with Accept: %s — one envelope, one media type. `api.Problem` is an "
                                 + "ordinary bean, so it went out as application/json until "
-                                + "ProblemMediaType; ProblemDetail has always been the other one",
+                                + "ProblemEnvelope; ProblemDetail has always been the other one",
                                 path, accept)
                         .isEqualTo(PROBLEM_JSON);
-                assertThat(response.getStatus()).isEqualTo(409);
+                assertThat(response.getStatus())
+                        .as("%s did not answer a refusal at all", path)
+                        .isGreaterThanOrEqualTo(400);
             }
         }
     }
 
-    /** The two envelopes, each returned the way its seven-or-twenty-one controllers return it. */
+    // ------------------------------------------------------- the request echo ----
+
+    /**
+     * Property names that hand the caller back the URL it just sent.
+     *
+     * <p>A list rather than the single name §163 found, for {@link #noBackDoorSpellingOfABodiedStatus}'s
+     * reason: {@code instance} is what Spring happens to call it, and a rule that knows one spelling
+     * leaves the others as its hole. {@code path} is on it because it is the one §146 removed.
+     */
+    private static final Set<String> REQUEST_ECHO_PROPERTIES =
+            Set.of("instance", "path", "uri", "url", "requestUri", "requestUrl", "resource");
+
+    /**
+     * The contract half: {@code Problem} declares no member that echoes the request.
+     *
+     * <p>This is the rule §163 decided, and it is written here rather than only against the server
+     * because the server rule below is a <em>subset</em> check — a future slice could make it pass
+     * by re-declaring the property instead of by suppressing it, which is precisely the edit §163
+     * reversed. With both, re-adding {@code instance} costs a red run in the file that argues why,
+     * and that is the difference between a decision and a tidy-up.
+     *
+     * <p><strong>What was measured.</strong> §162 declared {@code instance} optional on the claim
+     * that {@code ProblemDetail} writes it on 123 of 176 refusals, and did not take the
+     * reconciliation with §146 — which had removed {@code path} from the container's body on the
+     * grounds that a refusal does not echo the request. Both halves of that were worth checking and
+     * only one survived: {@code setInstance} occurs <strong>zero</strong> times in {@code src/main},
+     * so nothing here asks for the property — and it arrives anyway, on every one of the twenty-one
+     * {@code ProblemDetail} controllers, because Spring Framework's {@code HttpEntityMethodProcessor}
+     * and {@code RequestResponseBodyMethodProcessor} both set it from {@code getRequestURI()} when it
+     * is null. A default nobody chose, on the majority of this API's refusals.
+     */
+    @Test
+    @DisplayName("the Problem schema declares nothing that echoes the request back")
+    void theProblemSchemaDeclaresNoRequestEcho() {
+        Set<String> declared = declaredProblemProperties();
+
+        assertThat(declared)
+                .as("the `Problem` schema's properties could not be read — this asserted nothing")
+                .hasSizeGreaterThanOrEqualTo(5);
+
+        assertThat(declared)
+                .as("""
+                        `Problem` declares a member that hands the caller back the URL it just sent.
+
+                        §146 removed `path` from the container's error body and §163 removed
+                        `instance` — Spring's name for the same string — from the twenty-one
+                        controllers that were sending it without asking. The reasons are this
+                        repo's own: §162 says a refusal's shape must not depend on which of four
+                        writers produced it, and §141 says a member of a refusal earns its place by
+                        what the caller can do with it. `detail` says what to do and `errors` says
+                        which field; a path says where the caller just was.
+
+                        Declaring one again is a decision — reverse §163's argument in
+                        `api.ProblemEnvelope` and this list, in that order. Do not delete a name
+                        here to make a red run green.
+
+                        Echoing members declared:""")
+                .doesNotContainAnyElementsOf(REQUEST_ECHO_PROPERTIES);
+    }
+
+    /**
+     * The server half, read off the real serialization rather than off the source.
+     *
+     * <p>It has to be the serialization: {@code instance} is written by the return-value handler
+     * between the controller and the converter, so <strong>no scan of {@code src/main} can see
+     * it</strong> — the string does not occur there, which is what made §162 predict zero and get
+     * twenty-one. That is §108's lesson in the direction this repo meets less often: usually the
+     * defect is in text nothing evaluates, and here it was in a value nothing wrote.
+     *
+     * <p>Asserted as a <em>subset</em> of what the contract declares, not as a ban on the two names,
+     * so the rule generalises: any property arriving on a refusal that the document does not declare
+     * fails here. That is §148's and §162's family of defect stated once — a body and a document
+     * that disagree about what is in the body — and it is the direction neither of them covered.
+     *
+     * <p>The container's {@code /error} dispatch is the third writer and the filter's 429 the
+     * fourth; both are asserted where they can be, over real HTTP, in
+     * {@code auth.ErrorDispatchStatusTest.theBodyIsAProblem} and {@code auth.RateLimitTest}.
+     */
+    @Test
+    @DisplayName("no refusal body carries a property the contract does not declare")
+    void noRefusalBodyEchoesTheRequest() throws Exception {
+        Set<String> declared = declaredProblemProperties();
+        ObjectMapper json = new ObjectMapper();
+        int bodies = 0;
+
+        for (String path : List.of("/record", "/detail", "/detail-with-errors")) {
+            for (String accept : List.of("*/*", MediaType.APPLICATION_JSON_VALUE)) {
+                Set<String> members = new LinkedHashSet<>();
+                json.readTree(refuse(path, accept).getContentAsString())
+                        .fieldNames().forEachRemaining(members::add);
+                bodies++;
+
+                assertThat(members)
+                        .as("""
+                                %s answered with a member `Problem` does not declare.
+
+                                Nothing in src/main writes one: `setInstance` occurs zero times
+                                there, and Spring's HttpEntityMethodProcessor sets `instance` from
+                                the request URI on every ProblemDetail whose own is null. So the
+                                first sign of this is a generated client typed without a property
+                                the server sends — and the last, because both TypeScript consumers
+                                call .json() and read the members they know.
+
+                                `api.ProblemEnvelope` clears it, and it must run AFTER the
+                                return-value handler for that to work. If this failed on
+                                `instance`, that ordering is what changed.
+
+                                Members sent, against members declared %s:""".formatted(path, declared))
+                        .isSubsetOf(declared);
+            }
+        }
+
+        assertThat(bodies)
+                .as("no refusal was driven — the fixtures below have stopped answering")
+                .isEqualTo(6);
+    }
+
+    /** A refusal from the fixture controller, serialized exactly as the running app serializes one. */
+    private static MockHttpServletResponse refuse(String path, String accept) throws Exception {
+        return MockMvcBuilders.standaloneSetup(new Refusals())
+                .setControllerAdvice(new com.tcms.api.ProblemEnvelope())
+                .build()
+                .perform(get(path).header(HttpHeaders.ACCEPT, accept))
+                .andReturn().getResponse();
+    }
+
+    /** The member names {@code Problem} declares in {@code openapi.yaml}. */
+    private static Set<String> declaredProblemProperties() {
+        Map<String, Object> schema =
+                contract.resolve(Map.of("$ref", "#/components/schemas/Problem"));
+        return new LinkedHashSet<>(asMap(schema.get("properties")).keySet());
+    }
+
+    /** The two envelopes, each returned the way its eight-or-twenty-one controllers return it. */
     @RestController
     static class Refusals {
 
@@ -391,6 +522,20 @@ class ErrorBodyPolicyTest {
             problem.setTitle("Someone else saved first");
             problem.setDetail("Reload the case.");
             return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+        }
+
+        /**
+         * The validation shape, which is the one that proves the rule is a subset check and not a
+         * fixed key set: {@code errors} is a legitimate extra member, declared and optional, and it
+         * arrives through the same {@code setProperty} map {@code instance} used to ride out on.
+         */
+        @GetMapping("/detail-with-errors")
+        ResponseEntity<Object> detailWithErrors() {
+            ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+            problem.setTitle("Validation failed");
+            problem.setDetail("Check the highlighted fields.");
+            problem.setProperty("errors", Map.of("title", List.of("Required.")));
+            return ResponseEntity.badRequest().body(problem);
         }
     }
 
@@ -769,9 +914,26 @@ class ErrorBodyPolicyTest {
         return moduleRelative(file) + ":" + line;
     }
 
-    /** The module and file — {@code reporting/ReportController.java}. */
+    /**
+     * The module and file — {@code reporting/ReportController.java}.
+     *
+     * <p><strong>The separator is normalised, and it was not until §163.</strong>
+     * {@code Path.toString()} is platform-shaped, so on Windows this returned
+     * {@code reporting\ReportController.java} while {@code BODILESS_FORBIDDEN_SITES} and
+     * {@code NON_VALIDATION_ERRORS_SITES} are written with {@code /} — which means
+     * {@link #bodilessForbiddenSitesArePinned} (§148) and {@link #nonValidationErrorsSitesArePinned}
+     * (§149) had <strong>never once passed on a Windows checkout</strong>, each failing on a set
+     * whose members differ from the expected ones by one character apiece.
+     *
+     * <p>It is §58's platform lesson running the other way, and it is worth as much. That one says
+     * the local gate cannot see a Linux-only failure; this is a <em>Windows-only</em> failure the
+     * Linux nightly cannot see either — so `master` is green on the only observer that runs the
+     * suite, and `./gradlew build`, which `CLAUDE.md` calls the one gate a human runs before
+     * pushing, has been red on arrival for every slice since §149 on the machine this repo is
+     * developed on. A gate that is always red is a gate nobody reads.
+     */
     private static String moduleRelative(Path file) {
         int count = file.getNameCount();
-        return file.subpath(count - 2, count).toString();
+        return file.subpath(count - 2, count).toString().replace('\\', '/');
     }
 }

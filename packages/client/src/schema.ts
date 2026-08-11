@@ -7206,25 +7206,6 @@ export interface components {
             status: number;
             detail: string;
             /**
-             * @description The path the refused request was sent to. **Present on the refusals Spring's
-             *     `ProblemDetail` writes — twenty-one controllers — and absent on the eight that use the
-             *     `api.Problem` record**, which is why it is optional rather than required-and-nullable:
-             *     the key is genuinely missing, not null.
-             *
-             *     Undeclared until §162 while the server had been sending it since the first
-             *     `ProblemDetail` controller. A client cannot rely on it and should not need to: it
-             *     carries nothing the caller did not already know, since it is the URL it just requested.
-             *
-             *     **It is `path` under another name, and §146 deliberately removed `path` from the
-             *     container's error body** — `ErrorDispatchStatusTest` asserts its absence in as many
-             *     words. The two positions have coexisted for sixteen sections because nobody compared
-             *     them. Reconciling them is a decision, not a cleanup: either suppress `instance` so the
-             *     envelope matches the record and §146's rule holds everywhere, or amend §146's reasoning
-             *     to say why the container's echo is worse than a controller's. Declared here first,
-             *     because whichever way it goes the contract has to be true today.
-             */
-            instance?: string | null;
-            /**
              * @description RFC-7807 `errors` — a name to the messages it failed on. **Every value is a complete
              *     sentence any client may print verbatim**, and that is the load-bearing half: the SPA
              *     lands it beside an input, `@tcms/cli` prints `name: message` under the failure, and

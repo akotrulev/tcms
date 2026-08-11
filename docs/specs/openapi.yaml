@@ -5690,9 +5690,20 @@ components:
       # 404 has no body at all, so there is no `Problem` on it to omit a key from. The only 404
       # carrying this schema is the container's — a path with no operation, see PreHandlerRefusal.
       #
-      # ~~`errors` is the one optional member.~~ → **corrected §162: `instance` is a second**, and
-      # it had been arriving undeclared on 123 of the 176 refusals this API can send. See its own
-      # description below.
+      # ~~`errors` is the one optional member.~~ → ~~**corrected §162: `instance` is a second**, and
+      # it had been arriving undeclared on 123 of the 176 refusals this API can send.~~
+      # → **§163: `errors` is the one optional member again, and this time it is checked.**
+      # `instance` was real — measured, not reasoned: nothing in this codebase calls `setInstance`,
+      # and Spring Framework's `HttpEntityMethodProcessor` / `RequestResponseBodyMethodProcessor`
+      # each set it from `request.getRequestURI()` when it is null, so all twenty-one `ProblemDetail`
+      # controllers were sending it by way of a default nobody here chose. §163 SUPPRESSES it
+      # (`api.ProblemEnvelope`) rather than declaring it, because it is `path` under another name and
+      # §146 removed `path` from the container's body: a property present on twenty-one writers and
+      # absent on the other three is the asymmetry §162 spent a slice ending, and the caller already
+      # has the URL it just sent. **No refusal body in this API carries the path it was sent to** —
+      # `ErrorBodyPolicyTest.theProblemSchemaDeclaresNoRequestEcho` bans the name here and
+      # `noRefusalBodyEchoesTheRequest` reads it off the server's own serialization, so re-declaring
+      # it is a decision rather than an edit.
       #
       # Every refusal is `application/problem+json` (§162). It was declared as `application/json`
       # on 123 of them and as `application/problem+json` on one that sent `application/json` —
@@ -5706,26 +5717,18 @@ components:
         title: { type: string }
         status: { type: integer }
         detail: { type: string }
-        instance:
-          type: string
-          nullable: true
-          description: |
-            The path the refused request was sent to. **Present on the refusals Spring's
-            `ProblemDetail` writes — twenty-one controllers — and absent on the eight that use the
-            `api.Problem` record**, which is why it is optional rather than required-and-nullable:
-            the key is genuinely missing, not null.
-
-            Undeclared until §162 while the server had been sending it since the first
-            `ProblemDetail` controller. A client cannot rely on it and should not need to: it
-            carries nothing the caller did not already know, since it is the URL it just requested.
-
-            **It is `path` under another name, and §146 deliberately removed `path` from the
-            container's error body** — `ErrorDispatchStatusTest` asserts its absence in as many
-            words. The two positions have coexisted for sixteen sections because nobody compared
-            them. Reconciling them is a decision, not a cleanup: either suppress `instance` so the
-            envelope matches the record and §146's rule holds everywhere, or amend §146's reasoning
-            to say why the container's echo is worse than a controller's. Declared here first,
-            because whichever way it goes the contract has to be true today.
+        # ~~instance — the path the refused request was sent to, present on the twenty-one
+        # `ProblemDetail` writers and absent on the record's eight, declared optional in §162 with
+        # the reconciliation named as a decision rather than taken.~~
+        # → **§163 took it, and the answer is that this API sends no such property.** The decision
+        # was between suppressing `instance` and amending §146's reasoning, and three of this
+        # repo's own rules point the same way: §162's one-envelope rule (a refusal's shape must not
+        # depend on which of four writers produced it), the cost of the other direction (the record
+        # gains a component no factory can fill, `ProblemWriter` composes a path by hand in a
+        # filter, and `ProblemErrorAttributes` re-adds the exact key §146 deleted — three new
+        # writers to publish a value the caller already has), and §141 (a refusal earns its members
+        # by what the caller can do with them; `detail` says what to do, `errors` says which field,
+        # `instance` says where the caller just was).
         errors:
           type: object
           nullable: true

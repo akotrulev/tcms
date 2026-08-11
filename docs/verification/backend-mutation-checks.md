@@ -1890,3 +1890,31 @@ of what ran.*
 > response schemas and `Problem` is not one of them — it is written by two Java types, only one of
 > which this project owns, so the record-component comparison has nothing to compare. §162 declared
 > `instance` rather than closing that gap.
+
+## §163 — the request echo nobody wrote
+
+*Three mutations, one per rule. **All three were run** before the slice's prose was written, for
+`§162 MT-1`…`MT-4`'s reason and `CE-M1`/`CE-M2`'s before them: each mutates a **check** rather than
+the product — no screen, no request, no user-visible behaviour — and a rule shipped without seeing
+it fail is the rule §162 exists because of. §65's deferral covers the browser pass and the product's
+own behaviour, and both are deferred (`§163 EC-1` in the browser queue is **not run**).*
+
+*The slice's opening measurement is not a mutation and is recorded here anyway, because it is the
+only reason the slice went the way it did: a throwaway standalone `MockMvc` returning each envelope
+the way its controllers return it printed `{"type","title","status","detail","instance":"/detail"}`
+for `ProblemDetail` and `{"type","title","status","detail"}` for `api.Problem`, under both
+`Accept: */*` and `Accept: application/json`. The hypothesis under test was that `instance` is
+written on **zero** refusals — `setInstance` occurs zero times in `src/main` — and it is written on
+**all twenty-one** `ProblemDetail` controllers, by Spring's own return-value handler.*
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| `§163 EC-1` | In `ProblemEnvelope.beforeBodyWrite`, delete the `detail.setInstance(null)` arm | Should redden **two** things in different harnesses: `no refusal body carries a property the contract does not declare` (standalone `MockMvc`, naming `instance` as the member not declared) and `a controller's own ProblemDetail carries no instance either` (real HTTP, a controller-written 403). The pair is the point — the standalone fixture proves the mechanism and the real-HTTP one proves it on a body that came back over a socket, and a single red would mean one of the two is unobserved. It also proves the **advice runs after the return-value handler**, which is the only reason clearing the property works at all. | ✅ **RUN 2026-08-11 — both red, in both harnesses, as predicted** (`22 tests completed, 2 failed`) |
+| `§163 EC-2` | Re-declare `instance: { type: string, nullable: true }` under `Problem`'s properties in `openapi.yaml` | Should redden `the Problem schema declares nothing that echoes the request back` — **and leave the server-side subset rule green**, which is the half worth checking. That is exactly the loophole this rule exists to close: with only the subset check, a future slice could satisfy it by re-declaring the property instead of by suppressing it, which is the edit §163 reversed. | ✅ **RUN 2026-08-11 — red, and ONLY that one** (`12 tests completed, 1 failed`): the subset rule stayed green over a body carrying `instance`, which is the loophole in as many words |
+| `§163 EC-3` | In `ErrorBodyPolicyTest.Refusals.detailWithErrors`, add `problem.setProperty("traceId", "abc")` | Should redden `no refusal body carries a property the contract does not declare`, naming `traceId`. Proves the server rule is a **subset** check against the contract and not an `instance` blacklist — the general form of §148's and §162's family (a body and a document disagreeing about what is in the body), in the direction neither covered. | ✅ **RUN 2026-08-11 — red on `traceId`** (`12 tests completed, 1 failed`) |
+
+> **Not mutation-tested and worth knowing** — carried forward from §162 and now the slice's own
+> named candidate: nothing pins that the *record* and `ProblemDetail` carry the same field names.
+> `ContractConventionTest.RESPONSE_RECORDS` does that job for four response schemas and `Problem` is
+> not one of them, because it is written by two Java types and this project owns only one. §163
+> removed the single member that differed, so the two agree **today** with no check saying so.

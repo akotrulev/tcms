@@ -1952,3 +1952,25 @@ One row, in lane **`A0`** — it needs no fixture beyond a signed-in session:
 **Deliberately not queued:** a 429. Driving the rate limit needs an API token and 4 requests in a
 minute, which is a `packages/` lane rather than a browser one, and `RateLimitTest` already asserts
 that header over real HTTP.
+
+## §163 — the request echo goes away, and no client should notice that either
+
+**§163 removes a property from every refusal written by a `ProblemDetail` controller** — `instance`,
+the path the request was sent to, which Spring's return-value handler had been adding on all
+twenty-one of them without anything in this repo asking for it. No status, no `detail`, no `errors`,
+no media type moves.
+
+The claim is a **negative** again, and it is even better founded than §162's: `instance` occurs in
+no consumer in `frontend/src` or `packages/*/src` outside the generated schema, so nothing can be
+reading it. That is exactly the reasoning §161 exists to distrust, which is why there is a row.
+
+One row, lane **`A0`** — no fixture beyond a signed-in session, and it pairs with `§162 MT-1`:
+
+| # | What | Expected |
+|---|---|---|
+| `§163 EC-1` | With the stack up, drive the same two bodied refusals `§162 MT-1` uses — a **400** from a case edit with an empty title (`api.Problem`, the record) and a **403** from any gated action available to the signed-in role (`ProblemDetail`) — and read the **response body** in the network tab, not just the header. | Both bodies are exactly `{type, title, status, detail}` (+ `errors` on the 400) and **neither carries `instance`**. The rendered message is identical to before in both cases — `describeError` reads `detail` and never looked at `instance`. A refusal still carrying `instance` means `ProblemEnvelope`'s advice is not running on that path, which is a bigger finding than this row: the advice is also what sets the media type, so check the `Content-Type` in the same breath. |
+
+**Deliberately not queued:** the container's `/error` body and the filter's 429. Neither ever
+carried `instance`, both are asserted over real HTTP in `ErrorDispatchStatusTest` and `RateLimitTest`,
+and driving them from a browser needs a malformed request the SPA cannot compose and a rate limit
+that needs an API token.

@@ -2,15 +2,56 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-11 (**§162** — one media type for every refusal, the two envelopes nobody compared, and the exemptions that excused nothing; **§161** — the by-decision audit, and the contract-versus-server enum rule; **§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-11 (**§163** — the request echo nobody wrote, and the decision §162 left declared; **§162** — one media type for every refusal, the two envelopes nobody compared, and the exemptions that excused nothing; **§161** — the by-decision audit, and the contract-versus-server enum rule; **§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `d68545d` (pre-§162) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `b17b34f` (pre-§163) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
 ---
+
+## §163 — NO REFUSAL ECHOES THE REQUEST, AND THE PROPERTY WAS WRITTEN BY SPRING
+
+**Read this with the §162 section below; together they are the whole of what a refusal looks like.**
+
+- **`api.ProblemMediaType` IS NOW `api.ProblemEnvelope`** and does two things, not one: sets
+  `application/problem+json` on the record and on Boot's `/error` (§162), and **clears
+  `ProblemDetail.instance` on every response** (§163). Renamed because a class that strips a
+  property under a name saying it decides a header is §152's shape.
+- **`instance` WAS BEING WRITTEN ON ALL 21 `ProblemDetail` CONTROLLERS AND NOTHING IN THIS REPO ASKED
+  FOR IT.** `setInstance` occurs **zero** times in `backend/src`. Spring Framework 6.2's
+  `HttpEntityMethodProcessor` and `RequestResponseBodyMethodProcessor` each do
+  `if (detail.getInstance() == null) detail.setInstance(URI.create(request.getRequestURI()))` on the
+  way to the converter. **Not `ResponseEntityExceptionHandler`** — this app registers none, and
+  `spring.mvc.problemdetails.enabled` appears in no config file. *The obvious hypothesis was that
+  `instance` was written on zero refusals; every instrument that hypothesis was built from reads
+  `src/main`, and the property is not in `src/main`.*
+- **The decision was suppress, not declare**, argued from §162 (a refusal's shape must not depend on
+  which of four writers produced it), from cost (the other direction needs a component
+  `api.Problem`'s factories cannot fill, a hand-composed path in `ProblemWriter`, and the exact key
+  §146 deleted put back in `ProblemErrorAttributes`), and from §141 (`detail` says what to do,
+  `errors` says which field, a path says where the caller just was).
+- **THE ADVICE MUST RUN AFTER THE RETURN-VALUE HANDLER** or the clear is a no-op. It does —
+  `HttpEntityMethodProcessor` sets `instance` and *then* calls `writeWithMessageConverters` — and
+  that ordering is asserted, not reasoned, by driving the real serialization.
+- **Two rules, and they lock in opposite directions.**
+  `ErrorBodyPolicyTest.noRefusalBodyEchoesTheRequest` reads the **server**: each envelope's
+  serialized key set must be a **subset** of what `openapi.yaml`'s `Problem` declares — general, so
+  any undeclared property arriving on a refusal fails, not just this one.
+  `theProblemSchemaDeclaresNoRequestEcho` reads the **contract**: `Problem` may declare no member
+  from the echo family (`instance`, `path`, `uri`, `url`, `requestUri`, `requestUrl`, `resource`).
+  Without the second, a slice could satisfy the first by re-declaring the property — which is the
+  edit §163 reversed.
+- **Third check, real HTTP:** `ErrorDispatchStatusTest.aControllerProblemDetailCarriesNoInstance`
+  (an Automation Service token refused `token:issue` → `ApiTokenController`'s `ProblemDetail` 403),
+  and `theBodyIsAProblem` now asserts no `instance` in the same words it has asserted no `path`
+  since §146.
+- **Still not pinned:** `Problem` is the one contract schema written by **two Java types**, and
+  nothing compares their field names. `ContractConventionTest.RESPONSE_RECORDS` does that for four
+  response schemas and `Problem` is not one. §163 removed the only member that differed, so they
+  agree today with no check saying so — named as §163's next-slice candidate.
 
 ## §162 — ONE MEDIA TYPE FOR EVERY REFUSAL, AND THERE ARE TWO ERROR ENVELOPES
 
@@ -26,7 +67,7 @@ re-grep what a later commit could have moved).
   | writer | how the type is set |
   |---|---|
   | `ProblemDetail` (21 files) | Spring, by construction — and it **beats** an explicit `Accept: application/json`, which is what `@tcms/client` sends |
-  | `api.Problem` (8 files, ~50 sites) | `api.ProblemMediaType`, a `ResponseBodyAdvice` keyed on the **type** — no call site sets it |
+  | `api.Problem` (8 files, ~50 sites) | `api.ProblemEnvelope` (named `ProblemMediaType` until §163), a `ResponseBodyAdvice` keyed on the **type** — no call site sets it |
   | Boot's `/error` dispatch | the same advice, matched on `BasicErrorController` (its mapping is hard-coded `produces = application/json`) |
   | `ProblemWriter` (the filter 429) | set directly — **a filter's response reaches no advice** |
   So: **returning a `Problem` from a new controller needs no content type.** Writing one from a new
@@ -39,12 +80,8 @@ re-grep what a later commit could have moved).
   both directions.** Nothing observed it — `problem+json` occurred **zero** times in
   `backend/src` — because both TS consumers call `.json()` without reading `Content-Type`. The
   falsehood was in the generated types, not at runtime.
-- **`Problem.instance` is declared, optional, and UNRESOLVED.** `ProblemDetail` writes the request
-  path as `instance` on 123 of 176 refusals; the record's eight omit the key entirely. **It is
-  `path` under another name and §146 deliberately removed `path` from the container's body** —
-  `ErrorDispatchStatusTest` asserts `body.has("path")` is false while `instance` carries the same
-  string. Do not "tidy" either side: closing this is a decision (suppress `instance`, or amend
-  §146's reasoning), named as §162's next-slice candidate.
+- ~~**`Problem.instance` is declared, optional, and UNRESOLVED.**~~ → **RESOLVED §163 — see the
+  section above this one. `instance` is suppressed and undeclared; no refusal echoes the request.**
 
 ## §162 — AN EXEMPTION MUST STILL EXEMPT SOMETHING
 
@@ -3032,6 +3069,17 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   a caller may or may not see. `#confirmed`
 
 ## Session log
+
+- 2026-08-11 · FIX · **the request echo nobody wrote** (§163, one phase, `backend/` + contract + both
+  `schema.d.ts` copies, no migration). Took §162's declared-but-unresolved `instance`. Measured
+  first, and the obvious hypothesis (nothing writes it) was **false**: all 21 `ProblemDetail`
+  controllers send it, written by Spring's `HttpEntityMethodProcessor` from `getRequestURI()`, while
+  `setInstance` occurs zero times in `src/main` — a value no source scan can see. Suppressed rather
+  than declared, so §146's no-request-echo rule holds on every writer; `ProblemMediaType` renamed
+  `ProblemEnvelope` because it now decides two things. Three checks, two of them reading the server:
+  a subset rule over the real serialization, an echo-name ban on the schema (so re-declaring is a
+  decision), and a real-HTTP assertion on a controller-written 403. Mutation-verified in three
+  directions.
 
 - 2026-08-09 · EXTEND · **the seams only a test exercises** (§153, one phase, no migration).
   `everyPublicBeanMethodIsExercisedInProduction` asks §152's question from the other side and finds

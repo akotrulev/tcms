@@ -215,7 +215,7 @@ class ErrorDispatchStatusTest extends IntegrationTestBase {
         var refusal = post("/api/v1/projects/" + PROJECT + "/cases", UNREADABLE_CASE, issueToken());
 
         // §162. `BasicErrorController`'s mapping is hard-coded to `produces = application/json`,
-        // so until `ProblemMediaType` set the header this was the last refusal in the API still
+        // so until `ProblemEnvelope` set the header this was the last refusal in the API still
         // announcing itself as ordinary JSON — on the paths a machine caller hits most, which is
         // the same reason §146 shaped the body here in the first place. Asserted over real HTTP
         // because the header is written on the ERROR dispatch, which MockMvc does not run.
@@ -227,11 +227,48 @@ class ErrorDispatchStatusTest extends IntegrationTestBase {
 
         assertThat(body.has("timestamp")).as("the container's shape must be gone entirely").isFalse();
         assertThat(body.has("path")).as("`path` echoes the request back into the body").isFalse();
+        // §163. `instance` is `path` under Spring's name, and for sixteen sections this assertion
+        // held here while twenty-one controllers shipped the identical string one layer over. The
+        // rule is now the same rule on every writer, so it is asserted in the same words.
+        assertThat(body.has("instance"))
+                .as("`instance` echoes the request back into the body under Spring's name for it")
+                .isFalse();
         assertThat(body.get("type").asText()).isEqualTo("about:blank");
         assertThat(body.get("status").asInt()).isEqualTo(400);
         assertThat(body.get("title").asText()).isNotBlank();
         assertThat(body.get("detail").asText())
                 .as("`detail` is what @tcms/cli prints verbatim and what a model acts on")
+                .isNotBlank();
+    }
+
+    @Test
+    @DisplayName("a controller's own ProblemDetail carries no instance either — §163")
+    void aControllerProblemDetailCarriesNoInstance() throws Exception {
+        // The other twenty-one writers, over real HTTP. The test above covers the container's
+        // /error body; this covers a refusal a controller composed and returned itself, which is
+        // where `instance` actually came from — not from anything in this repository, but from
+        // HttpEntityMethodProcessor, which sets it from getRequestURI() on the way to the
+        // converter. `setInstance` occurs zero times in src/main and the property arrived on all
+        // twenty-one anyway, so a source scan is structurally unable to observe this and the
+        // assertion has to be on a body that came back over a socket.
+        //
+        // The site: an Automation Service token cannot issue API tokens (`token:issue` is Company
+        // Admin, COMPANY scope), and ApiTokenController answers that with a ProblemDetail.
+        var refusal = post("/api/v1/api-tokens",
+                "{\"name\":\"nope\",\"roleId\":\"" + Role.AUTOMATION_SERVICE_ID
+                        + "\",\"projectId\":\"" + PROJECT + "\",\"expiresAt\":null}",
+                issueToken());
+
+        assertThat(refusal.getStatusCode().value())
+                .as("the fixture must still reach a controller-written refusal, not a 401 or a 404")
+                .isEqualTo(403);
+
+        JsonNode body = json.readTree(refusal.getBody());
+        assertThat(body.has("instance"))
+                .as("a refusal does not hand the caller back the URL it just sent (§146, §163)")
+                .isFalse();
+        assertThat(body.get("detail").asText())
+                .as("and it still says what the caller cannot do — the member that earns its place")
                 .isNotBlank();
     }
 

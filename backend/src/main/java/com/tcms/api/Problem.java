@@ -16,8 +16,14 @@ import java.util.Map;
  * default content type {@code application/problem+json} and this record {@code application/json},
  * and {@code ProblemDetail} carries an {@code instance} property this record has no component for.
  * <strong>132 of the contract's 176 declared error bodies named the wrong media type as a result</strong>,
- * in both directions at once. {@link ProblemMediaType} closes the media-type half; {@code instance}
- * is declared optional in the contract and its reconciliation is recorded there as a decision.
+ * in both directions at once. {@link ProblemEnvelope} closes the media-type half; <s>{@code instance}
+ * is declared optional in the contract and its reconciliation is recorded there as a decision.</s>
+ *
+ * <p><strong>→ §163 took that decision, and this record won the argument.</strong> {@code instance}
+ * is suppressed rather than added, so the two envelopes now differ in Java type and in nothing a
+ * caller can observe. It matters which way round that went: the missing component here was not a gap
+ * to be filled — a record cannot know the request, and the three ways to give it one are the
+ * hand-written composition §146 deleted. See {@link ProblemEnvelope} for the argument in full.
  *
  * <h2>~~A second copy, and it is recorded as one rather than defended~~ → extracted in §146</h2>
  *
