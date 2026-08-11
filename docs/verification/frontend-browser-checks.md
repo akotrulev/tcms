@@ -1974,3 +1974,25 @@ One row, lane **`A0`** — no fixture beyond a signed-in session, and it pairs w
 carried `instance`, both are asserted over real HTTP in `ErrorDispatchStatusTest` and `RateLimitTest`,
 and driving them from a browser needs a malformed request the SPA cannot compose and a rate limit
 that needs an API token.
+
+## §165 — two screens that are correct renderings of a key the server never sends
+
+**Neither row is a regression and neither is fixed by §165.** Both are screens the live pass would
+otherwise read as *working*, because each renders a defensible empty state for a field the server has
+never once put on the wire — and each was argued in a javadoc that said the module supplying it
+"does not exist". Both modules exist. The rows are here so the pass **looks for the value rather
+than at the widget**, and records what it costs, which is what the corrected arguments now claim.
+
+They are pinned in `ContractConventionTest.MEMBER_DIVERGENCE_BY_DECISION` in both directions, so
+whichever slice closes one cannot land without deleting its entry, and these rows become live
+assertions the moment it does.
+
+| # | Lane | What | Expected |
+|---|---|---|---|
+| `§165 RC-1` | **A3** — after results exist (needs `TR-1` and at least one recorded result, which A3 leaves behind) | On the case list, find a case you have **just recorded a result for** and read its **Last result** column. Then open that case's detail page and read the same field. Confirm in the network tab that `GET …/cases` and `GET …/cases/{caseId}` carry **no `lastResult` key at all** — not `null`, absent. | Both read **"Never run"** for a case that was run minutes ago, and the key is absent from both responses. That is the finding, not a rendering bug: `TestCaseSummaryView` has no `lastResult` component and `repository` may not import `execution`. **If the column shows the real result, the read model has been built and `MEMBER_DIVERGENCE_BY_DECISION` is stale** — say so, because the build should have failed first. |
+| `§165 RC-2` | **A1** — after `DOC-1`'s links are authored (the fixture already links cases to bullets 1–3 and to the intro paragraph) | Open one of the cases `DOC-1` links to — bullet 1's passed case is the clearest — and read the **linked documents panel** on its detail page. Then confirm from the documentation side that the link is real: `DOC-1`'s bullet still shows the case chip (`M3-19`). | The case's panel is **empty** while the doc block shows the case. One link, visible from one end only. `CaseDetailPage` reads `data.relatedDocuments ?? []` and the server omits the key. **Read both ends in the same sitting** — the row is only meaningful as the pair, and checking the case alone reads as "this case has no linked documents", which is exactly the false reading the old javadoc encoded. |
+
+**Deliberately not queued:** `TestPlan.keySeq`. It is now declared and every plan response already
+carried it, so there is nothing on a screen to look at — no SPA code reads it, the plan list is
+ordered `keySeq DESC` server-side, and the change is to the generated types alone. `§165 RC-1` in
+the mutation queue is what covers it.

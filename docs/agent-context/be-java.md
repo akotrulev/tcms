@@ -2,15 +2,82 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-11 (**§164** — the two types that agreed by accident, and the schema in no pairing check; **§163** — the request echo nobody wrote, and the decision §162 left declared; **§162** — one media type for every refusal, the two envelopes nobody compared, and the exemptions that excused nothing; **§161** — the by-decision audit, and the contract-versus-server enum rule; **§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-11 (**§165** — the members nobody compared, and the three arguments that blamed a module for not existing; **§164** — the two types that agreed by accident, and the schema in no pairing check; **§163** — the request echo nobody wrote, and the decision §162 left declared; **§162** — one media type for every refusal, the two envelopes nobody compared, and the exemptions that excused nothing; **§161** — the by-decision audit, and the contract-versus-server enum rule; **§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `0d06cbb` (§163; §164 is this session, uncommitted at the time of writing) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `2bc1e43` (§164; §165 is this session, uncommitted at the time of writing) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
 ---
+
+## §165 — EVERY NAMED OBJECT SCHEMA IS PAIRED WITH ITS RECORD, AND COMPARED BOTH WAYS
+
+**`ContractConventionTest.RESPONSE_RECORDS` is 79 pairings, not four, and the rule is two-way.**
+Read this before adding a schema, adding a record, or changing either's members.
+
+- **Adding a property to a paired schema is a TWO-FILE edit, in either order**, and the second is
+  not optional — `pairedSchemasAndRecordsNameTheSameMembers` fails otherwise. Same for adding a
+  record component. This is §164's `Problem` rule generalised to every named object schema.
+- **`everyNameMatchedRecordIsPairedOrExplained` is the population rule and nothing like it existed.**
+  A production record whose simple name matches a named object schema (`Foo` or `FooView`) must be
+  paired, in `PAIRED_ELSEWHERE`, or in `HOMONYMS`. **A name match PROPOSES; the map entry is a human
+  accepting it** — that is why it stays hand-written, and the class literals then make a rename a
+  compile error.
+- **`MEMBER_DIVERGENCE_BY_DECISION` has four entries, all CONTRACT-ONLY, and is pinned BOTH ways** —
+  closing a divergence without deleting its entry fails the build. SERVER-ONLY is the defect
+  (Jackson writes it, no generated union names it); CONTRACT-ONLY costs a dead branch. Same
+  asymmetry `ContractEnumTest` records for the enums.
+- **`Problem` is in `PAIRED_ELSEWHERE`, deliberately** — §164's `theContractsProblemIsThisRecord`
+  already pins it both ways *and* compares the two envelopes as serialized bytes, which a static
+  record-component comparison cannot do. Do not fold it in; the population rule still accounts for it.
+- **`BulkResultView` and `ReportDefinitionView` are package-private and are named by STRING** in
+  `PACKAGE_PRIVATE_OWNERS`. **Do not widen their visibility to tidy this up** — that is a production
+  change made for a test. The cost is recorded: those two fail at runtime rather than at compile time.
+- **The rule reads `src/main/java` source text for record NAMES and imports no ArchUnit graph**, on
+  purpose: a third live class graph is what hung the build at 522685K of 512m (§161).
+- **`requiredPropertiesHaveAComponent` IS GONE** — strictly contained in the two-way rule (a
+  required property with no component is a schema-only member). §66's `createdBy` history lives in
+  the new rule's failure message. Older docs (§68, the M2.5 plans) still name it.
+- **`OpenApiContract` gained `propertiesOf` and `objectSchemas`**, both `allOf`-resolving and both
+  **component-level only** — inline object shapes on a property are out of scope for the same
+  measured reason `enumSchemas()` gives, and that population is the named next candidate.
+
+### The three arguments §165 corrected, and the two live product gaps under them
+
+- **NEVER write "the module does not exist" as a reason.** Three sites did —
+  `TestCaseSummaryView`'s header, `TestCaseDetailView`'s header (twice) and `openapi.yaml`'s
+  `TestCase` comment — while `execution` is **119 files** and `documentation` is **57**. The live
+  obstacle is the **module boundary**: `repository` may not import either, so each closes as a read
+  model fed by events (§3 lesson 4). `repository/package-info.java` said this correctly the whole
+  time, forty lines from the expired version. §160's shape, and the cost is the same: an argument
+  that misnames the obstacle deters the repair.
+- **`TestCaseSummary.lastResult` HAS NEVER BEEN ON THE WIRE**, so `CaseGrid`'s Last result column
+  and the case detail's read **"Never run" for every case in the product**, executed or not.
+- **`TestCase.relatedDocuments` likewise**, and links have been creatable since
+  `POST …/blocks/{blockId}/links`: **a doc link is never shown on the case it links to.**
+  `DocBlockView` struck its "nothing can create a link" clause when that shipped and the
+  `repository` side never heard — one claim, struck in one module, left standing in another.
+- **`DocBlock.coverage` is the control** and holds: the one argument that was *revised* when its
+  constraint moved rather than left to expire.
+- Both gaps are the recorded next slice, and both have browser rows (`§165 RC-1`, `§165 RC-2`) that
+  exist so a live pass **looks for the value rather than at the widget** — each screen is a correct
+  rendering of a key the server does not send, which reads as working.
+
+### `TestPlan.keySeq`, and `TeamRef` is three types
+
+- **`keySeq` is declared on `TestPlanSummary` now.** It was already on the wire — `TestPlanView` has
+  had the component since §74, all seven `TestPlan` operations send it — and no generated client
+  could name it. **§100 widened this exact schema by hand and missed it.**
+- **`TeamRef` is THREE records, not the two §147 recorded**, and only one serves the named schema:
+  `project.TeamRefView` (via `ReviewAssignee.team`, the schema's single `$ref`);
+  `identity.RoleAssignmentView.TeamRef` (serves `RoleAssignment.team`, **inline**);
+  `auth.CurrentUserService.TeamRef` (serves `CurrentUser.teams`, inline, and carries a third
+  component **`isLead`**). The last two are `HOMONYMS` entries, themselves checked for staleness.
+  **Consolidating the first two is a contract change before it is a Java one**, and the third has a
+  member the schema does not declare — so §147's "same argument that moved `UserRef`" does not
+  transfer unchanged.
 
 ## §163 — NO REFUSAL ECHOES THE REQUEST, AND THE PROPERTY WAS WRITTEN BY SPRING
 
@@ -73,10 +140,12 @@ re-grep what a later commit could have moved).
   which is exactly mutation `EN-1b`, red on the new rule **alone**.
 - **Adding a member to `Problem` is now a two-file edit**, in either order, and the second is not
   optional. `openapi.yaml`'s comment says so and names both rules.
-- **Do not "simplify" these into `RESPONSE_RECORDS`.** That map is four entries and **one
-  direction** (every *required* property has a component), so a component the schema does not
-  declare passes it. Generalising it is the standing next-slice candidate; folding `Problem` into it
-  as it stands would lose the direction this section exists for.
+- ~~**Do not "simplify" these into `RESPONSE_RECORDS`.** That map is four entries and **one
+  direction** … folding `Problem` into it as it stands would lose the direction this section exists
+  for.~~ → **§165 generalised it: the map is 79 pairings and two-way.** The instruction still holds
+  and now for a different reason — `Problem` sits in `PAIRED_ELSEWHERE` because §164's rule *also*
+  compares the two envelopes as serialized bytes, which the static rule cannot. See the §165 section
+  above.
 
 ## §162 — ONE MEDIA TYPE FOR EVERY REFUSAL, AND THERE ARE TWO ERROR ENVELOPES
 
@@ -2907,11 +2976,14 @@ exist**, and the slice plan's decision E declines to create it for two storage p
   requirement: the hash's determinism argument rests on there being no *set* in the record's shape.
   `CaseEdit.of` takes the case's stored ids so a bulk action's version row does not hash as though
   the case were unclassified. **`CaseUpdateRequest`'s refused six is now a refused FIVE.** `#confirmed`
-- **`ContractConventionTest.requiredPropertiesHaveAComponent`** resolves a schema's `required`
-  through `allOf` and checks the serving record has a component for each. Added in §68 after
-  `TestCaseDetailView` was found to have omitted `createdBy` since §66 — which made the case
-  detail's `OWN`-qualified Delete refuse every caller their own case. `RESPONSE_RECORDS` is a short
-  explicit map; add a pair when a new view backs a contract schema. `#confirmed`
+- ~~**`ContractConventionTest.requiredPropertiesHaveAComponent`** resolves a schema's `required`
+  through `allOf` and checks the serving record has a component for each … `RESPONSE_RECORDS` is a
+  short explicit map.~~ → **RENAMED AND WIDENED BY §165 — the rule is
+  `pairedSchemasAndRecordsNameTheSameMembers`, compares ALL properties in BOTH directions, and the
+  map is 79 pairings rather than "a short explicit map". See the §165 section at the top.** What
+  stands unchanged is why it exists: added in §68 after `TestCaseDetailView` was found to have
+  omitted `createdBy` since §66, which made the case detail's `OWN`-qualified Delete refuse every
+  caller their own case. That history is now in the new rule's failure message. `#confirmed`
 - **Operator CLI**: `ApplicationRunner` beans that are inert unless their verb appears in the
   non-option args — `ProvisionCompanyCommand`, `IssueInvitationCommand`. The verb list lives in
   `OperatorCommands`, which `TcmsApplication.main` asks *before the context exists* to pick

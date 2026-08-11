@@ -2,14 +2,38 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-10 (**§161** — no frontend source moved; `schema.d.ts` regenerated, comments only; **§160** — the posted CI report becomes a download, keyed on a URL the server composes; **§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
+**Last verified:** 2026-08-11 (**§165** — no frontend source moved, and TWO SCREENS ARE RENDERING A FALSEHOOD — see the entry below; **§162**–**§164** — no frontend source moved, refusal bodies only; **§161** — no frontend source moved; `schema.d.ts` regenerated, comments only; **§160** — the posted CI report becomes a download, keyed on a URL the server composes; **§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
 the one doc-block renderer and the editor's three new types; §126 phase 4 — the three attachment
 surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the flake panel and the
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `ca20094` (§161) (trust the
+**Baseline commit:** `2bc1e43` (§164; §165 is this session, uncommitted at the time of writing) (trust the
 body over the header and re-grep what a later commit could have moved).
+
+## §165 — TWO SCREENS RENDER A CONFIDENT FALSEHOOD, AND NEITHER IS A FRONTEND BUG
+
+No frontend source moved. `schema.d.ts` gains one property (`TestPlanSummary.keySeq`, which nothing
+here reads). **The entry is what §165 measured about two screens this codebase owns**, because both
+look correct and are not, and a browser pass that does not know will pass them.
+
+- **`CaseGrid`'s "Last result" column reads "Never run" for EVERY case in the product** — executed
+  or not. `row.lastResult?.statusKind ? … : 'Never run'` is right; the server has **never sent
+  `lastResult`**, on the list or the detail. `TestCaseSummaryView` has no such component and
+  `repository` may not import `execution` (module boundary), so closing it is a backend read model
+  fed by events, **not** a frontend change. `CaseDetailPage` renders the same value the same way.
+- **`CaseDetailPage`'s `DocLinksPanel` is empty for every case, including cases a doc block links
+  to.** `data.relatedDocuments ?? []`, and the server omits the key for the same reason. Links have
+  been creatable since `POST …/blocks/{blockId}/links`, so the link is real and visible **from the
+  documentation side only**.
+- **Do not "fix" either in the SPA.** There is nothing to fix here: no fallback, no default, no
+  optional chain is wrong. Both fields are pinned in
+  `ContractConventionTest.MEMBER_DIVERGENCE_BY_DECISION` in both directions, so the day a backend
+  slice serves one, the build fails until its entry goes — and `§165 RC-1` / `§165 RC-2` in the
+  browser queue become live assertions rather than descriptions.
+- **The general lesson is the one worth keeping**: an empty state is indistinguishable, on screen,
+  from a value the server never sends. When a browser row is about a field, read the **network tab**
+  for the key, not the widget for the text.
 
 ## §161 — NO FRONTEND SOURCE MOVED, AND THAT IS THE ENTRY
 

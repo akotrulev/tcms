@@ -1918,3 +1918,27 @@ written on **zero** refusals — `setInstance` occurs zero times in `src/main` �
 > `ContractConventionTest.RESPONSE_RECORDS` does that job for four response schemas and `Problem` is
 > not one of them, because it is written by two Java types and this project owns only one. §163
 > removed the single member that differed, so the two agree **today** with no check saying so.
+
+## §165 — the members nobody compared
+
+*Four mutations, all of them **checks over checks** — `§162 MT-*`, `§163 EC-*` and `CE-M*`'s reason:
+the thing §165 ships is a rule, and the only way to know a rule reports is to break what it watches.
+Running them is not the §65 exception, because none of them exercises the product. §65's deferral
+covers the browser pass and the product's own behaviour, and both are deferred — `§165 RC-1` and
+`§165 RC-2` in the browser queue are **not run**, and they are the two that matter most, because
+each is a screen that looks correct while showing a key the server has never sent.*
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| `§165 RC-1` | In `openapi.yaml`, remove `keySeq` from `TestPlanSummary`'s `properties` and `required` — i.e. revert this slice's contract edit | Should redden `a schema and the record serving it name the same members, both ways` with **`TestPlan.keySeq` as SERVER-ONLY** and nothing else. This is the slice's own finding replayed: the state before this commit, which every gate in the repo has been green over since §74. | ✅ **RUN 2026-08-11 — red, `unexpected: ["TestPlan.keySeq"]`, only that test** |
+| `§165 RC-2` | Rename `DocBlock.coverage` to `coverageXX` in `openapi.yaml`, leaving its `MEMBER_DIVERGENCE_BY_DECISION` entry in place | Should redden the same rule from **the healed arm** — `elements not found: ["DocBlock.coverage"]` — proving the by-decision map fails in *both* directions and an argument cannot outlive its gap. This is the property §162 found that one-directional exemption lists do not have. | ✅ **RUN 2026-08-11 — red, `elements not found: ["DocBlock.coverage"]` and `not expected: ["DocBlock.coverageXX"]`** |
+| `§165 RC-3` | Delete the `Facet` entry from `RESPONSE_RECORDS` | Should redden `every schema a record is named for is paired, and every pairing is a real schema`, naming `Facet`. Proves the population rule reports a schema whose record nobody has claimed — the direction that did not exist at all before this slice, when the map was four entries and everything else was silently unchecked. | ✅ **RUN 2026-08-11 — red, `["Facet"]`** |
+| `§165 RC-4` | Two variants on `HOMONYMS`: (a) delete the `auth.CurrentUserService.TeamRef` entry; (b) add a bogus `com.tcms.project.NoSuchTeamRef` entry, keeping both real ones | (a) should report the record as **unexplained** — the mechanism that would have caught §147's "TeamRef is two copies" when it is three; (b) should report it as **stale**, an argument naming a collision that does not exist. Both arms of the same map, and (a) short-circuits (b), so they are run separately. | ✅ **RUN 2026-08-11 — (a) red, `["com.tcms.auth.CurrentUserService.TeamRef (named for contract schema TeamRef)"]`; (b) red, `["com.tcms.project.NoSuchTeamRef"]`** |
+
+> **Not mutation-tested and worth knowing.** The rule compares a schema's declared properties to a
+> record's **components**, statically. It cannot see what Jackson actually writes — a
+> `@JsonIgnore`, a `@JsonProperty` rename, or a custom serializer would satisfy it while changing
+> the bytes. §164's `bothEnvelopesSerializeTheSameKeys` is the shape that closes this for one
+> schema, over a real `MockMvc` response, and generalising *that* to 79 pairings needs a fixture per
+> pairing rather than a class literal. The narrowing is the same one §164's queue recorded from the
+> other side, and it is the reason `Problem` stays in `PAIRED_ELSEWHERE` rather than being folded in.
