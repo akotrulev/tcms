@@ -25,18 +25,34 @@ import java.util.UUID;
  *
  * <h2>Two fields the contract has and this response does not</h2>
  *
+ * <p><strong>Both reasons below were rewritten by §165, and both used to blame a module for not
+ * existing.</strong> {@code documentation} is 57 files and {@code execution} is 119. What actually
+ * blocks each is the <em>module boundary</em> — {@code repository} may not import either, which
+ * this package's {@code package-info} has stated correctly the whole time — so each closes as a
+ * read model fed by events (§3 lesson 4), not by a join and not by waiting. An argument that
+ * misnames the obstacle deters the repair, which is §160's finding at a different field.
+ *
  * <ol>
  *   <li><strong>{@code relatedDocuments}.</strong> Sourced from {@code doc_link} against
- *       {@code doc_page} / {@code doc_block}, which are the {@code documentation} module — and that
- *       module does not exist. Nothing can create a link, so no case has one. The contract does not
- *       mark the field required and the SPA already renders its absence as an empty panel, which is
- *       exactly true. Serializing {@code []} would say the same thing while claiming the question
- *       had been asked.</li>
- *   <li><strong>{@code lastResult}.</strong> Sourced from {@code test_execution}; the
- *       {@code execution} module does not exist either. Same call as {@link TestCaseSummaryView}
- *       makes, and made the same way for the same reason — the SPA reads a missing
- *       {@code lastResult} as "Never run".</li>
+ *       {@code doc_page} / {@code doc_block}, which are the {@code documentation} module.
+ *       ~~Nothing can create a link, so no case has one.~~ <strong>Struck:</strong> links have been
+ *       creatable since {@code POST .../blocks/{blockId}/links} shipped, and
+ *       {@link com.tcms.documentation.DocBlockView}'s header struck this same clause on its own
+ *       side when that happened — <em>this</em> side never heard, which is what a hand-maintained
+ *       argument in two modules costs. So a link made from a doc block to a case is real and is
+ *       <strong>never shown on the case</strong>: {@code CaseDetailPage} reads
+ *       {@code data.relatedDocuments ?? []} and renders an empty panel. The contract does not mark
+ *       the field required, and serializing {@code []} would still be worse — it would claim the
+ *       question had been asked.</li>
+ *   <li><strong>{@code lastResult}.</strong> Sourced from {@code test_execution}. Same call as
+ *       {@link TestCaseSummaryView} makes, made the same way for the same reason, and wrong in the
+ *       same way today — the SPA reads a missing {@code lastResult} as "Never run", and every case
+ *       in the product reads that whether or not it has been executed.</li>
  * </ol>
+ *
+ * <p>Both are pinned as CONTRACT-ONLY in
+ * {@code ContractConventionTest.MEMBER_DIVERGENCE_BY_DECISION}, in both directions, so neither
+ * argument can outlive its gap the way these two did.
  *
  * @param gherkinSource null for a {@code STRUCTURED} case; {@link #steps} is empty for a
  *              {@code GHERKIN} one. The two are alternatives (plan §6a) and the SPA branches on

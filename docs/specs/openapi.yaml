@@ -6654,9 +6654,19 @@ components:
           # and leaving them out would mean a consumer cannot tell an unset objective from a field
           # this endpoint does not serve.
           #
-          # relatedDocuments is deliberately ABSENT: it is sourced from the `documentation` module,
-          # which does not exist, so the server omits the key entirely rather than serving [] and
-          # claiming a case has no linked documents (§27).
+          # relatedDocuments is deliberately ABSENT, and the reason was rewritten by §165 because
+          # the one it gave had expired: it said the `documentation` module "does not exist", and
+          # that module is 57 files including `DocLink`, `DocLinkRepository` and a POST that creates
+          # a link. The live obstacle is the module boundary — `repository` may not import
+          # `documentation` (see its package-info), so this has to arrive as a read model fed by
+          # events (§3 lesson 4) rather than as a join. The server still omits the key rather than
+          # serving [] and claiming a case has no linked documents (§27).
+          #
+          # WHAT IT COSTS NOW THAT LINKS ARE CREATABLE: a link made from a doc block to a case is
+          # never shown on the case. `CaseDetailPage` reads `data.relatedDocuments ?? []` and
+          # renders an empty panel. Pinned as CONTRACT-ONLY in
+          # ContractConventionTest.MEMBER_DIVERGENCE_BY_DECISION, which fails the build if either
+          # side closes without the other.
           required:
             - description
             - objective
@@ -7737,10 +7747,21 @@ components:
     # --------------------------------------------------------- execution ---
     TestPlanSummary:
       type: object
-      required: [id, key, name, status, milestoneName, milestoneDate, caseCount, passRate, coverage]
+      required: [id, key, keySeq, name, status, milestoneName, milestoneDate, caseCount, passRate, coverage]
       properties:
         id: { type: string, format: uuid }
         key: { type: string, example: TP-1 }
+        # Declared by §165, and it was ALREADY ON THE WIRE: `TestPlanView` has had a `keySeq`
+        # component since §74 and every one of the seven operations returning a `TestPlan` has been
+        # sending the key, while no generated client could name it. §100 widened this exact schema
+        # by hand — from `TestPlanSummary` to the full `TestPlan` — and missed it, because a
+        # hand-comparison looks for the field somebody is arguing about (`exitCriteria`) and a
+        # both-ways rule looks at all of them. `TestCaseSummary.keySeq` is the same value with the
+        # same reason and has been declared since M0.
+        #
+        # The plan list is ordered `keySeq DESC` server-side (`TestPlanRepository`), so no client
+        # has to sort by it — declaring it is what makes the body honest, not what makes it useful.
+        keySeq: { type: integer, description: Stable insertion ordinal — text keys do not order correctly. }
         name: { type: string }
         status: { type: string, enum: [DRAFT, IN_REVIEW, APPROVED] }
         milestoneName: { type: string, nullable: true }

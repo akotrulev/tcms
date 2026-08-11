@@ -8707,6 +8707,8 @@ export interface components {
             id: string;
             /** @example TP-1 */
             key: string;
+            /** @description Stable insertion ordinal — text keys do not order correctly. */
+            keySeq: number;
             name: string;
             /** @enum {string} */
             status: "DRAFT" | "IN_REVIEW" | "APPROVED";

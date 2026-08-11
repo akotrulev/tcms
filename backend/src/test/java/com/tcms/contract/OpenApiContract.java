@@ -225,6 +225,65 @@ public final class OpenApiContract {
     }
 
     /**
+     * Every property a schema declares, <strong>collected through {@code allOf}</strong> —
+     * {@link #requiredOf}'s superset, and the one a record's components are comparable to.
+     *
+     * <p>{@code required} was the only half {@link ContractConventionTest} compared until §165, and
+     * a subset comparison can only fail in one direction: a property the record lacks. The other —
+     * a component the schema does not declare — is a value Jackson writes that no generated union
+     * can name, which is the direction {@code Problem.instance} went for sixteen sections, and it is
+     * invisible to a rule that only walks the {@code required} array. {@code TestPlan.keySeq} was
+     * the instance here, on seven operations.
+     *
+     * <p>Optional properties are in, and that is the point rather than an oversight: an optional
+     * property with no component is a promise nothing keeps — the server cannot send the key under
+     * any circumstances — and the contract does not distinguish "optional" from "not implemented".
+     * §148's finding, arriving at the schema instead of at the response.
+     *
+     * @param ref a local {@code $ref}, e.g. {@code #/components/schemas/TestCase}
+     */
+    Set<String> propertiesOf(String ref) {
+        Set<String> properties = new LinkedHashSet<>();
+        collectProperties(resolve(Map.of("$ref", ref)), properties);
+        return properties;
+    }
+
+    private void collectProperties(Map<String, Object> schema, Set<String> into) {
+        if (schema.get("properties") instanceof Map<?, ?> declared) {
+            declared.keySet().forEach(name -> into.add(String.valueOf(name)));
+        }
+        if (schema.get("allOf") instanceof List<?> branches) {
+            for (Object branch : branches) {
+                collectProperties(resolve(asMap(branch)), into);
+            }
+        }
+    }
+
+    /**
+     * The {@code components.schemas} entries that declare an object shape — anything with
+     * {@code properties} of its own or an {@code allOf} that reaches some.
+     *
+     * <p>The counterpart of {@link #enumSchemas()} and narrowed the same way and for the same
+     * reason: <strong>component-level only</strong>. The document holds many more object shapes
+     * inline on a property — {@code RoleAssignment.team} and {@code CurrentUser.teams} are two, and
+     * both are served by a Java record — but an anonymous shape has no name to correspond by, so
+     * there is nothing for a pairing map to key on. A named schema is a named generated type, which
+     * is what makes it a thing a client can be wrong about by name.
+     */
+    Set<String> objectSchemas() {
+        Set<String> names = new LinkedHashSet<>();
+        map(map(root, "components"), "schemas").forEach((name, schema) -> {
+            Map<String, Object> node = asMap(schema);
+            if (node.get("properties") instanceof Map<?, ?> properties && !properties.isEmpty()) {
+                names.add(name);
+            } else if (node.get("allOf") instanceof List<?> branches && !branches.isEmpty()) {
+                names.add(name);
+            }
+        });
+        return names;
+    }
+
+    /**
      * The named enum types — every {@code components.schemas} entry that declares an
      * {@code enum}, mapped to its members in declaration order.
      *

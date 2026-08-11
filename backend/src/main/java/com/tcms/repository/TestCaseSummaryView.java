@@ -47,13 +47,25 @@ import java.util.UUID;
  *               because nothing computes them yet — see {@link HealthSignal}. Never null: the
  *               contract marks it required, so the SPA cannot null-check it.
  *
- * <p><strong>{@code lastResult} is deliberately not a field here.</strong> It is sourced from
- * {@code test_execution}, and the {@code execution} module does not exist — nothing can record a
- * result, so no case has one. The contract does not mark it required, so omitting the key is legal,
- * and the SPA already renders a missing {@code lastResult} as "Never run", which is exactly true.
- * Serializing an explicit {@code null} would say the same thing more expensively; serializing a
- * fabricated {@code UNTESTED} result would invent an execution that never happened. It appears when
- * {@code execution} does.
+ * <p><strong>{@code lastResult} is deliberately not a field here — and the reason below is §165's,
+ * because the one this javadoc gave had expired.</strong> It said the {@code execution} module
+ * "does not exist — nothing can record a result, so no case has one", and it concluded "it appears
+ * when {@code execution} does". That module is 119 files; results have been recorded since §117 and
+ * ingested from CI since §119. <strong>The SPA has therefore been rendering "Never run" for every
+ * case in the product, including ones with executions</strong> — {@code CaseGrid}'s Last result
+ * column, and the same value on {@link TestCaseDetailView}'s page.
+ *
+ * <p>The live obstacle is not existence, it is the module boundary: {@code repository} may not
+ * import {@code execution} (see this package's {@code package-info}, which states it correctly and
+ * always did — "the same rule is what keeps {@code TestCaseSummary.lastResult} off the wire today
+ * rather than reaching for {@code test_execution} directly"). Closing it is a read model fed by
+ * events, §3 lesson 4's shape, <strong>not</strong> a wiring fix and not a wait.
+ *
+ * <p>What holds unchanged: the contract does not mark it required, so omitting the key is legal;
+ * serializing an explicit {@code null} would say the same thing more expensively; serializing a
+ * fabricated {@code UNTESTED} result would invent an execution that never happened. Pinned as
+ * CONTRACT-ONLY in {@code ContractConventionTest.MEMBER_DIVERGENCE_BY_DECISION}, which fails the
+ * build if the contract drops the property or this record grows the component.
  */
 public record TestCaseSummaryView(
         UUID id,
