@@ -144,6 +144,14 @@ public class ExternalLinkService {
         /** Removed. 204. */
         record Deleted() implements Outcome {
         }
+
+        /**
+         * The relationship was corrected, or already said what the caller asked for. 200 either way
+         * (§174) — {@code BlockLinkService.Outcome.Relabelled} carries the argument for why the two
+         * arms are one record.
+         */
+        record Relabelled(ExternalLinkView view) implements Outcome {
+        }
     }
 
     /** Links a case to a repository range or a URL. */
@@ -232,6 +240,61 @@ public class ExternalLinkService {
             audit(project.getId(), userId, "doc_link.deleted", link, source.get(), clock.instant());
             outbox.recordCoalesced(OutboxEvents.DOC_LINKS_CHANGED);
             return new Outcome.Deleted();
+        }));
+    }
+
+    /**
+     * Corrects what one of a case's external links claims (§174) — the case end of the act
+     * {@link BlockLinkService#relabel} performs on the documentation end.
+     *
+     * <p><strong>Both ends exist because §173 is what happens when only one does.</strong> That
+     * section spent a slice removing an asymmetry in the <em>withdrawal</em> of these same rows, on
+     * the grounds that one act must not behave two ways depending on which screen reached it.
+     * Shipping the correction on the block end alone — which is literally all browser row
+     * {@code M6-38} asks for — would have re-created the asymmetry the same week it was removed.
+     *
+     * <p>The gate is {@code case:edit} and not {@code doc:edit}, mirroring this service's create and
+     * delete rather than {@link BlockLinkService}'s. The split is the one this class's header
+     * argues: a link to a file belongs to the case, a link to a paragraph belongs to the
+     * documentation, and each end is gated by whoever owns the thing the link is a property of.
+     */
+    @Transactional
+    public Outcome relabel(
+            UUID userId, UUID projectId, UUID caseId, UUID linkId, LinkRelabelInput input) {
+
+        return gated(projects.writeGranted(userId, projectId, EDIT_CASE, project -> {
+
+            LinkRelationship relationship = LinkRelationship.parse(input.relationship());
+            if (relationship == null) {
+                // Required, with no default — see LinkRelabelInput: an absent value on a correction
+                // is a caller who did not say what to correct it to.
+                return new Outcome.Invalid(Map.of("relationship",
+                        List.of("Choose a relationship: VERIFIES, DERIVED_FROM or REFERENCES.")));
+            }
+
+            Optional<CatalogueFacts.CatalogueRef> source =
+                    catalogue.find(project.getId(), LinkSourceType.TEST_CASE, caseId);
+            if (source.isEmpty()) {
+                return new Outcome.NotFound();
+            }
+
+            // Scoped to the case for the delete's reason, one method up: a link id belonging to
+            // another case must 404 rather than be rewritten from under it.
+            Optional<DocLink> found =
+                    links.findExternalForSource(LinkSourceType.TEST_CASE, caseId).stream()
+                            .filter(link -> link.getId().equals(linkId))
+                            .findFirst();
+            if (found.isEmpty()) {
+                return new Outcome.NotFound();
+            }
+
+            DocLink link = found.get();
+            Instant now = clock.instant();
+            if (link.relabel(relationship, userId, now)) {
+                audit(project.getId(), userId, "doc_link.relabelled", link, source.get(), now);
+                outbox.recordCoalesced(OutboxEvents.DOC_LINKS_CHANGED);
+            }
+            return new Outcome.Relabelled(ExternalLinkView.of(link));
         }));
     }
 

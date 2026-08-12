@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -77,6 +78,31 @@ public class ExternalLinkController {
     }
 
     /** Removes one of this case's external links. A hard delete — {@link ExternalLinkService}. */
+    /**
+     * Corrects what one of this case's links claims (§174).
+     *
+     * <p>The case end of the act {@code DocPageController.relabel} performs on the documentation
+     * end, gated on {@code case:edit} rather than {@code doc:edit} for this controller's standing
+     * reason. Both ends exist because §173 spent a slice removing exactly this asymmetry from the
+     * withdrawal of the same rows — see {@link ExternalLinkService#relabel}.
+     */
+    @PatchMapping("/{linkId}")
+    public ResponseEntity<Object> relabel(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID caseId,
+            @PathVariable UUID linkId,
+            @RequestBody LinkRelabelInput input) {
+
+        ExternalLinkService.Outcome outcome =
+                links.relabel(UUID.fromString(jwt.getSubject()), projectId, caseId, linkId, input);
+
+        return switch (outcome) {
+            case ExternalLinkService.Outcome.Relabelled done -> ResponseEntity.ok(done.view());
+            default -> problem(outcome, "edit test cases in this project");
+        };
+    }
+
     @DeleteMapping("/{linkId}")
     public ResponseEntity<Object> unlink(
             @AuthenticationPrincipal Jwt jwt,
@@ -125,6 +151,8 @@ public class ExternalLinkController {
                     throw new IllegalStateException("An existing link was mapped as a problem");
             case ExternalLinkService.Outcome.Deleted ignored ->
                     throw new IllegalStateException("A deleted link was mapped as a problem");
+            case ExternalLinkService.Outcome.Relabelled ignored ->
+                    throw new IllegalStateException("A relabelled link was mapped as a problem");
         };
     }
 }

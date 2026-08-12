@@ -125,8 +125,14 @@ public class DocLink {
     @Column(name = "external_url", updatable = false)
     private String externalUrl;
 
+    /**
+     * What the source claims about the target — and <strong>the one mutable column on this
+     * row</strong> since §174. See {@link #relabel}: the immutability that made this
+     * {@code updatable = false} was a policy about the <em>target coordinates</em>, applied here by
+     * being applied to everything.
+     */
     @Enumerated(EnumType.STRING)
-    @Column(name = "relationship", nullable = false, updatable = false)
+    @Column(name = "relationship", nullable = false)
     private LinkRelationship relationship;
 
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -135,6 +141,21 @@ public class DocLink {
     @Column(name = "created_by", updatable = false)
     private UUID createdBy;
 
+    /**
+     * When the relationship was last corrected, or {@code null} for <em>never</em> (§174).
+     *
+     * <p>Null is an answer and not a gap: it says the row still claims what it claimed when it was
+     * made. {@code V48} declines to backfill it from {@code created_at} for exactly that reason —
+     * that would state "corrected at creation" about every row that has ever existed, and no later
+     * reader could separate the fabricated values from the real ones.
+     */
+    @Column(name = "updated_at")
+    private Instant updatedAt;
+
+    /** Who last corrected it. Nullable for {@link #createdBy}'s reason — an actor may be a token. */
+    @Column(name = "updated_by")
+    private UUID updatedBy;
+
     /** JPA only. */
     protected DocLink() {
     }
@@ -142,10 +163,14 @@ public class DocLink {
     /**
      * A new link from a case or suite to a block.
      *
-     * <p>Every field is {@code updatable = false} and there is no mutator on this class. A link is
+     * <p>~~Every field is {@code updatable = false} and there is no mutator on this class. A link is
      * an assertion, and changing what it points at is two acts — withdrawing one claim and making
      * another — which the API spells as a delete and a create. An editable link would let the record
-     * of "who said this verifies that" be rewritten in place with no trace.
+     * of "who said this verifies that" be rewritten in place with no trace.~~ →
+     * <strong>superseded in part (§174)</strong>: see {@link #relabel}. The argument holds
+     * completely for the <em>target coordinates</em> and it is kept in place for them; it never
+     * held for {@code relationship}, and the trace it was protecting is now actually written
+     * ({@code updated_at} / {@code updated_by}) instead of being protected by refusal.
      */
     static DocLink toBlock(
             LinkSourceType sourceType,
@@ -231,6 +256,45 @@ public class DocLink {
         created.createdAt = now;
         created.createdBy = creatorId;
         return created;
+    }
+
+    /**
+     * Corrects what this link claims — the only mutation this class permits (§174).
+     *
+     * <h2>A named act, not a setter</h2>
+     *
+     * <p>The class header's rule is <em>"three factories, no setters"</em>, and this does not break
+     * it: {@code setRelationship} would be a bean accessor that says nothing about what changing the
+     * value means, and the point of this one is that it is <strong>one intention</strong> with a
+     * required actor and clock. There is no way to move the field without also stamping who moved
+     * it, which is what makes the audit columns a property of the type rather than a convention two
+     * services have to remember.
+     *
+     * <h2>Why this field and no other</h2>
+     *
+     * <p>The immutability of the target coordinates is load-bearing and stays: a link that silently
+     * changes which file or which block it points at is worse than one that is withdrawn and remade,
+     * because every count drawn off this table keeps agreeing with itself while pointing somewhere
+     * new. {@code relationship} is not a coordinate — it is the <em>claim</em>, it is the one field
+     * a person realistically gets wrong, and getting it wrong is not a small mistake: the coverage
+     * matrix counts {@code VERIFIES} and ignores the other two, so a mislabelled link is a false
+     * coverage number rather than a cosmetic error.
+     *
+     * <h2>Re-asserting the same value writes nothing</h2>
+     *
+     * <p>Returns whether anything moved, so the caller can skip the event and the audit stamp for a
+     * request that changes nothing. This is the {@code POST}'s idempotency rule seen from the update
+     * side: re-stating a fact that is already recorded is not an error, and stamping
+     * {@code updated_by} for it would report a correction nobody made.
+     */
+    boolean relabel(LinkRelationship next, UUID actorId, Instant now) {
+        if (relationship == next) {
+            return false;
+        }
+        relationship = next;
+        updatedAt = now;
+        updatedBy = actorId;
+        return true;
     }
 
     public UUID getId() {

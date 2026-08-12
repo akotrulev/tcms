@@ -492,6 +492,51 @@ class PlanDocumentEndpointTest extends IntegrationTestBase {
             assertThat(link(VIEWER, BANKING, idOfPage(page), firstBulletId(page), CASE)
                     .getResponse().getStatus()).isEqualTo(403);
         }
+
+        @Test
+        @DisplayName("the claim is correctable in place, and the block serves the new one (§174)")
+        void theClaimIsCorrectable() throws Exception {
+            JsonNode page = body(start(ENGINEER, BANKING, PLAN));
+            UUID pageId = idOfPage(page);
+            UUID blockId = firstBulletId(page);
+            UUID linkId = UUID.fromString(
+                    body(link(ENGINEER, BANKING, pageId, blockId, CASE)).get("id").asText());
+
+            MvcResult corrected = relabel(ENGINEER, BANKING, pageId, linkId, "REFERENCES");
+
+            assertThat(corrected.getResponse().getStatus()).isEqualTo(200);
+            assertThat(body(corrected).get("relationship").asText()).isEqualTo("REFERENCES");
+            // The same row, not a new one. Until §174 the only way to fix a claim was to withdraw
+            // the link and make another, which silently rewrote created_by to whoever noticed.
+            assertThat(body(corrected).get("id").asText()).isEqualTo(linkId.toString());
+            assertThat(linkCount(blockId)).isEqualTo(1);
+
+            // What the coverage matrix reads. A correction the page keeps serving as VERIFIES is a
+            // false coverage number that looks exactly like a correct one.
+            JsonNode links = blockById(body(document(ENGINEER, BANKING, PLAN)), blockId).get("links");
+            assertThat(links).hasSize(1);
+            assertThat(links.get(0).get("relationship").asText()).isEqualTo("REFERENCES");
+        }
+
+        @Test
+        @DisplayName("a Viewer may not correct a claim, and an unknown relationship is a 400")
+        void relabelIsGatedAndValidated() throws Exception {
+            JsonNode page = body(start(ENGINEER, BANKING, PLAN));
+            UUID pageId = idOfPage(page);
+            UUID blockId = firstBulletId(page);
+            UUID linkId = UUID.fromString(
+                    body(link(ENGINEER, BANKING, pageId, blockId, CASE)).get("id").asText());
+
+            // doc:edit, the key the create and the delete charge — correcting a claim is not a
+            // lesser act than making one.
+            assertThat(relabel(VIEWER, BANKING, pageId, linkId, "REFERENCES")
+                    .getResponse().getStatus()).isEqualTo(403);
+            assertThat(relabel(ENGINEER, BANKING, pageId, linkId, "SORT_OF")
+                    .getResponse().getStatus()).isEqualTo(400);
+
+            JsonNode links = blockById(body(document(ENGINEER, BANKING, PLAN)), blockId).get("links");
+            assertThat(links.get(0).get("relationship").asText()).isEqualTo("VERIFIES");
+        }
     }
 
     // =====================================================================
@@ -698,6 +743,20 @@ class PlanDocumentEndpointTest extends IntegrationTestBase {
                         .contentType(MediaType.APPLICATION_JSON)
                         .accept(MediaType.APPLICATION_JSON)
                         .content("{\"sourceType\":\"TEST_CASE\",\"sourceId\":\"" + caseId + "\"}"))
+                .andReturn();
+    }
+
+    private MvcResult relabel(
+            UUID userId, UUID projectId, UUID pageId, UUID linkId, String relationship)
+            throws Exception {
+
+        return mvc.perform(MockMvcRequestBuilders
+                        .patch("/api/v1/projects/" + projectId + "/doc-pages/" + pageId
+                                + "/links/" + linkId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, ACME))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"relationship\":\"" + relationship + "\"}"))
                 .andReturn();
     }
 

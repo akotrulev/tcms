@@ -2827,7 +2827,60 @@ export interface paths {
         };
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Correct what one of this case's external links claims
+         * @description Requires `case:edit` — this endpoint's own gate, not the documentation one. The split is
+         *     `POST .../external-links`'s: a link to a file belongs to the case, a link to a paragraph
+         *     belongs to the documentation, and each end is gated by whoever owns the thing the link is a
+         *     property of.
+         *
+         *     **Both ends of this act exist because §173 is what happens when only one does.** That
+         *     section spent a slice removing an asymmetry in the *withdrawal* of these same rows, on the
+         *     grounds that one act must not behave two ways depending on which screen reached it. Shipping
+         *     the correction on the documentation end alone would have re-created it the same week.
+         *
+         *     Everything else — only `relationship` is mutable, `200` whether or not the value moved, no
+         *     audit row and no event for a no-op — is the sibling's, and stated there.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                    /**
+                     * @description UUID only. Display keys (TC-1) are deliberately NOT accepted here: they are
+                     *     sequential per company and therefore trivially guessable, so allowing one as a
+                     *     path identifier hands out an enumeration oracle (plan §6t). Resolve a key the
+                     *     user typed or pasted through the search endpoint, which returns not-found —
+                     *     never forbidden — for a key in a project the caller cannot reach.
+                     */
+                    caseId: components["parameters"]["CaseId"];
+                    linkId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["LinkRelabelInput"];
+                };
+            };
+            responses: {
+                /** @description The link, with the relationship it now claims. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ExternalLink"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+            };
+        };
         trace?: never;
     };
     "/projects/{projectId}/ai-proposals": {
@@ -5118,7 +5171,78 @@ export interface paths {
         };
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Correct what a link claims
+         * @description Requires `doc:edit` — the same key as the create and the delete. Correcting a claim is not a
+         *     lesser act than making one; if anything it is the more consequential, because the link is
+         *     already being counted.
+         *
+         *     **Only `relationship` may be changed, and that is the whole design.** The target coordinates
+         *     are immutable: a link that silently changes which block it points at keeps every count over
+         *     `doc_link` agreeing with itself while pointing somewhere new, which is worse than a link that
+         *     is withdrawn and remade. The relationship is not a coordinate — it is the *claim*, it is the
+         *     field a person realistically gets wrong, and getting it wrong is a false coverage number
+         *     rather than a cosmetic error, because the coverage matrix counts `VERIFIES` and ignores the
+         *     other two.
+         *
+         *     Until §174 the only way to fix one was to withdraw the link and make another, which silently
+         *     rewrote `created_by` and `created_at` to whoever noticed the mistake. `V48` adds
+         *     `updated_at` / `updated_by` so the correction is recorded rather than disguised as a
+         *     creation.
+         *
+         *     **A `PATCH` rather than a second `POST`.** The create is keyed on (block, source) and answers
+         *     `200` with the existing row when that pair is already linked, so re-posting with a different
+         *     relationship would have to either overwrite silently — making a create an update, on the
+         *     endpoint whose documented contract is that a duplicate "writes nothing" — or keep ignoring
+         *     it, which is what it does and is why this endpoint exists.
+         *
+         *     **`200` whether the value moved or already said this.** Re-stating a recorded fact is not an
+         *     error here for the same reason it is not on the `POST`; what a no-op skips is the audit row
+         *     and the `documentation.links_changed` notice, because a correction that corrected nothing
+         *     must not be reported as one.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                    pageId: string;
+                    linkId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["LinkRelabelInput"];
+                };
+            };
+            responses: {
+                /** @description The link, with the relationship it now claims. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BlockLink"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                /**
+                 * @description The project, the page, the link, or the link's source is not visible here. One bodiless
+                 *     response for all four (§6t) — the source is in that list because this endpoint returns
+                 *     the row, and a row whose case can no longer be named has nothing to return.
+                 */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         trace?: never;
     };
     "/projects/{projectId}/plans/{planId}/document": {
@@ -10131,6 +10255,18 @@ export interface components {
              * @description Defaults to `VERIFIES`, which is what a test case linked to a scenario means and what
              *     the column already defaults to.
              * @default VERIFIES
+             * @enum {string}
+             */
+            relationship: "VERIFIES" | "DERIVED_FROM" | "REFERENCES";
+        };
+        LinkRelabelInput: {
+            /**
+             * @description **Required, and with no default — the one place this differs from the create.**
+             *
+             *     An absent `relationship` on a `POST` means "the ordinary one" and resolves to
+             *     `VERIFIES`. On a correction it means the caller did not say what to correct it *to*, and
+             *     defaulting there would have the server invent a claim on somebody's behalf — on the
+             *     field whose entire purpose is to keep *proves it* and *mentions it* apart.
              * @enum {string}
              */
             relationship: "VERIFIES" | "DERIVED_FROM" | "REFERENCES";

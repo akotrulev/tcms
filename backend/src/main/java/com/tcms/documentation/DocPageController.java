@@ -252,6 +252,37 @@ public class DocPageController {
         };
     }
 
+    /**
+     * Corrects what a link claims (§174).
+     *
+     * <p><strong>{@code PATCH} on the link and not a second {@code POST}</strong>: the create is
+     * keyed on (block, source) and answers 200 with the existing row when that pair is already
+     * linked, so re-posting with a different relationship would have to either overwrite silently —
+     * making a create an update, on the endpoint whose whole documented contract is that it
+     * "writes nothing" for a duplicate — or keep ignoring it, which is what it does today and is why
+     * this endpoint exists.
+     *
+     * <p>One success code, unlike the create: 200 whether the value moved or already said this.
+     * See {@code Outcome.Relabelled} — the two arms differ in what was written, not in what the
+     * caller gets back, and a client correcting a link needs the row either way.
+     */
+    @PatchMapping("/{pageId}/links/{linkId}")
+    public ResponseEntity<Object> relabel(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID pageId,
+            @PathVariable UUID linkId,
+            @RequestBody LinkRelabelInput input) {
+
+        BlockLinkService.Outcome outcome = blockLinks.relabel(
+                UUID.fromString(jwt.getSubject()), projectId, pageId, linkId, input);
+
+        return switch (outcome) {
+            case BlockLinkService.Outcome.Relabelled done -> ResponseEntity.ok(done.view());
+            default -> linkProblem(outcome, "change what a documentation link claims in this project");
+        };
+    }
+
     /** Removes a link. Hard, not soft — see {@link BlockLinkService}. */
     @DeleteMapping("/{pageId}/links/{linkId}")
     public ResponseEntity<Object> unlink(
@@ -295,6 +326,8 @@ public class DocPageController {
                     throw new IllegalStateException("An existing link was mapped as a problem");
             case BlockLinkService.Outcome.Deleted ignored ->
                     throw new IllegalStateException("A deleted link was mapped as a problem");
+            case BlockLinkService.Outcome.Relabelled ignored ->
+                    throw new IllegalStateException("A relabelled link was mapped as a problem");
         };
     }
 

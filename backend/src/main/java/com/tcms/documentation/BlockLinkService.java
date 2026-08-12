@@ -128,6 +128,21 @@ public class BlockLinkService {
         /** Removed. 204. */
         record Deleted() implements Outcome {
         }
+
+        /**
+         * The relationship was corrected, or was already what the caller asked for. 200 either way
+         * (§174).
+         *
+         * <p>One record and not two, deliberately. The {@code POST} distinguishes {@link Created}
+         * from {@link Existing} because they differ in <em>status code</em> — 201 against 200 — and
+         * a client has to know whether a row appeared. Here both arms are 200 with the same body,
+         * so a second record would be a distinction no response could carry, which is a fact stored
+         * where nobody can read it. What the two arms really differ in is whether anything was
+         * written, and {@link DocLink#relabel} already answers that where it matters: no audit row
+         * and no outbox notice for a correction that corrected nothing.
+         */
+        record Relabelled(BlockLinkView view) implements Outcome {
+        }
     }
 
     /** Links a case or suite to a block. */
@@ -230,6 +245,69 @@ public class BlockLinkService {
             outbox.recordCoalesced(OutboxEvents.DOC_LINKS_CHANGED);
 
             return new Outcome.Deleted();
+        }));
+    }
+
+    /**
+     * Corrects what an existing link claims (§174).
+     *
+     * <p>The one field of a link that may be changed in place, and the reason is
+     * {@link DocLink#relabel}'s: the coverage matrix counts {@code VERIFIES} and ignores the other
+     * two, so a mislabelled link is a false coverage number rather than a cosmetic error — and the
+     * alternative the product offered until now was to withdraw the link and make another, which
+     * silently rewrites {@code created_by} and {@code created_at} to whoever noticed the mistake.
+     *
+     * <p><strong>The gate is {@code doc:edit}, exactly as the create and the delete are.</strong>
+     * Correcting a claim is not a lesser act than making one — if anything it is the more
+     * consequential, because the link is already being counted.
+     *
+     * <p>The source is resolved for the response body for the same reason the create resolves it:
+     * a {@link BlockLinkView} names the case, and a client that has just relabelled a link needs
+     * the row back in the shape it renders. A link whose source can no longer be named is a
+     * {@code 404} here rather than a view with null fields — unlike the delete, which writes its
+     * audit row with the id alone, this path has to <em>return</em> the thing.
+     */
+    @Transactional
+    public Outcome relabel(
+            UUID userId, UUID projectId, UUID pageId, UUID linkId, LinkRelabelInput input) {
+
+        return gated(projects.writeGranted(userId, projectId, EDIT_DOC, project -> {
+
+            LinkRelationship relationship = LinkRelationship.parse(input.relationship());
+            if (relationship == null) {
+                // No default here, unlike the create. An absent relationship on a POST means "the
+                // ordinary one"; on a correction it means the caller did not say what to correct it
+                // to, and choosing VERIFIES for them would be the product inventing a claim.
+                return new Outcome.Invalid(Map.of("relationship",
+                        List.of("Choose a relationship: VERIFIES, DERIVED_FROM or REFERENCES.")));
+            }
+
+            Optional<DocPage> page = pages.findLiveInProject(project.getId(), pageId);
+            if (page.isEmpty()) {
+                return new Outcome.NotFound();
+            }
+
+            Optional<DocLink> found = links.findInPage(page.get().getId(), linkId);
+            if (found.isEmpty()) {
+                return new Outcome.NotFound();
+            }
+            DocLink link = found.get();
+
+            Optional<CatalogueFacts.CatalogueRef> source =
+                    catalogue.find(project.getId(), link.getSourceType(), link.getSourceId());
+            if (source.isEmpty()) {
+                return new Outcome.NotFound();
+            }
+
+            Instant now = clock.instant();
+            if (link.relabel(relationship, userId, now)) {
+                audit(project.getId(), userId, "doc_link.relabelled", link, source.get(), now);
+                // The mirror carries `relationship` (V46), and the coverage matrix reads it: a
+                // correction nobody propagates leaves the case end and every count still stating
+                // the claim that was just withdrawn.
+                outbox.recordCoalesced(OutboxEvents.DOC_LINKS_CHANGED);
+            }
+            return new Outcome.Relabelled(view(link, source.get()));
         }));
     }
 

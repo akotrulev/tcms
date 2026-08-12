@@ -581,6 +581,102 @@ class ExternalLinkEndpointTest extends IntegrationTestBase {
     }
 
     // =====================================================================
+    // Correcting the claim (§174)
+    // =====================================================================
+
+    @Nested
+    @DisplayName("Correcting what a link claims — PATCH, §174")
+    class Relabelling {
+
+        @Test
+        @DisplayName("the relationship moves, and the row records who moved it and when")
+        void theClaimIsCorrectedAndStamped() throws Exception {
+            UUID id = idOf(link(ENGINEER, ACME_BANKING, CASE, git()));
+            assertThat(only().updatedAt()).isNull();
+
+            MvcResult corrected = relabel(ENGINEER, ACME_BANKING, CASE, id, relationship("REFERENCES"));
+
+            assertThat(corrected.getResponse().getStatus()).isEqualTo(200);
+            assertThat(body(corrected).get("relationship").asText()).isEqualTo("REFERENCES");
+
+            Row stored = only();
+            assertThat(stored.relationship()).isEqualTo("REFERENCES");
+            // The half V48 exists for. Before it, correcting a claim meant deleting the link and
+            // making another, which rewrote created_by to whoever noticed the mistake.
+            assertThat(stored.updatedAt()).isNotNull();
+            assertThat(stored.updatedBy()).isEqualTo(ENGINEER);
+            assertThat(auditActions()).containsExactly("doc_link.created", "doc_link.relabelled");
+        }
+
+        @Test
+        @DisplayName("the target coordinates are untouched — only the claim moves")
+        void onlyTheClaimMoves() throws Exception {
+            UUID id = idOf(link(ENGINEER, ACME_BANKING, CASE, git()));
+
+            relabel(ENGINEER, ACME_BANKING, CASE, id, relationship("DERIVED_FROM"));
+
+            Row stored = only();
+            // The immutability that matters, and the reason the entity keeps `updatable = false`
+            // everywhere else: a link that silently changes what it points at keeps every count
+            // over doc_link agreeing with itself while pointing somewhere new.
+            assertThat(stored.externalRepo()).isEqualTo("acme/checkout-service");
+            assertThat(stored.externalPath()).isEqualTo("src/Refund.java");
+            assertThat(stored.externalLineStart()).isEqualTo(40);
+            assertThat(stored.externalCommitSha()).isEqualTo("4f9c2b1");
+            assertThat(stored.targetKind()).isEqualTo("EXTERNAL_GIT");
+        }
+
+        @Test
+        @DisplayName("re-stating the value it already has writes nothing — no stamp, no audit row")
+        void reStatingTheSameClaimWritesNothing() throws Exception {
+            UUID id = idOf(link(ENGINEER, ACME_BANKING, CASE, url("https://s.test/a", "REFERENCES")));
+
+            MvcResult again = relabel(ENGINEER, ACME_BANKING, CASE, id, relationship("REFERENCES"));
+
+            // 200 with the row, exactly as the POST answers for a duplicate — but nothing moved, so
+            // updated_by must stay null. A stamp here would report a correction nobody made, and an
+            // audit row for it buries the ones that matter.
+            assertThat(again.getResponse().getStatus()).isEqualTo(200);
+            assertThat(only().updatedBy()).isNull();
+            assertThat(only().updatedAt()).isNull();
+            assertThat(auditActions()).containsExactly("doc_link.created");
+        }
+
+        @Test
+        @DisplayName("an unknown or absent relationship is a field error, never a default")
+        void thereIsNoDefaultOnACorrection() throws Exception {
+            UUID id = idOf(link(ENGINEER, ACME_BANKING, CASE, git()));
+
+            // The create defaults an absent relationship to VERIFIES. A correction must not: an
+            // absent value here is a caller who did not say what to correct it TO, and choosing for
+            // them would have the server invent a claim on the field that exists to keep "proves
+            // it" and "mentions it" apart.
+            assertThat(relabel(ENGINEER, ACME_BANKING, CASE, id, "{}").getResponse().getStatus())
+                    .isEqualTo(400);
+            assertThat(relabel(ENGINEER, ACME_BANKING, CASE, id, relationship("SORT_OF"))
+                    .getResponse().getStatus()).isEqualTo(400);
+            assertThat(only().relationship()).isEqualTo("VERIFIES");
+            assertThat(only().updatedAt()).isNull();
+        }
+
+        @Test
+        @DisplayName("a Viewer may not correct a claim, and a link of another case is a 404")
+        void theGateAndTheScope() throws Exception {
+            UUID id = idOf(link(ENGINEER, ACME_BANKING, CASE, git()));
+
+            // case:edit, the same key the create and the delete charge — correcting a claim is not
+            // a lesser act than making one.
+            assertThat(relabel(VIEWER, ACME_BANKING, CASE, id, relationship("REFERENCES"))
+                    .getResponse().getStatus()).isEqualTo(403);
+            // Scoped to the case for the delete's reason: a link id belonging to another case must
+            // 404 rather than be rewritten from under it.
+            assertThat(relabel(ENGINEER, ACME_BANKING, OTHER_CASE, id, relationship("REFERENCES"))
+                    .getResponse().getStatus()).isEqualTo(404);
+            assertThat(only().relationship()).isEqualTo("VERIFIES");
+        }
+    }
+
+    // =====================================================================
     // helpers — requests
     // =====================================================================
 
@@ -606,6 +702,20 @@ class ExternalLinkEndpointTest extends IntegrationTestBase {
                                 + "/external-links/" + linkId)
                         .header(HttpHeaders.AUTHORIZATION,
                                 "Bearer " + tokenFor(userId, companyOf(userId))))
+                .andReturn();
+    }
+
+    private MvcResult relabel(UUID userId, UUID projectId, UUID caseId, UUID linkId, String payload)
+            throws Exception {
+
+        return mvc.perform(MockMvcRequestBuilders
+                        .patch("/api/v1/projects/" + projectId + "/cases/" + caseId
+                                + "/external-links/" + linkId)
+                        .header(HttpHeaders.AUTHORIZATION,
+                                "Bearer " + tokenFor(userId, companyOf(userId)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content(payload))
                 .andReturn();
     }
 
@@ -646,6 +756,15 @@ class ExternalLinkEndpointTest extends IntegrationTestBase {
             fields.add("\"commitSha\":\"" + sha + "\"");
         }
         return "{" + String.join(",", fields) + "}";
+    }
+
+    /** The created link's id — the pattern the delete tests spell inline four times over. */
+    private static UUID idOf(MvcResult created) throws Exception {
+        return UUID.fromString(body(created).get("id").asText());
+    }
+
+    private static String relationship(String value) {
+        return "{\"relationship\":\"" + value + "\"}";
     }
 
     private static String url(String url, String relationship) {
@@ -695,7 +814,8 @@ class ExternalLinkEndpointTest extends IntegrationTestBase {
                 PreparedStatement statement = connection.prepareStatement("""
                         SELECT source_id, target_kind, target_block_id, external_repo,
                                external_path, external_line_start, external_line_end,
-                               external_commit_sha, external_url, relationship
+                               external_commit_sha, external_url, relationship,
+                               updated_at, updated_by
                           FROM doc_link
                          ORDER BY created_at, id
                         """);
@@ -713,7 +833,13 @@ class ExternalLinkEndpointTest extends IntegrationTestBase {
                         (Integer) rows.getObject("external_line_end"),
                         rows.getString("external_commit_sha"),
                         rows.getString("external_url"),
-                        rows.getString("relationship")));
+                        rows.getString("relationship"),
+                        rows.getTimestamp("updated_at") == null
+                                ? null
+                                : rows.getTimestamp("updated_at").toInstant(),
+                        rows.getString("updated_by") == null
+                                ? null
+                                : UUID.fromString(rows.getString("updated_by"))));
             }
         }
         return found;
@@ -721,7 +847,10 @@ class ExternalLinkEndpointTest extends IntegrationTestBase {
 
     private record Row(UUID sourceId, String targetKind, UUID targetBlockId, String externalRepo,
             String externalPath, Integer externalLineStart, Integer externalLineEnd,
-            String externalCommitSha, String externalUrl, String relationship) {
+            String externalCommitSha, String externalUrl, String relationship,
+            /** V48 — null means never corrected, which is a different fact from "corrected at
+             * creation" and is why the migration declines to backfill it from created_at. */
+            Instant updatedAt, UUID updatedBy) {
     }
 
     private List<String> auditActions() throws SQLException {
