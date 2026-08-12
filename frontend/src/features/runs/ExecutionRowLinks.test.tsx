@@ -145,6 +145,8 @@ describe('RunDetailPage — the same pair, from the other grid', () => {
       status: 'IN_PROGRESS',
       releaseVersion: null,
       buildNumber: null,
+      commitSha: null,
+      branch: null,
       source: 'MANUAL',
       startedAt: '2026-08-06T09:00:00Z',
       completedAt: null,

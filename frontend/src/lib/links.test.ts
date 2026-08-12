@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DocLink } from '../api/types'
-import { describeLinkTarget } from './links'
+import { describeLinkTarget, describeRunCode } from './links'
 
 /**
  * The text form of a link's target — what a confirmation dialog names (§173).
@@ -101,5 +101,30 @@ describe('describeLinkTarget', () => {
         }),
       ),
     ).toBe('acme/checkout · src/Refund.java at 4f9c2b1')
+  })
+})
+
+/**
+ * A run's git coordinate (§177) — the same `at <sha>` convention as the link above, which is the
+ * reason both live in one module and are tested in one file. Two spellings of one convention is how
+ * a hundred consistent screens become a hundred slightly different ones.
+ */
+describe('describeRunCode', () => {
+  it('names the branch and pins it to the commit', () => {
+    expect(describeRunCode({ branch: 'release/4.3', commitSha: '4f9c2b1' })).toBe(
+      'release/4.3 at 4f9c2b1',
+    )
+  })
+
+  it('renders either half alone — a CI job may know one and not the other', () => {
+    expect(describeRunCode({ branch: 'main', commitSha: null })).toBe('main')
+    expect(describeRunCode({ branch: null, commitSha: '4f9c2b1' })).toBe('at 4f9c2b1')
+  })
+
+  it('is null when the run records neither, so the caller renders NOTHING', () => {
+    // Not an empty string and not an em dash: most runs are manual passes in projects that record
+    // no build, and a permanently empty labelled field is a screen teaching that something is
+    // missing (§157's signal, one screen over).
+    expect(describeRunCode({ branch: null, commitSha: null })).toBeNull()
   })
 })

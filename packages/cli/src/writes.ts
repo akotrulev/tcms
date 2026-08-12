@@ -842,7 +842,8 @@ const runCreate: Command = {
   summary: 'Create a test run',
   usage:
     'tcms run create --name N [--plan TP-n] [--suite TS-n]... [--case TC-n]... [--tag T]...\n'
-    + '                [--release V] [--build B] [--idempotency-key K]',
+    + '                [--release V] [--build B] [--branch B] [--commit SHA]\n'
+    + '                [--idempotency-key K]',
   options: {
     name: { type: 'string' },
     plan: { type: 'string' },
@@ -851,6 +852,11 @@ const runCreate: Command = {
     tag: { type: 'string', multiple: true },
     release: { type: 'string' },
     build: { type: 'string' },
+    // §177's Git traceability. `--commit` is the field a CI job filling this in from a shell has
+    // ready (`--commit "$(git rev-parse HEAD)"`), which is most of why the flags exist here at all:
+    // this command is the operator-and-pipeline path, and the browser form is the other one.
+    branch: { type: 'string' },
+    commit: { type: 'string' },
     'idempotency-key': { type: 'string' },
   },
   write: { kind: 'create', permission: 'run:create' },
@@ -874,6 +880,8 @@ const runCreate: Command = {
         tags: tagsFrom(options['tag']),
         releaseVersion: nullableText(options['release']),
         buildNumber: nullableText(options['build']),
+        commitSha: nullableText(options['commit']),
+        branch: nullableText(options['branch']),
       }) as components['schemas']['TestRunInput'],
       tcms: { ...request, ...createIntent({ key: text(options['idempotency-key']) }) },
     });

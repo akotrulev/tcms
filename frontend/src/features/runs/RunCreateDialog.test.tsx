@@ -235,6 +235,81 @@ describe('RunCreateDialog', () => {
     expect(body.tags).toEqual([])
   })
 
+  it('§177: sends the branch and the commit, trimmed, and null when left empty', async () => {
+    mockPlans(plans)
+    const post = vi
+      .spyOn(api, 'post')
+      .mockResolvedValue({ id: 'run-1', key: 'TR-1' } as never)
+
+    render(
+      <TestProviders client={createTestQueryClient()}>
+        <RunCreateDialog projectId={PROJECT} open onClose={() => {}} onCreated={vi.fn()} />
+      </TestProviders>,
+    )
+
+    await screen.findByTestId('Runs.Create.Name')
+    await userEvent.type(screen.getByTestId('Runs.Create.Name'), 'Regression')
+    await userEvent.type(screen.getByTestId('Runs.Create.Branch'), 'release/4.3')
+    await userEvent.type(screen.getByTestId('Runs.Create.Commit'), '4f9c2b1')
+
+    await choosePlan()
+    await userEvent.click(screen.getByTestId('Runs.Create.Submit'))
+
+    await waitFor(() => expect(post).toHaveBeenCalled())
+    const [, body] = post.mock.calls[0] as [string, Record<string, unknown>]
+    expect(body.branch).toBe('release/4.3')
+    expect(body.commitSha).toBe('4f9c2b1')
+  })
+
+  it('§177: an untouched branch and commit are sent as null, not as empty strings', async () => {
+    mockPlans(plans)
+    const post = vi
+      .spyOn(api, 'post')
+      .mockResolvedValue({ id: 'run-1', key: 'TR-1' } as never)
+
+    render(
+      <TestProviders client={createTestQueryClient()}>
+        <RunCreateDialog projectId={PROJECT} open onClose={() => {}} onCreated={vi.fn()} />
+      </TestProviders>,
+    )
+
+    await screen.findByTestId('Runs.Create.Name')
+    await userEvent.type(screen.getByTestId('Runs.Create.Name'), 'Ad hoc')
+    await choosePlan()
+    await userEvent.click(screen.getByTestId('Runs.Create.Submit'))
+
+    await waitFor(() => expect(post).toHaveBeenCalled())
+    const [, body] = post.mock.calls[0] as [string, Record<string, unknown>]
+    // '' would be a 400 on the sha's shape rule for a caller who typed nothing at all.
+    expect(body.branch).toBeNull()
+    expect(body.commitSha).toBeNull()
+  })
+
+  it('§177: the server\'s commitSha refusal lands on the commit field, not the root alert', async () => {
+    mockPlans(plans)
+    vi.spyOn(api, 'post').mockRejectedValue(
+      new ApiError(400, 'Check the highlighted fields.', {
+        commitSha: ['That is not a commit id — 7 to 40 hexadecimal characters.'],
+      }),
+    )
+
+    render(
+      <TestProviders client={createTestQueryClient()}>
+        <RunCreateDialog projectId={PROJECT} open onClose={() => {}} onCreated={vi.fn()} />
+      </TestProviders>,
+    )
+
+    await screen.findByTestId('Runs.Create.Name')
+    await userEvent.type(screen.getByTestId('Runs.Create.Name'), 'Regression')
+    await userEvent.type(screen.getByTestId('Runs.Create.Commit'), 'release/4.3')
+    await choosePlan()
+    await userEvent.click(screen.getByTestId('Runs.Create.Submit'))
+
+    // The shape rule lives on the server alone, so this message is the ONLY way the caller learns
+    // it — a field error with no control to land on is one nobody reads (`ui-rules`).
+    expect(await screen.findByText(/not a commit id/i)).toBeInTheDocument()
+  })
+
   it('lands a scope error on its own control — §99 gave caseIds and tags a place to go', async () => {
     mockPlans(plans)
     vi.spyOn(api, 'post').mockRejectedValue(

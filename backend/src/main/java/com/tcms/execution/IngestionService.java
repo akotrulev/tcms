@@ -367,6 +367,11 @@ public class IngestionService {
                 request.configurationId(),
                 request.releaseVersion(),
                 request.buildNumber(),
+                // Git traceability's whole read path on this endpoint. Passed through rather than
+                // validated here: RunEdit is the one place either value has a rule, and a second
+                // check would be a second answer to what a commit id is.
+                request.commitSha(),
+                request.branch(),
                 List.copyOf(caseIds),
                 List.of(),
                 List.of(),

@@ -754,6 +754,130 @@ class RunCreateEndpointTest extends IntegrationTestBase {
     }
 
     // =====================================================================
+    // Git traceability — §177, and the two columns V1 created for it
+    // =====================================================================
+
+    /**
+     * {@code commit_sha} and {@code branch}: written, served, and refused when the sha is not one.
+     *
+     * <p>Every test here would have passed vacuously before §177 in the way §170 describes — the
+     * request bound the fields, nothing read them, and the response never carried them. So the pair
+     * that matters is {@link #bothAreStoredAndServed} and {@link #theColumnsAreActuallyWritten}: one
+     * asserts the value comes back out of the endpoint, the other that it is in the row rather than
+     * echoed from the request.
+     */
+    @Nested
+    @DisplayName("Git traceability — the commit and branch a run tested")
+    class GitTraceability {
+
+        @Test
+        @DisplayName("both are stored and served back on the created run")
+        void bothAreStoredAndServed() throws Exception {
+            Map<String, Object> payload = fromPlan("Regression 4.3.0");
+            payload.put("commitSha", "4f9c2b1e8a7d");
+            payload.put("branch", "release/4.3");
+
+            JsonNode run = body(post(LEAD, ACME, ACME_BANKING, payload, null));
+
+            assertThat(run.get("commitSha").asText()).isEqualTo("4f9c2b1e8a7d");
+            assertThat(run.get("branch").asText()).isEqualTo("release/4.3");
+        }
+
+        @Test
+        @DisplayName("…in the row, not echoed from the request")
+        void theColumnsAreActuallyWritten() throws Exception {
+            Map<String, Object> payload = fromPlan("Regression 4.3.0");
+            payload.put("commitSha", "  4f9c2b1e8a7d  ");
+            payload.put("branch", "  release/4.3  ");
+
+            UUID runId = UUID.fromString(
+                    body(post(LEAD, ACME, ACME_BANKING, payload, null)).get("id").asText());
+
+            // Trimmed, and stored as given otherwise — NOT lower-cased. RunEdit says why: the other
+            // git-bearing column in the product stores what it was handed too, and one value with
+            // two normalizations is the worse defect.
+            assertThat(column(runId, "commit_sha")).isEqualTo("4f9c2b1e8a7d");
+            assertThat(column(runId, "branch")).isEqualTo("release/4.3");
+        }
+
+        @Test
+        @DisplayName("case is preserved — the columns are not lower-cased on the way in")
+        void caseIsPreserved() throws Exception {
+            Map<String, Object> payload = fromPlan("Regression");
+            payload.put("commitSha", "4F9C2B1");
+
+            UUID runId = UUID.fromString(
+                    body(post(LEAD, ACME, ACME_BANKING, payload, null)).get("id").asText());
+
+            assertThat(column(runId, "commit_sha")).isEqualTo("4F9C2B1");
+        }
+
+        @Test
+        @DisplayName("a run that names neither serves null for both, not empty strings")
+        void absentMeansNull() throws Exception {
+            JsonNode run = body(post(LEAD, ACME, ACME_BANKING, fromPlan("Ad hoc"), null));
+
+            // The contract marks both required-and-nullable, so a client's own type says the key is
+            // present. An empty string would render as an unclickable blank coordinate.
+            assertThat(run.has("commitSha")).isTrue();
+            assertThat(run.get("commitSha").isNull()).isTrue();
+            assertThat(run.get("branch").isNull()).isTrue();
+        }
+
+        @Test
+        @DisplayName("a BRANCH NAME in commitSha is refused on commitSha, and nothing is written")
+        void aBranchNameIsNotACommitId() throws Exception {
+            Map<String, Object> payload = fromPlan("Regression");
+            payload.put("commitSha", "release/4.3");
+
+            MvcResult refused = post(LEAD, ACME, ACME_BANKING, payload, null);
+
+            // THE failure the check exists for, and the one ExternalLinkService's own header names:
+            // an unchecked value is accepted, stored, and discovered to be a branch name by its
+            // reader. Here the field it belonged in is the next one along, so the message says so.
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(refused))
+                    .containsKey("commitSha")
+                    .doesNotContainKey("branch");
+            assertThat(errorsOf(refused).get("commitSha").getFirst())
+                    .contains("record it as the branch instead");
+            assertThat(runCount(ACME)).isZero();
+        }
+
+        @Test
+        @DisplayName("six hex characters is below the bound; seven is not")
+        void theBoundIsLooseAtTheBottomButNotOpen() throws Exception {
+            Map<String, Object> tooShort = fromPlan("Six");
+            tooShort.put("commitSha", "4f9c2b");
+            assertThat(errorsOf(post(LEAD, ACME, ACME_BANKING, tooShort, null)))
+                    .containsKey("commitSha");
+
+            Map<String, Object> abbreviated = fromPlan("Seven");
+            abbreviated.put("commitSha", "4f9c2b1");
+            assertThat(post(LEAD, ACME, ACME_BANKING, abbreviated, null)
+                    .getResponse().getStatus())
+                    .as("teams paste abbreviated shas out of terminals; refusing a seven-character "
+                            + "one would be this product deciding how somebody's git is configured")
+                    .isEqualTo(201);
+        }
+
+        @Test
+        @DisplayName("a branch is length-bounded and otherwise anything the team's git allows")
+        void theBranchIsBoundedAndNotShaped() throws Exception {
+            Map<String, Object> generated = fromPlan("Dependabot");
+            generated.put("branch", "dependabot/gradle/org.springframework.boot-3.5.6");
+            assertThat(post(LEAD, ACME, ACME_BANKING, generated, null).getResponse().getStatus())
+                    .as("a ref name is a path a tool generates, not a short identifier a human types")
+                    .isEqualTo(201);
+
+            Map<String, Object> tooLong = fromPlan("Too long");
+            tooLong.put("branch", "b".repeat(RunEdit.MAX_BRANCH + 1));
+            assertThat(errorsOf(post(LEAD, ACME, ACME_BANKING, tooLong, null)))
+                    .containsKey("branch");
+        }
+    }
+
+    // =====================================================================
     // Validation
     // =====================================================================
 

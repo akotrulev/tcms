@@ -70,6 +70,12 @@ const MAX_NAME = 200;
 const MAX_RELEASE = 100;
 /** Mirrors `RunEdit.MAX_TAG`, itself a copy of `CaseEdit`'s cap. */
 const MAX_TAG = 60;
+/**
+ * Mirrors `RunEdit.MAX_BRANCH`, and deliberately not `MAX_RELEASE`: a ref name is a path a tool
+ * generates (`dependabot/gradle/org.springframework.boot-3.5.6`), not a short identifier a human
+ * types.
+ */
+const MAX_BRANCH = 255;
 
 const RunSchema = z
   .object({
@@ -85,6 +91,15 @@ const RunSchema = z
     tags: z.array(z.string().max(MAX_TAG, `Keep each tag under ${MAX_TAG} characters.`)),
     releaseVersion: z.string().max(MAX_RELEASE).optional(),
     buildNumber: z.string().max(MAX_RELEASE).optional(),
+    /*
+      §177. The SHAPE is not checked here and that is the decision, not an omission: the server
+      refuses anything that is not 7–40 hex characters, and a client-side copy of that rule is a
+      second answer to "what is a commit id" which would then have to be kept equal to the one the
+      backend already keeps in two places. What the client owns is the length, because a maxLength
+      the input enforces is a paste the caller sees truncated rather than a 400.
+    */
+    commitSha: z.string().optional(),
+    branch: z.string().max(MAX_BRANCH).optional(),
   })
   /*
     A run needs somewhere to get its cases from, and this is the one rule the client can check
@@ -121,7 +136,9 @@ type FormField =
   | 'suiteIds'
   | 'tags'
   | 'releaseVersion'
-  | 'buildNumber';
+  | 'buildNumber'
+  | 'commitSha'
+  | 'branch';
 
 const FIELDS: readonly FormField[] = [
   'name',
@@ -131,6 +148,8 @@ const FIELDS: readonly FormField[] = [
   'tags',
   'releaseVersion',
   'buildNumber',
+  'commitSha',
+  'branch',
 ];
 
 function applyServerError(
@@ -202,6 +221,8 @@ export function RunCreateDialog({
       tags: [],
       releaseVersion: '',
       buildNumber: '',
+      commitSha: '',
+      branch: '',
     },
     mode: 'onBlur',
   });
@@ -243,6 +264,8 @@ export function RunCreateDialog({
         configurationId: null,
         releaseVersion: values.releaseVersion?.trim() || null,
         buildNumber: values.buildNumber?.trim() || null,
+        commitSha: values.commitSha?.trim() || null,
+        branch: values.branch?.trim() || null,
         caseIds: values.caseIds,
         suiteIds: values.suiteIds,
         tags: values.tags,
@@ -522,6 +545,39 @@ export function RunCreateDialog({
                   htmlInput: { 'data-testid': `${TestId}.Build`, maxLength: MAX_RELEASE },
                 }}
                 {...register('buildNumber')}
+              />
+            </Stack>
+            {/*
+              §177's Git traceability. Optional on a manual run and usually empty — a person running
+              a regression pass by hand often knows the branch and rarely the sha, which is why both
+              are accepted independently rather than as a pair. The row is below the release rather
+              than beside it because it answers the narrower question: release, then build, then the
+              exact code.
+            */}
+            <Stack direction="row" spacing={2}>
+              <TextField
+                label="Branch"
+                autoComplete="off"
+                fullWidth
+                error={!!errors.branch}
+                helperText={errors.branch?.message ?? 'Optional — release/4.3.'}
+                slotProps={{
+                  htmlInput: { 'data-testid': `${TestId}.Branch`, maxLength: MAX_BRANCH },
+                }}
+                {...register('branch')}
+              />
+              <TextField
+                label="Commit"
+                autoComplete="off"
+                fullWidth
+                error={!!errors.commitSha}
+                // The server's rule, stated rather than enforced here — see the schema. Naming the
+                // bound is what makes its refusal predictable instead of a surprise on submit.
+                helperText={errors.commitSha?.message ?? 'Optional — 7 to 40 hex characters.'}
+                slotProps={{
+                  htmlInput: { 'data-testid': `${TestId}.Commit`, maxLength: 40 },
+                }}
+                {...register('commitSha')}
               />
             </Stack>
           </Stack>

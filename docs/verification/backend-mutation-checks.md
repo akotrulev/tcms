@@ -2125,3 +2125,24 @@ bind at least one query parameter — so the floor is a live tripwire against th
 silently matching nothing, which is the failure mode `patternsOf`'s javadoc names. It is left at 5
 rather than 13 for the same reason the sibling rule's is: a floor that tracks the exact count fails
 on every legitimate deletion of a filter and teaches the next author to edit the number.
+
+## §177 — the columns V1 created for a milestone that arrived
+
+**Five rows, none run** — §65's standing policy, and this slice is the ordinary case for it rather
+than §170/§171/§176's exception. Those three shipped a test method and nothing else, so an unrun row
+was the whole slice on trust; this one ships product behaviour across two stacks, and the batched
+pass is what it is for. Recorded in executable form.
+
+The pair worth reading together is `GT-M1` and `GT-M2`. They mutate the two halves of one claim —
+the value reaching the **row** and the value reaching the **response** — and each must redden a
+*different* test. If either mutation reds both, the two tests are one test written twice, and the
+slice's central risk is unobserved: a field echoed back out of the request it arrived in looks
+identical to a field that was stored.
+
+| Row | Mutate | Must redden | What a green build would mean |
+|---|---|---|---|
+| `§177 GT-M1` | In `TestRun.create`, drop `created.commitSha = edit.commitSha();` | `RunCreateEndpointTest.GitTraceability.theColumnsAreActuallyWritten` **and** `bothAreStoredAndServed` — both, because the response is built from the entity | Exactly §170's defect restored: the request binds, the value goes nowhere, the caller gets a 2xx. A green build here means nothing in the suite reads `test_run.commit_sha` and the whole slice is a no-op that compiles. |
+| `§177 GT-M2` | In `RunService.view`, pass `null` where `run.getCommitSha()` goes | `bothAreStoredAndServed` **only** — `theColumnsAreActuallyWritten` must stay **GREEN** | The stored-versus-served distinction. A value in the column that no endpoint serves is invisible to every client, and the *green* half is what proves the other test asserts the row rather than the echo. |
+| `§177 GT-M3` | In `RunEdit.validateCreate`, delete the `SHA.matcher(...)` branch | `aBranchNameIsNotACommitId` and `IngestionEndpointTest.aMalformedShaRefusesTheWholePost` | The failure both declarations of the rule exist for — an unchecked value accepted, stored, and discovered to be a branch name by its reader. Two tests in two classes because the rule is enforced once and reached by two endpoints; a green ingestion test with a red create test would mean CI has its own validation path. |
+| `§177 GT-M4` | In `RunCloneService.derive`, replace the two `null`s with `source.getCommitSha()` / `source.getBranch()` | `RunCloneEndpointTest.theGitCoordinateIsNotInherited` | The one fallback that goes the other way. A clone inheriting the sha ships a run claiming a commit it never tested, and — with no run edit endpoint — the only correction is deleting the run. This is the row that pins a *deliberate absence*, which is the kind a later "consistency" cleanup removes. |
+| `§177 GT-M5` | In `RunEdit`, change `SHA` to `Pattern.compile("[0-9a-f]{7,40}")` — lower-case only | `GitObjectNameRuleTest.everyDeclarationAgrees` **and** `RunCreateEndpointTest.caseIsPreserved` | Two observers for one drift, deliberately. The convention test is the one that matters: it reads the source text of both declarations, so it fails on a change that is *behaviourally* almost invisible — a mixed-case sha pasted out of a GUI is refused on runs and accepted on doc links, and nothing else in the repo compares the two. |

@@ -4,13 +4,27 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * {@code TestRunInput} on the wire — the contract's ten properties and no more.
+ * {@code TestRunInput} on the wire — the contract's twelve properties and no more.
  *
  * <p>{@code status}, {@code source}, {@code startedAt} and the key are all absent for the reasons
  * {@link TestRun#create} gives: they are the server's to decide, and a field the client can set is a
- * claim the client can make. {@code commit_sha} and {@code branch} exist in {@code V1} and are not
- * on the contract; they arrive with CI ingestion in M3, and accepting them here would be a field
- * read and dropped.
+ * claim the client can make.
+ *
+ * <p>~~{@code commit_sha} and {@code branch} exist in {@code V1} and are not on the contract; they
+ * arrive with CI ingestion in M3, and accepting them here would be a field read and dropped.~~ →
+ * <strong>superseded: both are here, and the argument expired in the direction it predicted.</strong>
+ * It was right while nothing stored the columns — and §170 found that {@code IngestionRequest} had
+ * been accepting exactly those two fields and dropping them for two milestones, which is what this
+ * paragraph was written to prevent, one module over. Git traceability (plan §3 phase 2) makes them
+ * read, so the sentence has nothing left to refuse.
+ *
+ * <p><strong>A person may set them, not only a CI job</strong>, and the alternative was considered:
+ * restrict them to {@code IngestionInput}, on the grounds that a git coordinate is a machine's
+ * observation and {@code source = MANUAL} means no machine observed anything. It was rejected
+ * because there is no <em>edit</em> endpoint for a run — a value not accepted at create can never be
+ * recorded at all — and because "a machine may say what code ran and a person may not" is a rule
+ * with no failure behind it. A lead running a regression pass against {@code release/4.3} is exactly
+ * the caller who knows.
  *
  * @param suiteIds             §99's second scope arm. Whole suites, resolved through their
  *                             membership rather than through {@code test_case.suite_id} — see
@@ -42,6 +56,8 @@ public record RunWriteRequest(
         UUID configurationId,
         String releaseVersion,
         String buildNumber,
+        String commitSha,
+        String branch,
         List<UUID> caseIds,
         List<UUID> suiteIds,
         List<String> tags,

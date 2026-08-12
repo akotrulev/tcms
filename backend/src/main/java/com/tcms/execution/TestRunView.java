@@ -10,6 +10,13 @@ import java.util.UUID;
  *                against a plan list it may not have loaded breaks the moment the run list is shown
  *                on its own, and puts a second copy of "which plan is this" in the client.
  * @param counts  the result bar. Never percentages — see {@link ResultCountsView}.
+ * @param commitSha the code this run tested, if it is known — Git traceability (plan §3 phase 2).
+ *                <strong>Here, and not only on the detail, because the detail is built from this
+ *                record</strong> ({@link TestRunDetailView#of}) — a field absent from the list view
+ *                cannot reach the screen that renders it. The run <em>list</em> deliberately shows
+ *                neither: a commit id is a coordinate somebody follows once they are looking at one
+ *                run, and a table column of shas is noise in the cell where the release already is.
+ * @param branch  the branch that commit came from.
  */
 public record TestRunView(
         UUID id,
@@ -21,6 +28,8 @@ public record TestRunView(
         RunStatus status,
         String releaseVersion,
         String buildNumber,
+        String commitSha,
+        String branch,
         RunSource source,
         Instant startedAt,
         Instant completedAt,

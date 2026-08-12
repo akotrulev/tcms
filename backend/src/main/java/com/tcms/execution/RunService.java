@@ -187,6 +187,8 @@ public class RunService {
                 run.getStatus(),
                 run.getReleaseVersion(),
                 run.getBuildNumber(),
+                run.getCommitSha(),
+                run.getBranch(),
                 run.getSource(),
                 run.getStartedAt(),
                 run.getCompletedAt(),

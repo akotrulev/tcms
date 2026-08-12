@@ -40,3 +40,31 @@ export function describeLinkTarget(link: DocLink): string {
   const pinned = link.externalCommitSha ? `${file} at ${link.externalCommitSha}` : file;
   return [link.externalRepo, pinned].filter((part) => part !== '').join(' · ');
 }
+
+/**
+ * A run's git coordinate as one line — `release/4.3 at 4f9c2b1`, `main`, `at 4f9c2b1`, or null.
+ *
+ * Here rather than in `RunDetailPage` for the reason the shared layer exists, and the phrasing is
+ * the point: **`at <sha>` is `describeLinkTarget`'s wording above**, and a run's commit and a doc
+ * link's pin are the same kind of fact read on adjacent screens — the case detail's Traceability
+ * panel names a pinned file, and the run that tested that case names a pinned build. Two spellings
+ * of one convention is how a hundred consistent screens become a hundred slightly different ones.
+ *
+ * **Null when neither is set, which is most runs**, so the caller renders nothing rather than a
+ * label with an em dash after it: a manual pass in a project that does not record builds should not
+ * grow a permanently empty field (§157's signal, one screen over).
+ *
+ * Either half alone is a legitimate state and both read correctly: a CI job may know its branch and
+ * not its sha, and §177 accepts each independently rather than requiring the pair.
+ */
+export function describeRunCode(run: {
+  branch: string | null;
+  commitSha: string | null;
+}): string | null {
+  if (run.branch === null && run.commitSha === null) {
+    return null;
+  }
+  return [run.branch, run.commitSha === null ? null : `at ${run.commitSha}`]
+    .filter((part) => part !== null)
+    .join(' ');
+}

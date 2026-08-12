@@ -678,6 +678,18 @@ const writeRun: ToolDefinition = {
       tags: { type: 'array', items: { type: 'string' }, description: 'Cases carrying ANY of these.' },
       releaseVersion: { type: ['string', 'null'] },
       buildNumber: { type: ['string', 'null'] },
+      // §177. Described rather than bare, unlike the two above, because the server refuses a value
+      // that is not a git object name and an agent that learns the bound from a 400 has already
+      // burned a turn. `clone` accepts NEITHER — a fresh clone has run nothing, so there is no
+      // coordinate to carry — which is why the description says create.
+      commitSha: {
+        type: ['string', 'null'],
+        description: 'On create: the commit under test, 7 to 40 hex characters.',
+      },
+      branch: {
+        type: ['string', 'null'],
+        description: 'On create: the branch under test.',
+      },
     },
   },
   run: async (session, input) => {
@@ -715,6 +727,8 @@ const writeRun: ToolDefinition = {
         tags: strings(input, 'tags'),
         releaseVersion: nullableStr(input, 'releaseVersion'),
         buildNumber: nullableStr(input, 'buildNumber'),
+        commitSha: nullableStr(input, 'commitSha'),
+        branch: nullableStr(input, 'branch'),
       }) as components['schemas']['TestRunInput'],
       tcms: { ...tcms, ...createIntent({ key: session.callId }) },
     });

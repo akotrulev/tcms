@@ -31,7 +31,11 @@ import { RunDetailPage } from './RunDetailPage'
 const PROJECT = 'p1'
 const RUN = 'r1'
 
-function runBody(status: TestRunDetail['status'], startedAt: string | null): TestRunDetail {
+function runBody(
+  status: TestRunDetail['status'],
+  startedAt: string | null,
+  git: { commitSha: string | null; branch: string | null } = { commitSha: null, branch: null },
+): TestRunDetail {
   return {
     id: RUN,
     key: 'TR-4',
@@ -42,6 +46,8 @@ function runBody(status: TestRunDetail['status'], startedAt: string | null): Tes
     status,
     releaseVersion: '4.4.0',
     buildNumber: null,
+    commitSha: git.commitSha,
+    branch: git.branch,
     source: 'MANUAL',
     startedAt,
     completedAt: status === 'COMPLETED' || status === 'ABORTED' ? '2026-08-02T10:00:00Z' : null,
@@ -54,10 +60,11 @@ function mockReads(
   status: TestRunDetail['status'],
   startedAt: string | null,
   permissions: string[] = ['project:read', 'run:close', 'result:submit'],
+  git: { commitSha: string | null; branch: string | null } = { commitSha: null, branch: null },
 ) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
-    if (path.includes(`/runs/${RUN}`)) return runBody(status, startedAt)
+    if (path.includes(`/runs/${RUN}`)) return runBody(status, startedAt, git)
     if (path.startsWith('/projects/')) return { id: PROJECT, name: 'Banking' }
     return []
   }) as never)
@@ -174,5 +181,38 @@ describe('RunDetailPage — the run lifecycle controls', () => {
     await userEvent.click(screen.getByTestId('RunDetail.Abort'))
 
     await waitFor(() => expect(screen.getByTestId('RunDetail.StatusError')).toBeInTheDocument())
+  })
+})
+
+/**
+ * §177's Git traceability, read from the screen that renders it.
+ *
+ * Two assertions and the second is the one worth having: the coordinate is **absent** on a run that
+ * records neither, rather than a labelled empty field. Most runs in this product are manual passes
+ * in projects that record no build.
+ */
+describe('RunDetailPage — the code a run tested (§177)', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('names the branch and pins it to the commit in the header', async () => {
+    mockReads('IN_PROGRESS', '2026-08-02T09:00:00Z', ['project:read', 'run:close'], {
+      branch: 'release/4.3',
+      commitSha: '4f9c2b1',
+    })
+    renderPage()
+
+    expect(await screen.findByTestId('RunDetail.Code')).toHaveTextContent('release/4.3 at 4f9c2b1')
+  })
+
+  it('renders nothing at all when the run records neither', async () => {
+    mockReads('IN_PROGRESS', '2026-08-02T09:00:00Z')
+    renderPage()
+
+    // Awaited on something else first, so the absence below is a rendered page rather than an
+    // unresolved one — the shape that makes a "queryBy...toBeNull" assertion pass for free.
+    await screen.findByTestId('RunDetail.Status')
+    expect(screen.queryByTestId('RunDetail.Code')).toBeNull()
   })
 })

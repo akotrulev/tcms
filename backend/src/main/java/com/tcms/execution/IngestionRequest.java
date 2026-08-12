@@ -34,6 +34,12 @@ import java.util.UUID;
  * @param releaseVersion  what was under test. Denormalized onto every execution (V1, §6q).
  * @param buildNumber the CI build. The one field that makes an ingested run traceable back to the
  *                job that posted it, which is why it is on the request rather than left to the name.
+ * @param commitSha the commit the job built — {@code git rev-parse HEAD}. Refused unless it is a
+ *                git object name; {@link RunEdit#SHA} is the rule and this endpoint inherits it
+ *                rather than keeping a second one, because the create it opens goes through
+ *                {@code RunCreateService} like every other.
+ * @param branch  the branch the job built. Length-bounded and otherwise unchecked
+ *                ({@link RunEdit#MAX_BRANCH}).
  */
 public record IngestionRequest(
         ReportFormat format,
@@ -42,23 +48,28 @@ public record IngestionRequest(
         String runName,
         UUID configurationId,
         String releaseVersion,
-        String buildNumber) {
+        String buildNumber,
+        String commitSha,
+        String branch) {
 
     // ~~@param branch the branch under test. @param commitSha the commit under test.~~
-    // → REMOVED §170, as two components and nothing else. They were never declared on
-    // `IngestionInput`, so no generated client could name them, and they were read by nothing —
-    // not by IngestionService, not by IngestionEdit, and TestRun does not even map the
-    // `test_run.branch` / `test_run.commit_sha` columns V1 created for them. A CI job that set
-    // them got a 2xx and a run with no branch on it, which is the worst of the three possible
-    // behaviours: refusing would have been honest and storing would have been useful.
+    // → REMOVED §170, as two components and nothing else … → AND BACK, in the commit §170 said
+    // would bring them: Git traceability (plan §3 phase 2, and §6q's table lists `commitSha`/`branch`
+    // beside `releaseVersion` as the field saying which code ran; the ERD annotates both columns with
+    // that milestone). What §170 found is worth keeping in front of the next reader, because the
+    // shape it names is easy to re-create: these two were BOUND HERE AND DECLARED NOWHERE for two
+    // milestones, read by nothing — not by IngestionService, not by IngestionEdit, and `TestRun` did
+    // not map the `test_run.branch` / `test_run.commit_sha` columns V1 created for them. A CI job
+    // that set them got a 2xx and a run with no branch on it: the worst of the three available
+    // behaviours, since refusing would have been honest and storing would have been useful.
     //
-    // THE COLUMNS STAY AND THIS IS NOT THE FEATURE BEING CANCELLED. Git traceability is M4 (plan
-    // §3 phase 2, and §6q's table lists `commitSha`/`branch` beside `releaseVersion` as the field
-    // that says which code ran); the ERD annotates both columns with that milestone. The slice
-    // that builds it declares the two properties on `IngestionInput`, maps the columns on
-    // `TestRun`, and adds them back here in the same commit — at which point they are read.
+    // All three halves of the repair are in one commit, which is the part that matters. The
+    // properties are declared on `IngestionInput`, the columns are mapped on `TestRun`, and
+    // `IngestionService.openRun` passes both through to the run it opens. A component here that any
+    // one of those three is missing is the same defect again, wearing this slice's name.
     //
-    // Removing them changes no behaviour today: Spring Boot leaves FAIL_ON_UNKNOWN_PROPERTIES off,
-    // so a CI job still posting `branch` still gets its 2xx and the value is still dropped. What
-    // changes is that the drop is no longer disguised as a binding.
+    // The refusal is now the behaviour a bad value gets, and it costs the report on that build: a
+    // malformed `commitSha` 422s the post instead of dropping the field. That is the trade §170's
+    // sentence chose in advance — refuse or store, never 2xx-and-discard — and it is cheap in
+    // practice, because a value out of `git rev-parse` is malformed on the first build or never.
 }

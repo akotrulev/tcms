@@ -9280,6 +9280,22 @@ export interface components {
              *     posted it, which is why it is a field rather than left to the name.
              */
             buildNumber?: string | null;
+            /**
+             * @description The commit the job built — `git rev-parse HEAD`. See `TestRun.commitSha` for the rule.
+             *
+             *     **This is the field the CI caller has and nobody else does**, which is why it was
+             *     declared here first. It was a bound-and-dropped component of the request record for two
+             *     milestones until §170 removed it; the properties are back because the column is now
+             *     written.
+             *
+             *     A malformed value **refuses the whole post** rather than being dropped, which costs the
+             *     report on that build. Deliberate: the two honest answers were refuse and store, the
+             *     third — a 2xx with the value discarded — is the one §170 deleted, and a value coming
+             *     straight out of `git rev-parse` fails this on the first build or never.
+             */
+            commitSha?: string | null;
+            /** @description The branch the job built. See `TestRun.branch`. */
+            branch?: string | null;
         };
         /**
          * @description A test the ladder could not place. **This is what makes declining §6c's auto-created case
@@ -9428,6 +9444,23 @@ export interface components {
             status: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "ABORTED";
             releaseVersion: string | null;
             buildNumber: string | null;
+            /**
+             * @description The exact code this run tested — §6q's third rung, below `releaseVersion` (what) and
+             *     `buildNumber` (which build of it). Git traceability, plan §3 phase 2.
+             *
+             *     Refused unless it is a git object name, 7 to 40 hexadecimal characters, on the same
+             *     terms and for the same reason as `ExternalLinkInput.commitSha`: an unchecked value is
+             *     accepted, stored and discovered to be a branch name by the reader who reads it — and
+             *     here `branch` is the field immediately beside it.
+             * @example 4f9c2b1
+             */
+            commitSha: string | null;
+            /**
+             * @description The branch the code came from. Unchecked beyond a length bound: a ref name is whatever
+             *     the team's git says it is, and this product does not get to decide that.
+             * @example release/4.3
+             */
+            branch: string | null;
             /** @enum {string} */
             source: "MANUAL" | "INGESTED";
             /** Format: date-time */
@@ -9480,6 +9513,15 @@ export interface components {
             configurationId?: string | null;
             releaseVersion?: string | null;
             buildNumber?: string | null;
+            /**
+             * @description The commit this pass tests, if the caller knows it — see `TestRun.commitSha` for the
+             *     rule and its reason. **Accepted on a manual create too, not only on ingestion**: a run
+             *     has no edit endpoint, so this is the only moment it can be recorded, and "a machine may
+             *     say what code ran, a person may not" is a rule with nothing behind it.
+             */
+            commitSha?: string | null;
+            /** @description The branch this pass tests. See `TestRun.branch`. */
+            branch?: string | null;
             /**
              * @description Named cases. Every id must be a live case *in this project* — one from a sibling
              *     project satisfies the foreign key, the company column and RLS alike, so only this

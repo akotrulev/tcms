@@ -2,14 +2,38 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-12 (**§175** — `TeamRef` is one generated type and `CurrentUser.teams[].isLead` is gone; no `src/` change; **§174** — the relationship correctable in place at both ends, and a MUI `Chip` whose `disabled` was decorative; **§173** — one confirmation raised by both link screens, and the text form of a link target; **§172** — the block-link screen: two hooks that had no caller anywhere in `src/` now have one, and `doc_link` can be written from the documentation side at last; **§169** — the Traceability panel's two external branches ran against data for the first time, and a write hook that must NOT invalidate; **§168** — `CoverageMarker` came alive after 168 sections rendering against a field nothing sent; **§166**–**§167** — no frontend component moved, one test fixture each; **§165** — no frontend source moved, and TWO SCREENS ARE RENDERING A FALSEHOOD — see the entry below; **§162**–**§164** — no frontend source moved, refusal bodies only; **§161** — no frontend source moved; `schema.d.ts` regenerated, comments only; **§160** — the posted CI report becomes a download, keyed on a URL the server composes; **§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
+**Last verified:** 2026-08-12 (**§177** — the run's git coordinate: a third header line, two dialog fields, and `describeRunCode` beside `describeLinkTarget`; **§175** — `TeamRef` is one generated type and `CurrentUser.teams[].isLead` is gone; no `src/` change; **§174** — the relationship correctable in place at both ends, and a MUI `Chip` whose `disabled` was decorative; **§173** — one confirmation raised by both link screens, and the text form of a link target; **§172** — the block-link screen: two hooks that had no caller anywhere in `src/` now have one, and `doc_link` can be written from the documentation side at last; **§169** — the Traceability panel's two external branches ran against data for the first time, and a write hook that must NOT invalidate; **§168** — `CoverageMarker` came alive after 168 sections rendering against a field nothing sent; **§166**–**§167** — no frontend component moved, one test fixture each; **§165** — no frontend source moved, and TWO SCREENS ARE RENDERING A FALSEHOOD — see the entry below; **§162**–**§164** — no frontend source moved, refusal bodies only; **§161** — no frontend source moved; `schema.d.ts` regenerated, comments only; **§160** — the posted CI report becomes a download, keyed on a URL the server composes; **§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
 the one doc-block renderer and the editor's three new types; §126 phase 4 — the three attachment
 surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the flake panel and the
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `65aa59f` (§175) (trust the body over the header and re-grep what a later commit
+**Baseline commit:** `9f36657` (§176, which changed no frontend source; §177 is this commit) (trust the body over the header and re-grep what a later commit
 could have moved).
+
+## §177 — THE RUN'S GIT COORDINATE, AND WHY ITS FORMATTER LIVES WITH THE LINK'S
+
+**`describeRunCode` is in `lib/links.ts`, not in `RunDetailPage` and not in `format.ts`.** Read this
+before adding anything that renders a commit sha.
+
+- **`at <sha>` is `describeLinkTarget`'s wording and the two must not fork.** A case's Traceability
+  panel names a pinned file and the run that tested that case names a pinned build — the same kind of
+  fact on adjacent screens. That shared convention is why the function is filed with the link's rather
+  than with the numeric formatters.
+- **It returns `null` when the run records neither**, so the caller renders *nothing*. Most runs are
+  manual passes in projects that record no build, and a labelled empty field is a screen teaching that
+  something is missing (§157). Either half alone is a legitimate state: `main`, `at 4f9c2b1`.
+- **`RunDetailPage`'s line is a SIBLING of the release line, not nested inside it.** `buildNumber` is
+  nested under `releaseVersion &&` — an existing shape worth not copying, since a run with a build and
+  no release renders neither. A CI run knows its commit whether or not anybody set a release.
+- **`RunCreateDialog` checks LENGTH ONLY, never the sha's shape.** The 7-to-40-hex rule is the
+  server's alone, deliberately: a client copy would be a third declaration of it (the backend already
+  pins its two against each other). So the server's field error is the only way the caller learns the
+  bound — which is why `applyServerError` must keep `commitSha` and `branch` in `FIELDS`, or the
+  message lands in the root alert with no control under it.
+- **The run LIST renders neither**, though the payload carries them (`§177 GT-5`). Not an oversight.
+- Four run fixtures across `*.test.tsx` gained `commitSha` / `branch`; the contract marks both
+  **required-and-nullable**, so a new `TestRun` fixture that omits them is a compile error.
 
 ## §175 — `TeamRef` IS ONE GENERATED TYPE NOW (no frontend source changed)
 

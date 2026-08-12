@@ -55,6 +55,8 @@ const runs = [
     status: 'IN_PROGRESS',
     releaseVersion: '4.3.0',
     buildNumber: null,
+    commitSha: null,
+    branch: null,
     source: 'MANUAL',
     startedAt: '2026-08-01T09:00:00Z',
     completedAt: null,

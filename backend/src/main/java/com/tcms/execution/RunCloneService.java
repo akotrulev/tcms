@@ -163,7 +163,9 @@ public class RunCloneService {
      * The source run as a create request.
      *
      * <p>Every override falls back to the source except the two that must not — see
-     * {@link RunCloneRequest}. {@code suiteIds} and {@code tags} are left empty because the resolved
+     * {@link RunCloneRequest} — and {@code commitSha} / {@code branch} are neither, being fields the
+     * clone request does not carry and the clone does not inherit (the comment on them below says
+     * why). {@code suiteIds} and {@code tags} are left empty because the resolved
      * case list <em>is</em> the scope: passing an arm as well would make the create re-resolve it and
      * quietly widen the clone past what the source actually covered.
      */
@@ -181,6 +183,16 @@ public class RunCloneService {
                 request.releaseVersion() == null
                         ? source.getReleaseVersion() : request.releaseVersion(),
                 request.buildNumber() == null ? source.getBuildNumber() : request.buildNumber(),
+                // NEITHER IS INHERITED, and this is the one fallback that goes the other way. The
+                // three above fall back because a re-run is against the same release until the caller
+                // says otherwise; a git coordinate names the code that RAN, and a fresh clone has run
+                // nothing. Carrying the source's sha forward would ship a run claiming a commit it
+                // never tested — uncorrectable, since a run has no edit endpoint — where null says it
+                // does not know what code this pass covers, which is true of a manual re-run days
+                // later. So `TestRunCloneInput` declares no override for either: there is nothing to
+                // override.
+                null,
+                null,
                 caseIds,
                 // Empty, not null-and-hope: the resolved list above is the whole scope.
                 List.of(),

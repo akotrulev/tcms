@@ -327,6 +327,61 @@ class IngestionEndpointTest extends IntegrationTestBase {
                     junit(testCase("com.acme.RefundTest", "refundsInFull", null)), "ik-10")
                     .getResponse().getStatus()).isEqualTo(404);
         }
+
+        @Test
+        @DisplayName("§177: the commit and branch the job built reach the run's own columns")
+        void gitTraceabilityReachesTheRun() throws Exception {
+            Map<String, Object> payload = ingestionPayload(
+                    junit(testCase("com.acme.RefundTest", "refundsInFull", null)), null);
+            payload.put("commitSha", "4f9c2b1e8a7d");
+            payload.put("branch", "main");
+
+            assertThat(post(ROBOT, "/projects/" + BANKING + "/ingestions", payload, "ik-git")
+                    .getResponse().getStatus()).isEqualTo(201);
+
+            // These two were BOUND HERE AND DECLARED NOWHERE from M3 until §170 deleted them: a CI
+            // job that set them got its 2xx and a run with no branch on it. This is the assertion
+            // that could not have been written then — the value is in the row.
+            assertThat(runColumn("commit_sha")).isEqualTo("4f9c2b1e8a7d");
+            assertThat(runColumn("branch")).isEqualTo("main");
+        }
+
+        @Test
+        @DisplayName("§177: a malformed commitSha REFUSES THE POST — no job, no results, no run")
+        void aMalformedShaRefusesTheWholePost() throws Exception {
+            Map<String, Object> payload = ingestionPayload(
+                    junit(testCase("com.acme.RefundTest", "refundsInFull", null)), null);
+            payload.put("commitSha", "main");
+
+            MvcResult refused =
+                    post(ROBOT, "/projects/" + BANKING + "/ingestions", payload, "ik-bad-sha");
+
+            // The cost is stated where the decision is (IngestionRequest): refusing loses the report
+            // for that build, and the alternative §170 ruled out is a 2xx with the value discarded.
+            // A value out of `git rev-parse` fails this on the first build or never.
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(runCount()).isZero();
+            assertThat(jobCount()).isZero();
+        }
+
+        @Test
+        @DisplayName("§177: posting into an EXISTING run ignores both, as it does every run field")
+        void gitFieldsAreIgnoredWhenPostingIntoARun() throws Exception {
+            ingest(ROBOT, junit(testCase("com.acme.RefundTest", "refundsInFull", null)), "ik-11");
+            UUID runId = onlyRunId();
+
+            Map<String, Object> payload = ingestionPayload(
+                    junit(testCase("com.acme.RefundTest", "refundsInFull", null)), runId);
+            payload.put("commitSha", "4f9c2b1e8a7d");
+
+            assertThat(post(ROBOT, "/projects/" + BANKING + "/ingestions", payload, "ik-12")
+                    .getResponse().getStatus()).isEqualTo(201);
+
+            // IngestionInput's own rule for every run field: ignored rather than refused, because a
+            // CI configuration that sets them should not start failing the day somebody adds runId,
+            // and none of them can change a run that already exists.
+            assertThat(runColumn("commit_sha")).isNull();
+        }
     }
 
     // =====================================================================

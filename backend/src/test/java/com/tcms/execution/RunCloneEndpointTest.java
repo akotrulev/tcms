@@ -375,6 +375,33 @@ class RunCloneEndpointTest extends IntegrationTestBase {
         }
 
         @Test
+        @DisplayName("§177: the commit and branch are NOT inherited — the one fallback that isn't")
+        void theGitCoordinateIsNotInherited() throws Exception {
+            Map<String, Object> payload = onCases("Regression", List.of(caseA, caseB));
+            payload.put("releaseVersion", "4.3.0");
+            payload.put("commitSha", "4f9c2b1e8a7d");
+            payload.put("branch", "release/4.3");
+            UUID source = sourceRun(LEAD, payload);
+
+            JsonNode copy = clonedRun(
+                    cloneRun(LEAD, ACME, ACME_BANKING, source, named("Re-run"), null));
+
+            // The three overrides above fall back because a re-run is against the same release until
+            // the caller says otherwise. A git coordinate names the code that RAN, and a fresh clone
+            // has run nothing — inheriting it would ship a run claiming a commit it never tested,
+            // uncorrectably, since a run has no edit endpoint. `TestRunCloneInput` therefore declares
+            // no override for either: there is nothing to override.
+            assertThat(copy.get("commitSha").isNull()).isTrue();
+            assertThat(copy.get("branch").isNull()).isTrue();
+            assertThat(column(UUID.fromString(copy.get("id").asText()), "commit_sha"))
+                    .as("in the row, not merely absent from the response")
+                    .isNull();
+
+            // And the source keeps its own — the clone is not a move.
+            assertThat(column(source, "commit_sha")).isEqualTo("4f9c2b1e8a7d");
+        }
+
+        @Test
         @DisplayName("the scope is the RESOLVED case set, not the arms the source declared")
         void theScopeIsTheResolvedSetAndNotTheArms() throws Exception {
             // The source is scoped by a SUITE. test_run stores no scope, so the clone can only

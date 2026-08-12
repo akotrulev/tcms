@@ -24,6 +24,7 @@ import { StatusChip } from '../../components/StatusChip';
 import { describeError } from '../../lib/describeError';
 import { compareCaseKeys, formatCount, formatDateTime, formatDuration } from '../../lib/format';
 import { isRunClosed, runStatusColors, runStatusLabels, statusLabels } from '../../lib/labels';
+import { describeRunCode } from '../../lib/links';
 import { ScrollX } from '../../components/ScrollX';
 import { CaseKeyLink, ExecuteCaseLink } from './ExecutionRowLinks';
 import { FailureSummary } from './FailureSummary';
@@ -81,6 +82,16 @@ export function RunDetailPage() {
                       build <Identifier variant="muted">{run.data.buildNumber}</Identifier>
                     </>
                   )}
+                </Typography>
+              )}
+              {/* §177's Git traceability, and NOT nested inside the release the way `build` is
+                  above: a CI run knows its commit whether or not anybody set a release version, so
+                  a coordinate that only renders beside a release would be invisible on exactly the
+                  runs that always have one. `describeRunCode` owns the wording, which is the doc
+                  link's `at <sha>` and must stay it. */}
+              {describeRunCode(run.data) && (
+                <Typography variant="body2" sx={{ color: 'text.secondary' }} data-testid="RunDetail.Code">
+                  <Identifier variant="muted">{describeRunCode(run.data)}</Identifier>
                 </Typography>
               )}
               {run.data.planKey && (

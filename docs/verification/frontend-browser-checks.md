@@ -2167,3 +2167,20 @@ Both are `A0` (the accounts-and-teams lane, which is where a team grant is made 
 row — the value is on the wire, a client can name it, and the removal this slice made is only
 observable there — but it is a *contract* check wearing a browser row's clothes, and if the pass is
 short of time it is the one to drop. `TR-1` is not; it is a rendered column.
+
+## §177 — the code a run tested
+
+**Five rows, all `A3`** — the execution lane, because every one needs a run, and `GT-4` needs the CI
+credential `A3-4`'s preamble issues. They slot in beside `M4-30`–`M4-37` (creating a run) and
+`A3-6`–`A3-10` (ingestion) rather than forming a lane of their own.
+
+`GT-5` is the row that records a **deliberate absence**, and it is here so that the absence is not
+filed as a bug by the person driving the lane.
+
+| # | Drive | Expect |
+|---|---|---|
+| `§177 GT-1` | **A3**, New run in `OLB`: fill the name, choose a plan, and fill the new **Branch** (`release/4.3`) and **Commit** (a real 7-character sha) fields, then Start | 201, and the run header carries a **third** metadata line: `release/4.3 at 4f9c2b1`, in the muted identifier font, **beside** the release rather than nested inside it. Then create a second run with a branch and **no** commit: the line reads `release/4.3` alone. Both halves are accepted independently and this is the only place that is visible. |
+| `§177 GT-2` | **A3**, New run: type `release/4.3` into **Commit** and Start | Refused **in place, under the Commit field**: *"That is not a commit id — 7 to 40 hexadecimal characters. A branch or tag name moves; record it as the branch instead."* Not a corner toast and not a root banner. **The shape rule lives on the server alone** — the client checks length and nothing else — so this round trip is the only way the caller ever learns the bound, which makes the message landing on the right control the whole row. Then type six hex characters: refused. Seven: accepted. |
+| `§177 GT-3` | **A3**, open `GT-1`'s run → **Clone**, name it, Clone | The clone's header carries the release and build **and no code line at all**. Not the source's branch, not an empty label. A fresh clone has run nothing, so `TestRunCloneInput` offers no override for either and the columns are left null — driving this is what distinguishes "deliberately absent" from "the dialog forgot to send it". Open the source run again: it still shows its own coordinate. |
+| `§177 GT-4` | **A3**, with the ingestion credential: `curl` a JUnit report into `OLB` with `"commitSha"` and `"branch"` in the body and a fresh `Idempotency-Key`, then follow the `TR-n` link from the history | The run header shows the posted coordinate — the CI job is the caller that has it, and until §177 the API accepted these two keys and dropped them silently. Then post again with `"commitSha": "main"`: **400**, and the ingestion history gains **no row** — the report is refused rather than ingested with the field discarded, which is the trade recorded on `IngestionInput`. Read the response: the field error names `commitSha`. |
+| `§177 GT-5` | **A3**, the run **list** for `OLB` after `GT-1` | The Release cell shows the release and the build and **not** the branch or the sha, on every row. Deliberate: a commit id is a coordinate somebody follows once they are looking at one run, and a column of shas is noise in the cell the release already occupies. The value **is** on the wire for the list (the detail view is built from the list view's record), so a reader with the Network tab open will see a field the table does not render — that is the design, not a missed binding. |

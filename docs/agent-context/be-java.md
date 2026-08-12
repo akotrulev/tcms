@@ -2,12 +2,12 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-12 (**§176** — the four contract-binding rules are two questions over two populations, and a bound-and-undeclared query parameter fails the build; **§175** — one `TeamRef`, in `com.tcms.api`, with two inline schemas made `$ref`s and `isLead` off the wire; **§174** — `doc_link.relationship` is the one mutable column, `V48` records who moved it, and both ends got the endpoint; **§171** — the form parts nobody compared: the four multipart bodies are exempt from *pairing* and no longer exempt from *comparison*; **§170** — the population the pairing rule could not see: every object schema, named and inline, is paired or excused, and two ingestion inputs nothing read are gone; **§169** — the capability the schema designed and nobody built: `doc_link`'s two external target kinds get a writer, and the divergence map empties; **§168** — the coverage marker, whose obstacle had already moved; **§167** — `relatedDocuments` is served, and the mirror table `lastResult` argued against; **§166** — the result every case said it never had, and the seam that stayed write-only; **§165** — the members nobody compared, and the three arguments that blamed a module for not existing; **§164** — the two types that agreed by accident, and the schema in no pairing check; **§163** — the request echo nobody wrote, and the decision §162 left declared; **§162** — one media type for every refusal, the two envelopes nobody compared, and the exemptions that excused nothing; **§161** — the by-decision audit, and the contract-versus-server enum rule; **§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-12 (**§177** — `test_run.commit_sha` / `.branch` have a writer, the git-object regex is a pinned second copy, and the clone inherits neither; **§176** — the four contract-binding rules are two questions over two populations, and a bound-and-undeclared query parameter fails the build; **§175** — one `TeamRef`, in `com.tcms.api`, with two inline schemas made `$ref`s and `isLead` off the wire; **§174** — `doc_link.relationship` is the one mutable column, `V48` records who moved it, and both ends got the endpoint; **§171** — the form parts nobody compared: the four multipart bodies are exempt from *pairing* and no longer exempt from *comparison*; **§170** — the population the pairing rule could not see: every object schema, named and inline, is paired or excused, and two ingestion inputs nothing read are gone; **§169** — the capability the schema designed and nobody built: `doc_link`'s two external target kinds get a writer, and the divergence map empties; **§168** — the coverage marker, whose obstacle had already moved; **§167** — `relatedDocuments` is served, and the mirror table `lastResult` argued against; **§166** — the result every case said it never had, and the seam that stayed write-only; **§165** — the members nobody compared, and the three arguments that blamed a module for not existing; **§164** — the two types that agreed by accident, and the schema in no pairing check; **§163** — the request echo nobody wrote, and the decision §162 left declared; **§162** — one media type for every refusal, the two envelopes nobody compared, and the exemptions that excused nothing; **§161** — the by-decision audit, and the contract-versus-server enum rule; **§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `aa521a6` (§175 shipped; §176 is this commit) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `9f36657` (§176 shipped; §177 is this commit) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
 ---
@@ -154,11 +154,41 @@ fail the build until they are paired.**
   `schemasReferencedOutsideAllOf()`, and the three accounting maps must be **disjoint**.
 - **`MEMBER_DIVERGENCE_BY_DECISION` serves BOTH rules and is still `Map.of()`** across 144
   pairings; `isInlineKey` splits it. `compareMembers` is the one comparison — do not write a second.
-- **`IngestionRequest` lost `branch` and `commitSha`** (§170): undeclared on `IngestionInput`, read
-  by nothing, and `TestRun` maps neither `test_run.branch` nor `test_run.commit_sha`. **The columns
-  stay** — Git traceability is M4 (plan §3 phase 2, ERD's own annotation), and that slice re-adds
-  the two components in the commit that reads them. `FAIL_ON_UNKNOWN_PROPERTIES` is off, so removing
-  them changed no behaviour.
+- ~~**`IngestionRequest` lost `branch` and `commitSha`** (§170)~~ → **§177 PUT THEM BACK, with the
+  columns mapped and read.** See §177 below; the map/declare/pass triple is one commit by design.
+
+---
+
+## §177 — `test_run.commit_sha` AND `.branch` HAVE A WRITER, AND THE CLONE INHERITS NEITHER
+
+**Git traceability (M4, plan §3 phase 2).** Read this before touching `TestRun`, `RunEdit`,
+`RunCloneService.derive`, `IngestionRequest` or either run view.
+
+- **`TestRun` maps both columns, `updatable = false`.** `TestRun.create` is the only writer; there is
+  **no run edit endpoint at all** (only `PUT /status`), so create is the one moment either value can
+  be recorded. That absence is now load-bearing in two arguments and is itself a named candidate.
+- **THE TRIPLE IS ONE COMMIT: declare on the contract · map the column · pass it through.** Any two
+  of the three reproduce §170's defect — a bound property nothing stores, a mapped column nothing
+  writes, a declared property nothing binds. `GT-M1`/`GT-M2` in the mutation queue exist to prove the
+  row-assertion and the response-assertion are two different tests.
+- **`RunEdit` is the ONE validator and `IngestionService` inherits it** — the ingestion path opens its
+  run through `RunCreateService`, so there is no second answer to what a commit id is. Consequence
+  worth knowing: **a malformed `commitSha` refuses the whole CI post**, losing that build's report. No
+  `ingestion_job` row and no run are written (`RunEdit` refuses before a display key is burned).
+- **`RunEdit.SHA` is a SECOND COPY of `documentation.ExternalLinkService.SHA` and stays one.**
+  `api`'s charter refuses it explicitly (*"a helper two modules happen to share does not qualify"*)
+  and the two modules may not import each other. `config.GitObjectNameRuleTest` pins them equal **by
+  reading the source text of both** and pins the count at 2 — `IdempotencyKeyCapTest`'s shape. A third
+  validator means editing that number, deliberately.
+- **`MAX_BRANCH` is 255, NOT `MAX_RELEASE`'s 100**, and `branch` has no shape check. `commit_sha` is
+  trimmed and **not lower-cased**, matching `doc_link.external_commit_sha`.
+- **`RunCloneService.derive` passes `null` for both — the one fallback that does not go to the
+  source.** A release version is what you intend to test; a sha is what ran, and a fresh clone has run
+  nothing. `TestRunCloneInput` therefore declares no override. **This is a deliberate absence a
+  consistency cleanup would remove**; it is pinned in the schema comment, the `derive` comment and
+  `RunCloneEndpointTest.theGitCoordinateIsNotInherited`.
+- **`TestRunView` serves both because `TestRunDetailView` is built from it** — the *list* renders
+  neither, on purpose (`§177 GT-5`).
 
 ---
 

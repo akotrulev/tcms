@@ -117,6 +117,29 @@ public class TestRun {
     @Column(name = "build_number")
     private String buildNumber;
 
+    /**
+     * The commit this run tested — §6q's third rung of precision, and Git traceability (plan §3
+     * phase 2, which the ERD annotates both columns with).
+     *
+     * <p><strong>{@code V1} created this column and nothing mapped it until now</strong>, which is
+     * §170's finding read from the persistence side: {@code IngestionRequest} bound a {@code branch}
+     * and a {@code commitSha} that no field here could receive, so a CI job that set them got a 2xx
+     * and a run with no branch on it. §170 deleted the two components rather than the columns and
+     * said the slice that built the feature would add them back in the commit that made them read.
+     * This is that commit.
+     *
+     * <p>{@code updatable = false} for the reason every other identity column here carries it: the
+     * run has no edit endpoint, and a coordinate that names what code ran may not be quietly moved
+     * to name different code — {@code doc_link.relationship} (§174) is the one value in the product
+     * that earned the opposite, and it earned it by being a <em>claim</em> rather than a coordinate.
+     */
+    @Column(name = "commit_sha", updatable = false)
+    private String commitSha;
+
+    /** The branch that commit came from. {@link #commitSha}'s column, and its history. */
+    @Column(name = "branch", updatable = false)
+    private String branch;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "source", nullable = false)
     private RunSource source;
@@ -206,6 +229,8 @@ public class TestRun {
         // The one place either is assigned. See the field comment.
         created.releaseSortKey = ReleaseSortKey.of(edit.releaseVersion());
         created.buildNumber = edit.buildNumber();
+        created.commitSha = edit.commitSha();
+        created.branch = edit.branch();
         created.source = source;
         created.startedAt = null;
         created.completedAt = null;
@@ -296,6 +321,14 @@ public class TestRun {
 
     String getBuildNumber() {
         return buildNumber;
+    }
+
+    String getCommitSha() {
+        return commitSha;
+    }
+
+    String getBranch() {
+        return branch;
     }
 
     RunSource getSource() {

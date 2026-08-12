@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * A validated, normalized create of one run — and, with it, the <strong>resolved case set</strong>
@@ -64,6 +65,8 @@ record RunEdit(
         UUID planId,
         String releaseVersion,
         String buildNumber,
+        String commitSha,
+        String branch,
         UUID assigneeId,
         List<UUID> caseIds) {
 
@@ -72,6 +75,40 @@ record RunEdit(
 
     /** {@code release_version} and {@code build_number} are both short identifiers, not prose. */
     static final int MAX_RELEASE = 100;
+
+    /**
+     * A git object name — 7 to 40 hex characters, an abbreviated sha through a full SHA-1.
+     *
+     * <p><strong>This is a second copy of {@code documentation.ExternalLinkService.SHA} and it stays
+     * a copy.</strong> The obvious home would be {@code api}, and that module's charter refuses it in
+     * as many words: <em>"a helper two modules happen to share does not qualify — that is a copy, or
+     * an event."</em> A regex is not a shape the contract defines and nothing here serves it on the
+     * wire, so importing it would widen the one module in the application that declares no
+     * dependencies into the grab bag §125 refused. The two modules may not import each other either
+     * (plan §3), which leaves {@code RunEdit.MAX_TAG}'s answer: spell it again, name the other copy,
+     * and let a test pin them equal — {@code RunEditTest.gitObjectNameRuleMatchesTheDocumentationLane}.
+     *
+     * <p>The bound is loose at the bottom on purpose and refuses 64-character SHA-256 names, both
+     * for the reasons the other copy's header gives. Widening it is one number in two places, and
+     * the test is what says so.
+     */
+    static final Pattern SHA = Pattern.compile("[0-9a-fA-F]{7,40}");
+
+    /**
+     * The longest branch name a run may record.
+     *
+     * <p>Longer than {@link #MAX_RELEASE} and deliberately not the same number: a release version is
+     * a short identifier a human types, where a ref name is a path a tool generates —
+     * {@code dependabot/gradle/org.springframework.boot-3.5.6} is ordinary and already past 50. 255
+     * is a single path component on every filesystem git stores loose refs on, so a name longer than
+     * this cannot be a branch in the repository that produced it.
+     *
+     * <p><strong>There is no shape check beyond the length</strong>, which is the difference between
+     * this field and {@link #SHA}'s. What a valid ref name is belongs to the team's git — refusing
+     * one would be this product deciding how somebody's repository is configured — and unlike a
+     * commit id, a branch name that turns out to be wrong is wrong in a way its reader can see.
+     */
+    static final int MAX_BRANCH = 255;
 
     /**
      * The longest tag a run's scope may name, and it <strong>must stay {@code SuiteEdit.MAX_TAG}'s
@@ -159,6 +196,27 @@ record RunEdit(
                     "Keep the build number under " + MAX_RELEASE + " characters.");
         }
 
+        // Trimmed and stored as given — NOT lower-cased, which is a real choice with a cost. Two
+        // runs on one commit whose shas differ in case would not group together, and nothing groups
+        // by commit today. It stays uncased because `doc_link.external_commit_sha` stores what it was
+        // given too, and one value with two normalizations in one product is the worse defect: the
+        // day something does compare them, they must already agree.
+        String commitSha = PlanEdit.trimToNull(request.commitSha());
+        if (commitSha != null && !SHA.matcher(commitSha).matches()) {
+            // ExternalLinkService's sentence, minus its clause about pinning lines — nothing here is
+            // pinned to a line — and plus the field this caller almost certainly meant, which is
+            // sitting immediately beside this one.
+            PlanEdit.error(errors, "commitSha",
+                    "That is not a commit id — 7 to 40 hexadecimal characters. A branch or tag name "
+                            + "moves; record it as the branch instead.");
+        }
+
+        String branch = PlanEdit.trimToNull(request.branch());
+        if (branch != null && branch.length() > MAX_BRANCH) {
+            PlanEdit.error(errors, "branch",
+                    "Keep the branch name under " + MAX_BRANCH + " characters.");
+        }
+
         if (request.assigneeId() != null && !assigneeExists) {
             PlanEdit.error(errors, "assigneeId", "That person is not a member of this company.");
         }
@@ -223,8 +281,8 @@ record RunEdit(
 
         return errors.isEmpty()
                 ? new Outcome.Valid(new RunEdit(
-                        name, request.planId(), releaseVersion, buildNumber, request.assigneeId(),
-                        resolvedCases))
+                        name, request.planId(), releaseVersion, buildNumber, commitSha, branch,
+                        request.assigneeId(), resolvedCases))
                 : new Outcome.Invalid(errors);
     }
 

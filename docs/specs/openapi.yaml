@@ -8350,6 +8350,25 @@ components:
           description: |
             The CI build. The one field that makes an ingested run traceable back to the job that
             posted it, which is why it is a field rather than left to the name.
+        commitSha:
+          type: string
+          nullable: true
+          description: |
+            The commit the job built — `git rev-parse HEAD`. See `TestRun.commitSha` for the rule.
+
+            **This is the field the CI caller has and nobody else does**, which is why it was
+            declared here first. It was a bound-and-dropped component of the request record for two
+            milestones until §170 removed it; the properties are back because the column is now
+            written.
+
+            A malformed value **refuses the whole post** rather than being dropped, which costs the
+            report on that build. Deliberate: the two honest answers were refuse and store, the
+            third — a 2xx with the value discarded — is the one §170 deleted, and a value coming
+            straight out of `git rev-parse` fails this on the first build or never.
+        branch:
+          type: string
+          nullable: true
+          description: The branch the job built. See `TestRun.branch`.
 
     UnmatchedTest:
       type: object
@@ -8501,7 +8520,7 @@ components:
 
     TestRun:
       type: object
-      required: [id, key, name, planId, planKey, configuration, status, releaseVersion, buildNumber, source, startedAt, completedAt, counts]
+      required: [id, key, name, planId, planKey, configuration, status, releaseVersion, buildNumber, commitSha, branch, source, startedAt, completedAt, counts]
       properties:
         id: { type: string, format: uuid }
         key: { type: string, example: TR-1 }
@@ -8512,6 +8531,25 @@ components:
         status: { type: string, enum: [NOT_STARTED, IN_PROGRESS, COMPLETED, ABORTED] }
         releaseVersion: { type: string, nullable: true }
         buildNumber: { type: string, nullable: true }
+        commitSha:
+          type: string
+          nullable: true
+          example: 4f9c2b1
+          description: |
+            The exact code this run tested — §6q's third rung, below `releaseVersion` (what) and
+            `buildNumber` (which build of it). Git traceability, plan §3 phase 2.
+
+            Refused unless it is a git object name, 7 to 40 hexadecimal characters, on the same
+            terms and for the same reason as `ExternalLinkInput.commitSha`: an unchecked value is
+            accepted, stored and discovered to be a branch name by the reader who reads it — and
+            here `branch` is the field immediately beside it.
+        branch:
+          type: string
+          nullable: true
+          example: release/4.3
+          description: |
+            The branch the code came from. Unchecked beyond a length bound: a ref name is whatever
+            the team's git says it is, and this product does not get to decide that.
         source: { type: string, enum: [MANUAL, INGESTED] }
         startedAt: { type: string, format: date-time, nullable: true }
         completedAt: { type: string, format: date-time, nullable: true }
@@ -8553,6 +8591,14 @@ components:
           type: string
           nullable: true
           description: Overrides the source's build number. Omitted keeps it.
+        # commitSha / branch are deliberately absent, and the clone inherits neither.
+        #
+        # The three overrides above fall back to the source because a re-run is against the same
+        # release until the caller says otherwise. A git coordinate is not the same kind of value:
+        # it names the code that RAN, and a fresh clone has run nothing. Inheriting it would ship a
+        # run claiming a commit it never tested — and a run has no edit endpoint, so the only way to
+        # correct it would be to delete the run. Left null, the clone says it does not know what
+        # code its pass covers, which is true of a manual re-run days later.
         assigneeId:
           type: string
           format: uuid
@@ -8578,6 +8624,18 @@ components:
         configurationId: { type: string, format: uuid, nullable: true }
         releaseVersion: { type: string, nullable: true }
         buildNumber: { type: string, nullable: true }
+        commitSha:
+          type: string
+          nullable: true
+          description: |
+            The commit this pass tests, if the caller knows it — see `TestRun.commitSha` for the
+            rule and its reason. **Accepted on a manual create too, not only on ingestion**: a run
+            has no edit endpoint, so this is the only moment it can be recorded, and "a machine may
+            say what code ran, a person may not" is a rule with nothing behind it.
+        branch:
+          type: string
+          nullable: true
+          description: The branch this pass tests. See `TestRun.branch`.
         caseIds:
           type: array
           items: { type: string, format: uuid }
