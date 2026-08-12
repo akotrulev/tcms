@@ -7915,13 +7915,24 @@ export interface components {
              *     than role names (plan §6b).
              */
             isSystemAdmin: boolean;
-            /** @description The caller's teams IN THE ACTIVE COMPANY. Never across companies. */
-            teams: {
-                /** Format: uuid */
-                id: string;
-                name: string;
-                isLead: boolean;
-            }[];
+            /**
+             * @description The caller's teams IN THE ACTIVE COMPANY. Never across companies.
+             *
+             *     This is the only way a member who is not a Company Admin learns their own
+             *     teams: `GET /teams` is gated on `company:teams`, so the org chart is not
+             *     readable to the person in it.
+             *
+             *     **`isLead` was here until §175 and is not on the wire any more.** It said
+             *     whether the caller leads the team, which `team_membership.is_lead` records and
+             *     that column's own comment describes as conferring no permission — it names the
+             *     default reviewer. Nothing read it: not `frontend/`, not `packages/`, not any
+             *     generated client. `CurrentUser` exists to drive affordances (see
+             *     `isSystemAdmin`), and a flag no affordance turns on is a claim nobody keeps
+             *     correct — while its presence was the one thing making this array's entry a
+             *     different shape from `TeamRef`. A lead is named on `Team.leads`, which is where
+             *     the one screen that renders one reads it.
+             */
+            teams: components["schemas"]["TeamRef"][];
         };
         Project: {
             /** Format: uuid */
@@ -10844,11 +10855,15 @@ export interface components {
              *     reason: see `EntityVersion.createdBy` and `TestExecutionSummary.executedBy`.
              */
             user: components["schemas"]["UserRef"] | null;
-            team?: {
-                /** Format: uuid */
-                id: string;
-                name: string;
-            } | null;
+            /**
+             * @description **Null on a user grant**, the other half of `user`'s rule above.
+             *
+             *     A `$ref` since §175. It was an inline `{id, name}` object — the same properties as
+             *     `TeamRef` and no relationship to it that anything could check, which is how the
+             *     server came to serve it from a second Java record. The two are one now; see that
+             *     schema for what a field added to it would reach.
+             */
+            team?: components["schemas"]["TeamRef"] | null;
             /** Format: uuid */
             projectId?: string | null;
             projectName?: string | null;

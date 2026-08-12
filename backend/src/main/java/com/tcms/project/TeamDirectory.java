@@ -1,5 +1,6 @@
 package com.tcms.project;
 
+import com.tcms.api.TeamRef;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
@@ -50,7 +51,7 @@ public interface TeamDirectory {
      *         {@code Map.of()}, whose {@code get(null)} throws by contract and made the sibling
      *         lookup a 500 in §38
      */
-    Map<UUID, TeamRefView> resolve(UUID companyId, Collection<UUID> teamIds);
+    Map<UUID, TeamRef> resolve(UUID companyId, Collection<UUID> teamIds);
 
     /**
      * One team by id, in this company — the check a write performs before storing the reference.
@@ -62,5 +63,5 @@ public interface TeamDirectory {
      * id and checking the map would work and would read like an optimisation, which is precisely how
      * a validation stops looking like one.
      */
-    Optional<TeamRefView> find(UUID companyId, UUID teamId);
+    Optional<TeamRef> find(UUID companyId, UUID teamId);
 }

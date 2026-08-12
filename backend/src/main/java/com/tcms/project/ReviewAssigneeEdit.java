@@ -1,5 +1,6 @@
 package com.tcms.project;
 
+import com.tcms.api.TeamRef;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -77,7 +78,7 @@ record ReviewAssigneeEdit(UUID userId, UUID teamId) {
             ReviewAssignmentRequest request,
             Review review,
             boolean userReachesProject,
-            TeamRefView team) {
+            TeamRef team) {
 
         Map<String, List<String>> errors = new LinkedHashMap<>();
 

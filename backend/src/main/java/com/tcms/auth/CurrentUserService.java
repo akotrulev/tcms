@@ -1,5 +1,6 @@
 package com.tcms.auth;
 
+import com.tcms.api.TeamRef;
 import com.tcms.api.UserRef;
 import com.tcms.identity.AppUser;
 import com.tcms.identity.AppUserRepository;
@@ -55,7 +56,17 @@ public class CurrentUserService {
         this.instanceGrants = instanceGrants;
     }
 
-    /** {@code CurrentUser} in the contract: {@code UserRef} plus the two session facts. */
+    /**
+     * {@code CurrentUser} in the contract: {@code UserRef} plus the two session facts.
+     *
+     * @param teams the caller's teams in the active company — {@link TeamRef}, since §175. This
+     *              file declared its own three-component record until then, carrying
+     *              {@code isLead} on top of the shared shape, which is what kept the contract's
+     *              entry inline and the three {@code TeamRef}s apart. That component is gone from
+     *              the wire: nothing read it, {@code team_membership.is_lead} confers no
+     *              permission (see that field's own comment) and a lead is named on
+     *              {@code Team.leads}, which is where the screen that renders one reads it
+     */
     public record CurrentUser(
             UUID id,
             String displayName,
@@ -63,9 +74,6 @@ public class CurrentUserService {
             String avatarUrl,
             boolean isSystemAdmin,
             List<TeamRef> teams) {
-    }
-
-    public record TeamRef(UUID id, String name, boolean isLead) {
     }
 
     /**
@@ -120,8 +128,7 @@ public class CurrentUserService {
         // Project). Revisit if that stops being true, not before.
         return memberOf.stream()
                 .flatMap(membership -> teams.findById(membership.getTeamId()).stream()
-                        .map(team -> new TeamRef(
-                                team.getId(), team.getName(), membership.isLead())))
+                        .map(team -> new TeamRef(team.getId(), team.getName())))
                 .sorted((a, b) -> a.name().compareToIgnoreCase(b.name()))
                 .toList();
     }

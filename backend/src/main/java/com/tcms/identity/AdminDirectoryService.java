@@ -1,5 +1,6 @@
 package com.tcms.identity;
 
+import com.tcms.api.TeamRef;
 import com.tcms.api.UserRef;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectRepository;
@@ -437,7 +438,7 @@ public class AdminDirectoryService {
                 grant.getUserId() == null ? null : people.get(grant.getUserId()),
                 grant.getTeamId() == null
                         ? null
-                        : new RoleAssignmentView.TeamRef(
+                        : new TeamRef(
                                 grant.getTeamId(), teamNames.get(grant.getTeamId())),
                 grant.getProjectId(),
                 reach.maySee(grant.getProjectId())

@@ -1,5 +1,6 @@
 package com.tcms.identity;
 
+import com.tcms.api.TeamRef;
 import com.tcms.api.UserRef;
 import java.time.Instant;
 import java.util.UUID;
@@ -19,6 +20,12 @@ import java.util.UUID;
  *             so a team grant has no user to name. Same shape as the {@code EntityVersion.createdBy}
  *             correction handoff §37 records — reported for the contract holder rather than worked
  *             around here. The SPA already reads it with {@code ?.}.
+ * @param team <strong>null on a user grant</strong>, the other half of {@code user}'s rule. It was
+ *             a nested {@code TeamRef} record declared in this file until §175, behind an
+ *             <em>inline</em> {@code {id, name}} object in the contract: the same properties as the
+ *             {@code TeamRef} schema, related to it by nothing a rule could check. Both halves are
+ *             one now — {@code RoleAssignment.team} is a {@code $ref} and this is
+ *             {@link com.tcms.api.TeamRef}
  * @param projectId null for a COMPANY-scope grant: it covers every project in the company, present
  *                  and future
  * @param projectName null both when the grant is company-wide <em>and</em> when the caller may not
@@ -32,8 +39,4 @@ public record RoleAssignmentView(
         UUID projectId,
         String projectName,
         Instant grantedAt) {
-
-    /** A team, reduced to what the "granted via" column shows. */
-    public record TeamRef(UUID id, String name) {
-    }
 }

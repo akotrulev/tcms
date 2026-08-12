@@ -1,7 +1,7 @@
 package com.tcms.identity;
 
+import com.tcms.api.TeamRef;
 import com.tcms.project.TeamDirectory;
-import com.tcms.project.TeamRefView;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -37,7 +37,7 @@ public class IdentityTeamDirectory implements TeamDirectory {
 
     @Override
     @Transactional(readOnly = true)
-    public Map<UUID, TeamRefView> resolve(UUID companyId, Collection<UUID> teamIds) {
+    public Map<UUID, TeamRef> resolve(UUID companyId, Collection<UUID> teamIds) {
         if (teamIds.isEmpty()) {
             // A HashMap rather than Map.of(), for IdentityPeopleDirectory's stated reason: Map.of()
             // throws on get(null) by contract, so the immutable empty map would make the behaviour
@@ -45,19 +45,19 @@ public class IdentityTeamDirectory implements TeamDirectory {
             return new HashMap<>();
         }
 
-        Map<UUID, TeamRefView> resolved = new HashMap<>();
+        Map<UUID, TeamRef> resolved = new HashMap<>();
         for (Team team : teams.findAllById(teamIds)) {
             if (!companyId.equals(team.getCompanyId())) {
                 continue;
             }
-            resolved.put(team.getId(), new TeamRefView(team.getId(), team.getName()));
+            resolved.put(team.getId(), new TeamRef(team.getId(), team.getName()));
         }
         return resolved;
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Optional<TeamRefView> find(UUID companyId, UUID teamId) {
+    public Optional<TeamRef> find(UUID companyId, UUID teamId) {
         if (teamId == null) {
             return Optional.empty();
         }
@@ -67,6 +67,6 @@ public class IdentityTeamDirectory implements TeamDirectory {
         // id taken from a request body.
         return teams.findScopedById(teamId)
                 .filter(team -> companyId.equals(team.getCompanyId()))
-                .map(team -> new TeamRefView(team.getId(), team.getName()));
+                .map(team -> new TeamRef(team.getId(), team.getName()));
     }
 }

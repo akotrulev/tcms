@@ -1,5 +1,6 @@
 package com.tcms.project;
 
+import com.tcms.api.TeamRef;
 import com.tcms.api.UserRef;
 import com.tcms.tenancy.CompanyContext;
 import java.time.Clock;
@@ -747,7 +748,7 @@ public class ReviewService {
         // ReviewCommentEdit's arrangement. canView is asked of the ASSIGNEE here, not of the caller,
         // whose gate has already run one frame up.
         boolean reaches = assigneeId != null && access.canView(assigneeId, project.getId());
-        TeamRefView team = teamId == null ? null : teams.find(companyId, teamId).orElse(null);
+        TeamRef team = teamId == null ? null : teams.find(companyId, teamId).orElse(null);
 
         return switch (ReviewAssigneeEdit.validate(request, review, reaches, team)) {
             case ReviewAssigneeEdit.Outcome.Invalid invalid -> new Outcome.Invalid(invalid.errors());
@@ -944,7 +945,7 @@ public class ReviewService {
         // A second port, so unavoidably a second call — and skipped entirely when nothing names a
         // team, which is the common case: an empty collection bound into SQL `IN ()` is a syntax
         // error, and the port answers an empty map rather than making every caller remember that.
-        Map<UUID, TeamRefView> resolvedTeams = teams.resolve(companyId, teamIds);
+        Map<UUID, TeamRef> resolvedTeams = teams.resolve(companyId, teamIds);
 
         List<ReviewView> views = new ArrayList<>(rows.size());
         for (Review review : rows) {

@@ -66,6 +66,12 @@
  * would be a contract change wearing an extraction's clothes. Each carries the refusal in its own
  * header.
  *
+ * <p>There was a third — {@code project.TeamRefView} vs {@code identity.RoleAssignmentView.TeamRef},
+ * held back for "a third consumer" — and <strong>§175 took it, having first found that the refusal
+ * named the wrong obstacle</strong>. There was a third consumer on the day it was written; what was
+ * actually missing was that two of the three positions were inline schemas, which the second
+ * refusal above is about. Fixing the contract turned a judgment call into a consequence.
+ *
  * <h2>What it holds</h2>
  *
  * <ul>
@@ -97,6 +103,16 @@
  *       reading of "more than one module serves it" this codebase has. Its arrival deleted two
  *       loops that copied a record onto itself field by field
  *       ({@code repository.CaseOwners}, {@code execution.ExecutionPeople}).</li>
+ *   <li>{@link com.tcms.api.TeamRef} (§175) — {@code TeamRef} in the contract, and the third
+ *       refusal above, taken. It was {@code project.TeamRefView},
+ *       {@code identity.RoleAssignmentView.TeamRef} and {@code auth.CurrentUserService.TeamRef};
+ *       §147 left it for "a third consumer" and there were already three. <strong>The count was
+ *       never the obstacle</strong>, which is what makes this arrival different from
+ *       {@code UserRef}'s: two of the three positions were declared <em>inline</em> in the
+ *       contract, so a Java collapse alone would have been three records agreeing by coincidence
+ *       behind three schemas that did not, and one carried a component ({@code isLead}) the schema
+ *       never declared. Both were answered in {@code openapi.yaml} first — two {@code $ref}s and
+ *       one deletion — and the extraction is what was left over.</li>
  * </ul>
  *
  * <h2>The count is computed now, and that is the part that was actually broken</h2>

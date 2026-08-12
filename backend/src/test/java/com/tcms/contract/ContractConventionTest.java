@@ -356,9 +356,12 @@ class ContractConventionTest {
      * <p><strong>It is still hand-written, and the class literals are why.</strong> A name match is
      * how {@link #everyNameMatchedRecordIsPairedOrExplained} <em>proposes</em> a pair; a line here
      * is how a human accepts it, and the compiler then holds it — rename or delete either side and
-     * this file stops compiling. {@code TeamRef} is the entry that shows the difference: three
+     * this file stops compiling. ~~{@code TeamRef} is the entry that shows the difference: three
      * production records carry that name, only one serves the schema, and no scan could have
-     * decided which (see {@link #HOMONYMS}).
+     * decided which (see {@link #HOMONYMS}).~~ → §175 made that one record, so the example is now
+     * {@code Attachment}, whose two owners no name match proposes as a pair and no scan could
+     * confirm: they are in modules that may not import each other, and only a human knows the
+     * contract means them to stay identical.
      *
      * <p><strong>A list value, not a single class</strong>, for {@code ContractEnumTest.OWNERS}'
      * reason: a feature module may not import another's types, so one schema can legitimately be
@@ -524,9 +527,12 @@ class ContractConventionTest {
             Map.entry("Team", List.of(com.tcms.identity.TeamView.class)),
             Map.entry("TeamInput", List.of(com.tcms.identity.TeamInput.class)),
             Map.entry("TeamMemberInput", List.of(com.tcms.identity.TeamMemberInput.class)),
-            // One of three records carrying this name and the only one serving the schema: it is
-            // reached from `ReviewAssignee.team`, the schema's single $ref. See HOMONYMS.
-            Map.entry("TeamRef", List.of(com.tcms.project.TeamRefView.class)),
+            // ~~One of three records carrying this name and the only one serving the schema: it is
+            // reached from `ReviewAssignee.team`, the schema's single $ref. See HOMONYMS.~~
+            // → §175: there is one record and the schema has three $refs. The other two positions
+            // were inline objects served by their own records; both are gone, and so is the reason
+            // HOMONYMS had two entries.
+            Map.entry("TeamRef", List.of(com.tcms.api.TeamRef.class)),
             // The one pairing no name match proposes, and the reason the map is hand-written:
             // `TestCase` is an allOf of `TestCaseSummary`, and the record serving it is named for
             // being the DETAIL rather than for the schema.
@@ -638,30 +644,29 @@ class ContractConventionTest {
      * Production records that carry a contract schema's name without serving it, and the sentence
      * that tells them apart — {@code ContractEnumTest.HOMONYMS} at the object shape.
      *
-     * <p>Both entries are {@code TeamRef}, and together they correct a standing claim: §147 named
-     * {@code TeamRef} as a consolidation candidate on the grounds that "it is two copies". There
-     * are <strong>three</strong> types, they do not all serve the same schema, and one of them is
-     * not the same shape — so the argument that moved {@code UserRef} does not transfer unchanged.
-     * The named {@code TeamRef} schema has exactly one {@code $ref} ({@code ReviewAssignee.team});
-     * the other two records serve <em>inline</em> object shapes, which ~~{@code objectSchemas()}
-     * deliberately does not cover because an anonymous shape has no name to correspond by~~ →
-     * <strong>{@link #INLINE_RECORDS} now pairs both of them</strong> (§170). An entry here means
-     * "this record does not serve the schema its <em>name</em> matches", which is still true of
-     * both and is the ambiguity the map exists to resolve; it no longer means the record is
-     * compared to nothing.
+     * <p><strong>It is empty, and §175 emptied it.</strong> ~~Both entries are {@code TeamRef}, and
+     * together they correct a standing claim: §147 named it as a consolidation candidate on the
+     * grounds that "it is two copies". There are <strong>three</strong> types, they do not all serve
+     * the same schema, and one of them is not the same shape — so the argument that moved
+     * {@code UserRef} does not transfer unchanged.~~ → The two inline object shapes those records
+     * served are {@code $ref}s to the {@code TeamRef} schema now, {@code isLead} is off the wire,
+     * and the three records are {@link com.tcms.api.TeamRef}. There is no name collision left to
+     * resolve, so there is no entry.
+     *
+     * <p><strong>Empty is a result, not a dead map</strong>, and the two rules below are why it is
+     * worth keeping as one. {@link #everyNameMatchedRecordIsPairedOrExplained} reads it on every
+     * run: the day a second record is named for a schema it does not serve, the build fails with
+     * this map named in the message, which is the moment the sentence telling them apart is cheap
+     * to write. Deleting it would move that discovery to the first reader who is confused by the
+     * two — and the map has to exist for the staleness rule underneath it to mean anything.
+     *
+     * <p>An entry means "this record does not serve the schema its <em>name</em> matches". It has
+     * never meant "this record is compared to nothing" — {@link #INLINE_RECORDS} pairs anonymous
+     * shapes by location since §170, which is what made the difference between the two TeamRef
+     * shapes a checked fact rather than a sentence here, and therefore what made §175's collapse
+     * an edit rather than an argument.
      */
-    private static final Map<String, String> HOMONYMS = Map.of(
-            "com.tcms.identity.RoleAssignmentView.TeamRef",
-            "serves RoleAssignment.team, which is an INLINE {id, name} object rather than a $ref to "
-                    + "the TeamRef schema. Identical shape, no correspondence BY NAME — collapsing "
-                    + "the two would be a contract change (the inline object becoming a $ref) "
-                    + "before it was a Java one. Compared at that location by INLINE_RECORDS",
-            "com.tcms.auth.CurrentUserService.TeamRef",
-            "serves CurrentUser.teams, also inline, and it is NOT the same shape: it carries a "
-                    + "third component, isLead, which the TeamRef schema does not declare and this "
-                    + "one's inline schema does. A consolidation has to answer what happens to it. "
-                    + "Compared at that location by INLINE_RECORDS, which is what makes the "
-                    + "difference between the two shapes a checked fact rather than this sentence");
+    private static final Map<String, String> HOMONYMS = Map.of();
 
     /**
      * Members one side names and the other deliberately does not, with the reason each stays.
@@ -1068,12 +1073,11 @@ class ContractConventionTest {
     private static final Map<String, List<Class<?>>> INLINE_RECORDS = Map.ofEntries(
             Map.entry("AiProposal.acceptedCase",
                     List.of(com.tcms.repository.AiProposalView.AcceptedCaseView.class)),
-            // NOT the same shape as the named `TeamRef` schema — it carries isLead, which that one
-            // does not declare. HOMONYMS has said so since §165 and drew the wrong conclusion from
-            // it ("identical shape, no correspondence" of the sibling, "no correspondence" of this
-            // one): the correspondence was there, it was just not by name.
-            Map.entry("CurrentUser.teams[]",
-                    List.of(com.tcms.auth.CurrentUserService.TeamRef.class)),
+            // `CurrentUser.teams[]` and `RoleAssignment.team` were both here until §175, each with
+            // its own record, and between them they were the whole of the TeamRef question §147
+            // opened. They are `$ref`s to the TeamRef schema now, served by com.tcms.api.TeamRef —
+            // so they belong to RESPONSE_RECORDS' entry for that schema and are absent here, which
+            // is what everyInlineShapeIsPairedOrExempt asserts by deriving the population.
             Map.entry("DashboardBreakdown.segments[]",
                     List.of(com.tcms.repository.DashboardView.SegmentView.class)),
             Map.entry("DocBlock.coverage",
@@ -1091,8 +1095,6 @@ class ContractConventionTest {
                     List.of(com.tcms.repository.DashboardView.AutomationCoverageView.class)),
             Map.entry("RepositoryDashboard.recentActivity[]",
                     List.of(com.tcms.repository.DashboardView.ActivityPointView.class)),
-            Map.entry("RoleAssignment.team",
-                    List.of(com.tcms.identity.RoleAssignmentView.TeamRef.class)),
             Map.entry("Team.projects[]", List.of(com.tcms.identity.TeamView.ProjectRole.class)),
             Map.entry("TestCaseSummary.lastResult",
                     List.of(com.tcms.repository.LastResultView.class)),

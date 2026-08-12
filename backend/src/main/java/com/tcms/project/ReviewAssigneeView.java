@@ -1,5 +1,6 @@
 package com.tcms.project;
 
+import com.tcms.api.TeamRef;
 import com.tcms.api.UserRef;
 import java.time.Instant;
 import java.util.UUID;
@@ -23,14 +24,14 @@ import java.util.UUID;
  *                   client renders it as a request nobody can action rather than dropping it
  * @param team       the team asked, or null when {@code user} names a person. §6g: any member of it
  *                   may action the request, and the members are deliberately not expanded — see
- *                   {@link TeamRefView}
+ *                   {@link TeamRef}
  * @param assignedBy who asked. Null for an unattributable request, which {@code assigned_by}
  *                   permits for the reason every actor column in this schema does (§66)
  */
 public record ReviewAssigneeView(
         UUID id,
         UserRef user,
-        TeamRefView team,
+        TeamRef team,
         UserRef assignedBy,
         Instant assignedAt) {
 }
