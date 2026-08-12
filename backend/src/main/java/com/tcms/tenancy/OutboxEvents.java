@@ -33,11 +33,20 @@ package com.tcms.tenancy;
  * error: a coalesced occurrence silently loses events, and an uncoalesced state event delivers one
  * whole-company recompute per row.
  *
- * <p><strong>The vocabulary is one name, and it is the coalesced half (§153).</strong> The
- * past-tense form above is a convention with no instance in it — {@code case.deleted} is an
- * example, not an entry — so the rule stated here has never once discriminated anything. Read the
- * paragraph as what the second entry has to decide rather than as a description of a practice this
- * codebase follows; {@link Outbox#record} carries what else that entry owes.
+ * <p><del><strong>The vocabulary is one name, and it is the coalesced half (§153).</strong></del>
+ * <strong>Two names since §167, and the second one decided the same way</strong> —
+ * {@code documentation.links_changed} is a state, is recorded through
+ * {@link Outbox#recordCoalesced}, and carries no payload. The past-tense form is <em>still</em> a
+ * convention with no instance in it: {@code case.deleted} remains an example rather than an entry,
+ * so the rule stated above has yet to discriminate anything, and {@link Outbox#record} still has no
+ * caller in the product.
+ *
+ * <p>That both entries landed on the same half is not a coincidence and is worth reading before
+ * minting a third: <strong>a cross-module event in this codebase has so far always been consumed by
+ * a whole-company recompute</strong>, and a recompute takes no arguments, so there is nothing
+ * truthful for a payload to carry. The first name whose handler wants to know <em>which</em> row
+ * moved is the one that has to answer {@link Outbox#record}'s standing debt — a consumer-side test
+ * pinning the payload shape, because the compiler cannot see across that boundary.
  */
 public final class OutboxEvents {
 
@@ -50,6 +59,22 @@ public final class OutboxEvents {
      * which is all a recompute needs and all a coalesced event can honestly carry.
      */
     public static final String RESULTS_CHANGED = "execution.results_changed";
+
+    /**
+     * A company's documentation links or the pages they point into have moved (§167).
+     *
+     * <p>Coalesced, for {@link #RESULTS_CHANGED}'s reason: its handler is a whole-company recompute
+     * that takes no arguments, and a page edit that rewrites nine blocks must not be nine
+     * projections.
+     *
+     * <p><strong>The name says "links" and the producers are wider than linking</strong>, which is
+     * the part to read before adding a producer. {@code case_doc_link} copies a page's key, its
+     * title and a block's text, so <em>editing a page</em> changes what a case's traceability panel
+     * says exactly as <em>creating a link</em> does — and deleting a page removes rows the link
+     * table still has. Under-recording is the defect (a panel quoting text nobody can find any
+     * more); over-recording costs one idempotent recompute, which is what coalescing is for.
+     */
+    public static final String DOC_LINKS_CHANGED = "documentation.links_changed";
 
     private OutboxEvents() {
     }

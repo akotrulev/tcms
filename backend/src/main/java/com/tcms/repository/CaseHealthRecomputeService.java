@@ -81,6 +81,7 @@ public class CaseHealthRecomputeService {
     private final ExecutionFacts executionFacts;
     private final ApprovalFacts approvalFacts;
     private final ConditionDrift conditionDrift;
+    private final DocumentationFacts documentationFacts;
     private final CaseHealthProperties thresholds;
     private final Clock clock;
 
@@ -88,11 +89,13 @@ public class CaseHealthRecomputeService {
             ExecutionFacts executionFacts,
             ApprovalFacts approvalFacts,
             ConditionDrift conditionDrift,
+            DocumentationFacts documentationFacts,
             CaseHealthProperties thresholds,
             Clock clock) {
         this.executionFacts = executionFacts;
         this.approvalFacts = approvalFacts;
         this.conditionDrift = conditionDrift;
+        this.documentationFacts = documentationFacts;
         this.thresholds = thresholds;
         this.clock = clock;
     }
@@ -134,8 +137,16 @@ public class CaseHealthRecomputeService {
         // cutoff either: a condition edited an hour ago has changed the case exactly as much as
         // one edited last year, and ageing the signal would mean an ERROR that arrives late.
         conditionDrift.recomputeConditionDrift(now);
+        // Fifth statement pair, same transaction, and the only one that is not a signal: it
+        // replaces this company's mirror of its documentation links (§167), which is what
+        // TestCase.relatedDocuments is served from. It is here rather than in a service of its own
+        // because the two documentation-derived SIGNALS are computed from the rows it writes, and
+        // those two derivations must see one state of the table — a mirror refreshed by one job and
+        // read by another is the case detail's traceability panel disagreeing with the chip beside
+        // it about whether a spec moved.
+        int links = documentationFacts.refreshCaseDocLinks();
         log.debug("Recomputed execution, automation-drift, approval and condition-drift health "
-                + "signals for {} cases", cases);
+                + "signals for {} cases, and mirrored {} documentation links", cases, links);
         return cases;
     }
 }

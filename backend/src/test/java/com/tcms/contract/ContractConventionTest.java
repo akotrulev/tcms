@@ -385,6 +385,11 @@ class ContractConventionTest {
             Map.entry("DefectLink", List.of(com.tcms.execution.DefectLinkView.class)),
             Map.entry("DocBlock", List.of(com.tcms.documentation.DocBlockView.class)),
             Map.entry("DocBlockInput", List.of(com.tcms.documentation.DocBlockInput.class)),
+            // In `repository` and not in `documentation`, which is where the row lives: this is the
+            // link seen from the CASE end, off the case_doc_link read model, and the module that
+            // owns doc_link may not be read from a request path in the module that serves this
+            // (§167). BlockLinkView is the other end and pairs with `BlockLink`.
+            Map.entry("DocLink", List.of(com.tcms.repository.DocLinkView.class)),
             Map.entry("DocPage", List.of(com.tcms.documentation.DocPageView.class)),
             Map.entry("DocPageInput", List.of(com.tcms.documentation.DocPageInput.class)),
             Map.entry("DocPageStatusInput",
@@ -515,41 +520,74 @@ class ContractConventionTest {
      * property is the whole reason those maps did not rot while §162's one-directional exemptions
      * did.
      *
-     * <p><strong><del>All four</del> Both remaining entries are contract-only, which is the safe
-     * direction</strong> — a declared property nothing sends costs a dead branch in a client, where
-     * a component nothing declares is a value no generated union can name. And all of them are
-     * blocked by <em>the same</em> rule, which is what made them one decision rather than four:
-     * {@code repository} and {@code documentation} may not import {@code execution}, so a value
-     * sourced from {@code test_execution} has to arrive as a read model fed by events (§3 lesson 4)
-     * rather than as a join.
+     * <p><strong>Every entry is contract-only, which is the safe direction</strong> — a declared
+     * property nothing sends costs a dead branch in a client, where a component nothing declares is
+     * a value no generated union can name.
      *
-     * <p><strong>Three of the four said something else until §165, and what they said was that the
-     * module "does not exist".</strong> {@code execution} is 119 files and {@code documentation} is
-     * 57. This is §160's shape exactly — {@code rawStorageKey} arguing "there is no adapter" for
-     * twenty-nine sections after {@code storage} built one — and it cost the same thing: an
-     * argument that misnames the obstacle deters the repair, because "the module does not exist"
-     * reads as *wait* and "the module boundary forbids the join" reads as *design a read model*.
+     * <p><strong>The four this map opened with are down to one, and the three that left are the
+     * argument for how it is written.</strong> All four were blocked by one rule — {@code repository}
+     * and {@code documentation} may not import {@code execution} — and <em>three of them said
+     * something else until §165: that the module "does not exist"</em>. {@code execution} is 119
+     * files and {@code documentation} is 57. That is §160's shape exactly ({@code rawStorageKey}
+     * arguing "there is no adapter" for twenty-nine sections after {@code storage} built one) and it
+     * cost the same thing: an argument that misnames the obstacle deters the repair, because "the
+     * module does not exist" reads as <em>wait</em> and "the module boundary forbids the join" reads
+     * as <em>design a read model</em>.
      *
-     * <p><strong>§166 is the evidence for that last sentence, and it is why this map is now two
-     * entries.</strong> The rewritten argument named a repair — derive it into a read model this
-     * module owns — and the next slice did it, for both {@code lastResult} keys, one section later.
-     * The two remaining are the ones the rewrite did not make cheap: {@code relatedDocuments} needs
-     * a table rather than a column, and {@code DocBlock.coverage} needs two modules
-     * {@code documentation} may not name.
+     * <p>§166 took the rewritten argument and did what it named, for both {@code lastResult} keys;
+     * §167 did the same for {@code relatedDocuments} one section later, through a table rather than
+     * a column. <strong>{@code DocBlock.coverage} is what remains</strong>, and it is the control
+     * group: the one of the four whose argument was <em>revised when its constraint moved</em>
+     * rather than left to expire, and the one that still needs two modules {@code documentation} may
+     * not name.
+     *
+     * <p><strong>The six {@code DocLink.external*} entries are a different kind and belong to §167's
+     * pairing of that schema.</strong> Nothing about a module boundary blocks them — they are a
+     * capability {@code V1} designed and no slice has built, so the divergence records a decision
+     * not to fabricate values rather than an obstacle. They are what a schema paired for the first
+     * time turns up, which is the population argument {@code everyNameMatchedRecordIsPairedOrExplained}
+     * makes: a shape nothing compares can diverge in both directions for free.
      */
     private static final Map<String, String> MEMBER_DIVERGENCE_BY_DECISION = Map.ofEntries(
             // TestCaseSummary.lastResult and TestCase.lastResult WERE HERE and are deleted rather
             // than edited — §166 served the field, and this map is pinned in both directions
             // precisely so a closed divergence cannot keep its argument. Deleting them IS the
             // build passing again; that is the property, exercised.
-            Map.entry("TestCase.relatedDocuments",
-                    "CONTRACT-ONLY. Sourced from doc_link, which is `documentation` — the other "
-                            + "module `repository` may not import. Its old argument added that "
-                            + "\"nothing can create a link, so no case has one\": DocBlockView's "
-                            + "header struck that clause when POST .../blocks/{blockId}/links "
-                            + "shipped, and this side never heard. WHAT THAT COSTS TODAY: a link "
-                            + "made from a doc block to a case is never shown on the case — "
-                            + "CaseDetailPage's DocLinksPanel gets `?? []` and renders empty"),
+            // TestCase.relatedDocuments WAS HERE and is deleted rather than edited — §167 served
+            // the field, and this map is pinned in both directions precisely so a closed divergence
+            // cannot keep its argument. Second time that has fired on a divergence somebody
+            // actually closed; §166's two lastResult entries were the first.
+            //
+            // THE SIX BELOW ARRIVED WITH IT, and they are the other side of the same slice: pairing
+            // `DocLink` with the record that finally serves it is what made them visible. They are
+            // the two target kinds this product designs and does not build. documentation.DocLink
+            // leaves the columns UNMAPPED for the reason its header gives — "a mapped null suggests
+            // a value somebody could set" — and DocLinkView makes the same call one layer up, so
+            // the divergence is the honest record of a designed-but-unbuilt capability rather than
+            // six components that are null in every response there has ever been.
+            //
+            // They go together and they leave together: an external target needs a writer, a
+            // second arm in the mirror statement and a `targetKind` this SPA branch can reach, and
+            // on that day all six entries have to be deleted for the build to pass.
+            Map.entry("DocLink.externalRepo",
+                    "CONTRACT-ONLY. doc_link.external_repo belongs to target_kind EXTERNAL_GIT, "
+                            + "which V1's ck_doc_link_target designs and nothing writes — "
+                            + "BlockLinkService creates DOC_BLOCK links only"),
+            Map.entry("DocLink.externalPath",
+                    "CONTRACT-ONLY. EXTERNAL_GIT's path, same absent writer as externalRepo"),
+            Map.entry("DocLink.externalLineStart",
+                    "CONTRACT-ONLY. EXTERNAL_GIT's line range, same absent writer"),
+            Map.entry("DocLink.externalLineEnd",
+                    "CONTRACT-ONLY. EXTERNAL_GIT's line range, same absent writer"),
+            Map.entry("DocLink.externalCommitSha",
+                    "CONTRACT-ONLY. EXTERNAL_GIT's commit — the CHECK makes it mandatory for that "
+                            + "kind, because a line number without one points confidently at the "
+                            + "wrong code six months later (plan §6m). No writer"),
+            Map.entry("DocLink.externalUrl",
+                    "CONTRACT-ONLY. target_kind EXTERNAL_URL's whole payload. Plan §6i wants "
+                            + "Confluence and Google Docs references in the same traceability "
+                            + "graph, clearly marked as having no anchor stability; nothing builds "
+                            + "them yet"),
             Map.entry("DocBlock.coverage",
                     "CONTRACT-ONLY, and the control group: this is the one of the four whose "
                             + "argument was REVISED when its constraint moved rather than left to "

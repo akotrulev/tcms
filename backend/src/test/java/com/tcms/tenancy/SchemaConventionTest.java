@@ -264,7 +264,7 @@ class SchemaConventionTest extends IntegrationTestBase {
                 .as("fixture precondition: policies must have been found, or this asserts nothing")
                 // 56 from V1, + project_settings (V23), + review_assignment (V25),
                 // + report_job (V27), + suite_case and suite_tag_rule (V31), + case_flake (V38),
-                // + ai_proposal (V43).
+                // + ai_proposal (V43), + case_doc_link (V46).
                 // A new company-owned table moves this number, deliberately: the count is what
                 // makes the predicate check non-vacuous, and a table added without its policy would
                 // otherwise pass by not being looked at.
@@ -272,7 +272,7 @@ class SchemaConventionTest extends IntegrationTestBase {
                 // V36's api_token_lookup is NOT here and must not be: it is instance-level, the
                 // twelfth entry on ERD §0.1's exception list, and instanceLevelTablesAreNotRlsProtected
                 // below asserts it from the other side.
-                .isEqualTo(63);
+                .isEqualTo(64);
     }
 
     @Test

@@ -629,7 +629,7 @@ public class CaseBulkService {
                 decision,
                 renderer.render(
                         row, context.liveSuites(), context.vocabularies(), companyId,
-                        context.flakes(), context.attachments()),
+                        context.flakes(), context.attachments(), context.docLinks()),
                 userId,
                 now);
     }
@@ -720,7 +720,15 @@ public class CaseBulkService {
              * here for {@link #flakes}' reason exactly. No bulk action attaches or removes a file;
              * the snapshot renders them because the snapshot is the whole response.
              */
-            Map<UUID, List<CaseAttachmentView>> attachments) {
+            Map<UUID, List<CaseAttachmentView>> attachments,
+            /**
+             * The batch's documentation links, resolved once — {@link CaseRenderer#docLinksFor},
+             * and here for {@link #flakes}' reason exactly (§167). No bulk action creates or removes
+             * a link; the snapshot renders them because the snapshot is the whole response, and a v7
+             * that recorded a case's traceability as empty because this map was not carried would be
+             * describing a version that never existed.
+             */
+            Map<UUID, List<DocLinkView>> docLinks) {
 
         List<CaseCondition> conditionsOf(UUID caseId) {
             return conditions.getOrDefault(caseId, List.of());
@@ -894,6 +902,9 @@ public class CaseBulkService {
                         : Map.of(),
                 authored && !found.isEmpty()
                         ? renderer.attachmentsFor(CompanyContext.require(), found)
+                        : Map.of(),
+                authored && !found.isEmpty()
+                        ? renderer.docLinksFor(found)
                         : Map.of());
     }
 }

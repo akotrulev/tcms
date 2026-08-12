@@ -253,6 +253,92 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
     private static final UUID DRIFT_IN_AN_OLD_VERSION =
             UUID.fromString("ce004000-0000-4000-8000-00000000001c");
 
+    // ---- the documentation links (§167, plan §6i) -------------------------------------------
+    //
+    // The mirror, not a signal: case_doc_link is what TestCase.relatedDocuments is served from, and
+    // these fixtures are one link each crossed with the one thing that decides whether it is
+    // copied — §117's ladder rule again. Every one of them is a case with no execution, so they all
+    // report NEVER_EXECUTED as well; the assertions read the mirror rather than the signal set.
+
+    /** One link into a page whose content has not moved since the case was authored. Not stale. */
+    private static final UUID LINKED = UUID.fromString("ce004000-0000-4000-8000-00000000001e");
+    /** Linked to a page edited after the case's newest version. The signal's whole point. */
+    private static final UUID LINKED_TO_A_MOVED_SPEC =
+            UUID.fromString("ce004000-0000-4000-8000-00000000001f");
+    /**
+     * Two links, and the second one is to the long block.
+     *
+     * <p>A case with exactly one link cannot tell "the mirror copies the link" from "the mirror
+     * copies <em>a</em> link", and the panel renders a list.
+     */
+    private static final UUID LINKED_TWICE = UUID.fromString("ce004000-0000-4000-8000-000000000020");
+    /** Linked into a page somebody soft-deleted. Must vanish from the case. */
+    private static final UUID LINKED_TO_A_DELETED_PAGE =
+            UUID.fromString("ce004000-0000-4000-8000-000000000021");
+    /**
+     * Linked into a page of a <em>sibling project</em> — a row the write path refuses to create and
+     * RLS happily returns, because a sibling project is the same company.
+     */
+    private static final UUID LINKED_ACROSS_PROJECTS =
+            UUID.fromString("ce004000-0000-4000-8000-000000000022");
+    /** Linked, soft-deleted. Its links must not be mirrored at all. */
+    private static final UUID LINKED_AND_REMOVED =
+            UUID.fromString("ce004000-0000-4000-8000-000000000023");
+    /**
+     * Linked, with no {@code test_case_version} row — {@code CaseVersions}' v1 gap.
+     *
+     * <p>The {@code coalesce} the staleness comparison falls back through. Without it the
+     * comparison is NULL, and NULL into a {@code NOT NULL boolean} aborts the whole refresh — so
+     * this fixture's failure mode is the entire class going red rather than one wrong answer.
+     */
+    private static final UUID LINKED_WITHOUT_A_VERSION =
+            UUID.fromString("ce004000-0000-4000-8000-000000000024");
+    /** Umbra's case, linked to Umbra's page. The company the DELETE must not reach. */
+    private static final UUID FOREIGN_LINKED =
+            UUID.fromString("ce004000-0000-4000-8000-000000000025");
+
+    private static final UUID ACME_OTHER_PROJECT =
+            UUID.fromString("ce001000-0000-4000-8000-000000000003");
+    private static final UUID ACME_SPACE = UUID.fromString("ce007000-0000-4000-8000-000000000001");
+    private static final UUID ACME_OTHER_SPACE =
+            UUID.fromString("ce007000-0000-4000-8000-000000000002");
+    private static final UUID UMBRA_SPACE = UUID.fromString("ce007000-0000-4000-8000-000000000003");
+
+    /** The page every clean link points into. Its newest version predates the cases. */
+    private static final UUID SPEC_PAGE = UUID.fromString("ce007001-0000-4000-8000-000000000001");
+    /** Same, but its newest version was written after the case's. */
+    private static final UUID MOVED_SPEC_PAGE =
+            UUID.fromString("ce007001-0000-4000-8000-000000000002");
+    private static final UUID DELETED_PAGE = UUID.fromString("ce007001-0000-4000-8000-000000000003");
+    private static final UUID OTHER_PROJECT_PAGE =
+            UUID.fromString("ce007001-0000-4000-8000-000000000004");
+    private static final UUID UMBRA_PAGE = UUID.fromString("ce007001-0000-4000-8000-000000000005");
+
+    private static final UUID SPEC_BLOCK = UUID.fromString("ce007002-0000-4000-8000-000000000001");
+    /** Longer than the excerpt bound, and with newlines in it. */
+    private static final UUID LONG_BLOCK = UUID.fromString("ce007002-0000-4000-8000-000000000002");
+    /** A block with no words — a spacer somebody linked to. */
+    private static final UUID EMPTY_BLOCK = UUID.fromString("ce007002-0000-4000-8000-000000000003");
+    private static final UUID MOVED_BLOCK = UUID.fromString("ce007002-0000-4000-8000-000000000004");
+    private static final UUID DELETED_PAGE_BLOCK =
+            UUID.fromString("ce007002-0000-4000-8000-000000000005");
+    private static final UUID OTHER_PROJECT_BLOCK =
+            UUID.fromString("ce007002-0000-4000-8000-000000000006");
+    private static final UUID UMBRA_BLOCK = UUID.fromString("ce007002-0000-4000-8000-000000000007");
+
+    /** The link ids, so a test can withdraw one by naming it. */
+    private static final UUID LINKED_LINK = UUID.fromString("ce007003-0000-4000-8000-000000000001");
+
+    /**
+     * The text of the block every excerpt assertion reads, and it is over the 160-character bound
+     * on purpose — with a newline in it, because the mirror collapses whitespace exactly as
+     * {@code reporting.CoverageMatrixReport} does and a fixture on one line could not tell.
+     */
+    private static final String LONG_STATEMENT =
+            "The system shall decline a refund when the original capture is older than one hundred "
+                    + "and eighty days,\nand shall record the decline reason against the payment "
+                    + "for the finance team to audit later.";
+
     /** The library entry every clean case names, and the one the drifted snapshots were taken of. */
     private static final UUID STABLE_ENTRY = UUID.fromString("ce006000-0000-4000-8000-000000000001");
     /** Same id in the snapshot, different body in the library. */
@@ -314,6 +400,12 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
 
         inCompany(ACME, () -> {
             seedProject(ACME_PROJECT, ACME, "CEHAC", "Acme Product", now);
+            // A second project of the SAME company (§167): RLS returns its pages to a statement run
+            // in Acme's context, so it is the only fixture that can prove the mirror's project
+            // predicate does anything. Written here rather than beside its doc fixtures because
+            // seedProject goes through JPA and therefore needs an open company — the SQL helpers
+            // below do not.
+            seedProject(ACME_OTHER_PROJECT, ACME, "CEHAC2", "Acme Other", now);
             return null;
         });
         inCompany(UMBRA, () -> {
@@ -461,12 +553,91 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
                     now.minus(WELL_OUTSIDE));
             execution(acme, ACME, ACME_PROJECT, ACME_CI_RUN, UNDECLARED_IMPOSSIBLE,
                     now.minus(WELL_INSIDE));
+
+            // ---- documentation links (§167) --------------------------------------------------
+            //
+            // The staleness comparison is newest page version against newest case version, so BOTH
+            // sides are dated explicitly here. testCase() writes v1 at now(); leaving the page's
+            // version at now() as well would put the two within microseconds of each other and make
+            // every assertion in the block depend on insert order.
+            space(acme, ACME_SPACE, ACME, ACME_PROJECT, "Acme docs");
+            page(acme, SPEC_PAGE, ACME, ACME_SPACE, ACME_PROJECT, "DOC-1", 1, "Checkout spec",
+                    false);
+            pageVersion(acme, SPEC_PAGE, 1, now.minus(WELL_OUTSIDE));
+            block(acme, SPEC_BLOCK, ACME, SPEC_PAGE, 0, "A refund may be issued within 180 days.");
+            block(acme, LONG_BLOCK, ACME, SPEC_PAGE, 1, LONG_STATEMENT);
+            block(acme, EMPTY_BLOCK, ACME, SPEC_PAGE, 2, "");
+
+            page(acme, MOVED_SPEC_PAGE, ACME, ACME_SPACE, ACME_PROJECT, "DOC-2", 2, "Payments spec",
+                    false);
+            // Edited five days ago; the cases below were authored ten days ago.
+            pageVersion(acme, MOVED_SPEC_PAGE, 1, now.minus(WELL_OUTSIDE));
+            pageVersion(acme, MOVED_SPEC_PAGE, 2, now.minus(Duration.ofDays(5)));
+            block(acme, MOVED_BLOCK, ACME, MOVED_SPEC_PAGE, 0, "Captures expire after 7 days.");
+
+            page(acme, DELETED_PAGE, ACME, ACME_SPACE, ACME_PROJECT, "DOC-3", 3, "Withdrawn spec",
+                    true);
+            pageVersion(acme, DELETED_PAGE, 1, now.minus(WELL_OUTSIDE));
+            block(acme, DELETED_PAGE_BLOCK, ACME, DELETED_PAGE, 0, "Superseded statement.");
+
+            // The sibling project itself is seeded above, through JPA, where a company is open.
+            space(acme, ACME_OTHER_SPACE, ACME, ACME_OTHER_PROJECT, "Other docs");
+            page(acme, OTHER_PROJECT_PAGE, ACME, ACME_OTHER_SPACE, ACME_OTHER_PROJECT, "DOC-4", 4,
+                    "Another product's spec", false);
+            pageVersion(acme, OTHER_PROJECT_PAGE, 1, now.minus(WELL_OUTSIDE));
+            block(acme, OTHER_PROJECT_BLOCK, ACME, OTHER_PROJECT_PAGE, 0, "Not this product.");
+
+            authoredCase(acme, LINKED, ACME_PROJECT, "TC-29", 29, "DRAFT", 1);
+            datedVersion(acme, LINKED, now.minus(WELL_INSIDE));
+            link(acme, LINKED_LINK, ACME, LINKED, SPEC_BLOCK, "VERIFIES");
+
+            authoredCase(acme, LINKED_TO_A_MOVED_SPEC, ACME_PROJECT, "TC-30", 30, "DRAFT", 1);
+            datedVersion(acme, LINKED_TO_A_MOVED_SPEC, now.minus(WELL_INSIDE));
+            link(acme, UUID.randomUUID(), ACME, LINKED_TO_A_MOVED_SPEC, MOVED_BLOCK, "VERIFIES");
+
+            authoredCase(acme, LINKED_TWICE, ACME_PROJECT, "TC-31", 31, "DRAFT", 1);
+            datedVersion(acme, LINKED_TWICE, now.minus(WELL_INSIDE));
+            link(acme, UUID.randomUUID(), ACME, LINKED_TWICE, LONG_BLOCK, "DERIVED_FROM");
+            link(acme, UUID.randomUUID(), ACME, LINKED_TWICE, EMPTY_BLOCK, "REFERENCES");
+
+            authoredCase(acme, LINKED_TO_A_DELETED_PAGE, ACME_PROJECT, "TC-32", 32, "DRAFT", 1);
+            datedVersion(acme, LINKED_TO_A_DELETED_PAGE, now.minus(WELL_INSIDE));
+            // Unreachable through the API: DocPageWriteService#delete answers 409 WouldBreak when
+            // anything links to the page's blocks, so only a fixture can produce this row. The
+            // predicate is written for the day that guard changes or a project is hard-deleted.
+            link(acme, UUID.randomUUID(), ACME, LINKED_TO_A_DELETED_PAGE, DELETED_PAGE_BLOCK,
+                    "VERIFIES");
+
+            authoredCase(acme, LINKED_ACROSS_PROJECTS, ACME_PROJECT, "TC-33", 33, "DRAFT", 1);
+            datedVersion(acme, LINKED_ACROSS_PROJECTS, now.minus(WELL_INSIDE));
+            link(acme, UUID.randomUUID(), ACME, LINKED_ACROSS_PROJECTS, OTHER_PROJECT_BLOCK,
+                    "VERIFIES");
+
+            testCase(acme, LINKED_AND_REMOVED, ACME, ACME_PROJECT, ACME_SUITE, "TC-34", 34, true,
+                    "MANUAL");
+            link(acme, UUID.randomUUID(), ACME, LINKED_AND_REMOVED, SPEC_BLOCK, "VERIFIES");
+
+            // No datedVersion() and no version(): the v1 gap, so the comparison falls back to the
+            // case's created_at, which is now() and therefore newer than every page above.
+            authoredCase(acme, LINKED_WITHOUT_A_VERSION, ACME_PROJECT, "TC-35", 35, "DRAFT", 1);
+            link(acme, UUID.randomUUID(), ACME, LINKED_WITHOUT_A_VERSION, SPEC_BLOCK, "VERIFIES");
         }
 
         try (Connection umbra = appConnection(UMBRA)) {
             seedProjectDefaults(umbra, UMBRA, UMBRA_PROJECT);
             suite(umbra, UMBRA_SUITE, UMBRA, UMBRA_PROJECT, "Root");
             testCase(umbra, FOREIGN, UMBRA, UMBRA_PROJECT, UMBRA_SUITE, "TC-1", 1, false, "MANUAL");
+
+            // Umbra's own linked case — what Acme's unqualified DELETE FROM case_doc_link must not
+            // be able to reach.
+            testCase(umbra, FOREIGN_LINKED, UMBRA, UMBRA_PROJECT, UMBRA_SUITE, "TC-2", 2, false,
+                    "MANUAL");
+            space(umbra, UMBRA_SPACE, UMBRA, UMBRA_PROJECT, "Umbra docs");
+            page(umbra, UMBRA_PAGE, UMBRA, UMBRA_SPACE, UMBRA_PROJECT, "DOC-1", 1, "Umbra spec",
+                    false);
+            pageVersion(umbra, UMBRA_PAGE, 1, now.minus(WELL_OUTSIDE));
+            block(umbra, UMBRA_BLOCK, UMBRA, UMBRA_PAGE, 0, "Umbra's statement.");
+            link(umbra, UUID.randomUUID(), UMBRA, FOREIGN_LINKED, UMBRA_BLOCK, "VERIFIES");
         }
     }
 
@@ -977,6 +1148,192 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
     }
 
     @Nested
+    @DisplayName("The documentation links — the mirror TestCase.relatedDocuments is served from")
+    class TheDocumentationLinks {
+
+        @Test
+        @DisplayName("a link carries the page, the block and the relationship")
+        void aLinkIsMirroredWhole() {
+            // The panel renders every one of these: the relationship as a chip, the page title as
+            // the link text, the page key beside it, and the block id as the fragment it jumps to.
+            // Asserting the row rather than a count is what makes a mirror that copies the wrong
+            // column fail here instead of on a screen.
+            recomputeFor(ACME);
+
+            assertThat(mirrored(ACME, LINKED)).singleElement().satisfies(link -> {
+                assertThat(link.id()).as("the doc_link id, not a minted one").isEqualTo(LINKED_LINK);
+                assertThat(link.targetKind()).isEqualTo("DOC_BLOCK");
+                assertThat(link.relationship()).isEqualTo("VERIFIES");
+                assertThat(link.pageId()).isEqualTo(SPEC_PAGE);
+                assertThat(link.pageKey()).isEqualTo("DOC-1");
+                assertThat(link.pageTitle()).isEqualTo("Checkout spec");
+                assertThat(link.blockId()).isEqualTo(SPEC_BLOCK);
+                assertThat(link.blockExcerpt())
+                        .isEqualTo("A refund may be issued within 180 days.");
+                assertThat(link.stale())
+                        .as("the page has not been edited since the case was authored")
+                        .isFalse();
+            });
+        }
+
+        @Test
+        @DisplayName("every link of a case is mirrored, not merely one")
+        void allOfACasesLinksAreMirrored() {
+            recomputeFor(ACME);
+
+            assertThat(mirrored(ACME, LINKED_TWICE))
+                    .extracting(MirroredLink::relationship)
+                    .containsExactlyInAnyOrder("DERIVED_FROM", "REFERENCES");
+        }
+
+        @Test
+        @DisplayName("a long statement is cut at the bound, marked, and put on one line")
+        void theExcerptIsBoundedAndMarked() {
+            // Three properties in one assertion because they are one rule, and it is a SECOND
+            // spelling of reporting.CoverageMatrixReport's — 160 characters, whitespace collapsed,
+            // ellipsis where it was cut. Nothing checks that the two agree (DocumentationFacts says
+            // so at the constant); this at least pins this side.
+            recomputeFor(ACME);
+
+            String excerpt = mirrored(ACME, LINKED_TWICE).stream()
+                    .filter(link -> link.blockId().equals(LONG_BLOCK))
+                    .findFirst()
+                    .orElseThrow()
+                    .blockExcerpt();
+
+            // At most 160 rather than exactly: the cut is trimmed before the ellipsis is appended,
+            // so a statement whose 160th character is a space comes back one shorter. That is
+            // CoverageMatrixReport's behaviour too (`substring(0, LIMIT - 1).trim() + "…"`), and
+            // asserting an exact length here would pin the fixture's wording rather than the rule.
+            assertThat(excerpt).hasSizeLessThanOrEqualTo(160).endsWith("…");
+            assertThat(excerpt.length())
+                    .as("and it must actually have been cut, or this asserts nothing")
+                    .isLessThan(LONG_STATEMENT.length());
+            assertThat(excerpt)
+                    .as("the newline in the block must not reach a panel as a newline")
+                    .doesNotContain("\n")
+                    .startsWith("The system shall decline a refund");
+        }
+
+        @Test
+        @DisplayName("a block with no words has no excerpt, rather than an empty one")
+        void anEmptyBlockHasNoExcerpt() {
+            // Null and not "": the SPA renders the excerpt behind a falsy check, so an empty string
+            // and an absent value already behave alike there — and two spellings of nothing on the
+            // wire is the thing that eventually gets rendered differently by the second consumer.
+            recomputeFor(ACME);
+
+            assertThat(mirrored(ACME, LINKED_TWICE).stream()
+                    .filter(link -> link.blockId().equals(EMPTY_BLOCK))
+                    .findFirst()
+                    .orElseThrow()
+                    .blockExcerpt())
+                    .isNull();
+        }
+
+        @Test
+        @DisplayName("a spec edited after the case was authored is stale")
+        void aMovedSpecIsStale() {
+            recomputeFor(ACME);
+
+            assertThat(mirrored(ACME, LINKED_TO_A_MOVED_SPEC))
+                    .singleElement()
+                    .returns(true, MirroredLink::stale);
+        }
+
+        @Test
+        @DisplayName("a case with no version at all falls back to when it was created")
+        void theVersionlessCaseFallsBack() {
+            // Without the coalesce this row's staleness is NULL, NULL into a NOT NULL boolean
+            // aborts the INSERT, and the whole refresh fails — so the failure mode of removing it
+            // is every test in this class going red at once rather than one wrong answer here.
+            recomputeFor(ACME);
+
+            assertThat(mirrored(ACME, LINKED_WITHOUT_A_VERSION))
+                    .as("created now, linked to a page last edited 120 days ago")
+                    .singleElement()
+                    .returns(false, MirroredLink::stale);
+        }
+
+        @Test
+        @DisplayName("a withdrawn link disappears on the next refresh")
+        void aWithdrawnLinkDisappears() throws SQLException {
+            // THE reason the refresh is delete-then-insert. An ON CONFLICT upsert passes every
+            // other test in this class and leaves this row standing forever — a case that goes on
+            // claiming coverage somebody explicitly withdrew, which is the exact thing
+            // BlockLinkService refuses to leave in the table this one mirrors.
+            recomputeFor(ACME);
+            assertThat(mirrored(ACME, LINKED)).hasSize(1);
+
+            withdrawLink(ACME, LINKED_LINK);
+            recomputeFor(ACME);
+
+            assertThat(mirrored(ACME, LINKED)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a soft-deleted case keeps no links")
+        void aRemovedCaseIsNotMirrored() {
+            recomputeFor(ACME);
+
+            assertThat(mirrored(ACME, LINKED_AND_REMOVED)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a link into a soft-deleted page is not shown")
+        void aDeletedPageIsNotMirrored() {
+            // BlockLinks drops what it cannot name for the same reason: a row with a title and no
+            // destination reads as a broken product rather than as a withdrawn document.
+            recomputeFor(ACME);
+
+            assertThat(mirrored(ACME, LINKED_TO_A_DELETED_PAGE)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a page of a sibling project is not shown")
+        void anotherProjectsPageIsNotMirrored() {
+            // RLS returns it — a sibling project is the same company — so only the statement's own
+            // project predicate refuses it. Without that predicate this case's panel would name a
+            // page belonging to a project the reader may hold no grant on.
+            recomputeFor(ACME);
+
+            assertThat(mirrored(ACME, LINKED_ACROSS_PROJECTS)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("refreshing one company does not delete another's mirror")
+        void theUnqualifiedDeleteCannotCrossACompany() {
+            // The highest-value assertion in this class: `DELETE FROM case_doc_link` carries no
+            // WHERE clause and relies entirely on FORCE ROW LEVEL SECURITY. A deployment where that
+            // reliance is wrong loses another client's data rather than merely reading it.
+            recomputeFor(UMBRA);
+            assertThat(mirrored(UMBRA, FOREIGN_LINKED)).hasSize(1);
+
+            recomputeFor(ACME);
+
+            assertThat(mirrored(UMBRA, FOREIGN_LINKED))
+                    .as("Acme's refresh must not be able to reach Umbra's rows")
+                    .hasSize(1);
+            assertThat(mirrored(ACME, LINKED))
+                    .as("and must still have written its own")
+                    .hasSize(1);
+        }
+
+        @Test
+        @DisplayName("a second refresh changes nothing")
+        void isIdempotent() {
+            recomputeFor(ACME);
+            List<MirroredLink> first = mirrored(ACME, LINKED_TWICE);
+
+            recomputeFor(ACME);
+
+            assertThat(mirrored(ACME, LINKED_TWICE))
+                    .as("the ids are doc_link's, so replacing the table must not renumber anything")
+                    .isEqualTo(first);
+        }
+    }
+
+    @Nested
     @DisplayName("What the job must not touch")
     class Boundaries {
 
@@ -1149,15 +1506,196 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
                 // review.subject_id is deliberately NOT a foreign key — a review row surviving its
                 // subject would be seeded onto the next class's cases through the id, which is the
                 // §19 shape with an extra table in it.
+                // case_doc_link is not in this list and does not need to be: it is ON DELETE
+                // CASCADE from test_case, which is. doc_link IS here and its rows would otherwise
+                // outlive the cases they name — source_id carries no foreign key, deliberately (a
+                // cross-module FK), so a link seeded by one test would attach itself to the case
+                // the next test re-creates under the same id. That is §19's shape with an extra
+                // table in it, which is the reason review is on this list too.
                 for (String table : List.of("case_health", "review_participation", "review",
                         "step_result", "test_execution",
-                        "test_run", "test_case_version", "test_case", "suite")) {
+                        "test_run", "test_case_version", "test_case", "suite",
+                        "doc_link", "doc_block", "doc_page_version", "doc_page", "doc_space")) {
                     try (PreparedStatement statement =
                             connection.prepareStatement("DELETE FROM " + table)) {
                         statement.executeUpdate();
                     }
                 }
             }
+        }
+    }
+
+    // ---- documentation fixtures (§167) ---------------------------------------------------------
+    //
+    // The same four helpers CoverageMatrixReportTest writes, narrowed to what this class asserts:
+    // that one reads doc_link for a report and this one mirrors it. Copied rather than shared for
+    // the reason every fixture in this suite is per class — a shared seed is how two classes start
+    // depending on each other's ids (§19).
+
+    private void space(Connection connection, UUID id, UUID companyId, UUID projectId, String name)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO doc_space (id, company_id, project_id, name)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?)
+                    ON CONFLICT (id) DO NOTHING
+                """)) {
+            statement.setString(1, id.toString());
+            statement.setString(2, companyId.toString());
+            statement.setString(3, projectId.toString());
+            statement.setString(4, name);
+            statement.executeUpdate();
+        }
+    }
+
+    private void page(Connection connection, UUID id, UUID companyId, UUID spaceId, UUID projectId,
+            String key, long keySeq, String title, boolean deleted) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO doc_page
+                    (id, company_id, space_id, project_id, key, key_seq, path, slug, title,
+                     status, current_version_no, created_at, updated_at, deleted_at)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?,
+                        CAST(? AS ltree), ?, ?, 'PUBLISHED', 1, now(), now(),
+                        CAST(? AS timestamptz))
+                    ON CONFLICT (id) DO NOTHING
+                """)) {
+            statement.setString(1, id.toString());
+            statement.setString(2, companyId.toString());
+            statement.setString(3, spaceId.toString());
+            statement.setString(4, projectId.toString());
+            statement.setString(5, key);
+            statement.setLong(6, keySeq);
+            statement.setString(7, "p" + keySeq);
+            statement.setString(8, "page-" + keySeq);
+            statement.setString(9, title);
+            statement.setString(10, deleted ? "2026-01-01T00:00:00Z" : null);
+            statement.executeUpdate();
+        }
+    }
+
+    /**
+     * One authored version of a page, at a stated moment.
+     *
+     * <p>The moment is the whole point: {@code doc_page_version.created_at} is the left-hand side of
+     * the staleness comparison, and {@code doc_page.updated_at} deliberately is not — see
+     * {@code DocumentationFacts} for why the timestamp spelling was refused on both sides.
+     */
+    private void pageVersion(Connection connection, UUID pageId, int versionNo, Instant createdAt)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO doc_page_version
+                    (id, company_id, page_id, version_no, snapshot, content_hash, created_at)
+                SELECT gen_random_uuid(), p.company_id, p.id, ?, CAST('{}' AS jsonb), ?,
+                       CAST(? AS timestamptz)
+                  FROM doc_page p
+                 WHERE p.id = CAST(? AS uuid)
+                    ON CONFLICT (page_id, version_no) DO NOTHING
+                """)) {
+            statement.setInt(1, versionNo);
+            statement.setString(2, "hash-" + pageId + "-" + versionNo);
+            statement.setString(3, createdAt.toString());
+            statement.setString(4, pageId.toString());
+            statement.executeUpdate();
+        }
+    }
+
+    private void block(Connection connection, UUID id, UUID companyId, UUID pageId, int position,
+            String text) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO doc_block (id, company_id, page_id, position, block_type, content)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, 'paragraph',
+                        jsonb_build_object('text', CAST(? AS text)))
+                    ON CONFLICT (id) DO NOTHING
+                """)) {
+            statement.setString(1, id.toString());
+            statement.setString(2, companyId.toString());
+            statement.setString(3, pageId.toString());
+            statement.setInt(4, position);
+            statement.setString(5, text);
+            statement.executeUpdate();
+        }
+    }
+
+    /** One link from a case to a block. The id is a parameter so a test can withdraw a named one. */
+    private void link(Connection connection, UUID id, UUID companyId, UUID caseId, UUID blockId,
+            String relationship) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO doc_link
+                    (id, company_id, source_type, source_id, target_kind, target_block_id,
+                     relationship)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), 'TEST_CASE', CAST(? AS uuid),
+                        'DOC_BLOCK', CAST(? AS uuid), ?)
+                    ON CONFLICT (id) DO NOTHING
+                """)) {
+            statement.setString(1, id.toString());
+            statement.setString(2, companyId.toString());
+            statement.setString(3, caseId.toString());
+            statement.setString(4, blockId.toString());
+            statement.setString(5, relationship);
+            statement.executeUpdate();
+        }
+    }
+
+    /** Re-dates a case's v1, so the staleness comparison has a stated left and right. */
+    private void datedVersion(Connection connection, UUID caseId, Instant createdAt)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO test_case_version
+                    (id, company_id, case_id, version_no, snapshot, content_hash, created_at)
+                SELECT gen_random_uuid(), c.company_id, c.id, 1, CAST('{}' AS jsonb), ?,
+                       CAST(? AS timestamptz)
+                  FROM test_case c
+                 WHERE c.id = CAST(? AS uuid)
+                    ON CONFLICT (case_id, version_no) DO NOTHING
+                """)) {
+            statement.setString(1, "hash-" + caseId);
+            statement.setString(2, createdAt.toString());
+            statement.setString(3, caseId.toString());
+            statement.executeUpdate();
+        }
+    }
+
+    /** Every mirrored link of one case, in the order the read path gets them. */
+    private List<MirroredLink> mirrored(UUID companyId, UUID caseId) {
+        try (Connection connection = appConnection(companyId);
+                PreparedStatement statement = connection.prepareStatement("""
+                        SELECT id, target_kind, relationship, page_id, page_key, page_title,
+                               block_id, block_excerpt, stale
+                          FROM case_doc_link
+                         WHERE case_id = CAST(? AS uuid)
+                         ORDER BY page_key, block_id
+                        """)) {
+            statement.setString(1, caseId.toString());
+            try (ResultSet rows = statement.executeQuery()) {
+                List<MirroredLink> found = new java.util.ArrayList<>();
+                while (rows.next()) {
+                    found.add(new MirroredLink(
+                            UUID.fromString(rows.getString("id")),
+                            rows.getString("target_kind"),
+                            rows.getString("relationship"),
+                            UUID.fromString(rows.getString("page_id")),
+                            rows.getString("page_key"),
+                            rows.getString("page_title"),
+                            UUID.fromString(rows.getString("block_id")),
+                            rows.getString("block_excerpt"),
+                            rows.getBoolean("stale")));
+                }
+                return found;
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private record MirroredLink(UUID id, String targetKind, String relationship, UUID pageId,
+            String pageKey, String pageTitle, UUID blockId, String blockExcerpt, boolean stale) {
+    }
+
+    private void withdrawLink(UUID companyId, UUID linkId) throws SQLException {
+        try (Connection connection = appConnection(companyId);
+                PreparedStatement statement = connection.prepareStatement(
+                        "DELETE FROM doc_link WHERE id = CAST(? AS uuid)")) {
+            statement.setString(1, linkId.toString());
+            statement.executeUpdate();
         }
     }
 

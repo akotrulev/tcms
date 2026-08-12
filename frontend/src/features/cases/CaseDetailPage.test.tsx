@@ -85,6 +85,9 @@ function caseBody(createdBy: string | null): TestCase {
     // absences are different claims. No `case_flake` row means nobody has looked; no attachment
     // row means nothing is attached, which is an ordinary state with one spelling.
     attachments: [],
+    // Required since §167, same terms as `attachments`: empty is the ordinary state, not a
+    // third spelling of "not computed" — `case_doc_link` cannot say that (V46 §5).
+    relatedDocuments: [],
   } as TestCase
 }
 

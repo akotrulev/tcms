@@ -44,6 +44,7 @@ class CaseRenderer {
     private final TestStepRepository stepRows;
     private final CaseFlakeRepository flakes;
     private final AttachmentRepository attachments;
+    private final CaseDocLinkRepository docLinks;
     private final CaseOwners people;
 
     CaseRenderer(
@@ -55,6 +56,7 @@ class CaseRenderer {
             TestStepRepository stepRows,
             CaseFlakeRepository flakes,
             AttachmentRepository attachments,
+            CaseDocLinkRepository docLinks,
             CaseOwners people) {
 
         this.configuration = configuration;
@@ -65,6 +67,7 @@ class CaseRenderer {
         this.stepRows = stepRows;
         this.flakes = flakes;
         this.attachments = attachments;
+        this.docLinks = docLinks;
         this.people = people;
     }
 
@@ -96,7 +99,44 @@ class CaseRenderer {
             UUID companyId) {
 
         return render(row, liveSuites, vocabularies, companyId,
-                flakesFor(companyId, List.of(row)), attachmentsFor(companyId, List.of(row)));
+                flakesFor(companyId, List.of(row)), attachmentsFor(companyId, List.of(row)),
+                docLinksFor(List.of(row)));
+    }
+
+    /**
+     * Resolves the documentation links for a whole batch of cases — <strong>one query for any
+     * number of rows</strong>, on the same terms as {@link #flakesFor} and {@link #attachmentsFor}
+     * and for the same caller.
+     *
+     * <p>One query rather than their two: there is nobody to name. A link's author is not on the
+     * wire — {@code DocLink} has no {@code createdBy} property, and the doc page is where a link's
+     * provenance is read — so the second lookup those two make has nothing to fetch.
+     *
+     * <p>Reads {@code case_doc_link}, the read model, and <strong>never {@code doc_link}</strong>:
+     * this runs on a request path and {@code documentation} is a module this one may not name there.
+     * {@code DocumentationFacts} is the seam that fills it, on the
+     * {@code documentation.links_changed} event and hourly.
+     *
+     * <p>A case absent from the map has no links, and a case with no links renders an empty list
+     * rather than a null one — the {@code attachments} call one method up, not the {@code flake} one:
+     * there is no third state to distinguish here, because "nobody has looked" is not something this
+     * table can say (V46 §5).
+     */
+    Map<UUID, List<DocLinkView>> docLinksFor(List<TestCase> rows) {
+        List<CaseDocLink> found = docLinks.findForCases(rows.stream().map(TestCase::getId).toList());
+        if (found.isEmpty()) {
+            return Map.of();
+        }
+
+        // A HashMap, keyed on a NOT NULL column, so §38's get(null) trap is not in play here — kept
+        // as a HashMap anyway because the values are built by accumulation and the query's order is
+        // load-bearing (CaseDocLinkRepository#findForCases says why it has one).
+        Map<UUID, List<DocLinkView>> byCase = new HashMap<>();
+        for (CaseDocLink link : found) {
+            byCase.computeIfAbsent(link.getCaseId(), ignored -> new java.util.ArrayList<>())
+                    .add(DocLinkView.of(link));
+        }
+        return byCase;
     }
 
     /**
@@ -211,7 +251,8 @@ class CaseRenderer {
             List<ClassificationDimensionView> vocabularies,
             UUID companyId,
             Map<UUID, CaseFlakeView> flakeViews,
-            Map<UUID, List<CaseAttachmentView>> attachmentViews) {
+            Map<UUID, List<CaseAttachmentView>> attachmentViews,
+            Map<UUID, List<DocLinkView>> docLinkViews) {
 
         TestCaseSummaryView summary =
                 summaries.render(companyId, List.of(row), liveSuites, vocabularies).getFirst();
@@ -237,7 +278,12 @@ class CaseRenderer {
                 // means: no case_flake row is a THIRD state ("nobody has looked"), while no
                 // attachment row is simply an empty list. A nullable list would make the SPA
                 // distinguish two spellings of nothing.
-                attachmentViews.getOrDefault(row.getId(), List.of()));
+                attachmentViews.getOrDefault(row.getId(), List.of()),
+                // Never null, for the reason directly above and one more of its own: the empty list
+                // is what the SPA has always rendered here — `data.relatedDocuments ?? []` — so the
+                // panel that has said "Not linked to any specification" about every case in the
+                // product since §93 keeps saying it, and now it is true when it says it.
+                docLinkViews.getOrDefault(row.getId(), List.of()));
     }
 
     /** The project's classification dimensions, or none when the caller cannot read them. */

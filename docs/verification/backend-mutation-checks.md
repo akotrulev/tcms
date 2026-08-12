@@ -1968,3 +1968,16 @@ assertion elsewhere.*
 > recomputes* — without it a case's shown release version can change with nothing having happened,
 > which is a bug report nobody can reproduce. Recorded here because "no test can catch this" is a
 > legitimate entry and an unwritten one is indistinguishable from an oversight.
+
+## §167 — the specification points a case claims to verify, mirrored into a table
+
+*Five mutations, **NONE RUN** — §65 in full, same terms as §166: this slice ships a derivation that
+decides what a reader sees on the case detail's traceability panel, not a check over a check.*
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| `§167 DL-1` | In `DocumentationFacts.refreshCaseDocLinks`, delete the leading `DELETE FROM case_doc_link` | Should redden `removing the executions clears the last result on the next tick`'s sibling in `TheDocumentationLinks` — a link withdrawn (block deleted, page deleted, or the link itself removed) stays in the mirror forever. Same defect `BlockLinkService` refuses in `doc_link` itself, arriving one table later, and the reason the refresh is delete-then-insert rather than `ON CONFLICT`. | ⬜ not run |
+| `§167 DL-2` | Change `stale`'s predicate from `coalesce(page_content.at, p.created_at) > coalesce(case_content.at, c.created_at)` to compare `p.updated_at > c.updated_at` instead | Should redden a `TheDocumentationLinks` assertion on a case that was given an owner or moved status after its content last changed for real — the timestamp spelling forgives every accumulated spec change on an act that read nothing, the exact refusal `ApprovalFacts` already made for `STALE_APPROVAL`. | ⬜ not run |
+| `§167 DL-3` | Delete `AND p.project_id = c.project_id` from the mirror statement | Should redden nothing in this module's own fixtures (single-project) but is the row worth running first if this queue is ever drained partially: it is the one predicate that can only ever drop a row a defect produced, and its absence would surface as a sibling project's page title rendered on a case whose reader holds no grant on that project. | ⬜ not run |
+| `§167 DL-4` | In `HealthRecomputeOnLinksChanged`, delete the class (or gate it behind a property that defaults off) | Should redden nothing — no test asserts the outbox latency directly, the same gap `§166 LR-1`'s browser row exists to cover rather than a unit test. Recorded because "no test can catch this" here is a live gap and not a design choice, unlike `id DESC` above. | ⬜ not run |
+| `§167 DL-5` | In `CaseRenderer.docLinksFor`, change `computeIfAbsent(...).add(...)` to overwrite (`put`) instead of accumulate | Should redden a `TheDocumentationLinks` assertion on any fixture case with more than one link — the map would carry only the last link found per case instead of the full list, and `findForCases`'s `ORDER BY l.pageKey, l.blockId` is what makes "last found" deterministic rather than merely usually wrong. | ⬜ not run |

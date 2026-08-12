@@ -23,47 +23,28 @@ import java.util.UUID;
  * same object the grid renders — and copies it component by component, so a grid row and a detail
  * page cannot disagree about a case. The copying is mechanical; the resolution is shared.
  *
- * <h2><del>Two fields</del> One field the contract has and this response does not</h2>
+ * <h2><del>Two fields</del><del>One field</del> No field the contract has and this response does
+ * not</h2>
  *
- * <p><strong>Both reasons below were rewritten by §165, and both used to blame a module for not
+ * <p><strong>Both reasons here were rewritten by §165, and both used to blame a module for not
  * existing.</strong> {@code documentation} is 57 files and {@code execution} is 119. What actually
- * blocks each is the <em>module boundary</em> — {@code repository} may not import either, which
- * this package's {@code package-info} has stated correctly the whole time — so each closes as a
+ * blocked each was the <em>module boundary</em> — {@code repository} may not import either, which
+ * this package's {@code package-info} has stated correctly the whole time — so each closed as a
  * read model fed by events (§3 lesson 4), not by a join and not by waiting. An argument that
  * misnames the obstacle deters the repair, which is §160's finding at a different field.
  *
- * <p><strong>§166 acted on that for the second of the two, which is the evidence the rewrite was
- * worth doing.</strong> {@code lastResult} is a field on this record now, carried through from
- * {@link TestCaseSummaryView} by {@link #of} like every other summary component, and derived by
- * {@code ExecutionFacts} into {@code case_health} exactly as the paragraph above prescribed. One
- * remains:
+ * <p><strong>§166 acted on that for the first of the two and §167 for the second, which is the
+ * whole of the evidence that the rewrite was worth doing.</strong> {@code lastResult} is carried
+ * through from {@link TestCaseSummaryView} by {@link #of} like every other summary component and
+ * derived by {@code ExecutionFacts} into {@code case_health}; {@code relatedDocuments} is
+ * {@link #relatedDocuments} below, mirrored by {@code DocumentationFacts} into
+ * {@code case_doc_link}. Both took the shape the rewritten paragraph prescribed, one section apart,
+ * and neither needed anything the module boundary forbids.
  *
- * <ol>
- *   <li><strong>{@code relatedDocuments}.</strong> Sourced from {@code doc_link} against
- *       {@code doc_page} / {@code doc_block}, which are the {@code documentation} module.
- *       ~~Nothing can create a link, so no case has one.~~ <strong>Struck:</strong> links have been
- *       creatable since {@code POST .../blocks/{blockId}/links} shipped, and
- *       {@link com.tcms.documentation.DocBlockView}'s header struck this same clause on its own
- *       side when that happened — <em>this</em> side never heard, which is what a hand-maintained
- *       argument in two modules costs. So a link made from a doc block to a case is real and is
- *       <strong>never shown on the case</strong>: {@code CaseDetailPage} reads
- *       {@code data.relatedDocuments ?? []} and renders an empty panel. The contract does not mark
- *       the field required, and serializing {@code []} would still be worse — it would claim the
- *       question had been asked.
- *
- *       <p>It closes the same way {@code lastResult} just did, and the shape is now demonstrated
- *       rather than proposed: a derivation writing into a table this module owns, fed by an event
- *       from the module that sees the cause. What it does <em>not</em> get to reuse is
- *       {@code case_health}'s row — a list of links is not a column, so this one really does want
- *       its own table, and the argument V45 makes against a second table does not apply to a value
- *       nothing here derives twice.</li>
- * </ol>
- *
- * <p>It stays pinned as CONTRACT-ONLY in
- * {@code ContractConventionTest.MEMBER_DIVERGENCE_BY_DECISION}, in both directions, so the argument
- * cannot outlive its gap the way these two did. The two {@code lastResult} entries are gone from
- * that map, which is what a both-ways pin means: closing a divergence and leaving its entry fails
- * the build.
+ * <p><strong>Nothing is left in {@code MEMBER_DIVERGENCE_BY_DECISION} for this schema.</strong> The
+ * two {@code lastResult} entries went in §166 and the {@code relatedDocuments} one in §167, and in
+ * every case the entries were <em>deleted</em> rather than edited — that map is pinned in both
+ * directions, so closing a divergence and keeping its argument fails the build.
  *
  * @param gherkinSource null for a {@code STRUCTURED} case; {@link #steps} is empty for a
  *              {@code GHERKIN} one. The two are alternatives (plan §6a) and the SPA branches on
@@ -100,6 +81,26 @@ import java.util.UUID;
  *              version. Making the snapshot authored-only is a real cleanup and it is a separate
  *              slice; doing it here would mean the response and the snapshot stop being one render,
  *              which is the invariant {@link CaseRenderer} exists to hold.
+ * @param relatedDocuments the specification points this case claims to verify — never null, empty
+ *              being the ordinary state and, since §167, a state the server has actually looked at.
+ *              It had been declared in the contract and served by nothing since M0, so the
+ *              traceability panel said <em>"Not linked to any specification"</em> about every case
+ *              in the product, including cases somebody had linked from the doc page an hour
+ *              earlier.
+ *
+ *              <p>Read from {@code case_doc_link} — a read model this module owns, mirrored out of
+ *              {@code doc_link} by {@code DocumentationFacts} on the
+ *              {@code documentation.links_changed} event and on the hourly recompute. Nothing on
+ *              this request path names a {@code documentation} table, which is the property the
+ *              module rule was ever about.
+ *
+ *              <p><strong>Detail only</strong>, on {@code flake}'s and {@code attachments}' terms:
+ *              the grid draws what a case <em>is</em>, and traceability is read while deciding what
+ *              to do about one case. It lands in the version snapshot with them, and here that is
+ *              closer to right than merely accepted — a v7 that records which statements the case
+ *              claimed to verify when somebody saved it is describing the version honestly. The
+ *              content hash is computed over {@link CaseEdit}, so a link created on a doc page
+ *              cannot by itself write a version of a case nobody touched.
  * @param attachments files on the case's <strong>definition</strong> — never null, empty being the
  *              ordinary state. Detail only, for {@link #flake}'s reason: the grid draws what a case
  *              <em>is</em>, and a per-row join for a paperclip count is a column nobody asked for.
@@ -171,6 +172,7 @@ public record TestCaseDetailView(
         List<TestStepView> steps,
         List<CaseConditionRefView> preconditions,
         List<CaseConditionRefView> postconditions,
+        List<DocLinkView> relatedDocuments,
         int currentVersionNo,
         long lockVersion,
         CaseFlakeView flake,
@@ -184,7 +186,8 @@ public record TestCaseDetailView(
             List<TestStepView> steps,
             CaseConditions.Resolved conditions,
             CaseFlakeView flake,
-            List<CaseAttachmentView> attachments) {
+            List<CaseAttachmentView> attachments,
+            List<DocLinkView> relatedDocuments) {
 
         return new TestCaseDetailView(
                 summary.id(),
@@ -219,6 +222,7 @@ public record TestCaseDetailView(
                 steps,
                 conditions.preconditions(),
                 conditions.postconditions(),
+                relatedDocuments,
                 row.getCurrentVersionNo(),
                 row.getLockVersion(),
                 flake,

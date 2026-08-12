@@ -7,6 +7,8 @@ import com.tcms.tenancy.AuditEvent;
 import com.tcms.tenancy.AuditEventRepository;
 import com.tcms.tenancy.CompanyContext;
 import com.tcms.tenancy.DisplayKeys;
+import com.tcms.tenancy.Outbox;
+import com.tcms.tenancy.OutboxEvents;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -76,6 +78,8 @@ public class DocPageWriteService {
     private final PageVersions versions;
     private final DisplayKeys displayKeys;
     private final AuditEventRepository auditEvents;
+    /** How {@code repository} learns that a mirrored page moved — see {@link #edit}'s notice. */
+    private final Outbox outbox;
     private final Clock clock;
 
     public DocPageWriteService(
@@ -88,6 +92,7 @@ public class DocPageWriteService {
             PageVersions versions,
             DisplayKeys displayKeys,
             AuditEventRepository auditEvents,
+            Outbox outbox,
             Clock clock) {
 
         this.projects = projects;
@@ -99,6 +104,7 @@ public class DocPageWriteService {
         this.versions = versions;
         this.displayKeys = displayKeys;
         this.auditEvents = auditEvents;
+        this.outbox = outbox;
         this.clock = clock;
     }
 
@@ -430,6 +436,19 @@ public class DocPageWriteService {
             pages.saveAndFlush(page);
 
             audit(project.getId(), userId, "doc_page.edited", page, now);
+            // §167: `repository` mirrors this page's title and its blocks' text into case_doc_link,
+            // so an edit here changes what a case's traceability panel says — and a content edit
+            // writes a version, which is what makes every link into this page stale. Coalesced, so
+            // a save that rewrites nine blocks is one recompute (OutboxEvents#DOC_LINKS_CHANGED).
+            //
+            // Unconditional on the success arm rather than gated on versions.recordEdit's answer:
+            // the title moves on a save that authors no version, and the mirror carries it.
+            //
+            // THE OTHER THREE WRITE PATHS IN THIS CLASS ARE NOT PRODUCERS, and #delete is the one
+            // worth stating: it answers 409 WouldBreak when anything links to the page's blocks, so
+            // a page that reaches softDelete has no links and no mirror row to remove. #create makes
+            // a page nothing links to yet, and #setStatus moves a column the mirror does not carry.
+            outbox.recordCoalesced(OutboxEvents.DOC_LINKS_CHANGED);
 
             // The attachments are carried from the read above rather than omitted: an edit does not
             // touch them, but the response is what the SPA renders next, and serving an empty list

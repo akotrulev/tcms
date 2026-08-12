@@ -4800,10 +4800,14 @@ export interface paths {
          * @description Records that a test case (or a whole suite) verifies this statement. Requires `doc:edit` —
          *     the link is a property of the documentation, and its holder is everyone who writes docs.
          *
-         *     **This is the first writer `doc_link` has ever had.** Two read paths have been specified and
-         *     unserved since the mock era waiting for it: `TestCase.relatedDocuments` and `DocBlock.links`.
-         *     A third, `DocBlock.coverage`, stays absent — see its own description for why building this
-         *     did not unblock it.
+         *     **This is the first writer `doc_link` has ever had.** Two read paths had been specified and
+         *     unserved since the mock era waiting for it: `DocBlock.links`, served the same day, and
+         *     `TestCase.relatedDocuments` — which was **not**, and stayed empty for another seventy-four
+         *     sections because it is in a module that may not read this table. §167 served it through a
+         *     read model (`case_doc_link`), and this endpoint is now a **producer** of
+         *     `documentation.links_changed` so that the case end updates without waiting for the hourly
+         *     recompute. A third path, `DocBlock.coverage`, stays absent — see its own description for why
+         *     building this did not unblock it.
          *
          *     Two protections that already existed become reachable on the same day: the page `PATCH` and
          *     the page `DELETE` both answer `409` rather than cascading a link away, because a link is
@@ -7923,7 +7927,24 @@ export interface components {
             steps: components["schemas"]["TestStep"][];
             preconditions: components["schemas"]["CaseConditionRef"][];
             postconditions: components["schemas"]["CaseConditionRef"][];
-            relatedDocuments?: components["schemas"]["DocLink"][];
+            /**
+             * @description **The specification points this case claims to verify** — the case end of the
+             *     same edge `DocBlock.links` renders from the block end (§6i).
+             *
+             *     Served from `case_doc_link`, a read model in `repository` mirrored out of
+             *     `doc_link` by `DocumentationFacts`: the request path may not read the
+             *     `documentation` module's tables, so the page's key and title and the block's
+             *     excerpt are **copied** and refresh on the `documentation.links_changed` event and
+             *     on the hourly recompute. Everything here is therefore as of the last refresh,
+             *     which is the ordinary property of a read model and the reason `stale` below is a
+             *     stored comparison rather than a live one.
+             *
+             *     **Never null and never absent.** Empty is the ordinary state and means the case
+             *     has no links — it does not mean the question was not asked. Detail only: the grid
+             *     draws what a case *is*, and traceability is read while deciding what to do about
+             *     one case.
+             */
+            relatedDocuments: components["schemas"]["DocLink"][];
             currentVersionNo: number;
             lockVersion: number;
         };
@@ -9917,7 +9938,27 @@ export interface components {
             /** @description Mandatory for EXTERNAL_GIT — a line number without it is meaningless later. */
             externalCommitSha?: string | null;
             externalUrl?: string | null;
-            /** @description True when the target changed after the case was last touched (plan §6i). */
+            /**
+             * @description True when the target changed after the case was last touched (plan §6i).
+             *
+             *     **Both halves are content versions, never `updated_at`** — the newest
+             *     `doc_page_version` against the newest `test_case_version`. `ApprovalFacts` refused the
+             *     timestamp spelling for the same comparison and its reason holds here twice over: a
+             *     save whose content hash is unchanged writes no version and still moves `updated_at`,
+             *     and on a case that column also moves when somebody assigns an owner or changes a
+             *     lifecycle status. Under the timestamp spelling, giving a case an owner would forgive
+             *     every spec change it had accumulated.
+             *
+             *     **Page granularity, not block.** `doc_block` carries no timestamp and page versions
+             *     snapshot the whole page, so an edit to an unrelated paragraph raises this too. That is
+             *     the finest granularity the schema supports; closing it is a column on `doc_block`, a
+             *     writer for it, and its own slice.
+             *
+             *     **Computed at refresh time and stored**, so this marker and the case's
+             *     `OUTDATED_SPEC_CHANGED` health signal — rendered on the same screen, one panel apart —
+             *     move together. The cost is that editing a case does not clear its markers until the
+             *     next recompute.
+             */
             stale: boolean;
         };
         Artifact: {

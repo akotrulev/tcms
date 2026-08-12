@@ -4,6 +4,8 @@ import com.tcms.project.GateResult;
 import com.tcms.project.ProjectService;
 import com.tcms.tenancy.AuditEvent;
 import com.tcms.tenancy.AuditEventRepository;
+import com.tcms.tenancy.Outbox;
+import com.tcms.tenancy.OutboxEvents;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -62,6 +64,14 @@ public class BlockLinkService {
     private final DocLinkRepository links;
     private final CatalogueFacts catalogue;
     private final AuditEventRepository auditEvents;
+    /**
+     * How {@code repository} learns that a case's links moved — see {@link OutboxEvents#DOC_LINKS_CHANGED}.
+     *
+     * <p>An event and not a call: {@code repository} may not be imported from here and this module
+     * may not be imported from there, so the case detail's traceability panel is fed by a read model
+     * that module owns ({@code case_doc_link}) rather than by a join anybody could write (§3 lesson 4).
+     */
+    private final Outbox outbox;
     private final Clock clock;
 
     public BlockLinkService(
@@ -71,6 +81,7 @@ public class BlockLinkService {
             DocLinkRepository links,
             CatalogueFacts catalogue,
             AuditEventRepository auditEvents,
+            Outbox outbox,
             Clock clock) {
 
         this.projects = projects;
@@ -79,6 +90,7 @@ public class BlockLinkService {
         this.links = links;
         this.catalogue = catalogue;
         this.auditEvents = auditEvents;
+        this.outbox = outbox;
         this.clock = clock;
     }
 
@@ -177,6 +189,10 @@ public class BlockLinkService {
                     sourceType, input.sourceId(), blockId, relationship, userId, now));
 
             audit(project.getId(), userId, "doc_link.created", created, source.get(), now);
+            // On the Created arm alone. The Existing arm above writes no row and no audit event for
+            // the reason stated there, and an outbox notice that nothing changed is the same claim
+            // in a second place — it would cost a whole-company recompute per duplicate click.
+            outbox.recordCoalesced(OutboxEvents.DOC_LINKS_CHANGED);
             return new Outcome.Created(view(created, source.get()));
         }));
     }
@@ -209,6 +225,9 @@ public class BlockLinkService {
             links.delete(link);
             audit(project.getId(), userId, "doc_link.deleted", link, source.orElse(null),
                     clock.instant());
+            // The removal matters to the mirror more than the creation does: a withdrawn claim left
+            // standing in case_doc_link is exactly what this class refuses to leave in doc_link.
+            outbox.recordCoalesced(OutboxEvents.DOC_LINKS_CHANGED);
 
             return new Outcome.Deleted();
         }));
