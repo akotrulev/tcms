@@ -2146,3 +2146,24 @@ links and offers no way to create or remove one — so `§168 CV-4`'s parentheti
 link dialog, if it offers the choice") resolves to *there is no dialog at all*, and the only way to
 make a `DOC_BLOCK` link in this product is the API. Every row above is about the **case** end, which
 §169 gave a screen; the block end still has hooks and no UI.
+
+## §175 — the team a screen renders beside something else
+
+**Two rows, and the slice's honest position is that it should need none.** §175 collapsed three
+declarations of one shape into one `TeamRef`, and the *wire is unchanged* at both surviving
+positions: the same two keys, the same values, the same nullability. What changed is that a
+generated client now names the type. So these rows exist to prove **nothing moved** — the failure
+they would catch is a `$ref` that quietly changed a payload, which is exactly the failure a
+contract-only edit is assumed not to have.
+
+Both are `A0` (the accounts-and-teams lane, which is where a team grant is made in the first place).
+
+| Row | Drive | Expect |
+|---|---|---|
+| `§175 TR-1` | **A0**, after the three teams exist: grant a role to a **team** rather than a person, then open the role-assignments list | The grant's row names the **team**, by name, in the same column a user grant names a person — not a blank cell, not an id. Then a **user** grant beside it: that row's team cell is empty. `RoleAssignment.team` became a `$ref` in this slice and this is the one screen that reads it; an empty cell here means the collapse changed the payload. |
+| `§175 TR-2` | **A0**, signed in as a member who is **not** a Company Admin and who is in a team: open the Network tab and read `GET /me` | `teams` is an array of `{id, name}` and **carries no `isLead`** — the third position, whose extra flag §175 removed. The interesting half is the first: `teams` must still be *populated*, because `GET /teams` is gated on `company:teams` and this response is the only way this account can learn its own teams. Nothing in the SPA renders it, so the Network tab is the only observer there is. |
+
+**Stated rather than hidden:** `§175 TR-2` reads a payload no screen shows. That is a legitimate
+row — the value is on the wire, a client can name it, and the removal this slice made is only
+observable there — but it is a *contract* check wearing a browser row's clothes, and if the pass is
+short of time it is the one to drop. `TR-1` is not; it is a rendered column.

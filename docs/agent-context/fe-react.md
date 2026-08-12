@@ -2,14 +2,30 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-12 (**§174** — the relationship correctable in place at both ends, and a MUI `Chip` whose `disabled` was decorative; **§173** — one confirmation raised by both link screens, and the text form of a link target; **§172** — the block-link screen: two hooks that had no caller anywhere in `src/` now have one, and `doc_link` can be written from the documentation side at last; **§169** — the Traceability panel's two external branches ran against data for the first time, and a write hook that must NOT invalidate; **§168** — `CoverageMarker` came alive after 168 sections rendering against a field nothing sent; **§166**–**§167** — no frontend component moved, one test fixture each; **§165** — no frontend source moved, and TWO SCREENS ARE RENDERING A FALSEHOOD — see the entry below; **§162**–**§164** — no frontend source moved, refusal bodies only; **§161** — no frontend source moved; `schema.d.ts` regenerated, comments only; **§160** — the posted CI report becomes a download, keyed on a URL the server composes; **§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
+**Last verified:** 2026-08-12 (**§175** — `TeamRef` is one generated type and `CurrentUser.teams[].isLead` is gone; no `src/` change; **§174** — the relationship correctable in place at both ends, and a MUI `Chip` whose `disabled` was decorative; **§173** — one confirmation raised by both link screens, and the text form of a link target; **§172** — the block-link screen: two hooks that had no caller anywhere in `src/` now have one, and `doc_link` can be written from the documentation side at last; **§169** — the Traceability panel's two external branches ran against data for the first time, and a write hook that must NOT invalidate; **§168** — `CoverageMarker` came alive after 168 sections rendering against a field nothing sent; **§166**–**§167** — no frontend component moved, one test fixture each; **§165** — no frontend source moved, and TWO SCREENS ARE RENDERING A FALSEHOOD — see the entry below; **§162**–**§164** — no frontend source moved, refusal bodies only; **§161** — no frontend source moved; `schema.d.ts` regenerated, comments only; **§160** — the posted CI report becomes a download, keyed on a URL the server composes; **§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
 the one doc-block renderer and the editor's three new types; §126 phase 4 — the three attachment
 surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the flake panel and the
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `4137036` (§174 phase 2) (trust the body over the header and re-grep what a later commit
+**Baseline commit:** `65aa59f` (§175) (trust the body over the header and re-grep what a later commit
 could have moved).
+
+## §175 — `TeamRef` IS ONE GENERATED TYPE NOW (no frontend source changed)
+
+**Nothing in `src/` moved and both `schema.d.ts` copies did.** The backend collapsed three
+declarations of the team shape into one; the frontend consequence is entirely in the generated
+types, and it typechecks because the payloads are unchanged.
+
+- `RoleAssignment.team` was an inline `{id, name}` object and is now
+  `components["schemas"]["TeamRef"] | null` — **same keys, same values, same nullability**. The
+  admin role-assignment list is the one screen reading it (`§175 TR-1` in the browser queue).
+- `CurrentUser.teams` is `TeamRef[]` and **`isLead` is gone from it**. Safe because nothing read it:
+  `src/`'s only `isLead` is a local in `TeamMembersDialog` derived from a team's own `leads`.
+- **`CurrentUser.teams` is read by nothing at all**, which this slice found and did not close. The
+  session stores the whole `CurrentUser` in `localStorage` (`AuthContext`) and no component touches
+  `.teams`; `TeamBoardPage` and the admin screens go to `GET /teams` instead — which a non-admin
+  cannot call. If a "my teams" affordance is ever wanted, the data is already on the session.
 
 ## §174 — THE CLAIM'S CONTROL, AND WHY IT IS A BUTTON
 

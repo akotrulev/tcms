@@ -2077,3 +2077,30 @@ a green build after the edit would have meant. Revert each in the same command.
 | `§174 RL-1` | In `DocLink.relabel`, drop the `if (relationship == next) return false;` guard so it always stamps and returns `true` | `ExternalLinkEndpointTest.Relabelling.reStatingTheSameClaimWritesNothing` | A correction nobody made is recorded against a user and raises a company-wide recompute, once per duplicate click. The response is identical either way — 200 with the row — so no client and no other test can see it. |
 | `§174 RL-2` | In `DocLink`, restore `updatable = false` on the `relationship` column | `…Relabelling.theClaimIsCorrectedAndStamped` and `PlanDocumentEndpointTest.Links.theClaimIsCorrectable` | The endpoint answers **200 with the corrected view**, the audit row is written, the event fires, and **the database never moves** — Hibernate silently drops the column from the UPDATE. The response is a lie the whole way down, and only a read-back of the row catches it, which is why both tests re-read rather than trusting the body. |
 | `§174 RL-3` | In `BlockLinkService.relabel`, default an unparseable relationship to `VERIFIES` instead of returning `Invalid` (the create's line, copied) | `…Relabelling.thereIsNoDefaultOnACorrection` and `PlanDocumentEndpointTest.Links.relabelIsGatedAndValidated` | A typo'd or absent relationship silently **promotes the link to coverage**. The one direction of this field that inflates a coverage number is the one a copied default would take, on the endpoint whose reason for existing is that the field was wrong. |
+
+## §175 — one TeamRef, and the three rules now holding it
+
+Three mutations, **all three run** — §165's and §170's precedent, and this slice is the clearest
+case for it: every one is a check over a check, and what they are checking is that a *consolidation*
+cannot be silently undone. An extraction is only worth more than the three copies it replaced if
+re-introducing a copy fails a build, and that claim is unfalsifiable without running these. Revert
+each in the same command.
+
+| Row | Mutate | Must redden | What a green build would mean |
+|---|---|---|---|
+| `§175 TR-1` | Add a record with the same components back into a feature module: `public record GranteeGroup(UUID id, String name) {}` nested in `identity.RoleAssignmentView` | `ArchitectureRulesTest.noRecordOutsideApiRepeatsAnApiShape` | The fourth copy is written and nothing says so. This rule is the entire reason `api.TeamRef` is an extraction rather than a tidy-up: it is matched on **shape, not name**, so the copy that actually gets written — under some other name, in a module that could not import this one — is caught too. → ✅ **RUN 2026-08-12 — red on exactly that test, and on nothing in `ContractConventionTest`**, which is correct: `GranteeGroup` matches no schema's name, so every name-keyed rule is blind to it and the shape rule is the only observer there is. |
+| `§175 TR-2` | In `openapi.yaml`, revert `RoleAssignment.team` to the inline `{id, name}` object it was before this slice | `ContractConventionTest.everyInlineShapeIsPairedOrExempt` | An anonymous shape re-enters the contract and nothing asks which record serves it — which is precisely the state §170 closed and §175 depended on. The Java side would still compile and still send the same two keys, so the regression is invisible to every other gate. → ✅ **RUN 2026-08-12 — red on exactly that test, alone.** |
+| `§175 TR-3` | In `openapi.yaml`, add `isLead: { type: boolean }` back to the `TeamRef` schema's properties | `ContractConventionTest`'s member comparison for `TeamRef` (the `RESPONSE_RECORDS` direction) | The schema promises a property `api.TeamRef` cannot produce — §148's direction, and the one that used to be untestable here because the schema and the record that served it were only related by a name. It is also the exact shape of what §175 removed, so this row is the check that the removal was made in both places. → ✅ **RUN 2026-08-12 — red on `a schema and the record serving it name the same members, both ways`, alone.** |
+
+**`TR-1` was attempted first as a same-named record and does not compile**, which is recorded
+rather than quietly re-worded (§164 `EN-3`'s precedent). `public record TeamRef` nested in a file
+that imports `com.tcms.api.TeamRef` is a name clash the compiler refuses — so the *literal* re-copy
+this slice replaced can no longer be written in the one file it used to live in, and the mutation
+had to be renamed to be possible at all. That is a weaker guarantee than it sounds and the reason
+the rule matches on shape: rename it and it compiles fine, which is exactly what the run above did.
+
+> **What these do not cover, stated because the slice's whole argument is about coincidence.** The
+> three positions are now one schema, so nothing can compare them to *each other* any more — there
+> is nothing left to disagree. That is the intended end state and it is also a loss: the day
+> `ReviewAssignee.team` genuinely needs a member the other two must not have, the rules will report
+> nothing and the decision is a human's. `TeamRef`'s own schema comment carries that warning.
